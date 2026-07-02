@@ -127,12 +127,3 @@
   font-weight: 600;
   color: var(--text);
 }
-/* One status dot for every indicator (the connection dot in the status strip, the offline-charts chip
-   in the topbar): the color is set per chip through the --dot-color custom property, defaulting to the
-   healthy token, so there is one dot definition, not one per surface. */
-.status-dot {
-  inline-size: 0.6rem;
-  block-size: 0.6rem;
-  border-radius: 50%;
-  background: var(--dot-color, var(--ok));
-}

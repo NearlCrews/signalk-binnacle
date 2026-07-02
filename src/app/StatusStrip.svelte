@@ -50,7 +50,6 @@ let {
 } = $props();
 
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
-
 const split = $derived(splitBarActions(pinnedActions, MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((a) => a.pressed === true));
 let moreOpen = $state(false);
@@ -283,8 +282,14 @@ const closeMore = (): void => {
   display: inline-flex;
   align-items: center;
 }
-/* The dot itself is the global .status-dot (in strips.css); the strip only overrides the --dot-color
-   token to the caution hue while the stream is reconnecting or closed. */
+/* The connection dot: a small dot whose color is the --dot-color token, healthy by default and the
+   caution hue while the stream is reconnecting or closed. Scoped here, the only place it is used. */
+.status-dot {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 50%;
+  background: var(--dot-color, var(--ok));
+}
 .conn--down .status-dot {
   --dot-color: var(--warning);
 }

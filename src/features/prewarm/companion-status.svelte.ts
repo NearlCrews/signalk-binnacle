@@ -11,7 +11,7 @@ export const COMPANION_POLL_MS = 30_000;
 // A 5xx or a transport fault can be a single dropped poll on a boat link, so require this many
 // consecutive failures before the pill shows offline or error. One blip keeps the last state; recovery
 // is immediate on the next success.
-export const COMPANION_FAIL_THRESHOLD = 2;
+const COMPANION_FAIL_THRESHOLD = 2;
 
 export type CompanionState = 'serving' | 'needs-auth' | 'offline' | 'error';
 

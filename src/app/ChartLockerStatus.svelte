@@ -20,11 +20,21 @@ let {
 // the meaning never rides on the icon hue alone (WCAG 1.4.1); the icon carries the reinforcing color.
 // serving and needs-auth both read "online": the companion is present and reachable either way, and the
 // cache figure (only readable with access) lives in the hover title, never in the visible pill.
-const word = $derived(state === 'offline' ? 'offline' : state === 'error' ? 'error' : 'online');
-const Icon = $derived(state === 'offline' ? Unplug : state === 'error' ? TriangleAlert : HardDrive);
-const bytes = $derived(formatBytes(cacheBytes ?? 0));
+// Data-driven so a new state is one map entry, not parallel branches. serving and needs-auth share the
+// "online" word and the drive icon; the accent stays in CSS and the byte figure stays in the title.
+const STATE_META: Record<CompanionState, { word: string; icon: typeof HardDrive }> = {
+  serving: { word: 'online', icon: HardDrive },
+  'needs-auth': { word: 'online', icon: HardDrive },
+  offline: { word: 'offline', icon: Unplug },
+  error: { word: 'error', icon: TriangleAlert },
+};
+const word = $derived(STATE_META[state].word);
+const Icon = $derived(STATE_META[state].icon);
 const title = $derived.by(() => {
-  if (state === 'serving') return `Offline charts: online, cache ${bytes.value} ${bytes.unit}`;
+  if (state === 'serving') {
+    const bytes = formatBytes(cacheBytes ?? 0);
+    return `Offline charts: online, cache ${bytes.value} ${bytes.unit}`;
+  }
   if (state === 'needs-auth') return 'Offline charts: online, sign in to see cache size';
   if (state === 'offline') return 'Offline charts: not responding';
   return 'Offline charts: server error';
@@ -40,9 +50,7 @@ const ariaLabel = $derived(`Chart Locker ${word}, open offline charts`);
     class:cl--error={state === 'error'}
     aria-label={ariaLabel}
     {title}
-    onclick={() => {
-      if (present) onOpen();
-    }}
+    onclick={onOpen}
   >
     <Icon size={16} aria-hidden="true" />
     <span class="cl-brand">Chart Locker:</span>
