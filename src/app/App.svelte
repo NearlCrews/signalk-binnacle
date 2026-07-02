@@ -1182,7 +1182,7 @@ let companionAnnounce = $state('');
 let companionWasDown = false;
 $effect(() => {
   const state = companionStatus.state;
-  const down = state === 'offline' || state === 'error';
+  const down = companionStatus.down;
   if (down === companionWasDown) return;
   companionWasDown = down;
   companionAnnounce = down

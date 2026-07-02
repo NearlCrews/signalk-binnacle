@@ -207,6 +207,7 @@ describe('CompanionStatus', () => {
     status.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(status.state).toBe('serving');
+    expect(status.down).toBe(false);
 
     // One dropped poll: the pill holds serving rather than flickering to offline.
     fail = true;
@@ -216,6 +217,7 @@ describe('CompanionStatus', () => {
     // A second consecutive failure crosses the threshold and shows offline.
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(status.state).toBe('offline');
+    expect(status.down).toBe(true);
 
     // The next success recovers immediately, no debounce on the way back up.
     fail = false;

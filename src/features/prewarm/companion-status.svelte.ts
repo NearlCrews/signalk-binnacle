@@ -59,6 +59,12 @@ export class CompanionStatus {
     return this.#state;
   }
 
+  // The not-responding projection of the state machine. The announce boundary and any health consumer
+  // read this rather than re-partitioning the enum, so a new state is classified here, once.
+  get down(): boolean {
+    return this.#state === 'offline' || this.#state === 'error';
+  }
+
   get cacheBytes(): number | null {
     return this.#cacheBytes;
   }
