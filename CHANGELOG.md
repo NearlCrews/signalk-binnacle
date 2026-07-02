@@ -8,31 +8,75 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [0.13.0] - 2026-07-01
 
-First public release since 0.12.0. It gathers the offline-charts work of the two intervening
-development versions, 0.12.1 and 0.12.2, and adds a status-strip indicator for the chart cache.
+The first published release since 0.10.6. It brings the whole offline-charts and Chart Locker system
+built across the intervening development versions, and adds a Chart Locker status pill to the header.
 
 ### Added
 
-- **Chart Locker status in the header.** With the Chart Locker plugin installed, the header's right
-  controls show a Chart Locker pill next to the profile pill that reads "online", "offline", or "error"
-  at a glance, and opens the Offline charts panel on tap. It reads online whether or not you have the
-  access to read the cache size, and shows the size in its hover tooltip when you do. It turns to
-  "offline" if the cache stops responding, "error" on a server fault, and is absent on a standalone
-  install without Chart Locker.
+- **Offline charts you download before you lose coverage.** With the Chart Locker plugin installed,
+  draw a box on the chart and download every chart source that covers it into the boat-wide tile
+  cache. The area is saved and pinned, so it keeps rendering at anchor and at sea. A storage estimate,
+  gated against the cache budget, shows the size before the download starts.
+- **A saved-areas list you manage.** Every downloaded area is listed with its cached size and last
+  download date, with re-download and delete on each, and a progress bar tracks an area while it fills.
+- **The base map and marks saved by default.** A downloaded area saves the chart that covers it, the
+  navigation marks, and the vector base map with no setup, so an offline area is never a blank canvas.
+  "Customize what's included" opens the full layer list when you want the specialist overlays.
+- **Detail as plain presets.** Pick Overview, Coastal, or Harbor instead of raw zoom numbers, and the
+  area downloads to the right level of detail for how you will use it.
+- **Auto-cache around the boat.** An optional background fill keeps a small area cached around the
+  vessel as it moves. Pick the charts it caches, and set its radius and refresh interval, so you stay
+  covered even away from a saved area.
+- **Local chart management.** A panel lists every local PMTiles chart the Chart Locker plugin has
+  found and registered, each with its name and description, so your full set of offline charts is
+  visible in one place.
+- **One shared, boat-wide offline cache.** The remote chart overlays and the vector base map with its
+  labels are fetched and cached through the Signal K server, so the whole boat shares one cache, the
+  same tile is not refetched per device, and they keep working offline at sea.
+- **The Offline charts panel.** All of the above lives under one plain-language "Offline charts" menu
+  group: a landing with a single "Download an area" action, the saved-areas list, and rows into
+  Storage and Auto-cache, in place of the old scroll of source checkboxes, zoom numbers, and cache
+  internals.
+- **Chart Locker status in the header.** With the plugin installed, the header's right controls show a
+  Chart Locker pill beside the profile pill that reads "online", "offline", or "error" at a glance, and
+  opens the Offline charts panel on tap. It reads online whether or not you have the access to read the
+  cache size, and shows the size in its hover tooltip when you do. It turns to "offline" if the cache
+  stops responding, "error" on a server fault, and is absent on a standalone install without Chart
+  Locker.
 
 ### Fixed
 
+- **The vector base map and its labels render again.** The base map tiles and glyphs are fetched in a
+  web worker, which could not resolve a path-absolute `/plugins/...` URL and failed every vector tile
+  and glyph request, leaving only the shaded-relief raster visible. Binnacle now hands MapLibre
+  absolute URLs, so the vector base map, its labels, and a read-only server all work again.
+- **Writes use the read-write token the moment access is approved.** Routes, waypoints, tracks, course
+  changes, and alarm writes switch to the read-write token as soon as access is granted, instead of
+  failing on the original read-only token until the page reloads.
 - **Auto-cache settings are kept.** Turning on auto-cache around the boat, and its chart picks, radius,
   and interval, now persist and reload. The settings were saved all along, but the panel read them back
   in the wrong shape and reopened on its defaults, so the toggle looked like it never saved.
+- **The man-overboard confirm dialog times out exactly once.** The 15 second self-dismiss countdown
+  could fire more than once if the dialog lingered, so the alarm handoff now runs a single time.
 - **Theme switch during a chart load.** Switching the day, dusk, or night theme no longer errors when a
   chart overlay layer is still loading; the paint update skips a layer that is not on the map yet.
+- **A downloading area survives a token change.** If the access token rotates while an area download is
+  in progress, the status poll picks up the new token on its next tick instead of running on the stale
+  one.
+- **The offline-area storage check no longer hangs.** The storage check bounds its request with a
+  timeout, so an unreachable tile cache fails and reports rather than leaving the panel on "Checking
+  storage".
 
 ### Changed
 
+- **Companion plugin renamed to Chart Locker.** Binnacle points its tile cache, base map, chart, and
+  area requests at the renamed `signalk-chart-locker` plugin, previously the Binnacle Companion plugin.
+- **The man-overboard alert range follows your distance units.** The MOB alert's announced range now
+  matches the on-screen Range readout and honors your distance-unit preference, instead of always
+  announcing meters.
 - **Dependencies and internals.** Refreshed @lucide/svelte, declared the Biome dev dependency the lint
-  scripts rely on, dropped an unused dev dependency, and removed dead export surface across the app.
-  No behavior change.
+  scripts rely on, dropped an unused dev dependency, tightened the US and EU chart bounds so a layer
+  only appears where it has data, and removed dead export surface across the app.
 
 <a id="v0122"></a>
 

@@ -17,19 +17,21 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ## What's new in 0.13.0
 
-The major changes since 0.12.0, the first public release since then.
+The first published release since 0.10.6, bringing the whole offline-charts and Chart Locker system.
 
-- **Offline charts, powered by Chart Locker.** With the Chart Locker plugin installed, Binnacle caches
-  the remote charts and the vector base map boat-wide so they work offline at sea. Draw a box and
-  download every covering chart source before leaving coverage, keep an area warm around the boat
-  automatically, and manage local PMTiles archives, all from a plain-language "Offline charts" panel
-  with Overview, Coastal, and Harbor presets instead of raw zoom numbers.
-- **Chart Locker status in the header.** A Chart Locker pill in the header's right controls, next to the
-  profile pill, reads "online", "offline", or "error" at a glance, and opens the Offline charts panel on
-  tap. The cache size shows in its hover tooltip when you have the access to read it, and the pill is
-  absent on a standalone install.
-- **Auto-cache settings are kept.** Turning on auto-cache around the boat, and its chart picks and
-  range, now persist and reload correctly.
+- **Offline charts, powered by Chart Locker.** With the Chart Locker plugin installed, draw a box and
+  download every chart source that covers it into a boat-wide tile cache before you lose coverage. The
+  saved area is pinned and keeps rendering offline, saved areas carry re-download and delete, and detail
+  is a plain Overview, Coastal, or Harbor preset instead of raw zoom numbers. The base map and marks
+  save by default, so an offline area is never a blank canvas.
+- **Auto-cache around the boat.** An optional background fill keeps a small area cached around the
+  vessel as it moves, and its chart picks, radius, and refresh interval now persist and reload.
+- **Local chart management and a shared cache.** Manage your local PMTiles charts in one panel, and let
+  the whole boat share one offline cache for the remote charts and the vector base map so the same tile
+  is not refetched per device.
+- **Chart Locker status in the header.** A Chart Locker pill beside the profile pill reads "online",
+  "offline", or "error" at a glance, and opens the Offline charts panel on tap. The cache size shows in
+  its hover tooltip when you have the access to read it, and the pill is absent on a standalone install.
 - **Reliability fixes.** The vector base map and its labels render again, theme switches no longer
   error mid chart-load, the man-overboard confirm times out exactly once, and writes use the read-write
   token the moment access is approved.
