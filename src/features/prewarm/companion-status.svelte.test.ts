@@ -152,7 +152,7 @@ describe('CompanionStatus', () => {
     status.stop();
   });
 
-  it('a 5xx sets error and keeps polling', async () => {
+  it('a 5xx sets error only after two consecutive failures, and keeps polling', async () => {
     const fetchImpl = vi.fn(async () => errorResponse(500));
     const status = new CompanionStatus(
       'http://h',
@@ -162,14 +162,16 @@ describe('CompanionStatus', () => {
     );
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('error');
-    const afterFirst = fetchImpl.mock.calls.length;
+    expect(status.state).not.toBe('error'); // debounced: one failure does not flip
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterFirst);
+    expect(status.state).toBe('error');
+    const afterTwo = fetchImpl.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterTwo);
     status.stop();
   });
 
-  it('a network reject sets offline and keeps polling', async () => {
+  it('a network reject sets offline only after two consecutive failures, and keeps polling', async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error('offline');
     });
@@ -181,10 +183,44 @@ describe('CompanionStatus', () => {
     );
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('offline');
-    const afterFirst = fetchImpl.mock.calls.length;
+    expect(status.state).not.toBe('offline'); // debounced
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterFirst);
+    expect(status.state).toBe('offline');
+    const afterTwo = fetchImpl.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterTwo);
+    status.stop();
+  });
+
+  it('a single dropped poll does not flip a serving pill, and recovery is immediate', async () => {
+    let fail = false;
+    const fetchImpl = vi.fn(async () => {
+      if (fail) throw new Error('blip');
+      return okResponse(10);
+    });
+    const status = new CompanionStatus(
+      'http://h',
+      () => BASE,
+      () => 'tok',
+      fetchImpl as unknown as typeof fetch,
+    );
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('serving');
+
+    // One dropped poll: the pill holds serving rather than flickering to offline.
+    fail = true;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(status.state).toBe('serving');
+
+    // A second consecutive failure crosses the threshold and shows offline.
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(status.state).toBe('offline');
+
+    // The next success recovers immediately, no debounce on the way back up.
+    fail = false;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(status.state).toBe('serving');
     status.stop();
   });
 

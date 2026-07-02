@@ -8,6 +8,11 @@ import { createRegionsClient, HttpStatusError } from './regions-client.js';
 
 export const COMPANION_POLL_MS = 30_000;
 
+// A 5xx or a transport fault can be a single dropped poll on a boat link, so require this many
+// consecutive failures before the pill shows offline or error. One blip keeps the last state; recovery
+// is immediate on the next success.
+export const COMPANION_FAIL_THRESHOLD = 2;
+
 export type CompanionState = 'serving' | 'needs-auth' | 'offline' | 'error';
 
 export class CompanionStatus {
@@ -22,6 +27,9 @@ export class CompanionStatus {
   #timer: ReturnType<typeof setInterval> | null = null;
   #onVisibility: (() => void) | null = null;
   #inFlight = false;
+  // Consecutive 5xx or transport failures, so a single dropped poll does not flicker the pill to
+  // offline. Reset on any success or auth answer.
+  #failStreak = 0;
   // The exact credential a 401 or 403 refused, undefined when nothing is refused. While the live
   // credential still equals it the poller stays backed off, so a secured server is not re-hit with the
   // same refused credential every interval. This tracks a null credential too: a secured server that
@@ -108,20 +116,25 @@ export class CompanionStatus {
       this.#state = 'serving';
       this.#cacheBytes = stats.bytes;
       this.#refusedCred = undefined;
+      this.#failStreak = 0;
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
         // The credential (which may be null on a secured server) is refused: prompt sign-in and back
-        // off on this exact credential until a different one arrives.
+        // off on this exact credential until a different one arrives. Auth is a definite answer, not a
+        // transient fault, so apply it at once and reset the fault streak.
         this.#state = 'needs-auth';
         this.#refusedCred = token;
-      } else if (error instanceof HttpStatusError && error.status >= 500) {
-        // The container is reachable but faulting: keep polling so the pill recovers on its own, and do
-        // not back off a credential, since this is a server fault, not an auth refusal.
-        this.#state = 'error';
+        this.#failStreak = 0;
       } else {
-        // A network reject or any other transport fault: the container is unreachable. Keep polling so
-        // the pill recovers when the link or the container comes back.
-        this.#state = 'offline';
+        // A 5xx (reachable but faulting) or a transport fault (unreachable) can be a single blip on a
+        // boat link. Debounce: only surface offline or error after COMPANION_FAIL_THRESHOLD consecutive
+        // failures, keeping the last state through one dropped poll. Both keep polling so the pill
+        // recovers on its own, and neither backs off a credential, since this is not an auth refusal.
+        this.#failStreak += 1;
+        if (this.#failStreak >= COMPANION_FAIL_THRESHOLD) {
+          this.#state =
+            error instanceof HttpStatusError && error.status >= 500 ? 'error' : 'offline';
+        }
       }
     } finally {
       this.#inFlight = false;
