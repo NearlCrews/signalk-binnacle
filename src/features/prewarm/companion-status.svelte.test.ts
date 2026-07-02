@@ -28,6 +28,8 @@ function makeDoc(): {
   };
 }
 
+const BASE = 'http://h/plugins/signalk-chart-locker';
+
 const okResponse = (bytes: number, status = 200): Response =>
   ({
     ok: status < 400,
@@ -61,7 +63,7 @@ describe('CompanionStatus', () => {
       vi.fn(),
     );
     expect(status.present).toBe(false);
-    base = 'http://h/plugins/signalk-chart-locker';
+    base = BASE;
     expect(status.present).toBe(true);
   });
 
@@ -69,7 +71,7 @@ describe('CompanionStatus', () => {
     const fetchImpl = vi.fn(async () => okResponse(4096));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
     );
@@ -80,45 +82,30 @@ describe('CompanionStatus', () => {
     status.stop();
   });
 
-  it('a network failure sets down and keeps polling', async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error('offline');
-    });
+  it('an unsecured server with no token still polls and reaches serving', async () => {
+    // The root-cause fix: on an unsecured server the stats route answers 200 to everyone, so a
+    // tokenless viewer must poll and reach serving, not sit pinned to needs-auth.
+    const fetchImpl = vi.fn(async () => okResponse(2048));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
-      () => 'tok',
+      () => BASE,
+      () => null,
       fetchImpl as unknown as typeof fetch,
     );
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('down');
-    const afterFirst = fetchImpl.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterFirst);
+    expect(fetchImpl).toHaveBeenCalled();
+    expect(status.state).toBe('serving');
+    expect(status.cacheBytes).toBe(2048);
     status.stop();
   });
 
-  it('a 5xx sets down (not needs-auth)', async () => {
-    const fetchImpl = vi.fn(async () => errorResponse(500));
-    const status = new CompanionStatus(
-      'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('down');
-    status.stop();
-  });
-
-  it('a 401 sets needs-auth and stops polling until the token flips null to value', async () => {
-    let token: string | null = 'stale';
+  it('a secured server with no token shows needs-auth, backs off, and resumes when a token arrives', async () => {
+    let token: string | null = null;
     const fetchImpl = vi.fn(async () => (token === 'good' ? okResponse(8) : errorResponse(401)));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => token,
       fetchImpl as unknown as typeof fetch,
     );
@@ -127,14 +114,11 @@ describe('CompanionStatus', () => {
     expect(status.state).toBe('needs-auth');
     const afterAuthFail = fetchImpl.mock.calls.length;
 
-    // Still refused with the same token: no further network hits.
+    // Still the same refused null credential: no further network hits.
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(fetchImpl.mock.calls.length).toBe(afterAuthFail);
 
-    // The token clears (sign-out), then a fresh one arrives (re-approval): polling resumes.
-    token = null;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterAuthFail);
+    // A real token arrives (different from the refused null): polling resumes.
     token = 'good';
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(fetchImpl.mock.calls.length).toBe(afterAuthFail + 1);
@@ -142,12 +126,12 @@ describe('CompanionStatus', () => {
     status.stop();
   });
 
-  it('a refused token refreshed directly to a new one resumes polling', async () => {
+  it('a 401 backs off on the same credential and resumes when the token changes', async () => {
     let token = 'stale';
     const fetchImpl = vi.fn(async () => (token === 'fresh' ? okResponse(9) : errorResponse(403)));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => token,
       fetchImpl as unknown as typeof fetch,
     );
@@ -160,7 +144,7 @@ describe('CompanionStatus', () => {
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(fetchImpl.mock.calls.length).toBe(afterAuthFail);
 
-    // The expired token is refreshed to a new value with no null in between: polling resumes.
+    // The token is refreshed to a new value: polling resumes.
     token = 'fresh';
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(fetchImpl.mock.calls.length).toBe(afterAuthFail + 1);
@@ -168,18 +152,39 @@ describe('CompanionStatus', () => {
     status.stop();
   });
 
-  it('no token means zero polls and needs-auth', async () => {
-    const fetchImpl = vi.fn(async () => okResponse(1));
+  it('a 5xx sets error and keeps polling', async () => {
+    const fetchImpl = vi.fn(async () => errorResponse(500));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
-      () => null,
+      () => BASE,
+      () => 'tok',
       fetchImpl as unknown as typeof fetch,
     );
     status.start();
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS * 3);
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(status.state).toBe('needs-auth');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('error');
+    const afterFirst = fetchImpl.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterFirst);
+    status.stop();
+  });
+
+  it('a network reject sets offline and keeps polling', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const status = new CompanionStatus(
+      'http://h',
+      () => BASE,
+      () => 'tok',
+      fetchImpl as unknown as typeof fetch,
+    );
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('offline');
+    const afterFirst = fetchImpl.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterFirst);
     status.stop();
   });
 
@@ -187,7 +192,7 @@ describe('CompanionStatus', () => {
     const fetchImpl = vi.fn(async () => okResponse(2));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
     );
@@ -210,7 +215,7 @@ describe('CompanionStatus', () => {
     const fetchImpl = vi.fn(async () => okResponse(3));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
     );
@@ -228,7 +233,7 @@ describe('CompanionStatus', () => {
     const fetchImpl = vi.fn(async () => okResponse(5));
     const status = new CompanionStatus(
       'http://h',
-      () => 'http://h/plugins/signalk-chart-locker',
+      () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
     );

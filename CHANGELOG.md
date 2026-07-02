@@ -13,11 +13,12 @@ development versions, 0.12.1 and 0.12.2, and adds a status-strip indicator for t
 
 ### Added
 
-- **Chart Locker status in the header.** With the Chart Locker plugin installed, the header shows an
-  offline-charts chip next to the Binnacle Chartplotter title: a status dot plus the cache size in use,
-  so the boat-wide chart cache is reachable at a glance and its fill is visible. A viewer without the
-  access to read the size sees the name alone, the chip reads "no reply" if the cache stops responding,
-  and it is absent on a standalone install without Chart Locker.
+- **Chart Locker status in the header.** With the Chart Locker plugin installed, the header's right
+  controls show a Chart Locker pill next to the profile pill that reads "online", "offline", or "error"
+  at a glance, and opens the Offline charts panel on tap. It reads online whether or not you have the
+  access to read the cache size, and shows the size in its hover tooltip when you do. It turns to
+  "offline" if the cache stops responding, "error" on a server fault, and is absent on a standalone
+  install without Chart Locker.
 
 ### Fixed
 

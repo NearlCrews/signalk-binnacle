@@ -1,14 +1,14 @@
-/** The single owner of Chart Locker companion health, polled for the status strip's offline-charts
- * chip. It rebuilds the regions client with the live token every tick, so a token that arrives after
+/** The single owner of Chart Locker companion health, polled for the header's offline-charts status
+ * pill. It rebuilds the regions client with the live token every tick, so a token that arrives after
  * admin approval or rotates mid-session is always current, and it never captures a stale one. It lives
  * in the offline-charts feature because it drives that feature's cache-stats client; the app composes
- * one instance and reads its getters into the presenter chip. */
+ * one instance and reads its getters into the presenter pill. */
 
 import { createRegionsClient, HttpStatusError } from './regions-client.js';
 
 export const COMPANION_POLL_MS = 30_000;
 
-export type CompanionState = 'serving' | 'needs-auth' | 'down';
+export type CompanionState = 'serving' | 'needs-auth' | 'offline' | 'error';
 
 export class CompanionStatus {
   #origin: string;
@@ -22,10 +22,12 @@ export class CompanionStatus {
   #timer: ReturnType<typeof setInterval> | null = null;
   #onVisibility: (() => void) | null = null;
   #inFlight = false;
-  // The exact token a 401 or 403 refused. While the live token still equals it, the poller stays backed
-  // off, so a secured server is not re-hit with the same refused token every interval. Any change
-  // (a fresh sign-in, or an expired token refreshed to a new one) clears it and resumes polling.
-  #refusedToken: string | null = null;
+  // The exact credential a 401 or 403 refused, undefined when nothing is refused. While the live
+  // credential still equals it the poller stays backed off, so a secured server is not re-hit with the
+  // same refused credential every interval. This tracks a null credential too: a secured server that
+  // refuses the anonymous viewer backs off instead of 401-spamming, yet the moment a real token arrives
+  // (token !== the refused null) it polls again. A fresh sign-in or a refreshed token likewise clears it.
+  #refusedCred: string | null | undefined = undefined;
 
   constructor(
     origin: string,
@@ -63,8 +65,8 @@ export class CompanionStatus {
       document.addEventListener('visibilitychange', this.#onVisibility);
     }
     this.#timer = setInterval(() => void this.#tick(), COMPANION_POLL_MS);
-    // An immediate first poll resolves serving versus down within a tick rather than after the full
-    // interval.
+    // An immediate first poll resolves serving versus not-reachable within a tick rather than after the
+    // full interval.
     void this.#tick();
   }
 
@@ -87,32 +89,39 @@ export class CompanionStatus {
     if (base === null) return;
     if (typeof document !== 'undefined' && document.hidden) return;
 
+    // Read the live credential but do NOT early-return on a null token: an unsecured server answers the
+    // stats route 200 to everyone, so a tokenless viewer there must poll and reach serving. Only a
+    // credential that was actually refused (recorded in #refusedCred) backs the poller off.
     const token = this.#getToken();
 
-    // An anonymous or read-blocked viewer polls zero times: the chip reads needs-sign-in without ever
-    // touching the admin-gated route, so a secured server is not 401-spammed.
-    if (token === null) {
-      this.#state = 'needs-auth';
-      this.#refusedToken = null;
-      return;
-    }
-    // Stay backed off while the live token is still the one a 401 or 403 refused; any other token
-    // (a fresh sign-in, or a refreshed one) clears the block and polls again.
-    if (token === this.#refusedToken) return;
+    // Stay backed off while the live credential is still the exact one a 401 or 403 refused (a null
+    // token included); any other credential clears the block and polls again.
+    if (this.#refusedCred !== undefined && this.#refusedCred === token) return;
 
     this.#inFlight = true;
     try {
-      const stats = await createRegionsClient(this.#origin, token, this.#fetchImpl).getCacheStats();
+      const stats = await createRegionsClient(
+        this.#origin,
+        token ?? undefined,
+        this.#fetchImpl,
+      ).getCacheStats();
       this.#state = 'serving';
       this.#cacheBytes = stats.bytes;
+      this.#refusedCred = undefined;
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
+        // The credential (which may be null on a secured server) is refused: prompt sign-in and back
+        // off on this exact credential until a different one arrives.
         this.#state = 'needs-auth';
-        this.#refusedToken = token;
+        this.#refusedCred = token;
+      } else if (error instanceof HttpStatusError && error.status >= 500) {
+        // The container is reachable but faulting: keep polling so the pill recovers on its own, and do
+        // not back off a credential, since this is a server fault, not an auth refusal.
+        this.#state = 'error';
       } else {
-        // A network fault or a 5xx: keep polling so the chip recovers on its own when the link or the
-        // container comes back.
-        this.#state = 'down';
+        // A network reject or any other transport fault: the container is unreachable. Keep polling so
+        // the pill recovers when the link or the container comes back.
+        this.#state = 'offline';
       }
     } finally {
       this.#inFlight = false;

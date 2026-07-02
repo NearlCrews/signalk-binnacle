@@ -24,10 +24,10 @@ The major changes since 0.12.0, the first public release since then.
   download every covering chart source before leaving coverage, keep an area warm around the boat
   automatically, and manage local PMTiles archives, all from a plain-language "Offline charts" panel
   with Overview, Coastal, and Harbor presets instead of raw zoom numbers.
-- **Chart Locker status in the header.** The header shows an offline-charts chip next to the Binnacle
-  Chartplotter title: a status dot plus the cache size in use, so the boat-wide chart cache is visible
-  at a glance. A viewer without the access to read the size sees the name alone, it reads "no reply" if
-  the cache stops responding, and is absent on a standalone install.
+- **Chart Locker status in the header.** A Chart Locker pill in the header's right controls, next to the
+  profile pill, reads "online", "offline", or "error" at a glance, and opens the Offline charts panel on
+  tap. The cache size shows in its hover tooltip when you have the access to read it, and the pill is
+  absent on a standalone install.
 - **Auto-cache settings are kept.** Turning on auto-cache around the boat, and its chart picks and
   range, now persist and reload correctly.
 - **Reliability fixes.** The vector base map and its labels render again, theme switches no longer

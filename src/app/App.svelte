@@ -179,7 +179,7 @@ import { createTrackStore } from '$shared/storage';
 import { createThemeController, defaultSaveName, SlideOver, type Theme } from '$shared/ui';
 import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
 import { WeatherMap } from '$widgets/weather-map';
-import CompanionChip from './CompanionChip.svelte';
+import ChartLockerStatus from './ChartLockerStatus.svelte';
 import LiveRegions from './LiveRegions.svelte';
 import StatusStrip from './StatusStrip.svelte';
 
@@ -1174,17 +1174,21 @@ const collisionAlert = $derived.by(() => {
 const muteAlert = $derived(collisionMute.active ? 'Collision alarm muted.' : '');
 const muteRemainingMin = $derived(Math.max(1, Math.ceil(collisionMute.remainingMs / MINUTE_MS)));
 
-// Announce a single crossing of the serving-to-not-responding boundary through the polite live region,
+// Announce a single crossing of the reachable-to-not-responding boundary through the polite live region,
 // never the ticking byte count. Edge detection needs the previous value, so it uses a non-reactive
-// latch in an effect rather than a derived, which would re-fire on every poll.
+// latch in an effect rather than a derived, which would re-fire on every poll. offline and error are
+// both not-responding states, but each gets its own words so the operator hears which one it is.
 let companionAnnounce = $state('');
 let companionWasDown = false;
 $effect(() => {
-  const down = companionStatus.state === 'down';
+  const state = companionStatus.state;
+  const down = state === 'offline' || state === 'error';
   if (down === companionWasDown) return;
   companionWasDown = down;
   companionAnnounce = down
-    ? 'Chart Locker is not responding.'
+    ? state === 'error'
+      ? 'Chart Locker reported a server error.'
+      : 'Chart Locker is not responding.'
     : 'Chart Locker is responding again.';
 });
 
@@ -2017,11 +2021,6 @@ onDestroy(() => {
       <span class="brand"
         >Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></span
       >
-      <CompanionChip
-        present={companionStatus.present}
-        state={companionStatus.state}
-        cacheBytes={companionStatus.cacheBytes}
-      />
     </span>
     <MobButton {mob} onTrigger={mobController.onTrigger} onLocate={flyToPosition} />
     <span class="topbar-actions">
@@ -2043,6 +2042,12 @@ onDestroy(() => {
           Update
         </button>
       {/if}
+      <ChartLockerStatus
+        present={companionStatus.present}
+        state={companionStatus.state}
+        cacheBytes={companionStatus.cacheBytes}
+        onOpen={() => openPanel('regions')}
+      />
       <ProfileSwitcher
         active={profileStore.active}
         isDirty={profileStore.isDirty}
