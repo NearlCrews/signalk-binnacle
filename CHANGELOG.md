@@ -38,10 +38,11 @@ built across the intervening development versions, and adds a Chart Locker statu
   Storage and Auto-cache, in place of the old scroll of source checkboxes, zoom numbers, and cache
   internals.
 - **Chart Locker status in the header.** With the plugin installed, the header's right controls show a
-  Chart Locker pill beside the profile pill that reads "online", "offline", or "error" at a glance, and
-  opens the Offline charts panel on tap. It reads online whether or not you have the access to read the
-  cache size, and shows the size in its hover tooltip when you do. It turns to "offline" if the cache
-  stops responding, "error" on a server fault, and is absent on a standalone install without Chart
+  Chart Locker pill beside the profile pill whose glyph reads its state at a glance: a check when it is
+  online, a pulled plug when it is offline, and a warning triangle on a server fault. It opens the
+  Offline charts panel on tap. It reads online whether or not you have the access to read the cache
+  size, and shows the size in its hover tooltip when you do. The tooltip and the screen-reader label
+  always name the state in words, and the pill is absent on a standalone install without Chart
   Locker.
 
 ### Fixed

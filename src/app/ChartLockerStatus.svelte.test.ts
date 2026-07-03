@@ -4,10 +4,10 @@ import type { CompanionState } from '$features/prewarm';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 
 // Renders the pill to an SSR HTML string (the suite runs in the node environment, no DOM), enough to
-// pin its presence, per-state word, the warning modifier classes, and that the cache figure stays in
-// the hover title. The node environment cannot dispatch a real DOM click, so the onOpen wiring is
-// verified structurally: the click target (the button) exists only when present, which is exactly the
-// "fires only when present" guard, and no target renders when absent.
+// pin its presence, the per-state glyph, the accessible word, the warning modifier classes, and that
+// the cache figure stays in the hover title. The node environment cannot dispatch a real DOM click, so
+// the onOpen wiring is verified structurally: the click target (the button) exists only when present,
+// which is exactly the "fires only when present" guard, and no target renders when absent.
 function body(props: {
   present: boolean;
   state: CompanionState;
@@ -26,16 +26,22 @@ describe('ChartLockerStatus', () => {
     expect(html).not.toContain('<button');
   });
 
-  it('shows the state word per state', () => {
-    for (const [state, word] of [
-      ['serving', 'online'],
-      ['needs-auth', 'online'],
-      ['offline', 'offline'],
-      ['error', 'error'],
+  it('shows the state as a glyph, with the word in the accessible name, plus a steady drive mark', () => {
+    for (const [state, glyph, word] of [
+      ['serving', 'lucide-check', 'online'],
+      ['needs-auth', 'lucide-check', 'online'],
+      ['offline', 'lucide-unplug', 'offline'],
+      ['error', 'lucide-triangle-alert', 'error'],
     ] as const) {
       const html = body({ present: true, state, cacheBytes: null, onOpen: noop });
+      // The brand label and its steady drive mark are always shown.
       expect(html).toContain('Chart Locker:');
-      expect(html).toContain(`>${word}</span>`);
+      expect(html).toContain('lucide-hard-drive');
+      // The state shows as its glyph, and the literal word stays in the accessible name only.
+      expect(html).toContain(glyph);
+      expect(html).toContain(`aria-label="Chart Locker ${word}, open offline charts"`);
+      // The state word is never rendered as visible body text.
+      expect(html).not.toContain(`>${word}</span>`);
     }
   });
 
@@ -55,11 +61,9 @@ describe('ChartLockerStatus', () => {
     }
   });
 
-  it('keeps the cache figure in the hover title, never in the visible word', () => {
+  it('keeps the cache figure in the hover title, never in the visible pill', () => {
     const serving = body({ present: true, state: 'serving', cacheBytes: 4096, onOpen: noop });
-    // The byte figure rides only the title attribute, and the visible state word stays the plain word.
     expect(serving).toContain('title="Offline charts: online, cache 4.0 KB"');
-    expect(serving).toContain('>online</span>');
     // needs-auth cannot read the size, so no byte figure appears at all.
     const needsAuth = body({ present: true, state: 'needs-auth', cacheBytes: 4096, onOpen: noop });
     expect(needsAuth).toContain('sign in to see cache size');

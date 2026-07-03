@@ -29,9 +29,10 @@ The first published release since 0.10.6, bringing the whole offline-charts and 
 - **Local chart management and a shared cache.** Manage your local PMTiles charts in one panel, and let
   the whole boat share one offline cache for the remote charts and the vector base map so the same tile
   is not refetched per device.
-- **Chart Locker status in the header.** A Chart Locker pill beside the profile pill reads "online",
-  "offline", or "error" at a glance, and opens the Offline charts panel on tap. The cache size shows in
-  its hover tooltip when you have the access to read it, and the pill is absent on a standalone install.
+- **Chart Locker status in the header.** A Chart Locker pill beside the profile pill shows its state as
+  a glyph at a glance, a check when online, a pulled plug when offline, and a warning triangle on a fault,
+  and opens the Offline charts panel on tap. The cache size and the state in words show in its hover
+  tooltip, and the pill is absent on a standalone install.
 - **Reliability fixes.** The vector base map and its labels render again, theme switches no longer
   error mid chart-load, the man-overboard confirm times out exactly once, and writes use the read-write
   token the moment access is approved.
