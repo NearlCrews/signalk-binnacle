@@ -16,7 +16,6 @@ const COMPANION_FAIL_THRESHOLD = 2;
 export type CompanionState = 'serving' | 'needs-auth' | 'offline' | 'error';
 
 export class CompanionStatus {
-  #origin: string;
   #getBase: () => string | null;
   #getToken: () => string | null;
   #fetchImpl: typeof fetch | undefined;
@@ -38,12 +37,10 @@ export class CompanionStatus {
   #refusedCred: string | null | undefined = undefined;
 
   constructor(
-    origin: string,
     getBase: () => string | null,
     getToken: () => string | null,
     fetchImpl?: typeof fetch,
   ) {
-    this.#origin = origin;
     this.#getBase = getBase;
     this.#getToken = getToken;
     this.#fetchImpl = fetchImpl;
@@ -115,7 +112,7 @@ export class CompanionStatus {
     this.#inFlight = true;
     try {
       const stats = await createRegionsClient(
-        this.#origin,
+        base,
         token ?? undefined,
         this.#fetchImpl,
       ).getCacheStats();

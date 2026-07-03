@@ -557,7 +557,6 @@ let companionBase = $state<string | null>(null);
 // and token are getters so it reads them live: the base resolves after detectCompanion, and the token
 // arrives after admin approval and can rotate mid-session.
 const companionStatus = new CompanionStatus(
-  origin,
   () => companionBase,
   () => auth.token ?? null,
 );

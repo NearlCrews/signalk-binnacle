@@ -57,7 +57,6 @@ describe('CompanionStatus', () => {
   it('present derives from the base getter', () => {
     let base: string | null = null;
     const status = new CompanionStatus(
-      'http://h',
       () => base,
       () => 'tok',
       vi.fn(),
@@ -67,10 +66,28 @@ describe('CompanionStatus', () => {
     expect(status.present).toBe(true);
   });
 
+  it('polls the companion base, not the bare origin, so the /plugins prefix is present', async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(String(url));
+      return okResponse(1);
+    }) as unknown as typeof fetch;
+    const status = new CompanionStatus(
+      () => BASE,
+      () => 'tok',
+      fetchImpl,
+    );
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    // The URL must carry the companion base (BASE ends in /plugins/signalk-chart-locker), not the bare
+    // origin, or the poll hits /api/cache/stats and 404s.
+    expect(urls[0]).toBe(`${BASE}/api/cache/stats`);
+    status.stop();
+  });
+
   it('a successful poll sets serving and cacheBytes', async () => {
     const fetchImpl = vi.fn(async () => okResponse(4096));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -87,7 +104,6 @@ describe('CompanionStatus', () => {
     // tokenless viewer must poll and reach serving, not sit pinned to needs-auth.
     const fetchImpl = vi.fn(async () => okResponse(2048));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => null,
       fetchImpl as unknown as typeof fetch,
@@ -104,7 +120,6 @@ describe('CompanionStatus', () => {
     let token: string | null = null;
     const fetchImpl = vi.fn(async () => (token === 'good' ? okResponse(8) : errorResponse(401)));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => token,
       fetchImpl as unknown as typeof fetch,
@@ -130,7 +145,6 @@ describe('CompanionStatus', () => {
     let token = 'stale';
     const fetchImpl = vi.fn(async () => (token === 'fresh' ? okResponse(9) : errorResponse(403)));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => token,
       fetchImpl as unknown as typeof fetch,
@@ -155,7 +169,6 @@ describe('CompanionStatus', () => {
   it('a 5xx sets error only after two consecutive failures, and keeps polling', async () => {
     const fetchImpl = vi.fn(async () => errorResponse(500));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -176,7 +189,6 @@ describe('CompanionStatus', () => {
       throw new Error('offline');
     });
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -199,7 +211,6 @@ describe('CompanionStatus', () => {
       return okResponse(10);
     });
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -229,7 +240,6 @@ describe('CompanionStatus', () => {
   it('a hidden tab pauses polling and a resume refetches', async () => {
     const fetchImpl = vi.fn(async () => okResponse(2));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -252,7 +262,6 @@ describe('CompanionStatus', () => {
   it('stop clears the timer and removes the visibilitychange listener', async () => {
     const fetchImpl = vi.fn(async () => okResponse(3));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
@@ -270,7 +279,6 @@ describe('CompanionStatus', () => {
   it('start is idempotent: a second call does not stack a timer or listener', async () => {
     const fetchImpl = vi.fn(async () => okResponse(5));
     const status = new CompanionStatus(
-      'http://h',
       () => BASE,
       () => 'tok',
       fetchImpl as unknown as typeof fetch,
