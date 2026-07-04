@@ -18,6 +18,8 @@ export {
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
 } from './history-client';
+export type { MetaZone, PathMeta, ZoneState } from './meta';
+export { fetchPathMeta, zoneStateFor } from './meta';
 export type {
   RaiseNotificationOptions,
   UpdateNotificationOptions,
