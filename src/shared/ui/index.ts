@@ -11,6 +11,8 @@ export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as PanelHeader } from './PanelHeader.svelte';
 export { defaultSaveName, resolveSaveName } from './prompt';
+export type { Reorder, ReorderItem, ReorderOptions } from './reorder.svelte';
+export { createReorder } from './reorder.svelte';
 export { default as SavedList } from './SavedList.svelte';
 export { default as ShowOnChartToggle } from './ShowOnChartToggle.svelte';
 export { default as SlideOver } from './SlideOver.svelte';
