@@ -1,8 +1,8 @@
 import type { MenuItem } from './menu-item';
 
-// The bar's default pinned set: Center, Follow, and Charts (the layers action). The single source of
+// The bar's default pinned set: Center, Follow, Charts (the layers action), and Instruments. The single source of
 // the default, imported by the composition root for the persisted-value fallback.
-export const DEFAULT_PINNED: readonly string[] = ['center', 'follow', 'layers'];
+export const DEFAULT_PINNED: readonly string[] = ['center', 'follow', 'layers', 'instruments'];
 
 // The pinned actions in canonical (registry) order. Iterating the registry (not the id list) yields a
 // stable order regardless of pin sequence and inherently drops an id with no matching action (a

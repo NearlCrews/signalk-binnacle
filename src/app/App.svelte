@@ -5,6 +5,7 @@ import {
   ChartLine,
   CloudSun,
   DownloadCloud,
+  Gauge,
   History,
   Layers,
   LocateFixed,
@@ -50,6 +51,11 @@ import {
 import { AuthBanner } from '$features/auth-banner';
 import { deleteChart, putChart } from '$features/charts';
 import { ChartsManagementPanel } from '$features/charts-management';
+import {
+  createInstrumentsController,
+  DEFAULT_TILES,
+  InstrumentsPanel,
+} from '$features/instruments';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
 import {
   AlarmsPanel,
@@ -530,6 +536,23 @@ const pinnedActions = new PersistedValue<string[]>('binnacle:pinned-actions', [.
 // be a non-array. Heal it to the default once at startup, so the menu's Set and the pin toggle never
 // receive a non-iterable; resolvePinned defends the bar render separately.
 if (!Array.isArray(pinnedActions.value as unknown)) pinnedActions.set([...DEFAULT_PINNED]);
+
+// The instrument dock: tile selection rides profiles through this PersistedValue (the bindings
+// entry reads and writes it), while the open flag stays local so a casual dock toggle never
+// dirties the active profile and a profile switch never yanks the dock.
+const instrumentTiles = new PersistedValue<string[]>('binnacle:instrument-tiles', [
+  ...DEFAULT_TILES,
+]);
+const instrumentsOpen = new PersistedValue<boolean>('binnacle:instruments-open', false);
+const instruments = createInstrumentsController({
+  store,
+  origin,
+  getToken: () => authToken,
+  subscribe: (entries) => void client.raw.subscribe(entries),
+  unsubscribe: (paths) => void client.raw.unsubscribe(paths),
+  tilesStore: instrumentTiles,
+  openStore: instrumentsOpen,
+});
 const onTogglePin = (id: string): void => {
   pinnedActions.set(togglePinned(pinnedActions.value, id));
 };
@@ -1030,6 +1053,14 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Conditions',
     pressed: activePanel === 'trends',
     onSelect: () => togglePanel('trends'),
+  },
+  {
+    id: 'instruments',
+    label: 'Instruments',
+    icon: Gauge,
+    group: 'Conditions',
+    pressed: instruments.open,
+    onSelect: () => instruments.toggleOpen(),
   },
   // time-travel is not a LeftPanel; it has its own active flag and enter/exit API.
   {
@@ -1985,6 +2016,7 @@ onDestroy(() => {
   setWriteOutcomeListener(undefined);
   auth.stop();
   void marineRadar.dispose();
+  instruments.dispose();
   net.dispose();
   clock.dispose();
   void client.disconnect();
@@ -2358,6 +2390,11 @@ onDestroy(() => {
       />
     {/if}
   </section>
+
+  {#if instruments.open}
+    <InstrumentsPanel controller={instruments} deps={{ vessel, store, units, clock }} />
+  {/if}
+
   <StatusStrip
     {connectionLabel}
     {streamError}
@@ -2399,6 +2436,10 @@ onDestroy(() => {
 .binnacle-shell {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* The second column is the instrument dock; it collapses to zero when the dock is closed. Every
+     in-flow child is placed explicitly, because auto-placement would flow the topbar into the dock
+     column. The toggle is instant by design: animating the track would resize the map per frame. */
+  grid-template-columns: 1fr auto;
   /* dvh tracks the visible viewport so the locked (overflow-hidden) shell does not hide the bottom
      strip under a mobile browser's dynamic toolbar. */
   block-size: 100dvh;
@@ -2436,6 +2477,8 @@ onDestroy(() => {
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
    action cluster are; the flanks are 1fr each so the center cannot drift. */
 .topbar {
+  grid-row: 1;
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -2479,6 +2522,19 @@ onDestroy(() => {
 }
 .chart-host {
   position: relative;
+  grid-row: 2;
+  grid-column: 1;
+}
+.binnacle-shell > :global(.instruments) {
+  grid-row: 2;
+  grid-column: 2;
+  /* The dock scrolls its own tiles; without this a long tile list would stretch the shell row. */
+  min-block-size: 0;
+}
+/* The strip's root lives inside the StatusStrip component, so the span reaches it with :global. */
+.binnacle-shell :global(.status-strip) {
+  grid-row: 3;
+  grid-column: 1 / -1;
 }
 /* The nav strip and the danger strip share the bottom-center area. They stack in one column rather
    than overlapping, so when a collision danger appears mid-passage the course guidance is not hidden.
