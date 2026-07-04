@@ -52,7 +52,7 @@ export async function fetchPathMeta(
   token: string | undefined,
   path: string,
 ): Promise<PathMeta | undefined> {
-  const url = `${base}/signalk/v1/api/vessels/self/${path.split('.').join('/')}/meta`;
+  const url = `${base}/signalk/v1/api/vessels/self/${path.replaceAll('.', '/')}/meta`;
   const body = await fetchAuthedJson<unknown>(url, token);
   if (!isRecord(body)) return undefined;
   const zones = Array.isArray(body.zones)
