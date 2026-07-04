@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Chart Locker joins the "Works well with" plugin recommendations.
+
 ### Fixed
 
 - Profile sync to the server now recovers after an access upgrade: approving a read-write token
@@ -35,6 +39,18 @@ All notable changes to Binnacle are documented here. The format follows
   simplifier allocates less on long recordings.
 - The place-details cache keeps the most recently viewed places instead of evicting the
   oldest-loaded first.
+- Radar spoke frames recycle their transfer buffers between the app and the radar worker, so
+  steady-state streaming stops allocating a fresh multi-megabyte buffer many times a second.
+- Nearby tide and current stations resolve through a latitude-sorted index, so only stations that
+  can possibly be in range are measured.
+- Profile lookups by id go through an index instead of scanning the list per call.
+- The point-of-interest note shape is owned by the entities layer, so the notes overlay and the
+  POI search share one canonical type.
+- The notes overlay's fetch, cache, and retry state moved into a dedicated source module, with the
+  map hit handlers and the highlight ring extracted alongside.
+- The Signal K store's AIS target and notification maps are read-only outside the store, so
+  nothing can bypass the write paths that keep its change counters honest.
+- IndexedDB transaction lifetime is managed inside the storage slice through one shared helper.
 
 <a id="v0130"></a>
 
