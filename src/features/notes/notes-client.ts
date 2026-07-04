@@ -1,3 +1,4 @@
+import type { NotePoint } from '$entities/poi';
 import {
   categoryForSkIcon,
   type PoiCategory,
@@ -8,22 +9,10 @@ import type { Bbox4 } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
 import { fetchKeyedResource, str } from '$shared/signalk';
 
-// A point-of-interest note from the Signal K resources API. Providers like
-// signalk-crows-nest serve marinas, anchorages, and hazards as `notes`, scoped to a
-// geographic query, which is why the fetch carries the current viewport bbox.
-export interface NotePoint {
-  id: string;
-  name: string;
-  position: { latitude: number; longitude: number };
-  category: PoiCategory;
-  // The provider's raw icon reference, kept alongside the derived category so a provided
-  // symbol (signalk-symbol-manager) can resolve it to a custom marker.
-  skIcon?: string;
-  // Optional credit and link surfaced for the marker and its detail panel.
-  url?: string;
-  source?: string;
-  attribution?: string;
-}
+// The note shape itself lives in $entities/poi (the POI search panel renders the same points, and
+// cross-feature data flows through entities); re-exported here so the notes modules and the
+// feature's public API keep one local reference.
+export type { NotePoint };
 
 // The marker reference handed to the app when a note is selected; enough to title the panel
 // before its detail loads.

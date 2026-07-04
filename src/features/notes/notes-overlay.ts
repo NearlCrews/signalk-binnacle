@@ -1,18 +1,8 @@
-import type { GeoJSONSource, MapLayerMouseEvent } from 'maplibre-gl';
-import { asPoiCategory, registerPoiIcons } from '$entities/poi-icons';
+import { registerPoiIcons } from '$entities/poi-icons';
 import { createOverlayIconResolver, type SymbolsStore } from '$entities/symbols';
-import {
-  type Bbox4,
-  bboxContains,
-  type LatLon,
-  latLonToLonLat,
-  lngLatBoundsToBbox4,
-  padBbox,
-} from '$shared/geo';
-import { DAY_MS } from '$shared/lib';
+import { type Bbox4, bboxContains, type LatLon, lngLatBoundsToBbox4, padBbox } from '$shared/geo';
 import {
   emptyFeatureCollection,
-  featureCollection,
   type MapThemePaint,
   mapThemePaint,
   type OverlayContext,
@@ -21,16 +11,14 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
-import { str } from '$shared/signalk';
-import { createExpiringStore, type ExpiringStore } from '$shared/storage';
+import type { ExpiringStore } from '$shared/storage';
 import { registerNavaidIcons } from './navaid-symbols';
-import { bboxKey, NotesCache } from './notes-cache';
-import { fetchNotes, type NotePoint, type NoteSelection } from './notes-client';
+import type { NotePoint, NoteSelection } from './notes-client';
 import { buildRender } from './notes-features';
+import { createNoteHitHandlers } from './notes-hit-handlers';
 import {
   addNoteLayers,
   CLUSTER_COUNT_LAYER,
-  CLUSTER_HIT_LAYERS,
   CLUSTER_ICON_LAYER,
   CLUSTER_RING_BASE_OPACITY,
   CLUSTER_RING_LAYER,
@@ -40,18 +28,10 @@ import {
   removeNoteLayers,
   SELECT_CASING_LAYER,
   SELECT_LAYER,
-  SELECT_SOURCE,
   SOURCE_ID,
 } from './notes-layers';
-
-// After a failed fetch, back off this long before retrying so a stationary map recovers from a
-// transient hiccup without hammering a flaky provider (the tides loader uses the same pattern).
-const RETRY_COOLDOWN_MS = 30_000;
-// Fetched note sets persist across reloads in IndexedDB (which, unlike the service worker, also
-// works over plain http). POIs barely change, so a week-old set is still worth showing; the
-// in-memory TTL drives the real refresh once a set has been seen this session.
-const PERSIST_TTL_MS = 7 * DAY_MS;
-const MAX_PERSIST_ENTRIES = 24;
+import { createSelectRing } from './notes-select-ring';
+import { createNotesSource } from './notes-source';
 
 export interface NotesOverlay extends OverlayModule, Syncable {
   // Ring the marker at a position, or clear the ring with undefined. Position-driven so the POI
@@ -71,6 +51,10 @@ export interface NotesOverlayOptions {
   onNotes?: (notes: NotePoint[]) => void;
 }
 
+// The Points-of-interest overlay: renders community notes as clustered markers. The where-notes-
+// come-from state (persisted store, viewport cache, single-flight fetch, failure cooldown) lives in
+// notes-source, the map hit handlers in notes-hit-handlers, and the highlight ring in
+// notes-select-ring; this module owns rendering, the icon lifecycle, and the sync orchestration.
 export function createNotesOverlay(
   serverBase: string,
   getToken: () => string | undefined,
@@ -80,18 +64,9 @@ export function createNotesOverlay(
 ): NotesOverlay {
   const isOnline = options.isOnline ?? (() => true);
   const onNotes = options.onNotes;
-  const persist =
-    options.persist ??
-    createExpiringStore<NotePoint[]>('binnacle-notes', { maxEntries: MAX_PERSIST_ENTRIES });
-  // A viewport-keyed cache of fetched note sets so panning back, panning a little, or zooming in
-  // reuses a recent fetch instead of re-hitting the network (the data depends only on the bbox, not
-  // the zoom). The raw zoom/center drive a cheap idle fast-path that skips the work when the map has
-  // not moved at all, and a single fetch runs at a time.
-  const cache = new NotesCache();
-  // Areas already fetched or promoted this session: for those the in-memory TTL governs freshness
-  // and an expiry goes to the network, never back to the week-lived persisted copy, so a stale set
-  // cannot pin itself for its whole persisted life.
-  const promotedKeys = new Set<string>();
+  const source = createNotesSource(serverBase, getToken, options.persist);
+  const hit = createNoteHitHandlers(onSelect);
+  const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a
   // failed fetch keeps it on screen instead of blanking the markers.
   let renderedNotes: NotePoint[] | undefined;
@@ -104,9 +79,6 @@ export function createNotesOverlay(
   const invalidateIdleAnchor = (): void => {
     lastZoom = undefined;
   };
-  let fetching = false;
-  // Set after a failed fetch; until it passes, sync holds the fast-path open instead of fetching.
-  let cooldownUntil = 0;
   // Whether the layer is shown. A hidden Points-of-interest layer skips its sync entirely (no network
   // fetch, no re-clustering) and defers the icon re-raster on a theme change until it is shown again.
   // Starts true to match the layer-manager default; the register-time setVisible corrects it.
@@ -114,10 +86,6 @@ export function createNotesOverlay(
   // The paint to re-raster the icons with, set when the theme changes while hidden so the 18 POI and
   // navaid SVGs are refreshed lazily on the next show rather than re-rasterized while invisible.
   let pendingIconPaint: MapThemePaint | undefined;
-  let onClick: ((event: MapLayerMouseEvent) => void) | undefined;
-  let onClusterClick: ((event: MapLayerMouseEvent) => void) | undefined;
-  let onEnter: (() => void) | undefined;
-  let onLeave: (() => void) | undefined;
   // Provided symbols (signalk-symbol-manager), absent on a stock server. The resolver owns the
   // per-overlay icon registry and the pending-symbol queue; a note's skIcon resolves to a provided
   // symbol via the `note` role, or undefined for the built-in category disc (no symbols store,
@@ -161,30 +129,6 @@ export function createNotesOverlay(
     onNotes?.(notes);
   }
 
-  // Resolve an area's notes from the persisted store (only the first time this session sees the
-  // area, which is the reload case), else from the network, persisting a successful fetch for the
-  // next reload. The in-memory cache write stays with the caller, the weather loader's promote
-  // pattern.
-  async function resolveNotes(key: string, fetchBbox: Bbox4): Promise<NotePoint[] | undefined> {
-    if (!promotedKeys.has(key)) {
-      const now = Date.now();
-      const stored = await persist.get(key);
-      if (stored && stored.expires > now) {
-        promotedKeys.add(key);
-        void persist.prune(now);
-        return stored.value;
-      }
-    }
-    const notes = await fetchNotes(serverBase, getToken(), fetchBbox);
-    if (notes) {
-      promotedKeys.add(key);
-      const now = Date.now();
-      await persist.put(key, notes, now + PERSIST_TTL_MS);
-      void persist.prune(now);
-    }
-    return notes;
-  }
-
   // Clear the shown markers (below the zoom floor) without discarding the cache, so zooming back in
   // re-renders instantly from a recent fetch.
   function clearRendered(ctx: OverlayContext): void {
@@ -192,35 +136,6 @@ export function createNotesOverlay(
     renderedNotes = undefined;
     setSourceData(ctx.map, SOURCE_ID, emptyFeatureCollection());
     onNotes?.([]);
-  }
-
-  // The "lat,lon" of the ring last drawn (empty when cleared), so a redundant source rewrite is
-  // skipped when the highlighted position has not changed; reset() clears it once the source is
-  // recreated.
-  let lastRingKey = '';
-  // Position-driven so a list selection rings a marker without a rendered map feature and without
-  // moving the map; the app owns what is highlighted (a hovered or a selected POI) and drives this.
-  function drawSelectRing(ctx: OverlayContext, position: LatLon | undefined): void {
-    const key = position ? `${position.latitude},${position.longitude}` : '';
-    if (key === lastRingKey) return;
-    lastRingKey = key;
-    const data = position
-      ? featureCollection([
-          {
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: latLonToLonLat(position) },
-            properties: {},
-          },
-        ])
-      : emptyFeatureCollection();
-    setSourceData(ctx.map, SELECT_SOURCE, data);
-  }
-
-  // Invalidate the change-detection cache so the next highlight repopulates from scratch. The
-  // manager calls this on a base-style swap, which recreates the selection source empty; add() calls
-  // it so a later same-position highlight redraws its ring.
-  function reset(): void {
-    lastRingKey = '';
   }
 
   return {
@@ -233,65 +148,8 @@ export function createNotesOverlay(
     async add(ctx) {
       const before = ctx.beforeIdFor('routes');
       addNoteLayers(ctx.map, themePaint, before);
-      reset();
-
-      // The hit handlers persist across a base-style swap (the map keeps its listeners), so a
-      // reattach, an add() with no preceding remove(), must not re-register them or every click
-      // would fire onSelect twice and the cursor handlers would leak. remove() nulls these refs, so
-      // a genuine teardown then add() re-attaches. Guard on onClick, the first ref set below.
-      if (!onClick) {
-        onClick = (event) => {
-          const feature = event.features?.[0];
-          if (feature?.geometry.type !== 'Point') return;
-          const props = feature.properties ?? {};
-          const id = String(props.id ?? '');
-          // A note with no id cannot be fetched for detail, so do not select it.
-          if (!id) return;
-          // The category rides on the rendered feature, so validate it against the known set rather
-          // than trusting the string into PoiCategory: an out-of-vocabulary value would key the label
-          // and icon records to nothing instead of falling back.
-          const category = asPoiCategory(String(props.category ?? ''));
-          const [longitude, latitude] = feature.geometry.coordinates as [number, number];
-          onSelect?.({
-            id,
-            name: String(props.name ?? 'Point of interest'),
-            category,
-            position: { latitude, longitude },
-            attribution: str(props.attribution) ?? str(props.source),
-            url: str(props.url),
-          });
-        };
-        onClusterClick = (event) => {
-          const feature = event.features?.[0];
-          const clusterId = feature?.properties?.cluster_id;
-          if (typeof clusterId !== 'number' || feature?.geometry.type !== 'Point') return;
-          const source = ctx.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-          if (!source) return;
-          const center = feature.geometry.coordinates as [number, number];
-          void source
-            .getClusterExpansionZoom(clusterId)
-            .then((zoom) => {
-              ctx.map.easeTo({ center, zoom });
-            })
-            .catch(() => undefined);
-        };
-        onEnter = () => {
-          ctx.map.getCanvas().style.cursor = 'pointer';
-        };
-        onLeave = () => {
-          ctx.map.getCanvas().style.cursor = '';
-        };
-        ctx.map.on('click', LAYER_ID, onClick);
-        ctx.map.on('mouseenter', LAYER_ID, onEnter);
-        ctx.map.on('mouseleave', LAYER_ID, onLeave);
-        // Click only the ring (it covers the cluster and then some), so a click does not fire once per
-        // stacked cluster layer; hover the ring and the icon so either shows the pointer cursor.
-        ctx.map.on('click', CLUSTER_RING_LAYER, onClusterClick);
-        for (const id of CLUSTER_HIT_LAYERS) {
-          ctx.map.on('mouseenter', id, onEnter);
-          ctx.map.on('mouseleave', id, onLeave);
-        }
-      }
+      ring.reset();
+      hit.attach(ctx);
       // Load the category and navaid icons after the layers exist, concurrently; resilient, so a
       // failure here leaves the markers as text labels rather than breaking overlay setup.
       await Promise.all([
@@ -299,7 +157,9 @@ export function createNotesOverlay(
         registerNavaidIcons(ctx.map, themePaint),
       ]);
     },
-    reset,
+    reset() {
+      ring.reset();
+    },
     sync(ctx) {
       // A hidden layer pays nothing: no network fetch, no clustering, no GeoJSON rebuild. The next
       // show re-syncs from the cache (or fetches) for wherever the map ended up.
@@ -318,44 +178,36 @@ export function createNotesOverlay(
       const viewport: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
       // A recent fetch whose padded area still covers the viewport serves the markers with no
       // network. This runs before the in-flight guard, so a cache hit renders even mid-fetch.
-      // Offline, an expired entry still answers: stale POIs beat a chart that goes blank.
-      const cached = cache.get(viewport, Date.now(), !isOnline());
+      const cached = source.cached(viewport, !isOnline());
       if (cached) {
         render(ctx, cached);
         return;
       }
-      if (fetching) return;
-      if (Date.now() < cooldownUntil) {
+      if (source.inFlight()) return;
+      if (source.coolingDown()) {
         // Still backing off from a failed fetch; retry once the cooldown passes, even stationary.
         invalidateIdleAnchor();
         return;
       }
-      fetching = true;
       // Fetch a padded area so the next small pan or zoom-in reuses this fetch from the cache.
       const fetchBbox = padBbox(viewport);
-      resolveNotes(bboxKey(fetchBbox), fetchBbox)
-        .then((notes) => {
-          // undefined is a transient failure: keep the markers already shown and retry after a
-          // cooldown, even stationary (the fast-path would otherwise pin the failure forever). An
-          // empty array is a real "no POIs here" answer, so it renders and clears them.
-          if (!notes) {
-            cooldownUntil = Date.now() + RETRY_COOLDOWN_MS;
-            invalidateIdleAnchor();
-            return;
-          }
-          cache.put(fetchBbox, notes, Date.now());
-          render(ctx, notes);
-          // The map may have moved while the fetch was in flight; when this fetch no longer covers
-          // the current viewport, drop the fast-path anchor so the next sync serves the new area.
-          const current: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
-          if (!bboxContains(fetchBbox, current)) invalidateIdleAnchor();
-        })
-        .finally(() => {
-          fetching = false;
-        });
+      void source.load(fetchBbox).then((notes) => {
+        // undefined is a transient failure: keep the markers already shown and retry after the
+        // source's cooldown, even stationary (the fast-path would otherwise pin the failure
+        // forever). An empty array is a real "no POIs here" answer, so it renders and clears them.
+        if (!notes) {
+          invalidateIdleAnchor();
+          return;
+        }
+        render(ctx, notes);
+        // The map may have moved while the fetch was in flight; when this fetch no longer covers
+        // the current viewport, drop the fast-path anchor so the next sync serves the new area.
+        const current: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
+        if (!bboxContains(fetchBbox, current)) invalidateIdleAnchor();
+      });
     },
     highlight(ctx, position) {
-      drawSelectRing(ctx, position);
+      ring.draw(ctx, position);
     },
     applyTheme(ctx, paint) {
       themePaint = paint;
@@ -397,17 +249,7 @@ export function createNotesOverlay(
       ctx.map.setPaintProperty(SELECT_LAYER, 'circle-stroke-opacity', opacity);
     },
     remove(ctx) {
-      if (onClick) ctx.map.off('click', LAYER_ID, onClick);
-      if (onEnter) ctx.map.off('mouseenter', LAYER_ID, onEnter);
-      if (onLeave) ctx.map.off('mouseleave', LAYER_ID, onLeave);
-      if (onClusterClick) ctx.map.off('click', CLUSTER_RING_LAYER, onClusterClick);
-      for (const id of CLUSTER_HIT_LAYERS) {
-        if (onEnter) ctx.map.off('mouseenter', id, onEnter);
-        if (onLeave) ctx.map.off('mouseleave', id, onLeave);
-      }
-      // Null the refs so a genuine remove()/add() cycle re-attaches, while a bare reattach keeps the
-      // live handlers (the add() guard checks onClick).
-      onClick = onEnter = onLeave = onClusterClick = undefined;
+      hit.detach(ctx);
       removeNoteLayers(ctx.map);
     },
   };

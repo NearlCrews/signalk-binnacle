@@ -1,5 +1,5 @@
+import type { NotePoint } from '$entities/poi';
 import { categoryLabel } from '$entities/poi-icons';
-import type { NotePoint } from '$features/notes';
 import type { LatLon } from '$shared/geo';
 import { compareOptionalNumber } from '$shared/lib';
 import { rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
