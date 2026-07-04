@@ -3,7 +3,7 @@
  * and the other resource clients. Never throws: a failed read returns undefined so the panel keeps
  * its last list. */
 
-import { companionApiUrl } from '$shared/companion/companion-api';
+import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
 import { authInit } from '$shared/signalk';
 

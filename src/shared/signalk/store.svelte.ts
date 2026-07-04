@@ -111,7 +111,6 @@ export class SignalKStore {
     // must not rebuild every consumer's list per frame. State, message, id, and the four status
     // flags carry everything the list renders.
     const previous = this.notifications.get(path);
-    if (previous === value) return;
     if (previous && typeof previous === 'object' && typeof value === 'object' && value) {
       const a = previous as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
       const b = value as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
