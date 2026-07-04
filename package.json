@@ -42,6 +42,7 @@
       "./screenshots/05-profiles.png"
     ],
     "recommends": [
+      "signalk-chart-locker",
       "signalk-crows-nest",
       "signalk-virtual-weather-sensors"
     ]
