@@ -3,7 +3,7 @@
  * Auth follows the webapp scheme: a bearer token through the shared authInit, the origin as the base,
  * and the client owning the path. */
 
-import { companionApiUrl } from '$shared/companion/companion-api';
+import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
 import { authInit } from '$shared/signalk';
 
@@ -86,7 +86,14 @@ export function createRegionsClient(
   fetchImpl: typeof fetch = fetch,
 ): RegionsClient {
   const url = (path: string): string => companionApiUrl(origin, path);
-  const json = async <T>(r: Response): Promise<T> => (await r.json()) as T;
+  // Without an r.ok check a 401 or a 500 would parse an error body into garbage data (or vanish
+  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to a sign-in
+  // prompt and any other fault to a not-responding state.
+  const ensureOk = (r: Response): Response => {
+    if (!r.ok) throw new HttpStatusError(r.status);
+    return r;
+  };
+  const json = async <T>(r: Response): Promise<T> => (await ensureOk(r).json()) as T;
   // Every container call carries the bearer token and a request timeout, so a half-open link on a
   // boat bounds the wait rather than hanging, matching the charts-management client.
   const init = (extra?: RequestInit): RequestInit => withTimeout(authInit(token, extra));
@@ -101,10 +108,10 @@ export function createRegionsClient(
       return json(await fetchImpl(url('/position-warm/config'), init()));
     },
     async postConfig(config) {
-      await fetchImpl(url('/position-warm/config'), jsonPost(config));
+      ensureOk(await fetchImpl(url('/position-warm/config'), jsonPost(config)));
     },
     async setCacheConfig(ttlDays) {
-      await fetchImpl(url('/cache/config'), jsonPost({ ttlDays }));
+      ensureOk(await fetchImpl(url('/cache/config'), jsonPost({ ttlDays })));
     },
     async clearScrollCache() {
       return json<{ freedBytes: number; freedRows: number }>(
@@ -112,12 +119,7 @@ export function createRegionsClient(
       );
     },
     async getCacheStats() {
-      // Without an r.ok check a 401 or a 500 would parse an error body into a garbage CacheStats or
-      // throw on non-JSON, which a caller could not classify. Throw the status so the caller maps 401
-      // and 403 to a sign-in prompt and any other fault to a not-responding state.
-      const r = await fetchImpl(url('/cache/stats'), init());
-      if (!r.ok) throw new HttpStatusError(r.status);
-      return json<CacheStats>(r);
+      return json<CacheStats>(await fetchImpl(url('/cache/stats'), init()));
     },
     async getRegions() {
       return json<SavedRegionDto[]>(await fetchImpl(url('/regions'), init()));
@@ -128,7 +130,9 @@ export function createRegionsClient(
       );
     },
     async deleteRegion(id) {
-      await fetchImpl(url(`/regions/${encodeURIComponent(id)}`), init({ method: 'DELETE' }));
+      ensureOk(
+        await fetchImpl(url(`/regions/${encodeURIComponent(id)}`), init({ method: 'DELETE' })),
+      );
     },
     async redownloadRegion(id) {
       return json<{ jobId: string }>(
