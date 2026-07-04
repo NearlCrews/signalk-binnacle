@@ -1,0 +1,113 @@
+<script lang="ts">
+import { formatSignedAngleOr } from '$shared/lib';
+import type { ZoneState } from '$shared/signalk';
+import type { TileReading } from './tile-catalog';
+
+interface Props {
+  label: string;
+  reading: TileReading;
+  zone: ZoneState;
+  sensorGloss: string;
+}
+
+const { label, reading, zone, sensorGloss }: Props = $props();
+
+// BOW-UP: 0 rad points up. SVG rotate() uses degrees, positive = clockwise.
+const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
+</script>
+
+<div
+  class="tile card-frame"
+  class:tile--warning={zone === 'warning'}
+  class:tile--alarm={zone === 'alarm'}
+  class:tile--stale={reading.state === 'stale'}
+>
+  <span class="caps-label"
+    >{label}{reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}</span
+  >
+  {#if reading.state === 'never'}
+    <span class="muted-note gloss">{sensorGloss}</span>
+  {:else}
+    <svg class="rose" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <!-- 4 major cardinal ticks: N, E, S, W -->
+      <line x1="50" y1="6" x2="50" y2="16" stroke="var(--text-muted)" stroke-width="2" />
+      <line x1="94" y1="50" x2="84" y2="50" stroke="var(--text-muted)" stroke-width="2" />
+      <line x1="50" y1="94" x2="50" y2="84" stroke="var(--text-muted)" stroke-width="2" />
+      <line x1="6" y1="50" x2="16" y2="50" stroke="var(--text-muted)" stroke-width="2" />
+      <!-- 4 minor intercardinal ticks: NE, SE, SW, NW -->
+      <line x1="81" y1="19" x2="75" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
+      <line x1="81" y1="81" x2="75" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
+      <line x1="19" y1="81" x2="25" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
+      <line x1="19" y1="19" x2="25" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
+      <!-- Needle: points up at 0 rad (bow-up); rotate by wind angle around center -->
+      <line
+        x1="50"
+        y1="14"
+        x2="50"
+        y2="58"
+        stroke="var(--accent)"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        transform="rotate({deg} 50 50)"
+      />
+    </svg>
+    <span class="speed">
+      <span class="num">{reading.value}</span><span class="unit">{reading.unit}</span
+      ><span class="angle">{formatSignedAngleOr(reading.angleRad)}</span>
+    </span>
+  {/if}
+</div>
+
+<style>
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-block-size: 5.5rem;
+  padding: var(--space-2) var(--space-3);
+}
+
+.rose {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex-shrink: 0;
+}
+
+.speed .num {
+  font-size: var(--text-readout);
+}
+
+.unit {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-inline-start: var(--space-1);
+}
+
+.angle {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-inline-start: var(--space-2);
+}
+
+.tile--warning {
+  border-color: var(--warning);
+  background: var(--warning-tint);
+}
+
+.tile--warning .num {
+  color: var(--warning);
+}
+
+.tile--alarm {
+  border-color: var(--alarm);
+  background: var(--alarm-tint);
+}
+
+.tile--alarm .num {
+  color: var(--alarm);
+}
+
+.tile--stale .num {
+  color: var(--text-muted);
+}
+</style>
