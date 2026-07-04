@@ -260,6 +260,11 @@ export class AuthController {
     this.#checking = true;
     try {
       const result = await this.#pollAccessRequest(href);
+      // Another tab may have adopted a token (via the storage event) while the poll was in
+      // flight; every branch below would clobber the authenticated state, so bail out first.
+      // Widened read: the entry guard narrowed this.status, and control-flow analysis cannot
+      // see the cross-await mutation #onStorage makes.
+      if ((this.status as AuthStatus) === 'authenticated') return;
       if (result === 'gone') {
         // The request expired or was cleared server-side; start a fresh one rather than poll a dead
         // href forever (which left the first tab stuck until the user opened a new one).
