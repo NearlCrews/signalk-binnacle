@@ -169,6 +169,9 @@ const STW_DEF: TileDef = {
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.speedThroughWater);
     const state = grade(cell, clock);
+    // Reads the cell at call time: "stale retains the last value" holds because the store never
+    // clears cell.value on staleness. If that store contract ever changes, cache here like the
+    // OwnVessel getters do.
     const mps = asNumber(cell.value);
     return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps };
   },
