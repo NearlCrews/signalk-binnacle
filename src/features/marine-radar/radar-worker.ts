@@ -7,6 +7,10 @@ type Releasable = { [Comlink.releaseProxy]?: () => void };
 class RadarWorker {
   #socket: WebSocket | undefined;
   #timer = 0;
+  // The current stream's frame core, kept so recycle() can return spent transfer buffers to its
+  // pool. Replaced on each open(); a late recycle against the wrong core is dropped by its size
+  // guard.
+  #core: RadarFrameCore | undefined;
   // The Comlink callback proxies for the current open(), released on the next open() or on close() so
   // their MessagePorts do not accumulate across radar switches.
   #callbacks: Releasable[] = [];
@@ -46,6 +50,7 @@ class RadarWorker {
     this.#teardown();
     this.#callbacks = [onFrame as Releasable, onStatus as Releasable];
     const core = new RadarFrameCore(spokesPerRev, maxSpokeLen, initialRange);
+    this.#core = core;
     let hasData = false;
     const socket = new WebSocket(url);
     socket.binaryType = 'arraybuffer';
@@ -86,8 +91,14 @@ class RadarWorker {
     );
   }
 
+  // Take back a spent transfer buffer from the main thread so the next flush reuses it.
+  async recycle(buffer: ArrayBuffer): Promise<void> {
+    this.#core?.recycle(buffer);
+  }
+
   async close(): Promise<void> {
     this.#teardown();
+    this.#core = undefined;
   }
 }
 

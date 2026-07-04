@@ -16,6 +16,7 @@ export interface RadarWorkerApi {
     onFrame: (frame: RadarFrame) => void,
     onStatus: (status: RadarStreamStatus) => void,
   ): Promise<void>;
+  recycle(buffer: ArrayBuffer): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -29,6 +30,9 @@ export interface RadarWorkerClient {
     onFrame: (frame: RadarFrame) => void,
     onStatus: (status: RadarStreamStatus) => void,
   ): Promise<void>;
+  // Hand a spent frame buffer back to the worker's pool, so flushes stop allocating. Fire and
+  // forget: a recycle that races a close is simply dropped.
+  recycle(buffer: ArrayBuffer): void;
   close(): Promise<void>;
   dispose(): void;
 }
@@ -49,6 +53,11 @@ export function wrapRadarWorker(
         Comlink.proxy(onFrame),
         Comlink.proxy(onStatus),
       );
+    },
+    recycle(buffer) {
+      void api.recycle(Comlink.transfer(buffer, [buffer])).catch(() => {
+        // A recycle that lands after the worker closed just forfeits the buffer.
+      });
     },
     async close() {
       await api.close();

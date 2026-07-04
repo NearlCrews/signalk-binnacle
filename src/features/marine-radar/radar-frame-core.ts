@@ -26,6 +26,10 @@ export class RadarFrameCore {
   #heading: number | undefined;
   #sweep: number | undefined;
   #spokesSinceFlush = 0;
+  // Transfer buffers the main thread hands back after uploading a frame, so a steady-state flush
+  // copies into a recycled buffer instead of allocating a fresh one per flush (2 MB at 15 Hz is
+  // ~30 MB/s of garbage otherwise). Two is the natural depth: one in flight, one being written.
+  #pool: ArrayBuffer[] = [];
 
   // initialRange seeds the display range from discovery (RadarInfo.range) so the echo quad and rings
   // have a sane extent from the first frame, before any spoke reports a range, and survive a spoke that
@@ -57,12 +61,23 @@ export class RadarFrameCore {
     return message.spokes.length;
   }
 
+  // Return a spent transfer buffer to the pool. A buffer from a differently-sized radar (or one
+  // already detached, byteLength 0) is dropped rather than pooled.
+  recycle(buffer: ArrayBuffer): void {
+    if (this.#pool.length < 2 && buffer.byteLength === this.#accumulator.byteLength) {
+      this.#pool.push(buffer);
+    }
+  }
+
   flush(): RadarFrame {
-    const copy = this.#accumulator.slice();
+    // Copy, never transfer the live accumulator: persistence is per-angle overwrite, so the
+    // accumulated image must survive the flush. The copy target comes from the recycle pool.
+    const buffer = this.#pool.pop() ?? new ArrayBuffer(this.#accumulator.byteLength);
+    new Uint8Array(buffer).set(this.#accumulator);
     const spokeCount = this.#spokesSinceFlush;
     this.#spokesSinceFlush = 0;
     return {
-      buffer: copy.buffer,
+      buffer,
       spokesPerRev: this.#spokesPerRev,
       maxSpokeLen: this.#maxSpokeLen,
       range: this.#range,

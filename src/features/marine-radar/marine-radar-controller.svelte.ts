@@ -12,6 +12,7 @@ import {
   spokesUrl,
   writeControl,
 } from './radar-client';
+import type { RadarFrame } from './radar-frame-core';
 import { POWER_PENDING_KEY, type RadarStatus } from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
 
@@ -53,6 +54,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   let reopenTimer: ReturnType<typeof setTimeout> | undefined;
   let reopenAttempt = 0;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  // The frame most recently handed to the ppi layer. When the next one arrives and replaces it,
+  // its buffer goes back to the worker's pool, so steady-state flushing allocates nothing.
+  let liveFrame: RadarFrame | undefined;
   // Control ids with an in-flight optimistic write, mapped to the time the write should no longer be
   // considered pending. A state-poll reconcile skips these so it cannot revert a value the user just set.
   const pending = new Map<string, number>();
@@ -138,7 +142,12 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
       radar.range,
       FLUSH_HZ,
       (frame) => {
+        // The ppi layer only ever reads the frame it was last pushed, so once this one replaces
+        // the previous, the old buffer is safe to hand back to the worker for reuse.
+        const spent = liveFrame;
+        liveFrame = frame;
         layer.pushFrame(frame);
+        if (spent) worker?.recycle(spent.buffer);
         store.setStatus('live');
         // A live frame means the stream is healthy: reset the reconnect attempt count so a future drop
         // retries quickly rather than at the last (possibly long) backoff delay.
