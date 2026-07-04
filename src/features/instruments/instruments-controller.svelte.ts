@@ -7,10 +7,14 @@ import {
   type ZoneState,
   zoneStateFor,
 } from '$shared/signalk';
+import { discoverBatteries } from './battery-discovery';
 import {
   ALL_CATALOG_PATHS,
+  batteryTileDef,
+  CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
   minPeriodFor,
+  TILE_CATALOG,
   type TileDef,
   tileById,
 } from './tile-catalog';
@@ -29,6 +33,8 @@ export interface InstrumentsController {
   readonly open: boolean;
   readonly tiles: TileDef[];
   readonly selectedIds: readonly string[];
+  // The full catalog available in Customize mode: static tiles plus discovered battery instances.
+  readonly catalog: TileDef[];
   toggleOpen(): void;
   setOpen(open: boolean): void;
   toggleTile(id: string): void;
@@ -44,6 +50,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   const metaCache = new Map<string, PathMeta | null>();
   // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
   let metaVersion = $state(0);
+
+  // Discovered battery instance ids; populated on first open and never re-fetched.
+  let batteryInstances = $state<string[]>([]);
+  let discoveryDone = false;
 
   // Tracks which paths are currently subscribed via deps.subscribe, so syncSubscriptions can
   // diff desired against live and issue only the delta.
@@ -110,10 +120,26 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
+  // Runs once per controller construction when the dock is first opened. Discovery is fire-and-
+  // forget; a failure leaves batteryInstances empty, which is a safe degrade.
+  function discoverOnce(): void {
+    if (discoveryDone) return;
+    discoveryDone = true;
+    void discoverBatteries(deps.origin, deps.getToken()).then((instances) => {
+      batteryInstances = instances;
+      if (instances.length > 0) {
+        deps.store.ensureCells(instances.map((id) => `electrical.batteries.${id}.voltage`));
+      }
+    });
+  }
+
   function setOpen(open: boolean): void {
     deps.openStore.set(open);
     syncSubscriptions();
-    if (open) fetchMetaForSelected();
+    if (open) {
+      fetchMetaForSelected();
+      discoverOnce();
+    }
   }
 
   function toggleOpen(): void {
@@ -148,7 +174,15 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     const notification = deps.store.notifications.get(`notifications.${def.zonesPath}`);
     if (notification !== undefined) return 'alarm';
     const cached = metaCache.get(def.zonesPath);
-    return zoneStateFor(value, cached?.zones);
+    if (cached?.zones?.length) return zoneStateFor(value, cached.zones);
+    // Server zones always win. The client defaults (shallow-depth safety bands for a stock server
+    // with no configured zones) apply only while the path has a meta-cache entry: resolved with no
+    // zones, or in flight. A path awaiting an authorized retry (the token-less failure path, where
+    // the entry is removed) stays neutral until the retry lands.
+    if (metaCache.has(def.zonesPath)) {
+      return zoneStateFor(value, CLIENT_DEFAULT_ZONES.get(def.zonesPath));
+    }
+    return 'normal';
   }
 
   function dispose(): void {
@@ -158,9 +192,12 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
-  // Restore subscriptions and meta if the dock was persisted open before construction.
+  // Restore subscriptions, meta, and discovery if the dock was persisted open before construction.
   syncSubscriptions();
-  if (deps.openStore.value) fetchMetaForSelected();
+  if (deps.openStore.value) {
+    fetchMetaForSelected();
+    discoverOnce();
+  }
 
   return {
     get open() {
@@ -171,6 +208,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     },
     get selectedIds() {
       return resolveSelectedIds();
+    },
+    get catalog(): TileDef[] {
+      // Static catalog first, then one def per discovered battery instance.
+      return [...TILE_CATALOG, ...batteryInstances.map(batteryTileDef)];
     },
     toggleOpen,
     setOpen,

@@ -5,7 +5,6 @@ import { createReorder, LayerToggle, registerDismiss, UnavailableHint } from '$s
 import type { InstrumentsController } from './instruments-controller.svelte';
 import NumericTile from './NumericTile.svelte';
 import type { TileDeps } from './tile-catalog';
-import { TILE_CATALOG } from './tile-catalog';
 import WindTile from './WindTile.svelte';
 
 interface Props {
@@ -78,9 +77,9 @@ const reorder = createReorder({
   </header>
   {#if customizing}
     <ul class="tile-list" bind:this={listEl}>
-      {#each TILE_CATALOG as def (def.id)}
+      {#each controller.catalog as def (def.id)}
         {@const selected = controller.selectedIds.includes(def.id)}
-        {@const neverReported = def.paths.every((p) => deps.store.cell(p).epoch === 0)}
+        {@const neverReported = def.paths.length > 0 && def.paths.every((p) => deps.store.cell(p).epoch === 0)}
         <li
           data-tile-row={selected ? def.id : undefined}
           class="row-interactive"

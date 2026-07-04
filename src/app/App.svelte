@@ -2419,7 +2419,10 @@ onDestroy(() => {
   </section>
 
   {#if instruments.open}
-    <InstrumentsPanel controller={instruments} deps={{ vessel, store, units, clock }} />
+    <InstrumentsPanel
+      controller={instruments}
+      deps={{ vessel, store, units, clock, course: courseGuidance }}
+    />
   {/if}
 
   <StatusStrip

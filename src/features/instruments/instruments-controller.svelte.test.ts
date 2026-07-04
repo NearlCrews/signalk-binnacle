@@ -60,7 +60,7 @@ const flushPromises = () => new Promise<void>((r) => setTimeout(r, 0));
 describe('createInstrumentsController', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // Step 1 tests (written before implementation — RED phase)
+  // Step 1 tests (written before implementation: RED phase)
 
   it('calls ensureCells with ALL_CATALOG_PATHS at construction, does not subscribe', () => {
     const deps = makeDeps();
@@ -145,7 +145,7 @@ describe('createInstrumentsController', () => {
 
   it('removing one tile does not unsubscribe paths a remaining selected tile still needs', () => {
     const deps = makeDeps();
-    // sog: navigation.speedOverGround; stw: navigation.speedThroughWater — disjoint paths.
+    // sog: navigation.speedOverGround; stw: navigation.speedThroughWater: disjoint paths.
     deps.tilesStore.set(['sog', 'stw']);
     const ctrl = createInstrumentsController(deps);
 
@@ -342,6 +342,174 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
     expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+
+    ctrl.dispose();
+  });
+
+  it('battery discovery is called on first open, catalog includes discovered instances', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if ((url as string).includes('electrical/batteries')) {
+          return jsonResponse(200, { house: {}, starter: {} });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+
+    const deps = makeDeps();
+    const ctrl = createInstrumentsController(deps);
+
+    // Before open: static catalog only.
+    const staticCount = ctrl.catalog.length;
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    // After discovery: two battery defs appended.
+    expect(ctrl.catalog.length).toBe(staticCount + 2);
+    expect(ctrl.catalog.some((d) => d.id === 'battery:house')).toBe(true);
+    expect(ctrl.catalog.some((d) => d.id === 'battery:starter')).toBe(true);
+
+    ctrl.dispose();
+  });
+
+  it('battery discovery runs only once per construction even across multiple opens', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if ((url as string).includes('electrical/batteries')) {
+        return jsonResponse(200, { house: {} });
+      }
+      return jsonResponse(404, {});
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const deps = makeDeps();
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+    ctrl.setOpen(false);
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    const batteryCalls = fetchMock.mock.calls.filter(([u]: [string]) =>
+      u.includes('electrical/batteries'),
+    ).length;
+    expect(batteryCalls).toBe(1);
+
+    ctrl.dispose();
+  });
+
+  it('ensures store cells for discovered battery paths when discovery lands', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('electrical/batteries')
+          ? jsonResponse(200, { house: {} })
+          : jsonResponse(404, {}),
+      ),
+    );
+
+    const deps = makeDeps();
+    const spy = vi.spyOn(deps.store, 'ensureCells');
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    expect(spy).toHaveBeenCalledWith(['electrical.batteries.house.voltage']);
+
+    ctrl.dispose();
+  });
+
+  it("a selected 'battery:house' tile subscribes its voltage path while open", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(404, {})),
+    );
+
+    const deps = makeDeps();
+    deps.tilesStore.set(['battery:house']);
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    const entries = deps.subscribe.mock.calls.flat(2) as { path: string }[];
+    expect(entries.some((e) => e.path === 'electrical.batteries.house.voltage')).toBe(true);
+
+    ctrl.dispose();
+  });
+
+  it('zoneState falls back to CLIENT_DEFAULT_ZONES depth bands when the server meta has no zones', async () => {
+    // Meta resolves (200) but carries no zones, the stock-server case.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.endsWith('/meta') ? jsonResponse(200, { units: 'm' }) : jsonResponse(404, {}),
+      ),
+    );
+
+    const deps = makeDeps();
+    deps.tilesStore.set(['depth']);
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    const depthDef = mustTile('depth');
+    // depth 1.5 m < 2 m upper → alarm; depth 3 m inside [2, 5) warn → warning; 10 m outside → normal
+    expect(ctrl.zoneState(depthDef, 1.5)).toBe('alarm');
+    expect(ctrl.zoneState(depthDef, 3)).toBe('warning');
+    expect(ctrl.zoneState(depthDef, 10)).toBe('normal');
+
+    ctrl.dispose();
+  });
+
+  it('zoneState stays normal when the token-less meta fetch failed and awaits a retry', async () => {
+    // A 404 without a token removes the cache entry so a later authorized open can retry;
+    // until then the client defaults are withheld.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(404, {})),
+    );
+
+    const deps = makeDeps();
+    deps.tilesStore.set(['depth']);
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    expect(ctrl.zoneState(mustTile('depth'), 1.5)).toBe('normal');
+
+    ctrl.dispose();
+  });
+
+  it('server meta zones override client default zones', async () => {
+    // Server says: only warn above 10 m (atypical; just verifies server wins over client defaults).
+    const serverZones = [{ lower: 10, upper: 20, state: 'warn' }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if ((url as string).includes('belowTransducer')) {
+          return jsonResponse(200, { zones: serverZones });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+
+    const deps = makeDeps();
+    deps.tilesStore.set(['depth']);
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    const depthDef = mustTile('depth');
+    // Client default would fire alarm at 1.5 m, but server zones say only warn above 10 m.
+    expect(ctrl.zoneState(depthDef, 1.5)).toBe('normal');
+    expect(ctrl.zoneState(depthDef, 15)).toBe('warning');
 
     ctrl.dispose();
   });

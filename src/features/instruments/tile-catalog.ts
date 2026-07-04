@@ -1,19 +1,22 @@
+import type { CourseGuidance } from '$entities/course';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { asNumber } from '$shared/geo';
 import type { ReactiveClock } from '$shared/lib';
 import {
   formatBearingOr,
+  formatFixed,
   formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
+  formatNmOr,
   formatPressureOr,
   lengthUnit,
   PLACEHOLDER,
   pressureUnit,
 } from '$shared/lib';
-import type { SignalKStore } from '$shared/signalk';
+import type { MetaZone, SignalKStore } from '$shared/signalk';
 import { SK_PATHS } from '$shared/signalk';
 
 export interface TileDeps {
@@ -21,6 +24,7 @@ export interface TileDeps {
   store: SignalKStore;
   units: UnitsStore;
   clock: ReactiveClock;
+  course: CourseGuidance;
 }
 
 export type TileValueState = 'never' | 'placeholder' | 'stale' | 'live';
@@ -238,6 +242,29 @@ const POSITION_DEF: TileDef = {
   },
 };
 
+// The course tile's data is already subscribed by the App master list; no demand paths needed.
+// zonesPath is the calcValues distance leaf for shape consistency but zones are not expected here.
+const COURSE_ZONES_PATH = `${SK_PATHS.courseCalcValues}.distance`;
+
+const COURSE_DEF: TileDef = {
+  id: 'course',
+  label: 'WPT',
+  description: 'Course to waypoint',
+  sensorGloss: 'No active course',
+  paths: [],
+  zonesPath: COURSE_ZONES_PATH,
+  kind: 'numeric',
+  read({ course }) {
+    if (!course.active) {
+      return { state: 'never', value: PLACEHOLDER, unit: '' };
+    }
+    // Two-line: distance in nm on the first line, bearing in degrees on the second. No siValue:
+    // the distance path carries no zones, so banding does not apply.
+    const value = `${formatNmOr(course.distanceToNextMeters)} nm\n${formatBearingOr(course.bearingToNextRad)}°`;
+    return { state: 'live', value, unit: '' };
+  },
+};
+
 export const TILE_CATALOG: readonly TileDef[] = [
   SOG_DEF,
   HDG_DEF,
@@ -247,14 +274,52 @@ export const TILE_CATALOG: readonly TileDef[] = [
   WIND_TRUE_DEF,
   PRESSURE_DEF,
   POSITION_DEF,
+  COURSE_DEF,
 ];
 
 export const DEFAULT_TILES: readonly string[] = ['sog', 'heading', 'depth', 'wind-apparent'];
 
-export function tileById(id: string): TileDef | undefined {
-  return TILE_CATALOG.find((def) => def.id === id);
+// Battery instance id pattern: digits, letters, underscores, and hyphens only. Anything outside
+// this set (spaces, dots, slashes) would corrupt the SK path and is rejected.
+const BATTERY_INSTANCE_RE = /^battery:([A-Za-z0-9_-]+)$/;
+
+// Build a tile def for a single battery instance on demand. The def is created at lookup time,
+// so discovery (which runs asynchronously) does not need to be complete for a stored selection
+// containing a battery tile to resolve correctly.
+export function batteryTileDef(instanceId: string): TileDef {
+  const path = `electrical.batteries.${instanceId}.voltage`;
+  return {
+    id: `battery:${instanceId}`,
+    label: `BATT ${instanceId.toUpperCase()}`,
+    description: `Battery ${instanceId} voltage`,
+    sensorGloss: 'No battery data',
+    paths: [path],
+    zonesPath: path,
+    kind: 'numeric',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const volts = asNumber(cell.value);
+      return {
+        state,
+        value: formatFixed(volts, 1),
+        unit: 'V',
+        siValue: volts,
+      };
+    },
+  };
 }
 
+export function tileById(id: string): TileDef | undefined {
+  const staticDef = TILE_CATALOG.find((def) => def.id === id);
+  if (staticDef) return staticDef;
+  const match = BATTERY_INSTANCE_RE.exec(id);
+  if (match) return batteryTileDef(match[1]);
+  return undefined;
+}
+
+// ALL_CATALOG_PATHS covers only the static catalog (course tile contributes no paths; battery
+// paths are dynamic and ensured separately when discovery lands).
 export const ALL_CATALOG_PATHS: readonly string[] = [
   ...new Set(TILE_CATALOG.flatMap((def) => def.paths)),
 ];
@@ -267,3 +332,15 @@ const MIN_PERIOD_BY_PATH: ReadonlyMap<string, number> = new Map([
 export function minPeriodFor(path: string): number {
   return MIN_PERIOD_BY_PATH.get(path) ?? 1000;
 }
+
+// Client-side default zones applied when a path has no server-configured meta.zones. The server's
+// zones always take precedence when present. Depths in meters (SI).
+export const CLIENT_DEFAULT_ZONES: ReadonlyMap<string, MetaZone[]> = new Map([
+  [
+    SK_PATHS.depthBelowTransducer,
+    [
+      { upper: 2, state: 'alarm', message: 'Shallow' },
+      { lower: 2, upper: 5, state: 'warn' },
+    ],
+  ],
+]);

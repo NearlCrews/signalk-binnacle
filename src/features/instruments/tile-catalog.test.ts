@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { CourseGuidance } from '$entities/course';
 import { UnitsStore } from '$entities/units';
 import { OwnVessel } from '$entities/vessel';
 import type { ReactiveClock, UnitsMode } from '$shared/lib';
@@ -9,6 +10,8 @@ import { SignalKStore, SK_PATHS } from '$shared/signalk';
 import type { TileDeps } from './tile-catalog';
 import {
   ALL_CATALOG_PATHS,
+  batteryTileDef,
+  CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
   TILE_CATALOG,
   TILE_STALE_MS,
@@ -44,7 +47,19 @@ function makeDeps(clock: ReactiveClock, mode: UnitsMode = 'metric') {
   // PersistedValue uses fallback when no storage is available (Node test env).
   const local = new PersistedValue<UnitsMode>('binnacle:units', mode);
   const units = new UnitsStore(local);
-  return { store, vessel, units, clock };
+  return { store, vessel, units, clock, course: inactiveCourse() };
+}
+
+function inactiveCourse(): CourseGuidance {
+  return { active: false } as unknown as CourseGuidance;
+}
+
+function activeCourse(dtwMeters: number | undefined, btwRad: number | undefined): CourseGuidance {
+  return {
+    active: true,
+    distanceToNextMeters: dtwMeters,
+    bearingToNextRad: btwRad,
+  } as unknown as CourseGuidance;
 }
 
 describe('tile catalog structure', () => {
@@ -292,5 +307,140 @@ describe('position tile', () => {
     const [latLine, lonLine] = reading.value.split('\n');
     expect(latLine).toContain('N');
     expect(lonLine).toContain('W');
+  });
+});
+
+describe('course tile', () => {
+  it("returns state 'never' and PLACEHOLDER when no course is active", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const reading = readTile('course', deps);
+    expect(reading.state).toBe('never');
+    expect(reading.value).toBe(PLACEHOLDER);
+    expect(reading.unit).toBe('');
+  });
+
+  it("returns state 'live' with DTW/BTW two-line value when course is active", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    // 1852 m = 1.00 nm; Math.PI / 4 rad = 45 deg
+    deps.course = activeCourse(1852, Math.PI / 4);
+    const reading = readTile('course', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.unit).toBe('');
+    const [dtwLine, btwLine] = reading.value.split('\n');
+    expect(dtwLine).toContain('nm');
+    // dtwLine is e.g. "1.00 nm"; parseFloat parses the leading numeric portion.
+    expect(parseFloat(dtwLine)).toBeCloseTo(1.0, 1);
+    expect(btwLine).toContain('°');
+    expect(parseFloat(btwLine)).toBeCloseTo(45, 0);
+  });
+
+  it('renders PLACEHOLDER lines when active with undefined DTW and BTW', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.course = activeCourse(undefined, undefined);
+    const reading = readTile('course', deps);
+    expect(reading.state).toBe('live');
+    const [dtwLine, btwLine] = reading.value.split('\n');
+    expect(dtwLine).toContain(PLACEHOLDER);
+    expect(btwLine).toContain(PLACEHOLDER);
+  });
+
+  it('carries no siValue (the distance path has no zones to band against)', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.course = activeCourse(3704, 0);
+    const reading = readTile('course', deps);
+    expect(reading.siValue).toBeUndefined();
+  });
+
+  it('course tile has empty paths array (no demand subscription needed)', () => {
+    const def = tileById('course');
+    expect(def?.paths).toEqual([]);
+  });
+
+  it('course tile is NOT in DEFAULT_TILES', () => {
+    expect(DEFAULT_TILES).not.toContain('course');
+  });
+
+  it('course tile IS in TILE_CATALOG', () => {
+    expect(TILE_CATALOG.some((d) => d.id === 'course')).toBe(true);
+  });
+});
+
+describe('batteryTileDef', () => {
+  it('generates correct id, label, and path for an instance', () => {
+    const def = batteryTileDef('house');
+    expect(def.id).toBe('battery:house');
+    expect(def.label).toBe('BATT HOUSE');
+    expect(def.description).toBe('Battery house voltage');
+    expect(def.paths).toEqual(['electrical.batteries.house.voltage']);
+    expect(def.zonesPath).toBe('electrical.batteries.house.voltage');
+    expect(def.kind).toBe('numeric');
+    expect(def.sensorGloss).toBe('No battery data');
+  });
+
+  it('reads voltage from the store cell', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryTileDef('house');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'electrical.batteries.house.voltage': 12.6 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('12.6');
+    expect(reading.unit).toBe('V');
+    expect(reading.siValue).toBeCloseTo(12.6);
+  });
+
+  it("returns state 'never' and unit V when no data", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryTileDef('starter');
+    deps.store.ensureCells(def.paths);
+    const reading = def.read(deps);
+    expect(reading.state).toBe('never');
+    expect(reading.unit).toBe('V');
+  });
+});
+
+describe('tileById battery: pattern', () => {
+  it('resolves a valid battery instance id', () => {
+    const def = tileById('battery:house');
+    expect(def).toBeDefined();
+    expect(def?.id).toBe('battery:house');
+  });
+
+  it('resolves battery ids with digits and hyphens', () => {
+    expect(tileById('battery:bank-1')).toBeDefined();
+    expect(tileById('battery:b2')).toBeDefined();
+  });
+
+  it('returns undefined for battery: ids with invalid characters', () => {
+    expect(tileById('battery:has space')).toBeUndefined();
+    expect(tileById('battery:has.dot')).toBeUndefined();
+    expect(tileById('battery:')).toBeUndefined();
+  });
+
+  it('still resolves all static tile ids', () => {
+    for (const def of TILE_CATALOG) {
+      expect(tileById(def.id), `tileById('${def.id}')`).toBeDefined();
+    }
+  });
+});
+
+describe('CLIENT_DEFAULT_ZONES', () => {
+  it('contains an entry for the depth path', () => {
+    expect(CLIENT_DEFAULT_ZONES.has(SK_PATHS.depthBelowTransducer)).toBe(true);
+  });
+
+  it('depth zones: value 1.5 → alarm, 3 → warning (warn maps to warning), 10 → normal (outside zones)', () => {
+    // Verify the zone values directly without going through the controller, so the test is
+    // a pure data check independent of zoneStateFor.
+    const zones = CLIENT_DEFAULT_ZONES.get(SK_PATHS.depthBelowTransducer);
+    expect(zones).toBeDefined();
+    expect(zones?.some((z) => z.upper === 2 && z.state === 'alarm')).toBe(true);
+    expect(zones?.some((z) => z.lower === 2 && z.upper === 5 && z.state === 'warn')).toBe(true);
   });
 });
