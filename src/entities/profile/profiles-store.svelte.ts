@@ -85,12 +85,17 @@ export class ProfileStore {
     }
   }
 
+  // Id lookups go through a derived index rather than a per-call array scan, so profileById stays
+  // O(1) however many profiles a long-lived account accumulates. The index rebuilds only when the
+  // profiles array changes.
+  #byId = $derived(new Map(this.profiles.map((p) => [p.id, p])));
+
   get active(): Profile | undefined {
     return this.profileById(this.activeId);
   }
 
   profileById(id: string | undefined): Profile | undefined {
-    return id === undefined ? undefined : this.profiles.find((p) => p.id === id);
+    return id === undefined ? undefined : this.#byId.get(id);
   }
 
   get defaultId(): string | undefined {

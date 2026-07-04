@@ -7,12 +7,38 @@ export interface RankedStation {
 }
 
 // Meters per degree of latitude, set slightly under the true minimum (~110,567 at the equator) so
-// the prefilter window rounds outward and never excludes a station on the radius boundary.
+// the search window rounds outward and never excludes a station on the radius boundary.
 const LAT_METERS_PER_DEG = 110_000;
 
-// The stations within maxDistMeters of the position, nearest first, capped at k. A cheap latitude
-// window skips the haversine and the per-station allocation for the bulk of a nationwide list
-// (thousands of stations, of which only a handful are within any practical radius).
+// Stations sorted by latitude, memoized per list identity: the loader replaces the array wholesale
+// on each refresh, so a fetched list is indexed exactly once and dropped with the list itself.
+const SORTED_BY_LAT = new WeakMap<TideStation[], TideStation[]>();
+
+function sortedByLat(stations: TideStation[]): TideStation[] {
+  let sorted = SORTED_BY_LAT.get(stations);
+  if (!sorted) {
+    sorted = [...stations].sort((a, b) => a.latitude - b.latitude);
+    SORTED_BY_LAT.set(stations, sorted);
+  }
+  return sorted;
+}
+
+// The first index whose latitude is not below lat (binary lower bound).
+function lowerBound(sorted: TideStation[], lat: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid].latitude < lat) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+// The stations within maxDistMeters of the position, nearest first, capped at k. The haversine
+// runs only over the latitude band that can possibly be in range: binary search finds the band's
+// start in the memoized latitude-sorted copy, and the scan stops at the band's end, so a
+// nationwide list (thousands of stations) costs O(log n) plus the handful actually nearby.
 export function nearestStations(
   stations: TideStation[],
   lat: number,
@@ -20,10 +46,12 @@ export function nearestStations(
   k: number,
   maxDistMeters: number,
 ): RankedStation[] {
+  const sorted = sortedByLat(stations);
   const latWindowDeg = maxDistMeters / LAT_METERS_PER_DEG;
   const ranked: RankedStation[] = [];
-  for (const station of stations) {
-    if (Math.abs(station.latitude - lat) > latWindowDeg) continue;
+  for (let i = lowerBound(sorted, lat - latWindowDeg); i < sorted.length; i += 1) {
+    const station = sorted[i];
+    if (station.latitude > lat + latWindowDeg) break;
     const distanceMeters = haversineMeters(lat, lon, station.latitude, station.longitude);
     if (distanceMeters <= maxDistMeters) ranked.push({ station, distanceMeters });
   }
