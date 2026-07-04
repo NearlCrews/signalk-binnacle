@@ -40,16 +40,19 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
       <line x1="19" y1="81" x2="25" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
       <line x1="19" y1="19" x2="25" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
       <!-- Needle: points up at 0 rad (bow-up); rotate by wind angle around center -->
-      <line
-        x1="50"
-        y1="14"
-        x2="50"
-        y2="58"
-        stroke="var(--accent)"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        transform="rotate({deg} 50 50)"
-      />
+      {#if typeof reading.angleRad === 'number'}
+        <line
+          class="needle"
+          x1="50"
+          y1="14"
+          x2="50"
+          y2="58"
+          stroke="var(--accent)"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          transform="rotate({deg} 50 50)"
+        />
+      {/if}
     </svg>
     <span class="speed">
       <span class="num">{reading.value}</span><span class="unit">{reading.unit}</span
@@ -71,5 +74,9 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
   color: var(--text-muted);
   font-size: var(--text-xs);
   margin-inline-start: var(--space-2);
+}
+
+.tile--stale .needle {
+  stroke: var(--text-muted);
 }
 </style>

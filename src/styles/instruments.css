@@ -12,6 +12,7 @@
 }
 .tile .num {
   font-size: var(--text-readout);
+  white-space: pre-line;
 }
 .tile .unit {
   color: var(--text-muted);

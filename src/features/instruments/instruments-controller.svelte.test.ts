@@ -3,7 +3,7 @@ import { PersistedValue } from '$shared/settings/persisted.svelte';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
 import { jsonResponse } from '$shared/testing/fetch-stub';
 import { createInstrumentsController } from './instruments-controller.svelte';
-import { ALL_CATALOG_PATHS, DEFAULT_TILES, tileById } from './tile-catalog';
+import { ALL_CATALOG_PATHS, DEFAULT_TILES, minPeriodFor, tileById } from './tile-catalog';
 
 // --- Helpers ---
 
@@ -71,7 +71,7 @@ describe('createInstrumentsController', () => {
     ctrl.dispose();
   });
 
-  it('setOpen(true) subscribes selected deduped paths with policy instant and minPeriod 1000', () => {
+  it('setOpen(true) subscribes selected deduped paths with policy instant and per-path minPeriod', () => {
     const deps = makeDeps();
     const ctrl = createInstrumentsController(deps);
 
@@ -83,7 +83,8 @@ describe('createInstrumentsController', () => {
       policy: string;
       minPeriod: number;
     }>;
-    expect(entries.every((e) => e.policy === 'instant' && e.minPeriod === 1000)).toBe(true);
+    expect(entries.every((e) => e.policy === 'instant')).toBe(true);
+    expect(entries.every((e) => e.minPeriod === minPeriodFor(e.path))).toBe(true);
 
     const expectedPaths = [...new Set(DEFAULT_TILES.flatMap((id) => mustTile(id).paths))].sort();
     expect(entries.map((e) => e.path).sort()).toEqual(expectedPaths);
@@ -296,6 +297,51 @@ describe('createInstrumentsController', () => {
 
     ctrl.reorderTile('sog', 2);
     expect([...ctrl.selectedIds]).toEqual(['depth', 'stw', 'sog']);
+
+    ctrl.dispose();
+  });
+
+  it('construction with openStore true subscribes selected paths and fetches meta', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(404, {})),
+    );
+
+    const deps = makeDeps();
+    deps.openStore.set(true);
+    const ctrl = createInstrumentsController(deps);
+
+    expect(deps.subscribe).toHaveBeenCalledTimes(1);
+    const entries = deps.subscribe.mock.calls[0][0] as Array<{ path: string }>;
+    const expectedPaths = [...new Set(DEFAULT_TILES.flatMap((id) => mustTile(id).paths))].sort();
+    expect(entries.map((e) => e.path).sort()).toEqual(expectedPaths);
+
+    await flushPromises();
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+
+    ctrl.dispose();
+  });
+
+  it('meta fetch with no token removes sentinel so a later open with token retries', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(401, {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    let token: string | undefined;
+    const deps = { ...makeDeps(), getToken: () => token };
+    deps.tilesStore.set(['depth']);
+    const ctrl = createInstrumentsController(deps);
+
+    ctrl.setOpen(true);
+    await flushPromises();
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    ctrl.setOpen(false);
+
+    token = 'valid-token';
+    ctrl.setOpen(true);
+    await flushPromises();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
 
     ctrl.dispose();
   });

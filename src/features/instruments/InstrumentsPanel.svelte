@@ -80,8 +80,14 @@ const reorder = createReorder({
     <ul class="tile-list" bind:this={listEl}>
       {#each TILE_CATALOG as def (def.id)}
         {@const selected = controller.selectedIds.includes(def.id)}
-        {@const neverReported = deps.store.cell(def.zonesPath).epoch === 0}
-        <li data-tile-row={def.id} class="row-interactive" class:is-on={selected}>
+        {@const neverReported = def.paths.every((p) => deps.store.cell(p).epoch === 0)}
+        <li
+          data-tile-row={selected ? def.id : undefined}
+          class="row-interactive"
+          class:is-on={selected}
+          class:unavailable={neverReported}
+          title={neverReported ? 'No data received from this sensor yet' : undefined}
+        >
           <LayerToggle
             title={def.label}
             description={def.description}
@@ -143,6 +149,11 @@ const reorder = createReorder({
   padding: 0;
   flex: 1;
   overflow-y: auto;
+}
+
+/* Mirror LayerRow's unavailable treatment: gray out rows for sensors that have never reported. */
+.tile-list .unavailable {
+  opacity: 0.65;
 }
 
 /* Push the close button flush to the end; Customize sits between title and close. */

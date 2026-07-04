@@ -7,7 +7,13 @@ import {
   type ZoneState,
   zoneStateFor,
 } from '$shared/signalk';
-import { ALL_CATALOG_PATHS, DEFAULT_TILES, type TileDef, tileById } from './tile-catalog';
+import {
+  ALL_CATALOG_PATHS,
+  DEFAULT_TILES,
+  minPeriodFor,
+  type TileDef,
+  tileById,
+} from './tile-catalog';
 
 export interface InstrumentsDeps {
   store: SignalKStore;
@@ -69,7 +75,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     const toRemove = [...subscribedPaths].filter((p) => !desired.has(p));
 
     if (toAdd.length > 0) {
-      deps.subscribe(toAdd.map((path) => ({ path, policy: 'instant', minPeriod: 1000 })));
+      deps.subscribe(
+        toAdd.map((path) => ({ path, policy: 'instant', minPeriod: minPeriodFor(path) })),
+      );
       for (const p of toAdd) subscribedPaths.add(p);
     }
     if (toRemove.length > 0) {
@@ -83,10 +91,20 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     for (const def of resolveTiles()) {
       const { zonesPath } = def;
       if (metaCache.has(zonesPath)) continue;
+      const token = deps.getToken();
       // Sentinel before the async call: prevents a second fetch while the first is in flight.
       metaCache.set(zonesPath, null);
-      void fetchPathMeta(deps.origin, deps.getToken(), zonesPath).then((result) => {
-        metaCache.set(zonesPath, result ?? null);
+      void fetchPathMeta(deps.origin, token, zonesPath).then((result) => {
+        if (result !== undefined) {
+          metaCache.set(zonesPath, result);
+        } else if (token !== undefined) {
+          // Fetched with a token and still got nothing: permanently cache the null sentinel.
+          metaCache.set(zonesPath, null);
+        } else {
+          // Fetched without a token (likely a 401 before auth). Remove the sentinel so a later
+          // open after the user grants access can retry.
+          metaCache.delete(zonesPath);
+        }
         metaVersion += 1;
       });
     }
@@ -139,6 +157,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       subscribedPaths.clear();
     }
   }
+
+  // Restore subscriptions and meta if the dock was persisted open before construction.
+  syncSubscriptions();
+  if (deps.openStore.value) fetchMetaForSelected();
 
   return {
     get open() {

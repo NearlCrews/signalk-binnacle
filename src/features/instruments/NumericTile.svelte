@@ -12,6 +12,8 @@ interface Props {
 const { label, reading, zone, sensorGloss }: Props = $props();
 </script>
 
+<!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
+     styles/instruments.css, shared with WindTile. -->
 <div
   class="tile card-frame"
   class:tile--warning={zone === 'warning'}
@@ -29,6 +31,3 @@ const { label, reading, zone, sensorGloss }: Props = $props();
     >
   {/if}
 </div>
-
-<!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
-     styles/instruments.css, shared with WindTile. -->

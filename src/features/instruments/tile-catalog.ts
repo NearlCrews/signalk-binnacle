@@ -229,7 +229,7 @@ const POSITION_DEF: TileDef = {
     const state = grade(cell, clock);
     const pos = vessel.position;
     if (!pos) return { state, value: PLACEHOLDER, unit: '' };
-    // Two-line lat/lon; the component splits on '\n' because kind === 'position'.
+    // Two-line lat/lon; white-space: pre-line on .tile .num renders the embedded line break.
     return {
       state,
       value: `${formatLatitude(pos.latitude)}\n${formatLongitude(pos.longitude)}`,
@@ -258,3 +258,12 @@ export function tileById(id: string): TileDef | undefined {
 export const ALL_CATALOG_PATHS: readonly string[] = [
   ...new Set(TILE_CATALOG.flatMap((def) => def.paths)),
 ];
+
+const MIN_PERIOD_BY_PATH: ReadonlyMap<string, number> = new Map([
+  [SK_PATHS.headingTrue, 200],
+  [SK_PATHS.outsidePressure, 5000],
+]);
+
+export function minPeriodFor(path: string): number {
+  return MIN_PERIOD_BY_PATH.get(path) ?? 1000;
+}

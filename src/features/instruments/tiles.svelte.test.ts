@@ -160,4 +160,10 @@ describe('WindTile', () => {
     const html = windBody({ label: 'AWS', reading: WIND_LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).not.toContain('aria-live');
   });
+
+  it('omits needle when angleRad is undefined (speed live but angle absent)', () => {
+    const speedOnly: TileReading = { state: 'live', value: '10.0', unit: 'kn', siValue: 5.1 };
+    const html = windBody({ label: 'AWS', reading: speedOnly, zone: normal, sensorGloss: GLOSS });
+    expect(html).not.toContain('class="needle"');
+  });
 });

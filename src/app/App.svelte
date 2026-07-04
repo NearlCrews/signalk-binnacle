@@ -2499,7 +2499,7 @@ onDestroy(() => {
   box-shadow: var(--shadow-overlay);
   color: var(--text);
   font-weight: 600;
-  z-index: var(--z-overlay);
+  z-index: var(--z-safety-strips);
 }
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
    action cluster are; the flanks are 1fr each so the center cannot drift. */
