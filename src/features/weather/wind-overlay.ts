@@ -52,10 +52,6 @@ function sameMatrix(a: number[], b: number[]): boolean {
 // changes; the animation runs in the custom layer's own render loop via triggerRepaint, throttled to
 // ~25 fps and paused while the document is hidden, and recovers from a WebGL context loss.
 export function createWindOverlay(store: WeatherStore): WindOverlay {
-  // The animated particle field is a continuous, self-driving render loop, so a reduced-motion
-  // preference falls back to the static arrow layer (which still conveys wind direction and speed).
-  // This mirrors the camera moves, which also honor prefersReducedMotion.
-  const useParticles = supportsWindGl() && !prefersReducedMotion();
   let theme: Theme = 'day';
   let opacity = 1;
   let visible = false;
@@ -209,7 +205,11 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
     // absent one is skipped and a restack never drops the one that is present.
     layerIds: [GL_LAYER_ID, LAYER_ID],
     add(ctx) {
-      if (useParticles) addParticleLayer(ctx);
+      // The animated particle field is a continuous, self-driving render loop, so a reduced-motion
+      // preference falls back to the static arrow layer (which still conveys wind direction and
+      // speed), mirroring the camera moves. Evaluated per add, not at construction, so a preference
+      // change is honored the next time the overlay is (re)added rather than only after a reload.
+      if (supportsWindGl() && !prefersReducedMotion()) addParticleLayer(ctx);
       else addArrowLayer(ctx);
     },
     reset() {

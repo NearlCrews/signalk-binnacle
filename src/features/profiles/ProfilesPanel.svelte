@@ -2,6 +2,7 @@
 import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
 import type { Profile } from '$entities/profile';
 import {
+  ArmedRow,
   defaultSaveName,
   InlineConfirm,
   NameEntry,
@@ -82,11 +83,7 @@ async function importProfiles(): Promise<void> {
 
 // Delete is destructive and propagates to every synced device, so it arms a confirm step rather
 // than firing on a single tap, matching the Routes panel.
-let confirmingDelete = $state<string | undefined>();
-function confirmDelete(id: string): void {
-  confirmingDelete = undefined;
-  onRemove(id);
-}
+const armedDelete = new ArmedRow((id) => onRemove(id));
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
@@ -156,11 +153,11 @@ function confirmDelete(id: string): void {
           onConfirm={confirmName}
           onCancel={() => (naming = null)}
         />
-      {:else if confirmingDelete === profile.id}
+      {:else if armedDelete.isArmed(profile.id)}
         <InlineConfirm
           question="Delete this profile on every synced device?"
-          onConfirm={() => confirmDelete(profile.id)}
-          onCancel={() => (confirmingDelete = undefined)}
+          onConfirm={() => armedDelete.confirm(profile.id)}
+          onCancel={() => armedDelete.cancel()}
         />
       {:else}
         <div class="actions">
@@ -221,7 +218,7 @@ function confirmDelete(id: string): void {
             class="icon-btn icon-btn--danger"
             aria-label="Delete profile"
             title="Delete"
-            onclick={() => (confirmingDelete = profile.id)}
+            onclick={() => armedDelete.arm(profile.id)}
           >
             <Trash2 size={18} aria-hidden="true" />
           </button>

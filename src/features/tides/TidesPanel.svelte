@@ -84,7 +84,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 }
 </script>
 
-<SlideOver title="Tides" closeLabel="Close tides" {onClose} {onBack} bodyFlex>
+<SlideOver title="Tides" closeLabel="Close tides panel" {onClose} {onBack} bodyFlex>
   <p class="muted-note">Tide and current predictions for the nearest station.</p>
   {#if onToggleStations}
     <ShowOnChartToggle
@@ -106,25 +106,35 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
       <span class="dist caps-label">{stationDistanceText} away</span>
     </div>
 
-    <dl class="stats">
+    <dl class="stat-grid">
       <dt>Next high</dt>
       <dd>
         {#if nextHigh}
-          <span class="num">{formatClockTime(nextHigh.timeMs)}</span>,
-          {formatTideHeight(nextHigh.heightMeters, units.mode)}
-          ({formatTideHeightSecondary(nextHigh.heightMeters, units.mode)})
+          <span class="num"
+            >{formatClockTime(nextHigh.timeMs)},
+            {formatTideHeight(
+              nextHigh.heightMeters,
+              units.mode,
+            )}</span
+          >
+          <span class="unit">{formatTideHeightSecondary(nextHigh.heightMeters, units.mode)}</span>
         {:else}
-          <span class="num">--</span>
+          <span class="num">--</span><span class="unit"></span>
         {/if}
       </dd>
       <dt>Next low</dt>
       <dd>
         {#if nextLow}
-          <span class="num">{formatClockTime(nextLow.timeMs)}</span>,
-          {formatTideHeight(nextLow.heightMeters, units.mode)}
-          ({formatTideHeightSecondary(nextLow.heightMeters, units.mode)})
+          <span class="num"
+            >{formatClockTime(nextLow.timeMs)},
+            {formatTideHeight(
+              nextLow.heightMeters,
+              units.mode,
+            )}</span
+          >
+          <span class="unit">{formatTideHeightSecondary(nextLow.heightMeters, units.mode)}</span>
         {:else}
-          <span class="num">--</span>
+          <span class="num">--</span><span class="unit"></span>
         {/if}
       </dd>
     </dl>
@@ -144,13 +154,14 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
       <div class="current">
         <span class="caps-label">Tidal current</span>
         <span class="name" title={current.station.name}>{current.station.name}</span>
-        <dl class="stats">
+        <dl class="stat-grid">
           <dt>Next {nextCurrent?.kind === 'ebb' ? 'ebb' : 'flood'}</dt>
           <dd>
             {#if nextCurrent}
-              <span class="num">{formatClockTime(nextCurrent.timeMs)}</span>, {currentRate}
+              <span class="num">{formatClockTime(nextCurrent.timeMs)}, {currentRate}</span>
+              <span class="unit"></span>
             {:else}
-              <span class="num">--</span>
+              <span class="num">--</span><span class="unit"></span>
             {/if}
           </dd>
         </dl>
@@ -197,26 +208,6 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 .dist {
   flex-shrink: 0;
   color: var(--text-muted);
-}
-.stats {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: baseline;
-  column-gap: var(--space-3);
-  row-gap: var(--space-1);
-  margin: 0;
-}
-.stats dt {
-  color: var(--text-muted);
-}
-.stats dd {
-  margin: 0;
-  color: var(--text-muted);
-}
-/* Overrides only weight and color; the mono font and tabular figures come from the global .num. */
-.stats .num {
-  font-weight: 600;
-  color: var(--text);
 }
 .curve {
   inline-size: 100%;

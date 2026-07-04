@@ -75,7 +75,13 @@ function features(
 // A small overlay marking the nearest tide and tidal-current stations, each labeled with its next
 // event. It is driven by the store (the loader pushes readings in), not by the viewport, and only
 // rebuilds when the readings change. Point and text layers, so they theme cleanly to night-red.
-export function createTidesOverlay(store: TidesStore, units: UnitsStore): TidesOverlay {
+// The clock is injectable so a test can drive the minute rollover without real time, matching the
+// CollisionMute pattern; production callers take the Date.now default.
+export function createTidesOverlay(
+  store: TidesStore,
+  units: UnitsStore,
+  now: () => number = Date.now,
+): TidesOverlay {
   let theme: Theme = 'day';
   let lastTide: TideReading | undefined;
   let lastCurrent: CurrentReading | undefined;
@@ -149,7 +155,7 @@ export function createTidesOverlay(store: TidesStore, units: UnitsStore): TidesO
       const tide = store.tide;
       const current = store.current;
       const mode = units.mode;
-      const nowMs = Date.now();
+      const nowMs = now();
       const minute = Math.floor(nowMs / MINUTE_MS);
       if (
         seeded &&

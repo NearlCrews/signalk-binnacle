@@ -17,8 +17,9 @@ const { auth, companionBase, onClose, onBack }: Props = $props();
 
 let data = $state<ManagedChartsResponse | null>(null);
 let loadError = $state<string | null>(null);
-type SaveState = 'saving' | 'saved' | 'error' | '';
-// Per-field save state keyed as "<identifier>:<field>", so each field tracks independently.
+type SaveState = 'saving' | 'saved' | 'error';
+// Per-field save state keyed as "<identifier>:<field>", so each field tracks independently. A field
+// with no feedback is simply absent; there is no empty-string sentinel state.
 let saveStates = $state<Record<string, SaveState>>({});
 // Tracks pending clear-indicator timer ids so they can be canceled if the panel unmounts.
 const timerIds: ReturnType<typeof setTimeout>[] = [];
@@ -72,12 +73,22 @@ async function saveOverride(
     // Clear the saved indicator after a short pause; errors stay until the next action.
     timerIds.push(
       setTimeout(() => {
-        saveStates[key] = '';
+        delete saveStates[key];
       }, 2000),
     );
   }
 }
 </script>
+
+{#snippet saveIndicator(key: string, errorMessage: string)}
+  {#if saveStates[key] === 'saving'}
+    <p class="muted-note save-note" role="status">Saving...</p>
+  {:else if saveStates[key] === 'saved'}
+    <p class="muted-note save-note" role="status">Saved.</p>
+  {:else if saveStates[key] === 'error'}
+    <p class="alert-note save-note" role="alert">{errorMessage}</p>
+  {/if}
+{/snippet}
 
 <SlideOver title="Chart files" closeLabel="Close chart files panel" {onClose} {onBack} bodyFlex>
   <p class="muted-note">Rename the chart files installed on your server so they read plainly.</p>
@@ -133,13 +144,7 @@ async function saveOverride(
             ariaLabel="Display name for {chart.fileName}"
             onCommit={(value) => void saveOverride(chart, 'name', value)}
           />
-          {#if saveStates[nameKey] === 'saving'}
-            <p class="muted-note save-note" role="status">Saving...</p>
-          {:else if saveStates[nameKey] === 'saved'}
-            <p class="muted-note save-note" role="status">Saved.</p>
-          {:else if saveStates[nameKey] === 'error'}
-            <p class="alert-note save-note" role="alert">Could not save the name. Check access.</p>
-          {/if}
+          {@render saveIndicator(nameKey, 'Could not save the name. Check access.')}
           <TextField
             variant="stacked"
             label="Description"
@@ -148,15 +153,7 @@ async function saveOverride(
             ariaLabel="Description for {chart.fileName}"
             onCommit={(value) => void saveOverride(chart, 'description', value)}
           />
-          {#if saveStates[descKey] === 'saving'}
-            <p class="muted-note save-note" role="status">Saving...</p>
-          {:else if saveStates[descKey] === 'saved'}
-            <p class="muted-note save-note" role="status">Saved.</p>
-          {:else if saveStates[descKey] === 'error'}
-            <p class="alert-note save-note" role="alert">
-              Could not save the description. Check access.
-            </p>
-          {/if}
+          {@render saveIndicator(descKey, 'Could not save the description. Check access.')}
         </div>
       {/each}
     {/if}

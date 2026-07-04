@@ -71,95 +71,94 @@ function measure(item: NormalizedItem): string {
   closeLabel="Close place details"
   {onClose}
   footer={hasFooter ? footer : undefined}
+  bodyFlex
 >
-  <div class="body">
-    {#if onLocate}
-      <button type="button" class="btn btn-ghost locate" onclick={onLocate}>
-        <Crosshair size={16} aria-hidden="true" />
-        Show on chart
-      </button>
-    {/if}
-    {#if loading}
-      <p class="muted-note" role="status">Loading...</p>
-    {:else if failed}
-      <p class="alert-note" role="alert">Could not load the details for this place.</p>
-      <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>Retry</button>
-    {:else if sections}
-      {#each sections as section (section.id)}
-        {@const danger = section.items.find((item) => isDangerFlag(item.label, item.kind))}
-        {@const listItems = section.items.filter((item) => !isDangerFlag(item.label, item.kind))}
-        <section aria-label={section.title}>
-          <h3 class="caps-label">{section.title}</h3>
-          <!-- The danger status always leads its section, rendered before the dl: a div between
-               dt/dd pairs is non-conforming HTML. -->
-          {#if danger}
-            <div
-              class="alert-note alert"
-              class:alert-note--filled={danger.value === true}
-              data-danger={danger.value === true}
-            >
-              {danger.value === true ? 'Dangerous to navigation' : 'Not a danger to navigation'}
-            </div>
-          {/if}
-          <dl>
-            {#each listItems as item, i (item.label + i)}
-              {@const linkUrl =
-                item.kind === 'link' && typeof item.value === 'string'
-                  ? safeHttpUrl(item.value)
-                  : undefined}
-              {#if item.kind === 'note'}
-                <div class="note-item">
-                  {#if !isRedundantNoteLabel(item.label, section.title)}
-                    <dt>{item.label}</dt>
-                  {/if}
-                  <dd class="prose">{item.value}</dd>
-                </div>
-              {:else}
-                <div class="item">
+  {#if onLocate}
+    <button type="button" class="btn btn-ghost locate" onclick={onLocate}>
+      <Crosshair size={16} aria-hidden="true" />
+      Show on chart
+    </button>
+  {/if}
+  {#if loading}
+    <p class="muted-note" role="status">Loading...</p>
+  {:else if failed}
+    <p class="alert-note" role="alert">Could not load the details for this place.</p>
+    <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>Retry</button>
+  {:else if sections}
+    {#each sections as section (section.id)}
+      {@const danger = section.items.find((item) => isDangerFlag(item.label, item.kind))}
+      {@const listItems = section.items.filter((item) => !isDangerFlag(item.label, item.kind))}
+      <section aria-label={section.title}>
+        <h3 class="caps-label">{section.title}</h3>
+        <!-- The danger status always leads its section, rendered before the dl: a div between
+             dt/dd pairs is non-conforming HTML. -->
+        {#if danger}
+          <div
+            class="alert-note alert"
+            class:alert-note--filled={danger.value === true}
+            data-danger={danger.value === true}
+          >
+            {danger.value === true ? 'Dangerous to navigation' : 'Not a danger to navigation'}
+          </div>
+        {/if}
+        <dl>
+          {#each listItems as item, i (item.label + i)}
+            {@const linkUrl =
+              item.kind === 'link' && typeof item.value === 'string'
+                ? safeHttpUrl(item.value)
+                : undefined}
+            {#if item.kind === 'note'}
+              <div class="note-item">
+                {#if !isRedundantNoteLabel(item.label, section.title)}
                   <dt>{item.label}</dt>
-                  <dd>
-                    {#if item.kind === 'availability'}
-                      <span class="badge" data-value={String(item.value).toLowerCase()}
-                        >{item.value}</span
-                      >
-                    {:else if item.kind === 'flag'}
-                      <span class="badge" data-value={item.value === true ? 'yes' : 'no'}>
-                        {item.value === true ? 'Yes' : 'No'}
-                      </span>
-                    {:else if linkUrl}
-                      <a href={linkUrl} target="_blank" rel="noopener noreferrer"
-                        >Open link<span class="visually-hidden"> (opens in a new tab)</span></a
-                      >
-                    {:else if item.kind === 'rating' && Number.isFinite(Number(item.value))}
-                      {@const ratingValue = Number(item.value)}
-                      {@const filled = Math.round(ratingValue)}
-                      <span class="rating" role="img" aria-label={`Rating ${ratingValue} of 5`}>
-                        {#each STARS as n (n)}
-                          <Star
-                            size={14}
-                            fill={n <= filled ? 'currentColor' : 'none'}
-                            aria-hidden="true"
-                          />
-                        {/each}
-                      </span>
-                    {:else if item.kind === 'measure'}
-                      {measure(item)}
-                    {:else}
-                      {item.value}
-                    {/if}
-                  </dd>
-                </div>
-              {/if}
-            {/each}
-          </dl>
-        </section>
-      {/each}
-    {:else if detail?.fallbackText}
-      <p class="prose">{detail.fallbackText}</p>
-    {:else}
-      <p class="muted-note" role="status">No extra detail for this place.</p>
-    {/if}
-  </div>
+                {/if}
+                <dd class="prose">{item.value}</dd>
+              </div>
+            {:else}
+              <div class="item">
+                <dt>{item.label}</dt>
+                <dd>
+                  {#if item.kind === 'availability'}
+                    <span class="badge" data-value={String(item.value).toLowerCase()}
+                      >{item.value}</span
+                    >
+                  {:else if item.kind === 'flag'}
+                    <span class="badge" data-value={item.value === true ? 'yes' : 'no'}>
+                      {item.value === true ? 'Yes' : 'No'}
+                    </span>
+                  {:else if linkUrl}
+                    <a href={linkUrl} target="_blank" rel="noopener noreferrer"
+                      >Open link<span class="visually-hidden"> (opens in a new tab)</span></a
+                    >
+                  {:else if item.kind === 'rating' && Number.isFinite(Number(item.value))}
+                    {@const ratingValue = Number(item.value)}
+                    {@const filled = Math.round(ratingValue)}
+                    <span class="rating" role="img" aria-label={`Rating ${ratingValue} of 5`}>
+                      {#each STARS as n (n)}
+                        <Star
+                          size={14}
+                          fill={n <= filled ? 'currentColor' : 'none'}
+                          aria-hidden="true"
+                        />
+                      {/each}
+                    </span>
+                  {:else if item.kind === 'measure'}
+                    {measure(item)}
+                  {:else}
+                    {item.value}
+                  {/if}
+                </dd>
+              </div>
+            {/if}
+          {/each}
+        </dl>
+      </section>
+    {/each}
+  {:else if detail?.fallbackText}
+    <p class="prose">{detail.fallbackText}</p>
+  {:else}
+    <p class="muted-note" role="status">No extra detail for this place.</p>
+  {/if}
 </SlideOver>
 
 {#snippet footer()}
@@ -182,15 +181,13 @@ function measure(item: NormalizedItem): string {
   display: inline-flex;
   color: var(--select);
 }
-/* The scroll box comes from the shared .panel-body; only the content spacing is local. */
-.body section {
-  margin-block-end: var(--space-3);
-}
+/* The scroll box and the gapped column come from the shared .panel-body with bodyFlex; only the
+   content spacing inside a section is local. */
 /* The locate action sits at the top of the body as a compact button, not stretched full width. */
 .locate {
   align-self: flex-start;
 }
-.body h3 {
+section h3 {
   margin-block: 0 var(--space-1);
 }
 dl {

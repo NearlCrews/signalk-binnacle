@@ -57,7 +57,7 @@ export class MobStore {
 
   #notification = $derived.by<{ state?: unknown; position?: unknown } | undefined>(() => {
     const value = this.#store.cell(SK_PATHS.mobNotification).value;
-    if (!value || typeof value !== 'object') return undefined;
+    if (!isRecord(value)) return undefined;
     return value as { state?: unknown; position?: unknown };
   });
 

@@ -2,7 +2,7 @@
 import { Navigation, SquarePen, Trash2 } from '@lucide/svelte';
 import type { Waypoint } from '$entities/waypoint';
 import { formatLatitude, formatLongitude } from '$shared/lib';
-import { InlineConfirm, SavedList, SlideOver } from '$shared/ui';
+import { ArmedRow, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
 
 interface Props {
   waypoints: Waypoint[];
@@ -23,11 +23,7 @@ const { waypoints, error, onLocate, onGoTo, onEdit, onDelete, onClose, onBack }:
 
 // Deleting a waypoint is destructive, so it arms a confirm step rather than firing on a single
 // tap where a mis-tap on a rolling deck would lose a saved mark.
-let confirmingDelete = $state<string | undefined>();
-function confirmDelete(id: string): void {
-  confirmingDelete = undefined;
-  onDelete(id);
-}
+const armedDelete = new ArmedRow((id) => onDelete(id));
 </script>
 
 <SlideOver title="Waypoints" closeLabel="Close waypoints panel" bodyFlex {onClose} {onBack}>
@@ -66,11 +62,11 @@ function confirmDelete(id: string): void {
       {#if waypoint.description}
         <p class="description">{waypoint.description}</p>
       {/if}
-      {#if confirmingDelete === waypoint.id}
+      {#if armedDelete.isArmed(waypoint.id)}
         <InlineConfirm
           question="Delete this waypoint?"
-          onConfirm={() => confirmDelete(waypoint.id)}
-          onCancel={() => (confirmingDelete = undefined)}
+          onConfirm={() => armedDelete.confirm(waypoint.id)}
+          onCancel={() => armedDelete.cancel()}
         />
       {:else}
         <div class="actions">
@@ -99,7 +95,7 @@ function confirmDelete(id: string): void {
             class="icon-btn icon-btn--danger"
             aria-label="Delete waypoint"
             title="Delete"
-            onclick={() => (confirmingDelete = waypoint.id)}
+            onclick={() => armedDelete.arm(waypoint.id)}
           >
             <Trash2 size={18} aria-hidden="true" />
           </button>

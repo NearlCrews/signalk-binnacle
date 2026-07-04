@@ -194,11 +194,12 @@ export function createPpiLayer(
   function addRings(ctx: OverlayContext): void {
     ensureGeoJsonSource(ctx.map, RINGS_SOURCE_ID);
     if (!ctx.map.getLayer(RADAR_RINGS_LAYER_ID)) {
+      // No add-time visibility: the LayerManager always calls setVisible right after add(), which
+      // sets it through setLayersVisibility.
       const layer: LineLayerSpecification = {
         id: RADAR_RINGS_LAYER_ID,
         type: 'line',
         source: RINGS_SOURCE_ID,
-        layout: { visibility: visible ? 'visible' : 'none' },
         paint: { 'line-color': ringColor(theme), 'line-width': 1.5, 'line-opacity': 0.85 },
       };
       ctx.map.addLayer(layer, ctx.beforeIdFor('traffic'));
@@ -212,7 +213,6 @@ export function createPpiLayer(
         source: RINGS_SOURCE_ID,
         filter: ['has', 'label'],
         layout: {
-          visibility: visible ? 'visible' : 'none',
           'text-field': ['get', 'label'],
           'text-font': ['Noto Sans Regular'],
           'text-size': 11,
