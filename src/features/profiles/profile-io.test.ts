@@ -182,6 +182,24 @@ describe('parseProfilesJson', () => {
     expect(out[0].name).toBe('Imported profile');
   });
 
+  it('accepts settings with no instrumentTiles', () => {
+    expect(isProfileSettings({ ...settings(), instrumentTiles: undefined })).toBe(true);
+  });
+
+  it('accepts a string-array instrumentTiles', () => {
+    expect(isProfileSettings({ ...settings(), instrumentTiles: ['depth', 'sog'] })).toBe(true);
+  });
+
+  it('rejects a non-array instrumentTiles', () => {
+    expect(isProfileSettings({ ...settings(), instrumentTiles: 'depth' as never })).toBe(false);
+  });
+
+  it('rejects an instrumentTiles array containing non-string members', () => {
+    expect(isProfileSettings({ ...settings(), instrumentTiles: ['depth', 42 as never] })).toBe(
+      false,
+    );
+  });
+
   it('round-trips a valid mode and drops a Profile with a non-string mode', () => {
     const kept = parseProfilesJson(JSON.stringify(profile('Anchor', { mode: 'anchor' })));
     expect(kept[0].settings.mode).toBe('anchor');

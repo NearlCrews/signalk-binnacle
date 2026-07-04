@@ -710,6 +710,7 @@ const profileBindings = createProfileBindings({
   arrivalMuted,
   unitsLocal: units.localSetting,
   pinnedActions,
+  instrumentTiles,
 });
 
 function captureProfileSettings(): ProfileSettings {

@@ -56,6 +56,13 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   ) {
     return false;
   }
+  if (
+    value.instrumentTiles !== undefined &&
+    (!Array.isArray(value.instrumentTiles) ||
+      !value.instrumentTiles.every((id) => typeof id === 'string'))
+  ) {
+    return false;
+  }
   if (value.mode !== undefined && typeof value.mode !== 'string') return false;
   return true;
 }

@@ -21,6 +21,8 @@ export interface ProfileBindingDeps {
   unitsLocal: PersistedValue<UnitsMode>;
   // The bottom-bar pinned action ids.
   pinnedActions: PersistedValue<string[]>;
+  // The instrument tile selection, in display order.
+  instrumentTiles: PersistedValue<string[]>;
 }
 
 export interface ProfileBindings {
@@ -96,6 +98,13 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
         if (Array.isArray(s.pinnedActionIds)) deps.pinnedActions.set(s.pinnedActionIds);
       },
       track: () => void deps.pinnedActions.value,
+    },
+    instrumentTiles: {
+      read: () => ({ instrumentTiles: [...deps.instrumentTiles.value] }),
+      write: (s) => {
+        if (Array.isArray(s.instrumentTiles)) deps.instrumentTiles.set(s.instrumentTiles);
+      },
+      track: () => void deps.instrumentTiles.value,
     },
     units: {
       read: () => ({ units: deps.unitsLocal.value }),

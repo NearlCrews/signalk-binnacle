@@ -32,6 +32,7 @@ function makeDeps(): ProfileBindingDeps {
     arrivalMuted: pv(false),
     unitsLocal: pv('metric'),
     pinnedActions: pv<string[]>([]),
+    instrumentTiles: pv<string[]>(['depth', 'speed']),
   } as unknown as ProfileBindingDeps;
 }
 
@@ -97,5 +98,37 @@ describe('createProfileBindings', () => {
     const bindings = createProfileBindings(deps);
     bindings.apply({ ...bindings.capture(), pinnedActionIds: 'oops' as unknown as string[] });
     expect(deps.pinnedActions.value).toEqual(['center']);
+  });
+
+  it('captures instrumentTiles as a copy', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    const captured = bindings.capture();
+    expect(captured.instrumentTiles).toEqual(['depth', 'speed']);
+    (deps.instrumentTiles as unknown as { value: string[] }).value = ['depth'];
+    expect(captured.instrumentTiles).toEqual(['depth', 'speed']);
+  });
+
+  it('applies a valid instrumentTiles array to the store', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    bindings.apply({ ...bindings.capture(), instrumentTiles: ['sog', 'cog', 'depth'] });
+    expect(deps.instrumentTiles.value).toEqual(['sog', 'cog', 'depth']);
+  });
+
+  it('ignores a non-array instrumentTiles and leaves the prior value', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    bindings.apply({
+      ...bindings.capture(),
+      instrumentTiles: 'bogus' as unknown as string[],
+    });
+    expect(deps.instrumentTiles.value).toEqual(['depth', 'speed']);
+  });
+
+  it('track does not throw and reads instrumentTiles', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    expect(() => bindings.track()).not.toThrow();
   });
 });

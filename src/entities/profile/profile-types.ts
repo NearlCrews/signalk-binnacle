@@ -25,6 +25,8 @@ export interface ProfileSettings {
   // The ids of the actions pinned to the bottom bar, in stored (pin) order. Optional so profiles
   // saved before this field stay valid; the default applies at the read edge when absent.
   pinnedActionIds?: string[];
+  // Selected instrument tiles in display order; optional for pre-instruments profiles.
+  instrumentTiles?: string[];
   mode?: string;
 }
 
