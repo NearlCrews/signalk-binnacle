@@ -89,9 +89,15 @@ export function createTrackOverlay(
   }
 
   // committed.length > 0 always ends at the boundary point shared with the tail's first point, so the
-  // render and the next freeze drop that duplicate.
+  // render and the next freeze drop that duplicate. One pre-sized output array, not slice().concat(),
+  // since this runs on every kept GPS fix once a prefix is frozen.
   function spliceTail(simplifiedTail: TrackPoint[]): TrackPoint[] {
-    return committed.length > 0 ? committed.slice(0, -1).concat(simplifiedTail) : simplifiedTail;
+    if (committed.length === 0) return simplifiedTail;
+    const prefixLen = committed.length - 1;
+    const out = new Array<TrackPoint>(prefixLen + simplifiedTail.length);
+    for (let i = 0; i < prefixLen; i += 1) out[i] = committed[i];
+    for (let i = 0; i < simplifiedTail.length; i += 1) out[prefixLen + i] = simplifiedTail[i];
+    return out;
   }
 
   // Re-simplify only the tail since the last frozen point, then splice it onto the committed prefix.

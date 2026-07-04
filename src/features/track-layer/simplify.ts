@@ -18,9 +18,11 @@ function perpendicular(p: TrackPoint, a: TrackPoint, b: TrackPoint): number {
 function simplifyRun(run: TrackPoint[], tolerance: number): TrackPoint[] {
   const n = run.length;
   if (n <= 2) return run;
-  const keep = new Array<boolean>(n).fill(false);
-  keep[0] = true;
-  keep[n - 1] = true;
+  // A Uint8Array, not a boolean array: zero-initialized, unboxed, and cache-friendly on the long
+  // runs a multi-day track produces.
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[n - 1] = 1;
   const stack: Array<[number, number]> = [[0, n - 1]];
   while (stack.length > 0) {
     // The loop condition guarantees a non-empty stack; the guard just narrows the type.
@@ -37,7 +39,7 @@ function simplifyRun(run: TrackPoint[], tolerance: number): TrackPoint[] {
       }
     }
     if (maxDist > tolerance && index !== -1) {
-      keep[index] = true;
+      keep[index] = 1;
       stack.push([start, index]);
       stack.push([index, end]);
     }

@@ -1,4 +1,4 @@
-import { forEachLegendByte, legendColorTable } from './legend';
+import { forEachLegendByte, hexToRgba, legendColorTable } from './legend';
 import type { LegendEntry } from './radar-types';
 
 // A legend entry whose label marks it as a Doppler or history/trail code keeps its accent color through
@@ -17,25 +17,30 @@ function isAccent(label: string): boolean {
 
 // Theme the legend table for one coherent design system. Normal returns map onto the theme ramp:
 // night-red keeps red on true black with green and blue zeroed so the brightest pixel stays low, dusk
-// dims, day passes through. Accent codes (Doppler, history) are preserved. Built on legendColorTable,
-// then re-themed in place per sample value, so each color is parsed once.
+// dims, day passes through. Accent codes (Doppler, history) are preserved. Fills and themes in one
+// forEachLegendByte pass, so each sample value is visited once per theme change.
 export function themedColorTable(
   legend: LegendEntry[],
   theme: 'day' | 'dusk' | 'night-red',
 ): Uint8Array {
-  const table = legendColorTable(legend);
-  if (theme === 'day') return table;
+  if (theme === 'day') return legendColorTable(legend);
+  const table = new Uint8Array(256 * 4);
   forEachLegendByte(legend, (v, entry) => {
-    if (v === 0 || isAccent(entry.label)) return;
+    const [r, g, b, a] = hexToRgba(entry.color, 255);
     const o = v * 4;
-    if (theme === 'night-red') {
-      table[o] = Math.max(table[o], table[o + 1], table[o + 2]);
+    table[o + 3] = v === 0 ? 0 : a;
+    if (v === 0 || isAccent(entry.label)) {
+      table[o] = r;
+      table[o + 1] = g;
+      table[o + 2] = b;
+    } else if (theme === 'night-red') {
+      table[o] = Math.max(r, g, b);
       table[o + 1] = 0;
       table[o + 2] = 0;
     } else {
-      table[o] = Math.round(table[o] * 0.7);
-      table[o + 1] = Math.round(table[o + 1] * 0.7);
-      table[o + 2] = Math.round(table[o + 2] * 0.7);
+      table[o] = Math.round(r * 0.7);
+      table[o + 1] = Math.round(g * 0.7);
+      table[o + 2] = Math.round(b * 0.7);
     }
   });
   return table;

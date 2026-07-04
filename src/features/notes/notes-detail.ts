@@ -183,7 +183,13 @@ export function createNoteDetailLoader(
   return {
     load(id) {
       const cached = cache.get(id);
-      if (cached) return Promise.resolve(cached);
+      if (cached) {
+        // LRU refresh: re-insert on hit so a frequently reopened marker is not the first evicted
+        // (Map iteration order is insertion order, and eviction takes the front).
+        cache.delete(id);
+        cache.set(id, cached);
+        return Promise.resolve(cached);
+      }
       const pending = inflight.get(id);
       if (pending) return pending;
       const promise = fetchNoteDetail(base, getToken(), id)

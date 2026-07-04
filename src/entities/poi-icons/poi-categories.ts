@@ -152,17 +152,24 @@ export function asPoiCategory(raw: string, fallback: PoiCategory = 'generic'): P
   return isPoiCategory(raw) ? raw : fallback;
 }
 
+// Resolved skIcon strings memoized across calls: the same provider icon value repeats across many
+// notes and the resolver runs per note per overlay refresh, so the keyword scan runs once per
+// distinct string instead of per call. Bounded by the small set of icon names providers emit.
+const SKICON_CACHE = new Map<string, PoiCategory>();
+
 export function categoryForSkIcon(skIcon: string | undefined): PoiCategory {
   if (!skIcon) return 'generic';
+  const cached = SKICON_CACHE.get(skIcon);
+  if (cached) return cached;
   // Lowercase once: the exact table and keyword needles are all lowercase, so a capitalized
   // provider variant still classifies instead of falling through to a generic pin.
   const lower = skIcon.toLowerCase();
-  const exact = SKICON_CATEGORY[lower];
-  if (exact) return exact;
-  for (const [needle, category] of KEYWORD_CATEGORY) {
-    if (lower.includes(needle)) return category;
-  }
-  return 'generic';
+  const resolved =
+    SKICON_CATEGORY[lower] ??
+    KEYWORD_CATEGORY.find(([needle]) => lower.includes(needle))?.[1] ??
+    'generic';
+  SKICON_CACHE.set(skIcon, resolved);
+  return resolved;
 }
 
 export function categoryLabel(category: PoiCategory): string {

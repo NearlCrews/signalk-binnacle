@@ -64,11 +64,20 @@ export function exceedsRegionsFree(estimate: number, stats: CacheStats): boolean
   return estimate > regionsFreeBytes(stats);
 }
 
-/** The [minLng, minLat, maxLng, maxLat] of a drawn rectangle ring of [lng, lat] points. */
+/** The [minLng, minLat, maxLng, maxLat] of a drawn rectangle ring of [lng, lat] points. A manual
+ * scan, not a spread into Math.min/max (unbounded in arg count), matching tides-display. */
 export function bboxFromRectangle(ring: Array<[number, number]>): [number, number, number, number] {
-  const lngs = ring.map((p) => p[0]);
-  const lats = ring.map((p) => p[1]);
-  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+  let minLng = Number.POSITIVE_INFINITY;
+  let minLat = Number.POSITIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  for (const [lng, lat] of ring) {
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  return [minLng, minLat, maxLng, maxLat];
 }
 
 /** The single gate predicate shared by the panel and its test. Returns true only when a box is

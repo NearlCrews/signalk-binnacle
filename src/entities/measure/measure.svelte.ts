@@ -71,7 +71,7 @@ export class MeasureStore {
 
   add(point: LatLon): void {
     if (!this.#active) return;
-    this.#points = [...this.#points, point];
+    this.#points.push(point);
   }
 
   undo(): void {

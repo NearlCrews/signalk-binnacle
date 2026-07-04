@@ -61,7 +61,20 @@ export function computeStats(points: readonly TrackPoint[]): TrackStats {
 export class TrackRecorder {
   points = $state<TrackPoint[]>([]);
   paused = $state(false);
-  stats = $derived(computeStats(this.points));
+
+  // Distance and max SOG are accumulated per kept fix rather than derived from a full scan:
+  // computeStats over the whole history is O(n) per read, which a long recording makes a real
+  // per-render cost while the Tracks panel is open. The full scan runs only on restore.
+  #distanceMeters = $state(0);
+  #maxSog = $state(0);
+  stats = $derived.by<TrackStats>(() => {
+    const first = this.points[0];
+    const last = this.points[this.points.length - 1];
+    if (!first || !last) return { distanceMeters: 0, durationSeconds: 0, avgSog: 0, maxSog: 0 };
+    const durationSeconds = (last.t - first.t) / 1000;
+    const avgSog = durationSeconds > 0 ? this.#distanceMeters / durationSeconds : 0;
+    return { distanceMeters: this.#distanceMeters, durationSeconds, avgSog, maxSog: this.#maxSog };
+  });
 
   #settings: PersistedValue<TrackSettings>;
   #store: TrackStore<TrackPoint>;
@@ -86,6 +99,11 @@ export class TrackRecorder {
     // Prepend rather than assign: fixes recorded between construction and the store read must
     // not be clobbered by the restore.
     this.points = [...restored, ...this.points];
+    // Re-seed the accumulators from the merged history in one pass, including the junction leg
+    // between the restored tail and any fixes recorded before the store read resolved.
+    const seeded = computeStats(this.points);
+    this.#distanceMeters = seeded.distanceMeters;
+    this.#maxSog = seeded.maxSog;
   }
 
   consider(lat: number, lon: number, sog: number, now: number = Date.now()): void {
@@ -103,6 +121,12 @@ export class TrackRecorder {
     // renderer does not draw a line across it. Left absent otherwise rather than set false.
     if (decision.gap || this.#resumeGap) point.gap = true;
     this.#resumeGap = false;
+    if (sog > this.#maxSog) this.#maxSog = sog;
+    // A gapped point starts a new segment, so no leg distance accrues across the break,
+    // matching computeStats.
+    if (last && !point.gap) {
+      this.#distanceMeters += haversineMeters(last.lat, last.lon, lat, lon);
+    }
     this.points.push(point);
     void this.#store.append(point);
   }
@@ -118,6 +142,8 @@ export class TrackRecorder {
 
   clear(): void {
     this.points = [];
+    this.#distanceMeters = 0;
+    this.#maxSog = 0;
     this.#resumeGap = false;
     void this.#store.clear();
   }
