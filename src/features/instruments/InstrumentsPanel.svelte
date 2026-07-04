@@ -22,15 +22,20 @@ let customizing = $state(untrack(() => initCustomizing));
 
 const FULLSCREEN_BREAKPOINT_PX = 900;
 // Paired with the @media (max-width: 900px) block below: mirrors the CSS breakpoint so the
-// close-button label matches the panel's visual mode (dock vs. full-screen overlay).
+// close-button label matches the panel's visual mode (dock vs. full-screen overlay). Listener
+// lives in an effect with cleanup: the panel is conditionally mounted, so a bare listener would
+// accumulate one copy per open cycle.
 let fullscreenQueryMatches = $state(false);
-if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+$effect(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
   const query = window.matchMedia(`(max-width: ${FULLSCREEN_BREAKPOINT_PX}px)`);
   fullscreenQueryMatches = query.matches;
-  query.addEventListener('change', (e: MediaQueryListEvent) => {
+  const handler = (e: MediaQueryListEvent) => {
     fullscreenQueryMatches = e.matches;
-  });
-}
+  };
+  query.addEventListener('change', handler);
+  return () => query.removeEventListener('change', handler);
+});
 
 // Register with the shared Escape stack while open, so one Escape closes only the topmost surface.
 $effect(() => {
