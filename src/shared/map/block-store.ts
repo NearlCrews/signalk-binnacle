@@ -1,5 +1,5 @@
 import { DAY_MS } from '$shared/lib';
-import { degradeToMemory, openIdbDatabase, reqPromise, txDone } from '$shared/storage';
+import { degradeToMemory, openIdbDatabase, reqPromise, runTransaction } from '$shared/storage';
 
 // A protocol-layer block cache for PMTiles archives. The HTTP layer cannot give these
 // archives durable caching: range reads answer 206 Partial Content, which the Cache API
@@ -161,13 +161,13 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
       idb.write(
         async () => {
           const conn = await db();
-          const tx = conn.transaction([BLOCKS, META], 'readwrite');
-          for (const [index, data] of entries) {
-            const meta: BlockMeta = { size: data.byteLength, lastAccess: now };
-            tx.objectStore(BLOCKS).put(data, blockKey(url, index));
-            tx.objectStore(META).put(meta, blockKey(url, index));
-          }
-          await txDone(tx);
+          await runTransaction(conn, [BLOCKS, META], 'readwrite', (tx) => {
+            for (const [index, data] of entries) {
+              const meta: BlockMeta = { size: data.byteLength, lastAccess: now };
+              tx.objectStore(BLOCKS).put(data, blockKey(url, index));
+              tx.objectStore(META).put(meta, blockKey(url, index));
+            }
+          });
         },
         () => memory.putBlocks(url, entries, now),
       ),
@@ -175,18 +175,18 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
       idb.write(
         async () => {
           const conn = await db();
-          const tx = conn.transaction(META, 'readwrite');
-          const store = tx.objectStore(META);
-          for (const index of indexes) {
-            const key = blockKey(url, index);
-            const req = store.get(key);
-            // A follow-up put issued inside onsuccess stays inside this transaction.
-            req.onsuccess = () => {
-              const meta = req.result as BlockMeta | undefined;
-              if (meta) store.put({ size: meta.size, lastAccess: now }, key);
-            };
-          }
-          await txDone(tx);
+          await runTransaction(conn, META, 'readwrite', (tx) => {
+            const store = tx.objectStore(META);
+            for (const index of indexes) {
+              const key = blockKey(url, index);
+              const req = store.get(key);
+              // A follow-up put issued inside onsuccess stays inside this transaction.
+              req.onsuccess = () => {
+                const meta = req.result as BlockMeta | undefined;
+                if (meta) store.put({ size: meta.size, lastAccess: now }, key);
+              };
+            }
+          });
         },
         () => memory.touch(url, indexes, now),
       ),
@@ -203,9 +203,9 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
       idb.write(
         async () => {
           const conn = await db();
-          const tx = conn.transaction(ARCHIVES, 'readwrite');
-          tx.objectStore(ARCHIVES).put(validator, url);
-          await txDone(tx);
+          await runTransaction(conn, ARCHIVES, 'readwrite', (tx) => {
+            tx.objectStore(ARCHIVES).put(validator, url);
+          });
         },
         () => memory.setValidator(url, validator),
       ),
@@ -219,18 +219,18 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
           // the getAllKeys success so they queue while the transaction is still active (awaiting the
           // request, then issuing more on the same transaction, would let it auto-commit first).
           const prefix = `${url}\n`;
-          const tx = conn.transaction([BLOCKS, META, ARCHIVES], 'readwrite');
-          const metaStore = tx.objectStore(META);
-          const blocksStore = tx.objectStore(BLOCKS);
-          const keysReq = metaStore.getAllKeys();
-          keysReq.onsuccess = () => {
-            for (const key of (keysReq.result as string[]).filter((k) => k.startsWith(prefix))) {
-              blocksStore.delete(key);
-              metaStore.delete(key);
-            }
-            tx.objectStore(ARCHIVES).delete(url);
-          };
-          await txDone(tx);
+          await runTransaction(conn, [BLOCKS, META, ARCHIVES], 'readwrite', (tx) => {
+            const metaStore = tx.objectStore(META);
+            const blocksStore = tx.objectStore(BLOCKS);
+            const keysReq = metaStore.getAllKeys();
+            keysReq.onsuccess = () => {
+              for (const key of (keysReq.result as string[]).filter((k) => k.startsWith(prefix))) {
+                blocksStore.delete(key);
+                metaStore.delete(key);
+              }
+              tx.objectStore(ARCHIVES).delete(url);
+            };
+          });
         },
         () => memory.purgeArchive(url),
       ),
@@ -261,12 +261,12 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
           }
           const toDelete = [...expired.map((item) => item.key), ...evicted];
           if (toDelete.length === 0) return;
-          const tx = conn.transaction([BLOCKS, META], 'readwrite');
-          for (const key of toDelete) {
-            tx.objectStore(BLOCKS).delete(key);
-            tx.objectStore(META).delete(key);
-          }
-          await txDone(tx);
+          await runTransaction(conn, [BLOCKS, META], 'readwrite', (tx) => {
+            for (const key of toDelete) {
+              tx.objectStore(BLOCKS).delete(key);
+              tx.objectStore(META).delete(key);
+            }
+          });
         },
         () => memory.prune(now),
       ),

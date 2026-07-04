@@ -13,12 +13,30 @@ export function reqPromise<R>(req: IDBRequest<R>): Promise<R> {
   });
 }
 
+// Slice-internal (not on the public index): cross-slice callers manage transaction lifetime
+// through runTransaction below.
 export function txDone(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
+}
+
+// Run one multi-store transaction to completion: `run` must issue its requests synchronously (or
+// from an onsuccess of a request already on the transaction), because an await inside it would let
+// the transaction auto-commit. Owning the completion promise here keeps the transaction-lifetime
+// rules in the storage slice instead of leaking the raw txDone primitive across slices.
+export async function runTransaction<T>(
+  conn: IDBDatabase,
+  storeNames: string | string[],
+  mode: IDBTransactionMode,
+  run: (tx: IDBTransaction) => T,
+): Promise<T> {
+  const tx = conn.transaction(storeNames, mode);
+  const result = run(tx);
+  await txDone(tx);
+  return result;
 }
 
 // A lazy, memoized IndexedDB opener: opens on first call and reuses the connection, rejecting (not
