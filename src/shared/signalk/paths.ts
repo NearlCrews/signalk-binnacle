@@ -30,4 +30,9 @@ export const SK_PATHS = {
   // and the core never emits the parent object, so a subscription to courseCalcValues matches no bus.
   // Subscribe to the wildcard so every calcValues field streams; the base path stays for leaf keys.
   courseCalcValuesAll: 'navigation.course.calcValues.*',
+  speedThroughWater: 'navigation.speedThroughWater',
+  headingMagnetic: 'navigation.headingMagnetic',
+  windAngleApparent: 'environment.wind.angleApparent',
+  windSpeedTrue: 'environment.wind.speedTrue',
+  windAngleTrueWater: 'environment.wind.angleTrueWater',
 } as const satisfies Record<string, Path>;

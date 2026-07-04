@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PLACEHOLDER } from './coords';
 import {
   feetToMeters,
   formatClockTime,
@@ -9,6 +10,7 @@ import {
   formatNm,
   formatPrecipRateOr,
   formatPressureOr,
+  formatSignedAngleOr,
   formatTcpaMin,
   formatTemperatureOr,
   kelvinToCelsius,
@@ -248,5 +250,20 @@ describe('formatNm and formatTcpaMin boundary values', () => {
     const result = formatTcpaMin(0);
     expect(typeof result).toBe('string');
     expect(result).toBe('0');
+  });
+});
+
+describe('formatSignedAngleOr', () => {
+  it('formats starboard angles with an S prefix', () => {
+    expect(formatSignedAngleOr(Math.PI / 4)).toBe('S 45');
+  });
+  it('formats port angles with a P prefix', () => {
+    expect(formatSignedAngleOr(-Math.PI / 2)).toBe('P 90');
+  });
+  it('formats dead ahead as 0 with no prefix', () => {
+    expect(formatSignedAngleOr(0)).toBe('0');
+  });
+  it('renders the placeholder when undefined', () => {
+    expect(formatSignedAngleOr(undefined)).toBe(PLACEHOLDER);
   });
 });

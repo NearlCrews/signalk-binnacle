@@ -294,3 +294,13 @@ export function formatDuration(seconds: number): string {
   const { value, unit } = formatDurationParts(seconds);
   return unit ? `${value} ${unit}` : value;
 }
+
+// A signed relative angle (radians, port negative) as "P 45" / "S 120". radiansToBearing normalizes
+// to 0..360 and must not be reused for signed angles (its own comment says so); wind angles need the
+// port/starboard sense preserved.
+export function formatSignedAngleOr(rad: number | undefined): string {
+  if (rad === undefined || !Number.isFinite(rad)) return PLACEHOLDER;
+  const deg = Math.round(Math.abs(rad) * (180 / Math.PI));
+  if (deg === 0) return '0';
+  return `${rad < 0 ? 'P' : 'S'} ${deg}`;
+}

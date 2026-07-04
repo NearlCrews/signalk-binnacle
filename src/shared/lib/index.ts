@@ -29,6 +29,7 @@ export {
   formatPercent,
   formatPrecipRateOr,
   formatPressureOr,
+  formatSignedAngleOr,
   formatTcpaMin,
   formatTemperatureOr,
   HOUR_MS,
