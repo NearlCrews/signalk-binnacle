@@ -164,6 +164,14 @@ a scrolling body of controls. It still carries a specific back control and close
 the copy, token, and accessibility rules. A new panel uses a SlideOver unless it is a full-screen
 map of this kind.
 
+Second sanctioned exception: the instrument dock is a true SPLIT, not an overlay. The shell is a
+two-column grid; the dock takes the second column beside a live, narrowed chart, with a 1px
+--border seam (night-red has no shadows) and an instant toggle (animating the grid track would
+resize the map every frame). Under its 900px breakpoint the same panel goes full-screen at
+--z-panel, below the safety strips, with its own close chrome ("Close instruments, return to
+chart"). Do not add further split panels without a matching product case; overlays stay the
+default.
+
 ---
 
 ## 4. Reuse a primitive, never re-implement

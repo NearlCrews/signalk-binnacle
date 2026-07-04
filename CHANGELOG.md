@@ -8,6 +8,16 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- **An instrument dock.** Tap Instruments (pinned to the bottom bar on fresh installs, and in the
+  menu's Conditions group) and the chart slides left beside a column of live gauges: SOG, heading
+  (with a magnetic or COG fallback), depth, and apparent wind by default, with STW, true wind,
+  pressure, and position in the catalog. Customize picks and reorders tiles, the selection rides
+  profiles, and on a phone the tiles take the full screen. A tile without its sensor says so
+  ("No depth sensor") instead of showing dashes, values gray when their feed goes stale, and tiles
+  color by the zone bands (meta.zones) configured on your server, with raised notifications taking
+  the alarm tint.
+- **Open KIP.** When the KIP instrument webapp is installed on the server, a menu item opens it in
+  a new tab.
 - Chart Locker joins the "Works well with" plugin recommendations.
 
 ### Fixed

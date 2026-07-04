@@ -254,7 +254,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   owned by `App` and never duplicated.
 - The lit state is `.is-on` (accent color, accent border, accent-tint fill). Hover tints to
   `--accent-tint`. Both come from the shared classes; do not invent a per-component lit style (the MOB
-  alarm-tint is the one sanctioned exception).
+  alarm-tint and the instrument tile's zone tint, `.tile--warning` and `.tile--alarm` from the global
+  `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised notifications, are the
+  two sanctioned exceptions).
 - Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
   `prefers-reduced-motion`.
 

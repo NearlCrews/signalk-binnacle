@@ -51,11 +51,12 @@ not have to be corrected after the fact.
 
 ## Toolchain (lint, format, build)
 
-- Lint and format: Biome (preferred over ESLint and Prettier). Use the system binary at
-  `/usr/local/bin/biome`, kept current and not added to `package.json`, so a working tree needs
-  Biome installed globally to run `npm run lint` and `npm run format`. CI installs it with the
-  `biomejs/setup-biome` action pinned to the same version. Config is `biome.json`. `npm run lint`
-  is `biome lint .`, `npm run format` is `biome format --write .`, and CI runs `biome ci .`.
+- Lint and format: Biome (preferred over ESLint and Prettier). Three installs must stay on the
+  SAME version: the system binary at `/usr/local/bin/biome`, the `@biomejs/biome` devDependency
+  (npm scripts and the git hooks resolve `node_modules/.bin` first), and the `biomejs/setup-biome`
+  version pins in both CI workflows. Bump all three together (currently 2.5.2), and bump the
+  `$schema` version in `biome.json` with them. Config is `biome.json`. `npm run lint` is
+  `biome lint .`, `npm run format` is `biome format --write .`, and CI runs `biome ci .`.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
@@ -158,14 +159,14 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   equivalent to `eslint-plugin-boundaries`.
 - The global stylesheet is modular too (user rule, keep this style for everything going forward):
   `src/app.css` is only an ordered `@import` manifest over `src/styles/` modules (tokens, base, text,
-  buttons, forms, cards, icon-controls, scrubber, overlays, panels, strips, a11y, vendor), and the import order IS
+  buttons, forms, cards, instruments, icon-controls, scrubber, overlays, panels, strips, a11y, vendor), and the import order IS
   the cascade order. The utility vocabularies are split one concern per module (text helpers, the button
   system, form controls, the saved-card, stat grid, and `.nav-*` sortable two-line row list, the icon controls plus the lit `.is-on` state, the
   popover and modal scrims) and the shell into panels and strips; the order keeps `.is-on` after the
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
   the `$shared/ui` primitives (SlideOver, AnchoredMenu, InlineConfirm, UnitField, ConfirmArm, SavedList,
-  VisibilityToggle, the dialog dismiss stack, the rovingFocus, focusTrap, focusOnMount, and
+  VisibilityToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusTrap, focusOnMount, and
   onKeydownAction focus actions, the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
@@ -186,7 +187,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   emptyFeatureCollection, setSourceData, iconOffsetExpression with CENTERED_OFFSET, removeLayersAndSources,
   setLayersVisibility, createSafetyOverlay for safety-band rasters, rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
-  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authed fetchAuthedJson, fetchAuthedText, and postResource), `$shared/companion` (companionApiUrl, the companion plugin route base), and `$entities/symbols`
+  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authed fetchAuthedJson, fetchAuthedText, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a
   `getSource(...) as { setData }` cast or a `{ type: 'FeatureCollection', features }` literal should use
   setSourceData and featureCollection instead.

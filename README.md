@@ -71,6 +71,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   weather layers, the collision thresholds, and the track and planning settings), switch between them
   in one tap, set a default, export and import them as files, and sync them across devices through the
   server when you are logged in.
+- **Instruments:** tap the Instruments pill and the chart slides left for a gauge dock (SOG,
+  heading, depth, apparent wind, and more from a curated catalog you pick and reorder); on a phone
+  the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
+  alarm bands, selections ride profiles, and an Open KIP item appears when KIP is installed.
 - **Weather:** a zoom-capped mini-map with animated WebGL wind, pressure isobars, waves,
   precipitation, cloud, and radar, a tap-for-value readout, and a conditions and warnings panel.
 - **Tides:** the nearest tide station's next high and low with a 48-hour curve and the nearest
