@@ -47,8 +47,8 @@ describe('resolvePinned', () => {
 });
 
 describe('DEFAULT_PINNED', () => {
-  it('is Center, Follow, and Charts (the layers action)', () => {
-    expect([...DEFAULT_PINNED]).toEqual(['center', 'follow', 'layers']);
+  it('is Center, Follow, Charts (the layers action), and Instruments', () => {
+    expect([...DEFAULT_PINNED]).toEqual(['center', 'follow', 'layers', 'instruments']);
   });
 });
 
