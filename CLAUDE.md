@@ -68,7 +68,10 @@ not have to be corrected after the fact.
   (`useValidAriaValues` on dynamic ARIA bindings, `useSemanticElements` on `role="group"` toolbars,
   and `noLabelWithoutControl` on a label wrapping a child-component control), so those three are
   turned off for `.svelte` in `biome.json`; Svelte's own compiler a11y warnings, surfaced by
-  svelte-check, are the Svelte-aware backstop. SVG assets are excluded from Biome (2.5.1 began
+  svelte-check, are the Svelte-aware backstop. Biome 2.5.2 added `noUnusedVariables` false
+  positives on `.svelte` (props and module-script variables used only in the template), so that
+  rule is off for `.svelte` too; `noUnusedLocals` in `tsconfig.app.json` via svelte-check remains
+  the template-aware backstop. SVG assets are excluded from Biome (2.5.1 began
   parsing `.svg` and chokes on the XML prolog). Config uses the `linter.rules.preset` form
   (`recommended`), not the deprecated `recommended` boolean.
 - Type-check: `svelte-check --tsconfig ./tsconfig.app.json` (the leaf app config, not the
