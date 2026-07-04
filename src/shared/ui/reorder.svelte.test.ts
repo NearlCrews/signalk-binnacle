@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createReorder, type ReorderItem } from './reorder.svelte';
 
 // requestAnimationFrame is not available in the Node test environment; stub it so the refocus
@@ -8,6 +8,10 @@ beforeAll(() => {
     cb(0);
     return 0;
   });
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 function makeItems(count: number): ReorderItem[] {
