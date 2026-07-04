@@ -734,18 +734,14 @@ if (!profileStore.loadedFromStorage && profileStore.profiles.length === 0) {
 }
 
 // Once the user is authenticated to a secured server, sync profiles through the SignalK applicationData
-// API so they follow the user across devices. Runs once; an unsecured server (status 'unsecured', no
-// token) keeps profiles local, since applicationData is disabled without security.
-let profilesSynced = false;
+// API so they follow the user across devices. An unsecured server (status 'unsecured', no token) keeps
+// profiles local, since applicationData is disabled without security. No local latch: syncWithServer is
+// idempotent while attached, and the effect re-runs only on an auth change, so a token rotation (the
+// read-write upgrade approval) retries a sync that a read-only token had detached.
 $effect(() => {
-  if (profilesSynced) return;
   if (auth.status !== 'authenticated' || !auth.token) return;
-  const adapter = new SignalKProfileAdapter(origin, auth.token);
-  // Latch only on a resolved sync, so a transient failure at first auth does not permanently
-  // strand profiles local-only: a later reconnect or token change re-enters and retries.
-  void profileStore.syncWithServer(adapter).then((ok) => {
-    if (ok) profilesSynced = true;
-  });
+  const adapter = new SignalKProfileAdapter(origin, () => auth.token ?? undefined);
+  void profileStore.syncWithServer(adapter);
 });
 
 function onApplyProfile(id: string): void {

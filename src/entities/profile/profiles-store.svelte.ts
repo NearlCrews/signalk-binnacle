@@ -234,8 +234,9 @@ export class ProfileStore {
       }
       if (!ok) {
         // A rejected write (a read-only token, or the server refusing writes) will not start
-        // succeeding later this session, so detach and let the local cache stay authoritative
-        // rather than firing a doomed request on every later edit. A new session retries.
+        // succeeding under this token, so detach and let the local cache stay authoritative
+        // rather than firing a doomed request on every later edit. The next auth change (a
+        // read-write upgrade, a reconnect, or a new session) re-attaches and retries.
         this.#server = undefined;
         break;
       }

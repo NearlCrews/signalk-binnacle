@@ -25,7 +25,7 @@ describe('SignalKProfileAdapter.load', () => {
   it('GETs the applicationData URL with the Bearer header and parses a stored state', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, STATE));
     vi.stubGlobal('fetch', fetchMock);
-    const loaded = await new SignalKProfileAdapter('http://pi', 'tok').load();
+    const loaded = await new SignalKProfileAdapter('http://pi', () => 'tok').load();
     expect(loaded).toEqual(STATE);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(URL);
@@ -36,7 +36,7 @@ describe('SignalKProfileAdapter.load', () => {
 
   it('returns an empty state when the server returns an empty {} document (reachable)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, {})));
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').load()).toEqual({
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').load()).toEqual({
       profiles: [],
       activeId: undefined,
       defaultId: undefined,
@@ -45,12 +45,12 @@ describe('SignalKProfileAdapter.load', () => {
 
   it('returns undefined on a non-ok response such as 401 (unavailable)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, {})));
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').load()).toBeUndefined();
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').load()).toBeUndefined();
   });
 
   it('returns undefined when the fetch rejects', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').load()).toBeUndefined();
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').load()).toBeUndefined();
   });
 });
 
@@ -60,7 +60,7 @@ describe('SignalKProfileAdapter.save', () => {
   it('POSTs the state as JSON to the URL with the Bearer header and returns true', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal('fetch', fetchMock);
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').save(STATE)).toBe(true);
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').save(STATE)).toBe(true);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(URL);
     expect((init as RequestInit).method).toBe('POST');
@@ -73,11 +73,11 @@ describe('SignalKProfileAdapter.save', () => {
 
   it('returns false on a non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(403, {})));
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').save(STATE)).toBe(false);
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').save(STATE)).toBe(false);
   });
 
   it('returns false when the fetch rejects', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
-    expect(await new SignalKProfileAdapter('http://pi', 'tok').save(STATE)).toBe(false);
+    expect(await new SignalKProfileAdapter('http://pi', () => 'tok').save(STATE)).toBe(false);
   });
 });

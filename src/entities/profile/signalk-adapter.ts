@@ -14,15 +14,17 @@ const APP_DATA_URL = (base: string) =>
 // undefined and a save failure resolves false, so the store keeps its local cache rather than throw.
 export class SignalKProfileAdapter implements AsyncProfileAdapter {
   #base: string;
-  #token: string | undefined;
+  #token: () => string | undefined;
 
-  constructor(base: string, token: string | undefined) {
+  // The token is injected as a getter, not a value: it rotates mid-session when the user approves
+  // a read-write upgrade, and a captured value would keep 401ing with the stale read-only token.
+  constructor(base: string, token: () => string | undefined) {
     this.#base = base;
     this.#token = token;
   }
 
   async load(): Promise<ProfilesState | undefined> {
-    const body = await fetchAuthedJson<unknown>(APP_DATA_URL(this.#base), this.#token);
+    const body = await fetchAuthedJson<unknown>(APP_DATA_URL(this.#base), this.#token());
     // undefined means the store is unavailable (any non-2xx such as 401 unauthenticated or 405
     // security off, a network failure, or an unparseable body): tell the caller to stay local and
     // not attempt a write that would also fail, distinct from the reachable-but-empty case below.
@@ -36,6 +38,6 @@ export class SignalKProfileAdapter implements AsyncProfileAdapter {
   }
 
   async save(state: ProfilesState): Promise<boolean> {
-    return postResource(APP_DATA_URL(this.#base), this.#token, state);
+    return postResource(APP_DATA_URL(this.#base), this.#token(), state);
   }
 }
