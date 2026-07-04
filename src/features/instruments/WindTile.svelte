@@ -26,7 +26,7 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
     >{label}{reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}</span
   >
   {#if reading.state === 'never'}
-    <span class="muted-note gloss">{sensorGloss}</span>
+    <span class="muted-note">{sensorGloss}</span>
   {:else}
     <svg class="rose" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <!-- 4 major cardinal ticks: N, E, S, W -->
@@ -58,56 +58,18 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
   {/if}
 </div>
 
+<!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
+     styles/instruments.css, shared with NumericTile; only the rose and the angle text are local. -->
 <style>
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-block-size: 5.5rem;
-  padding: var(--space-2) var(--space-3);
-}
-
 .rose {
-  width: 4.5rem;
-  height: 4.5rem;
+  inline-size: 4.5rem;
+  block-size: 4.5rem;
   flex-shrink: 0;
-}
-
-.speed .num {
-  font-size: var(--text-readout);
-}
-
-.unit {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  margin-inline-start: var(--space-1);
 }
 
 .angle {
   color: var(--text-muted);
   font-size: var(--text-xs);
   margin-inline-start: var(--space-2);
-}
-
-.tile--warning {
-  border-color: var(--warning);
-  background: var(--warning-tint);
-}
-
-.tile--warning .num {
-  color: var(--warning);
-}
-
-.tile--alarm {
-  border-color: var(--alarm);
-  background: var(--alarm-tint);
-}
-
-.tile--alarm .num {
-  color: var(--alarm);
-}
-
-.tile--stale .num {
-  color: var(--text-muted);
 }
 </style>
