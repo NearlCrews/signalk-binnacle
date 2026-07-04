@@ -5,6 +5,7 @@ import {
   ChartLine,
   CloudSun,
   DownloadCloud,
+  ExternalLink,
   Gauge,
   History,
   Layers,
@@ -54,7 +55,9 @@ import { ChartsManagementPanel } from '$features/charts-management';
 import {
   createInstrumentsController,
   DEFAULT_TILES,
+  detectKip,
   InstrumentsPanel,
+  KIP_URL,
 } from '$features/instruments';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
 import {
@@ -219,6 +222,9 @@ const collisionMute = new CollisionMute(clock);
 // Server capability discovery: gates the v2 Notifications transport below; an older server
 // falls back to the raw v1 delta publish.
 let serverFeatures = $state<ServerFeatures | undefined>();
+// Whether the KIP instrument webapp is installed on the server, gating the Open KIP menu item
+// (dropped when absent, the Offline-charts convention for absent plugins).
+let kipPresent = $state(false);
 let historyProviders = $state<HistoryProviders | undefined>();
 const notificationsApi = $derived(serverFeatures?.apis.has('notifications') ?? false);
 
@@ -1063,6 +1069,20 @@ const menuItems = $derived<MenuItem[]>([
     pressed: instruments.open,
     onSelect: () => instruments.toggleOpen(),
   },
+  // Third-party webapp launcher: dropped entirely when KIP is absent, never grayed.
+  ...(kipPresent
+    ? [
+        {
+          id: 'open-kip',
+          label: 'Open KIP',
+          icon: ExternalLink,
+          group: 'Conditions',
+          onSelect: () => {
+            window.open(KIP_URL, '_blank', 'noopener,noreferrer');
+          },
+        },
+      ]
+    : []),
   // time-travel is not a LeftPanel; it has its own active flag and enter/exit API.
   {
     id: 'time-travel',
@@ -1872,6 +1892,9 @@ $effect(() => {
     if (features) serverFeatures = features;
     void marineRadar.start();
   });
+  void detectKip(origin, authToken).then((present) => {
+    kipPresent = present;
+  });
   void fetchHistoryProviders(origin, authToken).then((providers) => {
     if (providers) historyProviders = providers;
   });
@@ -1957,6 +1980,9 @@ $effect(() => {
   void fetchServerFeatures(origin, authToken).then((features) => {
     if (features) serverFeatures = features;
     void marineRadar.start();
+  });
+  void detectKip(origin, authToken).then((present) => {
+    kipPresent = present;
   });
   // History provider discovery: the v2 features list reports the history API even with no
   // provider registered, so the providers route is the real signal.
