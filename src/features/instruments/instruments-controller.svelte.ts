@@ -58,9 +58,8 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     });
   }
 
-  // Diffs desired subscription set against currently subscribed paths, issuing subscribe and
-  // unsubscribe only for the delta. Shared paths (two tiles using the same path) are deduplicated
-  // naturally: the desired set is a union, and removal only drops paths absent from the new union.
+  // Shared paths (two tiles using the same path) are deduplicated naturally: the desired set is a
+  // union, and removal only drops paths absent from the new union.
   function syncSubscriptions(): void {
     const desired = deps.openStore.value
       ? new Set(resolveTiles().flatMap((def) => def.paths))
@@ -79,7 +78,6 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
-  // Fires a meta fetch for each selected tile's zonesPath not yet in the cache.
   // Token is read at call time so a rotating token is always current.
   function fetchMetaForSelected(): void {
     for (const def of resolveTiles()) {
