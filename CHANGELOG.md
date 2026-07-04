@@ -4,6 +4,38 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Profile sync to the server now recovers after an access upgrade: approving a read-write token
+  mid-session resumes syncing instead of silently staying local until the next reload, and the
+  applicationData adapter always sends the current token.
+- Adopting a sign-in from another tab no longer flashes the auth state back to "requesting" when a
+  pending access poll resolves at the same moment.
+- The Chart Locker management calls (saved regions, cache settings, region delete and redownload)
+  now surface a failed response as an error instead of parsing an error body as data or silently
+  swallowing it.
+- Honor a reduced-motion preference change for the wind layer the next time it is turned on,
+  instead of only after a full reload.
+
+### Changed
+
+- Waypoint and profile deletes use the same one-at-a-time armed confirm as routes and tracks, so
+  arming one row disarms the rest.
+- The tides panel readouts use the shared stat-grid layout, and its close button is labeled "Close
+  tides panel" (matching "Close tracks panel"), so the panels read consistently.
+- The place-details panel lays its body out with the shared panel column, so the "Show on chart"
+  action sizes to its content instead of stretching full width.
+- Live track statistics are accumulated per fix instead of rescanned from the full point history on
+  every update, so the tracks panel stays light on long passages.
+- Faster nearby tide and current station lookup: stations far outside the search radius are skipped
+  before any distance math runs.
+- Repeated place-icon lookups and radar legend theming do less work per call, and the track
+  simplifier allocates less on long recordings.
+- The place-details cache keeps the most recently viewed places instead of evicting the
+  oldest-loaded first.
+
 <a id="v0130"></a>
 
 ## [0.13.0] - 2026-07-01

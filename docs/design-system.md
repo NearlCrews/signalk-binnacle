@@ -149,7 +149,7 @@ Shared behavior lives here. Compose these; do not re-implement them.
   for an inline clamp position.
 - `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions. Never a blocking
   `window.confirm`.
-- `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes and tracks panels):
+- `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints, and profiles panels):
   arming one row disarms the rest. Use it instead of a per-panel `confirmingDelete` id. `ConfirmArm`
   stays the single timed strip.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
