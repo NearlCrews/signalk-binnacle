@@ -1,3 +1,5 @@
+import type { ChartGroup } from 'signalk-chart-sources';
+
 import { type RasterOverlaySource, wmsTiles } from '$shared/map';
 
 // A free hosted bathymetry service streamed as raster tiles and cached as the user pans. All
@@ -27,7 +29,7 @@ const noaaEncSource = (
   layers: string,
   opts: {
     parent?: string;
-    group?: { id: string; title: string };
+    group?: ChartGroup;
     region?: string;
     description?: string;
   } = {},

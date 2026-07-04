@@ -3,6 +3,7 @@
  * Auth follows the webapp scheme: a bearer token through the shared authInit, the origin as the base,
  * and the client owning the path. */
 
+import type { Bbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
 import { authInit } from '$shared/signalk';
@@ -46,7 +47,7 @@ export interface CacheStats {
 export interface SavedRegionDto {
   id: string;
   name: string;
-  bbox: [number, number, number, number];
+  bbox: Bbox;
   sourceIds: string[];
   minzoom: number;
   maxzoom: number;
@@ -59,7 +60,7 @@ export interface SavedRegionDto {
 }
 
 interface RegionRequest {
-  bbox: [number, number, number, number];
+  bbox: Bbox;
   sourceIds: string[];
   minzoom: number;
   maxzoom: number;

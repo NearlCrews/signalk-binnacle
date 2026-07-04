@@ -1,3 +1,5 @@
+import type { ChartGroup } from 'signalk-chart-sources';
+
 import type { MapThemePaint } from './map-theme';
 import { installSentinels, sentinelId } from './sentinels';
 import { type OverlayContext, type OverlayModule, Z_ORDER, type ZBand } from './types';
@@ -30,7 +32,7 @@ export interface LayerListItem {
   parent?: string;
   // The named group this layer is a facet of, surfaced so the panel can render one group header
   // above the group's facets. See OverlayModule.group.
-  group?: { id: string; title: string };
+  group?: ChartGroup;
   // The Layers-panel category this layer declares. See OverlayModule.category.
   category?: string;
   // The region tag (US, EU, Global) shown on the row. See OverlayModule.region.

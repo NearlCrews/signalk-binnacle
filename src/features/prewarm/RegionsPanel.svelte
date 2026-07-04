@@ -8,7 +8,7 @@ import {
   Trash2,
 } from '@lucide/svelte';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { CHART_SOURCES } from 'signalk-chart-sources';
+import { type Bbox, chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
 import { clampInt, feetToMeters, formatBytes, lengthUnit, metersToFeet } from '$shared/lib';
@@ -53,7 +53,7 @@ interface Props {
 const { auth, companionBase, map, units, onClose, onBack }: Props = $props();
 
 // The whole-world box stands in for "no box drawn" when enumerating covering sources.
-const WORLD_BBOX: [number, number, number, number] = [-180, -90, 180, 90];
+const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
 
 // Region builder state. regions starts null to mean "loading"; loadError surfaces a failed initial
 // load. stats follows the same null-is-loading, statsError-is-failed shape.
@@ -61,7 +61,7 @@ let stats = $state<CacheStats | null>(null);
 let statsError = $state<string | null>(null);
 let regions = $state<SavedRegionDto[] | null>(null);
 let loadError = $state<string | null>(null);
-let bbox = $state<[number, number, number, number] | null>(null);
+let bbox = $state<Bbox | null>(null);
 let selectedSources = $state<string[]>([]);
 let minzoom = $state(6);
 let maxzoom = $state(12);
@@ -379,11 +379,11 @@ function pollRegion(id: string): void {
   pollTimers.set(id, timer);
 }
 
-function centerOf(box: [number, number, number, number]): { lat: number; lon: number } {
+function centerOf(box: Bbox): { lat: number; lon: number } {
   return { lat: (box[1] + box[3]) / 2, lon: (box[0] + box[2]) / 2 };
 }
 
-function coordName(box: [number, number, number, number]): string {
+function coordName(box: Bbox): string {
   const { lat, lon } = centerOf(box);
   return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
 }
@@ -508,12 +508,12 @@ function updatedLabel(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
-// The per-chart storage breakdown is keyed by source id. Map it to the plain registry title, collapse
-// the synthetic base-map sub-source keys, and fall back to the id so an unknown key never shows blank.
-const SOURCE_TITLE = new Map(CHART_SOURCES.map((s) => [s.id, s.title]));
+// The per-chart storage breakdown is keyed by source id. Resolve it to the plain registry title
+// through the shared catalog lookup, collapse the synthetic base-map sub-source keys, and fall back
+// to the id so an unknown key never shows blank.
 function chartLabel(id: string): string {
   if (id.startsWith('style:') || id === '__basemap_assets__') return 'Base map';
-  return SOURCE_TITLE.get(id) ?? id;
+  return chartSourceById(id)?.title ?? id;
 }
 </script>
 

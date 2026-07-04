@@ -5,11 +5,13 @@
  * the companion plugin share one implementation and the server-side budget re-validation agrees. */
 
 import {
+  type Bbox,
   CHART_SOURCES,
   type ChartSource,
   DEFAULT_TILE_BYTES,
   estimateBytes,
   tileCountInBbox,
+  type ZoomRange,
 } from 'signalk-chart-sources';
 import { formatBytes } from '$shared/lib';
 import type { CacheStats, WarmStatus } from './regions-client.js';
@@ -36,10 +38,7 @@ export function positionWarmSources(): ChartSource[] {
 /** Sources that cover the drawn bbox: region sources where tileCountInBbox > 0. Sources with no
  * bounds are global and always included for a non-empty bbox; the basemap (global, no bounds) covers
  * any non-empty box. */
-export function coveringSources(
-  bbox: [number, number, number, number],
-  zoomRange: [number, number],
-): ChartSource[] {
+export function coveringSources(bbox: Bbox, zoomRange: ZoomRange): ChartSource[] {
   return regionSources().filter((s) => tileCountInBbox(s, bbox, zoomRange) > 0);
 }
 
@@ -66,7 +65,7 @@ export function exceedsRegionsFree(estimate: number, stats: CacheStats): boolean
 
 /** The [minLng, minLat, maxLng, maxLat] of a drawn rectangle ring of [lng, lat] points. A manual
  * scan, not a spread into Math.min/max (unbounded in arg count), matching tides-display. */
-export function bboxFromRectangle(ring: Array<[number, number]>): [number, number, number, number] {
+export function bboxFromRectangle(ring: Array<[number, number]>): Bbox {
   let minLng = Number.POSITIVE_INFINITY;
   let minLat = Number.POSITIVE_INFINITY;
   let maxLng = Number.NEGATIVE_INFINITY;
@@ -84,11 +83,11 @@ export function bboxFromRectangle(ring: Array<[number, number]>): [number, numbe
  * drawn, at least one source is selected, the user can write, and the estimate fits the regions-free
  * budget. */
 export function canDownloadRegion(opts: {
-  bbox: [number, number, number, number] | null;
+  bbox: Bbox | null;
   sources: string[];
   writeBlocked: boolean;
   stats: CacheStats;
-  zoomRange: [number, number];
+  zoomRange: ZoomRange;
 }): boolean {
   if (opts.bbox === null || opts.sources.length === 0 || opts.writeBlocked) return false;
   return !exceedsRegionsFree(

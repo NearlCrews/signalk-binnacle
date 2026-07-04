@@ -1,4 +1,5 @@
 import type { RasterLayerSpecification, RasterSourceSpecification } from 'maplibre-gl';
+import type { Bbox, ChartGroup } from 'signalk-chart-sources';
 import { applyRasterTheme } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
 import type { OverlayModule, ZBand } from './types';
@@ -25,14 +26,14 @@ export interface RasterOverlaySource {
   minzoom?: number;
   maxzoom?: number;
   // Optional coverage bounds [west, south, east, north] in WGS84 degrees for a regional source.
-  bounds?: [number, number, number, number];
+  bounds?: Bbox;
   attribution: string;
   // An optional parent source id: a facet of another overlay nests under it in the Layers panel and
   // only shows when the parent is on.
   parent?: string;
   // An optional named group: facets that share a group id render under one labeled header in the
   // Layers panel.
-  group?: { id: string; title: string };
+  group?: ChartGroup;
   // The Layers-panel category this source declares. See OverlayModule.category.
   category?: string;
   // The region tag (US, EU, Global) shown on the row. See OverlayModule.region.

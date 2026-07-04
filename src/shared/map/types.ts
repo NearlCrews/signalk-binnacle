@@ -1,4 +1,5 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { ChartGroup } from 'signalk-chart-sources';
 import type { MapThemePaint } from './map-theme';
 
 export type ZBand =
@@ -52,7 +53,7 @@ export interface OverlayModule {
   // the Layers panel renders one labeled group header above them and lists each as a facet under it,
   // so a multi-facet chart (the NOAA ENC chart plus its data-quality overlay) reads as one unit.
   // Generic: any future multi-facet source declares the same descriptor.
-  readonly group?: { readonly id: string; readonly title: string };
+  readonly group?: Readonly<ChartGroup>;
   // The Layers-panel category this overlay belongs to, so the panel groups it without knowing any
   // feature id. When absent the panel derives a category from the band. The category vocabulary and
   // its order live in the panel; an overlay just declares which one it joins.
