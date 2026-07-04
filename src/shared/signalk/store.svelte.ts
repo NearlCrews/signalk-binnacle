@@ -31,7 +31,12 @@ export class SignalKStore {
   // The own-vessel context from hello (vessels.urn:...), once the stream has connected; plain,
   // not reactive: consumers read it at fetch time, never render from it.
   selfContext: string | undefined;
-  readonly aisTargets = new Map<string, AisTargetState>();
+  // Exposed as ReadonlyMap so a consumer cannot mutate past applyFrame and pruneAis, the only
+  // write paths that keep the version counters honest; the mutable Maps stay private.
+  #aisTargets = new Map<string, AisTargetState>();
+  get aisTargets(): ReadonlyMap<string, AisTargetState> {
+    return this.#aisTargets;
+  }
 
   // Bumped on every AIS change, so a consumer can skip rebuilding when nothing moved.
   // Reactive so a $derived or $effect consumer is notified, not only the rAF poll.
@@ -40,7 +45,10 @@ export class SignalKStore {
   // Mirror of every raised self notifications.* value, keyed by path, mirroring the AIS
   // pattern: a non-reactive Map plus a version bump so list consumers rebuild only on change.
   // The per-path cells still update for the keyed consumers (anchor drag, MOB).
-  readonly notifications = new Map<string, Value>();
+  #notifications = new Map<string, Value>();
+  get notifications(): ReadonlyMap<string, Value> {
+    return this.#notifications;
+  }
   notificationsVersion = $state(0);
 
   // Grows as new paths arrive and is never pruned: this is safe because the subscribed path set is
@@ -75,10 +83,10 @@ export class SignalKStore {
     }
     if (frame.ais) {
       for (const [context, incoming] of frame.ais) {
-        let target = this.aisTargets.get(context);
+        let target = this.#aisTargets.get(context);
         if (!target) {
           target = { values: new Map(), lastUpdate: frame.epoch };
-          this.aisTargets.set(context, target);
+          this.#aisTargets.set(context, target);
         }
         for (const [path, value] of incoming) target.values.set(path, value);
         target.lastUpdate = frame.epoch;
@@ -104,13 +112,13 @@ export class SignalKStore {
     // it: the alert list only ever shows raised states, and servers can republish normal-state
     // values every cycle for telemetry paths under notifications.*.
     if (typeof state !== 'string' || state === 'normal' || state === 'nominal') {
-      if (this.notifications.delete(path)) this.notificationsVersion += 1;
+      if (this.#notifications.delete(path)) this.notificationsVersion += 1;
       return;
     }
     // Bump only on a real change: a persistent alarm republished identically every delta cycle
     // must not rebuild every consumer's list per frame. State, message, id, and the four status
     // flags carry everything the list renders.
-    const previous = this.notifications.get(path);
+    const previous = this.#notifications.get(path);
     if (previous && typeof previous === 'object' && typeof value === 'object' && value) {
       const a = previous as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
       const b = value as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
@@ -125,15 +133,15 @@ export class SignalKStore {
         return;
       }
     }
-    this.notifications.set(path, value);
+    this.#notifications.set(path, value);
     this.notificationsVersion += 1;
   }
 
   pruneAis(now: number, ttlMs: number): number {
     let removed = 0;
-    for (const [context, target] of this.aisTargets) {
+    for (const [context, target] of this.#aisTargets) {
       if (now - target.lastUpdate > ttlMs) {
-        this.aisTargets.delete(context);
+        this.#aisTargets.delete(context);
         removed += 1;
       }
     }
