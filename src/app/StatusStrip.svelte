@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Ellipsis } from '@lucide/svelte';
+import { Ellipsis, TriangleAlert } from '@lucide/svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
@@ -125,7 +125,9 @@ const closeMore = (): void => {
         }}
       >
         <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
-        {#if action.icon}
+        {#if action.available === false && !action.pressed}
+          <TriangleAlert size={16} aria-hidden="true" />
+        {:else if action.icon}
           {@const Icon = action.icon}
           <Icon size={16} aria-hidden="true" />
         {/if}
@@ -178,7 +180,9 @@ const closeMore = (): void => {
                 <UnavailableHint
                   hint={action.available === false ? action.unavailableHint : undefined}
                 />
-                {#if action.icon}
+                {#if action.available === false && !action.pressed}
+                  <TriangleAlert size={16} aria-hidden="true" />
+                {:else if action.icon}
                   {@const Icon = action.icon}
                   <Icon size={16} aria-hidden="true" />
                 {/if}
@@ -347,6 +351,11 @@ const closeMore = (): void => {
    mismatched type sizes. */
 .strip-start .readout b,
 .center-cluster .readout b {
+  font-size: var(--text-md);
+}
+
+.strip-start .readout:last-child b,
+.strip-start .readout:nth-last-child(2) b {
   font-size: var(--text-readout);
 }
 </style>

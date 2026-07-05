@@ -107,6 +107,7 @@
 }
 /* A fully rounded variant for the chrome toggles (Update, Forecast) that read as pills. */
 .btn-pill {
+  min-block-size: var(--control-size);
   border-radius: var(--radius-pill);
 }
 

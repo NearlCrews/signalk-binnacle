@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Menu } from '@lucide/svelte';
+import { Menu, TriangleAlert } from '@lucide/svelte';
 import { AnchoredMenu, isTabKey, UnavailableHint } from '$shared/ui';
 import { itemBlocked, type MenuItem } from './menu-item';
 
@@ -164,7 +164,9 @@ function onCardKeydown(event: KeyboardEvent): void {
                 <UnavailableHint
                   hint={item.available === false ? item.unavailableHint : undefined}
                 />
-                {#if item.icon}
+                {#if item.available === false}
+                  <TriangleAlert size={22} aria-hidden="true" />
+                {:else if item.icon}
                   {@const Icon = item.icon}
                   <Icon size={22} aria-hidden="true" />
                 {/if}

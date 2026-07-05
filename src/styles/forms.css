@@ -14,6 +14,9 @@
   font: inherit;
   font-size: var(--text-sm);
 }
+:root[data-theme="night-red"] .input {
+  border: 1px solid var(--border);
+}
 .input::placeholder {
   color: var(--text-muted);
   opacity: 1;

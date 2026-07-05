@@ -85,6 +85,7 @@
   /* Floating-card lift; dropped on night-red, where a black shadow on true black is invisible
      and the surface border is the only separation. */
   --shadow-overlay: 0 2px 12px rgb(0 0 0 / 0.25);
+  --shadow-side: 10px 0 20px -10px rgba(0, 0, 0, 0.2);
   /* A layered elevation for the topmost surfaces (the menu popout, the weather panel, the slide-over
      panels): a tight contact shadow plus a soft ambient one, so the z-stack reads as real depth. */
   --shadow-lg: 0 1px 2px rgb(0 0 0 / 0.16), 0 10px 28px rgb(0 0 0 / 0.22);
@@ -120,6 +121,7 @@
   --warning: #d9a441;
   --shadow-overlay: 0 2px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 30px rgb(0 0 0 / 0.5);
+  --shadow-side: 10px 0 20px -10px rgba(0, 0, 0, 0.4);
   --edge-light: inset 0 1px 0 rgb(255 255 255 / 0.05);
   --accent-tint: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
   --accent-tint-strong: color-mix(in srgb, var(--accent) 26%, var(--surface-raised));
