@@ -215,12 +215,8 @@ function onCardKeydown(event: KeyboardEvent): void {
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 }
-.menu-head {
-  display: flex;
-}
-/* The customize control spans the full menu width as a header action, rather than a small
-   right-aligned quiet button, so it reads as header chrome above the groups rather than the
-   menu's loudest action. */
+/* The customize entry reads as quiet header chrome above the groups: right-aligned ghost, never
+   the menu's loudest action. */
 .menu-head {
   display: flex;
   justify-content: flex-end;

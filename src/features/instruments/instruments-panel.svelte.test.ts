@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import InstrumentsPanel from './InstrumentsPanel.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import type { TileDeps } from './tile-catalog';
@@ -73,8 +74,8 @@ describe('InstrumentsPanel', () => {
   it('renders one labeled row per catalog entry when customizing is true', () => {
     const controller = makeController({ selectedIds: SELECTED_IDS });
     const deps = makeDeps();
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     // controller.catalog defaults to TILE_CATALOG in the mock.
     for (const def of TILE_CATALOG) {
@@ -85,8 +86,8 @@ describe('InstrumentsPanel', () => {
   it('renders a drag handle for each selected row in customize mode', () => {
     const controller = makeController({ selectedIds: SELECTED_IDS });
     const deps = makeDeps();
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     // Each selected tile's handle has aria-label "Reorder <label>".
     for (const def of TILE_CATALOG.filter((d) => SELECTED_IDS.includes(d.id))) {
@@ -102,8 +103,8 @@ describe('InstrumentsPanel', () => {
     // All cells report epoch 0, so every tile with paths is "never-reported".
     const controller = makeController({ selectedIds: SELECTED_IDS });
     const deps = makeDeps(() => 0);
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     // UnavailableHint renders a visually-hidden span with the hint text.
     expect(body).toContain('No data received from this sensor yet');
@@ -118,8 +119,8 @@ describe('InstrumentsPanel', () => {
     expect(courseDef?.paths.length).toBe(0);
     const controller = makeController({ selectedIds: ['course'] });
     const deps = makeDeps(() => 0);
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     // The course row must have a drag handle (it is selected and not neverReported).
     expect(body).toContain(`Reorder ${courseDef?.label}`);
@@ -135,8 +136,8 @@ describe('InstrumentsPanel', () => {
   it('does not show handles for never-reported unselected rows', () => {
     const controller = makeController({ selectedIds: [] });
     const deps = makeDeps(() => 0);
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     for (const def of TILE_CATALOG) {
       expect(body).not.toContain(`Reorder ${def.label}`);
@@ -153,8 +154,8 @@ describe('InstrumentsPanel', () => {
   it('the reorder announcement span uses role="status" in customize mode', () => {
     const controller = makeController({ selectedIds: SELECTED_IDS });
     const deps = makeDeps();
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     expect(body).toContain('role="status"');
   });
@@ -169,8 +170,8 @@ describe('InstrumentsPanel', () => {
   it('shows customize teach line in customize mode', () => {
     const controller = makeController({ selectedIds: SELECTED_IDS });
     const deps = makeDeps();
-    const { body } = render(InstrumentsPanel, {
-      props: { controller, deps, customizing: true },
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps },
     });
     expect(body).toContain('Tap an instrument to show or hide it on the dock');
   });

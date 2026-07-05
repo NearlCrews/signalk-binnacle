@@ -46,8 +46,9 @@
 .tile--position .num {
   font-size: var(--text-readout);
 }
+/* The template's natural whitespace before the tag provides the gap, so no margin: the formatter
+   inserts a text node there and a margin would double it. */
 .abbr {
-  margin-inline-start: var(--space-1);
   color: var(--text-muted);
   font-size: var(--text-xs);
 }

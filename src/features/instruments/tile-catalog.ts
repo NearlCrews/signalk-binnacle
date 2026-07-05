@@ -159,12 +159,13 @@ const WIND_APPARENT_DEF: TileDef = {
   abbr: 'AWS',
   description: 'Apparent wind (AWS): the wind you feel with the boat moving.',
   sensorGloss: 'No wind sensor',
+  // headingMagnetic is deliberately NOT listed: it would defeat the never-reported check on a
+  // compass-only boat, and the heading cells are warmed by the heading tile and the master list.
   paths: [
     SK_PATHS.windSpeedApparent,
     SK_PATHS.windAngleApparent,
     SK_PATHS.windSpeedOverGround,
     SK_PATHS.windDirectionTrue,
-    SK_PATHS.headingMagnetic,
   ],
   zonesPath: SK_PATHS.windSpeedApparent,
   kind: 'wind',
