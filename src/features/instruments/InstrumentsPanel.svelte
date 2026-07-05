@@ -64,7 +64,6 @@ $effect(() => {
   {#if customizing}
     <InstrumentsCustomize {controller} {deps} />
   {:else}
-    <p class="muted-note">Live readouts from the boat's instruments.</p>
     <div class="tiles">
       {#each controller.tiles as def (def.id)}
         {@const reading = def.read(deps)}
