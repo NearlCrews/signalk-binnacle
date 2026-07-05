@@ -62,3 +62,6 @@ CLAUDE.local.md
 
 # Design specs and build plans (local working notes, not committed)
 docs/superpowers/
+
+# Agent-session infrastructure (in-repo worktrees from the cave plugin)
+.cave/

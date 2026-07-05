@@ -16,12 +16,8 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   let addWaypointAt = $state<LatLon | undefined>();
   let editingWaypoint = $state<Waypoint | undefined>();
 
-  function getToken(): string | undefined {
-    return deps.getToken();
-  }
-
   async function refreshWaypoints(): Promise<void> {
-    const fetched = await fetchWaypoints(origin, getToken());
+    const fetched = await fetchWaypoints(origin, deps.getToken());
     if (fetched) {
       waypointsStore.setWaypoints(fetched);
       return;
@@ -46,7 +42,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       position,
       ...(result.icon ? { icon: result.icon } : {}),
     };
-    if (!(await saveWaypoint(origin, getToken(), waypoint))) {
+    if (!(await saveWaypoint(origin, deps.getToken(), waypoint))) {
       waypointError = 'Could not save the waypoint. Check the connection and write access.';
       return;
     }
@@ -64,7 +60,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     if (!existing) return;
     waypointError = undefined;
     const updated: Waypoint = { ...existing, name: result.name, icon: result.icon };
-    if (!(await saveWaypoint(origin, getToken(), updated))) {
+    if (!(await saveWaypoint(origin, deps.getToken(), updated))) {
       waypointError = 'Could not save the waypoint. Check the connection and write access.';
       return;
     }
@@ -73,19 +69,31 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
 
   async function onDeleteWaypoint(id: string): Promise<void> {
     waypointError = undefined;
-    if (!(await deleteWaypoint(origin, getToken(), id))) {
+    if (!(await deleteWaypoint(origin, deps.getToken(), id))) {
       waypointError = 'Could not delete the waypoint.';
       return;
     }
     await refreshWaypoints();
   }
 
+  // The dialogs render while these states are set, so Cancel must clear them here: the
+  // composition root has no other way to dismiss them.
+  function cancelAddWaypoint(): void {
+    addWaypointAt = undefined;
+  }
+
+  function cancelEditWaypoint(): void {
+    editingWaypoint = undefined;
+  }
+
   return {
     refreshWaypoints,
     onDropWaypoint,
     confirmAddWaypoint,
+    cancelAddWaypoint,
     onOpenEditWaypoint,
     onSaveWaypointEdit,
+    cancelEditWaypoint,
     onDeleteWaypoint,
     get waypointError() {
       return waypointError;

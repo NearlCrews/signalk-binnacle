@@ -28,6 +28,9 @@ export interface RouteControllerDeps {
   startRouteEdit: (route?: Route, initialPoint?: LatLon) => void;
   stopRouteEdit: () => void;
   getBounds: () => [number, number, number, number] | undefined;
+  // The live recorder's points, read at call time so the save-as-route actions never rebuild
+  // closures per GPS fix in the composition root.
+  getTrackPoints: () => TrackPoint[];
 }
 
 export function createRouteController(deps: RouteControllerDeps) {
@@ -48,10 +51,6 @@ export function createRouteController(deps: RouteControllerDeps) {
     wasGuidanceActive = active;
   });
 
-  function getToken(): string | undefined {
-    return deps.getToken();
-  }
-
   function flagRouteError(message: string): void {
     routeError = message;
   }
@@ -61,7 +60,7 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   async function refreshRoutes(): Promise<void> {
-    const routes = await fetchRoutes(origin, getToken());
+    const routes = await fetchRoutes(origin, deps.getToken());
     if (routes) {
       routeStore.setRoutes(routes);
       return;
@@ -72,7 +71,7 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   async function stopActiveCourse(): Promise<boolean> {
-    if (!(await clearCourse(origin, getToken()))) return false;
+    if (!(await clearCourse(origin, deps.getToken()))) return false;
     routeStore.setActive(undefined);
     gotoActive = false;
     courseGuidance.clear();
@@ -81,7 +80,7 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function hydrateAndSeedCourse(): Promise<void> {
     const startedAt = Date.now();
-    const { info, calc } = await hydrateCourse(origin, getToken());
+    const { info, calc } = await hydrateCourse(origin, deps.getToken());
     courseGuidance.seed(info, calc, startedAt);
     const activation = activationFromCourse(info);
     if (!activation) return;
@@ -113,10 +112,6 @@ export function createRouteController(deps: RouteControllerDeps) {
     deps.startRouteEdit(undefined, initialPoint);
   }
 
-  function onStartRouteHere(position: LatLon): void {
-    beginNewRoute(position);
-  }
-
   function onEditRoute(id: string): void {
     const route = routeStore.routeById(id);
     if (!route) return;
@@ -130,7 +125,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     const working = routeStore.working;
     if (!working || working.waypoints.length < 2) return;
     const route = { ...working, name: name.trim() || defaultSaveName('Route') };
-    if (!(await saveRoute(origin, getToken(), route))) {
+    if (!(await saveRoute(origin, deps.getToken(), route))) {
       flagRouteError('Could not save the route. It is kept under edit so you can retry.');
       routeStore.setWorking(route);
       return;
@@ -152,7 +147,7 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('Could not stop the active route, so it was not deleted.');
       return;
     }
-    if (!(await deleteRoute(origin, getToken(), id))) {
+    if (!(await deleteRoute(origin, deps.getToken(), id))) {
       flagRouteError('Could not delete the route.');
       return;
     }
@@ -162,7 +157,7 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onActivateRoute(id: string): Promise<void> {
     clearRouteError();
-    if (!(await activateRoute(origin, getToken(), routeHref(id)))) {
+    if (!(await activateRoute(origin, deps.getToken(), routeHref(id)))) {
       flagRouteError('Could not activate the route. Check the connection.');
       return;
     }
@@ -181,16 +176,17 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   function onSkipPoint(delta: number): void {
-    void advancePoint(origin, getToken(), delta).then((ok) => {
+    void advancePoint(origin, deps.getToken(), delta).then((ok) => {
       if (!ok) flagRouteError('Could not skip the waypoint. Check the connection.');
     });
   }
 
-  async function onSaveTrackAsRoute(name: string, points: TrackPoint[]): Promise<void> {
+  async function onSaveTrackAsRoute(name: string): Promise<void> {
     clearRouteError();
+    const points = deps.getTrackPoints();
     if (points.length < 2) return;
     const route = trackToRoute(points, name);
-    if (!(await saveRoute(origin, getToken(), route))) {
+    if (!(await saveRoute(origin, deps.getToken(), route))) {
       flagRouteError('Could not save the track as a route.');
       return;
     }
@@ -198,17 +194,18 @@ export function createRouteController(deps: RouteControllerDeps) {
     routeStore.toggleShown(route.id, true);
   }
 
-  async function onTrackHome(points: TrackPoint[]): Promise<void> {
+  async function onTrackHome(): Promise<void> {
     clearRouteError();
+    const points = deps.getTrackPoints();
     if (points.length < 2) return;
     const route = trackToRoute(points, 'Track home');
     route.waypoints.reverse();
-    if (!(await saveRoute(origin, getToken(), route))) {
+    if (!(await saveRoute(origin, deps.getToken(), route))) {
       flagRouteError('Could not build the route home.');
       return;
     }
     await refreshRoutes();
-    if (!(await activateRoute(origin, getToken(), routeHref(route.id)))) {
+    if (!(await activateRoute(origin, deps.getToken(), routeHref(route.id)))) {
       flagRouteError('Could not start navigating home.');
       return;
     }
@@ -223,7 +220,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     const route = routeStore.routeById(id);
     if (!route) return;
     const reversed = reverseRoute(route);
-    if (!(await saveRoute(origin, getToken(), reversed))) {
+    if (!(await saveRoute(origin, deps.getToken(), reversed))) {
       flagRouteError('Could not reverse the route.');
       return;
     }
@@ -245,7 +242,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     const saved = [];
     for (const route of parsed) {
-      if (await saveRoute(origin, getToken(), route)) saved.push(route.id);
+      if (await saveRoute(origin, deps.getToken(), route)) saved.push(route.id);
     }
     if (saved.length === 0) {
       flagRouteError('Could not save the imported route.');
@@ -260,7 +257,7 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onGoToHere(position: LatLon): Promise<void> {
     clearRouteError();
-    if (!(await setDestination(origin, getToken(), position))) {
+    if (!(await setDestination(origin, deps.getToken(), position))) {
       flagRouteError('Could not set the destination. Check the connection.');
       return;
     }
@@ -274,7 +271,6 @@ export function createRouteController(deps: RouteControllerDeps) {
     hydrateAndSeedCourse,
     onToggleRouteShown,
     beginNewRoute,
-    onStartRouteHere,
     onEditRoute,
     onSaveRoute,
     onCancelRouteEdit,
@@ -288,6 +284,8 @@ export function createRouteController(deps: RouteControllerDeps) {
     onExportRouteGpx,
     onImportRouteGpx,
     onGoToHere,
+    flyToRouteStart,
+    flagRouteError,
     clearRouteError,
     get routeError() {
       return routeError;

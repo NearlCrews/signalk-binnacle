@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Ellipsis, TriangleAlert } from '@lucide/svelte';
+import { Ellipsis } from '@lucide/svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
@@ -8,6 +8,7 @@ import {
   itemBlocked,
   MAX_BAR_PILLS,
   type MenuItem,
+  MenuItemIcon,
   splitBarActions,
 } from '$features/menu';
 import {
@@ -125,12 +126,7 @@ const closeMore = (): void => {
         }}
       >
         <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
-        {#if action.available === false && !action.pressed}
-          <TriangleAlert size={16} aria-hidden="true" />
-        {:else if action.icon}
-          {@const Icon = action.icon}
-          <Icon size={16} aria-hidden="true" />
-        {/if}
+        <MenuItemIcon item={action} size={16} />
         {action.shortLabel ?? action.label}
       </button>
     {/each}
@@ -180,12 +176,7 @@ const closeMore = (): void => {
                 <UnavailableHint
                   hint={action.available === false ? action.unavailableHint : undefined}
                 />
-                {#if action.available === false && !action.pressed}
-                  <TriangleAlert size={16} aria-hidden="true" />
-                {:else if action.icon}
-                  {@const Icon = action.icon}
-                  <Icon size={16} aria-hidden="true" />
-                {/if}
+                <MenuItemIcon item={action} size={16} />
                 {action.label}
               </button>
             {/each}

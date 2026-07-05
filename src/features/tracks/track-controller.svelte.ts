@@ -30,16 +30,12 @@ export function createTrackController(deps: TrackControllerDeps) {
     features: () => savedTracksToFeatures(savedTracks, shownSaved),
   };
 
-  function getToken(): string | undefined {
-    return deps.getToken();
-  }
-
   function bumpSaved(): void {
     savedVersion += 1;
   }
 
   async function refreshSavedTracks(): Promise<void> {
-    const fetched = await fetchSavedTracks(origin, getToken());
+    const fetched = await fetchSavedTracks(origin, deps.getToken());
     if (fetched) {
       savedTracks = fetched;
       bumpSaved();
@@ -51,7 +47,7 @@ export function createTrackController(deps: TrackControllerDeps) {
     if (points.length < 2) return;
     trackError = undefined;
     const id = uuidv4();
-    if (!(await saveTrack(origin, getToken(), id, name, points))) {
+    if (!(await saveTrack(origin, deps.getToken(), id, name, points))) {
       trackError = 'Could not save the track. Check the connection and access.';
       return;
     }
@@ -62,7 +58,7 @@ export function createTrackController(deps: TrackControllerDeps) {
 
   async function onDeleteSavedTrack(id: string): Promise<void> {
     trackError = undefined;
-    if (!(await deleteTrack(origin, getToken(), id))) {
+    if (!(await deleteTrack(origin, deps.getToken(), id))) {
       trackError = 'Could not delete the track. Check the connection and access.';
       return;
     }

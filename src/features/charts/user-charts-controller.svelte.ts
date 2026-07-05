@@ -9,6 +9,9 @@ export interface UserChartsControllerDeps {
   getToken: () => string | undefined;
   userCharts: UserCharts;
   recolorMap: (theme: Theme) => void;
+  // A getter, not a value: the theme changes over the session, and a chart registered at night
+  // must recolor to the night palette, not a construction-time snapshot.
+  getTheme: () => Theme;
 }
 
 export function createUserChartsController(deps: UserChartsControllerDeps) {
@@ -17,12 +20,8 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   let userChartRegistrar = $state<UserChartRegistrar | undefined>();
   const registeredUserCharts = new Set<string>();
 
-  function getToken(): string | undefined {
-    return deps.getToken();
-  }
-
   function syncUrlChartToServer(source: UserChartSource): void {
-    const token = getToken();
+    const token = deps.getToken();
     if (token) {
       void putChart(origin, token, userChartToSignalK(source, source.origin.url)).then((ok) => {
         if (!ok) console.warn(`User chart "${source.id}" did not sync to the server.`);
@@ -38,7 +37,6 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   async function addUserChartOverlay(
     source: UserChartSource,
     registrar: UserChartRegistrar,
-    theme: Theme,
   ): Promise<void> {
     try {
       await registrar.register(userChartToSignalK(source, source.origin.url));
@@ -51,7 +49,7 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
       registrar.unregister(source.id);
       return;
     }
-    deps.recolorMap(theme);
+    deps.recolorMap(deps.getTheme());
   }
 
   $effect(() => {
@@ -65,7 +63,7 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
     for (const source of sources) {
       if (registeredUserCharts.has(source.id)) continue;
       registeredUserCharts.add(source.id);
-      void addUserChartOverlay(source, registrar, 'day');
+      void addUserChartOverlay(source, registrar);
     }
   });
 

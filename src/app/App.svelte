@@ -1162,6 +1162,7 @@ const routeController = createRouteController({
   startRouteEdit: (route, initialPoint) => mapCommands?.startRouteEdit(route, initialPoint),
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
   getBounds: () => mapCommands?.getBounds(),
+  getTrackPoints: () => recorder.points,
 });
 
 // Waypoints controller: owns waypoints CRUD.
@@ -1185,6 +1186,7 @@ const userChartsController = createUserChartsController({
   getToken: () => chartsToken,
   userCharts,
   recolorMap: (t) => recolorMap?.(t),
+  getTheme: () => theme.theme,
 });
 
 // Re-list the layers when an availability-gating provider appears or disappears, so a degrade overlay
@@ -1295,7 +1297,7 @@ $effect(() => {
     if (routeStore.activeId !== undefined && !courseGuidance.isLastPoint) {
       // The streamed activeRoute.pointIndex stays authoritative, so a server that also auto-advances
       // and this request converge on the same active point. A failed advance is surfaced.
-      void routeController.onSkipPoint(1);
+      routeController.onSkipPoint(1);
     }
   }
   arrivedLast = arrived;
@@ -1634,7 +1636,7 @@ onDestroy(() => {
       {units}
       waypoints={waypointsStore}
       symbols={symbolsStore}
-      onDropWaypoint={(position) => void waypointsController.onDropWaypoint(position)}
+      onDropWaypoint={waypointsController.onDropWaypoint}
       aisTrailsAvailable={() => serverFeatures?.plugins.has('tracks') ?? false}
       isOnline={() => net.online}
       historyProviders={() => historyProviders}
@@ -1677,7 +1679,8 @@ onDestroy(() => {
         armMeasure();
         measure.add(position);
       }}
-      onRouteEditorError={() => {}}
+      onRouteEditorError={() =>
+        routeController.flagRouteError('The route editor failed to load. Reload to edit routes.')}
       onAnchorMoved={(position) => void anchorController.onAnchorMoved(position)}
       marineRadarLayer={marineRadar.layer}
       onMapInstance={(m) => (mapInstance = m)}
@@ -1695,7 +1698,7 @@ onDestroy(() => {
         guidance={courseGuidance}
         {routeProgress}
         onStop={() => routeController.onStopCourse()}
-        onSkip={routeStore.activeId !== undefined ? (delta: number) => routeController.onSkipPoint(delta) : undefined}
+        onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
       />
       <MeasureStrip {measure} {units} />
       <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
@@ -1737,19 +1740,19 @@ onDestroy(() => {
             highlight={routeStore.highlight}
             {onHighlightLeg}
             error={routeController.routeError}
-            onNew={(initialPoint?: LatLon) => routeController.beginNewRoute(initialPoint)}
-            onEditRoute={(id: string) => routeController.onEditRoute(id)}
-            onSave={(name) => routeController.onSaveRoute(name)}
-            onCancelEdit={() => routeController.onCancelRouteEdit()}
-            onToggleShown={(id, shown) => routeController.onToggleRouteShown(id, shown)}
-            onLocate={(id) => { const start = routeStore.routeById(id)?.waypoints[0]?.position; if (start) mapCommands?.flyTo(start.latitude, start.longitude); }}
-            onActivate={(id) => routeController.onActivateRoute(id)}
-            onStop={() => routeController.onStopCourse()}
-            onReverse={(id) => routeController.onReverseRoute(id)}
-            onExportGpx={(id) => routeController.onExportRouteGpx(id)}
-            onImportGpx={(gpxText) => routeController.onImportRouteGpx(gpxText)}
+            onNew={routeController.beginNewRoute}
+            onEditRoute={routeController.onEditRoute}
+            onSave={routeController.onSaveRoute}
+            onCancelEdit={routeController.onCancelRouteEdit}
+            onToggleShown={routeController.onToggleRouteShown}
+            onLocate={routeController.flyToRouteStart}
+            onActivate={routeController.onActivateRoute}
+            onStop={routeController.onStopCourse}
+            onReverse={routeController.onReverseRoute}
+            onExportGpx={routeController.onExportRouteGpx}
+            onImportGpx={routeController.onImportRouteGpx}
             planningSpeed={planningSpeedKn}
-            onDelete={(id) => routeController.onDeleteRoute(id)}
+            onDelete={routeController.onDeleteRoute}
             onClose={closeRoutesPanel}
             onBack={backFromRoutesPanel}
           />
@@ -1759,12 +1762,12 @@ onDestroy(() => {
             settings={trackSettings}
             saved={trackController.savedTracks}
             shown={trackController.shownSaved}
-            onSave={(name) => void trackController.onSaveTrack(name)}
-            onSaveAsRoute={(name) => routeController.onSaveTrackAsRoute(name, recorder.points)}
-            onTrackHome={() => routeController.onTrackHome(recorder.points)}
-            onDelete={(id) => void trackController.onDeleteSavedTrack(id)}
-            onToggleSaved={(id) => trackController.onToggleSaved(id)}
-            onExport={(track) => trackController.onExportSavedTrack(track)}
+            onSave={trackController.onSaveTrack}
+            onSaveAsRoute={routeController.onSaveTrackAsRoute}
+            onTrackHome={routeController.onTrackHome}
+            onDelete={trackController.onDeleteSavedTrack}
+            onToggleSaved={trackController.onToggleSaved}
+            onExport={trackController.onExportSavedTrack}
             error={trackController.trackError}
             onClose={closePanel}
             onBack={backToMenu}
@@ -1775,8 +1778,8 @@ onDestroy(() => {
             error={waypointsController.waypointError}
             onLocate={(waypoint) => flyToPosition(waypoint.position)}
             onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
-            onEdit={(waypoint) => waypointsController.onOpenEditWaypoint(waypoint)}
-            onDelete={(id) => void waypointsController.onDeleteWaypoint(id)}
+            onEdit={waypointsController.onOpenEditWaypoint}
+            onDelete={waypointsController.onDeleteWaypoint}
             onClose={closePanel}
             onBack={backToMenu}
           />
@@ -1962,7 +1965,7 @@ onDestroy(() => {
     defaultName={defaultSaveName('Waypoint')}
     symbols={symbolsStore}
     onSave={(result) => void waypointsController.confirmAddWaypoint(result)}
-    onCancel={() => {}}
+    onCancel={waypointsController.cancelAddWaypoint}
   />
 {/if}
 {#if waypointsController.editingWaypoint}
@@ -1974,7 +1977,7 @@ onDestroy(() => {
       waypoint={waypointsController.editingWaypoint}
       symbols={symbolsStore}
       onSave={(result) => void waypointsController.onSaveWaypointEdit(result)}
-      onCancel={() => {}}
+      onCancel={waypointsController.cancelEditWaypoint}
     />
   {/key}
 {/if}
