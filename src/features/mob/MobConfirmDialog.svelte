@@ -3,7 +3,7 @@ import { LifeBuoy } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import type { MobMark } from '$entities/mob';
 import { formatClockTime, formatLatitude, formatLongitude } from '$shared/lib';
-import { dialog, focusOnMount, focusTrap } from '$shared/ui';
+import { dialog, focusOnMount } from '$shared/ui';
 
 interface Props {
   // The press-time capture; undefined when there was no GPS fix at the press.
@@ -43,48 +43,41 @@ function confirm(): void {
 }
 </script>
 
-<!-- The scrim is deliberately inert: a panicked hammer-tap outside the dialog must neither confirm
-     (any stray touch would arm the alarm) nor dismiss (retracting an emergency takes the explicit
-     Cancel, or Escape via the dialog action). -->
-<div class="modal-scrim">
-  <!-- The host deliberately carries NO tabindex (unlike SlideOver): the dialog action's
-       node.focus() then no-ops, so the confirm button's focusOnMount owns initial focus. -->
-  <div
-    class="modal-card mob-dialog"
-    role="alertdialog"
-    aria-modal="true"
-    aria-labelledby="mob-confirm-title"
-    aria-describedby="mob-confirm-desc"
-    use:dialog={onCancel}
-    use:focusTrap
-  >
-    <header class="head">
-      <LifeBuoy size={28} aria-hidden="true" />
-      <h2 id="mob-confirm-title">Man overboard</h2>
-    </header>
-    <p id="mob-confirm-desc" class="desc">
-      Marks the spot where MOB was pressed and sounds the alarm on every station.
+<!-- The backdrop is natively handled by ::backdrop on the dialog, which is inert by default. -->
+<!-- The host deliberately carries NO tabindex (unlike SlideOver): the dialog action's
+     node.focus() then no-ops, so the confirm button's focusOnMount owns initial focus. -->
+<dialog
+  class="modal-card mob-dialog"
+  aria-labelledby="mob-confirm-title"
+  aria-describedby="mob-confirm-desc"
+  use:dialog={onCancel}
+>
+  <header class="head">
+    <LifeBuoy size={28} aria-hidden="true" />
+    <h2 id="mob-confirm-title">Man overboard</h2>
+  </header>
+  <p id="mob-confirm-desc" class="desc">
+    Marks the spot where MOB was pressed and sounds the alarm on every station.
+  </p>
+  {#if mark?.position}
+    <p class="fix" aria-hidden="true">
+      Captured {formatClockTime(mark.epochMs, { seconds: true })}<br>
+      <span class="num">{formatLatitude(mark.position.latitude)}</span>
+      <span class="num">{formatLongitude(mark.position.longitude)}</span>
     </p>
-    {#if mark?.position}
-      <p class="fix" aria-hidden="true">
-        Captured {formatClockTime(mark.epochMs, { seconds: true })}<br>
-        <span class="num">{formatLatitude(mark.position.latitude)}</span>
-        <span class="num">{formatLongitude(mark.position.longitude)}</span>
-      </p>
-    {:else}
-      <p class="fix no-fix">No GPS fix. The alarm will sound without a position.</p>
-    {/if}
-    <div class="actions">
-      <button type="button" class="btn" onclick={onCancel}>
-        Cancel <span aria-hidden="true">({remaining}s)</span>
-      </button>
-      <button type="button" class="btn confirm" use:focusOnMount onclick={confirm}>
-        <LifeBuoy size={20} aria-hidden="true" />
-        Mark man overboard
-      </button>
-    </div>
+  {:else}
+    <p class="fix no-fix">No GPS fix. The alarm will sound without a position.</p>
+  {/if}
+  <div class="actions">
+    <button type="button" class="btn" onclick={onCancel}>
+      Cancel <span aria-hidden="true">({remaining}s)</span>
+    </button>
+    <button type="button" class="btn confirm" use:focusOnMount onclick={confirm}>
+      <LifeBuoy size={20} aria-hidden="true" />
+      Mark man overboard
+    </button>
   </div>
-</div>
+</dialog>
 
 <style>
 .mob-dialog {

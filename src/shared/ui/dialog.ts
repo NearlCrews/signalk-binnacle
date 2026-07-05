@@ -44,25 +44,55 @@ export function registerDismiss(close: () => void): () => void {
 export const dialog: Action<HTMLElement, () => void> = (node, onClose) => {
   let close = onClose;
   const restoreTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const isNativeDialog = node instanceof HTMLDialogElement;
   const unregister = registerDismiss(() => close());
 
-  // Move focus into the panel on open so a keyboard or screen-reader user lands inside it, not back on
-  // the trigger that opened it. The panel carries tabindex="-1" to receive focus; this is a no-op if
-  // the node is not focusable. restoreTo was captured above, so closing still returns focus correctly.
-  node.focus({ preventScroll: true });
+  if (isNativeDialog) {
+    // Show native dialog modal
+    node.showModal();
 
-  return {
-    update(next: () => void): void {
-      close = next;
-    },
-    destroy(): void {
-      unregister();
-      // Restore only when this panel actually holds focus (or focus already fell to the body):
-      // unconditionally restoring would yank focus from an unrelated panel the user moved into.
-      const active = document.activeElement;
-      if (node.contains(active) || active === document.body || active === null) {
-        restoreTo?.focus();
-      }
-    },
-  };
+    // Prevent native cancel (Escape) and instead let our Escape stack handle it
+    const handleCancel = (e: Event) => {
+      e.preventDefault();
+    };
+    node.addEventListener('cancel', handleCancel);
+
+    return {
+      update(next: () => void): void {
+        close = next;
+      },
+      destroy(): void {
+        unregister();
+        node.removeEventListener('cancel', handleCancel);
+        try {
+          node.close();
+        } catch (_) {}
+        // Restore focus
+        const active = document.activeElement;
+        if (node.contains(active) || active === document.body || active === null) {
+          restoreTo?.focus();
+        }
+      },
+    };
+  } else {
+    // Move focus into the panel on open so a keyboard or screen-reader user lands inside it, not back on
+    // the trigger that opened it. The panel carries tabindex="-1" to receive focus; this is a no-op if
+    // the node is not focusable. restoreTo was captured above, so closing still returns focus correctly.
+    node.focus({ preventScroll: true });
+
+    return {
+      update(next: () => void): void {
+        close = next;
+      },
+      destroy(): void {
+        unregister();
+        // Restore only when this panel actually holds focus (or focus already fell to the body):
+        // unconditionally restoring would yank focus from an unrelated panel the user moved into.
+        const active = document.activeElement;
+        if (node.contains(active) || active === document.body || active === null) {
+          restoreTo?.focus();
+        }
+      },
+    };
+  }
 };

@@ -3,7 +3,7 @@ import { type DefaultOption, IconPicker } from '$entities/icon-picker';
 import { isPoiCategory } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
 import type { Waypoint } from '$entities/waypoint';
-import { dialog, focusTrap, TextField } from '$shared/ui';
+import { dialog, TextField } from '$shared/ui';
 
 interface Props {
   // Required for add mode (new waypoint). In edit mode `waypoint` takes precedence for the initial
@@ -63,46 +63,36 @@ function save(): void {
 const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
 </script>
 
-<div class="modal-scrim">
-  <div
-    class="modal-card wp-dialog"
-    role="dialog"
-    aria-modal="true"
-    aria-label={title}
-    tabindex="-1"
-    use:dialog={onCancel}
-    use:focusTrap
-  >
-    <header><h2>{title}</h2></header>
-    <div class="wp-body">
-      <TextField
-        variant="stacked"
-        large
-        label="Name"
-        value={wpName}
-        placeholder={waypoint?.name ?? defaultName}
-        focusOnOpen
-        onInput={(value) => (wpName = value)}
-        onCommit={(value) => (wpName = value)}
-        onEnter={save}
+<dialog class="modal-card wp-dialog" aria-label={title} use:dialog={onCancel}>
+  <header><h2>{title}</h2></header>
+  <div class="wp-body">
+    <TextField
+      variant="stacked"
+      large
+      label="Name"
+      value={wpName}
+      placeholder={waypoint?.name ?? defaultName}
+      focusOnOpen
+      onInput={(value) => (wpName = value)}
+      onCommit={(value) => (wpName = value)}
+      onEnter={save}
+    />
+    <div class="wp-field">
+      <label class="caps-label" for="wp-icon-picker">Icon</label>
+      <IconPicker
+        id="wp-icon-picker"
+        bind:value={icon}
+        {symbols}
+        symbolRole="waypoint"
+        defaultOption={WAYPOINT_DEFAULT}
       />
-      <div class="wp-field">
-        <label class="caps-label" for="wp-icon-picker">Icon</label>
-        <IconPicker
-          id="wp-icon-picker"
-          bind:value={icon}
-          {symbols}
-          symbolRole="waypoint"
-          defaultOption={WAYPOINT_DEFAULT}
-        />
-      </div>
     </div>
-    <footer>
-      <button type="button" class="btn" onclick={onCancel}>Cancel</button>
-      <button type="button" class="btn btn-primary btn-pill" onclick={save}>Save</button>
-    </footer>
   </div>
-</div>
+  <footer>
+    <button type="button" class="btn" onclick={onCancel}>Cancel</button>
+    <button type="button" class="btn btn-primary btn-pill" onclick={save}>Save</button>
+  </footer>
+</dialog>
 
 <style>
 .wp-dialog {

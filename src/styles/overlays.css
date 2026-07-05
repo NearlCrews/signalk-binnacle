@@ -14,23 +14,28 @@
   cursor: default;
 }
 
-/* A centered, full-viewport modal backdrop: a tinted scrim with its contents centered. The shared
-   base for the app's true modal dialogs (the waypoint editor, the widget config, and the widget
-   picker), distinct from .overlay-backdrop, which is an absolute, transparent map-menu dismiss
-   layer. */
-.modal-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  place-items: center;
+/* Centered, full-viewport modal backdrop: a tinted scrim natively styled for dialog elements. */
+dialog::backdrop {
   background: var(--scrim);
 }
 
 /* The centered modal-dialog card frame shared by the app dialogs (the waypoint editor, the MOB
    confirm, the extension config, and the widget picker), so the dialog frame cannot drift across
-   them: one radius, surface, and shadow. Each dialog keeps its own inline-size and any modifier (the
-   MOB alarm border) on top, the way .popover-card consumers keep their own position and padding. */
+   them: one radius, surface, and shadow. We override native user-agent dialog styles to center it
+   perfectly and allow child dropdowns to overflow. */
+dialog.modal-card {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  overflow: visible;
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+
 .modal-card {
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
