@@ -137,7 +137,12 @@ import {
   updateNotification,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
-import { createThemeController, defaultSaveName, type Theme } from '$shared/ui';
+import {
+  createThemeController,
+  defaultSaveName,
+  startViewTransition,
+  type Theme,
+} from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
@@ -388,21 +393,27 @@ let activePanel = $state<LeftPanel | null>(null);
 let menuOpen = $state(false);
 let menuEditing = $state(false);
 const closePanel = (): void => {
-  activePanel = null;
+  startViewTransition(() => {
+    activePanel = null;
+  });
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
 // can move menu to panel to back to another panel without reopening the menu by hand.
 const backToMenu = (): void => {
-  activePanel = null;
-  menuOpen = true;
+  startViewTransition(() => {
+    activePanel = null;
+    menuOpen = true;
+  });
 };
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
 let narrow = $state(false);
 const openPanel = (panel: LeftPanel): void => {
-  activePanel = panel;
-  if (narrow) selectedNote = undefined;
+  startViewTransition(() => {
+    activePanel = panel;
+    if (narrow) selectedNote = undefined;
+  });
 };
 // Open the panel if it is closed, close it if it is already open, so a bar pill and a menu tile both
 // toggle. Delegates to openPanel/closePanel to keep the narrow-width clear-selectedNote side effect.
