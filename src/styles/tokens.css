@@ -35,6 +35,7 @@
      The instrument gesture is a big mono number over a small quiet label. */
   --text-xl: 1.15rem;
   --text-readout: 1.25rem;
+  --text-readout-lg: 1.75rem; /* the instrument-tile hero size */
   --z-overlay: 1;
   --z-panel: 2;
   /* Safety strips (collision danger and its actions) sit above every panel but below the menu. */

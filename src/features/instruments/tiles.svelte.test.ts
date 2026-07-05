@@ -97,6 +97,18 @@ describe('NumericTile', () => {
     const html = numericBody({ label: 'HDG', reading, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('HDG (M)');
   });
+
+  it('carries tile--empty class when state is never', () => {
+    const html = numericBody({ label: LABEL, reading: NEVER, zone: normal, sensorGloss: GLOSS });
+    expect(html).toContain('tile--empty');
+  });
+
+  it('renders abbr in .abbr span after the label', () => {
+    const html = render(NumericTile, {
+      props: { label: 'Speed', reading: LIVE, zone: normal, sensorGloss: GLOSS, abbr: 'SOG' },
+    }).body;
+    expect(html).toContain('<span class="abbr">SOG</span>');
+  });
 });
 
 describe('WindTile', () => {
@@ -159,6 +171,12 @@ describe('WindTile', () => {
   it('carries no aria-live attribute', () => {
     const html = windBody({ label: 'AWS', reading: WIND_LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).not.toContain('aria-live');
+  });
+
+  it('carries tile--empty class when state is never', () => {
+    const neverWind: TileReading = { state: 'never', value: '---', unit: '' };
+    const html = windBody({ label: 'AWS', reading: neverWind, zone: normal, sensorGloss: GLOSS });
+    expect(html).toContain('tile--empty');
   });
 
   it('omits needle when angleRad is undefined (speed live but angle absent)', () => {

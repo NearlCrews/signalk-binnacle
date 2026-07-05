@@ -130,21 +130,17 @@ function onCardKeydown(event: KeyboardEvent): void {
       <span class="muted-note">No options</span>
     {:else}
       <div class="menu-head">
-        <button
-          type="button"
-          class="btn btn-compact customize-toggle"
-          class:is-on={editing}
-          aria-pressed={editing}
-          aria-label="Customize bottom toolbar"
-          onclick={() => onEditingChange?.(!editing)}
-        >
-          {editing ? 'Done' : 'Customize bottom toolbar'}
+        <!-- The canonical edit-mode entry: a quiet ghost whose label swap to Done is the entire
+             state story (no aria-pressed, no is-on, no static aria-label; the visible text IS the
+             accessible name in both states). -->
+        <button type="button" class="btn btn-ghost" onclick={() => onEditingChange?.(!editing)}>
+          {editing ? 'Done' : 'Customize toolbar'}
         </button>
       </div>
       {#if editing}
         <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
              "panel open", which is invisible to a screen reader without this. -->
-        <p class="muted-note">Tap an action to pin or unpin it on the bar.</p>
+        <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
       {/if}
       {#each groups as group, gi (gi)}
         <!-- Every menu item carries a group label, so role="group" always has an accessible name
@@ -223,9 +219,11 @@ function onCardKeydown(event: KeyboardEvent): void {
   display: flex;
 }
 /* The customize control spans the full menu width as a header action, rather than a small
-   right-aligned button, so it reads as the menu's mode switch. */
-.customize-toggle {
-  inline-size: 100%;
+   right-aligned quiet button, so it reads as header chrome above the groups rather than the
+   menu's loudest action. */
+.menu-head {
+  display: flex;
+  justify-content: flex-end;
 }
 .group {
   display: flex;

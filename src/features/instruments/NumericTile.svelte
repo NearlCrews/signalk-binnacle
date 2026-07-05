@@ -7,9 +7,16 @@ interface Props {
   reading: TileReading;
   zone: ZoneState;
   sensorGloss: string;
+  kind?: string;
+  abbr?: string;
 }
 
-const { label, reading, zone, sensorGloss }: Props = $props();
+const { label, reading, zone, sensorGloss, kind, abbr }: Props = $props();
+
+// One expression, so the formatter cannot split the label from its reference parenthetical.
+const labelText = $derived(
+  `${label}${reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}`,
+);
 </script>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
@@ -19,9 +26,15 @@ const { label, reading, zone, sensorGloss }: Props = $props();
   class:tile--warning={zone === 'warning'}
   class:tile--alarm={zone === 'alarm'}
   class:tile--stale={reading.state === 'stale'}
+  class:tile--empty={reading.state === 'never'}
+  class:tile--wide={kind === 'position' || kind === 'wind'}
+  class:tile--position={kind === 'position'}
 >
   <span class="caps-label"
-    >{label}{reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}</span
+    >{labelText}
+    {#if abbr}
+      <span class="abbr">{abbr}</span>
+    {/if}</span
   >
   {#if reading.state === 'never'}
     <span class="muted-note">{sensorGloss}</span>

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PLACEHOLDER } from './coords';
 import {
+  degreesToRadians,
   feetToMeters,
+  formatBearingOr,
   formatClockTime,
   formatDayClock,
   formatDuration,
@@ -265,5 +267,21 @@ describe('formatSignedAngleOr', () => {
   });
   it('renders the placeholder when undefined', () => {
     expect(formatSignedAngleOr(undefined)).toBe(PLACEHOLDER);
+  });
+});
+
+describe('formatBearingOr', () => {
+  it('zero-pads bearing to three digits', () => {
+    expect(formatBearingOr(0)).toBe('000');
+    expect(formatBearingOr(Math.PI / 2)).toBe('090');
+    expect(formatBearingOr(Math.PI)).toBe('180');
+    expect(formatBearingOr(-Math.PI / 2)).toBe('270');
+  });
+  it('keeps the whole degrees three wide when digits > 0', () => {
+    expect(formatBearingOr(degreesToRadians(4), 1)).toBe('004.0');
+  });
+  it('returns PLACEHOLDER for null, undefined', () => {
+    expect(formatBearingOr(null)).toBe(PLACEHOLDER);
+    expect(formatBearingOr(undefined)).toBe(PLACEHOLDER);
   });
 });

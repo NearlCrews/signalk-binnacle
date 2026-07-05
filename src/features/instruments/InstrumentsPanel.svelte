@@ -76,6 +76,9 @@ const reorder = createReorder({
     </button>
   </header>
   {#if customizing}
+    <p class="muted-note">
+      Tap an instrument to show or hide it on the dock. Drag the handle to reorder.
+    </p>
     <ul class="tile-list" bind:this={listEl}>
       {#each controller.catalog as def (def.id)}
         {@const selected = controller.selectedIds.includes(def.id)}
@@ -112,14 +115,29 @@ const reorder = createReorder({
     </ul>
     <span class="visually-hidden" role="status">{reorder.reorderAnnouncement}</span>
   {:else}
+    <p class="muted-note">Live readouts from the boat's instruments.</p>
     <div class="tiles">
       {#each controller.tiles as def (def.id)}
         {@const reading = def.read(deps)}
         {@const zone = controller.zoneState(def, reading.siValue)}
         {#if def.kind === 'wind'}
-          <WindTile label={def.label} {reading} {zone} sensorGloss={def.sensorGloss} />
+          <WindTile
+            label={def.label}
+            {reading}
+            {zone}
+            sensorGloss={def.sensorGloss}
+            kind={def.kind}
+            abbr={def.abbr}
+          />
         {:else}
-          <NumericTile label={def.label} {reading} {zone} sensorGloss={def.sensorGloss} />
+          <NumericTile
+            label={def.label}
+            {reading}
+            {zone}
+            sensorGloss={def.sensorGloss}
+            kind={def.kind}
+            abbr={def.abbr}
+          />
         {/if}
       {/each}
     </div>
@@ -135,11 +153,13 @@ const reorder = createReorder({
 }
 
 .tiles {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  align-content: start;
+  flex: 1;
   overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
 }
 
 .tile-list {
@@ -167,11 +187,6 @@ const reorder = createReorder({
     z-index: var(--z-panel);
     inline-size: auto;
     background: var(--surface);
-  }
-
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
   }
 }
 </style>

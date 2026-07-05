@@ -43,6 +43,8 @@ function makeDeps(clock: ReactiveClock, mode: UnitsMode = 'metric') {
     SK_PATHS.windAngleApparent,
     SK_PATHS.windSpeedTrue,
     SK_PATHS.windAngleTrueWater,
+    SK_PATHS.windSpeedOverGround,
+    SK_PATHS.windDirectionTrue,
   ]);
   // PersistedValue uses fallback when no storage is available (Node test env).
   const local = new PersistedValue<UnitsMode>('binnacle:units', mode);
@@ -97,6 +99,8 @@ describe('tile catalog structure', () => {
     expect(all.has(SK_PATHS.windSpeedTrue)).toBe(true);
     expect(all.has(SK_PATHS.windAngleTrueWater)).toBe(true);
     expect(all.has(SK_PATHS.headingMagnetic)).toBe(true);
+    expect(all.has(SK_PATHS.windSpeedOverGround)).toBe(true);
+    expect(all.has(SK_PATHS.windDirectionTrue)).toBe(true);
   });
 });
 
@@ -181,12 +185,13 @@ describe('heading tile fallback chain', () => {
   it('headingTrue present → no referenceLabel, bearing in degrees', () => {
     const clock = { now: 1000 };
     const deps = makeDeps(clock);
-    // π/2 rad = 90°
+    // π/2 rad = 90°, zero-padded to three digits with embedded degree sign
     deps.store.applyFrame(skFrame({ [SK_PATHS.headingTrue]: Math.PI / 2 }, 1000));
     const reading = readTile('heading', deps);
     expect(reading.state).toBe('live');
     expect(reading.referenceLabel).toBeUndefined();
-    expect(Number(reading.value)).toBeCloseTo(90, 0);
+    expect(reading.value).toMatch(/^\d{3}°$/);
+    expect(Number(reading.value.replace('°', ''))).toBeCloseTo(90, 0);
   });
 
   it('only headingMagnetic reported → state live, referenceLabel M', () => {
@@ -196,7 +201,8 @@ describe('heading tile fallback chain', () => {
     const reading = readTile('heading', deps);
     expect(reading.state).toBe('live');
     expect(reading.referenceLabel).toBe('M');
-    expect(Number(reading.value)).toBeCloseTo(180, 0);
+    expect(reading.value).toMatch(/^\d{3}°$/);
+    expect(Number(reading.value.replace('°', ''))).toBeCloseTo(180, 0);
   });
 
   it('only COG reported → state live, referenceLabel COG', () => {
@@ -246,6 +252,90 @@ describe('wind-apparent tile', () => {
     expect(Number(reading.value)).toBeCloseTo(9.72, 1);
     expect(reading.siValue).toBeCloseTo(5.0);
     expect(reading.angleRad).toBeCloseTo(-0.5);
+  });
+});
+
+describe('wind-apparent tile ground fallback', () => {
+  it('ground-only store: state live, GND referenceLabel, speed from windSpeedOverGround in knots', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(
+      skFrame(
+        { [SK_PATHS.windSpeedOverGround]: 5.14, [SK_PATHS.windDirectionTrue]: Math.PI },
+        1000,
+      ),
+    );
+    const reading = readTile('wind-apparent', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.referenceLabel).toBe('GND');
+    expect(Number(reading.value)).toBeCloseTo(9.99, 0);
+    expect(reading.siValue).toBeCloseTo(5.14);
+  });
+
+  it('ground fallback: angleRad = normalized(directionTrue - headingTrue) when heading present', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    // directionTrue = π (from south), headingTrue = π/2 (east) → relative = π - π/2 = π/2
+    deps.store.applyFrame(
+      skFrame(
+        {
+          [SK_PATHS.windSpeedOverGround]: 3.0,
+          [SK_PATHS.windDirectionTrue]: Math.PI,
+          [SK_PATHS.headingTrue]: Math.PI / 2,
+        },
+        1000,
+      ),
+    );
+    const reading = readTile('wind-apparent', deps);
+    expect(reading.angleRad).toBeCloseTo(Math.PI / 2, 4);
+  });
+
+  it('ground fallback: angleRad undefined when no heading source', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(
+      skFrame({ [SK_PATHS.windSpeedOverGround]: 3.0, [SK_PATHS.windDirectionTrue]: 1.0 }, 1000),
+    );
+    const reading = readTile('wind-apparent', deps);
+    expect(reading.angleRad).toBeUndefined();
+  });
+
+  it('apparent-present boat: apparent takes priority, no GND label', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(
+      skFrame(
+        {
+          [SK_PATHS.windSpeedApparent]: 5.0,
+          [SK_PATHS.windAngleApparent]: -0.5,
+          [SK_PATHS.windSpeedOverGround]: 8.0,
+          [SK_PATHS.windDirectionTrue]: 1.0,
+        },
+        1000,
+      ),
+    );
+    const reading = readTile('wind-apparent', deps);
+    expect(reading.referenceLabel).toBeUndefined();
+    expect(reading.siValue).toBeCloseTo(5.0);
+  });
+
+  it('stale apparent keeps priority over fresh ground wind', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(
+      skFrame({ [SK_PATHS.windSpeedApparent]: 5.0, [SK_PATHS.windAngleApparent]: -0.5 }, 1000),
+    );
+    clock.now = 1000 + TILE_STALE_MS + 1;
+    deps.store.applyFrame(
+      skFrame(
+        { [SK_PATHS.windSpeedOverGround]: 8.0, [SK_PATHS.windDirectionTrue]: 1.0 },
+        clock.now,
+      ),
+    );
+    const reading = readTile('wind-apparent', deps);
+    expect(reading.state).toBe('stale');
+    expect(reading.referenceLabel).toBeUndefined();
+    expect(reading.siValue).toBeCloseTo(5.0);
   });
 });
 
@@ -374,7 +464,7 @@ describe('batteryTileDef', () => {
     const def = batteryTileDef('house');
     expect(def.id).toBe('battery:house');
     expect(def.label).toBe('BATT HOUSE');
-    expect(def.description).toBe('Battery house voltage');
+    expect(def.description).toBe('Battery house voltage.');
     expect(def.paths).toEqual(['electrical.batteries.house.voltage']);
     expect(def.zonesPath).toBe('electrical.batteries.house.voltage');
     expect(def.kind).toBe('numeric');

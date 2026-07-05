@@ -41,6 +41,7 @@ export interface TileReading {
 export interface TileDef {
   id: string;
   label: string;
+  abbr?: string;
   description: string;
   sensorGloss: string;
   paths: string[];
@@ -60,10 +61,16 @@ function grade(cell: PathCell, clock: ReactiveClock): TileValueState {
   return cell.value === undefined ? 'placeholder' : 'live';
 }
 
+// Wraps a radian angle to -π..π so a relative bearing stays in the port-starboard range.
+function normalizeAngle(a: number): number {
+  return ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+}
+
 const SOG_DEF: TileDef = {
   id: 'sog',
-  label: 'SOG',
-  description: 'Speed over ground',
+  label: 'Speed',
+  abbr: 'SOG',
+  description: 'Speed over ground (SOG): how fast you cross the seabed, from GPS.',
   sensorGloss: 'No speed data',
   paths: [SK_PATHS.speedOverGround],
   zonesPath: SK_PATHS.speedOverGround,
@@ -78,8 +85,9 @@ const SOG_DEF: TileDef = {
 
 const HDG_DEF: TileDef = {
   id: 'heading',
-  label: 'HDG',
-  description: 'Heading',
+  label: 'Heading',
+  abbr: 'HDG',
+  description: 'Heading (HDG): the direction the bow points.',
   sensorGloss: 'No heading data',
   // COG is a last-resort fallback; subscribing it here keeps the cell warm.
   paths: [SK_PATHS.headingTrue, SK_PATHS.headingMagnetic, SK_PATHS.courseOverGroundTrue],
@@ -115,8 +123,8 @@ const HDG_DEF: TileDef = {
     const state = grade(gradingCell, clock);
     return {
       state,
-      value: formatBearingOr(value),
-      unit: '°',
+      value: value !== undefined ? `${formatBearingOr(value)}°` : PLACEHOLDER,
+      unit: '',
       siValue: value,
       referenceLabel,
     };
@@ -125,8 +133,8 @@ const HDG_DEF: TileDef = {
 
 const DEPTH_DEF: TileDef = {
   id: 'depth',
-  label: 'DEPTH',
-  description: 'Depth below transducer',
+  label: 'Depth',
+  description: 'Depth of water under the boat.',
   sensorGloss: 'No depth sensor',
   paths: [SK_PATHS.depthBelowTransducer],
   zonesPath: SK_PATHS.depthBelowTransducer,
@@ -147,26 +155,60 @@ const DEPTH_DEF: TileDef = {
 
 const WIND_APPARENT_DEF: TileDef = {
   id: 'wind-apparent',
-  label: 'AWS',
-  description: 'Apparent wind',
+  label: 'Wind',
+  abbr: 'AWS',
+  description: 'Apparent wind (AWS): the wind you feel with the boat moving.',
   sensorGloss: 'No wind sensor',
-  paths: [SK_PATHS.windSpeedApparent, SK_PATHS.windAngleApparent],
+  paths: [
+    SK_PATHS.windSpeedApparent,
+    SK_PATHS.windAngleApparent,
+    SK_PATHS.windSpeedOverGround,
+    SK_PATHS.windDirectionTrue,
+    SK_PATHS.headingMagnetic,
+  ],
   zonesPath: SK_PATHS.windSpeedApparent,
   kind: 'wind',
   read({ vessel, store, clock }) {
-    const cell = store.cell(SK_PATHS.windSpeedApparent);
-    const state = grade(cell, clock);
-    const mps = vessel.windSpeedApparentMps;
-    const angleRad = asNumber(store.cell(SK_PATHS.windAngleApparent).value);
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad };
+    const apparentSpeedCell = store.cell(SK_PATHS.windSpeedApparent);
+    const groundSpeedCell = store.cell(SK_PATHS.windSpeedOverGround);
+
+    let gradingCell: PathCell;
+    let mps: number | undefined;
+    let angleRad: number | undefined;
+    let referenceLabel: string | undefined;
+
+    if (apparentSpeedCell.epoch > 0) {
+      gradingCell = apparentSpeedCell;
+      mps = vessel.windSpeedApparentMps;
+      angleRad = asNumber(store.cell(SK_PATHS.windAngleApparent).value);
+    } else if (groundSpeedCell.epoch > 0) {
+      gradingCell = groundSpeedCell;
+      mps = asNumber(groundSpeedCell.value);
+      referenceLabel = 'GND';
+      const dirTrue = asNumber(store.cell(SK_PATHS.windDirectionTrue).value);
+      if (dirTrue !== undefined) {
+        const hdg =
+          vessel.headingRad ??
+          asNumber(store.cell(SK_PATHS.headingMagnetic).value) ??
+          vessel.cogRad;
+        angleRad = hdg !== undefined ? normalizeAngle(dirTrue - hdg) : undefined;
+      }
+    } else {
+      gradingCell = apparentSpeedCell;
+    }
+
+    const state = grade(gradingCell, clock);
+    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad, referenceLabel };
   },
 };
 
 const STW_DEF: TileDef = {
   id: 'stw',
-  label: 'STW',
-  description: 'Speed through water',
-  sensorGloss: 'No log sensor',
+  label: 'Water speed',
+  abbr: 'STW',
+  description:
+    'Speed through the water (STW) from a paddlewheel log. Differs from GPS speed when there is current.',
+  sensorGloss: 'No water-speed sensor',
   paths: [SK_PATHS.speedThroughWater],
   zonesPath: SK_PATHS.speedThroughWater,
   kind: 'numeric',
@@ -183,8 +225,9 @@ const STW_DEF: TileDef = {
 
 const WIND_TRUE_DEF: TileDef = {
   id: 'wind-true',
-  label: 'TWS',
-  description: 'True wind',
+  label: 'True wind',
+  abbr: 'TWS',
+  description: "True wind (TWS): the real wind, with the boat's own motion removed.",
   sensorGloss: 'No true wind data',
   paths: [SK_PATHS.windSpeedTrue, SK_PATHS.windAngleTrueWater],
   zonesPath: SK_PATHS.windSpeedTrue,
@@ -200,9 +243,10 @@ const WIND_TRUE_DEF: TileDef = {
 
 const PRESSURE_DEF: TileDef = {
   id: 'pressure',
-  label: 'BARO',
-  description: 'Barometric pressure',
-  sensorGloss: 'No pressure sensor',
+  label: 'Barometer',
+  abbr: 'BARO',
+  description: 'Barometric pressure (BARO): a falling reading warns of worsening weather.',
+  sensorGloss: 'No barometer',
   paths: [SK_PATHS.outsidePressure],
   zonesPath: SK_PATHS.outsidePressure,
   kind: 'numeric',
@@ -222,9 +266,9 @@ const PRESSURE_DEF: TileDef = {
 
 const POSITION_DEF: TileDef = {
   id: 'position',
-  label: 'POS',
-  description: 'Vessel position',
-  sensorGloss: 'No position fix',
+  label: 'Position',
+  description: 'Your position, latitude and longitude.',
+  sensorGloss: 'No GPS position',
   paths: [SK_PATHS.position],
   zonesPath: SK_PATHS.position,
   kind: 'position',
@@ -248,8 +292,9 @@ const COURSE_ZONES_PATH = `${SK_PATHS.courseCalcValues}.distance`;
 
 const COURSE_DEF: TileDef = {
   id: 'course',
-  label: 'WPT',
-  description: 'Course to waypoint',
+  label: 'Waypoint',
+  abbr: 'WPT',
+  description: 'Distance and bearing to the next waypoint while navigating a course.',
   sensorGloss: 'No active course',
   paths: [],
   zonesPath: COURSE_ZONES_PATH,
@@ -291,7 +336,7 @@ export function batteryTileDef(instanceId: string): TileDef {
   return {
     id: `battery:${instanceId}`,
     label: `BATT ${instanceId.toUpperCase()}`,
-    description: `Battery ${instanceId} voltage`,
+    description: `Battery ${instanceId} voltage.`,
     sensorGloss: 'No battery data',
     paths: [path],
     zonesPath: path,

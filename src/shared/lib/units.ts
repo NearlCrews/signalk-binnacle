@@ -75,7 +75,11 @@ export function formatKnotsOr(metersPerSecond: number | null | undefined, digits
 }
 
 export function formatBearingOr(radians: number | null | undefined, digits = 0): string {
-  return formatFixed(radiansToBearing(radians), digits);
+  const bearing = radiansToBearing(radians);
+  if (bearing === undefined) return PLACEHOLDER;
+  // Marine convention pads the whole degrees to three digits ("004"); the pad target grows by
+  // the decimal point and fraction when digits > 0 so the integer part stays three wide.
+  return bearing.toFixed(digits).padStart(digits > 0 ? digits + 4 : 3, '0');
 }
 
 export function metersToNauticalMiles(value: number | null | undefined): number | undefined {

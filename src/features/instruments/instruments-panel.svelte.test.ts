@@ -158,4 +158,20 @@ describe('InstrumentsPanel', () => {
     });
     expect(body).toContain('role="status"');
   });
+
+  it('shows teach line in tile-display mode', () => {
+    const controller = makeController();
+    const deps = makeDeps();
+    const { body } = render(InstrumentsPanel, { props: { controller, deps } });
+    expect(body).toContain('Live readouts from the boat');
+  });
+
+  it('shows customize teach line in customize mode', () => {
+    const controller = makeController({ selectedIds: SELECTED_IDS });
+    const deps = makeDeps();
+    const { body } = render(InstrumentsPanel, {
+      props: { controller, deps, customizing: true },
+    });
+    expect(body).toContain('Tap an instrument to show or hide it on the dock');
+  });
 });

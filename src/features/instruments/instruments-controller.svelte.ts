@@ -48,6 +48,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   // Per-zonesPath meta cache: null means "fetch attempted, no zones found"; absent means "not yet fetched".
   const metaCache = new Map<string, PathMeta | null>();
+  const batteryDefCache = new Map<string, TileDef>();
   // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
   let metaVersion = $state(0);
 
@@ -210,8 +211,19 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return resolveSelectedIds();
     },
     get catalog(): TileDef[] {
-      // Static catalog first, then one def per discovered battery instance.
-      return [...TILE_CATALOG, ...batteryInstances.map(batteryTileDef)];
+      // Static catalog first, then one def per discovered battery instance, memoized per id so a
+      // reactive read does not allocate fresh defs every pass.
+      return [
+        ...TILE_CATALOG,
+        ...batteryInstances.map((id) => {
+          let def = batteryDefCache.get(id);
+          if (!def) {
+            def = batteryTileDef(id);
+            batteryDefCache.set(id, def);
+          }
+          return def;
+        }),
+      ];
     },
     toggleOpen,
     setOpen,

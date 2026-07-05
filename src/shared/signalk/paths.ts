@@ -35,4 +35,6 @@ export const SK_PATHS = {
   windAngleApparent: 'environment.wind.angleApparent',
   windSpeedTrue: 'environment.wind.speedTrue',
   windAngleTrueWater: 'environment.wind.angleTrueWater',
+  windSpeedOverGround: 'environment.wind.speedOverGround',
+  windDirectionTrue: 'environment.wind.directionTrue',
 } as const satisfies Record<string, Path>;
