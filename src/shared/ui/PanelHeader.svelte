@@ -15,7 +15,8 @@ interface Props {
   // When supplied, a leading back button returns to the menu instead of dismissing to the chart.
   onBack?: () => void;
   backLabel?: string;
-  // Extra header content between the title and the close button (the weather panel's "Here" toggle).
+  // Extra header content between the title and the close button (the instrument dock's
+  // CustomizeToggle).
   headerExtra?: Snippet;
   // When supplied, a phone-only minimize control collapses the panel to its header. One object so the
   // collapsed state and its toggle always travel together.

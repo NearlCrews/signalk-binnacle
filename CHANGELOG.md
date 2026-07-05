@@ -25,10 +25,12 @@ All notable changes to Binnacle are documented here. The format follows
   built-in shallow-water coloring (alarm under 2 m, caution under 5 m) whenever the server has no
   zones of its own.
 - **A friendlier, denser dock.** Tiles lead with plain words (Speed, Heading, Wind, Water speed,
-  Barometer) with the marine abbreviation as a quiet tag, pack a two-column grid with bigger
-  numbers and shorter boxes, collapse to a one-line note when a sensor is absent, and both the
-  dock and the toolbar editor now share one quiet Customize button style with a short how-to line
-  in edit mode. Bearings read as three digits ("004°") everywhere.
+  Barometer) with the marine abbreviation as a quiet tag and pack a two-column grid with bigger
+  numbers and shorter boxes. Every tile keeps the same height: when a sensor is absent, a plain
+  note ("No depth sensor") sits centered where the number would be instead of shrinking the tile.
+  The dock and the toolbar editor share one quiet customize control that names what it edits
+  ("Customize instruments", "Customize toolbar") and opens with a short how-to line in edit mode.
+  Bearings read as three digits ("004°") everywhere.
 - Chart Locker joins the "Works well with" plugin recommendations.
 - When Binnacle is installed as a desktop PWA and the browser supports Window Controls Overlay,
   the header bar extends into the native window title bar so the MOB button, navigation controls,
