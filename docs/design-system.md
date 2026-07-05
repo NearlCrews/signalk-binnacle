@@ -34,8 +34,10 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
 - Spacing (4px-based): `--space-1` 0.25rem, `--space-2` 0.5rem, `--space-3` 0.75rem, `--space-4` 1rem,
   `--space-5` 1.5rem, `--space-6` 2rem.
 - Type scale: `--text-xs` 0.72, `--text-sm` 0.8, `--text-base` 0.85, `--text-md` 0.9, `--text-lg` 1,
-  `--text-xl` 1.15, `--text-readout` 1.25 (rem). Fonts: `--font-ui` (Inter) for chrome, `--font-mono`
-  (JetBrains Mono) for numeric readouts.
+  `--text-xl` 1.15, `--text-readout` 1.25, `--text-readout-lg` 1.75 (rem). Fonts: `--font-ui` (Inter)
+  for chrome, `--font-mono` (JetBrains Mono) for numeric readouts. Every size pairs with a role in the
+  type-role table below; a new size or a new token-role pairing is a design-system change, never a
+  per-component decision.
 - Targets: `--control-size` 2.75rem is the action tap target (buttons, pills, icon buttons);
   `--row-size` 2.5rem is the denser list-row height (menu items, layer toggles). Lists use the denser
   size, primary actions use the full size.
@@ -43,6 +45,25 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
   (panel + 2), `--z-menu` 5, `--z-modal` 6 (the MOB confirm is the one true modal above everything).
+
+### Type roles
+
+Pick the token by role, never by eye:
+
+| Token | rem | Roles |
+| --- | --- | --- |
+| `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
+| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles |
+| `--text-base` | 0.85 | panel body baseline (`.slide-over`), strips |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`) |
+| `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
+| `--text-xl` | 1.15 | panel titles (`.panel-title`) only |
+| `--text-readout` | 1.25 | secondary numeric readouts: the position tile's two-line coordinates, the status strips |
+| `--text-readout-lg` | 1.75 | instrument tile hero values only |
+
+Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
+token. A component that wants a size this table does not grant its role is asking for a design-system
+change, and that conversation happens here, not in the component.
 
 ### Color is semantic, not literal
 
@@ -88,6 +109,10 @@ Rules:
   never into a component when a global class is the right home.
 - Hoist at the second copy. When the same markup or CSS appears in a second place, hoist it into a
   shared global class or a shared primitive. A third copy is a review failure.
+- Same purpose, same control. A control that does the same job on two surfaces carries the identical
+  label pattern, variant, and box everywhere ("Customize toolbar" and "Customize instruments" are the
+  same ghost button). Backdrop tint may differ, since a ghost inherits its surface; the control itself
+  may not. Judged at the second copy, like CSS.
 - A component's scoped `<style>` is for layout that is genuinely local to that component. It composes
   global classes and tokens; it does not re-implement them. A panel that re-declares the row chrome, the
   card frame, the alert banner, or the field shape that a global class already provides is wrong.
@@ -119,6 +144,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
   `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS and POI two-line sortable lists.
+- Instruments (`instruments.css`): the `.tile` vocabulary on the `.card-frame` surface, shared by
+  NumericTile and WindTile: the `--text-readout-lg` hero `.num`, the `--text-xs` `.unit` and `.abbr`,
+  the zone tints (`.tile--warning`, `.tile--alarm`, `.tile--stale`), `.tile--wide`, and `.tile--empty`.
+  Tiles in one grid stay equal height in every state: the `.value` slot reserves the hero line box
+  (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
+  never collapsing shorter than its value siblings. The
+  position tile is the one hero-size exception (`--text-readout`, the secondary readout), because two
+  coordinate lines at hero size would double the tile.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
@@ -140,21 +173,26 @@ Shared behavior lives here. Compose these; do not re-implement them.
   (a phone collapse-to-header control). Every left-docked panel is a SlideOver.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
-  through it, and the floating weather map panel reuses it, so the two headers stay identical. Do not
+  through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
+  its "Customize instruments" entry through `headerExtra`), so the headers cannot drift apart. Do not
   hand-roll a panel header.
 - `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with a scale transition
   and the dismiss-stack registration). Use it for any anchored menu (the app-menu launcher, the
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
   for an inline clamp position.
+- `CustomizeToggle`: the edit-mode entry control (see "Edit modes" below). Props: `object` (the
+  label's object noun), `editing`, and `onToggle`. Render it, never a hand-written ghost button.
 - `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions. Never a blocking
   `window.confirm`.
-- Edit modes: a surface with a customize mode gets exactly one entry control, a `.btn btn-ghost`
-  text button at intrinsic width trailing in its header row, labeled "Customize" (appending the
-  object, as in "Customize toolbar", only when the surface's title does not already name it). The
-  label swapping to "Done" is the entire state story: never aria-pressed, never is-on, never a
-  static aria-label. The mode opens with one leading `.muted-note` line stating what a tap now
-  does. The instrument dock and the menu's toolbar editor are the two shipped examples.
+- Edit modes: a surface with a customize mode gets exactly one entry control, the `CustomizeToggle`
+  primitive (a `.btn btn-ghost` text button at intrinsic width trailing in its header row), labeled
+  "Customize <object>" (as in "Customize toolbar", "Customize instruments"), always naming the
+  object even when the surface's title repeats it, so the same control reads the same on every
+  surface. The label swapping to "Done" is the entire state story: never aria-pressed, never is-on,
+  never a static aria-label. The mode opens with one leading `.muted-note` line stating what a tap
+  now does. The instrument dock and the menu's toolbar editor are the two shipped examples; both
+  render the primitive, never a hand-written copy.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints, and profiles panels):
   arming one row disarms the rest. Use it instead of a per-panel `confirmingDelete` id. `ConfirmArm`
   stays the single timed strip.

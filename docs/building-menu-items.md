@@ -172,11 +172,12 @@ resize the map every frame). Under its 900px breakpoint the same panel goes full
 chart"). Do not add further split panels without a matching product case; overlays stay the
 default.
 
-Edit-mode entry (the customize rule): one `.btn btn-ghost` text button at intrinsic width,
-trailing in the header row, labeled "Customize" (append the object only when the surface's title
-does not already name it), label swapping to "Done" as the whole state story (no aria-pressed, no
-is-on, no static aria-label), and the mode opens with one `.muted-note` line stating what a tap
-now does.
+Edit-mode entry (the customize rule): the `CustomizeToggle` primitive from `$shared/ui`, one per
+surface, trailing in the header row. It renders the `.btn btn-ghost` text button at intrinsic
+width, labeled "Customize <object>" ("Customize toolbar", "Customize instruments"), always naming
+the object even when the surface's title repeats it, label swapping to "Done" as the whole state
+story (no aria-pressed, no is-on, no static aria-label). The mode opens with one `.muted-note`
+line stating what a tap now does.
 
 ---
 
@@ -358,6 +359,13 @@ Tick all of these before you commit a new menu item.
       stored in SI and converted only at the edge through the server unit preference.
 - [ ] Copy follows the house writing rules; acronyms are glossed; aria-labels, roles, and headings
       are in place.
+- [ ] Every same-purpose control matches the label wording and variant of its siblings on other
+      surfaces (the "Customize <object>" rule is the model); a new label pattern for an existing
+      job is a review failure.
+- [ ] Tiles and rows in one grid stay equal height in every state, including empty and degraded;
+      a placeholder occupies the value slot, it never collapses the box.
+- [ ] Every text size comes from the type-role table in the design system; no new token-role
+      pairing without a design-system edit.
 - [ ] The gate is green: `npx @biomejs/biome check --write` then `npm run check` then `npx
       @biomejs/biome ci`, then the commit hook (`biome ci .` and `npm run cruise`) passes.
 

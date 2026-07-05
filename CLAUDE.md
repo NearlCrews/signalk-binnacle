@@ -166,7 +166,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
   the `$shared/ui` primitives (SlideOver, AnchoredMenu, InlineConfirm, UnitField, ConfirmArm, SavedList,
-  VisibilityToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusOnMount, and
+  VisibilityToggle, CustomizeToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusOnMount, and
   onKeydownAction focus actions, the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
