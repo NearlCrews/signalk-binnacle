@@ -28,7 +28,6 @@ import {
   weatherLegend,
 } from '$features/weather';
 import {
-  Clock,
   formatBearingOr,
   formatClockTime,
   formatDayClock,
@@ -42,6 +41,7 @@ import {
   MINUTE_MS,
   prefersReducedMotion,
   pressureUnit,
+  useTime,
 } from '$shared/lib';
 import { createThemedMap, type LayerSettings, type ThemedMapHandle } from '$shared/map';
 import type { MapView } from '$shared/settings';
@@ -116,7 +116,7 @@ const ZOOM_NOTE_DURATION_MS = 5000;
 // A bare Date.now() inside a $derived freezes for as long as its other dependencies hold still,
 // so during a long open the stale-age note, the Past/Forecast label, and the now tick would stop
 // tracking the wall clock. This coarse minute tick keeps them honest.
-const clock = new Clock(MINUTE_MS);
+const time = useTime(MINUTE_MS);
 
 let container: HTMLDivElement;
 let mapHandle: ThemedMapHandle | undefined;
@@ -189,7 +189,7 @@ const statusNote = $derived.by<string>(() => {
       return 'Weather unavailable: offline or rate limited';
     case 'stale': {
       const fetched = store.grid?.fetchedAt;
-      const age = fetched === undefined ? undefined : Math.round((clock.now - fetched) / MINUTE_MS);
+      const age = fetched === undefined ? undefined : Math.round((time() - fetched) / MINUTE_MS);
       return age === undefined
         ? `Showing last forecast${wavesNote}`
         : `Showing forecast fetched ${age} min ago${wavesNote}`;
@@ -202,14 +202,14 @@ const statusNote = $derived.by<string>(() => {
 // Radar can only show "now": when the slider is parked away from now the overlay hides itself
 // (the same radarScrubbedAway predicate, so legend and layer cannot disagree), and the legend says
 // so instead of leaving a silently missing layer.
-const scrubbedAway = $derived(radarScrubbedAway(store.selectedTime, clock.now));
+const scrubbedAway = $derived(radarScrubbedAway(store.selectedTime, time()));
 // The painted frame's valid time, fed by the radar overlay (a callback, not store state).
 let radarFrameTime = $state<number | undefined>();
 const radarNote = $derived.by<string>(() => {
   if (scrubbedAway) return 'shows now only, hidden while the slider is off now';
   if (!online) return 'cached radar (offline), not live';
   if (radarFrameTime === undefined) return 'radar with short-term nowcast, regional resolution';
-  const dMin = Math.round((radarFrameTime - clock.now) / MINUTE_MS);
+  const dMin = Math.round((radarFrameTime - time()) / MINUTE_MS);
   const rel = dMin === 0 ? 'now' : dMin > 0 ? `+${dMin} min (nowcast)` : `${dMin} min`;
   return `frame ${rel} · short-term nowcast`;
 });
@@ -233,11 +233,11 @@ const range = $derived<TimeRange | undefined>(
 // The label carries the zone (the shared formatDayClock rationale) and whether the slider sits in
 // the already-elapsed part of the series.
 const timeLabel = $derived(store.grid ? formatDayClock(store.selectedTime, { zone: true }) : '');
-const timeKind = $derived(store.selectedTime < clock.now - STEP_MS / 2 ? 'Past' : 'Forecast');
+const timeKind = $derived(store.selectedTime < time() - STEP_MS / 2 ? 'Past' : 'Forecast');
 // Where "now" sits on the slider track, for the tick that separates past from forecast.
 const nowFrac = $derived.by<number | undefined>(() => {
   if (!range || range.end <= range.start) return undefined;
-  const f = (clock.now - range.start) / (range.end - range.start);
+  const f = (time() - range.start) / (range.end - range.start);
   return f >= 0 && f <= 1 ? f : undefined;
 });
 
@@ -378,7 +378,6 @@ onMount(() => {
 
 onDestroy(() => {
   destroyed = true;
-  clock.dispose();
   if (fetchTimer) clearTimeout(fetchTimer);
   if (zoomNoteTimer) clearTimeout(zoomNoteTimer);
   pointReadout.destroy();

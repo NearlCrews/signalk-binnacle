@@ -51,3 +51,4 @@ export {
   temperatureUnit,
   type UnitsMode,
 } from './units';
+export { useTime } from './use-time.svelte';
