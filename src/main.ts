@@ -1,5 +1,6 @@
 import '@fontsource-variable/inter/wght.css';
 import '@fontsource-variable/jetbrains-mono/wght.css';
+import '@oddbird/popover-polyfill';
 import { mount } from 'svelte';
 import { registerPmtilesProtocol } from '$shared/map';
 import './app.css';
