@@ -720,7 +720,7 @@ onDestroy(() => {
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   /* The "Here" conditions become a full-width bottom sheet instead of a 15rem card covering most of
      the small map, lifted clear of the map attribution line. */
   .conditions-slot {

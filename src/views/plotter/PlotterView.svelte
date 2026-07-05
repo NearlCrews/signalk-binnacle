@@ -633,7 +633,7 @@ $effect(() => {
   inset-inline-start: 0;
   z-index: var(--z-panel);
 }
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   .note-panel-slot,
   .panel-slot {
     inset-block-start: auto;

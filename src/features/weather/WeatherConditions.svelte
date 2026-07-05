@@ -278,7 +278,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
 }
 /* On a phone the conditions span the weather panel's width as a bottom sheet rather than a fixed
    15rem card that would cover most of the small map. */
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   .conditions {
     inline-size: 100%;
     max-block-size: 45vh;

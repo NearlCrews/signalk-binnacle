@@ -1775,6 +1775,9 @@ onDestroy(() => {
   font-family: var(--font-ui);
   background: var(--surface);
   color: var(--text);
+  /* Define this shell as a named container for responsive child components. */
+  container-type: inline-size;
+  container-name: shell;
 }
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
    action cluster are; the flanks are 1fr each so the center cannot drift. */
@@ -1817,7 +1820,7 @@ onDestroy(() => {
 /* On a phone the brand yields its version string so the muted badge and the Update pill keep room.
    Phone override after the base rule: a media block before a same-specificity base is silently
    defeated by source order. It works here only because the base sets no display. */
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   .version {
     display: none;
   }
@@ -1848,7 +1851,7 @@ onDestroy(() => {
   inset-inline-start: 0;
   z-index: var(--z-panel);
 }
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   .panel-slot {
     inset-block-start: auto;
     inset-inline: 0;

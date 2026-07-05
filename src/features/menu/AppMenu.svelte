@@ -197,7 +197,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
 }
-@media (max-width: 600px) {
+@container shell (max-width: 600px) {
   :global(.launcher) {
     position: fixed;
     inset-block-start: auto;
