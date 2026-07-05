@@ -34,6 +34,7 @@ export default defineConfig({
         start_url: '/signalk-binnacle/',
         scope: '/signalk-binnacle/',
         display: 'standalone',
+        display_override: ['window-controls-overlay', 'standalone'],
         background_color: '#cfe0ec',
         theme_color: '#cfe0ec',
         icons: [

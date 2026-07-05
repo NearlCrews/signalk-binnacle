@@ -1780,7 +1780,8 @@ onDestroy(() => {
   container-name: shell;
 }
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
-   action cluster are; the flanks are 1fr each so the center cannot drift. */
+   action cluster are; the flanks are 1fr each so the center cannot drift. Includes Window Controls
+   Overlay (WCO) support to merge seamlessly into native PWA desktop title bars. */
 .topbar {
   grid-row: 1;
   grid-column: 1 / -1;
@@ -1788,8 +1789,26 @@ onDestroy(() => {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-2);
+
+  /* Fallback standard padding */
   padding: var(--space-2) var(--space-4);
+
+  /* Window Controls Overlay alignment */
+  padding-block-start: max(var(--space-2), env(titlebar-area-y, 0px));
+  min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));
+  padding-inline-start: max(var(--space-4), env(titlebar-area-x, 0px));
+  padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--space-4));
+
   border-block-end: 1px solid var(--border);
+
+  /* Make the header bar draggable in installed PWA windows */
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+.topbar > * {
+  /* Prevent interactive child controls from being draggable so they stay clickable */
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 .topbar-start {
   position: relative;
