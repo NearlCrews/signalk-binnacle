@@ -42,16 +42,8 @@ import { type UserChartSource, UserCharts } from '$entities/user-charts';
 import { OwnVessel } from '$entities/vessel';
 import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
-import { AisListPanel } from '$features/ais-list';
-import {
-  ANCHOR_TONE,
-  AnchorPanel,
-  AnchorStrip,
-  createAnchorController,
-} from '$features/anchor-watch';
-import { AuthBanner } from '$features/auth-banner';
+import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController, deleteChart } from '$features/charts';
-import { ChartsManagementPanel } from '$features/charts-management';
 import {
   createInstrumentsController,
   DEFAULT_TILES,
@@ -59,21 +51,13 @@ import {
   InstrumentsPanel,
   KIP_URL,
 } from '$features/instruments';
-import { LayersPanel, type LayersView } from '$features/layers-panel';
-import {
-  AlarmsPanel,
-  CollisionMute,
-  CollisionNotifier,
-  DangerStrip,
-  LookoutAlarm,
-} from '$features/lookout';
+import type { LayersView } from '$features/layers-panel';
+import { CollisionMute, CollisionNotifier, LookoutAlarm } from '$features/lookout';
 import {
   createMarineRadarController,
   RADAR_UNAVAILABLE_HINT,
-  RadarControls,
   type RadarStatus,
 } from '$features/marine-radar';
-import { MeasureStrip } from '$features/measure';
 import {
   AppMenu,
   DEFAULT_PINNED,
@@ -81,17 +65,16 @@ import {
   resolvePinned,
   togglePinned,
 } from '$features/menu';
-import { createMobController, MOB_TONE, MobButton, MobStrip } from '$features/mob';
-import { ARRIVAL_TONE, NavStrip, type RouteProgress } from '$features/navigation';
+import { createMobController, MOB_TONE, MobButton } from '$features/mob';
+import { ARRIVAL_TONE } from '$features/navigation';
 import {
   createNoteDetailLoader,
   type NoteDetailLoader,
-  NoteDetailPanel,
   type NotePoint,
   type NoteSelection,
 } from '$features/notes';
-import { type Poi, PoiSearchPanel } from '$features/poi-search';
-import { CompanionStatus, RegionsPanel } from '$features/prewarm';
+import type { Poi } from '$features/poi-search';
+import { CompanionStatus } from '$features/prewarm';
 import {
   createProfileBindings,
   downloadProfileJson,
@@ -100,19 +83,17 @@ import {
   ProfilesPanel,
   seedStarterProfiles,
 } from '$features/profiles';
-import { createRouteController, RoutesPanel } from '$features/routing';
+import { createRouteController } from '$features/routing';
 import { ThemeToggle } from '$features/theme-toggle';
 import {
   createTidesLoader,
   fetchSignalkTidesReading,
   SIGNALK_TIDES_PLUGIN_ID,
-  TidesPanel,
 } from '$features/tides';
-import { HistoryStrip, TimeTravelStore } from '$features/time-travel';
-
-import { createTrackController, TracksPanel } from '$features/tracks';
-import { TrendSessionRecorder, TrendsPanel } from '$features/trends';
-import { createWaypointsController, WaypointDialog, WaypointsPanel } from '$features/waypoints';
+import { TimeTravelStore } from '$features/time-travel';
+import { createTrackController } from '$features/tracks';
+import { TrendSessionRecorder } from '$features/trends';
+import { createWaypointsController, WaypointDialog } from '$features/waypoints';
 import {
   createPointConditionsLoader,
   createWeatherLoader,
@@ -125,7 +106,6 @@ import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared
 import { Clock, formatNm, formatTcpaMin, MINUTE_MS } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
-import { etaSeconds } from '$shared/nav';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
 import {
   createMapView,
@@ -157,9 +137,9 @@ import {
   updateNotification,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
-import { createThemeController, defaultSaveName, SlideOver, type Theme } from '$shared/ui';
-import { ChartCanvas, type MapCommands } from '$widgets/chart-canvas';
-import { WeatherMap } from '$widgets/weather-map';
+import { createThemeController, defaultSaveName, type Theme } from '$shared/ui';
+import type { MapCommands } from '$widgets/chart-canvas';
+import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 import LiveRegions from './LiveRegions.svelte';
 import StatusStrip from './StatusStrip.svelte';
@@ -348,17 +328,6 @@ const routeDistanceToGoMeters = $derived.by<number | undefined>(() => {
   const route = routeStore.routeById(id);
   if (!route) return undefined;
   return toNext + remainingRouteDistanceMeters(route.waypoints, idx);
-});
-
-// Pair the distance with the arrival time at the current SOG, so only this divide re-runs per tick.
-const routeProgress = $derived.by<RouteProgress | undefined>(() => {
-  const distanceToGoMeters = routeDistanceToGoMeters;
-  if (distanceToGoMeters == null) return undefined;
-  const sog = vessel.sogMps;
-  return {
-    distanceToGoMeters,
-    timeToGoSeconds: sog == null ? undefined : etaSeconds(distanceToGoMeters, sog),
-  };
 });
 
 // Tides and tidal currents from NOAA CO-OPS (US waters). The store feeds the panel and the nearest
@@ -808,10 +777,6 @@ $effect(() => {
   radarAutoEnabled.set(true);
   setLayerVisible('marine-radar', true);
 });
-
-// The current echo-layer visibility, mirrored into the Radar panel so its in-panel toggle and the
-// Layers eye stay one synced value (the layer-manager state is the single source of truth).
-const radarEchoShown = $derived(layerSettings.value['marine-radar']?.visible ?? false);
 
 // The /state poll only feeds the radar panel (operational status and control values), so run it only
 // while the panel is open; the echo render is driven by the spoke stream, not this poll.
@@ -1362,8 +1327,6 @@ $effect(() => {
 // means "all clear" or "not working". list() reads aisVersion, so the derived stays reactive.
 const aisCount = $derived(aisTargets.list().length);
 
-const accessRequestsUrl = `${origin}/admin/#/security/access/requests`;
-
 // Connect the stream the moment access resolves (an approved token, or an unsecured server),
 // not as a one-shot blocking step. A token that arrives after a tab refocus, or from another
 // tab, then connects without a reload.
@@ -1630,313 +1593,127 @@ onDestroy(() => {
       <ThemeToggle controller={theme} />
     </span>
   </header>
-  <section class="chart-host" aria-label="Chart">
-    <ChartCanvas
-      {origin}
-      {units}
-      waypoints={waypointsStore}
-      symbols={symbolsStore}
-      onDropWaypoint={waypointsController.onDropWaypoint}
-      aisTrailsAvailable={() => serverFeatures?.plugins.has('tracks') ?? false}
-      isOnline={() => net.online}
-      historyProviders={() => historyProviders}
-      {timeTravel}
-      {store}
-      {vessel}
-      {aisTargets}
-      {anchor}
-      {mob}
-      {measure}
-      {collision}
-      guidance={courseGuidance}
-      {recorder}
-      {routeStore}
-      tides={tidesStore}
-      theme={theme.theme}
-      {trackSettings}
-      savedTracks={trackController.savedSource}
-      {userCharts}
-      {chartsToken}
-      initialView={savedView}
-      savedLayers={layerSettings.value}
-      onLayersChange={(settings) => layerSettings.set(settings)}
-      savedOrder={layerOrder.value}
-      onOrderChange={(order) => layerOrder.set(order)}
-      onReady={(view) => (layersView = view)}
-      onMapReady={(recolor) => {
-        recolorMap = recolor;
-        recolor(theme.theme);
-      }}
-      onCommandsReady={(commands) => (mapCommands = commands)}
-      onUserChartsReady={(registrar) => userChartsController.onUserChartsReady(registrar)}
-      {onViewChange}
-      onNoteSelect={selectNote}
-      onNotes={(notes) => (poiNotes = notes)}
-      onUserPan={() => (following = false)}
-      onGoToHere={(position) => void routeController.onGoToHere(position)}
-      onStartRoute={onStartRouteHere}
-      onMeasureFrom={(position) => {
-        armMeasure();
-        measure.add(position);
-      }}
-      onRouteEditorError={() =>
-        routeController.flagRouteError('The route editor failed to load. Reload to edit routes.')}
-      onAnchorMoved={(position) => void anchorController.onAnchorMoved(position)}
-      marineRadarLayer={marineRadar.layer}
-      onMapInstance={(m) => (mapInstance = m)}
-      onMapDestroyed={() => (mapInstance = undefined)}
-    />
-    <div class="banner-slot">
-      <AuthBanner {auth} requestsUrl={accessRequestsUrl} />
-    </div>
-    {#if arrivalBanner}
-      <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
-    {/if}
-    <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
-      <HistoryStrip store={timeTravel} {units} onExit={() => timeTravel.exit()} />
-      <NavStrip
-        guidance={courseGuidance}
-        {routeProgress}
-        onStop={() => routeController.onStopCourse()}
-        onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
-      />
-      <MeasureStrip {measure} {units} />
-      <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
-      <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
-      <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
-    </div>
-    {#if selectedNote && noteLoader}
-      <div class="note-panel-slot">
-        <NoteDetailPanel
-          selection={selectedNote}
-          load={noteLoader.load}
-          onClose={closeNote}
-          onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
-        />
-      </div>
-    {/if}
-    {#if activePanel}
-      <div class="panel-slot" id={activePanel === 'layers' ? 'layers-panel' : undefined}>
-        {#if activePanel === 'layers' && layersView}
-          <LayersPanel
-            view={layersView}
-            {userCharts}
-            categoriesOpen={layerCategoriesOpen}
-            onClose={closePanel}
-            onBack={backToMenu}
-            onManageLayer={(id) => {
-              if (id === 'marine-radar') {
-                radarOpenedFrom = 'layers';
-                radarControlsOpen = true;
-              }
-            }}
-          />
-        {:else if activePanel === 'routes'}
-          <RoutesPanel
-            routes={routeStore.routes}
-            shownIds={routeStore.shownIds}
-            working={routeStore.working}
-            activeId={routeStore.activeId}
-            highlight={routeStore.highlight}
-            {onHighlightLeg}
-            error={routeController.routeError}
-            onNew={routeController.beginNewRoute}
-            onEditRoute={routeController.onEditRoute}
-            onSave={routeController.onSaveRoute}
-            onCancelEdit={routeController.onCancelRouteEdit}
-            onToggleShown={routeController.onToggleRouteShown}
-            onLocate={routeController.flyToRouteStart}
-            onActivate={routeController.onActivateRoute}
-            onStop={routeController.onStopCourse}
-            onReverse={routeController.onReverseRoute}
-            onExportGpx={routeController.onExportRouteGpx}
-            onImportGpx={routeController.onImportRouteGpx}
-            planningSpeed={planningSpeedKn}
-            onDelete={routeController.onDeleteRoute}
-            onClose={closeRoutesPanel}
-            onBack={backFromRoutesPanel}
-          />
-        {:else if activePanel === 'tracks'}
-          <TracksPanel
-            {recorder}
-            settings={trackSettings}
-            saved={trackController.savedTracks}
-            shown={trackController.shownSaved}
-            onSave={trackController.onSaveTrack}
-            onSaveAsRoute={routeController.onSaveTrackAsRoute}
-            onTrackHome={routeController.onTrackHome}
-            onDelete={trackController.onDeleteSavedTrack}
-            onToggleSaved={trackController.onToggleSaved}
-            onExport={trackController.onExportSavedTrack}
-            error={trackController.trackError}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'waypoints'}
-          <WaypointsPanel
-            waypoints={waypointsStore.waypoints}
-            error={waypointsController.waypointError}
-            onLocate={(waypoint) => flyToPosition(waypoint.position)}
-            onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
-            onEdit={waypointsController.onOpenEditWaypoint}
-            onDelete={waypointsController.onDeleteWaypoint}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'tides'}
-          <TidesPanel
-            store={tidesStore}
-            {units}
-            stationsShown={layerSettings.value.tides?.visible ?? false}
-            onToggleStations={(shown) => setLayerVisible('tides', shown)}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'trends'}
-          <TrendsPanel
-            {origin}
-            token={chartsToken}
-            providers={historyProviders}
-            recorder={trendRecorder}
-            mode={units.mode}
-            theme={theme.theme}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'ais'}
-          <AisListPanel
-            {units}
-            {aisTargets}
-            {vessel}
-            {collision}
-            onLocate={flyToPosition}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'poi-search'}
-          <!-- The list stays docked at the leading edge; selecting a result opens its detail in the
-               standard note popup, the same as tapping the marker on the chart. On a wide screen the
-               popup docks at the trailing edge so the navigator can click through results with the list
-               still open; on a phone it replaces the list as a bottom sheet. -->
-          <PoiSearchPanel
-            pois={poiInView}
-            {vessel}
-            {units}
-            onSelect={selectPoi}
-            onHover={(poi) => (hoveredPoi = poi)}
-            onClose={closePoiSearch}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'anchor'}
-          <AnchorPanel
-            {units}
-            {anchor}
-            {vessel}
-            error={anchorController.anchorError}
-            onDrop={() => void anchorController.onDrop()}
-            onRaise={() => void anchorController.onRaise()}
-            onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'alarms'}
-          <AlarmsPanel
-            {thresholds}
-            collisionMuted={collisionMute.active}
-            collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
-            onToggleCollisionMute={toggleCollisionMute}
-            arrivalMuted={arrivalMuted.value}
-            onToggleArrivalMute={() => arrivalMuted.set(!arrivalMuted.value)}
-            notifications={notificationsStore}
-            error={alarmActionError}
-            onSilence={notificationsApi ? onSilenceNotification : undefined}
-            onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'profiles'}
-          <ProfilesPanel
-            profiles={profileStore.profiles}
-            activeId={profileStore.activeId}
-            defaultId={profileStore.defaultId}
-            isDirty={profileStore.isDirty}
-            onApply={onApplyProfile}
-            onSaveNew={onSaveNewProfile}
-            onUpdate={(id) => {
-              profileStore.update(id, captureProfileSettings());
-              profileStore.clearDirty();
-            }}
-            onRename={(id, name) => profileStore.rename(id, name)}
-            onRemove={(id) => profileStore.remove(id)}
-            onSetDefault={(id) => profileStore.setDefault(id)}
-            onExport={onExportProfile}
-            onImport={onImportProfiles}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
-          <RegionsPanel
-            {auth}
-            map={mapInstance}
-            {units}
-            {companionBase}
-            onClose={closePanel}
-            onBack={backToMenu}
-          />
-        {:else if activePanel === 'charts-management' && companionBase !== null}
-          <ChartsManagementPanel {auth} {companionBase} onClose={closePanel} onBack={backToMenu} />
-        {/if}
-      </div>
-    {/if}
-    {#if radarControlsOpen}
-      <div class="panel-slot">
-        <SlideOver
-          title="Radar controls"
-          closeLabel="Close radar controls"
-          bodyFlex
-          onClose={() => (radarControlsOpen = false)}
-          onBack={radarOpenedFrom === 'menu'
-            ? () => {
-                radarControlsOpen = false;
-                backToMenu();
-              }
-            : undefined}
-        >
-          <RadarControls
-            store={marineRadar.store}
-            onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
-            onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-            onSelectRadar={(id) => marineRadar.selectRadar(id)}
-            onSetPower={onSetRadarPower}
-            echoShown={radarEchoShown}
-            onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
-          />
-        </SlideOver>
-      </div>
-    {/if}
-    {#if weatherPanelOpen}
-      <WeatherMap
-        store={weather}
-        {units}
-        loader={weatherLoader}
-        theme={theme.theme}
-        initialView={currentView}
-        savedLayers={weatherLayerSettings.value}
-        onLayersChange={(settings) => weatherLayerSettings.set(settings)}
-        onLayersReady={(apply) => (applyWeatherLayers = apply)}
-        token={chartsToken}
-        providerName={weatherProviderName}
-        position={vessel.position}
-        pointLoader={pointConditionsLoader}
-        online={net.online}
-        onClose={() => (weatherPanelOpen = false)}
-        onBack={() => {
-          weatherPanelOpen = false;
-          menuOpen = true;
+  <PlotterView
+    {origin}
+    {store}
+    {vessel}
+    {aisTargets}
+    {units}
+    {auth}
+    {net}
+    {theme}
+    {anchorController}
+    {mobController}
+    {routeController}
+    {waypointsController}
+    {trackController}
+    {marineRadar}
+    {anchor}
+    {mob}
+    {measure}
+    {collision}
+    {courseGuidance}
+    {recorder}
+    {routeStore}
+    {tidesStore}
+    {waypointsStore}
+    {symbolsStore}
+    {userCharts}
+    {weather}
+    {timeTravel}
+    {notificationsStore}
+    {trendRecorder}
+    {weatherLoader}
+    {pointConditionsLoader}
+    {planningSpeedKn}
+    {thresholds}
+    {routeDistanceToGoMeters}
+    {chartsToken}
+    {savedView}
+    {currentView}
+    layerSettings={layerSettings.value}
+    layerOrder={layerOrder.value}
+    weatherLayerSettings={weatherLayerSettings.value}
+    {trackSettings}
+    categoriesOpen={layerCategoriesOpen}
+    {activePanel}
+    bind:menuOpen
+    {layersView}
+    {noteLoader}
+    bind:selectedNote
+    bind:weatherPanelOpen
+    bind:radarControlsOpen
+    bind:radarOpenedFrom
+    bind:mapInstance
+    {companionBase}
+    {arrivalBanner}
+    bind:hoveredPoi
+    {poiInView}
+    {historyProviders}
+    {serverFeatures}
+    {weatherProviderName}
+    {collisionMute}
+    collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
+    {alarmActionError}
+    {arrivalMuted}
+    {onViewChange}
+    onLayersChange={(settings) => layerSettings.set(settings)}
+    onOrderChange={(order) => layerOrder.set(order)}
+    onWeatherLayersChange={(settings) => weatherLayerSettings.set(settings)}
+    onLayersReady={(view) => (layersView = view)}
+    onMapReady={(recolor) => {
+      recolorMap = recolor;
+      recolor(theme.theme);
+    }}
+    onCommandsReady={(commands) => (mapCommands = commands)}
+    onUserChartsReady={(registrar) => userChartsController.onUserChartsReady(registrar)}
+    onMapInstance={(m) => (mapInstance = m)}
+    onMapDestroyed={() => (mapInstance = undefined)}
+    onUserPan={() => (following = false)}
+    onNoteSelect={(selection) => (selectedNote = selection)}
+    onNotes={(notes) => (poiNotes = notes)}
+    onWeatherLayersReady={(apply) => (applyWeatherLayers = apply)}
+    {onSilenceNotification}
+    {onAcknowledgeNotification}
+    {closePanel}
+    {backToMenu}
+    {setLayerVisible}
+    {armMeasure}
+    {toggleCollisionMute}
+    {selectPoi}
+    flyToPosition={(position) => mapCommands?.flyTo(position.latitude, position.longitude)}
+    {onHighlightLeg}
+    {closeRoutesPanel}
+    {backFromRoutesPanel}
+    {onStartRouteHere}
+    {closeNote}
+    {closePoiSearch}
+    {onSetRadarPower}
+  />
+
+  {#if activePanel === 'profiles'}
+    <div class="panel-slot" id="profiles-panel">
+      <ProfilesPanel
+        profiles={profileStore.profiles}
+        activeId={profileStore.activeId}
+        defaultId={profileStore.defaultId}
+        isDirty={profileStore.isDirty}
+        onApply={onApplyProfile}
+        onSaveNew={onSaveNewProfile}
+        onUpdate={(id) => {
+          profileStore.update(id, captureProfileSettings());
+          profileStore.clearDirty();
         }}
+        onRename={(id, name) => profileStore.rename(id, name)}
+        onRemove={(id) => profileStore.remove(id)}
+        onSetDefault={(id) => profileStore.setDefault(id)}
+        onExport={onExportProfile}
+        onImport={onImportProfiles}
+        onClose={closePanel}
+        onBack={backToMenu}
       />
-    {/if}
-  </section>
+    </div>
+  {/if}
 
   {#if instruments.open}
     <InstrumentsPanel
@@ -1999,31 +1776,6 @@ onDestroy(() => {
   background: var(--surface);
   color: var(--text);
 }
-.banner-slot {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline: 0;
-  z-index: var(--z-overlay);
-}
-/* A brief arrival toast, centered at the top of the chart, paired with the arrival tone so a quiet
-   helm still gets the cue. It uses the accent treatment, not an alarm color, since arrival is a
-   waypoint event, not a danger. */
-.arrival-banner {
-  position: absolute;
-  inset-block-start: var(--space-3);
-  inset-inline: 0;
-  margin-inline: auto;
-  inline-size: fit-content;
-  max-inline-size: calc(100% - var(--space-6));
-  padding: var(--space-2) var(--space-4);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-overlay);
-  color: var(--text);
-  font-weight: 600;
-  z-index: var(--z-safety-strips);
-}
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
    action cluster are; the flanks are 1fr each so the center cannot drift. */
 .topbar {
@@ -2070,8 +1822,9 @@ onDestroy(() => {
     display: none;
   }
 }
-.chart-host {
-  position: relative;
+/* PlotterView's root is the chart host; place it explicitly like every other shell child, so
+   auto-placement can never drift it into the dock column. */
+.binnacle-shell > :global(.chart-host) {
   grid-row: 2;
   grid-column: 1;
 }
@@ -2086,40 +1839,6 @@ onDestroy(() => {
   grid-row: 3;
   grid-column: 1 / -1;
 }
-/* The nav strip and the danger strip share the bottom-center area. They stack in one column rather
-   than overlapping, so when a collision danger appears mid-passage the course guidance is not hidden.
-   column-reverse puts the danger strip (last in the DOM, the more urgent) on top, the nav strip below
-   it. Either renders nothing when inactive, so a single strip just centers. */
-.bottom-stack {
-  position: absolute;
-  inset-block-end: var(--space-3);
-  inset-inline: var(--space-3);
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: var(--space-2);
-  pointer-events: none;
-  /* Above the weather panel (which sits at z-panel + 1) so an active collision danger and its Mute and
-     Acknowledge stay reachable while the Forecast mini-map is open. The danger strip is a safety
-     surface, so it sits over every panel; only the menu (z-menu) is higher. */
-  z-index: var(--z-safety-strips);
-}
-.bottom-stack :global(.bottom-strip) {
-  pointer-events: auto;
-}
-/* While the Forecast panel is open the strips lift to sit on its top edge instead of covering its
-   scrubber and legend: the stack outranks the panel by design (safety surfaces stay visible and
-   tappable), so clearance has to come from geometry, not stacking order. The panel height is the
-   shared --weather-panel-height token, so the two cannot drift apart. */
-.bottom-stack.above-weather {
-  inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
-}
-.note-panel-slot {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  z-index: var(--z-panel);
-}
 /* Routes, layers, tracks, and the collision thresholds all dock at the leading edge, one at a time
    (activePanel is exclusive), opposite the note detail so the two never overlap. Each panel renders
    its own slide-over shell, so the slot only positions it. */
@@ -2130,7 +1849,6 @@ onDestroy(() => {
   z-index: var(--z-panel);
 }
 @media (max-width: 600px) {
-  .note-panel-slot,
   .panel-slot {
     inset-block-start: auto;
     inset-inline: 0;
