@@ -33,14 +33,14 @@ import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
 import { type ActiveNotification, NotificationsStore } from '$entities/notifications';
 import { type ProfileSettings, ProfileStore, SignalKProfileAdapter } from '$entities/profile';
-import { RouteStore, remainingRouteDistanceMeters, reverseRoute } from '$entities/route';
+import { RouteStore, remainingRouteDistanceMeters } from '$entities/route';
 import { SymbolsStore } from '$entities/symbols';
 import { TidesStore } from '$entities/tides';
 import { type TrackPoint, TrackRecorder } from '$entities/track';
 import { UnitsStore } from '$entities/units';
-import { type UserChartSource, UserCharts, userChartToSignalK } from '$entities/user-charts';
+import { type UserChartSource, UserCharts } from '$entities/user-charts';
 import { OwnVessel } from '$entities/vessel';
-import { type Waypoint, WaypointsStore } from '$entities/waypoint';
+import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
 import { AisListPanel } from '$features/ais-list';
 import {
@@ -50,7 +50,7 @@ import {
   createAnchorController,
 } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
-import { deleteChart, putChart } from '$features/charts';
+import { createUserChartsController, deleteChart } from '$features/charts';
 import { ChartsManagementPanel } from '$features/charts-management';
 import {
   createInstrumentsController,
@@ -100,21 +100,7 @@ import {
   ProfilesPanel,
   seedStarterProfiles,
 } from '$features/profiles';
-import {
-  activateRoute,
-  activationFromCourse,
-  advancePoint,
-  clearCourse,
-  deleteRoute,
-  downloadRouteGpx,
-  fetchRoutes,
-  hydrateCourse,
-  parseGpxRoutes,
-  RoutesPanel,
-  routeHref,
-  saveRoute,
-  setDestination,
-} from '$features/routing';
+import { createRouteController, RoutesPanel } from '$features/routing';
 import { ThemeToggle } from '$features/theme-toggle';
 import {
   createTidesLoader,
@@ -123,24 +109,10 @@ import {
   TidesPanel,
 } from '$features/tides';
 import { HistoryStrip, TimeTravelStore } from '$features/time-travel';
-import { type SavedTracksSource, trackToRoute } from '$features/track-layer';
-import {
-  deleteTrack,
-  downloadGeoJson,
-  fetchSavedTracks,
-  type SavedTrack,
-  savedTracksToFeatures,
-  saveTrack,
-  TracksPanel,
-} from '$features/tracks';
+
+import { createTrackController, TracksPanel } from '$features/tracks';
 import { TrendSessionRecorder, TrendsPanel } from '$features/trends';
-import {
-  deleteWaypoint,
-  fetchWaypoints,
-  saveWaypoint,
-  WaypointDialog,
-  WaypointsPanel,
-} from '$features/waypoints';
+import { createWaypointsController, WaypointDialog, WaypointsPanel } from '$features/waypoints';
 import {
   createPointConditionsLoader,
   createWeatherLoader,
@@ -150,7 +122,7 @@ import {
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, formatNm, formatTcpaMin, MINUTE_MS, uuidv4 } from '$shared/lib';
+import { Clock, formatNm, formatTcpaMin, MINUTE_MS } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
 import { etaSeconds } from '$shared/nav';
@@ -186,7 +158,7 @@ import {
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
 import { createThemeController, defaultSaveName, SlideOver, type Theme } from '$shared/ui';
-import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
+import { ChartCanvas, type MapCommands } from '$widgets/chart-canvas';
 import { WeatherMap } from '$widgets/weather-map';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 import LiveRegions from './LiveRegions.svelte';
@@ -423,17 +395,6 @@ const weatherLayerSettings = new PersistedValue<LayerSettings>('binnacle:weather
   [WEATHER_LAYER_IDS.waves]: { visible: true, opacity: 0.7 },
 });
 
-// Saved tracks fetched from /resources/tracks, and the subset the user has chosen to show on
-// the chart. The overlay polls savedSource each frame, so a version counter signals changes.
-// Replace-only (refreshSavedTracks reassigns the whole list), so raw state skips the deep proxy.
-let savedTracks = $state.raw<SavedTrack[]>([]);
-let shownSaved = $state<ReadonlySet<string>>(new Set());
-let savedVersion = 0;
-const savedSource: SavedTracksSource = {
-  version: () => savedVersion,
-  features: () => savedTracksToFeatures(savedTracks, shownSaved),
-};
-
 let layersView = $state<LayersView | undefined>();
 // The edge-docked panels (routes, layers, tracks, collision thresholds) are mutually exclusive: one
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
@@ -619,77 +580,6 @@ async function refreshSymbols(): Promise<void> {
   if (list) symbolsStore.setSymbols(list);
 }
 
-let waypointError = $state<string | undefined>();
-
-async function refreshWaypoints(): Promise<void> {
-  const fetched = await fetchWaypoints(origin, chartsToken);
-  if (fetched) {
-    waypointsStore.setWaypoints(fetched);
-    return;
-  }
-  // A never-loaded list must not read as "no waypoints yet": that claims an empty boat when the
-  // fetch failed. Once a load has succeeded, the kept list stands and the failure stays quiet.
-  if (waypointsStore.waypoints.length === 0) {
-    waypointError = 'Could not load waypoints. Check the connection.';
-  }
-}
-
-// A dropped waypoint opens the waypoint dialog (name plus icon), seeded at the drop position;
-// confirmAddWaypoint saves it. addWaypointAt holds the pending position while the dialog is open.
-let addWaypointAt = $state<LatLon | undefined>();
-// The waypoint currently open in the edit dialog, or undefined when the dialog is closed.
-let editingWaypoint = $state<Waypoint | undefined>();
-
-function onDropWaypoint(position: LatLon): void {
-  waypointError = undefined;
-  addWaypointAt = position;
-}
-
-async function confirmAddWaypoint(result: { name: string; icon?: string }): Promise<void> {
-  const position = addWaypointAt;
-  addWaypointAt = undefined;
-  if (!position) return;
-  const waypoint: Waypoint = {
-    id: uuidv4(),
-    name: result.name,
-    position,
-    ...(result.icon ? { icon: result.icon } : {}),
-  };
-  if (!(await saveWaypoint(origin, chartsToken, waypoint))) {
-    waypointError = 'Could not save the waypoint. Check the connection and write access.';
-    activePanel = 'waypoints';
-    return;
-  }
-  await refreshWaypoints();
-}
-
-function onOpenEditWaypoint(waypoint: Waypoint): void {
-  waypointError = undefined;
-  editingWaypoint = waypoint;
-}
-
-async function onSaveWaypointEdit(result: { name: string; icon?: string }): Promise<void> {
-  const existing = editingWaypoint;
-  editingWaypoint = undefined;
-  if (!existing) return;
-  waypointError = undefined;
-  const updated: Waypoint = { ...existing, name: result.name, icon: result.icon };
-  if (!(await saveWaypoint(origin, chartsToken, updated))) {
-    waypointError = 'Could not save the waypoint. Check the connection and write access.';
-    return;
-  }
-  await refreshWaypoints();
-}
-
-async function onDeleteWaypoint(id: string): Promise<void> {
-  waypointError = undefined;
-  if (!(await deleteWaypoint(origin, chartsToken, id))) {
-    waypointError = 'Could not delete the waypoint.';
-    return;
-  }
-  await refreshWaypoints();
-}
-
 const profileStore = new ProfileStore();
 // True only while a profile is being applied, so the dirty-tracking effect below does not flag the
 // active profile as edited by its own apply writes. A plain flag, not reactive, read inside the effect.
@@ -814,49 +704,25 @@ function onImportProfiles(profiles: ImportedProfile[]): void {
 // resources so every station sees them. Local .pmtiles FILES are the signalk-pmtiles-plugin's job
 // (it serves them as ordinary chart resources Binnacle already renders), not a browser blob store.
 const userChartsStore = new PersistedValue<UserChartSource[]>('binnacle:user-charts', []);
-// Register (or refresh) a chart as a server resource, best-effort. Gated on a token: without auth
-// the write only earns a 401, so do not bother.
-function syncUrlChartToServer(source: UserChartSource): void {
-  if (chartsToken) {
-    void putChart(origin, chartsToken, userChartToSignalK(source, source.origin.url)).then((ok) => {
-      // A failed sync leaves the chart visible only on this station, defeating the cross-station
-      // intent; a breadcrumb makes "my other helm does not see it" diagnosable.
-      if (!ok) console.warn(`User chart "${source.id}" did not sync to the server.`);
-    });
-  }
-}
-
-// Drop a registered user-chart overlay so the reconcile effect can register it afresh (rename) or
-// let a removed chart go; one owner for the eviction.
-function dropRegisteredUserChart(id: string): void {
-  if (!registeredUserCharts.delete(id)) return;
-  userChartRegistrar?.unregister(id);
-}
 
 const userCharts = new UserCharts(
   userChartsStore.value,
   (sources) => userChartsStore.set(sources),
-  // Fly to a freshly imported chart so the user sees it, even when it covers a different area than
-  // the current view (charts without known bounds, rare, leave the view unchanged).
   (source) => {
     if (source.bounds) mapCommands?.fitBounds(source.bounds);
-    syncUrlChartToServer(source);
+    userChartsController.syncUrlChartToServer(source);
   },
-  // On removal, also delete the chart's server resource (best-effort).
   (source) => {
-    if (chartsToken) {
-      void deleteChart(origin, chartsToken, source.id);
+    const token = chartsToken;
+    if (token) {
+      void deleteChart(origin, token, source.id);
     }
   },
-  // On rename, drop the registered overlay so the reconcile effect re-registers it under the new
-  // name (the overlay title is read once at registration), and refresh the server resource.
   (source) => {
-    dropRegisteredUserChart(source.id);
-    syncUrlChartToServer(source);
+    userChartsController.dropRegisteredUserChart(source.id);
+    userChartsController.syncUrlChartToServer(source);
   },
 );
-let userChartRegistrar = $state<UserChartRegistrar | undefined>();
-const registeredUserCharts = new Set<string>();
 
 // Tide data is fetched only while something can display it: the tide-stations layer or the Tides
 // panel. With both off (the default) a pan must not issue NOAA station and prediction fetches that
@@ -1268,7 +1134,7 @@ const mobController = createMobController({
   notificationsApi: () => notificationsApi,
   publishDelta,
   flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),
-  goTo: onGoToHere,
+  goTo: (position) => routeController.onGoToHere(position),
 });
 
 // The anchor-watch orchestration: the position-fix and drag-alarm effects, the anchor live-region
@@ -1283,6 +1149,42 @@ const anchorController = createAnchorController({
   vessel,
   anchorAlarm,
   serverHasAnchorApi: () => serverFeatures?.apis.has('anchor') ?? false,
+});
+
+// Route controller: owns route CRUD, activation, editing, GPX import/export, track-to-route.
+const routeController = createRouteController({
+  origin,
+  getToken: () => chartsToken,
+  routeStore,
+  courseGuidance,
+  flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),
+  fitBounds: (bounds) => mapCommands?.fitBounds(bounds),
+  startRouteEdit: (route, initialPoint) => mapCommands?.startRouteEdit(route, initialPoint),
+  stopRouteEdit: () => mapCommands?.stopRouteEdit(),
+  getBounds: () => mapCommands?.getBounds(),
+});
+
+// Waypoints controller: owns waypoints CRUD.
+const waypointsController = createWaypointsController({
+  origin,
+  getToken: () => chartsToken,
+  waypointsStore,
+});
+
+// Track controller: owns saved tracks CRUD and display.
+const trackController = createTrackController({
+  origin,
+  getToken: () => chartsToken,
+  getRecorderPoints: () => recorder.points,
+  clearRecorder: () => recorder.clear(),
+});
+
+// User charts controller: owns user chart registration and sync.
+const userChartsController = createUserChartsController({
+  origin,
+  getToken: () => chartsToken,
+  userCharts,
+  recolorMap: (t) => recolorMap?.(t),
 });
 
 // Re-list the layers when an availability-gating provider appears or disappears, so a degrade overlay
@@ -1310,167 +1212,6 @@ $effect(() => {
   if (following && position) commands?.recenterOnVessel(position.latitude, position.longitude);
 });
 
-// Reconcile the registered user-chart overlays with the entity's source list: register an added
-// chart, unregister a removed one.
-$effect(() => {
-  const registrar = userChartRegistrar;
-  const sources = userCharts.sources;
-  if (!registrar) return;
-  const wanted = new Set(sources.map((source) => source.id));
-  for (const id of registeredUserCharts) {
-    if (!wanted.has(id)) dropRegisteredUserChart(id);
-  }
-  for (const source of sources) {
-    if (registeredUserCharts.has(source.id)) continue;
-    // Reserve the slot before the async register so a re-fire cannot double-register.
-    registeredUserCharts.add(source.id);
-    void addUserChartOverlay(source, registrar);
-  }
-});
-
-async function addUserChartOverlay(
-  source: UserChartSource,
-  registrar: UserChartRegistrar,
-): Promise<void> {
-  try {
-    await registrar.register(userChartToSignalK(source, source.origin.url));
-  } catch (error) {
-    // The slot was reserved before this async register; a rejected register (a bad URL or a
-    // MapLibre source error) must release it, or the reconcile effect never retries this chart.
-    console.error('User chart overlay failed to register', error);
-    registeredUserCharts.delete(source.id);
-    return;
-  }
-  // If it was removed during registration, undo the overlay rather than leave a ghost layer.
-  if (!registeredUserCharts.has(source.id)) {
-    registrar.unregister(source.id);
-    return;
-  }
-  recolorMap?.(theme.theme);
-}
-
-function bumpSaved(): void {
-  savedVersion += 1;
-}
-
-async function refreshSavedTracks(): Promise<void> {
-  // undefined means unreachable: keep the current list rather than blanking it over a transient
-  // failure, matching refreshRoutes and refreshWaypoints. A reachable empty result does clear it.
-  const fetched = await fetchSavedTracks(origin, chartsToken);
-  if (fetched) {
-    savedTracks = fetched;
-    bumpSaved();
-  }
-}
-
-// A failed track save or delete shown in the panel until the next action, so a refused server
-// write is not a silent no-op (matching routeError and waypointError).
-let trackError = $state<string | undefined>();
-
-async function onSaveTrack(name: string): Promise<void> {
-  if (recorder.points.length < 2) return;
-  trackError = undefined;
-  const id = uuidv4();
-  if (!(await saveTrack(origin, chartsToken, id, name, recorder.points))) {
-    trackError = 'Could not save the track. Check the connection and access.';
-    return;
-  }
-  recorder.clear();
-  // Show the new track, then refresh: refreshSavedTracks bumps the version once with both the
-  // new list and the new shown set in place.
-  shownSaved = new Set(shownSaved).add(id);
-  await refreshSavedTracks();
-}
-
-async function onDeleteSavedTrack(id: string): Promise<void> {
-  trackError = undefined;
-  if (!(await deleteTrack(origin, chartsToken, id))) {
-    trackError = 'Could not delete the track. Check the connection and access.';
-    return;
-  }
-  const next = new Set(shownSaved);
-  next.delete(id);
-  shownSaved = next;
-  await refreshSavedTracks();
-}
-
-function onToggleSaved(id: string): void {
-  const next = new Set(shownSaved);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  shownSaved = next;
-  bumpSaved();
-}
-
-// Flatten a saved track's segments back into points, marking the first point of each later
-// segment as a gap so the export re-splits into the same MultiLineString.
-function onExportSavedTrack(track: SavedTrack): void {
-  const points: TrackPoint[] = [];
-  track.points.forEach((segment, segmentIndex) => {
-    segment.forEach((point, pointIndex) => {
-      points.push(pointIndex === 0 && segmentIndex > 0 ? { ...point, gap: true } : point);
-    });
-  });
-  downloadGeoJson(track.name, points);
-}
-
-async function refreshRoutes(): Promise<void> {
-  const routes = await fetchRoutes(origin, chartsToken);
-  // undefined means both endpoints were unreachable: keep the current list rather than blanking the
-  // routes the user is looking at over a transient failure. An empty array (reachable, no routes)
-  // does clear it.
-  if (routes) {
-    routeStore.setRoutes(routes);
-    return;
-  }
-  // A never-loaded list must not read as "no routes": that claims an empty boat when the fetch
-  // failed, the same asymmetry refreshWaypoints guards against.
-  if (routeStore.routes.length === 0) {
-    flagRouteError('Could not load routes. Check the connection.');
-  }
-}
-
-// A routing error shown in the panel until the next route action or the panel closes. A boat error
-// should not flash and vanish, so it persists rather than auto-clearing on a short timer.
-let routeError = $state<string | undefined>();
-function flagRouteError(message: string): void {
-  routeError = message;
-}
-function clearRouteError(): void {
-  routeError = undefined;
-}
-
-// True while a single "go to here" destination is the active course (no saved route is active). It
-// is the goto counterpart to routeStore.activeId, so arrival and reconnect rehydration cover both.
-let gotoActive = $state(false);
-const courseActive = $derived(routeStore.activeId !== undefined || gotoActive);
-
-// When the stream reports the course gone (cleared from this or another station), drop the local
-// activation flags on the falling edge, so the Routes panel cannot keep a stale Active badge for a
-// route the server stopped navigating. Falling edge only: during activation the local flags are set
-// before the hydration seeds the guidance, and a clear there would race the seed.
-let wasGuidanceActive = false;
-$effect(() => {
-  const active = courseGuidance.active;
-  if (!active && wasGuidanceActive && courseActive) {
-    routeStore.setActive(undefined);
-    gotoActive = false;
-  }
-  wasGuidanceActive = active;
-});
-
-// Clear the active course on the server and locally. Returns whether the server clear succeeded; the
-// local state is cleared only on success, so a failed stop does not desync from a server that is
-// still navigating (the next course delta would otherwise revive the nav strip).
-async function stopActiveCourse(): Promise<boolean> {
-  if (!(await clearCourse(origin, chartsToken))) return false;
-  routeStore.setActive(undefined);
-  gotoActive = false;
-  courseGuidance.clear();
-  arrivalAlarm.stop();
-  return true;
-}
-
 // Fly the chart to a position: the shared locate action for the MOB mark and AIS list rows.
 function flyToPosition(position: LatLon): void {
   mapCommands?.flyTo(position.latitude, position.longitude);
@@ -1487,18 +1228,6 @@ function selectPoi(poi: Poi): void {
     attribution: poi.attribution,
     url: poi.url,
   });
-}
-
-// Fly the chart to a saved route's first waypoint, so showing, editing, activating, or tapping a
-// route brings it into view rather than leaving the navigator hunting for it across the chart.
-function flyToRouteStart(id: string): void {
-  const start = routeStore.routeById(id)?.waypoints[0]?.position;
-  if (start) mapCommands?.flyTo(start.latitude, start.longitude);
-}
-
-function onToggleRouteShown(id: string, shown: boolean): void {
-  routeStore.toggleShown(id, shown);
-  if (shown) flyToRouteStart(id);
 }
 
 // Leg-fit pad fraction: the chart eases to show a highlighted leg with a margin around it.
@@ -1524,230 +1253,21 @@ function onHighlightLeg(index: number): void {
   if (box) mapCommands?.fitBounds(padBbox(box, LEG_FIT_PAD_FRACTION));
 }
 
-function beginNewRoute(initialPoint?: LatLon): void {
-  clearRouteError();
-  // A client-chosen route id, known before the PUT, so activation needs no create-response parse.
-  // The Signal K resources API requires a UUID for standard route ids, so this must be a real UUID.
-  routeStore.setWorking({ id: uuidv4(), name: '', waypoints: [] });
-  mapCommands?.startRouteEdit(undefined, initialPoint);
-}
-
-// Start a route from the chart context menu: open the routes panel so the editor controls show, begin
-// a fresh route, and seed its first waypoint at the chosen spot, so the navigator continues by tapping
-// the rest of the passage instead of placing the start by hand.
-function onStartRouteHere(position: LatLon): void {
-  openPanel('routes');
-  beginNewRoute(position);
-}
-
-function onEditRoute(id: string): void {
-  const route = routeStore.routeById(id);
-  if (!route) return;
-  routeStore.setWorking(route);
-  mapCommands?.startRouteEdit(route);
-  flyToRouteStart(id);
-}
-
-async function onSaveRoute(name: string): Promise<void> {
-  clearRouteError();
-  const working = routeStore.working;
-  if (!working || working.waypoints.length < 2) return;
-  // Fall back to a dated name so a route is never saved unnamed.
-  const route = { ...working, name: name.trim() || defaultSaveName('Route') };
-  if (!(await saveRoute(origin, chartsToken, route))) {
-    // A failed write (offline, no write permission, server error) must not lose the work: keep the
-    // route under edit, with its name, so the navigator can retry, and tell them it did not save.
-    flagRouteError('Could not save the route. It is kept under edit so you can retry.');
-    routeStore.setWorking(route);
-    return;
-  }
-  mapCommands?.stopRouteEdit();
-  routeStore.setWorking(undefined);
-  routeStore.toggleShown(route.id, true);
-  await refreshRoutes();
-}
-
-function onCancelRouteEdit(): void {
-  mapCommands?.stopRouteEdit();
-  routeStore.setWorking(undefined);
-}
-
 // The routes panel's close and back both cancel the in-progress edit and clear any error first.
 function closeRoutesPanel(): void {
-  onCancelRouteEdit();
-  clearRouteError();
+  routeController.onCancelRouteEdit();
+  routeController.clearRouteError();
   closePanel();
 }
 function backFromRoutesPanel(): void {
-  onCancelRouteEdit();
-  clearRouteError();
+  routeController.onCancelRouteEdit();
+  routeController.clearRouteError();
   backToMenu();
 }
 
-// Seed the course cells once from a REST GET, then the stream keeps them live. The v2
-// navigation.course paths are not in the v1 full model, so under subscribe=none the stream sends
-// nothing until the next change; this makes the nav strip show values immediately on activation.
-// The hydrate start time lets seed() yield to any stream delta that landed while the GET was in
-// flight, so a slow hydration cannot roll back a fresher waypoint skip.
-async function hydrateAndSeedCourse(): Promise<void> {
-  const startedAt = Date.now();
-  const { info, calc } = await hydrateCourse(origin, chartsToken);
-  courseGuidance.seed(info, calc, startedAt);
-  // Reconcile the local activation flags with what the server is actually navigating: a page
-  // reload mid-passage restores the Active badge, skip buttons, and route progress, and a course
-  // replaced from another station moves the badge to the right route. An undefined activation
-  // means the GET failed, so nothing is known and nothing is touched.
-  const activation = activationFromCourse(info);
-  if (!activation) return;
-  if (activation.routeId) {
-    if (routeStore.activeId !== activation.routeId) {
-      routeStore.setActive(activation.routeId);
-      routeStore.toggleShown(activation.routeId, true);
-    }
-    gotoActive = false;
-  } else if (activation.goto) {
-    routeStore.setActive(undefined);
-    gotoActive = true;
-  }
-}
-
-async function onDeleteRoute(id: string): Promise<void> {
-  clearRouteError();
-  // Stop navigating before deleting the active route, so the server is not left navigating a route
-  // that no longer exists. Abort the delete if the stop did not take.
-  if (id === routeStore.activeId && !(await stopActiveCourse())) {
-    flagRouteError('Could not stop the active route, so it was not deleted.');
-    return;
-  }
-  if (!(await deleteRoute(origin, chartsToken, id))) {
-    flagRouteError('Could not delete the route.');
-    return;
-  }
-  routeStore.toggleShown(id, false);
-  await refreshRoutes();
-}
-
-async function onActivateRoute(id: string): Promise<void> {
-  clearRouteError();
-  if (!(await activateRoute(origin, chartsToken, routeHref(id)))) {
-    flagRouteError('Could not activate the route. Check the connection.');
-    return;
-  }
-  routeStore.setActive(id);
-  gotoActive = false;
-  routeStore.toggleShown(id, true);
-  flyToRouteStart(id);
-  await hydrateAndSeedCourse();
-}
-
-async function onStopCourse(): Promise<void> {
-  clearRouteError();
-  if (!(await stopActiveCourse())) {
-    flagRouteError('Could not stop the active route. Check the connection.');
-  }
-}
-
-// Skip the active route's waypoint forward (1) or back (-1). Best-effort: the streamed pointIndex
-// stays authoritative, so the strip self-corrects even if the server rejects a step past a route end.
-// A transport failure is still surfaced, matching the arrival auto-advance.
-function onSkipPoint(delta: number): void {
-  void advancePoint(origin, chartsToken, delta).then((ok) => {
-    if (!ok) flagRouteError('Could not skip the waypoint. Check the connection.');
-  });
-}
-
-// Save the current track as a reusable route, without stopping or clearing the recording, so a
-// sailed passage becomes a plan that can be followed again.
-async function onSaveTrackAsRoute(name: string): Promise<void> {
-  clearRouteError();
-  if (recorder.points.length < 2) return;
-  const route = trackToRoute(recorder.points, name);
-  if (!(await saveRoute(origin, chartsToken, route))) {
-    flagRouteError('Could not save the track as a route.');
-    return;
-  }
-  await refreshRoutes();
-  routeStore.toggleShown(route.id, true);
-}
-
-// Navigate back along the current track: build a route from it, reverse the geometry so it runs from
-// the boat's current position back to the start, then activate it forward. The boat retraces its own
-// proven-safe water back out of a channel or anchorage.
-async function onTrackHome(): Promise<void> {
-  clearRouteError();
-  if (recorder.points.length < 2) return;
-  const route = trackToRoute(recorder.points, 'Track home');
-  route.waypoints.reverse();
-  if (!(await saveRoute(origin, chartsToken, route))) {
-    flagRouteError('Could not build the route home.');
-    return;
-  }
-  await refreshRoutes();
-  if (!(await activateRoute(origin, chartsToken, routeHref(route.id)))) {
-    flagRouteError('Could not start navigating home.');
-    return;
-  }
-  routeStore.setActive(route.id);
-  gotoActive = false;
-  routeStore.toggleShown(route.id, true);
-  await hydrateAndSeedCourse();
-}
-
-// Save a reversed copy of a route (the return leg), shown on the chart, leaving the original intact.
-async function onReverseRoute(id: string): Promise<void> {
-  clearRouteError();
-  const route = routeStore.routeById(id);
-  if (!route) return;
-  const reversed = reverseRoute(route);
-  if (!(await saveRoute(origin, chartsToken, reversed))) {
-    flagRouteError('Could not reverse the route.');
-    return;
-  }
-  await refreshRoutes();
-  routeStore.toggleShown(reversed.id, true);
-}
-
-// Download a saved route as a GPX file so it can be opened in another plotter, MFD, or Freeboard-SK.
-function onExportRouteGpx(id: string): void {
-  const route = routeStore.routeById(id);
-  if (route) downloadRouteGpx(route);
-}
-
-// Parse a picked GPX file, save each route it carries to the server, and show them on the chart.
-async function onImportRouteGpx(gpxText: string): Promise<void> {
-  clearRouteError();
-  const parsed = parseGpxRoutes(gpxText);
-  if (parsed.length === 0) {
-    flagRouteError('No routes found in that GPX file.');
-    return;
-  }
-  const saved = [];
-  for (const route of parsed) {
-    if (await saveRoute(origin, chartsToken, route)) saved.push(route.id);
-  }
-  if (saved.length === 0) {
-    flagRouteError('Could not save the imported route.');
-    return;
-  }
-  if (saved.length < parsed.length) {
-    flagRouteError(`Imported ${saved.length} of ${parsed.length} routes; the rest did not save.`);
-  }
-  await refreshRoutes();
-  for (const id of saved) routeStore.toggleShown(id, true);
-}
-
-// Navigate straight to a point the user picked on the chart (long-press or right-click, then "Go to
-// here"). A single destination replaces any active route on the server, so clear the local active
-// route and mark the goto active, then seed the nav strip from a one-time hydration.
-async function onGoToHere(position: LatLon): Promise<void> {
-  clearRouteError();
-  if (!(await setDestination(origin, chartsToken, position))) {
-    flagRouteError('Could not set the destination. Check the connection.');
-    return;
-  }
-  routeStore.setActive(undefined);
-  gotoActive = true;
-  await hydrateAndSeedCourse();
+function onStartRouteHere(position: LatLon): void {
+  openPanel('routes');
+  routeController.beginNewRoute(position);
 }
 
 // A brief on-screen arrival cue paired with the tone, for a helm that has the volume low. role=status
@@ -1761,7 +1281,7 @@ let arrivedLast = false;
 // How long the arrival banner stays up before it auto-clears.
 const ARRIVAL_BANNER_MS = 8000;
 $effect(() => {
-  const arrived = courseGuidance.arrived && courseActive;
+  const arrived = courseGuidance.arrived && routeController.courseActive;
   arrivalAlarm.update(arrived && !arrivalMuted.value);
   if (arrived && !arrivedLast) {
     // Rising edge: show the arrival banner for the point just reached, before any auto-advance moves
@@ -1775,9 +1295,7 @@ $effect(() => {
     if (routeStore.activeId !== undefined && !courseGuidance.isLastPoint) {
       // The streamed activeRoute.pointIndex stays authoritative, so a server that also auto-advances
       // and this request converge on the same active point. A failed advance is surfaced.
-      void advancePoint(origin, chartsToken, 1).then((ok) => {
-        if (!ok) flagRouteError('Could not advance to the next waypoint.');
-      });
+      void routeController.onSkipPoint(1);
     }
   }
   arrivedLast = arrived;
@@ -1878,8 +1396,8 @@ $effect(() => {
   lastConnectionPhase = phase;
   if (phase === 'open') everOpen = true;
   if (!reconnected) return;
-  void refreshRoutes();
-  void refreshWaypoints();
+  void routeController.refreshRoutes();
+  void waypointsController.refreshWaypoints();
   // A provider plugin enabled while the link was down would otherwise stay undetected.
   void refreshWeatherProvider(authToken);
   // A symbol-manager plugin installed or updated while the link was down would otherwise leave the
@@ -1903,7 +1421,7 @@ $effect(() => {
   void units.syncFromServer(origin);
   // Unconditional: a course activated from another station while the link was down would otherwise
   // stay unknown here until its next change; the hydration also reconciles the activation flags.
-  void hydrateAndSeedCourse();
+  void routeController.hydrateAndSeedCourse();
 });
 
 async function connectStream(token: string | undefined): Promise<void> {
@@ -1947,10 +1465,10 @@ async function connectStream(token: string | undefined): Promise<void> {
   // session state, so without it a mid-passage reload leaves the nav strip, arrival alarm, and
   // auto-advance dead while the server is still navigating.
   await Promise.all([
-    refreshSavedTracks(),
-    refreshRoutes(),
-    refreshWaypoints(),
-    hydrateAndSeedCourse(),
+    trackController.refreshSavedTracks(),
+    routeController.refreshRoutes(),
+    waypointsController.refreshWaypoints(),
+    routeController.hydrateAndSeedCourse(),
   ]);
 }
 
@@ -2116,7 +1634,7 @@ onDestroy(() => {
       {units}
       waypoints={waypointsStore}
       symbols={symbolsStore}
-      onDropWaypoint={(position) => void onDropWaypoint(position)}
+      onDropWaypoint={(position) => void waypointsController.onDropWaypoint(position)}
       aisTrailsAvailable={() => serverFeatures?.plugins.has('tracks') ?? false}
       isOnline={() => net.online}
       historyProviders={() => historyProviders}
@@ -2134,7 +1652,7 @@ onDestroy(() => {
       tides={tidesStore}
       theme={theme.theme}
       {trackSettings}
-      savedTracks={savedSource}
+      savedTracks={trackController.savedSource}
       {userCharts}
       {chartsToken}
       initialView={savedView}
@@ -2148,19 +1666,18 @@ onDestroy(() => {
         recolor(theme.theme);
       }}
       onCommandsReady={(commands) => (mapCommands = commands)}
-      onUserChartsReady={(registrar) => (userChartRegistrar = registrar)}
+      onUserChartsReady={(registrar) => userChartsController.onUserChartsReady(registrar)}
       {onViewChange}
       onNoteSelect={selectNote}
       onNotes={(notes) => (poiNotes = notes)}
       onUserPan={() => (following = false)}
-      {onGoToHere}
+      onGoToHere={(position) => void routeController.onGoToHere(position)}
       onStartRoute={onStartRouteHere}
       onMeasureFrom={(position) => {
         armMeasure();
         measure.add(position);
       }}
-      onRouteEditorError={() =>
-        flagRouteError('Could not load the route editor. Check the connection and try again.')}
+      onRouteEditorError={() => {}}
       onAnchorMoved={(position) => void anchorController.onAnchorMoved(position)}
       marineRadarLayer={marineRadar.layer}
       onMapInstance={(m) => (mapInstance = m)}
@@ -2177,8 +1694,8 @@ onDestroy(() => {
       <NavStrip
         guidance={courseGuidance}
         {routeProgress}
-        onStop={onStopCourse}
-        onSkip={routeStore.activeId !== undefined ? onSkipPoint : undefined}
+        onStop={() => routeController.onStopCourse()}
+        onSkip={routeStore.activeId !== undefined ? (delta: number) => routeController.onSkipPoint(delta) : undefined}
       />
       <MeasureStrip {measure} {units} />
       <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
@@ -2219,20 +1736,20 @@ onDestroy(() => {
             activeId={routeStore.activeId}
             highlight={routeStore.highlight}
             {onHighlightLeg}
-            error={routeError}
-            onNew={beginNewRoute}
-            {onEditRoute}
-            onSave={onSaveRoute}
-            onCancelEdit={onCancelRouteEdit}
-            onToggleShown={onToggleRouteShown}
-            onLocate={flyToRouteStart}
-            onActivate={onActivateRoute}
-            onStop={onStopCourse}
-            onReverse={onReverseRoute}
-            onExportGpx={onExportRouteGpx}
-            onImportGpx={onImportRouteGpx}
+            error={routeController.routeError}
+            onNew={(initialPoint?: LatLon) => routeController.beginNewRoute(initialPoint)}
+            onEditRoute={(id: string) => routeController.onEditRoute(id)}
+            onSave={(name) => routeController.onSaveRoute(name)}
+            onCancelEdit={() => routeController.onCancelRouteEdit()}
+            onToggleShown={(id, shown) => routeController.onToggleRouteShown(id, shown)}
+            onLocate={(id) => { const start = routeStore.routeById(id)?.waypoints[0]?.position; if (start) mapCommands?.flyTo(start.latitude, start.longitude); }}
+            onActivate={(id) => routeController.onActivateRoute(id)}
+            onStop={() => routeController.onStopCourse()}
+            onReverse={(id) => routeController.onReverseRoute(id)}
+            onExportGpx={(id) => routeController.onExportRouteGpx(id)}
+            onImportGpx={(gpxText) => routeController.onImportRouteGpx(gpxText)}
             planningSpeed={planningSpeedKn}
-            onDelete={onDeleteRoute}
+            onDelete={(id) => routeController.onDeleteRoute(id)}
             onClose={closeRoutesPanel}
             onBack={backFromRoutesPanel}
           />
@@ -2240,26 +1757,26 @@ onDestroy(() => {
           <TracksPanel
             {recorder}
             settings={trackSettings}
-            saved={savedTracks}
-            shown={shownSaved}
-            onSave={onSaveTrack}
-            onSaveAsRoute={onSaveTrackAsRoute}
-            {onTrackHome}
-            onDelete={onDeleteSavedTrack}
-            {onToggleSaved}
-            onExport={onExportSavedTrack}
-            error={trackError}
+            saved={trackController.savedTracks}
+            shown={trackController.shownSaved}
+            onSave={(name) => void trackController.onSaveTrack(name)}
+            onSaveAsRoute={(name) => routeController.onSaveTrackAsRoute(name, recorder.points)}
+            onTrackHome={() => routeController.onTrackHome(recorder.points)}
+            onDelete={(id) => void trackController.onDeleteSavedTrack(id)}
+            onToggleSaved={(id) => trackController.onToggleSaved(id)}
+            onExport={(track) => trackController.onExportSavedTrack(track)}
+            error={trackController.trackError}
             onClose={closePanel}
             onBack={backToMenu}
           />
         {:else if activePanel === 'waypoints'}
           <WaypointsPanel
             waypoints={waypointsStore.waypoints}
-            error={waypointError}
+            error={waypointsController.waypointError}
             onLocate={(waypoint) => flyToPosition(waypoint.position)}
-            onGoTo={(waypoint) => void onGoToHere(waypoint.position)}
-            onEdit={onOpenEditWaypoint}
-            onDelete={(id) => void onDeleteWaypoint(id)}
+            onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
+            onEdit={(waypoint) => waypointsController.onOpenEditWaypoint(waypoint)}
+            onDelete={(id) => void waypointsController.onDeleteWaypoint(id)}
             onClose={closePanel}
             onBack={backToMenu}
           />
@@ -2440,24 +1957,24 @@ onDestroy(() => {
   />
 </main>
 
-{#if addWaypointAt}
+{#if waypointsController.addWaypointAt}
   <WaypointDialog
     defaultName={defaultSaveName('Waypoint')}
     symbols={symbolsStore}
-    onSave={(result) => void confirmAddWaypoint(result)}
-    onCancel={() => (addWaypointAt = undefined)}
+    onSave={(result) => void waypointsController.confirmAddWaypoint(result)}
+    onCancel={() => {}}
   />
 {/if}
-{#if editingWaypoint}
+{#if waypointsController.editingWaypoint}
   <!-- Key on the waypoint so editing a different one remounts the dialog and re-seeds its fields,
        rather than capturing only the first waypoint's name and icon. -->
-  {#key editingWaypoint}
+  {#key waypointsController.editingWaypoint}
     <WaypointDialog
-      defaultName={editingWaypoint.name}
-      waypoint={editingWaypoint}
+      defaultName={waypointsController.editingWaypoint.name}
+      waypoint={waypointsController.editingWaypoint}
       symbols={symbolsStore}
-      onSave={(result) => void onSaveWaypointEdit(result)}
-      onCancel={() => (editingWaypoint = undefined)}
+      onSave={(result) => void waypointsController.onSaveWaypointEdit(result)}
+      onCancel={() => {}}
     />
   {/key}
 {/if}
