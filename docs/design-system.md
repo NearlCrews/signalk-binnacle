@@ -149,6 +149,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   for an inline clamp position.
 - `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions. Never a blocking
   `window.confirm`.
+- Edit modes: a surface with a customize mode gets exactly one entry control, a `.btn btn-ghost`
+  text button at intrinsic width trailing in its header row, labeled "Customize" (appending the
+  object, as in "Customize toolbar", only when the surface's title does not already name it). The
+  label swapping to "Done" is the entire state story: never aria-pressed, never is-on, never a
+  static aria-label. The mode opens with one leading `.muted-note` line stating what a tap now
+  does. The instrument dock and the menu's toolbar editor are the two shipped examples.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints, and profiles panels):
   arming one row disarms the rest. Use it instead of a per-panel `confirmingDelete` id. `ConfirmArm`
   stays the single timed strip.

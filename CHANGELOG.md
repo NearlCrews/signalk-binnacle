@@ -18,6 +18,17 @@ All notable changes to Binnacle are documented here. The format follows
   the alarm tint.
 - **Open KIP.** When the KIP instrument webapp is installed on the server, a menu item opens it in
   a new tab.
+- **Course, battery, and smarter wind tiles.** A Waypoint tile shows distance and bearing to the
+  next waypoint while a course is active; battery voltage tiles appear in Customize for every
+  battery the server reports; and the wind tile falls back to ground-referenced wind (labeled GND)
+  when there is no masthead anemometer, so virtual weather stations still show wind. Depth gets
+  built-in shallow-water coloring (alarm under 2 m, caution under 5 m) whenever the server has no
+  zones of its own.
+- **A friendlier, denser dock.** Tiles lead with plain words (Speed, Heading, Wind, Water speed,
+  Barometer) with the marine abbreviation as a quiet tag, pack a two-column grid with bigger
+  numbers and shorter boxes, collapse to a one-line note when a sensor is absent, and both the
+  dock and the toolbar editor now share one quiet Customize button style with a short how-to line
+  in edit mode. Bearings read as three digits ("004°") everywhere.
 - Chart Locker joins the "Works well with" plugin recommendations.
 
 ### Fixed

@@ -172,6 +172,12 @@ resize the map every frame). Under its 900px breakpoint the same panel goes full
 chart"). Do not add further split panels without a matching product case; overlays stay the
 default.
 
+Edit-mode entry (the customize rule): one `.btn btn-ghost` text button at intrinsic width,
+trailing in the header row, labeled "Customize" (append the object only when the surface's title
+does not already name it), label swapping to "Done" as the whole state story (no aria-pressed, no
+is-on, no static aria-label), and the mode opens with one `.muted-note` line stating what a tap
+now does.
+
 ---
 
 ## 4. Reuse a primitive, never re-implement
