@@ -43,13 +43,11 @@ $effect(() => {
 <aside class="instruments" aria-label="Instruments" tabindex="-1">
   <header class="panel-header">
     <h2 class="panel-title">Instruments</h2>
-    <button
-      type="button"
-      class="btn btn-ghost customize"
-      onclick={() => (customizing = !customizing)}
-    >
-      {customizing ? 'Done' : 'Customize'}
-    </button>
+    <div class="customize-toggle">
+      <button type="button" class="btn btn-ghost" onclick={() => (customizing = !customizing)}>
+        {customizing ? 'Done' : 'Customize'}
+      </button>
+    </div>
     <button
       type="button"
       class="icon-btn panel-close"
@@ -62,6 +60,9 @@ $effect(() => {
     </button>
   </header>
   {#if customizing}
+    <div class="customize-instruction">
+      <span class="muted-note">Tap an instrument to show or hide. Drag to reorder.</span>
+    </div>
     <InstrumentsCustomize {controller} {deps} />
   {:else}
     <div class="tiles">
@@ -111,8 +112,12 @@ $effect(() => {
 }
 
 /* Push the close button flush to the end; Customize sits between title and close. */
-.customize {
-  margin-inline-end: auto;
+.customize-toggle {
+  margin-inline-start: auto;
+}
+
+.customize-instruction {
+  padding: 0 var(--space-3) var(--space-2);
 }
 
 @media (max-width: 900px) {

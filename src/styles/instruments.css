@@ -8,7 +8,7 @@
   flex-direction: column;
   gap: var(--space-1);
   min-block-size: 4rem;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
 }
 .tile .num {
   font-size: var(--text-readout-lg);
@@ -34,11 +34,16 @@
 .tile--alarm .num {
   color: var(--alarm);
 }
+.tile--stale {
+  border-color: var(--border);
+}
 .tile--stale .num {
   color: var(--text-muted);
 }
 .tile--empty {
   min-block-size: unset;
+  background: var(--surface-raised);
+  border-color: var(--border);
 }
 .tile--wide {
   grid-column: 1 / -1;

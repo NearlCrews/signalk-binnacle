@@ -20,7 +20,11 @@ type DeltaOrHello = Delta & { self?: string };
 
 export class WorkerCore {
   #connection?: SkConnection;
-  #registry?: SubscriptionRegistry;
+  // Constructed with the core, not per connect(): a feature controller restoring persisted state
+  // (the instrument dock) subscribes BEFORE the stream connects, and a per-connect registry made
+  // that a silent no-op and dropped every demand subscription on reconnect. The send closure reads
+  // the connection lazily, and resubscribeAll on every open replays whatever registered early.
+  #registry = new SubscriptionRegistry((message) => this.#connection?.send(message));
   #batcher = new FrameBatcher();
   #onFrame?: (frame: SKFrame) => void;
   #connectionState: ConnectionState = INITIAL_CONNECTION_STATE;
@@ -39,9 +43,8 @@ export class WorkerCore {
         this.#onFrame?.({ self: new Map(), connection: state, epoch: Date.now() });
       },
       onDelta: (raw) => this.#ingest(raw),
-      onOpen: () => this.#registry?.resubscribeAll(),
+      onOpen: () => this.#registry.resubscribeAll(),
     });
-    this.#registry = new SubscriptionRegistry((message) => this.#connection?.send(message));
     this.#batcher.onFlush = (self, ais, epoch) => {
       this.#onFrame?.({
         self,
@@ -55,11 +58,11 @@ export class WorkerCore {
   }
 
   subscribe(entries: SubscribeEntry[]): void {
-    this.#registry?.add(entries);
+    this.#registry.add(entries);
   }
 
   unsubscribe(paths: Path[], context?: Context): void {
-    this.#registry?.remove(paths, context);
+    this.#registry.remove(paths, context);
   }
 
   // Send a client delta to the server. The connection drops the send when the socket is not

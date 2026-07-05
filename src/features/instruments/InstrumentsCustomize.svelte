@@ -23,9 +23,6 @@ const reorder = createReorder({
 });
 </script>
 
-<p class="muted-note">
-  Tap an instrument to show or hide it on the dock. Drag the handle to reorder.
-</p>
 <ul class="tile-list" bind:this={listEl}>
   {#each controller.catalog as def (def.id)}
     {@const selected = controller.selectedIds.includes(def.id)}

@@ -35,6 +35,18 @@ describe('WorkerCore', () => {
     expect(frames.at(-1)?.self.get('navigation.speedOverGround')).toBe(4.2);
   });
 
+  it('delivers a subscription issued before connect once the socket opens', () => {
+    const core = new WorkerCore();
+    // The instrument dock restores a persisted-open state at App construction, before connect().
+    core.subscribe([
+      { path: 'environment.wind.speedOverGround' as Path, policy: 'instant', minPeriod: 1000 },
+    ]);
+    core.connect('ws://test', () => {});
+    const ws = FakeWebSocket.instances[0];
+    ws.open();
+    expect(ws.sent.some((m) => m.includes('environment.wind.speedOverGround'))).toBe(true);
+  });
+
   it('forwards subscribe messages to the socket', () => {
     const core = new WorkerCore();
     core.connect('ws://test', () => {});

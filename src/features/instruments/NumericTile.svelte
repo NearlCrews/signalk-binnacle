@@ -30,12 +30,6 @@ const labelText = $derived(
   class:tile--wide={kind === 'position' || kind === 'wind'}
   class:tile--position={kind === 'position'}
 >
-  <span class="caps-label"
-    >{labelText}
-    {#if abbr}
-      <span class="abbr">{abbr}</span>
-    {/if}</span
-  >
   {#if reading.state === 'never'}
     <span class="muted-note">{sensorGloss}</span>
   {:else}
@@ -43,4 +37,10 @@ const labelText = $derived(
       ><span class="num">{reading.value}</span><span class="unit">{reading.unit}</span></span
     >
   {/if}
+  <span class="caps-label"
+    >{labelText}
+    {#if abbr}
+      <span class="abbr">{abbr}</span>
+    {/if}</span
+  >
 </div>

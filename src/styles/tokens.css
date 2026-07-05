@@ -157,10 +157,10 @@
      brightest pixel and without introducing any non-red hue. */
   --accent-tint: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
   --accent-tint-strong: color-mix(in srgb, var(--accent) 24%, var(--surface-raised));
-  --alarm-tint: color-mix(in srgb, var(--alarm) 16%, var(--surface-raised));
+  --alarm-tint: color-mix(in srgb, var(--alarm) 18%, var(--surface-raised));
   /* Still a dim plane on near-black: the bold --alarm label stays the brightest pixel. */
-  --alarm-tint-strong: color-mix(in srgb, var(--alarm) 26%, var(--surface-raised));
-  --warning-tint: color-mix(in srgb, var(--warning) 16%, var(--surface-raised));
+  --alarm-tint-strong: color-mix(in srgb, var(--alarm) 28%, var(--surface-raised));
+  --warning-tint: color-mix(in srgb, var(--warning) 18%, var(--surface-raised));
   /* At night the scrim only removes light from the chart behind the dialog. */
   --scrim: rgb(0 0 0 / 0.6);
 }

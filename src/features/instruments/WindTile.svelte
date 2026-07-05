@@ -31,12 +31,6 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
   class:tile--empty={reading.state === 'never'}
   class:tile--wide={kind === 'wind'}
 >
-  <span class="caps-label"
-    >{labelText}
-    {#if abbr}
-      <span class="abbr">{abbr}</span>
-    {/if}</span
-  >
   {#if reading.state === 'never'}
     <span class="muted-note">{sensorGloss}</span>
   {:else}
@@ -73,6 +67,12 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
       </span>
     </div>
   {/if}
+  <span class="caps-label"
+    >{labelText}
+    {#if abbr}
+      <span class="abbr">{abbr}</span>
+    {/if}</span
+  >
 </div>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
