@@ -203,7 +203,6 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | Explain why a control is grayed | `UnavailableHint` plus a matching `title` | a `title` alone, silent to assistive tech |
 | Focus a freshly revealed control | `focusOnMount` | an ad hoc onMount focus call |
 | Arrow-key roving in a small menu | `rovingFocus` | a bespoke keydown index walker |
-| Trap Tab in a true modal | `focusTrap` (the MOB confirm only) | a trap on a non-modal panel |
 | Import a text file | `pickTextFile` plus `readErrorMessage` | a hidden `<input type="file">` |
 | A dated default save name | `defaultSaveName` | an inline date string |
 | Escape-dismiss a bespoke overlay | `registerDismiss` | a private window keydown listener |
@@ -333,7 +332,8 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
 - Section headings are `<h3 class="caps-label">`. The panel's own title comes from `SlideOver` or
   `SubViewHeader`; do not add a second top-level title.
 - Use the shared focus actions in `src/shared/ui/focus.ts` (`focusOnMount`, `rovingFocus`,
-  `focusTrap` for true modals only, `onKeydownAction`); do not hand-roll focus code.
+  `onKeydownAction`); do not hand-roll focus code. True modals use a native `<dialog>` with
+  `showModal()`, which provides browser-native Tab trapping without a manual action.
 - A grayed control with a `title` must also carry an `UnavailableHint`, or assistive-technology users
   get no reason. The gloss on a row goes in the `description` prop, not a one-off span.
 

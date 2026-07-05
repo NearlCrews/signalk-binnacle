@@ -20,7 +20,7 @@
 .slide-over--dock-right {
   border-inline-start: 1px solid var(--border);
 }
-@container shell (max-width: 600px) {
+@media (max-width: 600px) {
   .slide-over {
     inline-size: 100%;
     block-size: auto;

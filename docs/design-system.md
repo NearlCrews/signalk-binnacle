@@ -127,7 +127,7 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   category header), `.overlay-backdrop` (the transparent dismiss backdrop).
 - Panels (`panels.css`): `.slide-over` and `.slide-over--dock-{left,right}` (the docked panel frame),
   `.panel-header`, `.panel-body`, `.panel-body--flex` (the bodyFlex column), and `.panel-footer`.
-- Overlays, modals: `.modal-scrim`, `.modal-card`.
+- Overlays, modals: `.modal-card`.
 
 ## 6. Shared UI primitives (`$shared/ui`)
 
@@ -185,7 +185,7 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
   and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
   CSS token contract.
-- Focus and dialog helpers: `rovingFocus`, `focusTrap`, `focusOnMount`, `onKeydownAction`, `isTabKey`,
+- Focus and dialog helpers: `rovingFocus`, `focusOnMount`, `onKeydownAction`, `isTabKey`,
   `dialog`, and `registerDismiss` (the Escape dismiss stack that peels the topmost surface first).
 - `pickTextFile` and `readErrorMessage` for file import; `defaultSaveName` to seed a save name, and
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
@@ -244,7 +244,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   screen-reader text, rather than dropping it from the menu. (`disabled` plus `disabledLabel` is the
   transient block for an action that is momentarily unavailable, such as a chart still loading.)
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
-  (`.modal-card` over `.modal-scrim`), reserved for the MOB confirm.
+  (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
+  used for the waypoint editor and the MOB confirm.
 - The bottom bar renders the pinned `MenuItem`s (using `shortLabel`) plus a More overflow.
 
 ## 9. Interaction and accessibility

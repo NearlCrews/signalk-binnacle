@@ -16,6 +16,9 @@
 
 /* Centered, full-viewport modal backdrop: a tinted scrim natively styled for dialog elements. */
 dialog::backdrop {
+  /* Literal first: some engines do not resolve page custom properties inside ::backdrop. */
+  background: rgb(0 0 0 / 0.45);
+  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback pair */
   background: var(--scrim);
 }
 
@@ -31,9 +34,6 @@ dialog.modal-card {
   padding: 0;
   color: inherit;
   overflow: visible;
-  border-radius: var(--radius-lg);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-lg);
 }
 
 .modal-card {

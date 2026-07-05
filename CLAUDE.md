@@ -162,11 +162,11 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   buttons, forms, cards, instruments, icon-controls, scrubber, overlays, panels, strips, a11y, vendor), and the import order IS
   the cascade order. The utility vocabularies are split one concern per module (text helpers, the button
   system, form controls, the saved-card, stat grid, and `.nav-*` sortable two-line row list, the icon controls plus the lit `.is-on` state, the
-  popover and modal scrims) and the shell into panels and strips; the order keeps `.is-on` after the
+  popover and modal backdrop styles) and the shell into panels and strips; the order keeps `.is-on` after the
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
   the `$shared/ui` primitives (SlideOver, AnchoredMenu, InlineConfirm, UnitField, ConfirmArm, SavedList,
-  VisibilityToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusTrap, focusOnMount, and
+  VisibilityToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusOnMount, and
   onKeydownAction focus actions, the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
@@ -175,7 +175,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   carries the hover tint and the lit `.is-on` body at a high enough specificity to beat a scoped
   background, with border longhands so a row can reserve its lit border), `.card-frame` (the raised
   bordered card surface shared by the saved-list cards and the alarm rows), `.overlay-backdrop`,
-  `.modal-scrim`, `.alert-note` and its `.alert-note--filled` tinted-banner modifier, `.muted-note`,
+  `.alert-note` and its `.alert-note--filled` tinted-banner modifier, `.muted-note`,
   `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*`, `.saved`, `.stat-grid`,
   `.num`, and the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
   `.nav-metric`) shared by the AIS targets and POI search panels)

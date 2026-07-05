@@ -137,12 +137,7 @@ import {
   updateNotification,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
-import {
-  createThemeController,
-  defaultSaveName,
-  startViewTransition,
-  type Theme,
-} from '$shared/ui';
+import { createThemeController, defaultSaveName, type Theme } from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
@@ -393,27 +388,21 @@ let activePanel = $state<LeftPanel | null>(null);
 let menuOpen = $state(false);
 let menuEditing = $state(false);
 const closePanel = (): void => {
-  startViewTransition(() => {
-    activePanel = null;
-  });
+  activePanel = null;
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
 // can move menu to panel to back to another panel without reopening the menu by hand.
 const backToMenu = (): void => {
-  startViewTransition(() => {
-    activePanel = null;
-    menuOpen = true;
-  });
+  activePanel = null;
+  menuOpen = true;
 };
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
 let narrow = $state(false);
 const openPanel = (panel: LeftPanel): void => {
-  startViewTransition(() => {
-    activePanel = panel;
-    if (narrow) selectedNote = undefined;
-  });
+  activePanel = panel;
+  if (narrow) selectedNote = undefined;
 };
 // Open the panel if it is closed, close it if it is already open, so a bar pill and a menu tile both
 // toggle. Delegates to openPanel/closePanel to keep the narrow-width clear-selectedNote side effect.
@@ -1786,9 +1775,6 @@ onDestroy(() => {
   font-family: var(--font-ui);
   background: var(--surface);
   color: var(--text);
-  /* Define this shell as a named container for responsive child components. */
-  container-type: inline-size;
-  container-name: shell;
 }
 /* Three columns so the MOB button sits dead center regardless of how wide the brand and the
    action cluster are; the flanks are 1fr each so the center cannot drift. Includes Window Controls
@@ -1812,13 +1798,11 @@ onDestroy(() => {
 
   border-block-end: 1px solid var(--border);
 
-  /* Make the header bar draggable in installed PWA windows */
-  app-region: drag;
+  /* Draggable header in installed PWA windows; only the -webkit- form is implemented anywhere. */
   -webkit-app-region: drag;
 }
 .topbar > * {
-  /* Prevent interactive child controls from being draggable so they stay clickable */
-  app-region: no-drag;
+  /* Interactive children stay clickable inside the drag region. */
   -webkit-app-region: no-drag;
 }
 .topbar-start {
@@ -1850,7 +1834,7 @@ onDestroy(() => {
 /* On a phone the brand yields its version string so the muted badge and the Update pill keep room.
    Phone override after the base rule: a media block before a same-specificity base is silently
    defeated by source order. It works here only because the base sets no display. */
-@container shell (max-width: 600px) {
+@media (max-width: 600px) {
   .version {
     display: none;
   }
@@ -1881,7 +1865,7 @@ onDestroy(() => {
   inset-inline-start: 0;
   z-index: var(--z-panel);
 }
-@container shell (max-width: 600px) {
+@media (max-width: 600px) {
   .panel-slot {
     inset-block-start: auto;
     inset-inline: 0;

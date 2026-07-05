@@ -30,6 +30,9 @@ All notable changes to Binnacle are documented here. The format follows
   dock and the toolbar editor now share one quiet Customize button style with a short how-to line
   in edit mode. Bearings read as three digits ("004°") everywhere.
 - Chart Locker joins the "Works well with" plugin recommendations.
+- When Binnacle is installed as a desktop PWA and the browser supports Window Controls Overlay,
+  the header bar extends into the native window title bar so the MOB button, navigation controls,
+  and profile pill sit flush with the window chrome.
 
 ### Fixed
 
@@ -77,6 +80,10 @@ All notable changes to Binnacle are documented here. The format follows
 - The Signal K store's AIS target and notification maps are read-only outside the store, so
   nothing can bypass the write paths that keep its change counters honest.
 - IndexedDB transaction lifetime is managed inside the storage slice through one shared helper.
+- The waypoint editor and MOB confirm use native HTML dialog elements, so the browser provides
+  scroll-lock, focus trapping, and modal semantics directly without custom scaffolding.
+- The MOB confirm carries `role="alertdialog"` so assistive technology announces it as an
+  emergency requiring immediate response, not a routine dialog.
 
 <a id="v0130"></a>
 

@@ -87,7 +87,7 @@ const ariaLabel = $derived(`Chart Locker ${word}, open offline charts`);
 }
 /* On a phone the pill drops the "Chart Locker:" label but keeps both glyphs, so a glance still reads the
    subsystem and its state; it stays a full tap target into the Offline charts panel. */
-@container shell (max-width: 600px) {
+@media (max-width: 600px) {
   .cl-brand {
     display: none;
   }

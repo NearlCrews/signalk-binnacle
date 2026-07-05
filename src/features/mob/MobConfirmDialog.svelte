@@ -48,6 +48,7 @@ function confirm(): void {
      node.focus() then no-ops, so the confirm button's focusOnMount owns initial focus. -->
 <dialog
   class="modal-card mob-dialog"
+  role="alertdialog"
   aria-labelledby="mob-confirm-title"
   aria-describedby="mob-confirm-desc"
   use:dialog={onCancel}
