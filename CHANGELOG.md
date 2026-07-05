@@ -46,6 +46,11 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
+- The chartplotter's panel layer moved into a dedicated view component behind the app's views
+  layer, and the composition root slimmed to construction, controllers, and shell chrome. No
+  behavior change.
+
+
 - Waypoint and profile deletes use the same one-at-a-time armed confirm as routes and tracks, so
   arming one row disarms the rest.
 - The tides panel readouts use the shared stat-grid layout, and its close button is labeled "Close

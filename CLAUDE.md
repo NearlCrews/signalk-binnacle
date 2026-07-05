@@ -198,11 +198,13 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   token, a feature-detection flag, even a stable store whose `.svelte.ts` identity must stay reactive in
   a `$derived`) is injected as a GETTER `() => value`, never by value: capturing a value at construction
   freezes the initial one, which is a real stale-value bug (a stale-token regression came from exactly
-  this). `createMobController`, `createAnchorController`, and `createMarineRadarController` (the first to
-  own a Web Worker, the radar spokes stream) are the existing ones; the route, stream,
-  notifications, waypoints, tracks, and user-charts controllers and the `views/` PlotterView extraction
-  (the build already wires a `$views` layer and a `views-go-down-only` rule, but `src/views/` is still
-  empty) are the documented next steps for shrinking `App.svelte`.
+  this). The existing ones: `createMobController`, `createAnchorController`,
+  `createMarineRadarController` (the first to own a Web Worker, the radar spokes stream),
+  `createInstrumentsController`, `createRouteController`, `createWaypointsController`,
+  `createTrackController`, and `createUserChartsController`. The panel layer lives in
+  `src/views/plotter/PlotterView.svelte` behind the `$views` index (one root `section.chart-host`,
+  placed explicitly in the shell grid by App), so `App.svelte` holds construction, controllers, and
+  shell chrome; the stream and notifications controllers remain the documented next extractions.
 
 This is a hard rule. Architectural feedback that came at the cost of redoing significant work
 must not be repeatable.
