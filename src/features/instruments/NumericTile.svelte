@@ -31,7 +31,7 @@ const labelText = $derived(
   class:tile--position={kind === 'position'}
 >
   {#if reading.state === 'never'}
-    <span class="muted-note">{sensorGloss}</span>
+    <span class="value"><span class="muted-note">{sensorGloss}</span></span>
   {:else}
     <span class="value"
       ><span class="num">{reading.value}</span><span class="unit">{reading.unit}</span></span

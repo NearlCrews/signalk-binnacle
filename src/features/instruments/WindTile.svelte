@@ -32,7 +32,7 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
   class:tile--wide={kind === 'wind'}
 >
   {#if reading.state === 'never'}
-    <span class="muted-note">{sensorGloss}</span>
+    <span class="value"><span class="muted-note">{sensorGloss}</span></span>
   {:else}
     <div class="wind-body">
       <svg class="rose" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

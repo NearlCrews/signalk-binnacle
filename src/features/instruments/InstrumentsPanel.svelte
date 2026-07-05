@@ -1,6 +1,5 @@
 <script lang="ts">
-import { X } from '@lucide/svelte';
-import { registerDismiss } from '$shared/ui';
+import { CustomizeToggle, PanelHeader, registerDismiss } from '$shared/ui';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import NumericTile from './NumericTile.svelte';
@@ -41,24 +40,21 @@ $effect(() => {
 </script>
 
 <aside class="instruments" aria-label="Instruments" tabindex="-1">
-  <header class="panel-header">
-    <h2 class="panel-title">Instruments</h2>
-    <div class="customize-toggle">
-      <button type="button" class="btn btn-ghost" onclick={() => (customizing = !customizing)}>
-        {customizing ? 'Done' : 'Customize'}
-      </button>
-    </div>
-    <button
-      type="button"
-      class="icon-btn panel-close"
-      aria-label={fullscreenQueryMatches
-        ? 'Close instruments, return to chart'
-        : 'Close instruments dock'}
-      onclick={() => controller.setOpen(false)}
-    >
-      <X size={18} aria-hidden="true" />
-    </button>
-  </header>
+  <PanelHeader
+    title="Instruments"
+    closeLabel={fullscreenQueryMatches
+      ? 'Close instruments, return to chart'
+      : 'Close instruments dock'}
+    onClose={() => controller.setOpen(false)}
+  >
+    {#snippet headerExtra()}
+      <CustomizeToggle
+        object="instruments"
+        editing={customizing}
+        onToggle={() => (customizing = !customizing)}
+      />
+    {/snippet}
+  </PanelHeader>
   {#if customizing}
     <div class="customize-instruction">
       <span class="muted-note">Tap an instrument to show or hide. Drag to reorder.</span>
@@ -109,11 +105,6 @@ $effect(() => {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3);
-}
-
-/* Push the close button flush to the end; Customize sits between title and close. */
-.customize-toggle {
-  margin-inline-start: auto;
 }
 
 .customize-instruction {

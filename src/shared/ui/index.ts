@@ -1,5 +1,6 @@
 export { default as AnchoredMenu } from './AnchoredMenu.svelte';
 export { ArmedRow } from './armed-row.svelte';
+export { default as CustomizeToggle } from './CustomizeToggle.svelte';
 export { ConfirmArm } from './confirm-arm.svelte';
 export { default as Disclosure } from './Disclosure.svelte';
 export { dialog, registerDismiss } from './dialog';

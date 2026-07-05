@@ -4,6 +4,7 @@
    cards.css, so the override wins the cascade), with the value text in the state color; night-red
    keeps alarm and warning distinguishable by brightness. */
 .tile {
+  --hero-leading: 1.1;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -12,8 +13,19 @@
 }
 .tile .num {
   font-size: var(--text-readout-lg);
-  line-height: 1.1;
+  line-height: var(--hero-leading);
   white-space: pre-line;
+}
+/* The value slot reserves the hero line box, so a no-sensor gloss (or any future degraded fill)
+   keeps the tile the same height as its value siblings. Baseline keeps the unit suffix on the
+   numeral's baseline; the empty state centers its gloss in the reserved slot instead. */
+.tile .value {
+  min-block-size: calc(var(--hero-leading) * var(--text-readout-lg));
+  display: inline-flex;
+  align-items: baseline;
+}
+.tile--empty .value {
+  align-items: center;
 }
 .tile .unit {
   color: var(--text-muted);
@@ -41,13 +53,13 @@
   color: var(--text-muted);
 }
 .tile--empty {
-  min-block-size: unset;
   background: var(--surface-raised);
   border-color: var(--border);
 }
 .tile--wide {
   grid-column: 1 / -1;
 }
+/* The secondary-readout exception: two coordinate lines at hero size would double the tile. */
 .tile--position .num {
   font-size: var(--text-readout);
 }

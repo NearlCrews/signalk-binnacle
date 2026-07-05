@@ -20,7 +20,7 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   // Default tiles render their plain labels.
   await expect(dock.getByText('Speed', { exact: false }).first()).toBeVisible();
   // Customize flips to the catalog rows and back.
-  await dock.getByRole('button', { name: 'Customize' }).click();
+  await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect(dock.getByText('Tap an instrument to show or hide', { exact: false })).toBeVisible();
   await dock.getByRole('button', { name: 'Done' }).click();
   // Close from the header returns to the chart-only shell.

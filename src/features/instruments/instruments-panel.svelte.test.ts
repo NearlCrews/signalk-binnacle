@@ -64,11 +64,11 @@ describe('InstrumentsPanel', () => {
     expect(body).toContain('aria-label="Close instruments dock"');
   });
 
-  it('renders Customize button when in tile-display mode', () => {
+  it('renders the Customize instruments button when in tile-display mode', () => {
     const controller = makeController();
     const deps = makeDeps();
     const { body } = render(InstrumentsPanel, { props: { controller, deps } });
-    expect(body).toContain('Customize');
+    expect(body).toContain('Customize instruments');
   });
 
   it('renders one labeled row per catalog entry when customizing is true', () => {

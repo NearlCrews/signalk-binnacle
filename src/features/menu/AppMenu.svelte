@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Menu } from '@lucide/svelte';
-import { AnchoredMenu, isTabKey, UnavailableHint } from '$shared/ui';
+import { AnchoredMenu, CustomizeToggle, isTabKey, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { itemBlocked, type MenuItem } from './menu-item';
 
@@ -131,12 +131,7 @@ function onCardKeydown(event: KeyboardEvent): void {
       <span class="muted-note">No options</span>
     {:else}
       <div class="menu-head">
-        <!-- The canonical edit-mode entry: a quiet ghost whose label swap to Done is the entire
-             state story (no aria-pressed, no is-on, no static aria-label; the visible text IS the
-             accessible name in both states). -->
-        <button type="button" class="btn btn-ghost" onclick={() => onEditingChange?.(!editing)}>
-          {editing ? 'Done' : 'Customize toolbar'}
-        </button>
+        <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
       </div>
       {#if editing}
         <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
