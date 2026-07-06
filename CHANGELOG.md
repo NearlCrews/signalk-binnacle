@@ -34,6 +34,14 @@ All notable changes to Binnacle are documented here. The format follows
   The dock and the toolbar editor share one quiet customize control that names what it edits
   ("Customize instruments", "Customize toolbar") and opens with a short how-to line in edit mode.
   Bearings read as three digits ("004°") everywhere.
+- **More instruments, with small visualizations.** The customize catalog gains battery health
+  tiles for every battery the server reports (state of charge with a battery-bar glyph, time
+  remaining at the present load, and charge or discharge current), water and air temperature,
+  GNSS satellites in the fix, and rate of turn with a small needle dial. Continuous readouts
+  (speed, depth, temperatures, pressure, battery voltage and current) draw a quiet sparkline of
+  the last few minutes under the number. Tiles now center their text like gauge faces, the wind
+  angle steps up a size, and the bottom strip keeps SOG and COG as the two large readouts by
+  design, with COG dashing while the boat is stationary.
 - Chart Locker joins the "Works well with" plugin recommendations.
 - When Binnacle is installed as a desktop PWA and the browser supports Window Controls Overlay,
   the header bar extends into the native window title bar so the MOB button, navigation controls,

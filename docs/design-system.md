@@ -55,10 +55,10 @@ Pick the token by role, never by eye:
 | `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, status-strip emphasis |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, status strip secondary readouts (AIS, anchor, the map-view cluster) |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | secondary numeric readouts: the position tile's two-line coordinates, the strip metrics |
+| `--text-readout` | 1.25 | primary status-strip readouts (`.readout--hero`: SOG and COG), the bottom-strip metrics, the position tile's two-line coordinates |
 | `--text-readout-lg` | 1.75 | instrument tile hero values only |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -149,7 +149,12 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   the zone tints (`.tile--warning`, `.tile--alarm`, `.tile--stale`), `.tile--wide`, and `.tile--empty`.
   Tiles in one grid stay equal height in every state: the `.value` slot reserves the hero line box
   (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
-  never collapsing shorter than its value siblings. The
+  never collapsing shorter than its value siblings. Tile content centers on both axes (the gauge-face
+  read); instrument tiles are the one centered numeric family, and list rows, stat grids, and
+  nav-metrics stay start-aligned. Tile marks (the `viz` field on a TileDef) are quiet inline SVG in
+  `currentColor`, never brighter than the value: `Sparkline` (recent-history polyline for continuous
+  numerics), `BatteryBar` (charge fraction, zone-tinted), and `RotNeedle` (turn-rate half-dial);
+  circular and stepped values carry no mark. The
   position tile is the one hero-size exception (`--text-readout`, the secondary readout), because two
   coordinate lines at hero size would double the tile. The dock grid fills its column: rows share the
   full dock height (`grid-auto-rows: minmax(min-content, 1fr)`, falling back to min-content and the
