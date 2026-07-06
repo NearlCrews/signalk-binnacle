@@ -27,7 +27,6 @@ const labelText = $derived(
   class:tile--alarm={zone === 'alarm'}
   class:tile--stale={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
-  class:tile--wide={kind === 'position'}
   class:tile--position={kind === 'position'}
 >
   {#if reading.state === 'never'}

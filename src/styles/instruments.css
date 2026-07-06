@@ -63,10 +63,15 @@
   grid-column: 1 / -1;
 }
 /* A no-sensor gloss is one line; it never earns a full row. */
-.tile--empty.tile--wide {
+.tile--empty.tile--wide,
+.tile--empty.tile--position {
   grid-column: auto;
 }
-/* The secondary-readout exception: two coordinate lines at hero size would double the tile. */
+/* The position tile spans the row for its two coordinate lines, at the secondary-readout size
+   because hero-size lines would double the tile. */
+.tile--position {
+  grid-column: 1 / -1;
+}
 .tile--position .num {
   font-size: var(--text-readout);
 }

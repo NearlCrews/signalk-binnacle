@@ -29,13 +29,11 @@
   --text-base: 0.85rem;
   --text-md: 0.9rem;
   --text-lg: 1rem;
-  /* A title tier above the body sizes for panel headings, and a readout tier for the largest hero
-     numbers, the nav and danger strip metrics, so a glance lands on the number, not its caps label.
-     The secondary readouts (the strip SOG and COG, the conditions values) step up only to --text-lg.
-     The instrument gesture is a big mono number over a small quiet label. */
+  /* The title and readout tiers above the body sizes. Role-to-token pairings live in the
+     type-role table in docs/design-system.md; edit them there, not here. */
   --text-xl: 1.15rem;
   --text-readout: 1.25rem;
-  --text-readout-lg: 1.75rem; /* the instrument-tile hero size */
+  --text-readout-lg: 1.75rem;
   --z-overlay: 1;
   --z-panel: 2;
   /* Safety strips (collision danger and its actions) sit above every panel but below the menu. */

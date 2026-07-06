@@ -4,8 +4,8 @@ import type { Snippet } from 'svelte';
 
 // The panel-header triad shared by every docked panel: an optional accent back button, the heading
 // (title plus optional subtitle), optional interleaved header content, an optional phone-only
-// minimize control, and the close button. SlideOver and the floating weather panel both render it so
-// the back, title, and close chrome cannot drift apart between the two panel shapes.
+// minimize control, and the close button. Every panel-shaped header renders through it so the
+// back, title, and close chrome cannot drift apart between consumers.
 interface Props {
   title: string;
   // A muted second heading line under the title, for panels whose subject needs a qualifier.

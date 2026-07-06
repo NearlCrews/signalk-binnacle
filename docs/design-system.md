@@ -54,11 +54,11 @@ Pick the token by role, never by eye:
 | --- | --- | --- |
 | `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles |
-| `--text-base` | 0.85 | panel body baseline (`.slide-over`), strips |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`) |
+| `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, status-strip emphasis |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
-| `--text-xl` | 1.15 | panel titles (`.panel-title`) only |
-| `--text-readout` | 1.25 | secondary numeric readouts: the position tile's two-line coordinates, the status strips |
+| `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
+| `--text-readout` | 1.25 | secondary numeric readouts: the position tile's two-line coordinates, the strip metrics |
 | `--text-readout-lg` | 1.75 | instrument tile hero values only |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -154,7 +154,8 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   coordinate lines at hero size would double the tile. The dock grid fills its column: rows share the
   full dock height (`grid-auto-rows: minmax(min-content, 1fr)`, falling back to min-content and the
   dock scroll when the tile set outgrows it), tile content centers vertically in a stretched row, an
-  empty tile is never full width (`.tile--empty` overrides `.tile--wide` back to a single column),
+  empty tile is never full width (`.tile--empty` overrides the full-row modifiers back to a single
+  column),
   and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the customize
   order only where a hole would otherwise sit.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`

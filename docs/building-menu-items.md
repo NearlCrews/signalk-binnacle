@@ -174,12 +174,10 @@ and an empty tile is never full width (the layout rules live in the design syste
 module entry). Do not add further split panels without a matching product case; overlays stay the
 default.
 
-Edit-mode entry (the customize rule): the `CustomizeToggle` primitive from `$shared/ui`, one per
-surface, trailing in the header row. It renders the `.btn btn-ghost` text button at intrinsic
-width, labeled "Customize <object>" ("Customize toolbar", "Customize instruments"), always naming
-the object even when the surface's title repeats it, label swapping to "Done" as the whole state
-story (no aria-pressed, no is-on, no static aria-label). The mode opens with one `.muted-note`
-line stating what a tap now does.
+Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive from `$shared/ui`,
+one per surface, trailing in the header row, and open the mode with one `.muted-note` line
+stating what a tap now does. The visual and aria recipe lives in the design system's Edit modes
+entry.
 
 ---
 
