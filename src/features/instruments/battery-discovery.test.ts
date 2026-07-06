@@ -8,14 +8,30 @@ describe('discoverBatteries', () => {
   it('returns sorted instance keys from a 200 response', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => jsonResponse(200, { starter: {}, house: {}, bank2: {} })),
+      vi.fn(async () =>
+        jsonResponse(200, {
+          starter: { voltage: {} },
+          house: { capacity: {} },
+          bank2: { current: {} },
+        }),
+      ),
     );
     const result = await discoverBatteries('http://pi', 'tok');
     expect(result).toEqual(['bank2', 'house', 'starter']);
   });
 
+  it('skips instances without a measured branch (a bare name stub)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(200, { 0: { name: { value: 'stub' } }, house: { voltage: {} } }),
+      ),
+    );
+    expect(await discoverBatteries('http://pi', 'tok')).toEqual(['house']);
+  });
+
   it('sends the bearer header when a token is present', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { house: {} }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { house: { voltage: {} } }));
     vi.stubGlobal('fetch', fetchMock);
     await discoverBatteries('http://pi', 'my-token');
     const [url, init] = fetchMock.mock.calls[0];

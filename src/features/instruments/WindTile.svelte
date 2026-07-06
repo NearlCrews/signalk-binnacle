@@ -90,9 +90,10 @@ const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
   gap: var(--space-2);
 }
 
+/* One step above the unit size: the wind angle is operational helm data, not a suffix. */
 .angle {
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   margin-inline-start: var(--space-2);
 }
 

@@ -4,6 +4,7 @@ import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import NumericTile from './NumericTile.svelte';
 import type { TileDeps } from './tile-catalog';
+import { createTileHistory } from './tile-history.svelte';
 import WindTile from './WindTile.svelte';
 
 interface Props {
@@ -36,6 +37,19 @@ $effect(() => {
 $effect(() => {
   if (!controller.open) return;
   return registerDismiss(() => controller.setOpen(false));
+});
+
+// Session-only sparkline history: sampled here on the shared reactive clock so the buffers only
+// accumulate while the dock is mounted, matching the subscription lifecycle.
+const history = createTileHistory();
+$effect(() => {
+  const liveIds = new Set<string>();
+  for (const def of controller.tiles) {
+    if (def.viz !== 'spark') continue;
+    liveIds.add(def.id);
+    history.sample(def.id, def.read(deps).siValue, deps.clock.now);
+  }
+  history.prune(liveIds);
 });
 </script>
 
@@ -82,6 +96,8 @@ $effect(() => {
             sensorGloss={def.sensorGloss}
             kind={def.kind}
             abbr={def.abbr}
+            viz={def.viz}
+            sparkPoints={def.viz === 'spark' ? history.series(def.id) : undefined}
           />
         {/if}
       {/each}

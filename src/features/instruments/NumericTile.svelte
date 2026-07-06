@@ -1,6 +1,9 @@
 <script lang="ts">
 import type { ZoneState } from '$shared/signalk';
-import type { TileReading } from './tile-catalog';
+import BatteryBar from './BatteryBar.svelte';
+import RotNeedle from './RotNeedle.svelte';
+import Sparkline from './Sparkline.svelte';
+import type { TileDef, TileReading } from './tile-catalog';
 
 interface Props {
   label: string;
@@ -9,9 +12,11 @@ interface Props {
   sensorGloss: string;
   kind?: string;
   abbr?: string;
+  viz?: TileDef['viz'];
+  sparkPoints?: number[];
 }
 
-const { label, reading, zone, sensorGloss, kind, abbr }: Props = $props();
+const { label, reading, zone, sensorGloss, kind, abbr, viz, sparkPoints }: Props = $props();
 
 // One expression, so the formatter cannot split the label from its reference parenthetical.
 const labelText = $derived(
@@ -35,6 +40,13 @@ const labelText = $derived(
     <span class="value"
       ><span class="num">{reading.value}</span><span class="unit">{reading.unit}</span></span
     >
+    {#if viz === 'battery'}
+      <BatteryBar fraction={reading.siValue} state={zone} />
+    {:else if viz === 'rot'}
+      <RotNeedle radPerSec={reading.siValue} />
+    {:else if viz === 'spark' && sparkPoints}
+      <Sparkline points={sparkPoints} />
+    {/if}
   {/if}
   <span class="caps-label"
     >{labelText}

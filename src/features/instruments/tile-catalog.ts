@@ -5,16 +5,20 @@ import { asNumber } from '$shared/geo';
 import type { ReactiveClock } from '$shared/lib';
 import {
   formatBearingOr,
+  formatDuration,
   formatFixed,
   formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
   formatNmOr,
+  formatPercent,
   formatPressureOr,
+  formatTemperatureOr,
   lengthUnit,
   PLACEHOLDER,
   pressureUnit,
+  temperatureUnit,
 } from '$shared/lib';
 import type { MetaZone, SignalKStore } from '$shared/signalk';
 import { SK_PATHS } from '$shared/signalk';
@@ -47,6 +51,8 @@ export interface TileDef {
   paths: string[];
   zonesPath: string;
   kind: 'numeric' | 'wind' | 'position';
+  // Rendered mark type beside the numeric readout; the mark components live beside NumericTile.
+  viz?: 'spark' | 'battery' | 'rot';
   read(deps: TileDeps): TileReading;
 }
 
@@ -75,6 +81,7 @@ const SOG_DEF: TileDef = {
   paths: [SK_PATHS.speedOverGround],
   zonesPath: SK_PATHS.speedOverGround,
   kind: 'numeric',
+  viz: 'spark',
   read({ vessel, store, clock }) {
     const cell = store.cell(SK_PATHS.speedOverGround);
     const state = grade(cell, clock);
@@ -139,6 +146,7 @@ const DEPTH_DEF: TileDef = {
   paths: [SK_PATHS.depthBelowTransducer],
   zonesPath: SK_PATHS.depthBelowTransducer,
   kind: 'numeric',
+  viz: 'spark',
   read({ vessel, store, clock, units }) {
     const cell = store.cell(SK_PATHS.depthBelowTransducer);
     const state = grade(cell, clock);
@@ -213,6 +221,7 @@ const STW_DEF: TileDef = {
   paths: [SK_PATHS.speedThroughWater],
   zonesPath: SK_PATHS.speedThroughWater,
   kind: 'numeric',
+  viz: 'spark',
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.speedThroughWater);
     const state = grade(cell, clock);
@@ -251,6 +260,7 @@ const PRESSURE_DEF: TileDef = {
   paths: [SK_PATHS.outsidePressure],
   zonesPath: SK_PATHS.outsidePressure,
   kind: 'numeric',
+  viz: 'spark',
   read({ vessel, store, clock, units }) {
     const cell = store.cell(SK_PATHS.outsidePressure);
     const state = grade(cell, clock);
@@ -311,6 +321,94 @@ const COURSE_DEF: TileDef = {
   },
 };
 
+const WATER_TEMP_DEF: TileDef = {
+  id: 'water-temp',
+  label: 'Water temp',
+  abbr: 'SEA',
+  description: 'Sea water temperature at the transducer.',
+  sensorGloss: 'No water temperature',
+  paths: [SK_PATHS.waterTemperature],
+  zonesPath: SK_PATHS.waterTemperature,
+  kind: 'numeric',
+  viz: 'spark',
+  read({ store, clock, units }) {
+    const cell = store.cell(SK_PATHS.waterTemperature);
+    const state = grade(cell, clock);
+    const kelvin = asNumber(cell.value);
+    const mode = units.mode;
+    return {
+      state,
+      value: formatTemperatureOr(kelvin, mode),
+      unit: temperatureUnit(mode),
+      siValue: kelvin,
+    };
+  },
+};
+
+const AIR_TEMP_DEF: TileDef = {
+  id: 'air-temp',
+  label: 'Air temp',
+  abbr: 'AIR',
+  description: 'Outside air temperature.',
+  sensorGloss: 'No air temperature',
+  paths: [SK_PATHS.outsideTemperature],
+  zonesPath: SK_PATHS.outsideTemperature,
+  kind: 'numeric',
+  viz: 'spark',
+  read({ store, clock, units }) {
+    const cell = store.cell(SK_PATHS.outsideTemperature);
+    const state = grade(cell, clock);
+    const kelvin = asNumber(cell.value);
+    const mode = units.mode;
+    return {
+      state,
+      value: formatTemperatureOr(kelvin, mode),
+      unit: temperatureUnit(mode),
+      siValue: kelvin,
+    };
+  },
+};
+
+const GNSS_DEF: TileDef = {
+  id: 'gnss-satellites',
+  label: 'Satellites',
+  abbr: 'GPS',
+  description: 'Number of GNSS satellites in the position fix.',
+  sensorGloss: 'No GNSS receiver',
+  paths: [SK_PATHS.gnssSatellites],
+  zonesPath: SK_PATHS.gnssSatellites,
+  kind: 'numeric',
+  read({ store, clock }) {
+    const cell = store.cell(SK_PATHS.gnssSatellites);
+    const state = grade(cell, clock);
+    const count = asNumber(cell.value);
+    return { state, value: formatFixed(count, 0), unit: '', siValue: count };
+  },
+};
+
+// Rate-of-turn arrives in rad/s (SI); the readout is signed degrees per minute, the convention on
+// a chartplotter turn indicator.
+const RAD_PER_SEC_TO_DEG_PER_MIN = (180 / Math.PI) * 60;
+
+const ROT_DEF: TileDef = {
+  id: 'rate-of-turn',
+  label: 'Turn rate',
+  abbr: 'ROT',
+  description: 'Rate of turn: how fast the bow is swinging, in degrees per minute.',
+  sensorGloss: 'No turn sensor',
+  paths: [SK_PATHS.rateOfTurn],
+  zonesPath: SK_PATHS.rateOfTurn,
+  kind: 'numeric',
+  viz: 'rot',
+  read({ store, clock }) {
+    const cell = store.cell(SK_PATHS.rateOfTurn);
+    const state = grade(cell, clock);
+    const radPerSec = asNumber(cell.value);
+    const degPerMin = radPerSec === undefined ? undefined : radPerSec * RAD_PER_SEC_TO_DEG_PER_MIN;
+    return { state, value: formatFixed(degPerMin, 1), unit: '°/min', siValue: radPerSec };
+  },
+};
+
 export const TILE_CATALOG: readonly TileDef[] = [
   SOG_DEF,
   HDG_DEF,
@@ -321,6 +419,10 @@ export const TILE_CATALOG: readonly TileDef[] = [
   PRESSURE_DEF,
   POSITION_DEF,
   COURSE_DEF,
+  WATER_TEMP_DEF,
+  AIR_TEMP_DEF,
+  GNSS_DEF,
+  ROT_DEF,
 ];
 
 export const DEFAULT_TILES: readonly string[] = ['sog', 'heading', 'depth', 'wind-apparent'];
@@ -342,6 +444,7 @@ export function batteryTileDef(instanceId: string): TileDef {
     paths: [path],
     zonesPath: path,
     kind: 'numeric',
+    viz: 'spark',
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -356,11 +459,103 @@ export function batteryTileDef(instanceId: string): TileDef {
   };
 }
 
+// State of charge for a single battery instance: a 0..1 ratio shown as a whole-number percent.
+export function batterySocTileDef(instanceId: string): TileDef {
+  const path = `electrical.batteries.${instanceId}.capacity.stateOfCharge`;
+  return {
+    id: `battery-soc:${instanceId}`,
+    label: `Charge ${instanceId.toUpperCase()}`,
+    abbr: 'SOC',
+    description: `Battery ${instanceId} state of charge.`,
+    sensorGloss: 'No charge data',
+    paths: [path],
+    zonesPath: path,
+    kind: 'numeric',
+    viz: 'battery',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const ratio = asNumber(cell.value);
+      return { state, value: formatPercent(ratio), unit: '%', siValue: ratio };
+    },
+  };
+}
+
+// Estimated time remaining at the present load for a single battery instance.
+export function batteryTimeTileDef(instanceId: string): TileDef {
+  const path = `electrical.batteries.${instanceId}.capacity.timeRemaining`;
+  return {
+    id: `battery-time:${instanceId}`,
+    label: `Runtime ${instanceId.toUpperCase()}`,
+    abbr: 'TIME',
+    description: `Battery ${instanceId} time remaining at the present load.`,
+    sensorGloss: 'No time estimate',
+    paths: [path],
+    zonesPath: path,
+    kind: 'numeric',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const seconds = asNumber(cell.value);
+      // timeRemaining is null when the battery is full or charging: a real reported-then-absent
+      // reading, shown as the placeholder rather than a fabricated duration.
+      if (seconds === undefined) {
+        return { state: cell.epoch === 0 ? 'never' : 'placeholder', value: PLACEHOLDER, unit: '' };
+      }
+      return { state: grade(cell, clock), value: formatDuration(seconds), unit: '' };
+    },
+  };
+}
+
+// Instantaneous current for a single battery instance: signed, negative while discharging.
+export function batteryCurrentTileDef(instanceId: string): TileDef {
+  const path = `electrical.batteries.${instanceId}.current`;
+  return {
+    id: `battery-current:${instanceId}`,
+    label: `Current ${instanceId.toUpperCase()}`,
+    abbr: 'AMPS',
+    description: `Battery ${instanceId} current, negative when discharging.`,
+    sensorGloss: 'No current data',
+    paths: [path],
+    zonesPath: path,
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const amps = asNumber(cell.value);
+      return { state, value: formatFixed(amps, 1), unit: 'A', siValue: amps };
+    },
+  };
+}
+
+// The full per-instance tile set: voltage, state of charge, time remaining, and current. The
+// catalog getter and cell warm-up derive their paths from this so the four defs never drift.
+export function batteryDefsFor(instanceId: string): TileDef[] {
+  return [
+    batteryTileDef(instanceId),
+    batterySocTileDef(instanceId),
+    batteryTimeTileDef(instanceId),
+    batteryCurrentTileDef(instanceId),
+  ];
+}
+
+// Parallel patterns for the per-battery ids. The prefixes are disjoint (battery: versus
+// battery-soc:, battery-time:, battery-current:), so each id matches exactly one.
+const BATTERY_SOC_RE = /^battery-soc:([A-Za-z0-9_-]+)$/;
+const BATTERY_TIME_RE = /^battery-time:([A-Za-z0-9_-]+)$/;
+const BATTERY_CURRENT_RE = /^battery-current:([A-Za-z0-9_-]+)$/;
+
 export function tileById(id: string): TileDef | undefined {
   const staticDef = TILE_CATALOG.find((def) => def.id === id);
   if (staticDef) return staticDef;
-  const match = BATTERY_INSTANCE_RE.exec(id);
-  if (match) return batteryTileDef(match[1]);
+  const voltage = BATTERY_INSTANCE_RE.exec(id);
+  if (voltage) return batteryTileDef(voltage[1]);
+  const soc = BATTERY_SOC_RE.exec(id);
+  if (soc) return batterySocTileDef(soc[1]);
+  const time = BATTERY_TIME_RE.exec(id);
+  if (time) return batteryTimeTileDef(time[1]);
+  const current = BATTERY_CURRENT_RE.exec(id);
+  if (current) return batteryCurrentTileDef(current[1]);
   return undefined;
 }
 

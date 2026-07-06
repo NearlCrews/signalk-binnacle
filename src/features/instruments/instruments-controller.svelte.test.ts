@@ -23,13 +23,13 @@ function fakeStorage() {
   };
 }
 
-function makeDeps() {
+function makeDeps(opts: { tiles?: string[] } = {}) {
   const store = new SignalKStore();
   const subscribe = vi.fn();
   const unsubscribe = vi.fn();
   const tilesStore = new PersistedValue<string[]>(
     'binnacle:instrument-tiles',
-    [...DEFAULT_TILES],
+    opts.tiles ?? [...DEFAULT_TILES],
     fakeStorage(),
   );
   const openStore = new PersistedValue<boolean>('binnacle:instruments-open', false, fakeStorage());
@@ -68,6 +68,27 @@ describe('createInstrumentsController', () => {
     const ctrl = createInstrumentsController(deps);
     expect(spy).toHaveBeenCalledWith(ALL_CATALOG_PATHS);
     expect(deps.subscribe).not.toHaveBeenCalled();
+    ctrl.dispose();
+  });
+
+  it('pre-creates cells for persisted dynamic battery ids at construction', () => {
+    // A cell first created during a template read is untracked and never re-renders, so the
+    // persisted selection's dynamic paths must be ensured before the first render.
+    const deps = makeDeps({ tiles: ['sog', 'battery-soc:console'] });
+    const spy = vi.spyOn(deps.store, 'ensureCells');
+    const ctrl = createInstrumentsController(deps);
+    const ensured = spy.mock.calls.flatMap((call) => call[0]);
+    expect(ensured).toContain('electrical.batteries.console.capacity.stateOfCharge');
+    ctrl.dispose();
+  });
+
+  it('toggleTile ensures the cells of the added tile before selecting it', () => {
+    const deps = makeDeps();
+    const ctrl = createInstrumentsController(deps);
+    const spy = vi.spyOn(deps.store, 'ensureCells');
+    ctrl.toggleTile('battery-time:console');
+    const ensured = spy.mock.calls.flatMap((call) => call[0]);
+    expect(ensured).toContain('electrical.batteries.console.capacity.timeRemaining');
     ctrl.dispose();
   });
 
@@ -351,7 +372,7 @@ describe('createInstrumentsController', () => {
       'fetch',
       vi.fn(async (url: string) => {
         if ((url as string).includes('electrical/batteries')) {
-          return jsonResponse(200, { house: {}, starter: {} });
+          return jsonResponse(200, { house: { voltage: {} }, starter: { voltage: {} } });
         }
         return jsonResponse(404, {});
       }),
@@ -366,9 +387,12 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
 
-    // After discovery: two battery defs appended.
-    expect(ctrl.catalog.length).toBe(staticCount + 2);
+    // After discovery: four defs per instance (voltage, SOC, time, current) for two instances.
+    expect(ctrl.catalog.length).toBe(staticCount + 2 * 4);
     expect(ctrl.catalog.some((d) => d.id === 'battery:house')).toBe(true);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-soc:house')).toBe(true);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-time:house')).toBe(true);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-current:house')).toBe(true);
     expect(ctrl.catalog.some((d) => d.id === 'battery:starter')).toBe(true);
 
     ctrl.dispose();
@@ -377,7 +401,7 @@ describe('createInstrumentsController', () => {
   it('battery discovery runs only once per construction even across multiple opens', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if ((url as string).includes('electrical/batteries')) {
-        return jsonResponse(200, { house: {} });
+        return jsonResponse(200, { house: { voltage: {} } });
       }
       return jsonResponse(404, {});
     });
@@ -405,7 +429,7 @@ describe('createInstrumentsController', () => {
       'fetch',
       vi.fn(async (url: string) =>
         url.includes('electrical/batteries')
-          ? jsonResponse(200, { house: {} })
+          ? jsonResponse(200, { house: { voltage: {} } })
           : jsonResponse(404, {}),
       ),
     );
@@ -417,7 +441,12 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
 
-    expect(spy).toHaveBeenCalledWith(['electrical.batteries.house.voltage']);
+    expect(spy).toHaveBeenCalledWith([
+      'electrical.batteries.house.voltage',
+      'electrical.batteries.house.capacity.stateOfCharge',
+      'electrical.batteries.house.capacity.timeRemaining',
+      'electrical.batteries.house.current',
+    ]);
 
     ctrl.dispose();
   });

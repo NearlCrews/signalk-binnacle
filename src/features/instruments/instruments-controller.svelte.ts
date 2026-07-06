@@ -10,7 +10,7 @@ import {
 import { discoverBatteries } from './battery-discovery';
 import {
   ALL_CATALOG_PATHS,
-  batteryTileDef,
+  batteryDefsFor,
   CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
   minPeriodFor,
@@ -48,7 +48,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   // Per-zonesPath meta cache: null means "fetch attempted, no zones found"; absent means "not yet fetched".
   const metaCache = new Map<string, PathMeta | null>();
-  const batteryDefCache = new Map<string, TileDef>();
+  const batteryDefCache = new Map<string, TileDef[]>();
   // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
   let metaVersion = $state(0);
 
@@ -129,7 +129,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     void discoverBatteries(deps.origin, deps.getToken()).then((instances) => {
       batteryInstances = instances;
       if (instances.length > 0) {
-        deps.store.ensureCells(instances.map((id) => `electrical.batteries.${id}.voltage`));
+        deps.store.ensureCells(
+          instances.flatMap((id) => batteryDefsFor(id).flatMap((def) => def.paths)),
+        );
       }
     });
   }
@@ -148,7 +150,12 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   }
 
   function toggleTile(id: string): void {
-    if (!tileById(id)) return;
+    const def = tileById(id);
+    if (!def) return;
+    // Create the cells here, in event context, before the tile's first template read: a cell
+    // whose $state is created during that read is untracked and never re-renders (the dynamic
+    // battery defs are not in ALL_CATALOG_PATHS, so nothing else pre-creates theirs).
+    deps.store.ensureCells(def.paths);
     const current = resolveSelectedIds();
     const idx = current.indexOf(id);
     const next = idx >= 0 ? current.filter((_, i) => i !== idx) : [...current, id];
@@ -193,6 +200,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
+  // Pre-create cells for the persisted selection too: it can hold dynamic battery ids that
+  // ALL_CATALOG_PATHS does not cover, and their first read must find a tracked cell.
+  deps.store.ensureCells(resolveTiles().flatMap((def) => def.paths));
+
   // Restore subscriptions, meta, and discovery if the dock was persisted open before construction.
   syncSubscriptions();
   if (deps.openStore.value) {
@@ -215,13 +226,13 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       // reactive read does not allocate fresh defs every pass.
       return [
         ...TILE_CATALOG,
-        ...batteryInstances.map((id) => {
-          let def = batteryDefCache.get(id);
-          if (!def) {
-            def = batteryTileDef(id);
-            batteryDefCache.set(id, def);
+        ...batteryInstances.flatMap((id) => {
+          let defs = batteryDefCache.get(id);
+          if (!defs) {
+            defs = batteryDefsFor(id);
+            batteryDefCache.set(id, defs);
           }
-          return def;
+          return defs;
         }),
       ];
     },

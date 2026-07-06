@@ -7,9 +7,12 @@
   --hero-leading: 1.1;
   display: flex;
   flex-direction: column;
-  /* Centered so a tile stretched by the dock's row fill reads as a gauge, not content pinned in
-     a tall box; a no-op at min-content height. */
+  /* Centered on both axes so a tile stretched by the dock's row fill reads as a gauge face, not
+     content pinned in a corner. Instrument tiles are the one centered numeric family; list rows,
+     stat grids, and nav-metrics stay start-aligned. */
   justify-content: center;
+  align-items: center;
+  text-align: center;
   gap: var(--space-1);
   min-block-size: 4rem;
   padding: var(--space-2);

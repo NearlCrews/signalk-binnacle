@@ -11,5 +11,15 @@ export async function discoverBatteries(
   const url = `${origin}/signalk/v1/api/vessels/self/electrical/batteries`;
   const body = await fetchAuthedJson<unknown>(url, token);
   if (!isRecord(body)) return [];
-  return Object.keys(body).sort();
+  // An instance with none of the measured branches (some sources publish a bare `.name` stub)
+  // would only produce permanently empty tiles, so it does not count as a battery.
+  return Object.keys(body)
+    .filter((id) => {
+      const instance = body[id];
+      return (
+        isRecord(instance) &&
+        ('voltage' in instance || 'capacity' in instance || 'current' in instance)
+      );
+    })
+    .sort();
 }

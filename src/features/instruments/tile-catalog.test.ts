@@ -10,7 +10,10 @@ import { SignalKStore, SK_PATHS } from '$shared/signalk';
 import type { TileDeps } from './tile-catalog';
 import {
   ALL_CATALOG_PATHS,
+  batteryCurrentTileDef,
+  batterySocTileDef,
   batteryTileDef,
+  batteryTimeTileDef,
   CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
   TILE_CATALOG,
@@ -532,5 +535,184 @@ describe('CLIENT_DEFAULT_ZONES', () => {
     expect(zones).toBeDefined();
     expect(zones?.some((z) => z.upper === 2 && z.state === 'alarm')).toBe(true);
     expect(zones?.some((z) => z.lower === 2 && z.upper === 5 && z.state === 'warn')).toBe(true);
+  });
+});
+
+describe('water-temp tile', () => {
+  it('formats Celsius with unit °C in metric mode', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'metric');
+    // 294.62 K = 21.47 °C, rounded to whole degrees like the weather panel.
+    deps.store.applyFrame(skFrame({ [SK_PATHS.waterTemperature]: 294.62 }, 1000));
+    const reading = readTile('water-temp', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.unit).toBe('°C');
+    expect(reading.value).toBe('21');
+    expect(reading.siValue).toBeCloseTo(294.62);
+  });
+
+  it('formats Fahrenheit with unit °F in imperial mode', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'imperial');
+    // 294.62 K ≈ 70.65 °F → 71
+    deps.store.applyFrame(skFrame({ [SK_PATHS.waterTemperature]: 294.62 }, 1000));
+    const reading = readTile('water-temp', deps);
+    expect(reading.unit).toBe('°F');
+    expect(reading.value).toBe('71');
+  });
+
+  it('has viz spark', () => {
+    expect(tileById('water-temp')?.viz).toBe('spark');
+  });
+});
+
+describe('air-temp tile', () => {
+  it('reads environment.outside.temperature and formats per mode', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'metric');
+    deps.store.applyFrame(skFrame({ [SK_PATHS.outsideTemperature]: 300 }, 1000));
+    const reading = readTile('air-temp', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.unit).toBe('°C');
+    // 300 K = 26.85 °C → 27
+    expect(reading.value).toBe('27');
+  });
+});
+
+describe('gnss-satellites tile', () => {
+  it('renders the integer count with no unit and no viz', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(skFrame({ [SK_PATHS.gnssSatellites]: 20 }, 1000));
+    const reading = readTile('gnss-satellites', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('20');
+    expect(reading.unit).toBe('');
+    expect(tileById('gnss-satellites')?.viz).toBeUndefined();
+  });
+});
+
+describe('rate-of-turn tile', () => {
+  it('renders signed degrees per minute at one decimal with unit °/min', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    // 0.0043633 rad/s * (180/π) * 60 ≈ 15.0 °/min
+    deps.store.applyFrame(skFrame({ [SK_PATHS.rateOfTurn]: 0.0043633 }, 1000));
+    const reading = readTile('rate-of-turn', deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('15.0');
+    expect(reading.unit).toBe('°/min');
+    expect(reading.siValue).toBeCloseTo(0.0043633);
+  });
+
+  it('keeps the sign for a turn to port (negative rad/s)', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(skFrame({ [SK_PATHS.rateOfTurn]: -0.0043633 }, 1000));
+    const reading = readTile('rate-of-turn', deps);
+    expect(reading.value).toBe('-15.0');
+  });
+
+  it('has viz rot', () => {
+    expect(tileById('rate-of-turn')?.viz).toBe('rot');
+  });
+});
+
+describe('batterySocTileDef', () => {
+  it('generates the SOC id, path, abbr, and battery viz', () => {
+    const def = batterySocTileDef('house');
+    expect(def.id).toBe('battery-soc:house');
+    expect(def.abbr).toBe('SOC');
+    expect(def.viz).toBe('battery');
+    expect(def.paths).toEqual(['electrical.batteries.house.capacity.stateOfCharge']);
+    expect(def.sensorGloss).toBe('No charge data');
+  });
+
+  it('renders a 0..1 ratio as a whole-number percent with unit %', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batterySocTileDef('house');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(
+      skFrame({ 'electrical.batteries.house.capacity.stateOfCharge': 0.82 }, 1000),
+    );
+    const reading = def.read(deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('82');
+    expect(reading.unit).toBe('%');
+    expect(reading.siValue).toBeCloseTo(0.82);
+  });
+
+  it('resolves via tileById', () => {
+    expect(tileById('battery-soc:house')?.id).toBe('battery-soc:house');
+  });
+});
+
+describe('batteryTimeTileDef', () => {
+  it('renders time remaining via formatDuration', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryTimeTileDef('house');
+    deps.store.ensureCells(def.paths);
+    // 45600 s = 760 min → "12h 40m"
+    deps.store.applyFrame(
+      skFrame({ 'electrical.batteries.house.capacity.timeRemaining': 45600 }, 1000),
+    );
+    const reading = def.read(deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('12h 40m');
+    expect(reading.unit).toBe('');
+    expect(def.abbr).toBe('TIME');
+    expect(def.viz).toBeUndefined();
+  });
+
+  it("a reported-then-null cell grades 'placeholder' with the dash, never a fake number", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryTimeTileDef('house');
+    deps.store.ensureCells(def.paths);
+    // Battery full or charging: the server reports null for timeRemaining.
+    deps.store.applyFrame(
+      skFrame({ 'electrical.batteries.house.capacity.timeRemaining': null }, 1000),
+    );
+    const reading = def.read(deps);
+    expect(reading.state).toBe('placeholder');
+    expect(reading.value).toBe(PLACEHOLDER);
+  });
+
+  it("a never-reported cell grades 'never'", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryTimeTileDef('house');
+    deps.store.ensureCells(def.paths);
+    const reading = def.read(deps);
+    expect(reading.state).toBe('never');
+    expect(reading.value).toBe(PLACEHOLDER);
+  });
+
+  it('resolves via tileById', () => {
+    expect(tileById('battery-time:house')?.id).toBe('battery-time:house');
+  });
+});
+
+describe('batteryCurrentTileDef', () => {
+  it('renders signed amps at one decimal with unit A and spark viz', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = batteryCurrentTileDef('house');
+    deps.store.ensureCells(def.paths);
+    // Negative current = discharge.
+    deps.store.applyFrame(skFrame({ 'electrical.batteries.house.current': -12.34 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.state).toBe('live');
+    expect(reading.value).toBe('-12.3');
+    expect(reading.unit).toBe('A');
+    expect(reading.siValue).toBeCloseTo(-12.34);
+    expect(def.abbr).toBe('AMPS');
+    expect(def.viz).toBe('spark');
+  });
+
+  it('resolves via tileById', () => {
+    expect(tileById('battery-current:house')?.id).toBe('battery-current:house');
   });
 });

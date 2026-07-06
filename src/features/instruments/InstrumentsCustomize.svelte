@@ -69,6 +69,15 @@ const reorder = createReorder({
   overflow-y: auto;
 }
 
+/* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
+   block-flow row wraps the grip onto its own line and every selected row doubles in height. */
+.tile-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-end: var(--space-1);
+}
+
 /* Mirror LayerRow's unavailable treatment: gray out rows for sensors that have never reported. */
 .tile-list .unavailable {
   opacity: 0.65;
