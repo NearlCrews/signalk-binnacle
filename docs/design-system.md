@@ -205,9 +205,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   never a static aria-label. The mode opens with one leading `.muted-note` line stating what a tap
   now does. The instrument dock and the menu's toolbar editor are the two shipped examples; both
   render the primitive, never a hand-written copy.
-- `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints, and profiles panels):
-  arming one row disarms the rest. Use it instead of a per-panel `confirmingDelete` id. `ConfirmArm`
-  stays the single timed strip.
+- `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints,
+  profiles, and chart locker regions panels): arming one row disarms the rest. Use it instead of a
+  per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
   back to the effective value). Use it for a single number field with a unit; do not use it for a live
   drag (that is a `.range` slider).

@@ -71,6 +71,10 @@ export default defineConfig({
     emptyOutDir: true,
   },
   test: {
+    // Vitest stubs CSS imports as empty modules by default (real CSS processing is wasted work for
+    // most tests); map-theme.test.ts needs the real tokens.css text to cross-check its hand-copied
+    // colors, so opt that one file back in.
+    css: { include: [/tokens\.css/] },
     // ICU warm-up for every worker; see the file's comment.
     setupFiles: ['./vitest.setup.ts'],
     // Headroom for oversubscribed CI runners (the v0.6.0 Windows Node 22 machine spent 63 s just
