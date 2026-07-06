@@ -68,8 +68,7 @@
 /* A titled section inside a panel body: a caps-label heading over a column of controls or readouts.
    Every panel composes this one class rather than inventing a per-feature section name, so the
    section rhythm reads the same across panels. The bodyFlex gap separates one section from the next;
-   this owns the spacing inside a section. The .section-card modifier pads the section over a
-   card-frame surface, and a second heading within a section gets a little extra top air. */
+   this owns the spacing inside a section. A second heading within a section gets a little extra top air. */
 .panel-section {
   display: flex;
   flex-direction: column;

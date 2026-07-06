@@ -115,7 +115,7 @@ const closeMore = (): void => {
     >
     <span class="readout"
       >COG
-      <b
+      <b class="num"
         >{formatBearingOr(
           fixStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS ? undefined : vessel.cogRad,
         )}</b
