@@ -39,8 +39,7 @@
   /* Safety strips (collision danger and its actions) sit above every panel but below the menu. */
   --z-safety-strips: calc(var(--z-panel) + 2);
   --z-menu: 5;
-  /* The MOB confirm is the one true modal: above every panel, strip, and menu. */
-  --z-modal: 6;
+
   /* The Forecast panel's height, defined once because two rules compose from it: the panel's own
      block-size, and the lifted bottom-stack that clears the panel while it is open. */
   --weather-panel-height: min(74vh, 36rem);
@@ -149,6 +148,9 @@
      brightness alone, with no blue or green. */
   --warning: #c0563c;
   --shadow-overlay: none;
+  /* No side shadow at night either: a black shadow on true black is invisible, same as the
+     overlay and large shadows already dropped above. */
+  --shadow-side: none;
   /* No black shadow and no white edge highlight at night: both are invisible or off-contract on true
      black. The deeper red --border is the only surface separation, by design. */
   --shadow-lg: none;

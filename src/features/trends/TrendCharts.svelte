@@ -85,7 +85,7 @@ let hovered = $state<Partial<Record<TrendKey, { timeSec: number; value: number |
 <div class="trend-charts">
   {#each sections as section (section.key)}
     {@const point = hovered[section.key]}
-    <section aria-label="{section.label} trend">
+    <section class="panel-section" aria-label="{section.label} trend">
       <div class="head">
         <h3 class="caps-label">{section.label}</h3>
         {#if point}
@@ -117,11 +117,6 @@ let hovered = $state<Partial<Record<TrendKey, { timeSec: number; value: number |
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
 .head {
   display: flex;

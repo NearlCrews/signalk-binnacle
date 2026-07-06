@@ -183,7 +183,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  inline-size: min(22rem, calc(100vw - 2 * var(--space-2)));
+  inline-size: min(22rem, calc(100dvw - 2 * var(--space-2)));
   /* Fill the space below the topbar so the grouped grid fits without a scrollbar on a normal screen;
      the topbar is one --control-size tall, and --space-6 leaves a small margin above and below. A
      short helm display still caps here and scrolls. */
@@ -200,7 +200,7 @@ function onCardKeydown(event: KeyboardEvent): void {
     inset-inline-start: 0;
     margin-block-start: 0;
     transform-origin: bottom center;
-    inline-size: 100vw;
+    inline-size: 100dvw;
     max-inline-size: none;
     max-block-size: 80dvh;
     border-inline: 0;
@@ -252,7 +252,8 @@ function onCardKeydown(event: KeyboardEvent): void {
   transition:
     background-color var(--transition-fast),
     color var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast),
+    filter var(--transition-fast);
 }
 .tile :global(svg) {
   color: var(--text-muted);

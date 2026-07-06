@@ -17,3 +17,11 @@ body {
 #app {
   block-size: 100dvh;
 }
+
+/* A bare list with no markers, margin, or padding. Compose on any <ul> or <ol> that is a layout
+   container, not a semantic list. */
+.bare-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

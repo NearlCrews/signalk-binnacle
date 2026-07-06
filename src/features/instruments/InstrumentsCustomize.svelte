@@ -123,9 +123,4 @@ function neverReported(paths: string[]): boolean {
 
 /* The grip rest and lift, the drag feedback, and touch-action: none come from the shared
    .reorder-row (styles/reorder.css), the same vocabulary the layer rows use. */
-
-/* Mirror LayerRow's unavailable treatment: gray out rows for sensors that have never reported. */
-.tile-list .unavailable {
-  opacity: 0.65;
-}
 </style>

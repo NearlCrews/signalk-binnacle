@@ -87,7 +87,7 @@ const closeMore = (): void => {
     {/if}
     {#if connectionPhase === 'open'}
       <span class="readout lookout" title="AIS targets the lookout is tracking">
-        AIS <b>{aisCount}</b>
+        AIS <b class="num">{aisCount}</b>
       </span>
     {/if}
     {#if anchor.watching}
@@ -102,14 +102,17 @@ const closeMore = (): void => {
         {#if anchor.fixLost}
           Anchor <b>no GPS</b>
         {:else}
-          Anchor <b>{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>/<b
+          Anchor <b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>/<b
+            class="num"
             >{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b
           >
           {lengthUnit(units.mode)}
         {/if}
       </span>
     {/if}
-    <span class="readout">SOG <b>{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span>
+    <span class="readout"
+      >SOG <b class="num">{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span
+    >
     <span class="readout"
       >COG
       <b
@@ -195,9 +198,9 @@ const closeMore = (): void => {
   </div>
   <div class="center-cluster">
     <span class="readout">View</span>
-    <span class="readout"><b>{formatLatitude(mapView?.lat)}</b></span>
-    <span class="readout"><b>{formatLongitude(mapView?.lon)}</b></span>
-    <span class="readout">z<b>{formatFixed(mapView?.zoom, 1)}</b></span>
+    <span class="readout"><b class="num">{formatLatitude(mapView?.lat)}</b></span>
+    <span class="readout"><b class="num">{formatLongitude(mapView?.lon)}</b></span>
+    <span class="readout">z<b class="num">{formatFixed(mapView?.zoom, 1)}</b></span>
   </div>
 </footer>
 
@@ -344,7 +347,5 @@ const closeMore = (): void => {
    --text-md matches the base strip font, so labels and values share a size too. */
 .readout b {
   color: var(--text);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
 }
 </style>

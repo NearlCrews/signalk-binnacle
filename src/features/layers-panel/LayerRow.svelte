@@ -197,12 +197,6 @@ $effect(() => {
 /* The flat-row skeleton (height, padding, divider) comes from the shared .list-row, and the drag
    feedback (positioning context, the dragging lift, the drop indicators, the grip rest and lift)
    from the shared .reorder-row. Only the layer-specific states stay here. */
-/* A detect-and-degrade layer whose provider is absent: grayed and non-interactive, with a hover
-   tooltip explaining what to install. The disabled toggle inside adds its own dim, so the row stays
-   moderate to keep the compounded result legible at night. */
-.row.unavailable {
-  opacity: 0.65;
-}
 .row-main,
 .facet-line {
   display: flex;

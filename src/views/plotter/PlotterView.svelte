@@ -627,15 +627,8 @@ $effect(() => {
   inset-inline-end: 0;
   z-index: var(--z-panel);
 }
-.panel-slot {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  z-index: var(--z-panel);
-}
 @media (max-width: 600px) {
-  .note-panel-slot,
-  .panel-slot {
+  .note-panel-slot {
     inset-block-start: auto;
     inset-inline: 0;
     inline-size: auto;

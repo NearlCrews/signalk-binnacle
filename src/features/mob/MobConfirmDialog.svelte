@@ -152,8 +152,6 @@ function confirm(): void {
   font-weight: 700;
 }
 .confirm:hover:not(:disabled) {
-  border-color: var(--alarm);
-  background: var(--alarm-tint-strong);
   filter: brightness(1.06);
 }
 </style>
