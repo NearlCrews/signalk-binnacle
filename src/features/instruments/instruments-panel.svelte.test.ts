@@ -18,10 +18,15 @@ function makeStore(epochFor: (path: string) => number = () => 0) {
 }
 
 function makeController(overrides: Partial<InstrumentsController> = {}): InstrumentsController {
+  const selectedIds = overrides.selectedIds ?? [];
   return {
     open: true,
-    tiles: [],
-    selectedIds: [],
+    selectedIds,
+    // tiles are the selected defs in order, mirroring the real controller so the shown list and the
+    // selection cannot diverge (the divergence was the reorder-does-not-move bug).
+    tiles: [...selectedIds]
+      .map((id) => tileById(id))
+      .filter((d): d is NonNullable<typeof d> => !!d),
     // Default catalog mirrors the static tile catalog so the Customize-mode tests work without
     // needing a real controller. Tests that check battery discovery pass their own catalog override.
     catalog: [...TILE_CATALOG],

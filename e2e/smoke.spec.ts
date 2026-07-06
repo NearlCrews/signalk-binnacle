@@ -28,6 +28,38 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   await expect(dock).not.toBeVisible();
 });
 
+test('a touch drag on a customize grip reorders the shown instruments', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  await dock.getByRole('button', { name: 'Customize instruments' }).click();
+
+  const shownTitles = () =>
+    page.$$eval('.tile-list li[data-tile-row] .title', (els) =>
+      els.map((e) => e.textContent?.trim()),
+    );
+  const before = await shownTitles();
+  expect(before[0]).toBe('Speed');
+
+  // Drive a real touch drag through CDP so the browser's touch-action arbitration applies: the grip
+  // must set touch-action: none or the gesture is claimed as a scroll and never reorders.
+  const grip = dock.locator('.tile-list .handle').first();
+  const box = await grip.boundingBox();
+  if (!box) throw new Error('no grip');
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const cdp = await page.context().newCDPSession(page);
+  const tp = (y: number) => [{ x: cx, y, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tp(cy) });
+  for (const dy of [20, 60, 110]) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: tp(cy + dy) });
+    await page.waitForTimeout(30);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+  await expect.poll(async () => (await shownTitles())[0]).not.toBe('Speed');
+});
+
 test('instrument tiles take the full screen under the breakpoint with their own close chrome', async ({
   page,
 }) => {

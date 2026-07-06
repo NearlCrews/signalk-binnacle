@@ -55,10 +55,10 @@ Pick the token by role, never by eye:
 | `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, status strip secondary readouts (AIS, anchor, the map-view cluster) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | primary status-strip readouts (`.readout--hero`: SOG and COG), the bottom-strip metrics, the position tile's two-line coordinates |
+| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates |
 | `--text-readout-lg` | 1.75 | instrument tile hero values only |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -231,6 +231,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   layer's visibility, with the Layers eye as the source of truth.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
   is absent (used by the app menu, the status strip, and the layer rows).
+- `createReorder`: the pointer-and-keyboard drag-reorder controller (the layer rows and the
+  instrument customize list). Two contracts are load-bearing. First, render the rows in the same
+  order as the `getItems` movable list, not some fixed source order; if the visible rows and the
+  movable list diverge, a drag commits but the rows never appear to move, which reads as broken.
+  Second, the grip element must carry `touch-action: none` (with `cursor: grab`), or a touchscreen
+  claims the gesture as a scroll, cancels the pointer stream, and the drag never fires.
 - `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
   and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
   CSS token contract.

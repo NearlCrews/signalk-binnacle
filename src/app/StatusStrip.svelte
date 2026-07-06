@@ -109,10 +109,8 @@ const closeMore = (): void => {
         {/if}
       </span>
     {/if}
-    <span class="readout readout--hero"
-      >SOG <b>{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span
-    >
-    <span class="readout readout--hero"
+    <span class="readout">SOG <b>{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span>
+    <span class="readout"
       >COG
       <b
         >{formatBearingOr(
@@ -342,21 +340,11 @@ const closeMore = (): void => {
 .readout {
   white-space: nowrap;
 }
+/* One size for every readout value, so the whole strip reads as one quiet instrument row.
+   --text-md matches the base strip font, so labels and values share a size too. */
 .readout b {
   color: var(--text);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-/* Two documented tiers (the type-role table): secondary readouts (AIS, anchor, the map-view
-   cluster) stay quiet at --text-md, and the primary underway pair carries .readout--hero at
-   --text-readout so the helm glance lands on SOG and COG by size alone. The hero rule stays
-   scoped under .strip-start: a bare .readout--hero b loses to the (0,2,1) base and no-ops. */
-.strip-start .readout b,
-.center-cluster .readout b {
-  font-size: var(--text-md);
-}
-
-.strip-start .readout--hero b {
-  font-size: var(--text-readout);
 }
 </style>

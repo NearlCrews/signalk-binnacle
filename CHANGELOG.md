@@ -40,8 +40,9 @@ All notable changes to Binnacle are documented here. The format follows
   GNSS satellites in the fix, and rate of turn with a small needle dial. Continuous readouts
   (speed, depth, temperatures, pressure, battery voltage and current) draw a quiet sparkline of
   the last few minutes under the number. Tiles now center their text like gauge faces, the wind
-  angle steps up a size, and the bottom strip keeps SOG and COG as the two large readouts by
-  design, with COG dashing while the boat is stationary.
+  angle steps up a size, and the bottom strip reads at one size with COG dashing while the boat
+  is stationary. The Customize view now splits into Shown (drag to reorder) and Available, so
+  dragging visibly moves an instrument, including by touch on a helm display.
 - Chart Locker joins the "Works well with" plugin recommendations.
 - When Binnacle is installed as a desktop PWA and the browser supports Window Controls Overlay,
   the header bar extends into the native window title bar so the MOB button, navigation controls,

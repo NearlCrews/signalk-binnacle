@@ -13,38 +13,41 @@ const { controller, deps }: Props = $props();
 
 let listEl: HTMLElement | undefined = $state(undefined);
 
+// The shown tiles in their selection order, so dragging visibly reorders these rows; the reorder
+// controller addresses rows by their index in this same list. The available tiles hang below in
+// catalog order as add-only rows. Rendering the catalog order here instead would divorce the
+// visible rows from the movable list, so a drag would commit but never appear to move.
+const shown = $derived(controller.tiles);
+const selectedIds = $derived(new Set(controller.selectedIds));
+const available = $derived(controller.catalog.filter((def) => !selectedIds.has(def.id)));
+
 const reorder = createReorder({
-  getItems: () => controller.tiles.map((t) => ({ id: t.id, title: t.label })),
+  getItems: () => shown.map((t) => ({ id: t.id, title: t.label })),
   getListEl: () => listEl,
   commit: (id, slot) => controller.reorderTile(id, slot),
   rowAttribute: 'data-tile-row',
   handleSelector: '.handle',
   itemNoun: 'Tile',
 });
+
+function neverReported(paths: string[]): boolean {
+  return paths.length > 0 && paths.every((p) => deps.store.cell(p).epoch === 0);
+}
 </script>
 
-<ul class="tile-list" bind:this={listEl}>
-  {#each controller.catalog as def (def.id)}
-    {@const selected = controller.selectedIds.includes(def.id)}
-    {@const neverReported =
-      def.paths.length > 0 && def.paths.every((p) => deps.store.cell(p).epoch === 0)}
-    <li
-      data-tile-row={selected ? def.id : undefined}
-      class="row-interactive"
-      class:is-on={selected}
-      class:unavailable={neverReported}
-      title={neverReported ? 'No data received from this sensor yet' : undefined}
-    >
-      <LayerToggle
-        title={def.label}
-        description={def.description}
-        visible={selected}
-        onToggle={() => controller.toggleTile(def.id)}
-      />
-      {#if neverReported}
-        <UnavailableHint hint="No data received from this sensor yet" />
-      {/if}
-      {#if selected}
+<!-- The reorder controller measures rows and listens for scroll on this element, so it is the one
+     scroll container over both sections and it holds the data-tile-row rows (the shown list). -->
+<div class="customize-list" bind:this={listEl}>
+  <h3 class="caps-label section-label">Shown</h3>
+  <ul class="tile-list">
+    {#each shown as def (def.id)}
+      <li data-tile-row={def.id} class="row-interactive is-on">
+        <LayerToggle
+          title={def.label}
+          description={def.description}
+          visible={true}
+          onToggle={() => controller.toggleTile(def.id)}
+        />
         <button
           type="button"
           class="icon-btn handle"
@@ -54,19 +57,51 @@ const reorder = createReorder({
         >
           <GripVertical size={16} aria-hidden="true" />
         </button>
-      {/if}
-    </li>
-  {/each}
-</ul>
+      </li>
+    {/each}
+  </ul>
+  {#if available.length > 0}
+    <h3 class="caps-label section-label">Available</h3>
+    <ul class="tile-list">
+      {#each available as def (def.id)}
+        {@const unavailable = neverReported(def.paths)}
+        <li
+          class="row-interactive"
+          class:unavailable
+          title={unavailable ? 'No data received from this sensor yet' : undefined}
+        >
+          <LayerToggle
+            title={def.label}
+            description={def.description}
+            visible={false}
+            onToggle={() => controller.toggleTile(def.id)}
+          />
+          {#if unavailable}
+            <UnavailableHint hint="No data received from this sensor yet" />
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</div>
 <span class="visually-hidden" role="status">{reorder.reorderAnnouncement}</span>
 
 <style>
+.customize-list {
+  flex: 1;
+  overflow-y: auto;
+  min-block-size: 0;
+}
+.section-label {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+.section-label:first-child {
+  padding-block-start: 0;
+}
 .tile-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  flex: 1;
-  overflow-y: auto;
 }
 
 /* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
@@ -76,6 +111,13 @@ const reorder = createReorder({
   align-items: center;
   gap: var(--space-1);
   padding-inline-end: var(--space-1);
+}
+
+/* touch-action: none is load-bearing: without it a touchscreen claims the drag gesture as a scroll
+   and the pointer stream cancels, so the grip cannot reorder by touch (matches LayerRow's handle). */
+.handle {
+  cursor: grab;
+  touch-action: none;
 }
 
 /* Mirror LayerRow's unavailable treatment: gray out rows for sensors that have never reported. */
