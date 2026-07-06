@@ -107,12 +107,12 @@ const caution = $derived(thresholdsCaution(t));
         <div class="alert-main">
           <span class="alert-message">{alertLabel(n)}</span>
           {#if time}
-            <span class="alert-time">{time}</span>
+            <span class="alert-time muted-note">{time}</span>
           {/if}
         </div>
         <div class="alert-actions">
           {#if n.silenced}
-            <span class="flag-tag">Silenced</span>
+            <span class="flag-tag muted-note">Silenced</span>
           {:else if onSilence && canSilence(n)}
             <button
               type="button"
@@ -124,7 +124,7 @@ const caution = $derived(thresholdsCaution(t));
             </button>
           {/if}
           {#if n.acknowledged}
-            <span class="flag-tag">Acknowledged</span>
+            <span class="flag-tag muted-note">Acknowledged</span>
           {:else if onAcknowledge && canAcknowledge(n)}
             <button
               type="button"
@@ -278,8 +278,7 @@ const caution = $derived(thresholdsCaution(t));
   overflow-wrap: anywhere;
 }
 .alert-time {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  flex-shrink: 0;
 }
 .alert-actions {
   display: flex;
@@ -288,8 +287,7 @@ const caution = $derived(thresholdsCaution(t));
   gap: var(--space-1);
 }
 .flag-tag {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  flex-shrink: 0;
 }
 /* On the shared .btn base; a mute reads as a row, not a centered button. */
 .mute-row {

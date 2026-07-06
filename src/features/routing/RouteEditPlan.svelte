@@ -127,7 +127,7 @@ const totalTime = $derived.by(() => {
    the base owns), and only the leg grid and the lit leg's thick inline-start bar are scoped here. */
 .leg-row {
   display: grid;
-  grid-template-columns: 1.5rem 1fr auto auto;
+  grid-template-columns: var(--space-5) 1fr auto auto;
   gap: var(--space-2);
   align-items: center;
   padding: 0 var(--space-2);

@@ -60,7 +60,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
         </div>
       {/if}
     </div>
-    <ul class="list">
+    <ul class="bare-list list">
       {#each top as contact (contact.id)}
         <li class="row">
           <span
@@ -87,9 +87,6 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   background: var(--accent-tint);
 }
 .list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

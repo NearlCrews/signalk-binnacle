@@ -470,27 +470,28 @@ onDestroy(() => {
       >
         {#if readout}
           <span class="readout-line">
-            Wind <b>{formatKnotsOr(readout.speedMs, 0)}</b> kn from
-            <b>{formatBearingOr(readout.fromRad)}</b>&deg;T
+            Wind <b class="num">{formatKnotsOr(readout.speedMs, 0)}</b> kn from
+            <b class="num">{formatBearingOr(readout.fromRad)}</b>&deg;T
             {#if readout.gustMs !== undefined}
-              gust <b>{formatKnotsOr(readout.gustMs, 0)}</b> kn
+              gust <b class="num">{formatKnotsOr(readout.gustMs, 0)}</b> kn
             {/if}
             {#if showField(WEATHER_LAYER_IDS.pressure) && readout.pressurePa !== undefined}
-              &middot; <b>{formatPressureOr(readout.pressurePa, units.mode)}</b>
+              &middot; <b class="num">{formatPressureOr(readout.pressurePa, units.mode)}</b>
               {pressureUnit(units.mode)}
             {/if}
             {#if showField(WEATHER_LAYER_IDS.waves) && readout.waveHeightM !== undefined}
-              &middot; waves <b>{formatLengthOr(readout.waveHeightM, units.mode)}</b>
+              &middot; waves <b class="num">{formatLengthOr(readout.waveHeightM, units.mode)}</b>
               {lengthUnit(units.mode)}
               {#if readout.wavePeriodS !== undefined}
-                / <b>{formatFixed(readout.wavePeriodS, 1)}</b> s
+                / <b class="num">{formatFixed(readout.wavePeriodS, 1)}</b> s
               {/if}
               {#if readout.waveFromRad !== undefined}
-                from <b>{formatBearingOr(readout.waveFromRad)}</b>&deg;T
+                from <b class="num">{formatBearingOr(readout.waveFromRad)}</b>&deg;T
               {/if}
             {/if}
             {#if showPrecipOrRadar && readout.precipitationMm !== undefined && readout.precipitationMm >= RAIN_VISIBLE_MM_H}
-              &middot; rain <b>{formatPrecipRateOr(readout.precipitationMm, units.mode)}</b>
+              &middot; rain
+              <b class="num">{formatPrecipRateOr(readout.precipitationMm, units.mode)}</b>
               {precipUnitLabel(readout.precipIsRate, units.mode)}
             {/if}
           </span>
@@ -540,7 +541,7 @@ onDestroy(() => {
     {/if}
   </div>
 
-  <footer class="panel-foot">
+  <footer class="weather-footer">
     {#if range}
       <WeatherScrubber
         {range}
@@ -560,7 +561,7 @@ onDestroy(() => {
     {#if menuProvenance}
       <!-- Provenance, not licensing: which source produced the fields and how old they are. The
            same line the layer menu shows, from the one derived so they cannot diverge. -->
-      <p class="provenance">{menuProvenance}</p>
+      <p class="provenance muted-note">{menuProvenance}</p>
     {/if}
   </footer>
 </section>
@@ -675,10 +676,6 @@ onDestroy(() => {
   padding-inline-end: var(--space-5);
   color: var(--text);
 }
-.map-note--readout b {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
 .readout-source {
   display: block;
   margin-block-start: 0.1rem;
@@ -708,7 +705,7 @@ onDestroy(() => {
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
-.panel-foot {
+.weather-footer {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -716,9 +713,7 @@ onDestroy(() => {
   border-block-start: 1px solid var(--border);
 }
 .provenance {
-  margin: 0;
   font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 @media (max-width: 600px) {
   /* The "Here" conditions become a full-width bottom sheet instead of a 15rem card covering most of

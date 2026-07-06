@@ -44,7 +44,7 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
-  (panel + 2), `--z-menu` 5, `--z-modal` 6 (the MOB confirm is the one true modal above everything).
+  (panel + 2), and `--z-menu` 5. The MOB confirm is a native top-layer `<dialog>`, above everything without a z-index.
 
 ### Type roles
 

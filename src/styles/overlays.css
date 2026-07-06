@@ -116,3 +116,9 @@ dialog.modal-card {
   border-color: var(--accent);
   background: var(--accent-tint);
 }
+
+/* A grayed-out row whose provider is absent. Shared by the layer rows and the instrument customize
+   list so the dim treatment is identical everywhere. */
+.unavailable {
+  opacity: 0.65;
+}

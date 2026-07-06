@@ -1858,20 +1858,4 @@ onDestroy(() => {
   grid-row: 3;
   grid-column: 1 / -1;
 }
-/* Routes, layers, tracks, and the collision thresholds all dock at the leading edge, one at a time
-   (activePanel is exclusive), opposite the note detail so the two never overlap. Each panel renders
-   its own slide-over shell, so the slot only positions it. */
-.panel-slot {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  z-index: var(--z-panel);
-}
-@media (max-width: 600px) {
-  .panel-slot {
-    inset-block-start: auto;
-    inset-inline: 0;
-    inline-size: auto;
-  }
-}
 </style>

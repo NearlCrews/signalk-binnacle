@@ -176,7 +176,7 @@ const eta = $derived.by(() => {
   position: relative;
   display: inline-block;
   inline-size: 3.5rem;
-  block-size: 0.75rem;
+  block-size: var(--space-3);
   margin-inline: var(--space-1);
   vertical-align: middle;
   border-block: 1px solid var(--border);
@@ -213,12 +213,10 @@ const eta = $derived.by(() => {
   flex-shrink: 0;
   padding: 0.2rem;
   border: 1px solid var(--border);
+  transition: border-color var(--transition-fast);
 }
 .skip:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent-tint);
-}
-.skip:disabled {
-  opacity: var(--disabled-opacity);
 }
 </style>
