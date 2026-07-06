@@ -39,6 +39,7 @@ export {
   landDistanceUnit,
   lengthUnit,
   METERS_PER_MILE,
+  METERS_PER_NAUTICAL_MILE,
   MINUTE_MS,
   metersPerSecondToKnots,
   metersToFeet,
@@ -48,6 +49,7 @@ export {
   precipRateUnit,
   pressureUnit,
   pressureValue,
+  RAD_TO_DEG,
   temperatureUnit,
   type UnitsMode,
 } from './units';

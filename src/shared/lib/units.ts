@@ -1,9 +1,11 @@
 import { PLACEHOLDER } from './coords';
 
-const METERS_PER_NAUTICAL_MILE = 1852;
+// Meters in one nautical mile. Exported so the few call sites that need a whole-nautical-mile
+// distance (radar ring-label precision, the auto-cache radius defaults) go through this or the
+// nauticalMilesToMeters converter rather than re-spelling 1852.
+export const METERS_PER_NAUTICAL_MILE = 1852;
 // 3600 (seconds per hour) / 1852 (meters per nautical mile): meters per second to knots.
 const MS_TO_KNOTS = 3600 / METERS_PER_NAUTICAL_MILE;
-const DEG_PER_RAD = 180 / Math.PI;
 const KELVIN_OFFSET = 273.15;
 export const PA_PER_HPA = 100;
 
@@ -11,6 +13,10 @@ export const PA_PER_HPA = 100;
 // that would otherwise each define their own `Math.PI / 180`. The display-edge converter
 // degreesToRadians is defined in terms of it.
 export const DEG_TO_RAD = Math.PI / 180;
+
+// The inverse, radians-to-degrees, as a plain multiplier. Exported so the bearing and signed-angle
+// readouts and the instrument tiles share one factor rather than each re-spelling `180 / Math.PI`.
+export const RAD_TO_DEG = 180 / Math.PI;
 
 // Milliseconds in a minute, hour, and day, shared by the time-step and TTL constants so the
 // factors are named once rather than re-spelled as 60 * 1000 chains across the loaders.
@@ -34,7 +40,7 @@ export function knotsToMetersPerSecond(value: number): number {
 // this is bearing-specific; it must not be reused for an arbitrary signed angle.
 export function radiansToBearing(value: number | null | undefined): number | undefined {
   if (value == null) return undefined;
-  return (value * DEG_PER_RAD + 360) % 360;
+  return (value * RAD_TO_DEG + 360) % 360;
 }
 
 export function degreesToRadians(value: number): number {
@@ -304,7 +310,7 @@ export function formatDuration(seconds: number): string {
 // port/starboard sense preserved.
 export function formatSignedAngleOr(rad: number | undefined): string {
   if (rad === undefined || !Number.isFinite(rad)) return PLACEHOLDER;
-  const deg = Math.round(Math.abs(rad) * (180 / Math.PI));
+  const deg = Math.round(Math.abs(rad) * RAD_TO_DEG);
   if (deg === 0) return '0';
   return `${rad < 0 ? 'P' : 'S'} ${deg}`;
 }

@@ -156,13 +156,10 @@ const eta = $derived.by(() => {
 {/if}
 
 <style>
-/* The destination name takes the row's flexible space and ellipsizes (via the shared .bottom-strip
-   .name), so it is what shrinks, while the "computing locally" note keeps its width. */
+/* The shared .bottom-strip .name owns the flex, weight, and ellipsis; the destination name adds
+   only min-inline-size so it is what shrinks, while the "computing locally" note keeps its width. */
 .name {
-  flex: 1;
   min-inline-size: 0;
-  font-size: var(--text-base);
-  font-weight: 600;
 }
 .note {
   flex-shrink: 0;

@@ -88,7 +88,7 @@ function measure(item: NormalizedItem): string {
     {#each sections as section (section.id)}
       {@const danger = section.items.find((item) => isDangerFlag(item.label, item.kind))}
       {@const listItems = section.items.filter((item) => !isDangerFlag(item.label, item.kind))}
-      <section aria-label={section.title}>
+      <section class="panel-section" aria-label={section.title}>
         <h3 class="caps-label">{section.title}</h3>
         <!-- The danger status always leads its section, rendered before the dl: a div between
              dt/dd pairs is non-conforming HTML. -->
@@ -186,9 +186,6 @@ function measure(item: NormalizedItem): string {
 /* The locate action sits at the top of the body as a compact button, not stretched full width. */
 .locate {
   align-self: flex-start;
-}
-section h3 {
-  margin-block: 0 var(--space-1);
 }
 dl {
   margin: 0;

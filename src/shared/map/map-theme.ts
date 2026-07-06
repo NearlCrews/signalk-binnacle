@@ -15,8 +15,10 @@ export interface MapThemePaint {
   // Base-map text labels (place, road, and water names). Readable on each theme's
   // background; a muted red at night so labels stay in the red band.
   label: string;
-  // Collision-highlight rings: danger tracks the --alarm token per theme, warning is a
-  // distinct, less-urgent hue (night-red keeps both in the red band, danger brighter).
+  // Collision-highlight rings: danger mirrors the --alarm token per theme, warning is a
+  // distinct, less-urgent hue (night-red keeps both in the red band, danger brighter). MapLibre
+  // paint cannot read a CSS custom property, so danger is hand-copied from --alarm in
+  // src/styles/tokens.css and the two must be retuned in lockstep.
   danger: string;
   warning: string;
   // Point-of-interest (notes) marker fill color.
@@ -32,6 +34,8 @@ export interface MapThemePaint {
   markerGlyph: string;
   // Highlight ring around a selected marker. A distinct accent in day and dusk; at night
   // a light red that stays in the red band yet reads apart from the danger and warning hues.
+  // Mirrors the --select token per theme (hand-copied because MapLibre paint cannot read a CSS
+  // custom property), so select here and --select in src/styles/tokens.css retune in lockstep.
   select: string;
   // The lit leg of a route under edit: a warmer, more saturated tone than the editing line's select,
   // so the highlighted segment stands out from the line it overlays rather than blending into it.

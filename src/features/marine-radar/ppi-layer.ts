@@ -6,7 +6,7 @@ import type {
 } from 'maplibre-gl';
 import maplibregl from 'maplibre-gl';
 import type { LatLon } from '$shared/geo';
-import { formatNm } from '$shared/lib';
+import { formatNm, METERS_PER_NAUTICAL_MILE } from '$shared/lib';
 import {
   emptyFeatureCollection,
   ensureGeoJsonSource,
@@ -38,7 +38,8 @@ const RING_COLOR_NIGHT = '#ff3333';
 // carries its own contrast.
 const RING_LABEL_HALO = 'rgba(0, 0, 0, 0.75)';
 // The range label for a ring's radius: nautical miles, the universal radar range unit.
-const ringLabel = (meters: number): string => `${formatNm(meters, meters < 1852 ? 2 : 1)} nm`;
+const ringLabel = (meters: number): string =>
+  `${formatNm(meters, meters < METERS_PER_NAUTICAL_MILE ? 2 : 1)} nm`;
 
 // Shared by the radar layer row and the app-menu radar tile so both grayed surfaces explain the
 // same thing when no radar is discovered. One source of truth keeps the wording from drifting.

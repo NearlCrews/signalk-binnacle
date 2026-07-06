@@ -51,7 +51,9 @@
   -webkit-appearance: none;
   inline-size: var(--range-thumb-size);
   block-size: var(--range-thumb-size);
-  margin-block-start: -8px;
+  /* Center the thumb on the thinner track: half the track-to-thumb size difference, derived from the
+     tokens so it tracks either one changing rather than a hand-computed pixel offset. */
+  margin-block-start: calc((var(--range-track-h) - var(--range-thumb-size)) / 2);
   border-radius: var(--radius-pill);
   border: none;
   background: var(--accent);

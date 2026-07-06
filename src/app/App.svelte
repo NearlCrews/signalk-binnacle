@@ -1476,8 +1476,10 @@ $effect(() => {
   void refreshSymbols();
 });
 
-// The phone breakpoint, in CSS pixels. The scoped CSS below repeats the literal because a media
-// query cannot reference this constant.
+// The phone breakpoint, in CSS pixels. A media query cannot reference this constant, so the same
+// 600px literal is mirrored in the `@media (max-width: 600px)` blocks in styles/panels.css and the
+// scoped styles of ChartLockerStatus, WeatherMap, PlotterView, AppMenu, WeatherConditions, and the
+// scoped CSS below. This const is the source of truth; retune all of them together.
 const NARROW_BREAKPOINT_PX = 600;
 
 onMount(() => {

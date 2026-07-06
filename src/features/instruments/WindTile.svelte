@@ -1,5 +1,5 @@
 <script lang="ts">
-import { formatSignedAngleOr } from '$shared/lib';
+import { formatSignedAngleOr, RAD_TO_DEG } from '$shared/lib';
 import type { ZoneState } from '$shared/signalk';
 import type { TileReading } from './tile-catalog';
 
@@ -20,7 +20,7 @@ const labelText = $derived(
 );
 
 // BOW-UP: 0 rad points up. SVG rotate() uses degrees, positive = clockwise.
-const deg = $derived((reading.angleRad ?? 0) * (180 / Math.PI));
+const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
 </script>
 
 <div
