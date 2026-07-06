@@ -50,6 +50,9 @@ let {
   pinnedActions: MenuItem[];
 } = $props();
 
+// COG is meaningless while the boat is stationary; under this speed the readout dashes.
+const COG_MIN_SOG_MPS = 0.15;
+
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
 const split = $derived(splitBarActions(pinnedActions, MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((a) => a.pressed === true));
@@ -106,9 +109,16 @@ const closeMore = (): void => {
         {/if}
       </span>
     {/if}
-    <span class="readout">SOG <b>{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span>
-    <span class="readout"
-      >COG <b>{formatBearingOr(fixStale ? undefined : vessel.cogRad)}</b>&deg;T</span
+    <span class="readout readout--hero"
+      >SOG <b>{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span
+    >
+    <span class="readout readout--hero"
+      >COG
+      <b
+        >{formatBearingOr(
+          fixStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS ? undefined : vessel.cogRad,
+        )}</b
+      >&deg;T</span
     >
   </div>
   <div class="strip-center">
@@ -337,16 +347,16 @@ const closeMore = (): void => {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-/* Every footer readout number, leading (AIS, SOG, COG) and trailing (the position cluster), takes
-   the same instrument-readout size, so the strip reads as one instrument row rather than two
-   mismatched type sizes. */
+/* Two documented tiers (the type-role table): secondary readouts (AIS, anchor, the map-view
+   cluster) stay quiet at --text-md, and the primary underway pair carries .readout--hero at
+   --text-readout so the helm glance lands on SOG and COG by size alone. The hero rule stays
+   scoped under .strip-start: a bare .readout--hero b loses to the (0,2,1) base and no-ops. */
 .strip-start .readout b,
 .center-cluster .readout b {
   font-size: var(--text-md);
 }
 
-.strip-start .readout:last-child b,
-.strip-start .readout:nth-last-child(2) b {
+.strip-start .readout--hero b {
   font-size: var(--text-readout);
 }
 </style>
