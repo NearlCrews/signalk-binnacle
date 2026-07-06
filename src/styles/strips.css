@@ -48,12 +48,16 @@
   gap: var(--space-1) var(--space-3);
   font-size: var(--text-base);
 }
-/* A name that ellipsizes rather than wrapping (the active destination, a contact). The strips add
-   their own flex and weight on top. */
+/* A name that takes the row's flexible space and ellipsizes rather than wrapping (the active
+   destination, a contact). A strip that must let the name shrink below its content adds
+   min-inline-size: 0 on top; everything else is shared here so the two strips do not drift. */
 .bottom-strip .name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 600;
 }
 .bottom-strip .ack {
   margin-inline-start: auto;

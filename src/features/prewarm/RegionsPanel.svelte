@@ -11,9 +11,17 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { type Bbox, chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
-import { clampInt, feetToMeters, formatBytes, lengthUnit, metersToFeet } from '$shared/lib';
+import {
+  clampInt,
+  feetToMeters,
+  formatBytes,
+  lengthUnit,
+  metersToFeet,
+  nauticalMilesToMeters,
+} from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import {
+  ArmedRow,
   Disclosure,
   InlineConfirm,
   LayerToggle,
@@ -87,8 +95,9 @@ let error = $state<string | null>(null);
 
 // The latest warm snapshot per downloading region, for the determinate progress bar.
 let regionStatus = $state<Record<string, WarmStatus>>({});
-// Deleting a region arms an inline confirm first, like every other destructive delete in the app.
-let confirmingDelete = $state<string | undefined>();
+// Deleting a region arms an inline confirm first, keyed so only one row is armed at a time, like
+// every other destructive per-row delete in the app.
+const armedDelete = new ArmedRow((id) => void deleteRegion(id));
 // A per-region busy flag so a re-download or delete on one card does not disable the others, and
 // neither action can fire twice.
 let pendingRegion = $state<Record<string, boolean>>({});
@@ -121,8 +130,8 @@ const client = $derived(createRegionsClient(companionBase, auth.token ?? undefin
 // (on, with no charts picked, so the panel prompts the navigator to choose). This false is only the
 // pre-load value before the config arrives, replaced as soon as getConfig resolves.
 let positionEnabled = $state(false);
-let positionRadiusMeters = $state(3704); // ~2 nautical miles
-let positionMoveThresholdMeters = $state(1852); // 1 nautical mile
+let positionRadiusMeters = $state(nauticalMilesToMeters(2));
+let positionMoveThresholdMeters = $state(nauticalMilesToMeters(1));
 let positionIntervalSecs = $state(60); // server-side floor is 60 s
 let positionBaseZoom = $state(12);
 let positionSources = $state<string[]>([]);
@@ -463,11 +472,6 @@ async function redownloadRegion(id: string): Promise<void> {
   }
 }
 
-function confirmDelete(id: string): void {
-  confirmingDelete = undefined;
-  void deleteRegion(id);
-}
-
 async function deleteRegion(id: string): Promise<void> {
   if (auth.writeBlocked || submitting || pendingRegion[id]) return;
   error = null;
@@ -591,11 +595,11 @@ function chartLabel(id: string): string {
                 <div class="warm-fill" style:inline-size="{pct}%"></div>
               </div>
             {/if}
-            {#if confirmingDelete === region.id}
+            {#if armedDelete.isArmed(region.id)}
               <InlineConfirm
                 question="Delete this offline area?"
-                onConfirm={() => confirmDelete(region.id)}
-                onCancel={() => (confirmingDelete = undefined)}
+                onConfirm={() => armedDelete.confirm(region.id)}
+                onCancel={() => armedDelete.cancel()}
               />
             {:else}
               <div class="actions">
@@ -618,7 +622,7 @@ function chartLabel(id: string): string {
                   aria-label="Delete this area"
                   title="Delete"
                   disabled={auth.writeBlocked || submitting || pendingRegion[region.id]}
-                  onclick={() => (confirmingDelete = region.id)}
+                  onclick={() => armedDelete.arm(region.id)}
                 >
                   <Trash2 size={18} aria-hidden="true" />
                 </button>

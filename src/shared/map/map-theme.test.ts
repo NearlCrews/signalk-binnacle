@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest';
+import TOKENS_CSS from '../../styles/tokens.css?raw';
 import { mapThemePaint } from './map-theme';
 
+const THEME_SELECTOR = {
+  day: /:root\s*\{([^}]*)\}/,
+  dusk: /:root\[data-theme="dusk"\]\s*\{([^}]*)\}/,
+  'night-red': /:root\[data-theme="night-red"\]\s*\{([^}]*)\}/,
+} as const;
+
+function tokenValue(theme: keyof typeof THEME_SELECTOR, token: string): string {
+  const block = TOKENS_CSS.match(THEME_SELECTOR[theme])?.[1] ?? '';
+  const value = block.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]+)`))?.[1];
+  if (!value) throw new Error(`--${token} not found for theme "${theme}" in tokens.css`);
+  return value.toLowerCase();
+}
+
 describe('mapThemePaint', () => {
+  // MapLibre paint properties cannot read a CSS custom property, so map-theme.ts hand-copies
+  // --alarm and --select from tokens.css per theme. This guards the two from drifting apart
+  // silently, since nothing else catches a retune of one without the other.
+  it('mirrors --alarm and --select from tokens.css for each theme', () => {
+    for (const theme of ['day', 'dusk', 'night-red'] as const) {
+      const paint = mapThemePaint(theme);
+      expect(paint.danger.toLowerCase()).toBe(tokenValue(theme, 'alarm'));
+      expect(paint.select.toLowerCase()).toBe(tokenValue(theme, 'select'));
+    }
+  });
+
   it('returns a background and water color for each theme', () => {
     for (const theme of ['day', 'dusk', 'night-red'] as const) {
       const paint = mapThemePaint(theme);

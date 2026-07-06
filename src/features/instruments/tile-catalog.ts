@@ -18,6 +18,7 @@ import {
   lengthUnit,
   PLACEHOLDER,
   pressureUnit,
+  RAD_TO_DEG,
   temperatureUnit,
 } from '$shared/lib';
 import type { MetaZone, SignalKStore } from '$shared/signalk';
@@ -382,7 +383,7 @@ const GNSS_DEF: TileDef = {
 
 // Rate-of-turn arrives in rad/s (SI); the readout is signed degrees per minute, the convention on
 // a chartplotter turn indicator. Exported so the RotNeedle dial scales with the same conversion.
-export const RAD_PER_SEC_TO_DEG_PER_MIN = (180 / Math.PI) * 60;
+export const RAD_PER_SEC_TO_DEG_PER_MIN = RAD_TO_DEG * 60;
 
 const ROT_DEF: TileDef = {
   id: 'rate-of-turn',

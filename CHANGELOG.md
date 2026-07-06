@@ -68,8 +68,8 @@ All notable changes to Binnacle are documented here. The format follows
   behavior change.
 
 
-- Waypoint and profile deletes use the same one-at-a-time armed confirm as routes and tracks, so
-  arming one row disarms the rest.
+- Waypoint, profile, and chart locker region deletes use the same one-at-a-time armed confirm as
+  routes and tracks, so arming one row disarms the rest.
 - The tides panel readouts use the shared stat-grid layout, and its close button is labeled "Close
   tides panel" (matching "Close tracks panel"), so the panels read consistently.
 - The place-details panel lays its body out with the shared panel column, so the "Show on chart"

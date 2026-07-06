@@ -63,7 +63,7 @@ function neverReported(paths: string[]): boolean {
           onpointerdown={(e) => reorder.handlePointerDown(def.id, e)}
           onkeydown={(e) => reorder.handleKeydown(def.id, e)}
         >
-          <GripVertical size={16} aria-hidden="true" />
+          <GripVertical size={18} aria-hidden="true" />
         </button>
       </li>
     {/each}

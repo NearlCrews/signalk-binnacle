@@ -94,10 +94,6 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   flex-direction: column;
   gap: var(--space-1);
 }
-.name {
-  flex: 1;
-  font-weight: 600;
-}
 .more {
   margin: 0;
   margin-block-start: 0.3rem;
