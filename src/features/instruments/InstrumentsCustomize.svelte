@@ -40,8 +40,15 @@ function neverReported(paths: string[]): boolean {
 <div class="customize-list" bind:this={listEl}>
   <h3 class="caps-label section-label">Shown</h3>
   <ul class="tile-list">
-    {#each shown as def (def.id)}
-      <li data-tile-row={def.id} class="row-interactive is-on">
+    {#each shown as def, i (def.id)}
+      {@const indicator = reorder.indicatorFor(def.id)}
+      <li
+        data-tile-row={def.id}
+        class="row-interactive reorder-row is-on"
+        class:dragging={reorder.dragId === def.id}
+        class:drop-before={indicator.before}
+        class:drop-after={indicator.after}
+      >
         <LayerToggle
           title={def.label}
           description={def.description}
@@ -51,7 +58,8 @@ function neverReported(paths: string[]): boolean {
         <button
           type="button"
           class="icon-btn handle"
-          aria-label="Reorder {def.label}"
+          aria-label={`Move ${def.label}, position ${i + 1} of ${shown.length}`}
+          aria-keyshortcuts="ArrowUp ArrowDown"
           onpointerdown={(e) => reorder.handlePointerDown(def.id, e)}
           onkeydown={(e) => reorder.handleKeydown(def.id, e)}
         >
@@ -113,12 +121,8 @@ function neverReported(paths: string[]): boolean {
   padding-inline-end: var(--space-1);
 }
 
-/* touch-action: none is load-bearing: without it a touchscreen claims the drag gesture as a scroll
-   and the pointer stream cancels, so the grip cannot reorder by touch (matches LayerRow's handle). */
-.handle {
-  cursor: grab;
-  touch-action: none;
-}
+/* The grip rest and lift, the drag feedback, and touch-action: none come from the shared
+   .reorder-row (styles/reorder.css), the same vocabulary the layer rows use. */
 
 /* Mirror LayerRow's unavailable treatment: gray out rows for sensors that have never reported. */
 .tile-list .unavailable {

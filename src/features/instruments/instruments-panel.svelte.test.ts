@@ -94,13 +94,13 @@ describe('InstrumentsPanel', () => {
     const { body } = render(InstrumentsCustomize, {
       props: { controller, deps },
     });
-    // Each selected tile's handle has aria-label "Reorder <label>".
+    // Each selected tile's handle has aria-label "Move <label>, position N of M".
     for (const def of TILE_CATALOG.filter((d) => SELECTED_IDS.includes(d.id))) {
-      expect(body).toContain(`Reorder ${def.label}`);
+      expect(body).toContain(`Move ${def.label}, position`);
     }
     // Unselected tiles must not expose a handle.
     for (const def of TILE_CATALOG.filter((d) => !SELECTED_IDS.includes(d.id))) {
-      expect(body).not.toContain(`Reorder ${def.label}`);
+      expect(body).not.toContain(`Move ${def.label}, position`);
     }
   });
 
@@ -128,7 +128,7 @@ describe('InstrumentsPanel', () => {
       props: { controller, deps },
     });
     // The course row must have a drag handle (it is selected and not neverReported).
-    expect(body).toContain(`Reorder ${courseDef?.label}`);
+    expect(body).toContain(`Move ${courseDef?.label}, position`);
     // Each neverReported tile contributes 2 occurrences of the hint text (once in the title
     // attribute of the <li> and once in the UnavailableHint span). The course tile must not
     // add any. Only the 8 TILE_CATALOG entries that have paths are neverReported here.
@@ -145,7 +145,7 @@ describe('InstrumentsPanel', () => {
       props: { controller, deps },
     });
     for (const def of TILE_CATALOG) {
-      expect(body).not.toContain(`Reorder ${def.label}`);
+      expect(body).not.toContain(`Move ${def.label}, position`);
     }
   });
 

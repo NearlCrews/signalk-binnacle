@@ -1,0 +1,43 @@
+/* The shared drag-reorder feedback, composed by every list the createReorder controller drives (the
+   layer rows and the instrument customize list) so the drag reads identically wherever it appears.
+   The row is the positioning context for its drop indicator, the carried row lifts off the list as a
+   card, an accent hairline marks the edge the drop will land on, and the grip is quiet at rest and
+   lifts to full on row hover or keyboard focus. Imported after overlays.css so the dragging state
+   wins over a lit .row-interactive.is-on row at equal specificity. */
+.reorder-row {
+  position: relative;
+}
+.reorder-row.dragging {
+  background: var(--surface-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-overlay);
+  opacity: 0.9;
+}
+.reorder-row.drop-before::before,
+.reorder-row.drop-after::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  block-size: 2px;
+  background: var(--accent);
+}
+.reorder-row.drop-before::before {
+  inset-block-start: -1px;
+}
+.reorder-row.drop-after::after {
+  inset-block-end: -1px;
+}
+/* The grip: muted at rest so a long list does not shout, lifting on row hover or focus, and always
+   touch-action: none so a touchscreen cannot claim the drag as a scroll. */
+.reorder-row .handle {
+  opacity: 0.4;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+  transition: opacity var(--transition-fast);
+}
+.reorder-row:hover .handle,
+.reorder-row:focus-within .handle {
+  opacity: 1;
+}

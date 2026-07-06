@@ -101,7 +101,8 @@ that matter when you do touch this:
 the cascade order. Do not reorder it blindly: the order keeps `.is-on` (in `icon-controls.css`) able to
 light the bases that precede it, and keeps `overlays.css` and `panels.css` after the bases they extend.
 The order is: maplibre, tokens, base, text, buttons, forms, cards, icon-controls, scrubber, overlays,
-panels, strips, a11y, vendor.
+reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so the dragging state
+wins over a lit `.row-interactive.is-on` row at equal specificity.)
 
 Rules:
 
@@ -232,11 +233,16 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
   is absent (used by the app menu, the status strip, and the layer rows).
 - `createReorder`: the pointer-and-keyboard drag-reorder controller (the layer rows and the
-  instrument customize list). Two contracts are load-bearing. First, render the rows in the same
+  instrument customize list). Three contracts are load-bearing. First, render the rows in the same
   order as the `getItems` movable list, not some fixed source order; if the visible rows and the
   movable list diverge, a drag commits but the rows never appear to move, which reads as broken.
-  Second, the grip element must carry `touch-action: none` (with `cursor: grab`), or a touchscreen
-  claims the gesture as a scroll, cancels the pointer stream, and the drag never fires.
+  Second, compose the shared `.reorder-row` class (`styles/reorder.css`) on each row and feed it the
+  drag feedback: `class:dragging={dragId === id}` and `class:drop-before`/`class:drop-after` from
+  `indicatorFor(id)`, so the carried row lifts, an accent line marks the drop edge, and the grip
+  lifts on hover, identically in every list. A row that wires the commit but omits the feedback
+  snaps to its new spot with no animation, which reads as inconsistent. Third, the grip carries
+  `touch-action: none` (provided by `.reorder-row .handle`), or a touchscreen claims the gesture as
+  a scroll and the drag never fires.
 - `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
   and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
   CSS token contract.

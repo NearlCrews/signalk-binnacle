@@ -135,7 +135,7 @@ $effect(() => {
 {/snippet}
 
 <li
-  class="list-row row"
+  class="list-row row reorder-row"
   class:dragging
   class:drop-before={dropBefore}
   class:drop-after={dropAfter}
@@ -194,39 +194,14 @@ $effect(() => {
 /* Flat list row: no card border or fill, a hairline divider draws between rows in the panel. The whole
    row is one module, a lead rail (drag handle), the toggle and title in the flexible center, and a
    trailing rail (tune, manage), so every row reads on the same two rails down the panel. */
-/* The flat-row skeleton (height, padding, divider) comes from the shared .list-row; this adds the
-   row's own positioning context (for the drop indicators) and state styles. */
-.row {
-  position: relative;
-}
-/* The carried row is the one place a card frame appears: it lifts off the flat list while dragging. */
-.row.dragging {
-  background: var(--surface-raised);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-overlay);
-  opacity: 0.9;
-}
+/* The flat-row skeleton (height, padding, divider) comes from the shared .list-row, and the drag
+   feedback (positioning context, the dragging lift, the drop indicators, the grip rest and lift)
+   from the shared .reorder-row. Only the layer-specific states stay here. */
 /* A detect-and-degrade layer whose provider is absent: grayed and non-interactive, with a hover
    tooltip explaining what to install. The disabled toggle inside adds its own dim, so the row stays
    moderate to keep the compounded result legible at night. */
 .row.unavailable {
   opacity: 0.65;
-}
-/* A drop indicator line at the leading or trailing edge of the row the dragged item will land at. */
-.row.drop-before::before,
-.row.drop-after::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  block-size: 2px;
-  background: var(--accent);
-}
-.row.drop-before::before {
-  inset-block-start: -1px;
-}
-.row.drop-after::after {
-  inset-block-end: -1px;
 }
 .row-main,
 .facet-line {
@@ -241,17 +216,6 @@ $effect(() => {
 .lead {
   display: inline-flex;
   flex-shrink: 0;
-}
-.row :global(.handle) {
-  opacity: 0.4;
-  color: var(--text-muted);
-  cursor: grab;
-  touch-action: none;
-  transition: opacity var(--transition-fast);
-}
-.row:hover :global(.handle),
-.row:focus-within :global(.handle) {
-  opacity: 1;
 }
 .trail {
   display: inline-flex;
