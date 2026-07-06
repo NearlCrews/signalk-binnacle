@@ -169,7 +169,9 @@ two-column grid; the dock takes the second column beside a live, narrowed chart,
 --border seam (night-red has no shadows) and an instant toggle (animating the grid track would
 resize the map every frame). Under its 900px breakpoint the same panel goes full-screen at
 --z-panel, below the safety strips, with its own close chrome ("Close instruments, return to
-chart"). Do not add further split panels without a matching product case; overlays stay the
+chart"). Its tile grid fills the dock: rows share the full height, dense flow backfills holes,
+and an empty tile is never full width (the layout rules live in the design system's instruments
+module entry). Do not add further split panels without a matching product case; overlays stay the
 default.
 
 Edit-mode entry (the customize rule): the `CustomizeToggle` primitive from `$shared/ui`, one per

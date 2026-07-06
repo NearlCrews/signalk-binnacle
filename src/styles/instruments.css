@@ -7,6 +7,9 @@
   --hero-leading: 1.1;
   display: flex;
   flex-direction: column;
+  /* Centered so a tile stretched by the dock's row fill reads as a gauge, not content pinned in
+     a tall box; a no-op at min-content height. */
+  justify-content: center;
   gap: var(--space-1);
   min-block-size: 4rem;
   padding: var(--space-2);
@@ -58,6 +61,10 @@
 }
 .tile--wide {
   grid-column: 1 / -1;
+}
+/* A no-sensor gloss is one line; it never earns a full row. */
+.tile--empty.tile--wide {
+  grid-column: auto;
 }
 /* The secondary-readout exception: two coordinate lines at hero size would double the tile. */
 .tile--position .num {

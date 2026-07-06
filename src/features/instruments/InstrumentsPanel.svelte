@@ -99,9 +99,15 @@ $effect(() => {
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  /* The 40% arm caps the full-screen phone layout at two readable columns (and one column on a
+     very narrow phone), while staying under the 9rem floor inside the 16-22rem dock. */
+  grid-template-columns: repeat(auto-fill, minmax(max(9rem, 40%), 1fr));
+  /* Dense flow backfills the hole a wide tile leaves after a lone half tile; rows split the
+     leftover dock height so the grid spans the dock, collapsing to min-content (and the existing
+     scroll) when the tile set outgrows it. */
+  grid-auto-flow: row dense;
+  grid-auto-rows: minmax(min-content, 1fr);
   gap: var(--space-2);
-  align-content: start;
   flex: 1;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3);

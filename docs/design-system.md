@@ -151,7 +151,12 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
   never collapsing shorter than its value siblings. The
   position tile is the one hero-size exception (`--text-readout`, the secondary readout), because two
-  coordinate lines at hero size would double the tile.
+  coordinate lines at hero size would double the tile. The dock grid fills its column: rows share the
+  full dock height (`grid-auto-rows: minmax(min-content, 1fr)`, falling back to min-content and the
+  dock scroll when the tile set outgrows it), tile content centers vertically in a stretched row, an
+  empty tile is never full width (`.tile--empty` overrides `.tile--wide` back to a single column),
+  and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the customize
+  order only where a hole would otherwise sit.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
