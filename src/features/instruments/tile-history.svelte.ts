@@ -28,9 +28,12 @@ export function createTileHistory(opts: TileHistoryOptions = {}): TileHistory {
     const last = lastMs.get(id);
     if (last !== undefined && nowMs - last < minSpacingMs) return;
     lastMs.set(id, nowMs);
-    const next = [...(buffers[id] ?? []), value];
-    // Reassign immutably (with the oldest trimmed) so the $state proxy fires for series() readers.
-    buffers[id] = next.length > capacity ? next.slice(next.length - capacity) : next;
+    // Read back through the record so buf is the $state proxy (deep reactivity tracks the
+    // mutations); the raw array captured before assignment would mutate invisibly.
+    if (!buffers[id]) buffers[id] = [];
+    const buf = buffers[id];
+    buf.push(value);
+    if (buf.length > capacity) buf.shift();
   }
 
   function series(id: string): number[] {

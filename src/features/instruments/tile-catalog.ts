@@ -321,6 +321,22 @@ const COURSE_DEF: TileDef = {
   },
 };
 
+// Shared by the water and air tiles: identical anatomy, different path.
+function temperatureRead(path: string): TileDef['read'] {
+  return ({ store, clock, units }) => {
+    const cell = store.cell(path);
+    const state = grade(cell, clock);
+    const kelvin = asNumber(cell.value);
+    const mode = units.mode;
+    return {
+      state,
+      value: formatTemperatureOr(kelvin, mode),
+      unit: temperatureUnit(mode),
+      siValue: kelvin,
+    };
+  };
+}
+
 const WATER_TEMP_DEF: TileDef = {
   id: 'water-temp',
   label: 'Water temp',
@@ -331,18 +347,7 @@ const WATER_TEMP_DEF: TileDef = {
   zonesPath: SK_PATHS.waterTemperature,
   kind: 'numeric',
   viz: 'spark',
-  read({ store, clock, units }) {
-    const cell = store.cell(SK_PATHS.waterTemperature);
-    const state = grade(cell, clock);
-    const kelvin = asNumber(cell.value);
-    const mode = units.mode;
-    return {
-      state,
-      value: formatTemperatureOr(kelvin, mode),
-      unit: temperatureUnit(mode),
-      siValue: kelvin,
-    };
-  },
+  read: temperatureRead(SK_PATHS.waterTemperature),
 };
 
 const AIR_TEMP_DEF: TileDef = {
@@ -355,18 +360,7 @@ const AIR_TEMP_DEF: TileDef = {
   zonesPath: SK_PATHS.outsideTemperature,
   kind: 'numeric',
   viz: 'spark',
-  read({ store, clock, units }) {
-    const cell = store.cell(SK_PATHS.outsideTemperature);
-    const state = grade(cell, clock);
-    const kelvin = asNumber(cell.value);
-    const mode = units.mode;
-    return {
-      state,
-      value: formatTemperatureOr(kelvin, mode),
-      unit: temperatureUnit(mode),
-      siValue: kelvin,
-    };
-  },
+  read: temperatureRead(SK_PATHS.outsideTemperature),
 };
 
 const GNSS_DEF: TileDef = {
@@ -387,8 +381,8 @@ const GNSS_DEF: TileDef = {
 };
 
 // Rate-of-turn arrives in rad/s (SI); the readout is signed degrees per minute, the convention on
-// a chartplotter turn indicator.
-const RAD_PER_SEC_TO_DEG_PER_MIN = (180 / Math.PI) * 60;
+// a chartplotter turn indicator. Exported so the RotNeedle dial scales with the same conversion.
+export const RAD_PER_SEC_TO_DEG_PER_MIN = (180 / Math.PI) * 60;
 
 const ROT_DEF: TileDef = {
   id: 'rate-of-turn',
@@ -426,10 +420,6 @@ export const TILE_CATALOG: readonly TileDef[] = [
 ];
 
 export const DEFAULT_TILES: readonly string[] = ['sog', 'heading', 'depth', 'wind-apparent'];
-
-// Battery instance id pattern: digits, letters, underscores, and hyphens only. Anything outside
-// this set (spaces, dots, slashes) would corrupt the SK path and is rejected.
-const BATTERY_INSTANCE_RE = /^battery:([A-Za-z0-9_-]+)$/;
 
 // Build a tile def for a single battery instance on demand. The def is created at lookup time,
 // so discovery (which runs asynchronously) does not need to be complete for a stored selection
@@ -528,6 +518,10 @@ export function batteryCurrentTileDef(instanceId: string): TileDef {
   };
 }
 
+// The electrical.batteries.<id> branches the tile set reads. Discovery filters instances on these
+// same keys, so "counts as a battery" and "what a battery tile reads" cannot drift apart.
+export const BATTERY_BRANCH_KEYS = ['voltage', 'capacity', 'current'] as const;
+
 // The full per-instance tile set: voltage, state of charge, time remaining, and current. The
 // catalog getter and cell warm-up derive their paths from this so the four defs never drift.
 export function batteryDefsFor(instanceId: string): TileDef[] {
@@ -539,24 +533,26 @@ export function batteryDefsFor(instanceId: string): TileDef[] {
   ];
 }
 
-// Parallel patterns for the per-battery ids. The prefixes are disjoint (battery: versus
-// battery-soc:, battery-time:, battery-current:), so each id matches exactly one.
-const BATTERY_SOC_RE = /^battery-soc:([A-Za-z0-9_-]+)$/;
-const BATTERY_TIME_RE = /^battery-time:([A-Za-z0-9_-]+)$/;
-const BATTERY_CURRENT_RE = /^battery-current:([A-Za-z0-9_-]+)$/;
+// One pattern for every per-battery id (battery:, battery-soc:, battery-time:, battery-current:),
+// so the id-to-def mapping stays owned by batteryDefsFor. Instance ids allow digits, letters,
+// underscores, and hyphens only; anything else (spaces, dots, slashes) would corrupt the SK path.
+const BATTERY_ID_RE = /^battery(?:-(?:soc|time|current))?:([A-Za-z0-9_-]+)$/;
+
+// Dynamic defs are memoized by id: tileById runs on every tiles read (a hot, reactive path), and a
+// fresh def per call would allocate per render and break identity-keyed consumers. The id space is
+// finite (discovered instances times four), so the cache is bounded.
+const dynamicDefCache = new Map<string, TileDef>();
 
 export function tileById(id: string): TileDef | undefined {
   const staticDef = TILE_CATALOG.find((def) => def.id === id);
   if (staticDef) return staticDef;
-  const voltage = BATTERY_INSTANCE_RE.exec(id);
-  if (voltage) return batteryTileDef(voltage[1]);
-  const soc = BATTERY_SOC_RE.exec(id);
-  if (soc) return batterySocTileDef(soc[1]);
-  const time = BATTERY_TIME_RE.exec(id);
-  if (time) return batteryTimeTileDef(time[1]);
-  const current = BATTERY_CURRENT_RE.exec(id);
-  if (current) return batteryCurrentTileDef(current[1]);
-  return undefined;
+  const cached = dynamicDefCache.get(id);
+  if (cached) return cached;
+  const match = BATTERY_ID_RE.exec(id);
+  if (!match) return undefined;
+  const def = batteryDefsFor(match[1]).find((d) => d.id === id);
+  if (def) dynamicDefCache.set(id, def);
+  return def;
 }
 
 // ALL_CATALOG_PATHS covers only the static catalog (course tile contributes no paths; battery

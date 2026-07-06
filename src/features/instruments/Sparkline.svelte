@@ -1,10 +1,9 @@
 <script lang="ts">
 interface Props {
   points: number[];
-  label?: string;
 }
 
-const { points, label }: Props = $props();
+const { points }: Props = $props();
 
 // The polyline point string, or null when there is too little history to draw a line. Built here so
 // the template stays declarative and the y math lives in one place.
@@ -30,9 +29,7 @@ const polyline = $derived.by(() => {
     class="sparkline"
     viewBox="0 0 100 24"
     preserveAspectRatio="none"
-    role={label ? 'img' : undefined}
-    aria-label={label}
-    aria-hidden={label ? undefined : 'true'}
+    aria-hidden="true"
     xmlns="http://www.w3.org/2000/svg"
   >
     <polyline

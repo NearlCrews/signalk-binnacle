@@ -25,17 +25,9 @@ describe('Sparkline', () => {
     expect(html).toContain('points="0,12 50,12 100,12"');
   });
 
-  it('is aria-hidden without a label', () => {
+  it('is aria-hidden', () => {
     const html = render(Sparkline, { props: { points: [1, 2, 3] } }).body;
     expect(html).toContain('aria-hidden="true"');
-    expect(html).not.toContain('role="img"');
-  });
-
-  it('exposes role and aria-label when a label is passed', () => {
-    const html = render(Sparkline, { props: { points: [1, 2, 3], label: 'Depth trend' } }).body;
-    expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="Depth trend"');
-    expect(html).not.toContain('aria-hidden="true"');
   });
 });
 
@@ -43,7 +35,7 @@ describe('BatteryBar', () => {
   it('scales the fill width with the fraction', () => {
     const html = render(BatteryBar, { props: { fraction: 0.5 } }).body;
     // 30 units of travel * 0.5 = 15.
-    expect(html).toContain('class="fill"');
+    expect(html).toContain('class="fill');
     expect(html).toContain('width="15"');
   });
 
@@ -54,16 +46,19 @@ describe('BatteryBar', () => {
 
   it('renders no fill rect for an undefined fraction', () => {
     const html = render(BatteryBar, { props: { fraction: undefined } }).body;
-    expect(html).not.toContain('class="fill"');
+    expect(html).not.toContain('class="fill');
     // The outline (body plus terminal nub) still renders.
     expect(html).toContain('<svg');
   });
 
-  it('tints the fill by state', () => {
+  it('tints the fill by state through the severity utilities', () => {
     const warn = render(BatteryBar, { props: { fraction: 0.5, state: 'warning' } }).body;
-    expect(warn).toContain('fill="var(--warning)"');
+    expect(warn).toContain('sev-warning');
     const alarm = render(BatteryBar, { props: { fraction: 0.5, state: 'alarm' } }).body;
-    expect(alarm).toContain('fill="var(--alarm)"');
+    expect(alarm).toContain('sev-danger');
+    const normal = render(BatteryBar, { props: { fraction: 0.5 } }).body;
+    expect(normal).not.toContain('sev-warning');
+    expect(normal).not.toContain('sev-danger');
   });
 
   it('is aria-hidden', () => {

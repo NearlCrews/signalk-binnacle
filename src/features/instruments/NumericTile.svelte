@@ -44,7 +44,7 @@ const labelText = $derived(
       <BatteryBar fraction={reading.siValue} state={zone} />
     {:else if viz === 'rot'}
       <RotNeedle radPerSec={reading.siValue} />
-    {:else if viz === 'spark' && sparkPoints}
+    {:else if sparkPoints}
       <Sparkline points={sparkPoints} />
     {/if}
   {/if}

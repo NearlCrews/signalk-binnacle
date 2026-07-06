@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from 'svelte';
 import { CustomizeToggle, PanelHeader, registerDismiss } from '$shared/ui';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
@@ -40,14 +41,21 @@ $effect(() => {
 });
 
 // Session-only sparkline history: sampled here on the shared reactive clock so the buffers only
-// accumulate while the dock is mounted, matching the subscription lifecycle.
+// accumulate while the dock is mounted, matching the subscription lifecycle. The reads are
+// untracked so the effect re-runs on the 1 Hz clock and selection changes, not on every delta
+// flush; the 5 s sample spacing makes up to a second of staleness invisible.
 const history = createTileHistory();
 $effect(() => {
+  const now = deps.clock.now;
   const liveIds = new Set<string>();
   for (const def of controller.tiles) {
     if (def.viz !== 'spark') continue;
     liveIds.add(def.id);
-    history.sample(def.id, def.read(deps).siValue, deps.clock.now);
+    history.sample(
+      def.id,
+      untrack(() => def.read(deps).siValue),
+      now,
+    );
   }
   history.prune(liveIds);
 });

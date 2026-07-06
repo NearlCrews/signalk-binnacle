@@ -1,4 +1,6 @@
 <script lang="ts">
+import { RAD_PER_SEC_TO_DEG_PER_MIN } from './tile-catalog';
+
 interface Props {
   radPerSec: number | undefined;
   maxDegPerMin?: number;
@@ -10,7 +12,7 @@ const { radPerSec, maxDegPerMin = 30 }: Props = $props();
 // scale against the full-scale rate, clamp to +/-1, and open the needle up to +/-60 from vertical.
 const rotation = $derived.by(() => {
   if (radPerSec === undefined) return undefined;
-  const degPerMin = radPerSec * (180 / Math.PI) * 60;
+  const degPerMin = radPerSec * RAD_PER_SEC_TO_DEG_PER_MIN;
   return Math.max(-1, Math.min(1, degPerMin / maxDegPerMin)) * 60;
 });
 </script>

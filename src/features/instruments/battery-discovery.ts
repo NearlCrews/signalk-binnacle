@@ -1,5 +1,6 @@
 import { isRecord } from '$shared/lib';
 import { fetchAuthedJson } from '$shared/signalk';
+import { BATTERY_BRANCH_KEYS } from './tile-catalog';
 
 // Enumerate battery instance ids from the Signal K electrical tree. Returns a sorted list of
 // instance keys (e.g. ['house', 'starter']) or an empty array on any failure. The caller caches
@@ -16,10 +17,7 @@ export async function discoverBatteries(
   return Object.keys(body)
     .filter((id) => {
       const instance = body[id];
-      return (
-        isRecord(instance) &&
-        ('voltage' in instance || 'capacity' in instance || 'current' in instance)
-      );
+      return isRecord(instance) && BATTERY_BRANCH_KEYS.some((key) => key in instance);
     })
     .sort();
 }
