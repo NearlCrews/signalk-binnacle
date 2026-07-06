@@ -7,6 +7,19 @@ export const focusOnMount: Action<HTMLElement> = (node) => {
   node.focus({ preventScroll: true });
 };
 
+// Focus and select the input's text on mount, for a rename or entry field that replaces a value
+// in place (NameEntry). preventScroll keeps the panel from jumping as focus lands.
+export const focusSelectOnMount: Action<HTMLInputElement> = (node) => {
+  node.focus({ preventScroll: true });
+  node.select();
+};
+
+// Focus the input on mount only when the passed condition is true, for a field revealed in place
+// conditionally (an import review row, a dialog). preventScroll keeps the panel from jumping.
+export const focusOnMountIf: Action<HTMLInputElement, boolean> = (node, condition) => {
+  if (condition) node.focus({ preventScroll: true });
+};
+
 // Shift+Tab shares the same key value ('Tab') as Tab, so no shiftKey check is needed to detect
 // either direction.
 export function isTabKey(event: KeyboardEvent): boolean {
@@ -47,10 +60,24 @@ export const rovingFocus: Action<HTMLElement, string> = (node, selector) => {
   const items = (): HTMLElement[] => [...node.querySelectorAll<HTMLElement>(selector)];
   items()[0]?.focus({ preventScroll: true });
   function onKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (
+      event.key !== 'ArrowDown' &&
+      event.key !== 'ArrowUp' &&
+      event.key !== 'Home' &&
+      event.key !== 'End'
+    )
+      return;
     const list = items();
     if (list.length === 0) return;
     event.preventDefault();
+    if (event.key === 'Home') {
+      list[0]?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key === 'End') {
+      list[list.length - 1]?.focus({ preventScroll: true });
+      return;
+    }
     const down = event.key === 'ArrowDown';
     const current = list.indexOf(document.activeElement as HTMLElement);
     // When focus is outside the set (indexOf -1), ArrowDown lands on the first item and ArrowUp on

@@ -13,10 +13,18 @@
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
+  accent-color: var(--accent);
 }
 .input::placeholder {
   color: var(--text-muted);
   opacity: 1;
+}
+
+/* Theme native checkboxes and radios so they match the accent color in every theme, instead of
+   the user-agent default blue. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
 }
 
 /* A row of action buttons under a panel header (New route, Save and Cancel), shared so the panels do

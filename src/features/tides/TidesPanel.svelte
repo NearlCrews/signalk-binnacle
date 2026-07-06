@@ -88,7 +88,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
   <p class="muted-note">Tide and current predictions for the nearest station.</p>
   {#if onToggleStations}
     <ShowOnChartToggle
-      shown={stationsShown}
+      visible={stationsShown}
       label="Show stations on chart"
       description="Markers for nearby tide and current stations you can tap for predictions."
       onToggle={onToggleStations}

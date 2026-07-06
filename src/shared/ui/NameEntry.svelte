@@ -1,6 +1,6 @@
 <script lang="ts">
 import { untrack } from 'svelte';
-import type { Action } from 'svelte/action';
+import { focusSelectOnMount } from './focus';
 
 // An inline name form that replaces a native window.prompt: a labeled, themed text input with Save
 // and Cancel, so naming a route, track, or profile reads like the rest of the app instead of an
@@ -23,13 +23,6 @@ const { label, value = '', confirmLabel = 'Save', onConfirm, onCancel }: Props =
 // explicit and keeps the compiler from flagging a missed reactive reference.
 let text = $state(untrack(() => value));
 
-// Focus and select the seeded text on mount, so the field is ready to type over without first
-// clearing the default name.
-const focusSelect: Action<HTMLInputElement> = (node) => {
-  node.focus({ preventScroll: true });
-  node.select();
-};
-
 function submit(event: SubmitEvent): void {
   event.preventDefault();
   onConfirm(text);
@@ -43,7 +36,7 @@ function submit(event: SubmitEvent): void {
       class="input"
       type="text"
       bind:value={text}
-      use:focusSelect
+      use:focusSelectOnMount
       onkeydown={(event) => {
         if (event.key === 'Escape') onCancel();
       }}

@@ -253,8 +253,8 @@ $effect(() => {
       {:else}
         <div class="actions">
           <VisibilityToggle
-            shown={shownIds.has(route.id)}
-            onToggle={() => onToggleShown(route.id, !shownIds.has(route.id))}
+            visible={shownIds.has(route.id)}
+            onToggle={(v) => onToggleShown(route.id, v)}
           />
           <button
             type="button"

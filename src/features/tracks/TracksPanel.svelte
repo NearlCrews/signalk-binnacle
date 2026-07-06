@@ -258,7 +258,10 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         />
       {:else}
         <div class="actions">
-          <VisibilityToggle shown={shown.has(track.id)} onToggle={() => onToggleSaved(track.id)} />
+          <VisibilityToggle
+            visible={shown.has(track.id)}
+            onToggle={() => onToggleSaved(track.id)}
+          />
           <button
             type="button"
             class="icon-btn"

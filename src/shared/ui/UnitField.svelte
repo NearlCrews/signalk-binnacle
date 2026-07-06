@@ -83,7 +83,6 @@ function commit(event: Event): void {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-md);
-  accent-color: var(--accent);
 }
 .unit {
   color: var(--text-muted);

@@ -49,7 +49,6 @@ const { title, visible, onToggle, disabled = false, description }: Props = $prop
   block-size: 1.25rem;
   /* Never let a long layer name shrink the box: the title ellipsizes, the checkbox stays square. */
   flex-shrink: 0;
-  accent-color: var(--accent);
 }
 .layer-toggle .title {
   min-inline-size: 0;

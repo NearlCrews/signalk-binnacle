@@ -253,7 +253,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       Standby keeps the radar powered but not emitting. Transmit scans and paints returns.
     </p>
     <ShowOnChartToggle
-      shown={echoShown}
+      visible={echoShown}
       label="Show echo on chart"
       description="The radar echo: the returns it paints from boats, land, and rain around you"
       onToggle={onToggleEcho}

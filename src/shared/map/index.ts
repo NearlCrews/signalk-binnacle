@@ -10,7 +10,7 @@ export type { LayerListItem, LayerSettings } from './layer-manager';
 export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
 export type { MapThemePaint } from './map-theme';
-export { applyRasterTheme, colorProperty, mapThemePaint } from './map-theme';
+export { applyRasterTheme, mapThemePaint } from './map-theme';
 export { iconOffsetExpression } from './overlay-expressions';
 export {
   ensureGeoJsonSource,
@@ -30,12 +30,10 @@ export {
   wmsTiles,
 } from './raster-overlay';
 export { decodeSvgToImageData } from './svg-raster';
-export type { SymbolOverlay, SymbolOverlayConfig } from './symbol-overlay';
+export type { SymbolOverlay } from './symbol-overlay';
 export { createSymbolOverlay } from './symbol-overlay';
 export {
   createThemedMap,
-  type ThemedMapApi,
   type ThemedMapHandle,
-  type ThemedMapOptions,
 } from './themed-map';
-export type { OverlayContext, OverlayModule, ZBand } from './types';
+export type { OverlayContext, OverlayModule } from './types';

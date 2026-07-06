@@ -1,13 +1,10 @@
-export type { AuthStatus } from './auth.svelte';
 export { AuthController } from './auth.svelte';
 export { fullJitterDelay } from './backoff';
-export type { SignalKClient } from './client';
 export { createSignalKClient } from './client';
 export type { ServerFeatures } from './features-client';
 export { fetchServerFeatures } from './features-client';
 export type {
   HistoryProviders,
-  HistoryQuery,
   HistoryValues,
 } from './history-client';
 export {
@@ -20,11 +17,6 @@ export {
 } from './history-client';
 export type { MetaZone, PathMeta, ZoneState } from './meta';
 export { fetchPathMeta, zoneStateFor } from './meta';
-export type {
-  RaiseNotificationOptions,
-  UpdateNotificationOptions,
-  UpdateNotificationResult,
-} from './notifications-client';
 export {
   acknowledgeNotification,
   postMobNotification,
@@ -33,7 +25,7 @@ export {
   silenceNotification,
   updateNotification,
 } from './notifications-client';
-export { appendQuery, appendToken, serverOrigin, streamUrl } from './origin';
+export { appendToken, serverOrigin, streamUrl } from './origin';
 export { SK_PATHS } from './paths';
 export {
   asKeyedObject,
@@ -54,9 +46,7 @@ export type { SkSymbol } from './symbols-client';
 export { fetchSymbols } from './symbols-client';
 export type {
   ActiveRoute,
-  AisTargetState,
   ConnectionPhase,
-  ConnectionState,
   Context,
   CourseCalculations,
   CourseInfo,
@@ -65,7 +55,6 @@ export type {
   RaisedNotificationState,
   SKFrame,
   SubscribeEntry,
-  SubscribePolicy,
 } from './types';
 export {
   ALL_VESSELS_CONTEXT,
