@@ -26,8 +26,11 @@ All notable changes to Binnacle are documented here. The format follows
   zones of its own.
 - **A friendlier, denser dock.** Tiles lead with plain words (Speed, Heading, Wind, Water speed,
   Barometer) with the marine abbreviation as a quiet tag and pack a two-column grid with bigger
-  numbers and shorter boxes. Every tile keeps the same height: when a sensor is absent, a plain
-  note ("No depth sensor") sits centered where the number would be instead of shrinking the tile.
+  numbers. The grid fills the whole dock: tiles share the available height instead of leaving
+  empty space below, gaps in the grid are packed closed, and a tile without its sensor drops to
+  half width so it never burns a full row. Every tile keeps the same height: when a sensor is
+  absent, a plain note ("No depth sensor") sits centered where the number would be instead of
+  shrinking the tile.
   The dock and the toolbar editor share one quiet customize control that names what it edits
   ("Customize instruments", "Customize toolbar") and opens with a short how-to line in edit mode.
   Bearings read as three digits ("004°") everywhere.
