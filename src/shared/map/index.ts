@@ -11,7 +11,7 @@ export type { LayerListItem, LayerSettings } from './layer-manager';
 export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
 export type { MapThemePaint } from './map-theme';
-export { applyRasterTheme, mapThemePaint } from './map-theme';
+export { applyRasterTheme, colorProperty, mapThemePaint } from './map-theme';
 export { iconOffsetExpression } from './overlay-expressions';
 export {
   ensureGeoJsonSource,
