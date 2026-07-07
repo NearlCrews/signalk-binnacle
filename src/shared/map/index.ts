@@ -11,12 +11,14 @@ export type { LayerListItem, LayerSettings } from './layer-manager';
 export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
 export type { MapThemePaint } from './map-theme';
-export { applyRasterTheme, colorProperty, mapThemePaint } from './map-theme';
+export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
 export { iconOffsetExpression } from './overlay-expressions';
 export {
   ensureGeoJsonSource,
   ensureGeoJsonSources,
+  ensureSource,
   removeLayersAndSources,
+  removeSharedSourceIfOrphaned,
   setLayersVisibility,
   setSourceData,
 } from './overlay-helpers';

@@ -169,6 +169,11 @@ export function mapThemePaint(theme: Theme): MapThemePaint {
   return { ...PAINT[theme], theme };
 }
 
+// Initial draw colors shared by every overlay that paints before the real saved theme is broadcast:
+// the chart adapter and the Seascape depth-chart overlays all draw once with this, then applyTheme
+// (or applyRasterTheme) corrects the color once the app's actual theme arrives.
+export const DAY_PAINT: MapThemePaint = mapThemePaint('day');
+
 // The color paint property for a fill, line, or symbol layer. The chart adapter and the base-style
 // recolor both choose between line-color, fill-color, and text-color, so sharing this keeps the
 // spellings from drifting. Anything that is not a line or symbol takes fill-color, matching the

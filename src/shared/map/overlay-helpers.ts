@@ -1,4 +1,4 @@
-import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
+import type { GeoJSONSource, Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
 import { emptyFeatureCollection } from './feature-collection';
 
 // Add an empty GeoJSON source under `id` when the map does not already hold it: the idle state every
@@ -56,5 +56,26 @@ export function removeLayersAndSources(
   }
   for (const id of sourceIds) {
     if (map.getSource(id)) map.removeSource(id);
+  }
+}
+
+// Guard-add a source only if absent, so two OverlayModules that share one MapLibre source can
+// both call this from their own add() without caring which one runs first.
+export function ensureSource(map: MapLibreMap, sourceId: string, spec: SourceSpecification): void {
+  if (!map.getSource(sourceId)) {
+    map.addSource(sourceId, spec);
+  }
+}
+
+// Remove a shared source only once every sibling layer that still depends on it is gone, so two
+// OverlayModules sharing one source can each guard-remove it from their own remove() in any order
+// without one deleting the source out from under the other.
+export function removeSharedSourceIfOrphaned(
+  map: MapLibreMap,
+  sourceId: string,
+  siblingLayerIds: readonly string[],
+): void {
+  if (siblingLayerIds.every((id) => !map.getLayer(id)) && map.getSource(sourceId)) {
+    map.removeSource(sourceId);
   }
 }

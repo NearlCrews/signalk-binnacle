@@ -1,6 +1,6 @@
 import type { LayerSpecification, SourceSpecification } from 'maplibre-gl';
 import type { SignalKChart } from './chart-types';
-import { type MapColorKey, mapThemePaint } from './map-theme';
+import { DAY_PAINT, type MapColorKey } from './map-theme';
 
 // Stamped on each themed draw layer so the chart overlay can recolor it on a theme
 // change without re-deriving the source-layer to color mapping.
@@ -116,10 +116,6 @@ const DRAW_LAYERS: readonly DrawStyle[] = [
   { sourceLayer: 'boundaries', kind: 'line', paint: 'boundary' },
   { sourceLayer: 'boundary', kind: 'line', paint: 'boundary' },
 ];
-
-// Initial draw colors; the theme is corrected by applyRasterTheme after the layers mount, so this
-// is computed once at module load rather than allocating a fresh paint object per chart register.
-const DAY_PAINT = mapThemePaint('day');
 
 function vectorDrawLayers(sourceId: string, available: string[]): LayerSpecification[] {
   // Signal K's charts API often returns an empty layers list for a PMTiles archive;
