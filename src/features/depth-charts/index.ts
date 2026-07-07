@@ -1,4 +1,4 @@
-export { createSeascapeDemOverlay, type SeascapeDemOverlays } from './seascape-dem-overlay';
+export { createSeascapeDemOverlay } from './seascape-dem-overlay';
 export {
   SEASCAPE_DEM_SOURCES,
   SEASCAPE_GROUP,
@@ -6,9 +6,6 @@ export {
   type SeascapeDemSource,
   type SeascapeVectorSource,
 } from './seascape-sources';
-export {
-  createSeascapeVectorOverlay,
-  type SeascapeVectorOverlays,
-} from './seascape-vector-overlay';
+export { createSeascapeVectorOverlay } from './seascape-vector-overlay';
 export { createStreamingChartOverlay } from './streaming-overlay';
 export { STREAMING_CHART_SOURCES } from './streaming-sources';

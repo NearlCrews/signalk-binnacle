@@ -11,7 +11,7 @@ const SOURCE: SeascapeDemSource = {
 };
 
 // A minimal fake of the MapLibre map surface the two overlays touch, enough to prove the
-// shared-source ownership contract without a real MapLibre instance.
+// shared-source contract without a real MapLibre instance.
 function fakeMap() {
   const sources = new Set<string>();
   const layers = new Map<string, { type: string }>();
@@ -45,7 +45,7 @@ describe('createSeascapeDemOverlay', () => {
     expect(hillshade.group).toEqual({ id: 'seascape', title: 'Seascape bathymetry' });
   });
 
-  it('depth shading creates the shared source; hillshade only attaches its own layer', () => {
+  it('both rows share one raster-dem source, created once', () => {
     const map = fakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     depthShading.add(ctx(map));
@@ -53,21 +53,33 @@ describe('createSeascapeDemOverlay', () => {
     expect(map.layers.has('seascape-depth-shading-layer')).toBe(true);
     hillshade.add(ctx(map));
     expect(map.layers.has('seascape-hillshade-layer')).toBe(true);
-    // Hillshade never re-creates the source; it was already present from depthShading.add.
+    // Hillshade's own add guard-adds the source too, but finds it already present from
+    // depthShading.add, so it never creates a second one.
     expect(map.sources.size).toBe(1);
   });
 
-  it('only depth shading removes the shared source; hillshade only removes its own layer', () => {
+  it('removing one row does not remove the shared source out from under the other', () => {
+    const map = fakeMap();
+    const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
+    depthShading.add(ctx(map));
+    hillshade.add(ctx(map));
+    depthShading.remove(ctx(map));
+    expect(map.sources.has('seascape-dem')).toBe(true);
+    expect(map.layers.has('seascape-hillshade-layer')).toBe(true);
+    hillshade.remove(ctx(map));
+    expect(map.sources.has('seascape-dem')).toBe(false);
+  });
+
+  it('removing rows in reverse order also preserves the shared source until both are gone', () => {
     const map = fakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     depthShading.add(ctx(map));
     hillshade.add(ctx(map));
     hillshade.remove(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(true);
-    expect(map.layers.has('seascape-hillshade-layer')).toBe(false);
+    expect(map.layers.has('seascape-depth-shading-layer')).toBe(true);
     depthShading.remove(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(false);
-    expect(map.layers.has('seascape-depth-shading-layer')).toBe(false);
   });
 
   it('depth shading supports opacity; hillshade does not (no MapLibre hillshade opacity paint property)', () => {

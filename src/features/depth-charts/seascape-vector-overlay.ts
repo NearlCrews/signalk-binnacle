@@ -7,10 +7,11 @@ import type {
 } from 'maplibre-gl';
 import {
   colorProperty,
-  mapThemePaint,
-  type OverlayContext,
+  DAY_PAINT,
+  ensureSource,
   type OverlayModule,
   removeLayersAndSources,
+  removeSharedSourceIfOrphaned,
   setLayersVisibility,
 } from '$shared/map';
 import { SEASCAPE_GROUP, type SeascapeVectorSource } from './seascape-sources';
@@ -25,10 +26,6 @@ const DRYING_OPACITY = 0.55;
 // module's setOpacity (below) multiplies the slider value by this constant, so a slider at its
 // ordinary full-scale default of 1 reproduces exactly this baked translucency instead of a solid line.
 const CONTOUR_LINE_OPACITY = 0.6;
-
-// Initial draw colors; applyTheme corrects them once the real saved theme is broadcast, matching the
-// load-then-correct pattern seascape-dem-overlay.ts and chart-adapter.ts use for their own DAY_PAINT.
-const DAY_PAINT = mapThemePaint('day');
 
 // Seascape ships both a metric and an imperial contour feature set on the same 'contours'
 // source-layer, tagged by the `sys` field, rather than converting one set live; this filter
@@ -70,6 +67,7 @@ const CONTOUR_LAYER_IDS = [
   SOUNDING_LAYER_ID,
 ] as const;
 const DRYING_LAYER_IDS = [DRYING_LAYER_ID] as const;
+const LABEL_LAYER_IDS = [CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID] as const;
 
 export interface SeascapeVectorOverlays {
   contours: OverlayModule;
@@ -77,37 +75,14 @@ export interface SeascapeVectorOverlays {
 }
 
 // Contours (with its two symbol facets, contour labels and soundings) and drying areas share one
-// vector source. Unlike the DEM pair in seascape-dem-overlay.ts, which assigns one module a fixed
-// first-owner role for the shared source, this pair is symmetric: both rows guard-add the source
-// with the same if-absent check every overlay in this codebase already uses (createChartOverlay,
-// createRasterOverlay), so whichever registers first creates it, and each row's remove() deletes the
-// shared source only once it has confirmed the other row's layers are already gone, so whichever is
-// torn down last is the one that actually removes it. This is safe because MapLibre's addSource,
-// removeSource, getLayer, and getSource are all synchronous, so there is no window where both rows
-// race to create the source twice or both wrongly believe the other still needs it.
+// vector source, the same symmetric ownership scheme as the DEM pair in seascape-dem-overlay.ts:
+// both rows guard-add the source with the shared ensureSource helper, so whichever registers first
+// creates it, and each row's remove() deletes the shared source through removeSharedSourceIfOrphaned
+// only once it has confirmed the other row's layers are already gone, so whichever is torn down last
+// is the one that actually removes it. This is safe because MapLibre's addSource, removeSource,
+// getLayer, and getSource are all synchronous, so there is no window where both rows race to create
+// the source twice or both wrongly believe the other still needs it.
 export function createSeascapeVectorOverlay(source: SeascapeVectorSource): SeascapeVectorOverlays {
-  const ensureSource = (ctx: OverlayContext) => {
-    if (!ctx.map.getSource(VECTOR_SOURCE_ID)) {
-      ctx.map.addSource(VECTOR_SOURCE_ID, {
-        type: 'vector',
-        tiles: [...source.tiles],
-        maxzoom: source.maxzoom,
-        attribution: source.attribution,
-      });
-    }
-  };
-
-  // Removes the shared vector source only once none of `siblingLayerIds` are still attached, so one
-  // row's remove() never deletes the source out from under the other row's still-live layers.
-  const removeSharedSourceIfOrphaned = (
-    ctx: OverlayContext,
-    siblingLayerIds: readonly string[],
-  ) => {
-    if (siblingLayerIds.every((id) => !ctx.map.getLayer(id))) {
-      removeLayersAndSources(ctx.map, [], [VECTOR_SOURCE_ID]);
-    }
-  };
-
   const drying: OverlayModule = {
     id: 'seascape-drying',
     title: 'Seascape drying areas',
@@ -119,7 +94,12 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     defaultOpacity: DRYING_OPACITY,
     layerIds: DRYING_LAYER_IDS,
     add(ctx) {
-      ensureSource(ctx);
+      ensureSource(ctx.map, VECTOR_SOURCE_ID, {
+        type: 'vector',
+        tiles: [...source.tiles],
+        maxzoom: source.maxzoom,
+        attribution: source.attribution,
+      });
       if (!ctx.map.getLayer(DRYING_LAYER_ID)) {
         const layer: FillLayerSpecification = {
           id: DRYING_LAYER_ID,
@@ -133,7 +113,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, DRYING_LAYER_IDS, []);
-      removeSharedSourceIfOrphaned(ctx, CONTOUR_LAYER_IDS);
+      removeSharedSourceIfOrphaned(ctx.map, VECTOR_SOURCE_ID, CONTOUR_LAYER_IDS);
     },
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, DRYING_LAYER_IDS, visible);
@@ -166,7 +146,12 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     defaultOpacity: 1,
     layerIds: CONTOUR_LAYER_IDS,
     add(ctx) {
-      ensureSource(ctx);
+      ensureSource(ctx.map, VECTOR_SOURCE_ID, {
+        type: 'vector',
+        tiles: [...source.tiles],
+        maxzoom: source.maxzoom,
+        attribution: source.attribution,
+      });
       if (!ctx.map.getLayer(CONTOUR_LINE_LAYER_ID)) {
         const layer: LineLayerSpecification = {
           id: CONTOUR_LINE_LAYER_ID,
@@ -230,7 +215,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, CONTOUR_LAYER_IDS, []);
-      removeSharedSourceIfOrphaned(ctx, DRYING_LAYER_IDS);
+      removeSharedSourceIfOrphaned(ctx.map, VECTOR_SOURCE_ID, DRYING_LAYER_IDS);
     },
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, CONTOUR_LAYER_IDS, visible);
@@ -243,7 +228,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
           opacity * CONTOUR_LINE_OPACITY,
         );
       }
-      for (const id of [CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID]) {
+      for (const id of LABEL_LAYER_IDS) {
         if (ctx.map.getLayer(id)) ctx.map.setPaintProperty(id, 'text-opacity', opacity);
       }
     },
@@ -251,7 +236,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
       if (ctx.map.getLayer(CONTOUR_LINE_LAYER_ID)) {
         ctx.map.setPaintProperty(CONTOUR_LINE_LAYER_ID, colorProperty('line'), paint.boundary);
       }
-      for (const id of [CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID]) {
+      for (const id of LABEL_LAYER_IDS) {
         if (!ctx.map.getLayer(id)) continue;
         ctx.map.setPaintProperty(id, colorProperty('symbol'), paint.label);
         ctx.map.setPaintProperty(id, 'text-halo-color', paint.background);

@@ -15,7 +15,7 @@ export interface SeascapeDemSource {
   id: string;
   tiles: string[];
   tileSize: number;
-  maxzoom?: number;
+  maxzoom: number;
   attribution: string;
 }
 
