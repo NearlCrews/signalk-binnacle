@@ -17,7 +17,14 @@ import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import { BOUNDARY_SOURCES, createBoundaryOverlay } from '$features/boundaries-overlay';
 import { fetchCharts } from '$features/charts';
-import { createStreamingChartOverlay, STREAMING_CHART_SOURCES } from '$features/depth-charts';
+import {
+  createSeascapeDemOverlay,
+  createSeascapeVectorOverlay,
+  createStreamingChartOverlay,
+  SEASCAPE_DEM_SOURCES,
+  SEASCAPE_VECTOR_SOURCES,
+  STREAMING_CHART_SOURCES,
+} from '$features/depth-charts';
 import { LayersView } from '$features/layers-panel';
 import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
@@ -201,6 +208,9 @@ let editGeneration = 0;
 // The layer manager, captured from onLoad so the time-travel review effect can dim the live vessel
 // and force the history track on while scrubbing. $state so the effect re-runs once it is assigned.
 let manager = $state<LayerManager | undefined>();
+// Captured from onLoad alongside manager, so the units effect below can reach
+// map.setGlobalStateProperty once the map exists. $state so the effect re-runs once it is assigned.
+let mapRef = $state<MapLibreMap | undefined>();
 // The open "go to here" menu, anchored at the press point in chart pixels with the chart size
 // captured for edge clamping, or undefined when closed.
 let chartMenu = $state<
@@ -213,6 +223,17 @@ let chartMenu = $state<
 $effect(() => {
   routeEditor?.setTheme(theme);
   workingRouteOverlay?.setTheme(theme);
+});
+
+// Seascape's contour and sounding labels switch between metric and imperial via MapLibre's
+// global-state rather than rebuilding filters or paint, so this only needs to push the current
+// mode whenever it changes; units is a prop backed by reactive state, so this effect tracks it.
+// setGlobalStateProperty is the Map-level API (setGlobalState is an internal Style method, not
+// exposed on Map in maplibre-gl 5.24).
+$effect(() => {
+  const map = mapRef;
+  if (!map) return;
+  map.setGlobalStateProperty('unit', units.mode === 'imperial' ? 'ft' : 'm');
 });
 
 // The live vessel dims to this opacity during time-travel review so the scrub marker stands out.
@@ -350,11 +371,26 @@ onMount(async () => {
       // so the boat shares one cache and works offline. When it is absent, the sources keep their direct
       // upstream URLs (a standalone install is unchanged). The NASA GIBS ocean fields stay direct: they
       // are date-dynamic and not yet in the companion allowlist.
+      // Seascape's DEM pair (depth shading, hillshade) registers before the existing bathymetry
+      // rasters, the same background-tint role GEBCO plays as the current bottom-most bathymetry
+      // layer. Its vector pair (drying, then contours on top, fill under line and label) registers
+      // after them, so vector detail draws over every bathymetry raster including the NOAA ENC chart,
+      // the same way soundings and contours sit over the depth-area fill on a paper chart.
+      const seascapeDem = createSeascapeDemOverlay(
+        proxiedSources(SEASCAPE_DEM_SOURCES, companionBase)[0],
+      );
+      const seascapeVector = createSeascapeVectorOverlay(
+        proxiedSources(SEASCAPE_VECTOR_SOURCES, companionBase)[0],
+      );
       await mgr.registerAll([
         ...charts.map((chart) => createChartOverlay(chart, origin, 'basemap', () => chartsToken)),
+        seascapeDem.depthShading,
+        seascapeDem.hillshade,
         ...proxiedSources(STREAMING_CHART_SOURCES, companionBase).map((source) =>
           createStreamingChartOverlay(source),
         ),
+        seascapeVector.drying,
+        seascapeVector.contours,
         ...buildOceanSources().map((source) => createOceanOverlay(source)),
         // Within the safety band, registration order is z, so the seamark navigation aids draw over
         // the reference area fills and boundary lines beneath them.
@@ -369,6 +405,7 @@ onMount(async () => {
       ]);
       // Capture the manager so the time-travel review effect can dim the vessel and toggle history.
       manager = mgr;
+      mapRef = map;
       if (isDestroyed()) return;
 
       // The Terra Draw route editor draws into its own layers anchored in the routes band. It writes
