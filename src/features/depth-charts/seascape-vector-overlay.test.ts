@@ -70,4 +70,16 @@ describe('createSeascapeVectorOverlay', () => {
     drying.remove(ctx(map));
     expect(map.sources.has('seascape-vector')).toBe(false);
   });
+
+  it('removing rows in reverse order also preserves the shared source until both are gone', () => {
+    const map = fakeMap();
+    const { contours, drying } = createSeascapeVectorOverlay(SOURCE);
+    drying.add(ctx(map));
+    contours.add(ctx(map));
+    drying.remove(ctx(map));
+    expect(map.sources.has('seascape-vector')).toBe(true);
+    expect(map.layers.has('seascape-contours-line')).toBe(true);
+    contours.remove(ctx(map));
+    expect(map.sources.has('seascape-vector')).toBe(false);
+  });
 });

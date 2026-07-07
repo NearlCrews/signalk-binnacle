@@ -64,6 +64,13 @@ const LABEL_TEXT_SIZE: ExpressionSpecification = [
   12,
 ];
 
+const CONTOUR_LAYER_IDS = [
+  CONTOUR_LINE_LAYER_ID,
+  CONTOUR_LABEL_LAYER_ID,
+  SOUNDING_LAYER_ID,
+] as const;
+const DRYING_LAYER_IDS = [DRYING_LAYER_ID] as const;
+
 export interface SeascapeVectorOverlays {
   contours: OverlayModule;
   drying: OverlayModule;
@@ -110,7 +117,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     supportsOpacity: true,
     defaultVisible: false,
     defaultOpacity: DRYING_OPACITY,
-    layerIds: [DRYING_LAYER_ID],
+    layerIds: DRYING_LAYER_IDS,
     add(ctx) {
       ensureSource(ctx);
       if (!ctx.map.getLayer(DRYING_LAYER_ID)) {
@@ -126,11 +133,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, [DRYING_LAYER_ID], []);
-      removeSharedSourceIfOrphaned(ctx, [
-        CONTOUR_LINE_LAYER_ID,
-        CONTOUR_LABEL_LAYER_ID,
-        SOUNDING_LAYER_ID,
-      ]);
+      removeSharedSourceIfOrphaned(ctx, CONTOUR_LAYER_IDS);
     },
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, [DRYING_LAYER_ID], visible);
@@ -161,7 +164,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     // already assumes when defaultOpacity is absent. Setting this to CONTOUR_LINE_OPACITY would
     // re-apply the multiplier on top of itself and dim a fresh install's line to 0.36 opacity.
     defaultOpacity: 1,
-    layerIds: [CONTOUR_LINE_LAYER_ID, CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID],
+    layerIds: CONTOUR_LAYER_IDS,
     add(ctx) {
       ensureSource(ctx);
       if (!ctx.map.getLayer(CONTOUR_LINE_LAYER_ID)) {
@@ -226,19 +229,11 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
       }
     },
     remove(ctx) {
-      removeLayersAndSources(
-        ctx.map,
-        [CONTOUR_LINE_LAYER_ID, CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID],
-        [],
-      );
-      removeSharedSourceIfOrphaned(ctx, [DRYING_LAYER_ID]);
+      removeLayersAndSources(ctx.map, CONTOUR_LAYER_IDS, []);
+      removeSharedSourceIfOrphaned(ctx, DRYING_LAYER_IDS);
     },
     setVisible(ctx, visible) {
-      setLayersVisibility(
-        ctx.map,
-        [CONTOUR_LINE_LAYER_ID, CONTOUR_LABEL_LAYER_ID, SOUNDING_LAYER_ID],
-        visible,
-      );
+      setLayersVisibility(ctx.map, CONTOUR_LAYER_IDS, visible);
     },
     setOpacity(ctx, opacity) {
       if (ctx.map.getLayer(CONTOUR_LINE_LAYER_ID)) {
