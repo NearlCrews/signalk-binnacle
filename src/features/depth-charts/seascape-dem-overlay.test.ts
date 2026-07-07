@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mapThemePaint } from '$shared/map';
 import { createSeascapeDemOverlay } from './seascape-dem-overlay';
 import type { SeascapeDemSource } from './seascape-sources';
 
@@ -15,6 +16,7 @@ const SOURCE: SeascapeDemSource = {
 function fakeMap() {
   const sources = new Set<string>();
   const layers = new Map<string, { type: string }>();
+  const setPaintProperty = vi.fn();
   return {
     sources,
     layers,
@@ -24,7 +26,7 @@ function fakeMap() {
     getLayer: (id: string) => layers.get(id),
     addLayer: (layer: { id: string; type: string }) => layers.set(layer.id, layer),
     removeLayer: (id: string) => layers.delete(id),
-    setPaintProperty: vi.fn(),
+    setPaintProperty,
   };
 }
 
@@ -32,6 +34,19 @@ const ctx = (map: ReturnType<typeof fakeMap>) => ({
   map: map as never,
   beforeIdFor: () => undefined,
 });
+
+// Helper to safely access vi.fn() mock from the fakeMap's setPaintProperty
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getMockCalls(map: ReturnType<typeof fakeMap>): any[][] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (map.setPaintProperty as any).mock.calls;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clearMock(map: ReturnType<typeof fakeMap>): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (map.setPaintProperty as any).mockClear();
+}
 
 describe('createSeascapeDemOverlay', () => {
   it('declares both rows in the bathymetry band, hidden by default, grouped together', () => {
@@ -86,5 +101,115 @@ describe('createSeascapeDemOverlay', () => {
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     expect(depthShading.supportsOpacity).toBe(true);
     expect(hillshade.supportsOpacity).toBe(false);
+  });
+
+  it('depth shading applyTheme with different themes produces different color-relief-color expressions', () => {
+    const map = fakeMap();
+    const { depthShading } = createSeascapeDemOverlay(SOURCE);
+    depthShading.add(ctx(map));
+
+    // Apply day theme
+    const dayPaint = mapThemePaint('day');
+    depthShading.applyTheme(ctx(map), dayPaint);
+    const dayColorExpr = getMockCalls(map)[0][2];
+
+    // Reset mock
+    clearMock(map);
+
+    // Apply dusk theme
+    const duskPaint = mapThemePaint('dusk');
+    depthShading.applyTheme(ctx(map), duskPaint);
+    const duskColorExpr = getMockCalls(map)[0][2];
+
+    // Different themes must produce different color expressions
+    expect(dayColorExpr).not.toEqual(duskColorExpr);
+  });
+
+  it('depth shading applyTheme with same theme reuses the memoized color-relief-color expression', () => {
+    const map = fakeMap();
+    const { depthShading } = createSeascapeDemOverlay(SOURCE);
+    depthShading.add(ctx(map));
+
+    const dayPaint = mapThemePaint('day');
+
+    // First call
+    depthShading.applyTheme(ctx(map), dayPaint);
+    const firstColorExpr = getMockCalls(map)[0][2];
+
+    // Reset mock
+    clearMock(map);
+
+    // Second call with same theme
+    depthShading.applyTheme(ctx(map), dayPaint);
+    const secondColorExpr = getMockCalls(map)[0][2];
+
+    // Repeated calls with the same theme must use the exact same cached expression object
+    expect(firstColorExpr).toBe(secondColorExpr);
+  });
+
+  it('hillshade applyTheme with different themes produces different shadow and highlight colors', () => {
+    const map = fakeMap();
+    const { hillshade } = createSeascapeDemOverlay(SOURCE);
+    hillshade.add(ctx(map));
+
+    // Apply day theme
+    const dayPaint = mapThemePaint('day');
+    hillshade.applyTheme(ctx(map), dayPaint);
+    const dayShadowColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-shadow-color',
+    )?.[2];
+    const dayHighlightColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-highlight-color',
+    )?.[2];
+
+    // Reset mock
+    clearMock(map);
+
+    // Apply night-red theme
+    const nightPaint = mapThemePaint('night-red');
+    hillshade.applyTheme(ctx(map), nightPaint);
+    const nightShadowColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-shadow-color',
+    )?.[2];
+    const nightHighlightColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-highlight-color',
+    )?.[2];
+
+    // Different themes must produce different colors
+    expect(dayShadowColor).not.toEqual(nightShadowColor);
+    expect(dayHighlightColor).not.toEqual(nightHighlightColor);
+  });
+
+  it('hillshade applyTheme with same theme reuses memoized shadow and highlight colors', () => {
+    const map = fakeMap();
+    const { hillshade } = createSeascapeDemOverlay(SOURCE);
+    hillshade.add(ctx(map));
+
+    const dayPaint = mapThemePaint('day');
+
+    // First call
+    hillshade.applyTheme(ctx(map), dayPaint);
+    const firstShadowColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-shadow-color',
+    )?.[2];
+    const firstHighlightColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-highlight-color',
+    )?.[2];
+
+    // Reset mock
+    clearMock(map);
+
+    // Second call with same theme
+    hillshade.applyTheme(ctx(map), dayPaint);
+    const secondShadowColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-shadow-color',
+    )?.[2];
+    const secondHighlightColor = getMockCalls(map).find(
+      (call) => call[1] === 'hillshade-highlight-color',
+    )?.[2];
+
+    // Repeated calls with the same theme must use the exact same cached color strings
+    expect(firstShadowColor).toBe(secondShadowColor);
+    expect(firstHighlightColor).toBe(secondHighlightColor);
   });
 });
