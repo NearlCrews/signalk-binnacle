@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Action } from 'svelte/action';
+import { focusOnMountIf } from './focus';
 
 interface Props {
   label: string;
@@ -42,11 +42,6 @@ const {
 function commit(event: Event): void {
   onCommit((event.currentTarget as HTMLInputElement).value);
 }
-
-// Focus on mount only when asked, so a revealed field is ready to type without first tapping it.
-const focusOnOpenAction: Action<HTMLInputElement> = (node) => {
-  if (focusOnOpen) node.focus({ preventScroll: true });
-};
 </script>
 
 <!-- The labeled text-input row shared by the region name field and the chart name and description
@@ -61,7 +56,7 @@ const focusOnOpenAction: Action<HTMLInputElement> = (node) => {
     {placeholder}
     {disabled}
     aria-label={ariaLabel}
-    use:focusOnOpenAction
+    use:focusOnMountIf={focusOnOpen}
     onchange={commit}
     oninput={(event) => onInput?.((event.currentTarget as HTMLInputElement).value)}
     onkeydown={(event) => {

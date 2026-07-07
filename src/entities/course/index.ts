@@ -1,1 +1,1 @@
-export { CourseGuidance, type CourseSource } from './course.svelte';
+export { CourseGuidance } from './course.svelte';

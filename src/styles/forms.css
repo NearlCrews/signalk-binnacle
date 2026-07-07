@@ -19,6 +19,13 @@
   opacity: 1;
 }
 
+/* Theme native checkboxes and radios so they match the accent color in every theme, instead of
+   the user-agent default blue. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+}
+
 /* A row of action buttons under a panel header (New route, Save and Cancel), shared so the panels do
    not each re-declare the row. */
 .panel-controls {

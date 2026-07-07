@@ -1,4 +1,3 @@
 export type { Bbox, RadarData, RadarFrame, TimeBracket, WeatherGrid } from './weather-grid';
-export { bilinearAt, boundsToBbox, nearestGridTime, sampleGrid, timeBracket } from './weather-grid';
-export type { WeatherStatus } from './weather-store.svelte';
+export { bilinearAt, boundsToBbox, sampleGrid, timeBracket } from './weather-grid';
 export { WeatherStore } from './weather-store.svelte';

@@ -76,10 +76,10 @@ export function createTrackController(deps: TrackControllerDeps) {
     await refreshSavedTracks();
   }
 
-  function onToggleSaved(id: string): void {
+  function onToggleSaved(id: string, shown: boolean): void {
     const next = new Set(shownSaved);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (shown) next.add(id);
+    else next.delete(id);
     shownSaved = next;
     bumpSaved();
   }

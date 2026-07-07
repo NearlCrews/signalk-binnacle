@@ -1,5 +1,4 @@
 export type {
-  ActiveSeverity,
   Assessment,
   DangerContact,
   Severity,

@@ -878,7 +878,7 @@ function chartLabel(id: string): string {
         downloading an area yourself.
       </p>
       <ShowOnChartToggle
-        shown={positionEnabled}
+        visible={positionEnabled}
         label="Enable auto-cache"
         description="Caches chart tiles around the boat as it moves, so the water ahead is ready offline."
         disabled={auth.writeBlocked}

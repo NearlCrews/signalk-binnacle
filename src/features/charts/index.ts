@@ -1,5 +1,2 @@
-export { deleteChart, fetchCharts, putChart } from './charts-client';
-export {
-  createUserChartsController,
-  type UserChartsControllerDeps,
-} from './user-charts-controller.svelte';
+export { deleteChart, fetchCharts } from './charts-client';
+export { createUserChartsController } from './user-charts-controller.svelte';
