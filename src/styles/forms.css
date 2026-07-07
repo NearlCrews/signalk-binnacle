@@ -13,7 +13,6 @@
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
-  accent-color: var(--accent);
 }
 .input::placeholder {
   color: var(--text-muted);

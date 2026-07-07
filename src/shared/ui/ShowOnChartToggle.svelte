@@ -1,14 +1,11 @@
 <script lang="ts">
+import type { VisibilityToggleProps } from './visibility-toggle';
+
 // A full-width "Show X on chart" toggle: the in-panel control that mirrors a layer's visibility (the
 // Layers eye stays the source of truth). Shared so every panel that surfaces its own layer reads
 // identically. Reuses the .btn lit-state vocabulary, so it themes correctly with no extra styling.
-interface Props {
-  visible: boolean;
+interface Props extends VisibilityToggleProps {
   label: string;
-  onToggle: (visible: boolean) => void;
-  disabled?: boolean;
-  // An optional plain-language hover and focus tooltip, matching LayerToggle.
-  description?: string;
 }
 
 const { visible, label, onToggle, disabled = false, description }: Props = $props();

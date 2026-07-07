@@ -1,16 +1,12 @@
 <script lang="ts">
-interface Props {
+import type { VisibilityToggleProps } from './visibility-toggle';
+
+interface Props extends VisibilityToggleProps {
   title: string;
-  visible: boolean;
-  onToggle: (visible: boolean) => void;
-  // A sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled without
-  // the chart it annotates.
-  disabled?: boolean;
-  // An optional plain-language description shown as a hover and focus tooltip, so a reader can learn
-  // what a layer is without leaving the list. Falls back to the visible title.
-  description?: string;
 }
 
+// disabled: a sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled
+// without the chart it annotates. description falls back to the visible title.
 const { title, visible, onToggle, disabled = false, description }: Props = $props();
 </script>
 

@@ -25,7 +25,7 @@ interface Props {
   onSaveAsRoute: (name: string) => void;
   onTrackHome: () => void;
   onDelete: (id: string) => void;
-  onToggleSaved: (id: string) => void;
+  onToggleSaved: (id: string, shown: boolean) => void;
   onExport: (track: SavedTrack) => void;
   // A failed save or delete, shown until the next action, matching the routes and waypoints panels.
   error?: string;
@@ -260,7 +260,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         <div class="actions">
           <VisibilityToggle
             visible={shown.has(track.id)}
-            onToggle={() => onToggleSaved(track.id)}
+            onToggle={(v) => onToggleSaved(track.id, v)}
           />
           <button
             type="button"

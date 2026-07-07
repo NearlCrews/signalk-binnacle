@@ -10,14 +10,14 @@ export const focusOnMount: Action<HTMLElement> = (node) => {
 // Focus and select the input's text on mount, for a rename or entry field that replaces a value
 // in place (NameEntry). preventScroll keeps the panel from jumping as focus lands.
 export const focusSelectOnMount: Action<HTMLInputElement> = (node) => {
-  node.focus({ preventScroll: true });
+  focusOnMount(node);
   node.select();
 };
 
 // Focus the input on mount only when the passed condition is true, for a field revealed in place
 // conditionally (an import review row, a dialog). preventScroll keeps the panel from jumping.
 export const focusOnMountIf: Action<HTMLInputElement, boolean> = (node, condition) => {
-  if (condition) node.focus({ preventScroll: true });
+  if (condition) focusOnMount(node);
 };
 
 // Shift+Tab shares the same key value ('Tab') as Tab, so no shiftKey check is needed to detect
@@ -85,7 +85,7 @@ export const rovingFocus: Action<HTMLElement, string> = (node, selector) => {
     let next: number;
     if (current < 0) next = down ? 0 : list.length - 1;
     else next = down ? current + 1 : current - 1 + list.length;
-    list[next % list.length]?.focus();
+    list[next % list.length]?.focus({ preventScroll: true });
   }
   node.addEventListener('keydown', onKeydown);
   return {

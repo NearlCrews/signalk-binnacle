@@ -24,3 +24,4 @@ export { PANEL_TRANSITION_MS } from './transitions';
 export { default as UnavailableHint } from './UnavailableHint.svelte';
 export { default as UnitField } from './UnitField.svelte';
 export { default as VisibilityToggle } from './VisibilityToggle.svelte';
+export type { VisibilityToggleProps } from './visibility-toggle';

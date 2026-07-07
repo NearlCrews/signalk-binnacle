@@ -1,11 +1,8 @@
 <script lang="ts">
 import { Eye, EyeOff } from '@lucide/svelte';
+import type { VisibilityToggleProps } from './visibility-toggle';
 
-interface Props {
-  // Whether the item is currently visible on the chart.
-  visible: boolean;
-  onToggle: (visible: boolean) => void;
-}
+type Props = Pick<VisibilityToggleProps, 'visible' | 'onToggle'>;
 
 const { visible, onToggle }: Props = $props();
 </script>
