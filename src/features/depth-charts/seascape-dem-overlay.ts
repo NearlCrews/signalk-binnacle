@@ -1,4 +1,4 @@
-import type { LayerSpecification } from 'maplibre-gl';
+import type { ColorReliefLayerSpecification, HillshadeLayerSpecification } from 'maplibre-gl';
 import {
   depthShadingStops,
   mapThemePaint,
@@ -44,6 +44,7 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     band: 'bathymetry',
     group: SEASCAPE_GROUP,
     supportsOpacity: true,
+    defaultOpacity: DEPTH_SHADING_OPACITY,
     defaultVisible: false,
     layerIds: [DEPTH_SHADING_LAYER_ID],
     add(ctx) {
@@ -58,23 +59,21 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
         });
       }
       if (!ctx.map.getLayer(DEPTH_SHADING_LAYER_ID)) {
-        ctx.map.addLayer(
-          {
-            id: DEPTH_SHADING_LAYER_ID,
-            type: 'color-relief',
-            source: DEM_SOURCE_ID,
-            paint: {
-              'color-relief-color': [
-                'interpolate',
-                ['linear'],
-                ['elevation'],
-                ...depthShadingStops(DAY_PAINT.water, DAY_PAINT.land),
-              ],
-              'color-relief-opacity': DEPTH_SHADING_OPACITY,
-            },
-          } as LayerSpecification,
-          ctx.beforeIdFor('bathymetry'),
-        );
+        const layer: ColorReliefLayerSpecification = {
+          id: DEPTH_SHADING_LAYER_ID,
+          type: 'color-relief',
+          source: DEM_SOURCE_ID,
+          paint: {
+            'color-relief-color': [
+              'interpolate',
+              ['linear'],
+              ['elevation'],
+              ...depthShadingStops(DAY_PAINT.water, DAY_PAINT.land),
+            ],
+            'color-relief-opacity': DEPTH_SHADING_OPACITY,
+          },
+        };
+        ctx.map.addLayer(layer, ctx.beforeIdFor('bathymetry'));
       }
     },
     remove(ctx) {
@@ -113,20 +112,18 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     layerIds: [HILLSHADE_LAYER_ID],
     add(ctx) {
       if (ctx.map.getLayer(HILLSHADE_LAYER_ID)) return;
-      ctx.map.addLayer(
-        {
-          id: HILLSHADE_LAYER_ID,
-          type: 'hillshade',
-          source: DEM_SOURCE_ID,
-          paint: {
-            'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
-            'hillshade-exaggeration': HILLSHADE_EXAGGERATION,
-            'hillshade-shadow-color': shadeColor(DAY_PAINT.water, -0.5),
-            'hillshade-highlight-color': shadeColor(DAY_PAINT.land, 0.3),
-          },
-        } as LayerSpecification,
-        ctx.beforeIdFor('bathymetry'),
-      );
+      const layer: HillshadeLayerSpecification = {
+        id: HILLSHADE_LAYER_ID,
+        type: 'hillshade',
+        source: DEM_SOURCE_ID,
+        paint: {
+          'hillshade-illumination-direction': HILLSHADE_ILLUMINATION_DIRECTION,
+          'hillshade-exaggeration': HILLSHADE_EXAGGERATION,
+          'hillshade-shadow-color': shadeColor(DAY_PAINT.water, -0.5),
+          'hillshade-highlight-color': shadeColor(DAY_PAINT.land, 0.3),
+        },
+      };
+      ctx.map.addLayer(layer, ctx.beforeIdFor('bathymetry'));
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, [HILLSHADE_LAYER_ID], []);
