@@ -35,17 +35,14 @@ const ctx = (map: ReturnType<typeof fakeMap>) => ({
   beforeIdFor: () => undefined,
 });
 
-// Helper to safely access vi.fn() mock from the fakeMap's setPaintProperty
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getMockCalls(map: ReturnType<typeof fakeMap>): any[][] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (map.setPaintProperty as any).mock.calls;
+// setPaintProperty is a vi.fn(), so its .mock.calls is already properly typed; these two just
+// name the two operations the applyTheme assertions below repeat.
+function getMockCalls(map: ReturnType<typeof fakeMap>) {
+  return map.setPaintProperty.mock.calls;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function clearMock(map: ReturnType<typeof fakeMap>): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (map.setPaintProperty as any).mockClear();
+  map.setPaintProperty.mockClear();
 }
 
 describe('createSeascapeDemOverlay', () => {
@@ -110,7 +107,7 @@ describe('createSeascapeDemOverlay', () => {
 
     // Apply day theme
     const dayPaint = mapThemePaint('day');
-    depthShading.applyTheme(ctx(map), dayPaint);
+    depthShading.applyTheme?.(ctx(map), dayPaint);
     const dayColorExpr = getMockCalls(map)[0][2];
 
     // Reset mock
@@ -118,7 +115,7 @@ describe('createSeascapeDemOverlay', () => {
 
     // Apply dusk theme
     const duskPaint = mapThemePaint('dusk');
-    depthShading.applyTheme(ctx(map), duskPaint);
+    depthShading.applyTheme?.(ctx(map), duskPaint);
     const duskColorExpr = getMockCalls(map)[0][2];
 
     // Different themes must produce different color expressions
@@ -133,14 +130,14 @@ describe('createSeascapeDemOverlay', () => {
     const dayPaint = mapThemePaint('day');
 
     // First call
-    depthShading.applyTheme(ctx(map), dayPaint);
+    depthShading.applyTheme?.(ctx(map), dayPaint);
     const firstColorExpr = getMockCalls(map)[0][2];
 
     // Reset mock
     clearMock(map);
 
     // Second call with same theme
-    depthShading.applyTheme(ctx(map), dayPaint);
+    depthShading.applyTheme?.(ctx(map), dayPaint);
     const secondColorExpr = getMockCalls(map)[0][2];
 
     // Repeated calls with the same theme must use the exact same cached expression object
@@ -154,7 +151,7 @@ describe('createSeascapeDemOverlay', () => {
 
     // Apply day theme
     const dayPaint = mapThemePaint('day');
-    hillshade.applyTheme(ctx(map), dayPaint);
+    hillshade.applyTheme?.(ctx(map), dayPaint);
     const dayShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
     )?.[2];
@@ -167,7 +164,7 @@ describe('createSeascapeDemOverlay', () => {
 
     // Apply night-red theme
     const nightPaint = mapThemePaint('night-red');
-    hillshade.applyTheme(ctx(map), nightPaint);
+    hillshade.applyTheme?.(ctx(map), nightPaint);
     const nightShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
     )?.[2];
@@ -188,7 +185,7 @@ describe('createSeascapeDemOverlay', () => {
     const dayPaint = mapThemePaint('day');
 
     // First call
-    hillshade.applyTheme(ctx(map), dayPaint);
+    hillshade.applyTheme?.(ctx(map), dayPaint);
     const firstShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
     )?.[2];
@@ -200,7 +197,7 @@ describe('createSeascapeDemOverlay', () => {
     clearMock(map);
 
     // Second call with same theme
-    hillshade.applyTheme(ctx(map), dayPaint);
+    hillshade.applyTheme?.(ctx(map), dayPaint);
     const secondShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
     )?.[2];
