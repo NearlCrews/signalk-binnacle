@@ -109,12 +109,8 @@ export function createRadarOverlay(
         paint: { 'raster-opacity': opacity },
       };
       ctx.map.addLayer(layer, ctx.beforeIdFor('weather'));
-      if (lastPaint) recolor(ctx, lastPaint);
+      if (lastPaint) applyRasterTheme(ctx.map, LAYER_ID, lastPaint);
     }
-  }
-
-  function recolor(ctx: OverlayContext, paint: MapThemePaint): void {
-    applyRasterTheme(ctx.map, LAYER_ID, paint);
   }
 
   return {
@@ -177,7 +173,7 @@ export function createRadarOverlay(
     },
     applyTheme(ctx, paint) {
       lastPaint = paint;
-      if (ctx.map.getLayer(LAYER_ID)) recolor(ctx, paint);
+      if (ctx.map.getLayer(LAYER_ID)) applyRasterTheme(ctx.map, LAYER_ID, paint);
     },
   };
 }

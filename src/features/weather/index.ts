@@ -15,7 +15,6 @@ export { defaultProviderName, fetchWeatherProviders } from './signalk-weather';
 export { advancePlay, clampTime, stepTime, type TimeRange } from './time-scrub';
 export { default as WeatherConditions } from './WeatherConditions.svelte';
 export { createWavesOverlay } from './waves-overlay';
-export type { ForecastOptions } from './weather-client';
 export { createWeatherLoader, type WeatherLoader } from './weather-loader';
 export { precipUnitLabel, RAIN_VISIBLE_MM_H } from './weather-readout';
 export { createWindOverlay } from './wind-overlay';

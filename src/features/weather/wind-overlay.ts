@@ -69,10 +69,6 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
   let removeContextListeners = () => {};
 
   // Arrow fallback path.
-  function colorExpr(t: Theme): ExpressionSpecification {
-    return windColorExpression(t) as unknown as ExpressionSpecification;
-  }
-
   function addArrowLayer(ctx: OverlayContext): void {
     ensureGeoJsonSource(ctx.map, SOURCE_ID);
     if (!ctx.map.getLayer(LAYER_ID)) {
@@ -81,7 +77,11 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
         type: 'line',
         source: SOURCE_ID,
         layout: { 'line-cap': 'round', visibility: visible ? 'visible' : 'none' },
-        paint: { 'line-color': colorExpr(theme), 'line-width': 2, 'line-opacity': opacity },
+        paint: {
+          'line-color': windColorExpression(theme) as unknown as ExpressionSpecification,
+          'line-width': 2,
+          'line-opacity': opacity,
+        },
       };
       ctx.map.addLayer(layer, ctx.beforeIdFor('weather'));
     }
@@ -242,7 +242,11 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
       theme = paint.theme;
       particles?.setTheme(windColorTexture(theme));
       if (ctx.map.getLayer(LAYER_ID)) {
-        ctx.map.setPaintProperty(LAYER_ID, 'line-color', colorExpr(theme));
+        ctx.map.setPaintProperty(
+          LAYER_ID,
+          'line-color',
+          windColorExpression(theme) as unknown as ExpressionSpecification,
+        );
       }
     },
   };
