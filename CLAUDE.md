@@ -166,7 +166,9 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
   the `$shared/ui` primitives (SlideOver, AnchoredMenu, InlineConfirm, UnitField, ConfirmArm, SavedList,
-  VisibilityToggle, CustomizeToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the rovingFocus, focusOnMount, and
+  VisibilityToggle, ShowOnChartToggle, and LayerToggle (the three share one VisibilityToggleProps
+  contract), CustomizeToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the
+  rovingFocus (with Home and End support), focusOnMount, focusSelectOnMount, focusOnMountIf, and
   onKeydownAction focus actions, the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
@@ -175,8 +177,12 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   carries the hover tint and the lit `.is-on` body at a high enough specificity to beat a scoped
   background, with border longhands so a row can reserve its lit border), `.card-frame` (the raised
   bordered card surface shared by the saved-list cards and the alarm rows), `.overlay-backdrop`,
+  `.unavailable` (the grayed treatment for a row whose provider is absent, shared by the layer rows
+  and the instrument customize list), `.bare-list` (the list-style, margin, and padding reset for a
+  layout `<ul>` or `<ol>`),
   `.alert-note` and its `.alert-note--filled` tinted-banner modifier, `.muted-note`,
-  `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*`, `.saved`, `.stat-grid`,
+  `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*` (including `.panel-slot`
+  and its `--end` modifier), `.saved`, `.stat-grid`,
   `.num`, and the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
   `.nav-metric`) shared by the AIS targets and POI search panels)
   before any panel grows a scoped duplicate. Lay a panel's body out with SlideOver's `bodyFlex` prop

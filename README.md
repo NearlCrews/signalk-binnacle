@@ -15,29 +15,28 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.13.0
+## What's new in 0.14.0
 
-The first published release since 0.10.6, bringing the whole offline-charts and Chart Locker system.
+An instrument dock with customizable live gauges, and provider-absence and read-write access
+handling brought in line across every write-gated panel.
 
-- **Offline charts, powered by Chart Locker.** With the Chart Locker plugin installed, draw a box and
-  download every chart source that covers it into a boat-wide tile cache before you lose coverage. The
-  saved area is pinned and keeps rendering offline, saved areas carry re-download and delete, and detail
-  is a plain Overview, Coastal, or Harbor preset instead of raw zoom numbers. The base map and marks
-  save by default, so an offline area is never a blank canvas.
-- **Auto-cache around the boat.** An optional background fill keeps a small area cached around the
-  vessel as it moves, and its chart picks, radius, and refresh interval now persist and reload.
-- **Local chart management and a shared cache.** Manage your local PMTiles charts in one panel, and let
-  the whole boat share one offline cache for the remote charts and the vector base map so the same tile
-  is not refetched per device.
-- **Chart Locker status in the header.** A Chart Locker pill beside the profile pill shows its state as
-  a glyph at a glance, a check when online, a pulled plug when offline, and a warning triangle on a fault,
-  and opens the Offline charts panel on tap. The cache size and the state in words show in its hover
-  tooltip, and the pill is absent on a standalone install.
-- **Reliability fixes.** The vector base map and its labels render again, theme switches no longer
-  error mid chart-load, the man-overboard confirm times out exactly once, and writes use the read-write
-  token the moment access is approved.
+- **An instrument dock.** Tap Instruments and the chart slides left beside a column of live
+  gauges: SOG, heading, depth, and apparent wind by default, with more in the catalog. Customize
+  picks and reorders tiles, the selection rides profiles, and a tile without its sensor says so
+  instead of showing dashes.
+- **More instruments, with small visualizations.** Battery health, water and air temperature,
+  GNSS satellites, and rate of turn join the catalog, and continuous readouts draw a quiet
+  sparkline of recent history.
+- **Open KIP.** When the KIP instrument webapp is installed on the server, a menu item opens it in
+  a new tab.
+- **Window Controls Overlay support.** Installed as a desktop PWA on a browser that supports it,
+  the header bar extends into the native window title bar so the MOB button, navigation controls,
+  and profile pill sit flush with the window chrome.
+- **Clearer read-only access.** Routes, waypoints, tracks, anchor watch, alarms, and profiles now
+  explain when a read-write token is needed instead of failing with only a generic error, and the
+  Replay and track history layers gray out correctly when no history provider is present.
 
-See the [changelog](CHANGELOG.md#v0130) for the full list.
+See the [changelog](CHANGELOG.md#v0140) for the full list.
 
 ## What it does
 

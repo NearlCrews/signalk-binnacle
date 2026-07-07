@@ -4,7 +4,13 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+<a id="v0140"></a>
+
+## [0.14.0] - 2026-07-06
+
+Adds the instrument dock: a customizable column of live gauges beside the chart. Also brings
+provider-absence and read-write access handling in line across every write-gated panel and the
+Replay and track history layers.
 
 ### Added
 
@@ -47,9 +53,20 @@ All notable changes to Binnacle are documented here. The format follows
 - When Binnacle is installed as a desktop PWA and the browser supports Window Controls Overlay,
   the header bar extends into the native window title bar so the MOB button, navigation controls,
   and profile pill sit flush with the window chrome.
+- Cloud and precipitation layers describe what they show in the Layers panel, matching the other
+  weather layers.
 
 ### Fixed
 
+- Routes, waypoints, tracks, anchor watch, alarms, and profiles now show a note explaining that a
+  read-write token is needed when a save is blocked by read-only access, matching the note the
+  charts and offline-areas panels already show, instead of only a generic error after the fact.
+  Profiles keep saving on the device either way: only syncing them to other stations needs the
+  token.
+- Track history's layer row now grays out on a server with no history provider instead of
+  appearing available and rendering nothing.
+- The Replay tile now grays with an explanation when no history provider is present, matching the
+  radar tile, instead of opening into an empty mode.
 - Profile sync to the server now recovers after an access upgrade: approving a read-write token
   mid-session resumes syncing instead of silently staying local until the next reload, and the
   applicationData adapter always sends the current token.
@@ -66,8 +83,6 @@ All notable changes to Binnacle are documented here. The format follows
 - The chartplotter's panel layer moved into a dedicated view component behind the app's views
   layer, and the composition root slimmed to construction, controllers, and shell chrome. No
   behavior change.
-
-
 - Waypoint, profile, and chart locker region deletes use the same one-at-a-time armed confirm as
   routes and tracks, so arming one row disarms the rest.
 - The tides panel readouts use the shared stat-grid layout, and its close button is labeled "Close
@@ -98,6 +113,11 @@ All notable changes to Binnacle are documented here. The format follows
   scroll-lock, focus trapping, and modal semantics directly without custom scaffolding.
 - The MOB confirm carries `role="alertdialog"` so assistive technology announces it as an
   emergency requiring immediate response, not a routine dialog.
+- The visibility toggles (a layer, a route, a track) share one prop contract, so showing or hiding
+  an item runs through the same code path everywhere.
+- Duplicate CSS for the docked-panel slot, muted notes, and numeral styling were folded into their
+  shared classes across several panels.
+- Unused type and value exports were trimmed from several feature and shared module public APIs.
 
 <a id="v0130"></a>
 
