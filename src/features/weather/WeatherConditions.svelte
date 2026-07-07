@@ -185,7 +185,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
     <p class="muted-note" role="status">Waiting for a vessel position.</p>
   {:else}
     {#if sortedWarnings.length > 0}
-      <ul class="warnings" role="alert">
+      <ul class="warnings bare-list" role="alert">
         {#each sortedWarnings as w (w.startTime + w.type)}
           {@const until = untilLabel(w.endTime)}
           <li class="alert-note alert-note--filled warning">
@@ -244,9 +244,6 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
   color: var(--text-muted);
 }
 .warnings {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;

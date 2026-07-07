@@ -2,7 +2,7 @@ import type { UserChartSource, UserCharts } from '$entities/user-charts';
 import { userChartToSignalK } from '$entities/user-charts';
 import type { Theme } from '$shared/ui';
 import type { UserChartRegistrar } from '$widgets/chart-canvas';
-import { putChart } from './charts-client';
+import { deleteChart, putChart } from './charts-client';
 
 export interface UserChartsControllerDeps {
   origin: string;
@@ -32,6 +32,11 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   function dropRegisteredUserChart(id: string): void {
     if (!registeredUserCharts.delete(id)) return;
     userChartRegistrar?.unregister(id);
+  }
+
+  function deleteUserChartFromServer(id: string): void {
+    const token = deps.getToken();
+    if (token) void deleteChart(origin, token, id);
   }
 
   async function addUserChartOverlay(
@@ -75,5 +80,6 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
     onUserChartsReady,
     syncUrlChartToServer,
     dropRegisteredUserChart,
+    deleteUserChartFromServer,
   };
 }

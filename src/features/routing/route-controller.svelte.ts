@@ -4,7 +4,7 @@ import { reverseRoute } from '$entities/route';
 import type { TrackPoint } from '$entities/track';
 import { trackToRoute } from '$features/track-layer';
 import type { LatLon } from '$shared/geo';
-import { uuidv4 } from '$shared/lib';
+import { ErrorState, uuidv4 } from '$shared/lib';
 import { defaultSaveName } from '$shared/ui';
 import {
   activateRoute,
@@ -36,7 +36,7 @@ export interface RouteControllerDeps {
 export function createRouteController(deps: RouteControllerDeps) {
   const { origin, routeStore, courseGuidance } = deps;
 
-  let routeError = $state<string | undefined>();
+  const routeError = new ErrorState();
   let gotoActive = $state(false);
 
   const courseActive = $derived(routeStore.activeId !== undefined || gotoActive);
@@ -52,11 +52,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   });
 
   function flagRouteError(message: string): void {
-    routeError = message;
+    routeError.flag(message);
   }
 
   function clearRouteError(): void {
-    routeError = undefined;
+    routeError.clear();
   }
 
   async function refreshRoutes(): Promise<void> {
@@ -288,7 +288,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     flagRouteError,
     clearRouteError,
     get routeError() {
-      return routeError;
+      return routeError.message;
     },
     get courseActive() {
       return courseActive;

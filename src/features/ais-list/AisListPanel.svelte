@@ -86,7 +86,7 @@ const rows = $derived(
       No vessels are broadcasting nearby right now. This list fills as AIS traffic comes into range.
     </p>
   {:else}
-    <ul class="nav-list" aria-label="Nearby vessels">
+    <ul class="nav-list bare-list" aria-label="Nearby vessels">
       {#each rows as row (row.id)}
         <li>
           <button

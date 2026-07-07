@@ -43,7 +43,7 @@ import { OwnVessel } from '$entities/vessel';
 import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
-import { createUserChartsController, deleteChart } from '$features/charts';
+import { createUserChartsController } from '$features/charts';
 import {
   createInstrumentsController,
   DEFAULT_TILES,
@@ -681,12 +681,7 @@ const userCharts = new UserCharts(
     if (source.bounds) mapCommands?.fitBounds(source.bounds);
     userChartsController.syncUrlChartToServer(source);
   },
-  (source) => {
-    const token = chartsToken;
-    if (token) {
-      void deleteChart(origin, token, source.id);
-    }
-  },
+  (source) => userChartsController.deleteUserChartFromServer(source.id),
   (source) => {
     userChartsController.dropRegisteredUserChart(source.id);
     userChartsController.syncUrlChartToServer(source);
@@ -1232,6 +1227,32 @@ function backFromRoutesPanel(): void {
   backToMenu();
 }
 
+// The tracks and waypoints panels' close and back clear their controller's error the same way the
+// routes panel does, so a dismissed panel does not reopen showing a stale failure from last time.
+function closeTracksPanel(): void {
+  trackController.clearTrackError();
+  closePanel();
+}
+function backFromTracksPanel(): void {
+  trackController.clearTrackError();
+  backToMenu();
+}
+function closeWaypointsPanel(): void {
+  waypointsController.clearWaypointError();
+  closePanel();
+}
+function backFromWaypointsPanel(): void {
+  waypointsController.clearWaypointError();
+  backToMenu();
+}
+
+// A waypoint dropped from the chart context menu saves through the dialog above with no waypoints
+// panel open to show a failure, so a save failure opens the panel to surface it.
+async function confirmDroppedWaypoint(result: { name: string; icon?: string }): Promise<void> {
+  await waypointsController.confirmAddWaypoint(result);
+  if (waypointsController.waypointError) activePanel = 'waypoints';
+}
+
 function onStartRouteHere(position: LatLon): void {
   openPanel('routes');
   routeController.beginNewRoute(position);
@@ -1668,7 +1689,7 @@ onDestroy(() => {
       recolor(theme.theme);
     }}
     onCommandsReady={(commands) => (mapCommands = commands)}
-    onUserChartsReady={(registrar) => userChartsController.onUserChartsReady(registrar)}
+    onUserChartsReady={userChartsController.onUserChartsReady}
     onMapInstance={(m) => (mapInstance = m)}
     onMapDestroyed={() => (mapInstance = undefined)}
     onUserPan={() => (following = false)}
@@ -1687,6 +1708,10 @@ onDestroy(() => {
     {onHighlightLeg}
     {closeRoutesPanel}
     {backFromRoutesPanel}
+    {closeTracksPanel}
+    {backFromTracksPanel}
+    {closeWaypointsPanel}
+    {backFromWaypointsPanel}
     {onStartRouteHere}
     {closeNote}
     {closePoiSearch}
@@ -1743,7 +1768,7 @@ onDestroy(() => {
   <WaypointDialog
     defaultName={defaultSaveName('Waypoint')}
     symbols={symbolsStore}
-    onSave={(result) => void waypointsController.confirmAddWaypoint(result)}
+    onSave={(result) => void confirmDroppedWaypoint(result)}
     onCancel={waypointsController.cancelAddWaypoint}
   />
 {/if}

@@ -1,6 +1,6 @@
 import type { TrackPoint } from '$entities/track';
 import type { SavedTracksSource } from '$features/track-layer';
-import { uuidv4 } from '$shared/lib';
+import { ErrorState, uuidv4 } from '$shared/lib';
 import { downloadGeoJson } from './track-export';
 import {
   deleteTrack,
@@ -23,7 +23,7 @@ export function createTrackController(deps: TrackControllerDeps) {
   let savedTracks = $state.raw<SavedTrack[]>([]);
   let shownSaved = $state<ReadonlySet<string>>(new Set());
   let savedVersion = 0;
-  let trackError = $state<string | undefined>();
+  const trackError = new ErrorState();
 
   const savedSource: SavedTracksSource = {
     version: () => savedVersion,
@@ -34,21 +34,29 @@ export function createTrackController(deps: TrackControllerDeps) {
     savedVersion += 1;
   }
 
+  function clearTrackError(): void {
+    trackError.clear();
+  }
+
   async function refreshSavedTracks(): Promise<void> {
     const fetched = await fetchSavedTracks(origin, deps.getToken());
     if (fetched) {
       savedTracks = fetched;
       bumpSaved();
+      return;
+    }
+    if (savedTracks.length === 0) {
+      trackError.flag('Could not load saved tracks. Check the connection.');
     }
   }
 
   async function onSaveTrack(name: string): Promise<void> {
     const points = deps.getRecorderPoints();
     if (points.length < 2) return;
-    trackError = undefined;
+    trackError.clear();
     const id = uuidv4();
     if (!(await saveTrack(origin, deps.getToken(), id, name, points))) {
-      trackError = 'Could not save the track. Check the connection and access.';
+      trackError.flag('Could not save the track. Check the connection and access.');
       return;
     }
     deps.clearRecorder();
@@ -57,9 +65,9 @@ export function createTrackController(deps: TrackControllerDeps) {
   }
 
   async function onDeleteSavedTrack(id: string): Promise<void> {
-    trackError = undefined;
+    trackError.clear();
     if (!(await deleteTrack(origin, deps.getToken(), id))) {
-      trackError = 'Could not delete the track. Check the connection and access.';
+      trackError.flag('Could not delete the track. Check the connection and access.');
       return;
     }
     const next = new Set(shownSaved);
@@ -92,6 +100,7 @@ export function createTrackController(deps: TrackControllerDeps) {
     onDeleteSavedTrack,
     onToggleSaved,
     onExportSavedTrack,
+    clearTrackError,
     get savedSource() {
       return savedSource;
     },
@@ -102,7 +111,7 @@ export function createTrackController(deps: TrackControllerDeps) {
       return shownSaved;
     },
     get trackError() {
-      return trackError;
+      return trackError.message;
     },
   };
 }

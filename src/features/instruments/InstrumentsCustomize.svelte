@@ -39,7 +39,7 @@ function neverReported(paths: string[]): boolean {
      scroll container over both sections and it holds the data-tile-row rows (the shown list). -->
 <div class="customize-list" bind:this={listEl}>
   <h3 class="caps-label section-label">Shown</h3>
-  <ul class="tile-list">
+  <ul class="tile-list bare-list">
     {#each shown as def, i (def.id)}
       {@const indicator = reorder.indicatorFor(def.id)}
       <li
@@ -70,7 +70,7 @@ function neverReported(paths: string[]): boolean {
   </ul>
   {#if available.length > 0}
     <h3 class="caps-label section-label">Available</h3>
-    <ul class="tile-list">
+    <ul class="tile-list bare-list">
       {#each available as def (def.id)}
         {@const unavailable = neverReported(def.paths)}
         <li
@@ -106,12 +106,6 @@ function neverReported(paths: string[]): boolean {
 .section-label:first-child {
   padding-block-start: 0;
 }
-.tile-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
 /* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
    block-flow row wraps the grip onto its own line and every selected row doubles in height. */
 .tile-list li {

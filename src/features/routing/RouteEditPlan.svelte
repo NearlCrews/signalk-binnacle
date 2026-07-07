@@ -84,7 +84,7 @@ const totalTime = $derived.by(() => {
     <span class="caps-label" title="Compass direction of the leg, in degrees true">Bearing</span>
     <span class="leg-time caps-label">Time</span>
   </div>
-  <ol class="legs" aria-label="Legs">
+  <ol class="legs bare-list" aria-label="Legs">
     {#each workingLegs as leg (leg.fromIndex)}
       {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
       <li>
@@ -112,9 +112,6 @@ const totalTime = $derived.by(() => {
 /* The leg-by-leg readout for the route under edit: a scrolling list of leg number, distance, bearing,
    and the cumulative passage time to reach that waypoint, mono and tabular so the columns line up. */
 .legs {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;

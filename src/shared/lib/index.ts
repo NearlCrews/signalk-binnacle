@@ -2,6 +2,7 @@ export { formatBytes } from './bytes';
 export { Clock, type ReactiveClock } from './clock.svelte';
 export { formatLatitude, formatLongitude, PLACEHOLDER } from './coords';
 export { downloadText } from './download';
+export { ErrorState } from './error-state.svelte';
 export { fetchJsonOrUndefined } from './fetch-json';
 export { withTimeout } from './fetch-timeout';
 export { uuidv4 } from './id';

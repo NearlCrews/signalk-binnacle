@@ -1,6 +1,6 @@
 import type { Waypoint, WaypointsStore } from '$entities/waypoint';
 import type { LatLon } from '$shared/geo';
-import { uuidv4 } from '$shared/lib';
+import { ErrorState, uuidv4 } from '$shared/lib';
 import { deleteWaypoint, fetchWaypoints, saveWaypoint } from './waypoints-client';
 
 export interface WaypointControllerDeps {
@@ -12,9 +12,13 @@ export interface WaypointControllerDeps {
 export function createWaypointsController(deps: WaypointControllerDeps) {
   const { origin, waypointsStore } = deps;
 
-  let waypointError = $state<string | undefined>();
+  const waypointError = new ErrorState();
   let addWaypointAt = $state<LatLon | undefined>();
   let editingWaypoint = $state<Waypoint | undefined>();
+
+  function clearWaypointError(): void {
+    waypointError.clear();
+  }
 
   async function refreshWaypoints(): Promise<void> {
     const fetched = await fetchWaypoints(origin, deps.getToken());
@@ -23,12 +27,12 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       return;
     }
     if (waypointsStore.waypoints.length === 0) {
-      waypointError = 'Could not load waypoints. Check the connection.';
+      waypointError.flag('Could not load waypoints. Check the connection.');
     }
   }
 
   function onDropWaypoint(position: LatLon): void {
-    waypointError = undefined;
+    waypointError.clear();
     addWaypointAt = position;
   }
 
@@ -43,14 +47,14 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       ...(result.icon ? { icon: result.icon } : {}),
     };
     if (!(await saveWaypoint(origin, deps.getToken(), waypoint))) {
-      waypointError = 'Could not save the waypoint. Check the connection and write access.';
+      waypointError.flag('Could not save the waypoint. Check the connection and write access.');
       return;
     }
     await refreshWaypoints();
   }
 
   function onOpenEditWaypoint(waypoint: Waypoint): void {
-    waypointError = undefined;
+    waypointError.clear();
     editingWaypoint = waypoint;
   }
 
@@ -58,19 +62,19 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     const existing = editingWaypoint;
     editingWaypoint = undefined;
     if (!existing) return;
-    waypointError = undefined;
+    waypointError.clear();
     const updated: Waypoint = { ...existing, name: result.name, icon: result.icon };
     if (!(await saveWaypoint(origin, deps.getToken(), updated))) {
-      waypointError = 'Could not save the waypoint. Check the connection and write access.';
+      waypointError.flag('Could not save the waypoint. Check the connection and write access.');
       return;
     }
     await refreshWaypoints();
   }
 
   async function onDeleteWaypoint(id: string): Promise<void> {
-    waypointError = undefined;
+    waypointError.clear();
     if (!(await deleteWaypoint(origin, deps.getToken(), id))) {
-      waypointError = 'Could not delete the waypoint.';
+      waypointError.flag('Could not delete the waypoint.');
       return;
     }
     await refreshWaypoints();
@@ -95,8 +99,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     onSaveWaypointEdit,
     cancelEditWaypoint,
     onDeleteWaypoint,
+    clearWaypointError,
     get waypointError() {
-      return waypointError;
+      return waypointError.message;
     },
     get addWaypointAt() {
       return addWaypointAt;

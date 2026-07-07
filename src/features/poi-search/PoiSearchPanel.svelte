@@ -111,7 +111,7 @@ function toggleSort(key: PoiSort): void {
         : 'No places match your search. Clear it to see all in view.'}
     </p>
   {:else}
-    <ul class="nav-list" aria-label="Places in view">
+    <ul class="nav-list bare-list" aria-label="Places in view">
       {#each rows as row (row.poi.id)}
         <li>
           <button

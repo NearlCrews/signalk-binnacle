@@ -119,7 +119,7 @@ const reorder = createLayerReorder(
           <h3 class="category-head pinned-head">
             <span class="category-title caps-label">Always on top</span>
           </h3>
-          <ul class="category-rows">
+          <ul class="category-rows bare-list">
             {#each pinned as item (item.id)}
               <li class="list-row pinned-row">
                 <span class="lead"><Lock class="pin-glyph" size={18} aria-hidden="true" /></span>
@@ -130,7 +130,7 @@ const reorder = createLayerReorder(
         </section>
       {/if}
 
-      <ul class="rows" bind:this={listEl}>
+      <ul class="rows bare-list" bind:this={listEl}>
         {#each categories as cat (cat.id)}
           {@const expanded = isOpen(cat.id)}
           {@const panelId = `layer-cat-${cat.id}`}
@@ -152,7 +152,7 @@ const reorder = createLayerReorder(
                 <span class="category-count" aria-hidden="true">{cat.rows.length}</span>
               </button>
             </h3>
-            <ul class="category-rows" id={panelId} hidden={!expanded}>
+            <ul class="category-rows bare-list" id={panelId} hidden={!expanded}>
               {#each cat.rows as { item, i } (item.id)}
                 {@const indicator = reorder.indicatorFor(item.id)}
                 {@const removeId = userChartIds.get(item.id)}
@@ -197,9 +197,6 @@ const reorder = createLayerReorder(
 
 <style>
 .rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -271,9 +268,7 @@ const reorder = createLayerReorder(
   color: var(--text-muted);
 }
 .category-rows {
-  list-style: none;
   margin: var(--space-1) 0 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0;

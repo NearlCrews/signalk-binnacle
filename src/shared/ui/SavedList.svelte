@@ -26,7 +26,7 @@ const { heading, items, empty, ariaLabel, key, isActive, card }: Props = $props(
   {#if items.length === 0}
     <p class="empty">{empty}</p>
   {:else}
-    <ul aria-label={ariaLabel}>
+    <ul class="bare-list" aria-label={ariaLabel}>
       {#each items as item (key(item))}
         <li
           class="card-frame"

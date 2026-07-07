@@ -40,6 +40,10 @@ $effect(() => {
   return registerDismiss(() => controller.setOpen(false));
 });
 
+// Hoisted so the tile selection resolves (validate the persisted ids, scan the catalog) once per
+// real change instead of once per clock tick: both the effect below and the template read this.
+const tiles = $derived(controller.tiles);
+
 // Session-only sparkline history: sampled here on the shared reactive clock so the buffers only
 // accumulate while the dock is mounted, matching the subscription lifecycle. The reads are
 // untracked so the effect re-runs on the 1 Hz clock and selection changes, not on every delta
@@ -48,7 +52,7 @@ const history = createTileHistory();
 $effect(() => {
   const now = deps.clock.now;
   const liveIds = new Set<string>();
-  for (const def of controller.tiles) {
+  for (const def of tiles) {
     if (def.viz !== 'spark') continue;
     liveIds.add(def.id);
     history.sample(
@@ -84,7 +88,7 @@ $effect(() => {
     <InstrumentsCustomize {controller} {deps} />
   {:else}
     <div class="tiles">
-      {#each controller.tiles as def (def.id)}
+      {#each tiles as def (def.id)}
         {@const reading = def.read(deps)}
         {@const zone = controller.zoneState(def, reading.siValue)}
         {#if def.kind === 'wind'}

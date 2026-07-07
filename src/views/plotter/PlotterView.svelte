@@ -169,6 +169,10 @@ interface Props {
   onHighlightLeg: (index: number) => void;
   closeRoutesPanel: () => void;
   backFromRoutesPanel: () => void;
+  closeTracksPanel: () => void;
+  backFromTracksPanel: () => void;
+  closeWaypointsPanel: () => void;
+  backFromWaypointsPanel: () => void;
   onStartRouteHere: (position: LatLon) => void;
   closeNote: () => void;
   closePoiSearch: () => void;
@@ -264,6 +268,10 @@ let {
   onHighlightLeg,
   closeRoutesPanel,
   backFromRoutesPanel,
+  closeTracksPanel,
+  backFromTracksPanel,
+  closeWaypointsPanel,
+  backFromWaypointsPanel,
   onStartRouteHere,
   closeNote,
   closePoiSearch,
@@ -430,8 +438,8 @@ $effect(() => {
           onToggleSaved={trackController.onToggleSaved}
           onExport={trackController.onExportSavedTrack}
           error={trackController.trackError}
-          onClose={closePanel}
-          onBack={backToMenu}
+          onClose={closeTracksPanel}
+          onBack={backFromTracksPanel}
         />
       {:else if activePanel === 'waypoints'}
         <WaypointsPanel
@@ -441,8 +449,8 @@ $effect(() => {
           onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
           onEdit={waypointsController.onOpenEditWaypoint}
           onDelete={waypointsController.onDeleteWaypoint}
-          onClose={closePanel}
-          onBack={backToMenu}
+          onClose={closeWaypointsPanel}
+          onBack={backFromWaypointsPanel}
         />
       {:else if activePanel === 'tides'}
         <TidesPanel

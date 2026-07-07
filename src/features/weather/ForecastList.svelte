@@ -25,7 +25,7 @@ function stepLabel(timeMs: number): string {
 </script>
 
 <h4 class="caps-label forecast-head">Forecast · next {horizonH} h</h4>
-<ul class="forecast">
+<ul class="forecast bare-list">
   {#each forecast as step (step.timeMs)}
     <li>
       <span class="f-time">{stepLabel(step.timeMs)}</span>
@@ -51,9 +51,6 @@ function stepLabel(timeMs: number): string {
   border-block-start: 1px solid var(--border);
 }
 .forecast {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

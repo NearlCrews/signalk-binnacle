@@ -2,7 +2,9 @@ import type { Action } from 'svelte/action';
 
 // A dismissible overlay panel behavior: Escape closes it, and focus returns to whatever was focused
 // when it opened (typically the control that opened it) once it closes. Deliberately light, with no
-// focus trap, because these panels are non-modal: the chart stays live underneath.
+// hand-rolled focus trap: a non-modal panel needs none (the chart stays live underneath), and a
+// modal one (a plain element vs. an HTMLDialogElement, branched below) gets focus trapping natively
+// from showModal().
 //
 // Open dismissables are tracked in one stack so a single Escape closes only the topmost (most
 // recently opened) one. The note and weather panels can be open at the same time, and the app menu

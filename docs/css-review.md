@@ -1,8 +1,8 @@
 # CSS review: dead code, modularization, and inconsistencies
 
 Scope: every CSS module in `src/styles/` and every scoped `<style>` block in every
-`.svelte` component, reviewed by a 6-agent team for dead selectors, duplicate patterns,
-token compliance violations, cross-component inconsistencies, and night-red safety.
+`.svelte` component, checked for dead selectors, duplicate patterns, token compliance
+violations, cross-component inconsistencies, and night-red safety.
 
 ## Changes made
 
