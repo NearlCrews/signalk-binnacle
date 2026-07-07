@@ -8,6 +8,7 @@ function clamp255(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
+// Expects a 6-digit #rrggbb hex string, matching this codebase's theme tokens.
 function hexToRgb(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];

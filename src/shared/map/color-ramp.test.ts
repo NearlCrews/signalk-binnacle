@@ -25,4 +25,16 @@ describe('depthShadingStops', () => {
     }
     expect(stops[stops.length - 1]).toBe('#eae6dd');
   });
+
+  it('produces intermediate stop colors that match expected shadeColor results', () => {
+    const waterHex = '#a8c9e0';
+    const stops = depthShadingStops(waterHex, '#eae6dd');
+    expect(stops[1]).toBe(shadeColor(waterHex, -0.6));
+    expect(stops[3]).toBe(shadeColor(waterHex, -0.35));
+    expect(stops[5]).toBe(shadeColor(waterHex, -0.15));
+    expect(stops[7]).toBe(waterHex);
+    expect(stops[9]).toBe(shadeColor(waterHex, 0.15));
+    expect(stops[11]).toBe(shadeColor(waterHex, 0.35));
+    expect(stops[13]).toBe(shadeColor(waterHex, 0.55));
+  });
 });
