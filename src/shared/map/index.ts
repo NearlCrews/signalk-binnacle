@@ -1,6 +1,7 @@
 export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';
+export { depthShadingStops, shadeColor } from './color-ramp';
 export { DARK_SCRIM, rgbaCss } from './contrast';
 export { matrixOf } from './custom-layer';
 export { emptyFeatureCollection, featureCollection } from './feature-collection';
