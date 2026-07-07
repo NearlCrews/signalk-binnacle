@@ -169,11 +169,14 @@ export function mapThemePaint(theme: Theme): MapThemePaint {
   return { ...PAINT[theme], theme };
 }
 
-// The color paint property for a fill or line layer. The chart adapter and the base-style recolor both
-// choose between line-color and fill-color, so sharing this keeps the two spellings from drifting.
-// Anything that is not a line takes fill-color, matching the chart adapter's fill default.
-export function colorProperty(type: string): 'line-color' | 'fill-color' {
-  return type === 'line' ? 'line-color' : 'fill-color';
+// The color paint property for a fill, line, or symbol layer. The chart adapter and the base-style
+// recolor both choose between line-color, fill-color, and text-color, so sharing this keeps the
+// spellings from drifting. Anything that is not a line or symbol takes fill-color, matching the
+// chart adapter's fill default.
+export function colorProperty(type: string): 'line-color' | 'fill-color' | 'text-color' {
+  if (type === 'line') return 'line-color';
+  if (type === 'symbol') return 'text-color';
+  return 'fill-color';
 }
 
 // Apply the theme to a raster overlay layer. A raster layer cannot be recolored, so night-red

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import TOKENS_CSS from '../../styles/tokens.css?raw';
-import { mapThemePaint } from './map-theme';
+import { colorProperty, mapThemePaint } from './map-theme';
 
 const THEME_SELECTOR = {
   day: /:root\s*\{([^}]*)\}/,
@@ -59,5 +59,20 @@ describe('mapThemePaint', () => {
     expect(aisTarget.r).toBeGreaterThan(aisTarget.b);
     expect(aisTarget.g).toBeLessThan(0x50);
     expect(aisTarget.b).toBeLessThan(0x40);
+  });
+});
+
+describe('colorProperty', () => {
+  it('maps line to line-color', () => {
+    expect(colorProperty('line')).toBe('line-color');
+  });
+
+  it('maps symbol to text-color', () => {
+    expect(colorProperty('symbol')).toBe('text-color');
+  });
+
+  it('defaults everything else to fill-color', () => {
+    expect(colorProperty('fill')).toBe('fill-color');
+    expect(colorProperty('raster')).toBe('fill-color');
   });
 });
