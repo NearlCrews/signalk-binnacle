@@ -82,6 +82,20 @@ violations, cross-component inconsistencies, and night-red safety.
     the `:hover` state changes `border-color` but the `.icon-btn` transition does not include
     `border-color`. Added a scoped `transition: border-color var(--transition-fast)` to
     `.skip`.
+20. **`.panel-slot` third copy** (`src/views/plotter/PlotterView.svelte`): the note detail panel's
+    `.note-panel-slot` duplicated the hoisted `.panel-slot` (item 6) except for docking to the
+    trailing edge. Gave `.panel-slot` a `--end` modifier in `panels.css` and removed the scoped
+    copy.
+21. **`.fix` composes `.muted-note`** (`src/features/mob/MobConfirmDialog.svelte`): the scoped rule
+    re-declared `color: var(--text-muted); font-size: var(--text-sm)`. Added `muted-note` to the
+    template class, kept only `padding-block-start` in the scoped rule.
+22. **`.more` composes `.muted-note`** (`src/features/lookout/DangerStrip.svelte`): the scoped rule
+    re-declared `margin: 0; color: var(--text-muted);`. Added `muted-note` to the template class,
+    kept only `margin-block-start` and the `--text-xs` override.
+23. **`.leg-no` composes `.num`** (`src/features/routing/RouteEditPlan.svelte`): the row number
+    re-declared `font-variant-numeric: tabular-nums`, which the global `.num` class already
+    provides and its sibling columns already use. Added `class="num"` to the template, removed the
+    duplicated property from the scoped rule.
 
 ## Findings not acted on (documented for future consideration)
 
@@ -103,5 +117,6 @@ violations, cross-component inconsistencies, and night-red safety.
 - **Fine-print muted text pattern** (`font-size: var(--text-xs); color: var(--text-muted)`):
   re-declared in 7+ locations. A `.muted-note--xs` variant in `text.css` would hoist it.
 - **`InstrumentsPanel.svelte` uses `@media (max-width: 900px)`** while other panels use
-  `600px`. The 900px breakpoint targets landscape tablets where the dock would be too
-  narrow; it may be intentional but is undocumented.
+  `600px`. Intentional: the 900px breakpoint pairs with the component's own
+  `FULLSCREEN_BREAKPOINT_PX`, switching the dock to a fullscreen overlay rather than a bottom
+  sheet, a different collapse behavior from the 600px panels.

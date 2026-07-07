@@ -61,13 +61,13 @@ function confirm(): void {
     Marks the spot where MOB was pressed and sounds the alarm on every station.
   </p>
   {#if mark?.position}
-    <p class="fix" aria-hidden="true">
+    <p class="fix muted-note" aria-hidden="true">
       Captured {formatClockTime(mark.epochMs, { seconds: true })}<br>
       <span class="num">{formatLatitude(mark.position.latitude)}</span>
       <span class="num">{formatLongitude(mark.position.longitude)}</span>
     </p>
   {:else}
-    <p class="fix no-fix">No GPS fix. The alarm will sound without a position.</p>
+    <p class="fix muted-note no-fix">No GPS fix. The alarm will sound without a position.</p>
   {/if}
   <div class="actions">
     <button type="button" class="btn" onclick={onCancel}>
@@ -117,15 +117,13 @@ function confirm(): void {
 .fix {
   margin: 0;
   padding-inline: var(--space-4);
-  color: var(--text);
 }
 .desc {
   padding-block-start: var(--space-3);
+  color: var(--text);
 }
 .fix {
   padding-block-start: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 .no-fix {
   font-family: var(--font-ui);

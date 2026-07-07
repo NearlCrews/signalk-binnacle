@@ -75,7 +75,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
       {/each}
     </ul>
     {#if overflow > 0}
-      <p class="more">+{overflow} more</p>
+      <p class="more muted-note">+{overflow} more</p>
     {/if}
   </aside>
 {/if}
@@ -92,9 +92,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   gap: var(--space-1);
 }
 .more {
-  margin: 0;
   margin-block-start: 0.3rem;
   font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 </style>

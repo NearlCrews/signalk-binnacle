@@ -375,7 +375,7 @@ $effect(() => {
     <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
   </div>
   {#if selectedNote && noteLoader}
-    <div class="note-panel-slot">
+    <div class="panel-slot panel-slot--end">
       <NoteDetailPanel
         selection={selectedNote}
         load={noteLoader.load}
@@ -628,18 +628,5 @@ $effect(() => {
 }
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
-}
-.note-panel-slot {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  z-index: var(--z-panel);
-}
-@media (max-width: 600px) {
-  .note-panel-slot {
-    inset-block-start: auto;
-    inset-inline: 0;
-    inline-size: auto;
-  }
 }
 </style>

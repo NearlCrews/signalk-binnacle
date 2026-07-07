@@ -277,15 +277,13 @@ const caution = $derived(thresholdsCaution(t));
 .alert-message {
   overflow-wrap: anywhere;
 }
-.alert-time {
-  flex-shrink: 0;
-}
 .alert-actions {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--space-1);
 }
+.alert-time,
 .flag-tag {
   flex-shrink: 0;
 }

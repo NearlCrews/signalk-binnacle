@@ -127,6 +127,8 @@ Rules:
 
 Reach for these before writing scoped CSS. Each lives in the named module.
 
+- Base (`base.css`): `.bare-list` (list-style, margin, and padding reset for a `<ul>` or `<ol>` used
+  as a layout container, not a semantic list).
 - Buttons (`buttons.css`): `.btn` (the base bordered button, 44px), `.btn-primary` (filled accent),
   `.btn-danger`, `.btn-ghost`, `.btn--grow` (flex-fill), `.segmented` (a joined row of `.btn` for a
   binary or small-enum choice; the active segment carries `.is-on`).
@@ -169,9 +171,13 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
   `.row-interactive` (the shared control-height transparent interactive row that tints on hover and
   lights via `.is-on`; composed by the weather and route menu rows, the icon picker, and the layers
-  category header), `.overlay-backdrop` (the transparent dismiss backdrop).
+  category header), `.overlay-backdrop` (the transparent dismiss backdrop), `.unavailable` (the
+  grayed-out treatment for a row whose provider is absent, shared by the layer rows and the
+  instrument customize list).
 - Panels (`panels.css`): `.slide-over` and `.slide-over--dock-{left,right}` (the docked panel frame),
-  `.panel-header`, `.panel-body`, `.panel-body--flex` (the bodyFlex column), and `.panel-footer`.
+  `.panel-header`, `.panel-body`, `.panel-body--flex` (the bodyFlex column), `.panel-footer`, and
+  `.panel-slot` plus its `--end` modifier (the absolute-positioned dock slot for a docked panel,
+  shared by App.svelte and PlotterView.svelte).
 - Overlays, modals: `.modal-card`.
 
 ## 6. Shared UI primitives (`$shared/ui`)

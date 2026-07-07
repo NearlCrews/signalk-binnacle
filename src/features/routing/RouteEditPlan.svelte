@@ -96,7 +96,7 @@ const totalTime = $derived.by(() => {
           aria-label={`Highlight leg ${leg.fromIndex + 1}`}
           onclick={() => onHighlightLeg(leg.fromIndex)}
         >
-          <span class="leg-no">{leg.fromIndex + 1}</span>
+          <span class="leg-no num">{leg.fromIndex + 1}</span>
           <span class="leg-dist num">{formatNm(leg.distanceMeters)} nm</span>
           <span class="leg-brg num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
           <span class="leg-time num">
@@ -142,7 +142,6 @@ const totalTime = $derived.by(() => {
 }
 .leg-no {
   color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
 }
 .leg-dist {
   color: var(--text);

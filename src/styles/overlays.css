@@ -118,7 +118,9 @@ dialog.modal-card {
 }
 
 /* A grayed-out row whose provider is absent. Shared by the layer rows and the instrument customize
-   list so the dim treatment is identical everywhere. */
+   list so the dim treatment is identical everywhere. 0.65, not the --disabled-opacity token: the
+   row's own disabled toggle already dims at 0.45, and the two compound, so matching
+   --disabled-opacity here would go nearly invisible at night. */
 .unavailable {
   opacity: 0.65;
 }
