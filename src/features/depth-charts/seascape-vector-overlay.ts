@@ -132,11 +132,11 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
       }
     },
     remove(ctx) {
-      removeLayersAndSources(ctx.map, [DRYING_LAYER_ID], []);
+      removeLayersAndSources(ctx.map, DRYING_LAYER_IDS, []);
       removeSharedSourceIfOrphaned(ctx, CONTOUR_LAYER_IDS);
     },
     setVisible(ctx, visible) {
-      setLayersVisibility(ctx.map, [DRYING_LAYER_ID], visible);
+      setLayersVisibility(ctx.map, DRYING_LAYER_IDS, visible);
     },
     setOpacity(ctx, opacity) {
       if (ctx.map.getLayer(DRYING_LAYER_ID)) {
