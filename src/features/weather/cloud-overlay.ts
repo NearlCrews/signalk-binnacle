@@ -11,6 +11,7 @@ export function createCloudOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
     {
       id: WEATHER_LAYER_IDS.cloud,
       title: 'Cloud',
+      description: 'Cloud cover fraction across the area.',
       sourceId: 'binnacle-weather-cloud-field',
       layerId: 'binnacle-weather-cloud-field-layer',
       defaultOpacity: 0.5,

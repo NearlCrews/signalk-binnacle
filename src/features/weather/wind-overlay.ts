@@ -68,7 +68,8 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
   let lastStep = 0;
   let removeContextListeners = () => {};
 
-  // Arrow fallback path.
+  // Arrow fallback path. windColorExpression stays free of MapLibre types (see wind-colormap.ts),
+  // so this is the one place that casts its plain array to the paint property's expression type.
   function colorExpr(t: Theme): ExpressionSpecification {
     return windColorExpression(t) as unknown as ExpressionSpecification;
   }
