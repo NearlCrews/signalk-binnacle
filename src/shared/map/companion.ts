@@ -4,7 +4,6 @@
 // URL, so a standalone install is unchanged.
 
 import { proxyTileTemplate } from 'signalk-chart-sources';
-import type { RasterOverlaySource } from './raster-overlay';
 
 const COMPANION_PATH = '/plugins/signalk-chart-locker';
 
@@ -28,14 +27,17 @@ export async function detectCompanion(
 }
 
 /**
- * Route a list of raster overlay sources through the companion proxy when present, else leave their
+ * Route a list of sources through the companion proxy when present, else leave their
  * direct upstream URLs. The proxied template keys on the source id, which the companion expands to the
  * real upstream, so the webapp no longer builds WMS, WMTS, or ArcGIS requests on the proxied path.
+ * Structural, not RasterOverlaySource-specific: the Seascape DEM and vector source descriptors
+ * (features/depth-charts/seascape-sources.ts) are not raster WMS overlays but share the same id
+ * and tiles[] shape, so they route through the same companion proxy without a second helper.
  */
-export function proxiedSources(
-  sources: RasterOverlaySource[],
+export function proxiedSources<T extends { id: string; tiles: string[] }>(
+  sources: T[],
   companionBase: string | null,
-): RasterOverlaySource[] {
+): T[] {
   if (companionBase === null) {
     return sources;
   }

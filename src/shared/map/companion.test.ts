@@ -52,6 +52,23 @@ describe('proxiedSources', () => {
   });
 });
 
+describe('proxiedSources with a non-raster-overlay shape', () => {
+  it('rewrites tiles for any source shaped with id and tiles', () => {
+    const sources = [
+      {
+        id: 'seascape-dem',
+        tiles: ['https://tiles.openwaters.io/seascape/{z}/{x}/{y}.webp'],
+        maxzoom: 17,
+      },
+    ];
+    const out = proxiedSources(sources, 'http://pi.local/plugins/signalk-chart-locker');
+    expect(out[0].tiles).toEqual([
+      'http://pi.local/plugins/signalk-chart-locker/tile/seascape-dem/{z}/{x}/{y}',
+    ]);
+    expect(out[0].maxzoom).toBe(17);
+  });
+});
+
 describe('proxied overlay ids match the companion registry', () => {
   it('every proxied overlay id exists in CHART_SOURCES, so the proxy resolves it', () => {
     const registryIds = new Set(CHART_SOURCES.map((s) => s.id));
