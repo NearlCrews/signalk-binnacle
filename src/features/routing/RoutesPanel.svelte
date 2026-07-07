@@ -14,6 +14,7 @@ import {
 import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
 import { formatNm } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
+import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
   defaultSaveName,
@@ -29,6 +30,7 @@ import {
 import RouteEditPlan from './RouteEditPlan.svelte';
 
 interface Props {
+  auth: AuthController;
   routes: Route[];
   shownIds: ReadonlySet<string>;
   // The route currently under edit on the chart, or undefined when not editing.
@@ -65,6 +67,7 @@ interface Props {
 }
 
 const {
+  auth,
   routes,
   shownIds,
   working,
@@ -145,6 +148,12 @@ $effect(() => {
 >
   {#if error}
     <p class="alert-note" role="alert">{error}</p>
+  {/if}
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      A write token is needed to save, activate, or delete routes. Request a read/write token to
+      continue.
+    </p>
   {/if}
 
   <p class="muted-note">

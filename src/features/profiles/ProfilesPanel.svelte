@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
 import type { Profile } from '$entities/profile';
+import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
   defaultSaveName,
@@ -14,6 +15,7 @@ import {
 import { type ImportedProfile, parseProfilesJson } from './profile-io';
 
 interface Props {
+  auth: AuthController;
   profiles: Profile[];
   activeId: string | undefined;
   defaultId: string | undefined;
@@ -32,6 +34,7 @@ interface Props {
 }
 
 const {
+  auth,
   profiles,
   activeId,
   defaultId,
@@ -87,6 +90,12 @@ const armedDelete = new ArmedRow((id) => onRemove(id));
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      Profiles save on this device, but a write token is needed to sync them to other stations.
+      Request a read/write token to continue.
+    </p>
+  {/if}
   <p class="muted-note">
     A profile saves which layers and overlays are on, so you can switch between setups like coastal
     cruising and racing in one tap.

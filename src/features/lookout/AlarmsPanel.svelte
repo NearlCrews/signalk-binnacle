@@ -3,6 +3,7 @@ import { Bell, BellOff } from '@lucide/svelte';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
 import { formatClockTime, metersToNauticalMiles, nauticalMilesToMeters } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
+import type { AuthController } from '$shared/signalk';
 import { Disclosure, SlideOver, UnitField } from '$shared/ui';
 import { thresholdsCaution } from './thresholds-caution';
 
@@ -16,6 +17,7 @@ const STATE_LABELS: Record<string, string> = {
 const stateLabel = (state: string): string => STATE_LABELS[state] ?? state;
 
 interface Props {
+  auth: AuthController;
   notifications: NotificationsStore;
   // A transient silence or acknowledge failure, surfaced because a refused action is otherwise
   // indistinguishable from a slow stream echo while the alarm keeps sounding.
@@ -33,6 +35,7 @@ interface Props {
 }
 
 const {
+  auth,
   notifications,
   error,
   onSilence,
@@ -93,6 +96,12 @@ const caution = $derived(thresholdsCaution(t));
 <SlideOver title="Alarms" closeLabel="Close alarms panel" {onClose} {onBack} bodyFlex>
   {#if error}
     <p class="alert-note" role="alert">{error}</p>
+  {/if}
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      A write token is needed to silence or acknowledge alarms. Request a read/write token to
+      continue.
+    </p>
   {/if}
   <p class="muted-note">
     Active alarms show here. Silence stops the sound, acknowledge clears it. Tune the collision

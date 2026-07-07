@@ -3,6 +3,7 @@ import { Download, Eraser, Pause, Play, Route, Save, Trash2, Undo2 } from '@luci
 import type { TrackRecorder } from '$entities/track';
 import { formatDuration, formatKnots, formatNm, PLACEHOLDER } from '$shared/lib';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
+import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
   defaultSaveName,
@@ -16,6 +17,7 @@ import {
 import type { SavedTrack } from './tracks-client';
 
 interface Props {
+  auth: AuthController;
   recorder: TrackRecorder;
   settings: PersistedValue<TrackSettings>;
   saved: SavedTrack[];
@@ -34,6 +36,7 @@ interface Props {
 }
 
 const {
+  auth,
   recorder,
   settings,
   saved,
@@ -97,6 +100,11 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 <SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack}>
   {#if error}
     <p class="alert-note" role="alert">{error}</p>
+  {/if}
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      A write token is needed to save or delete tracks. Request a read/write token to continue.
+    </p>
   {/if}
   <p class="muted-note">
     A track is the breadcrumb trail of where the boat has been. Recording starts automatically while

@@ -909,13 +909,17 @@ const menuItems = $derived<MenuItem[]>([
         },
       ]
     : []),
-  // time-travel is not a LeftPanel; it has its own active flag and enter/exit API.
+  // time-travel is not a LeftPanel; it has its own active flag and enter/exit API. Grays like the
+  // radar tile when no history provider is known, rather than opening to an empty mode.
   {
     id: 'time-travel',
     label: 'Replay',
     shortLabel: 'Replay',
     icon: History,
     group: 'Conditions',
+    available: (historyProviders?.ids.length ?? 0) > 0,
+    unavailableHint:
+      'Replay needs a history provider plugin on the server, such as signalk-questdb.',
     pressed: timeTravel.active,
     onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
   },
@@ -1721,6 +1725,7 @@ onDestroy(() => {
   {#if activePanel === 'profiles'}
     <div class="panel-slot" id="profiles-panel">
       <ProfilesPanel
+        {auth}
         profiles={profileStore.profiles}
         activeId={profileStore.activeId}
         defaultId={profileStore.defaultId}

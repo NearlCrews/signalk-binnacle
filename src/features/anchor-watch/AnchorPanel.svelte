@@ -11,9 +11,11 @@ import {
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
+import type { AuthController } from '$shared/signalk';
 import { InlineConfirm, SlideOver, UnitField } from '$shared/ui';
 
 interface Props {
+  auth: AuthController;
   anchor: AnchorWatch;
   vessel: OwnVessel;
   units: UnitsStore;
@@ -26,7 +28,7 @@ interface Props {
   onBack?: () => void;
 }
 
-const { anchor, vessel, units, error, onDrop, onRaise, onSetRadius, onClose, onBack }: Props =
+const { auth, anchor, vessel, units, error, onDrop, onRaise, onSetRadius, onClose, onBack }: Props =
   $props();
 
 const watching = $derived(anchor.watching);
@@ -82,6 +84,12 @@ function captureFromDistance(): void {
 </script>
 
 <SlideOver title="Anchor watch" closeLabel="Close anchor watch" {onClose} {onBack} bodyFlex>
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      A write token is needed to drop, move, or raise the anchor. Request a read/write token to
+      continue.
+    </p>
+  {/if}
   <p class="muted-note">
     Drop the anchor to start a drift alarm that sounds if the boat swings past the watch radius.
   </p>

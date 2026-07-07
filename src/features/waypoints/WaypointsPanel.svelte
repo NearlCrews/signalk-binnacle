@@ -2,9 +2,11 @@
 import { Navigation, SquarePen, Trash2 } from '@lucide/svelte';
 import type { Waypoint } from '$entities/waypoint';
 import { formatLatitude, formatLongitude } from '$shared/lib';
+import type { AuthController } from '$shared/signalk';
 import { ArmedRow, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
 
 interface Props {
+  auth: AuthController;
   waypoints: Waypoint[];
   // A transient error to show (a failed save, edit, or delete), or undefined when clear.
   error: string | undefined;
@@ -19,7 +21,8 @@ interface Props {
   onBack?: () => void;
 }
 
-const { waypoints, error, onLocate, onGoTo, onEdit, onDelete, onClose, onBack }: Props = $props();
+const { auth, waypoints, error, onLocate, onGoTo, onEdit, onDelete, onClose, onBack }: Props =
+  $props();
 
 // Deleting a waypoint is destructive, so it arms a confirm step rather than firing on a single
 // tap where a mis-tap on a rolling deck would lose a saved mark.
@@ -29,6 +32,12 @@ const armedDelete = new ArmedRow((id) => onDelete(id));
 <SlideOver title="Waypoints" closeLabel="Close waypoints panel" bodyFlex {onClose} {onBack}>
   {#if error}
     <p class="alert-note" role="alert">{error}</p>
+  {/if}
+  {#if auth.writeBlocked}
+    <p class="muted-note">
+      A write token is needed to add, edit, or delete waypoints. Request a read/write token to
+      continue.
+    </p>
   {/if}
 
   <p class="muted-note">Press and hold anywhere on the chart to drop a waypoint.</p>

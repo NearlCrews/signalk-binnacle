@@ -402,6 +402,7 @@ $effect(() => {
         />
       {:else if activePanel === 'routes'}
         <RoutesPanel
+          {auth}
           routes={routeStore.routes}
           shownIds={routeStore.shownIds}
           working={routeStore.working}
@@ -427,6 +428,7 @@ $effect(() => {
         />
       {:else if activePanel === 'tracks'}
         <TracksPanel
+          {auth}
           {recorder}
           settings={trackSettings}
           saved={trackController.savedTracks}
@@ -443,6 +445,7 @@ $effect(() => {
         />
       {:else if activePanel === 'waypoints'}
         <WaypointsPanel
+          {auth}
           waypoints={waypointsStore.waypoints}
           error={waypointsController.waypointError}
           onLocate={(waypoint) => flyToPosition(waypoint.position)}
@@ -494,6 +497,7 @@ $effect(() => {
         />
       {:else if activePanel === 'anchor'}
         <AnchorPanel
+          {auth}
           {units}
           {anchor}
           {vessel}
@@ -506,6 +510,7 @@ $effect(() => {
         />
       {:else if activePanel === 'alarms'}
         <AlarmsPanel
+          {auth}
           {thresholds}
           collisionMuted={collisionMute.active}
           {collisionMuteRemainingMin}
