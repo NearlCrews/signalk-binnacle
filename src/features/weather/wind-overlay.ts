@@ -68,7 +68,12 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
   let lastStep = 0;
   let removeContextListeners = () => {};
 
-  // Arrow fallback path.
+  // Arrow fallback path. windColorExpression stays free of MapLibre types (see wind-colormap.ts),
+  // so this is the one place that casts its plain array to the paint property's expression type.
+  function colorExpr(t: Theme): ExpressionSpecification {
+    return windColorExpression(t) as unknown as ExpressionSpecification;
+  }
+
   function addArrowLayer(ctx: OverlayContext): void {
     ensureGeoJsonSource(ctx.map, SOURCE_ID);
     if (!ctx.map.getLayer(LAYER_ID)) {
@@ -77,11 +82,7 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
         type: 'line',
         source: SOURCE_ID,
         layout: { 'line-cap': 'round', visibility: visible ? 'visible' : 'none' },
-        paint: {
-          'line-color': windColorExpression(theme) as unknown as ExpressionSpecification,
-          'line-width': 2,
-          'line-opacity': opacity,
-        },
+        paint: { 'line-color': colorExpr(theme), 'line-width': 2, 'line-opacity': opacity },
       };
       ctx.map.addLayer(layer, ctx.beforeIdFor('weather'));
     }
@@ -242,11 +243,7 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
       theme = paint.theme;
       particles?.setTheme(windColorTexture(theme));
       if (ctx.map.getLayer(LAYER_ID)) {
-        ctx.map.setPaintProperty(
-          LAYER_ID,
-          'line-color',
-          windColorExpression(theme) as unknown as ExpressionSpecification,
-        );
+        ctx.map.setPaintProperty(LAYER_ID, 'line-color', colorExpr(theme));
       }
     },
   };
