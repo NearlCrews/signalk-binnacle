@@ -62,6 +62,7 @@ export function createFakeMap() {
     setLayerZoomRange: vi.fn(),
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
+    setGlobalStateProperty: vi.fn(),
     on: (type: string, handler: (event: unknown) => void) => {
       const set = handlers.get(type) ?? new Set();
       set.add(handler);

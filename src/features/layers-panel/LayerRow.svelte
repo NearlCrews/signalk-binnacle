@@ -50,11 +50,12 @@ const percent = $derived(Math.round(item.opacity * 100));
 // is below full so a faded layer is visible at a glance without opening the popover.
 const canTune = $derived(item.supportsOpacity && item.visible);
 const dimmed = $derived(item.opacity < 1);
-// The drag handle moves the whole row, so for a facet group it names the group, otherwise the layer.
 // A row only counts as a facet group when it actually has sub-layers nested under it: a row that
 // merely shares a group id with something it is not the parent of (for example a plain sibling row
 // tagged with the same group for display grouping alone) keeps its own title.
-const handleLabel = $derived(subLayers.length > 0 ? (groupTitle ?? item.title) : item.title);
+const isFacetGroup = $derived(subLayers.length > 0);
+// The drag handle moves the whole row, so for a facet group it names the group, otherwise the layer.
+const handleLabel = $derived(isFacetGroup ? (groupTitle ?? item.title) : item.title);
 
 let tuneOpen = $state(false);
 // Close the popover if the layer is hidden while it is open: the popover lives inside the canTune
@@ -143,12 +144,12 @@ $effect(() => {
   class:drop-before={dropBefore}
   class:drop-after={dropAfter}
   class:unavailable={!item.available}
-  aria-label={subLayers.length > 0 ? groupTitle : undefined}
+  aria-label={isFacetGroup ? groupTitle : undefined}
   title={item.available ? undefined : item.unavailableHint}
   data-layer-row={item.id}
 >
   <UnavailableHint hint={item.available ? undefined : item.unavailableHint} />
-  {#if subLayers.length > 0}
+  {#if isFacetGroup}
     <!-- A facet group: one handle moves the whole group, the parent and child toggles share one
          aligned column, and the tune control sits on the parent line. -->
     <div class="facet-row">

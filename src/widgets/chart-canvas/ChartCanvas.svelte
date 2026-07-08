@@ -31,6 +31,7 @@ import type { TimeTravelStore } from '$features/time-travel';
 import type { SavedTracksSource } from '$features/track-layer';
 import { OWN_VESSEL_OVERLAY_ID } from '$features/vessel-layer';
 import type { LatLon } from '$shared/geo';
+import { lengthUnit } from '$shared/lib';
 import {
   chartSourceId,
   createChartOverlay,
@@ -226,7 +227,7 @@ $effect(() => {
 $effect(() => {
   const map = mapRef;
   if (!map) return;
-  map.setGlobalStateProperty('unit', units.mode === 'imperial' ? 'ft' : 'm');
+  map.setGlobalStateProperty('unit', lengthUnit(units.mode));
 });
 
 // The live vessel dims to this opacity during time-travel review so the scrub marker stands out.
@@ -290,6 +291,10 @@ onMount(async () => {
       };
     },
     onLoad: async ({ map, ctx, manager: mgr, recolor, isDestroyed, runTick }) => {
+      // Seed the unit global-state before registerAll below adds Seascape's vector layers, so their
+      // global-state-driven filters and text-fields never evaluate against an unset value; the
+      // units effect (mapRef-gated, further down) keeps it live after this initial seed.
+      map.setGlobalStateProperty('unit', lengthUnit(units.mode));
       // A pan or zoom moves the chart out from under the menu's pixel anchor, so dismiss it on move.
       map.on('movestart', () => {
         chartMenu = undefined;

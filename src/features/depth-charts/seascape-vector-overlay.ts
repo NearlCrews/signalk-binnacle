@@ -94,12 +94,14 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     defaultOpacity: DRYING_OPACITY,
     layerIds: DRYING_LAYER_IDS,
     add(ctx) {
-      ensureSource(ctx.map, VECTOR_SOURCE_ID, {
-        type: 'vector',
-        tiles: [...source.tiles],
-        maxzoom: source.maxzoom,
-        attribution: source.attribution,
-      });
+      if (!ctx.map.getSource(VECTOR_SOURCE_ID)) {
+        ensureSource(ctx.map, VECTOR_SOURCE_ID, {
+          type: 'vector',
+          tiles: [...source.tiles],
+          maxzoom: source.maxzoom,
+          attribution: source.attribution,
+        });
+      }
       if (!ctx.map.getLayer(DRYING_LAYER_ID)) {
         const layer: FillLayerSpecification = {
           id: DRYING_LAYER_ID,
@@ -146,12 +148,14 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     defaultOpacity: 1,
     layerIds: CONTOUR_LAYER_IDS,
     add(ctx) {
-      ensureSource(ctx.map, VECTOR_SOURCE_ID, {
-        type: 'vector',
-        tiles: [...source.tiles],
-        maxzoom: source.maxzoom,
-        attribution: source.attribution,
-      });
+      if (!ctx.map.getSource(VECTOR_SOURCE_ID)) {
+        ensureSource(ctx.map, VECTOR_SOURCE_ID, {
+          type: 'vector',
+          tiles: [...source.tiles],
+          maxzoom: source.maxzoom,
+          attribution: source.attribution,
+        });
+      }
       if (!ctx.map.getLayer(CONTOUR_LINE_LAYER_ID)) {
         const layer: LineLayerSpecification = {
           id: CONTOUR_LINE_LAYER_ID,

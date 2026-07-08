@@ -25,8 +25,9 @@ const DEPTH_SHADING_OPACITY = 0.85;
 const HILLSHADE_ILLUMINATION_DIRECTION = 315;
 const HILLSHADE_EXAGGERATION = 0.5;
 // Hillshade's shadow and highlight colors are the theme's water and land tones mixed toward black
-// and white respectively, matching the same shadeColor ratios depthShadingStops's own darkest and
-// brightest stops use, so hillshade's relief reads as one seabed model with the depth-shading fill.
+// and white respectively. These ratios are tuned independently of depthShadingStops's own darkest
+// and brightest stops (different values, and the highlight uses land rather than water as its
+// base), since hillshade is a relief texture, not a continuation of the depth-tint gradient.
 const HILLSHADE_SHADOW_RATIO = -0.5;
 const HILLSHADE_HIGHLIGHT_RATIO = 0.3;
 
@@ -99,7 +100,9 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     defaultVisible: false,
     layerIds: [DEPTH_SHADING_LAYER_ID],
     add(ctx) {
-      ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
+      if (!ctx.map.getSource(DEM_SOURCE_ID)) {
+        ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
+      }
       if (!ctx.map.getLayer(DEPTH_SHADING_LAYER_ID)) {
         const layer: ColorReliefLayerSpecification = {
           id: DEPTH_SHADING_LAYER_ID,
@@ -149,7 +152,9 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     defaultVisible: false,
     layerIds: [HILLSHADE_LAYER_ID],
     add(ctx) {
-      ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
+      if (!ctx.map.getSource(DEM_SOURCE_ID)) {
+        ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
+      }
       if (ctx.map.getLayer(HILLSHADE_LAYER_ID)) return;
       const colors = hillshadeColors(DAY_PAINT);
       const layer: HillshadeLayerSpecification = {

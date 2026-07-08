@@ -105,15 +105,12 @@ describe('createSeascapeDemOverlay', () => {
     const { depthShading } = createSeascapeDemOverlay(SOURCE);
     depthShading.add(ctx(map));
 
-    // Apply day theme
     const dayPaint = mapThemePaint('day');
     depthShading.applyTheme?.(ctx(map), dayPaint);
     const dayColorExpr = getMockCalls(map)[0][2];
 
-    // Reset mock
     clearMock(map);
 
-    // Apply dusk theme
     const duskPaint = mapThemePaint('dusk');
     depthShading.applyTheme?.(ctx(map), duskPaint);
     const duskColorExpr = getMockCalls(map)[0][2];
@@ -129,14 +126,11 @@ describe('createSeascapeDemOverlay', () => {
 
     const dayPaint = mapThemePaint('day');
 
-    // First call
     depthShading.applyTheme?.(ctx(map), dayPaint);
     const firstColorExpr = getMockCalls(map)[0][2];
 
-    // Reset mock
     clearMock(map);
 
-    // Second call with same theme
     depthShading.applyTheme?.(ctx(map), dayPaint);
     const secondColorExpr = getMockCalls(map)[0][2];
 
@@ -149,7 +143,6 @@ describe('createSeascapeDemOverlay', () => {
     const { hillshade } = createSeascapeDemOverlay(SOURCE);
     hillshade.add(ctx(map));
 
-    // Apply day theme
     const dayPaint = mapThemePaint('day');
     hillshade.applyTheme?.(ctx(map), dayPaint);
     const dayShadowColor = getMockCalls(map).find(
@@ -159,10 +152,8 @@ describe('createSeascapeDemOverlay', () => {
       (call) => call[1] === 'hillshade-highlight-color',
     )?.[2];
 
-    // Reset mock
     clearMock(map);
 
-    // Apply night-red theme
     const nightPaint = mapThemePaint('night-red');
     hillshade.applyTheme?.(ctx(map), nightPaint);
     const nightShadowColor = getMockCalls(map).find(
@@ -184,7 +175,6 @@ describe('createSeascapeDemOverlay', () => {
 
     const dayPaint = mapThemePaint('day');
 
-    // First call
     hillshade.applyTheme?.(ctx(map), dayPaint);
     const firstShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
@@ -193,10 +183,8 @@ describe('createSeascapeDemOverlay', () => {
       (call) => call[1] === 'hillshade-highlight-color',
     )?.[2];
 
-    // Reset mock
     clearMock(map);
 
-    // Second call with same theme
     hillshade.applyTheme?.(ctx(map), dayPaint);
     const secondShadowColor = getMockCalls(map).find(
       (call) => call[1] === 'hillshade-shadow-color',
