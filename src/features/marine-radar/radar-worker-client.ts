@@ -55,8 +55,10 @@ export function wrapRadarWorker(
       );
     },
     recycle(buffer) {
-      void api.recycle(Comlink.transfer(buffer, [buffer])).catch(() => {
-        // A recycle that lands after the worker closed just forfeits the buffer.
+      void api.recycle(Comlink.transfer(buffer, [buffer])).catch((e) => {
+        // A recycle that lands after the worker closed just forfeits the buffer; log in dev so
+        // unexpected errors (not just the race-against-close case) are visible during development.
+        if (import.meta.env?.DEV) console.warn('[marine-radar] recycle failed', e);
       });
     },
     async close() {
@@ -78,6 +80,9 @@ export function createRadarWorkerClient(): RadarWorkerClient {
       filename: event.filename,
       lineno: event.lineno,
     });
+  };
+  worker.onmessageerror = (event) => {
+    console.error('Radar worker message could not be deserialized', event);
   };
   const api = Comlink.wrap<RadarWorkerApi>(worker);
   return wrapRadarWorker(

@@ -25,6 +25,9 @@ export function createSignalKClient(): SignalKClient {
   // the connection badge keeps reading its last live phase while data silently stops. Emitting a
   // closed-connection frame here flips the badge to disconnected so the failure is visible.
   let onFrameRef: ((frame: SKFrame) => void) | undefined;
+  // The Comlink proxy for the onFrame callback. Stored so it can be released before creating a new
+  // one on reconnect: without releasing, each connect() leaks a MessagePort on the worker side.
+  let frameProxy: (((frame: SKFrame) => void) & Comlink.ProxyMarked) | undefined;
   worker.onerror = (event) => {
     const error = new Error(
       `Signal K worker failed to load or threw: ${event.message ?? 'unknown'}`,
@@ -48,11 +51,16 @@ export function createSignalKClient(): SignalKClient {
     raw,
     async connect(url, onFrame) {
       onFrameRef = onFrame;
+      // Release any previous callback proxy so a reconnect does not leak a MessagePort.
+      if (frameProxy)
+        (frameProxy as unknown as Comlink.Remote<(frame: SKFrame) => void>)[Comlink.releaseProxy]();
+      const proxy = Comlink.proxy(onFrame);
+      frameProxy = proxy;
       const workerFailed = new Promise<never>((_, reject) => {
         rejectPendingConnect = reject;
       });
       try {
-        await Promise.race([raw.connect(url, Comlink.proxy(onFrame)), workerFailed]);
+        await Promise.race([raw.connect(url, proxy), workerFailed]);
       } finally {
         rejectPendingConnect = undefined;
       }
