@@ -101,7 +101,11 @@ export function applyBaseTheme(map: MapLibreMap, paint: MapThemePaint, layers?: 
     const themed = baseLayerPaint(layer, paint);
     if (!themed) continue;
     try {
-      map.setPaintProperty(layer.id, themed.property as keyof AllPaintProperties, themed.color as never);
+      map.setPaintProperty(
+        layer.id,
+        themed.property as keyof AllPaintProperties,
+        themed.color as never,
+      );
       // fill-pattern is a paint property in MapLibre, not a layout one; clearing it lets the
       // flat themed color show through the wetland hatch and paved-area textures.
       if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-pattern', undefined);
@@ -205,7 +209,11 @@ export function captureBaseTheme(
 export function restoreBaseTheme(map: MapLibreMap, snapshot: BaseSnapshot): void {
   for (const entry of snapshot) {
     try {
-      map.setPaintProperty(entry.id, entry.property as keyof AllPaintProperties, entry.color as never);
+      map.setPaintProperty(
+        entry.id,
+        entry.property as keyof AllPaintProperties,
+        entry.color as never,
+      );
       // Restore the label halo for every symbol, including back to undefined (the style default),
       // so the theme's added halo does not linger as a dark outline on the day map.
       if (entry.isSymbol) map.setPaintProperty(entry.id, 'text-halo-color', entry.halo as never);

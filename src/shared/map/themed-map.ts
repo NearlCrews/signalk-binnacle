@@ -215,7 +215,9 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // follow lock survives a zoom but ends the moment the user drags the chart away.
   if (opts.onUserPan) mapInstance.on('dragstart', () => opts.onUserPan?.());
   if (opts.onClick) {
-    mapInstance.on('click', (e: MapMouseEvent) => opts.onClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
+    mapInstance.on('click', (e: MapMouseEvent) =>
+      opts.onClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }),
+    );
   }
 
   // A right-click or long-press at a point, surfaced for the "go to here" menu. The contextMenu
