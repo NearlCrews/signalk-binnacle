@@ -4,7 +4,7 @@ import type {
   Map as MapLibreMap,
   SymbolLayerSpecification,
 } from 'maplibre-gl';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { LatLon } from '$shared/geo';
 import { formatNm, METERS_PER_NAUTICAL_MILE } from '$shared/lib';
 import {

@@ -1,4 +1,9 @@
-import type { GeoJSONSource, Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
+import type {
+  AllPaintProperties,
+  GeoJSONSource,
+  Map as MapLibreMap,
+  SourceSpecification,
+} from 'maplibre-gl';
 import { emptyFeatureCollection } from './feature-collection';
 
 // Add an empty GeoJSON source under `id` when the map does not already hold it: the idle state every
@@ -57,6 +62,24 @@ export function removeLayersAndSources(
   for (const id of sourceIds) {
     if (map.getSource(id)) map.removeSource(id);
   }
+}
+
+// Casts a dynamically-computed paint property name and value through MapLibre 6's keyed paint
+// types, so callers pass a plain string instead of re-spelling `as keyof AllPaintProperties` /
+// `as never` at each call site. Throws exactly as the underlying MapLibre call would (a layer
+// lacking the property, or the style not yet loaded); a caller that needs to skip such layers
+// still wraps this in its own try/catch, same as before.
+export function setPaintProp(
+  map: MapLibreMap,
+  layerId: string,
+  property: string,
+  value: unknown,
+): void {
+  map.setPaintProperty(layerId, property as keyof AllPaintProperties, value as never);
+}
+
+export function getPaintProp(map: MapLibreMap, layerId: string, property: string): unknown {
+  return map.getPaintProperty(layerId, property as keyof AllPaintProperties);
 }
 
 // Guard-add a source only if absent, so two OverlayModules that share one MapLibre source can

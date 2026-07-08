@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
 import { onDestroy, onMount } from 'svelte';
 import type { AisTargets } from '$entities/ais';
 import type { AnchorWatch } from '$entities/anchor';
@@ -301,7 +301,7 @@ onMount(async () => {
       });
       // While the measure tool is armed, plain taps append measurement points. Route editing wins
       // when both are somehow active, since Terra Draw owns the chart taps then.
-      map.on('click', (e) => {
+      map.on('click', (e: MapMouseEvent) => {
         if (!measure.active || routeStore.working) return;
         measure.add({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
       });
@@ -309,7 +309,7 @@ onMount(async () => {
       // on empty water clears the highlight. Terra Draw still owns the tap for selecting and dragging
       // the vertex underneath, so this only drives the cross-highlight. A generous box makes a small
       // dot tappable with a glove.
-      map.on('click', (e) => {
+      map.on('click', (e: MapMouseEvent) => {
         if (!routeStore.working) return;
         const index = workingRouteOverlay?.hitTestWaypoint(e.point);
         if (index !== undefined) routeStore.setHighlight({ kind: 'waypoint', index });
