@@ -2,7 +2,7 @@ import type { Map as MapLibreMap, MapSourceDataEvent } from 'maplibre-gl';
 import { chartSourceId, chartToSpecs, PMTILES_SCHEME, THEME_PAINT_KEY } from './chart-adapter';
 import type { SignalKChart } from './chart-types';
 import { applyRasterTheme, colorProperty, type MapColorKey } from './map-theme';
-import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
+import { removeLayersAndSources, setLayersVisibility, setPaintProp } from './overlay-helpers';
 import { registerPmtilesArchive, unregisterPmtilesArchive } from './pmtiles';
 import type { OverlayModule, ZBand } from './types';
 
@@ -137,7 +137,7 @@ export function createChartOverlay(
         // not present, for example if the slider moves during the window after a base-style reload and
         // before the overlay reattaches.
         if (property && ctx.map.getLayer(layer.id))
-          ctx.map.setPaintProperty(layer.id, property, opacity);
+          setPaintProp(ctx.map, layer.id, property, opacity);
       }
     },
     applyTheme(ctx, paint) {
