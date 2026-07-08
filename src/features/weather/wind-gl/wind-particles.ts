@@ -64,6 +64,8 @@ export class WindParticles {
   #framebuffer!: WebGLFramebuffer;
   #colorRamp!: WebGLTexture;
   #wind: WebGLTexture | undefined;
+  #windW = 0;
+  #windH = 0;
   #field: WindField | undefined;
   #rampPixels: Uint8Array | undefined;
   #state0!: WebGLTexture;
@@ -138,6 +140,8 @@ export class WindParticles {
     this.#screen0 = createTexture(gl, gl.NEAREST, null, 1, 1);
     this.#screen1 = createTexture(gl, gl.NEAREST, null, 1, 1);
     this.#wind = undefined;
+    this.#windW = 0;
+    this.#windH = 0;
     this.#screenW = 0;
     this.#screenH = 0;
   }
@@ -160,8 +164,29 @@ export class WindParticles {
   setWind(field: WindField): void {
     this.#field = field;
     const gl = this.#gl;
-    if (this.#wind) gl.deleteTexture(this.#wind);
-    this.#wind = createTexture(gl, gl.LINEAR, field.data, field.width, field.height);
+    // Reuse the existing texture when dimensions match (the common case for time-step advances
+    // on the same forecast model), avoiding the delete/create overhead. Falls back to a full
+    // texture creation only on a size change or the first call.
+    if (this.#wind && this.#windW === field.width && this.#windH === field.height) {
+      gl.bindTexture(gl.TEXTURE_2D, this.#wind);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        field.width,
+        field.height,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        field.data,
+      );
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    } else {
+      if (this.#wind) gl.deleteTexture(this.#wind);
+      this.#wind = createTexture(gl, gl.LINEAR, field.data, field.width, field.height);
+      this.#windW = field.width;
+      this.#windH = field.height;
+    }
   }
 
   setTheme(rampPixels: Uint8Array): void {
