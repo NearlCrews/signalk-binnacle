@@ -214,7 +214,7 @@ export function createRouteEditor(opts: {
     return reconcileNames(waypoints);
   };
 
-  draw.on('change', (_ids, type) => {
+  const onRouteChange = (_ids: unknown, type: string) => {
     if (pruning) return;
     // Styling changes come from setTheme's updateModeOptions, not a geometry edit, so they must not
     // re-run the change pipeline.
@@ -222,13 +222,15 @@ export function createRouteEditor(opts: {
     const next = read();
     remember(next);
     opts.onChange(next);
-  });
+  };
+  draw.on('change', onRouteChange);
 
   // Completing a line (double-tap or Enter) removes Terra Draw's trailing ghost, so stop dropping a
   // coordinate; the finished line's coordinates are then all placed points.
-  draw.on('finish', () => {
+  const onRouteFinish = () => {
     drawing = false;
-  });
+  };
+  draw.on('finish', onRouteFinish);
 
   // "Start a route here" seeds the first waypoint at a chosen spot. Terra Draw has no API to seed an
   // in-progress line, so replay the exact path a real opening tap takes: dispatch a pointer down and
@@ -290,6 +292,11 @@ export function createRouteEditor(opts: {
       // rather than a Terra Draw "not started" throw.
       if (!started) return;
       started = false;
+      // Remove event listeners explicitly, mirroring regions-draw's cleanup. The Terra Draw
+      // instance is garbage-collected after stop(), but explicit off() makes the lifecycle clear
+      // and is future-proof if the instance were ever reused.
+      draw.off('change', onRouteChange);
+      draw.off('finish', onRouteFinish);
       draw.stop();
     },
   };

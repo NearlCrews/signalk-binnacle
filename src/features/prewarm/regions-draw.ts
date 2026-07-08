@@ -11,7 +11,7 @@ import { bboxFromRectangle } from './estimate.js';
 export interface RegionRectangle {
   start(): void;
   clear(): void;
-  onChange(cb: (bbox: Bbox | null) => void): void;
+  onFinish(cb: (bbox: Bbox | null) => void): void;
   destroy(): void;
 }
 
@@ -21,20 +21,23 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
     modes: [new TerraDrawRectangleMode()],
   });
 
-  let onChangeCb: (bbox: Bbox | null) => void = () => {};
+  let onFinishCb: (bbox: Bbox | null) => void = () => {};
   let started = false;
 
-  const onFinish = (): void => {
-    const snapshot = draw.getSnapshot();
-    const polygon = snapshot.find((f) => f.geometry.type === 'Polygon');
-    if (!polygon) {
-      onChangeCb(null);
+  const onFinish = (id: string | number): void => {
+    if (id == null) {
+      onFinishCb(null);
       return;
     }
-    const ring = (polygon.geometry.coordinates as number[][][])[0].map(
+    const feature = draw.getSnapshotFeature(id);
+    if (feature?.geometry?.type !== 'Polygon') {
+      onFinishCb(null);
+      return;
+    }
+    const ring = (feature.geometry.coordinates as number[][][])[0].map(
       (p) => [p[0], p[1]] as [number, number],
     );
-    onChangeCb(bboxFromRectangle(ring));
+    onFinishCb(bboxFromRectangle(ring));
   };
   draw.on('finish', onFinish);
 
@@ -50,10 +53,10 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
       // draw.clear() runs terra-draw's checkEnabled(), which throws when the instance was never
       // started, so guard it with the same started flag start() uses; the null change still fires.
       if (started) draw.clear();
-      onChangeCb(null);
+      onFinishCb(null);
     },
-    onChange(cb) {
-      onChangeCb = cb;
+    onFinish(cb) {
+      onFinishCb = cb;
     },
     destroy() {
       if (started) {
