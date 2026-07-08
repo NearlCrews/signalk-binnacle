@@ -6,11 +6,28 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- An apple-touch-icon and larger PNG app icons, for a proper icon on an iOS home screen install
+  alongside the existing SVG favicon.
+
 ### Changed
 
 - Moved to MapLibre GL JS 6 (currently a prerelease). Map rendering, chart overlays, theming, and
   every custom WebGL layer (wind particles, marine radar echo) behave the same; this is an
   internal dependency update with no user-facing change expected.
+- MapLibre, Terra Draw, and pmtiles now build into their own cacheable vendor chunks, and
+  production builds carry hidden sourcemaps for future error-monitoring symbolication.
+
+### Fixed
+
+- The Signal K stream and marine radar worker connections release their callback proxies on
+  reconnect, so a dropped and restored connection cannot leak a browser MessagePort.
+- The marine radar's recycle-failure warning now surfaces in production too, not only during
+  development.
+- Wind particle WebGL textures are reused across forecast updates instead of recreated, and a
+  removed PMTiles chart archive is dropped defensively rather than silently leaking if the
+  library's internal shape ever changes.
 
 <a id="v0141"></a>
 
