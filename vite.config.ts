@@ -98,11 +98,15 @@ export default defineConfig({
         // Split the large vendor libraries into separate chunks for better cache hit rates across
         // releases (vendor code changes less often than app code) and parallel HTTP/2 download.
         manualChunks(id) {
+          // Path-segment anchored (slashes on both sides), not a bare substring match: a bare
+          // 'maplibre-gl' check would also catch terra-draw-maplibre-gl-adapter's own path (its
+          // package name contains that substring), silently merging the adapter into the far
+          // larger maplibre-gl chunk instead of its own terra-draw chunk.
           if (id.includes('node_modules')) {
-            if (id.includes('maplibre-gl')) return 'maplibre-gl';
-            if (id.includes('terra-draw') || id.includes('terra-draw-maplibre-gl-adapter'))
+            if (id.includes('/terra-draw/') || id.includes('/terra-draw-maplibre-gl-adapter/'))
               return 'terra-draw';
-            if (id.includes('pmtiles') || id.includes('pbf')) return 'pmtiles';
+            if (id.includes('/maplibre-gl/')) return 'maplibre-gl';
+            if (id.includes('/pmtiles/') || id.includes('/pbf/')) return 'pmtiles';
           }
         },
       },
