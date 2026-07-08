@@ -1,4 +1,4 @@
-import type { Map as MapLibreMap, MapSourceDataEvent } from 'maplibre-gl';
+import type { AllPaintProperties, Map as MapLibreMap, MapSourceDataEvent } from 'maplibre-gl';
 import { chartSourceId, chartToSpecs, PMTILES_SCHEME, THEME_PAINT_KEY } from './chart-adapter';
 import type { SignalKChart } from './chart-types';
 import { applyRasterTheme, colorProperty, type MapColorKey } from './map-theme';
@@ -137,7 +137,7 @@ export function createChartOverlay(
         // not present, for example if the slider moves during the window after a base-style reload and
         // before the overlay reattaches.
         if (property && ctx.map.getLayer(layer.id))
-          ctx.map.setPaintProperty(layer.id, property, opacity);
+          ctx.map.setPaintProperty(layer.id, property as keyof AllPaintProperties, opacity);
       }
     },
     applyTheme(ctx, paint) {
