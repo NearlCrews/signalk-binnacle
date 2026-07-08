@@ -14,8 +14,7 @@ All notable changes to Binnacle are documented here. The format follows
 ### Changed
 
 - Moved to MapLibre GL JS 6 (currently a prerelease). Map rendering, chart overlays, theming, and
-  every custom WebGL layer (wind particles, marine radar echo) behave the same; this is an
-  internal dependency update with no user-facing change expected.
+  every custom WebGL layer (wind particles, marine radar echo) behave the same as before.
 - MapLibre, Terra Draw, and pmtiles now build into their own cacheable vendor chunks, and
   production builds carry hidden sourcemaps for future error-monitoring symbolication.
 
@@ -28,6 +27,9 @@ All notable changes to Binnacle are documented here. The format follows
 - Wind particle WebGL textures are reused across forecast updates instead of recreated, and a
   removed PMTiles chart archive is dropped defensively rather than silently leaking if the
   library's internal shape ever changes.
+- Centering, the layers panel, and every chart feature (routes, waypoints, tides, AIS, anchor
+  watch) work again. A MapLibre 6 prerelease bug meant the map's ready signal never fired, so
+  nothing past the bare base map ever initialized.
 
 <a id="v0141"></a>
 
