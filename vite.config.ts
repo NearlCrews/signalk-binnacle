@@ -19,12 +19,6 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.2.0'),
   },
-  optimizeDeps: {
-    // MapLibre 6's worker bundling fails Vite's dependency pre-bundler with "the file does not
-    // exist at .../maplibre-gl-worker.mjs"; excluding it is the workaround maplibre-gl and
-    // terra-draw upstream document (terra-draw issue #912) until the optimizer handles it.
-    exclude: ['maplibre-gl'],
-  },
   plugins: [
     svelte(),
     VitePWA({

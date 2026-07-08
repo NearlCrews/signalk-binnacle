@@ -231,17 +231,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     removeCanvasListeners = contextMenu.remove;
   }
 
-  let mapReady = false;
-  let settleTimer: ReturnType<typeof setTimeout> | undefined;
-  let maxWaitTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const initialize = () => {
-    if (mapReady || destroyed) return;
-    mapReady = true;
-    clearTimeout(settleTimer);
-    clearTimeout(maxWaitTimer);
-    mapInstance.off('render', onRenderForReadyCheck);
-
+  mapInstance.on('load', () => {
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
@@ -276,36 +266,11 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
         runTick: tick.runTick,
       }),
     ).catch((e) => console.error('map onLoad failed', e));
-  };
-
-  // MapLibre 6.0.0-20 has an upstream bug: a vector tile source's internal load bookkeeping never
-  // flips true, even though its tiles fetch and paint normally (a raster source is unaffected), so
-  // map.loaded() never returns true and the 'load' event this all used to hang off never fires.
-  // Race the real 'load' event, so this self-heals the moment a maplibre-gl upgrade fixes it,
-  // against a synthetic ready signal built only from events proven to fire in this build:
-  // 'styledata' (the style JSON parsed), armed once no further 'render' activity has happened for
-  // half a second (mirrors 'idle' without trusting the broken loaded() check), capped at 8 seconds
-  // after styledata so a link slow or flaky enough to keep triggering renders can never block
-  // initialization forever, the same failure mode this workaround exists to avoid. Delete this
-  // block and go back to a plain mapInstance.on('load', initialize) once maplibre-gl fires 'load'
-  // normally again.
-  const armSettleTimer = () => {
-    clearTimeout(settleTimer);
-    settleTimer = setTimeout(initialize, 500);
-  };
-  mapInstance.once('styledata', () => {
-    armSettleTimer();
-    maxWaitTimer = setTimeout(initialize, 8000);
   });
-  const onRenderForReadyCheck = () => armSettleTimer();
-  mapInstance.on('render', onRenderForReadyCheck);
-  mapInstance.on('load', initialize);
 
   return {
     destroy: () => {
       destroyed = true;
-      clearTimeout(settleTimer);
-      clearTimeout(maxWaitTimer);
       cancelLongPress();
       removeCanvasListeners();
       stopTick();

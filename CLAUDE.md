@@ -84,36 +84,17 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 6.0.0-20 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
-  MapLibre GL JS is pinned to the exact prerelease `6.0.0-20` in `package.json`, with no `^` range,
-  since v6 is not yet stable and a caret would float across breaking prerelease builds. Three
-  prerelease-specific workarounds go with the pin, all to remove once v6.0.0 stable ships and the
-  pin widens back to `^6.x`:
-  - `package.json`'s `overrides` forces `terra-draw-maplibre-gl-adapter`'s `maplibre-gl: >=4` peer
-    range to accept the prerelease: npm's semver treats a prerelease as excluded from a plain range
-    like `>=4` unless the range itself names a prerelease at the same version, so `npm ci` hard-fails
-    without the override even though the adapter's own maintainer has smoke-tested v6 compatibility
-    (upstream issue: JamesLMilner/terra-draw#912). A stable v6.0.0 release resolves this on its own,
-    no override needed.
-  - `vite.config.ts`'s `optimizeDeps.exclude: ['maplibre-gl']` works around a separate v6 plus Vite
-    dependency-pre-bundling bug (same upstream issue) that breaks the dev server and Playwright e2e
-    with a missing `maplibre-gl-worker.mjs` error; drop it once upstream fixes the optimizer
-    interaction.
-  - `themed-map.ts`'s `createThemedMap` no longer waits solely on MapLibre's own `'load'` event to
-    initialize the map (register the LayerManager, the overlay tick, and every panel's
-    `onLoad`/`onCommandsReady`/`onReady` callback). In `6.0.0-20`, a vector tile source's internal
-    load bookkeeping never flips true even though its tiles fetch and paint normally (a raster
-    source is unaffected), so `map.loaded()` never returns true and `'load'` (and `'idle'`, which
-    also gates on it) never fire, silently disabling the whole app beyond the bare base map
-    (centering, the layers panel, routes, waypoints, tides, AIS, anchor watch). The fix races the
-    real `'load'` event (self-heals once upstream fixes this) against a synthetic ready signal built
-    only from events proven to fire in this build: `'styledata'` armed once `'render'` activity has
-    been quiet for half a second, capped at 8 seconds after `'styledata'` so a slow or flaky link
-    can never block initialization forever. Revert to a plain `mapInstance.on('load', initialize)`
-    once `'load'` fires normally again.
+  A MapLibre GL JS 6 migration was tried and reverted (2026-07-08): the `6.0.0-20` prerelease has
+  an upstream bug where a vector tile source's internal load bookkeeping never flips true even
+  though its tiles fetch and paint normally, so `map.loaded()` never returns true and the `'load'`
+  event this app's whole chart initialization hangs off never fires, silently disabling everything
+  past the bare base map (centering, the layers panel, routes, waypoints, tides, AIS, anchor
+  watch). A workaround shipped and was verified working, but v6 is still too unstable this early in
+  its prerelease cycle to build on; revisit once v6.0.0 ships stable.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 
