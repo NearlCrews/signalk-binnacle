@@ -56,9 +56,10 @@ export function wrapRadarWorker(
     },
     recycle(buffer) {
       void api.recycle(Comlink.transfer(buffer, [buffer])).catch((e) => {
-        // A recycle that lands after the worker closed just forfeits the buffer; log in dev so
-        // unexpected errors (not just the race-against-close case) are visible during development.
-        if (import.meta.env?.DEV) console.warn('[marine-radar] recycle failed', e);
+        // A recycle that lands after the worker closed just forfeits the buffer; warn unconditionally,
+        // matching this file's other stream-error logging, so an unexpected failure (not just the
+        // race-against-close case) is visible in production too, not only during development.
+        console.warn('[marine-radar] recycle failed', e);
       });
     },
     async close() {
