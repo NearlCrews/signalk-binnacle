@@ -51,6 +51,12 @@ const SOUNDING_TEXT: ExpressionSpecification = [
   ['to-string', ['get', 'depth_m']],
 ];
 
+// OpenFreeMap's Liberty style (the base map's glyph source, see map-theme.ts's basemap wiring)
+// only serves Noto Sans; MapLibre's own default text-font (Open Sans Regular, Arial Unicode MS
+// Regular) 404s against it, matching the convention every other symbol layer in this codebase
+// already follows (waypoint-layers.ts, notes-layers.ts, tides-overlay.ts, and others).
+const LABEL_TEXT_FONT = ['Noto Sans Regular'];
+
 const LABEL_TEXT_SIZE: ExpressionSpecification = [
   'interpolate',
   ['linear'],
@@ -183,6 +189,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
           layout: {
             'symbol-placement': 'line',
             'text-field': CONTOUR_LABEL_TEXT,
+            'text-font': LABEL_TEXT_FONT,
             'text-size': LABEL_TEXT_SIZE,
             'text-letter-spacing': 0.1,
             'text-max-angle': 30,
@@ -205,6 +212,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
           minzoom: 7,
           layout: {
             'text-field': SOUNDING_TEXT,
+            'text-font': LABEL_TEXT_FONT,
             'text-size': LABEL_TEXT_SIZE,
             'text-padding': 8,
           },

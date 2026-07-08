@@ -11,7 +11,10 @@ const SOURCE: SeascapeVectorSource = {
 
 function fakeMap() {
   const sources = new Set<string>();
-  const layers = new Map<string, { id: string; type: string; 'source-layer'?: string }>();
+  const layers = new Map<
+    string,
+    { id: string; type: string; 'source-layer'?: string; layout?: Record<string, unknown> }
+  >();
   return {
     sources,
     layers,
@@ -19,8 +22,12 @@ function fakeMap() {
     addSource: (id: string) => sources.add(id),
     removeSource: (id: string) => sources.delete(id),
     getLayer: (id: string) => layers.get(id),
-    addLayer: (layer: { id: string; type: string; 'source-layer'?: string }) =>
-      layers.set(layer.id, layer),
+    addLayer: (layer: {
+      id: string;
+      type: string;
+      'source-layer'?: string;
+      layout?: Record<string, unknown>;
+    }) => layers.set(layer.id, layer),
     removeLayer: (id: string) => layers.delete(id),
     setPaintProperty: vi.fn(),
   };
@@ -57,6 +64,21 @@ describe('createSeascapeVectorOverlay', () => {
     expect(map.layers.get('seascape-drying-layer')?.['source-layer']).toBe('drying');
     expect(map.layers.get('seascape-contours-line')?.['source-layer']).toBe('contours');
     expect(map.layers.get('seascape-soundings-layer')?.['source-layer']).toBe('soundings');
+  });
+
+  it('both symbol layers set a text-font the base style actually serves', () => {
+    // OpenFreeMap's Liberty style (this app's base map glyph source) only serves Noto Sans;
+    // MapLibre's own default text-font 404s against it. A regression here silently falls back
+    // to that unset default instead of failing loudly, so this test pins the explicit value.
+    const map = fakeMap();
+    const { contours } = createSeascapeVectorOverlay(SOURCE);
+    contours.add(ctx(map));
+    expect(map.layers.get('seascape-contours-label')?.layout?.['text-font']).toEqual([
+      'Noto Sans Regular',
+    ]);
+    expect(map.layers.get('seascape-soundings-layer')?.layout?.['text-font']).toEqual([
+      'Noto Sans Regular',
+    ]);
   });
 
   it('removing one row does not remove the shared source out from under the other', () => {
