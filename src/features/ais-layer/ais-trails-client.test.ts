@@ -17,7 +17,8 @@ describe('fetchAisTrails', () => {
     const [url, init] = mock.mock.calls[0];
     // south,west,north,east: the order the plugin's positional sw/ne parse actually honors.
     expect(url).toBe(`${BASE}/signalk/v1/api/tracks?bbox=42,-83.5,43,-82.5`);
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer tok');
   });
 
   it('flattens the context-keyed MultiLineStrings into one trail per line', async () => {

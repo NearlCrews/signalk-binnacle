@@ -44,9 +44,12 @@ describe('tides overlay', () => {
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get('binnacle-tides');
-    const label = () =>
-      (source?.data as { features: Array<{ properties: { label: string } }> }).features[0]
-        .properties.label;
+    const label = () => {
+      const data = source?.data as
+        | { features: Array<{ properties: { label: string } }> }
+        | undefined;
+      return data?.features[0].properties.label;
+    };
     expect(label()).toContain('High');
     const before = source?.data;
     overlay.sync(ctx); // same minute, same readings, same units: no rebuild

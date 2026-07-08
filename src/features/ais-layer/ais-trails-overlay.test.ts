@@ -65,7 +65,8 @@ async function settleSync(overlay: AisTrailsOverlay, ctx: OverlayContext): Promi
 
 function featuresIn(map: ReturnType<typeof createFakeMap>): unknown[] {
   const source = map.sources.get(SOURCE_ID);
-  return (source?.data as { features: unknown[] }).features;
+  const data = source?.data as { features: unknown[] } | undefined;
+  return data?.features ?? [];
 }
 
 beforeEach(() => {

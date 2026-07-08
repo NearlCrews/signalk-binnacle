@@ -24,7 +24,8 @@ function setup() {
 }
 
 function features(map: ReturnType<typeof createFakeMap>): GeoJSON.Feature[] {
-  return (map.sources.get('binnacle-mob')?.data as GeoJSON.FeatureCollection).features;
+  const data = map.sources.get('binnacle-mob')?.data as GeoJSON.FeatureCollection | undefined;
+  return data?.features ?? [];
 }
 
 describe('mob overlay', () => {

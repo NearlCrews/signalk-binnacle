@@ -29,6 +29,7 @@ describe('withTimeout', () => {
     expect(signal?.aborted).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(signal?.aborted).toBe(true);
-    expect((signal?.reason as Error).name).toBe('TimeoutError');
+    const reason = signal?.reason as Error | undefined;
+    expect(reason?.name).toBe('TimeoutError');
   });
 });

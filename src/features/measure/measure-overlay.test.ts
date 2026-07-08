@@ -18,7 +18,8 @@ function setup(mode: UnitsMode = 'metric') {
 }
 
 function features(map: ReturnType<typeof createFakeMap>): GeoJSON.Feature[] {
-  return (map.sources.get('binnacle-measure')?.data as GeoJSON.FeatureCollection).features;
+  const data = map.sources.get('binnacle-measure')?.data as GeoJSON.FeatureCollection | undefined;
+  return data?.features ?? [];
 }
 
 describe('measure overlay', () => {

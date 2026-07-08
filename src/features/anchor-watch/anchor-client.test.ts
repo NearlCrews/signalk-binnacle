@@ -29,7 +29,8 @@ describe('anchor server client', () => {
     expect(url).toBe(`${BASE}/plugins/anchoralarm/dropAnchor`);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({ radius: 45 });
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer tok');
   });
 
   it('sets the radius and raises through the plugin endpoints', async () => {

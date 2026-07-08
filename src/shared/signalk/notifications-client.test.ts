@@ -29,7 +29,8 @@ describe('postNotification', () => {
     expect(url).toBe(API);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual(options);
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer tok');
   });
 
   it('returns undefined when the server rejects the raise', async () => {

@@ -14,7 +14,8 @@ describe('fetchServerFeatures', () => {
     await fetchServerFeatures(BASE, 'tok');
     const [url, init] = mock.mock.calls[0];
     expect(url).toBe(`${BASE}/signalk/v2/features?enabled=1`);
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer tok');
   });
 
   it('maps the apis to a set and the plugins to an id-to-version map', async () => {

@@ -25,7 +25,8 @@ function setup() {
 }
 
 function features(map: ReturnType<typeof createFakeMap>, src: string): GeoJSON.Feature[] {
-  return (map.sources.get(src)?.data as GeoJSON.FeatureCollection).features;
+  const data = map.sources.get(src)?.data as GeoJSON.FeatureCollection | undefined;
+  return data?.features ?? [];
 }
 
 describe('anchor overlay', () => {
@@ -142,7 +143,8 @@ function touchEvent(lat: number, lng: number) {
 
 function markerCoords(map: ReturnType<typeof eventfulMap>): unknown {
   const feature = features(map as never, 'binnacle-anchor-point')[0];
-  return (feature?.geometry as GeoJSON.Point).coordinates;
+  const geometry = feature?.geometry as GeoJSON.Point | undefined;
+  return geometry?.coordinates;
 }
 
 function dragSetup() {

@@ -16,7 +16,7 @@ jobs:
           cache: npm
       - uses: biomejs/setup-biome@v2
         with:
-          version: 2.5.2
+          version: 2.5.3
       - run: npm ci
       - run: npm run check
       - run: npm run ci:biome

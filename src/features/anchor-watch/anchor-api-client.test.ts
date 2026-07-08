@@ -30,7 +30,8 @@ describe('standard anchor API client', () => {
     expect(url).toBe(`${API}/drop`);
     expect(init?.method).toBe('POST');
     expect(init?.body).toBeUndefined();
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer tok');
   });
 
   it('raises with a bare POST', async () => {
