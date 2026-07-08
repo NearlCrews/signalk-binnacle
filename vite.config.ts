@@ -19,6 +19,12 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.2.0'),
   },
+  optimizeDeps: {
+    // MapLibre 6's worker bundling fails Vite's dependency pre-bundler with "the file does not
+    // exist at .../maplibre-gl-worker.mjs"; excluding it is the workaround maplibre-gl and
+    // terra-draw upstream document (terra-draw issue #912) until the optimizer handles it.
+    exclude: ['maplibre-gl'],
+  },
   plugins: [
     svelte(),
     VitePWA({
@@ -26,7 +32,7 @@ export default defineConfig({
       // build surfaces an Update control (registerPwa's onNeedRefresh) so the navigator chooses when
       // to reload, rather than the chart vanishing mid-passage.
       registerType: 'prompt',
-      includeAssets: ['binnacle-icon.svg'],
+      includeAssets: ['binnacle-icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Binnacle Chartplotter',
         short_name: 'Binnacle',
@@ -42,6 +48,18 @@ export default defineConfig({
             src: 'binnacle-icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'any maskable',
           },
         ],

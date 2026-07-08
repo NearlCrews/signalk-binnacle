@@ -425,8 +425,10 @@ let mapView = $state<MapView | undefined>();
 // Replace-only (reassigned wholesale from onNotes), so raw state skips the wasted deep proxy.
 let poiNotes = $state.raw<NotePoint[]>([]);
 // Reading mapView ties this to every map move, so the in-view clip recomputes on pan and zoom; the
-// live bounds come from the map. The clip is only computed while the POI search panel reads it.
+// live bounds come from the map. The clip is gated behind the panel being open so it does not
+// recompute on every pan frame while the POI search panel is hidden.
 const poiInView = $derived.by<Poi[]>(() => {
+  if (activePanel !== 'poi-search') return [];
   void mapView;
   const bounds = mapCommands?.getBounds();
   const source = bounds

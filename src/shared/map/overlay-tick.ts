@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { OverlayContext } from './types';
 
 // How often store-driven overlays (AIS prune, tides, radar advance, collision) are synced when the
