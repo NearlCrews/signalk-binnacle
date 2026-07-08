@@ -1,4 +1,4 @@
-import Pbf from 'pbf';
+import { PbfWriter } from 'pbf';
 
 type Pathology = 'clean' | 'reduce' | 'fill' | 'double';
 
@@ -10,7 +10,7 @@ export interface Opts {
 }
 
 function encodeFrame(angle: number, range: number, data: Uint8Array): Uint8Array {
-  const pbf = new Pbf();
+  const pbf = new PbfWriter();
   pbf.writeMessage(
     2,
     (_obj, w) => {

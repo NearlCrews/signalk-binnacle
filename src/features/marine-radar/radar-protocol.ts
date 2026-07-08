@@ -1,4 +1,4 @@
-import Pbf from 'pbf';
+import { PbfReader } from 'pbf';
 
 export interface RadarSpoke {
   angle: number;
@@ -14,7 +14,7 @@ export interface RadarMessage {
   spokes: RadarSpoke[];
 }
 
-function readSpoke(pbf: Pbf, end: number): RadarSpoke {
+function readSpoke(pbf: PbfReader, end: number): RadarSpoke {
   const spoke: RadarSpoke = { angle: 0, range: 0, data: new Uint8Array(0) };
   while (pbf.pos < end) {
     const tag = pbf.readVarint();
@@ -37,7 +37,7 @@ function readSpoke(pbf: Pbf, end: number): RadarSpoke {
 // than discarding the whole revolution's batch, so an occasional provider quirk thins the picture by one
 // spoke instead of blanking it.
 export function decodeRadarMessage(bytes: Uint8Array): RadarMessage {
-  const pbf = new Pbf(bytes);
+  const pbf = new PbfReader(bytes);
   const msg: RadarMessage = { spokes: [] };
   const len = bytes.length;
   while (pbf.pos < len) {

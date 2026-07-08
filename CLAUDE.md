@@ -84,10 +84,10 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, and Comlink 4.
-  One deliberate hold: pbf stays at 4.x. pbf 5 changes the decode API surface the radar protocol's
-  manual BigInt varint reader relies on (pbf.buf and pbf.pos publics with pbf 4 field semantics),
-  and upgrading fails 11 radar decode tests; revisit only with a live radar to verify against.
+  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4, and
+  pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
+  `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
+  and test fixtures import `PbfWriter`).
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 

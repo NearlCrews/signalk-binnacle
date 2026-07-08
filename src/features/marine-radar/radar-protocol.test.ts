@@ -1,9 +1,9 @@
-import Pbf from 'pbf';
+import { PbfWriter } from 'pbf';
 import { describe, expect, it } from 'vitest';
 import { decodeRadarMessage } from './radar-protocol';
 
 function encodeSpoke(): Uint8Array {
-  const pbf = new Pbf();
+  const pbf = new PbfWriter();
   pbf.writeMessage(
     2,
     (_obj, w) => {

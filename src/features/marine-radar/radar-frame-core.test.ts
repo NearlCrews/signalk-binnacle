@@ -1,10 +1,10 @@
-import Pbf from 'pbf';
+import { PbfWriter } from 'pbf';
 import { describe, expect, it } from 'vitest';
 import { RadarFrameCore } from './radar-frame-core';
 import { syntheticFrames } from './synthetic-radar';
 
 function encodeSpoke(angle: number, range: number, data: Uint8Array): Uint8Array {
-  const pbf = new Pbf();
+  const pbf = new PbfWriter();
   pbf.writeMessage(
     2,
     (_obj, w) => {
