@@ -1,4 +1,4 @@
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { PMTiles, Protocol, type RangeResponse, type Source } from 'pmtiles';
 import { isAbort } from './abort';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';

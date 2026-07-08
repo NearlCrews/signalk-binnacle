@@ -84,10 +84,24 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4, and
-  pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
+  Svelte 5, MapLibre GL JS 6.0.0-20 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
+  MapLibre GL JS is pinned to the exact prerelease `6.0.0-20` in `package.json`, with no `^` range,
+  since v6 is not yet stable and a caret would float across breaking prerelease builds. Two
+  prerelease-specific workarounds go with the pin, both to remove once v6.0.0 stable ships and the
+  pin widens back to `^6.x`:
+  - `package.json`'s `overrides` forces `terra-draw-maplibre-gl-adapter`'s `maplibre-gl: >=4` peer
+    range to accept the prerelease: npm's semver treats a prerelease as excluded from a plain range
+    like `>=4` unless the range itself names a prerelease at the same version, so `npm ci` hard-fails
+    without the override even though the adapter's own maintainer has smoke-tested v6 compatibility
+    (upstream issue: JamesLMilner/terra-draw#912). A stable v6.0.0 release resolves this on its own,
+    no override needed.
+  - `vite.config.ts`'s `optimizeDeps.exclude: ['maplibre-gl']` works around a separate v6 plus Vite
+    dependency-pre-bundling bug (same upstream issue) that breaks the dev server and Playwright e2e
+    with a missing `maplibre-gl-worker.mjs` error; drop it once upstream fixes the optimizer
+    interaction.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 
