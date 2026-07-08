@@ -292,11 +292,11 @@ export function createRouteEditor(opts: {
       // rather than a Terra Draw "not started" throw.
       if (!started) return;
       started = false;
-      // Remove event listeners explicitly, mirroring regions-draw's cleanup. The Terra Draw
-      // instance is garbage-collected after stop(), but explicit off() makes the lifecycle clear
-      // and is future-proof if the instance were ever reused.
-      draw.off('change', onRouteChange);
-      draw.off('finish', onRouteFinish);
+      // onRouteChange and onRouteFinish are registered once at construction, not per start(), and
+      // this editor instance is reused across every edit session (ChartCanvas memoizes it, so
+      // start()/stop() cycle on the same instance): draw.stop() does not remove listeners, and
+      // off()'ing them here with no matching re-registration in start() would silently break every
+      // edit session after the first.
       draw.stop();
     },
   };

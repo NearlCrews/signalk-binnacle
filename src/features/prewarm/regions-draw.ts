@@ -25,12 +25,8 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
   let started = false;
 
   const onFinish = (id: string | number): void => {
-    if (id == null) {
-      onFinishCb(null);
-      return;
-    }
     const feature = draw.getSnapshotFeature(id);
-    if (feature?.geometry?.type !== 'Polygon') {
+    if (feature?.geometry.type !== 'Polygon') {
       onFinishCb(null);
       return;
     }
