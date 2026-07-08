@@ -3,7 +3,7 @@ import { AnchorWatch } from '$entities/anchor';
 import { OwnVessel } from '$entities/vessel';
 import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
 import { createFakeStorage } from '$shared/testing/fake-storage';
 import { createFrameFactory } from '$shared/testing/sk-frame';
 import { createAnchorOverlay } from './anchor-overlay';
@@ -24,11 +24,6 @@ function setup() {
   return { store, vessel, anchor, map, overlay, ctx };
 }
 
-function features(map: ReturnType<typeof createFakeMap>, src: string): GeoJSON.Feature[] {
-  const data = map.sources.get(src)?.data as GeoJSON.FeatureCollection | undefined;
-  return data?.features ?? [];
-}
-
 describe('anchor overlay', () => {
   it('adds its sources and layers', () => {
     const { map, overlay, ctx } = setup();
@@ -44,8 +39,8 @@ describe('anchor overlay', () => {
     const { map, overlay, ctx } = setup();
     overlay.add(ctx);
     overlay.sync(ctx);
-    expect(features(map, 'binnacle-anchor-shapes')).toHaveLength(0);
-    expect(features(map, 'binnacle-anchor-point')).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-anchor-shapes')).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-anchor-point')).toHaveLength(0);
   });
 
   it('renders the swing circle, rode line, and marker for a watch', () => {
@@ -54,9 +49,9 @@ describe('anchor overlay', () => {
     anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
     store.applyFrame(frame({ 'navigation.position': { latitude: 0.0002, longitude: 0 } }));
     overlay.sync(ctx);
-    const shapes = features(map, 'binnacle-anchor-shapes');
+    const shapes = sourceFeatures(map, 'binnacle-anchor-shapes');
     expect(shapes.map((f) => f.geometry.type).sort()).toEqual(['LineString', 'Polygon']);
-    expect(features(map, 'binnacle-anchor-point')).toHaveLength(1);
+    expect(sourceFeatures(map, 'binnacle-anchor-point')).toHaveLength(1);
   });
 
   it('skips the redraw when nothing changed, and clears after a raise', () => {
@@ -71,7 +66,7 @@ describe('anchor overlay', () => {
     expect(source.data).toBe(before);
     anchor.raiseLocal();
     overlay.sync(ctx);
-    expect(features(map, 'binnacle-anchor-shapes')).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-anchor-shapes')).toHaveLength(0);
   });
 
   it('marks the features as dragging once the watch latches', () => {
@@ -84,7 +79,7 @@ describe('anchor overlay', () => {
       anchor.updateFix();
     }
     overlay.sync(ctx);
-    expect(features(map, 'binnacle-anchor-point')[0]?.properties?.dragging).toBe(true);
+    expect(sourceFeatures(map, 'binnacle-anchor-point')[0]?.properties?.dragging).toBe(true);
   });
 
   it('toggles visibility across all of its layers', () => {
@@ -142,7 +137,7 @@ function touchEvent(lat: number, lng: number) {
 }
 
 function markerCoords(map: ReturnType<typeof eventfulMap>): unknown {
-  const feature = features(map as never, 'binnacle-anchor-point')[0];
+  const feature = sourceFeatures(map as never, 'binnacle-anchor-point')[0];
   const geometry = feature?.geometry as GeoJSON.Point | undefined;
   return geometry?.coordinates;
 }

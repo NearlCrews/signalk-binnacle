@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 
 // A minimal JSON Response stub for the REST client tests: ok is derived from the status, and json()
 // resolves to the given body. Shared so the client tests do not each hand-roll the same shape.
@@ -32,4 +32,11 @@ export function stubFetch(
   });
   vi.stubGlobal('fetch', mock);
   return mock;
+}
+
+// Asserts a captured fetch call's Authorization header, shared so client tests do not each
+// re-derive the RequestInit.headers cast.
+export function expectBearerAuth(init: RequestInit | undefined, token: string) {
+  const headers = init?.headers as Record<string, string> | undefined;
+  expect(headers?.Authorization).toBe(`Bearer ${token}`);
 }

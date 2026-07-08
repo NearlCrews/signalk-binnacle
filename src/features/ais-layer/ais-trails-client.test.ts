@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Bbox4 } from '$shared/geo';
-import { stubFetch } from '$shared/testing/fetch-stub';
+import { expectBearerAuth, stubFetch } from '$shared/testing/fetch-stub';
 import { fetchAisTrails } from './ais-trails-client';
 
 const BASE = 'https://boat.example';
@@ -17,8 +17,7 @@ describe('fetchAisTrails', () => {
     const [url, init] = mock.mock.calls[0];
     // south,west,north,east: the order the plugin's positional sw/ne parse actually honors.
     expect(url).toBe(`${BASE}/signalk/v1/api/tracks?bbox=42,-83.5,43,-82.5`);
-    const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.Authorization).toBe('Bearer tok');
+    expectBearerAuth(init, 'tok');
   });
 
   it('flattens the context-keyed MultiLineStrings into one trail per line', async () => {

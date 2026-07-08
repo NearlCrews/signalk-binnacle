@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mapThemePaint, type OverlayContext, rgbaCss } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
 import { type AisTrail, fetchAisTrails } from './ais-trails-client';
 import { type AisTrailsOverlay, createAisTrailsOverlay } from './ais-trails-overlay';
 
@@ -63,12 +63,6 @@ async function settleSync(overlay: AisTrailsOverlay, ctx: OverlayContext): Promi
   await flush();
 }
 
-function featuresIn(map: ReturnType<typeof createFakeMap>): unknown[] {
-  const source = map.sources.get(SOURCE_ID);
-  const data = source?.data as { features: unknown[] } | undefined;
-  return data?.features ?? [];
-}
-
 beforeEach(() => {
   vi.useFakeTimers();
   fetchMock.mockReset();
@@ -92,7 +86,7 @@ describe('ais trails overlay', () => {
     expect(overlay.band).toBe('traffic');
     expect(overlay.supportsOpacity).toBe(true);
     expect(map.layers.has(LAYER_ID)).toBe(true);
-    expect(featuresIn(map)).toHaveLength(0);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(0);
   });
 
   it('fetches nothing while the tracks plugin is unavailable', async () => {
@@ -108,7 +102,7 @@ describe('ais trails overlay', () => {
     await settleSync(overlay, ctx);
     await settleSync(overlay, ctx);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(featuresIn(map)).toHaveLength(0);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(0);
   });
 
   it('fetches once the viewport settles and renders one line per trail, excluding self', async () => {
@@ -125,7 +119,7 @@ describe('ais trails overlay', () => {
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const features = featuresIn(map) as GeoJSON.Feature[];
+    const features = sourceFeatures<GeoJSON.Feature>(map, SOURCE_ID);
     expect(features).toHaveLength(1);
     expect(features[0].geometry).toEqual({ type: 'LineString', coordinates: trailA().line });
     expect(features[0].properties).toEqual({ context: trailA().context });
@@ -190,18 +184,18 @@ describe('ais trails overlay', () => {
     const ctx = ctxFor(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
-    expect(featuresIn(map)).toHaveLength(1);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(1);
 
     fetchMock.mockResolvedValueOnce(undefined);
     vi.advanceTimersByTime(30_000);
     await settleSync(overlay, ctx);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(featuresIn(map)).toHaveLength(1);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(1);
 
     fetchMock.mockResolvedValueOnce([]);
     vi.advanceTimersByTime(30_000);
     await settleSync(overlay, ctx);
-    expect(featuresIn(map)).toHaveLength(0);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(0);
   });
 
   it('reuses the padded fetch area for a small pan, refetches once the viewport leaves it', async () => {
@@ -260,10 +254,10 @@ describe('ais trails overlay', () => {
     const ctx = ctxFor(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
-    expect(featuresIn(map)).toHaveLength(1);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(1);
     available = false;
     overlay.sync(ctx);
-    expect(featuresIn(map)).toHaveLength(0);
+    expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(0);
   });
 
   it('applyTheme recolors the trail line with the theme AIS color', () => {

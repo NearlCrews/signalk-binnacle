@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { expectBearerAuth } from '$shared/testing/fetch-stub';
 import {
   dropAnchorOnServer,
   putServerAnchorPosition,
@@ -29,8 +30,7 @@ describe('anchor server client', () => {
     expect(url).toBe(`${BASE}/plugins/anchoralarm/dropAnchor`);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({ radius: 45 });
-    const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.Authorization).toBe('Bearer tok');
+    expectBearerAuth(init, 'tok');
   });
 
   it('sets the radius and raises through the plugin endpoints', async () => {

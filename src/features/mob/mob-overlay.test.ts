@@ -3,7 +3,7 @@ import { MobStore } from '$entities/mob';
 import { OwnVessel } from '$entities/vessel';
 import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
 import { createFakeStorage } from '$shared/testing/fake-storage';
 import { createFrameFactory } from '$shared/testing/sk-frame';
 import { createMobOverlay } from './mob-overlay';
@@ -23,17 +23,12 @@ function setup() {
   return { store, mob, map, overlay, ctx: ctxFor(map) };
 }
 
-function features(map: ReturnType<typeof createFakeMap>): GeoJSON.Feature[] {
-  const data = map.sources.get('binnacle-mob')?.data as GeoJSON.FeatureCollection | undefined;
-  return data?.features ?? [];
-}
-
 describe('mob overlay', () => {
   it('renders nothing without a mark', () => {
     const { overlay, map, ctx } = setup();
     overlay.add(ctx);
     overlay.sync(ctx);
-    expect(features(map)).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-mob')).toHaveLength(0);
   });
 
   it('renders the mark and the line back from the boat', () => {
@@ -43,7 +38,7 @@ describe('mob overlay', () => {
     mob.trigger();
     overlay.sync(ctx);
     expect(
-      features(map)
+      sourceFeatures(map, 'binnacle-mob')
         .map((f) => f.geometry.type)
         .sort(),
     ).toEqual(['LineString', 'Point']);
@@ -57,6 +52,6 @@ describe('mob overlay', () => {
     overlay.sync(ctx);
     mob.cancel();
     overlay.sync(ctx);
-    expect(features(map)).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-mob')).toHaveLength(0);
   });
 });

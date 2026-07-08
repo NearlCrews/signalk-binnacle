@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '$shared/testing/fetch-stub';
+import { expectBearerAuth, stubFetch } from '$shared/testing/fetch-stub';
 import {
   acknowledgeNotification,
   postMobNotification,
@@ -29,8 +29,7 @@ describe('postNotification', () => {
     expect(url).toBe(API);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual(options);
-    const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.Authorization).toBe('Bearer tok');
+    expectBearerAuth(init, 'tok');
   });
 
   it('returns undefined when the server rejects the raise', async () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '$shared/testing/fetch-stub';
+import { expectBearerAuth, stubFetch } from '$shared/testing/fetch-stub';
 import { fetchServerFeatures } from './features-client';
 
 const BASE = 'https://boat.example';
@@ -14,8 +14,7 @@ describe('fetchServerFeatures', () => {
     await fetchServerFeatures(BASE, 'tok');
     const [url, init] = mock.mock.calls[0];
     expect(url).toBe(`${BASE}/signalk/v2/features?enabled=1`);
-    const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.Authorization).toBe('Bearer tok');
+    expectBearerAuth(init, 'tok');
   });
 
   it('maps the apis to a set and the plugins to an id-to-version map', async () => {

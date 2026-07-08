@@ -3,7 +3,7 @@ import { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import type { UnitsMode } from '$shared/lib';
 import type { OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
 import { createTidesOverlay } from './tides-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
@@ -43,17 +43,12 @@ describe('tides overlay', () => {
     const ctx = ctxFor(map);
     overlay.add(ctx);
     overlay.sync(ctx);
-    const source = map.sources.get('binnacle-tides');
-    const label = () => {
-      const data = source?.data as
-        | { features: Array<{ properties: { label: string } }> }
-        | undefined;
-      return data?.features[0].properties.label;
-    };
+    const label = () =>
+      sourceFeatures<{ properties: { label: string } }>(map, 'binnacle-tides')[0].properties.label;
     expect(label()).toContain('High');
-    const before = source?.data;
+    const before = map.sources.get('binnacle-tides')?.data;
     overlay.sync(ctx); // same minute, same readings, same units: no rebuild
-    expect(source?.data).toBe(before);
+    expect(map.sources.get('binnacle-tides')?.data).toBe(before);
     units.mode = 'imperial'; // a preference flip refreshes the labels within the minute
     overlay.sync(ctx);
     expect(label()).toContain('ft');

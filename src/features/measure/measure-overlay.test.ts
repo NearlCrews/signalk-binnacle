@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MeasureStore } from '$entities/measure';
 import type { UnitsMode } from '$shared/lib';
 import type { OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
 import { createMeasureOverlay } from './measure-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
@@ -17,17 +17,12 @@ function setup(mode: UnitsMode = 'metric') {
   return { measure, map, units, overlay, ctx: ctxFor(map) };
 }
 
-function features(map: ReturnType<typeof createFakeMap>): GeoJSON.Feature[] {
-  const data = map.sources.get('binnacle-measure')?.data as GeoJSON.FeatureCollection | undefined;
-  return data?.features ?? [];
-}
-
 describe('measure overlay', () => {
   it('renders nothing while no measurement is in progress', () => {
     const { overlay, map, ctx } = setup();
     overlay.add(ctx);
     overlay.sync(ctx);
-    expect(features(map)).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(0);
   });
 
   it('renders vertices, the line, and the total label on the last point', () => {
@@ -37,7 +32,7 @@ describe('measure overlay', () => {
     measure.add({ latitude: 0, longitude: 0 });
     measure.add({ latitude: 0.001, longitude: 0 });
     overlay.sync(ctx);
-    const all = features(map);
+    const all = sourceFeatures(map, 'binnacle-measure');
     expect(all.filter((f) => f.geometry.type === 'Point')).toHaveLength(2);
     expect(all.filter((f) => f.geometry.type === 'LineString')).toHaveLength(1);
     const labeled = all.find((f) => f.properties?.label);
@@ -53,7 +48,7 @@ describe('measure overlay', () => {
     overlay.sync(ctx);
     units.mode = 'imperial';
     overlay.sync(ctx);
-    const labeled = features(map).find((f) => f.properties?.label);
+    const labeled = sourceFeatures(map, 'binnacle-measure').find((f) => f.properties?.label);
     expect(labeled?.properties?.label).toMatch(/ ft$/);
   });
 
@@ -87,6 +82,6 @@ describe('measure overlay', () => {
     overlay.sync(ctx);
     measure.stop();
     overlay.sync(ctx);
-    expect(features(map)).toHaveLength(0);
+    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(0);
   });
 });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { expectBearerAuth } from '$shared/testing/fetch-stub';
 import {
   dropAnchorViaApi,
   raiseAnchorViaApi,
@@ -30,8 +31,7 @@ describe('standard anchor API client', () => {
     expect(url).toBe(`${API}/drop`);
     expect(init?.method).toBe('POST');
     expect(init?.body).toBeUndefined();
-    const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.Authorization).toBe('Bearer tok');
+    expectBearerAuth(init, 'tok');
   });
 
   it('raises with a bare POST', async () => {

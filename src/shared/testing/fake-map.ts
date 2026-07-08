@@ -96,3 +96,12 @@ export function createFakeMap() {
 }
 
 export type FakeMap = ReturnType<typeof createFakeMap>;
+
+// Reads back a geojson source's current features for assertions. Throws rather than defaulting to
+// an empty array on a missing source or data, so a test that forgot overlay.add or used the wrong
+// source id fails loudly instead of passing by coincidence against a "renders nothing" assertion.
+export function sourceFeatures<T = GeoJSON.Feature>(map: FakeMap, id: string): T[] {
+  const data = map.sources.get(id)?.data as { features: T[] } | undefined;
+  if (!data) throw new Error(`no source data for "${id}"`);
+  return data.features;
+}
