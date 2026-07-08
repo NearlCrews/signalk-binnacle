@@ -53,7 +53,8 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   let metaVersion = $state(0);
 
   // Discovered battery instance ids; populated on first open and never re-fetched.
-  let batteryInstances = $state<string[]>([]);
+  // Replace-only (assigned wholesale, never mutated in place), so raw state skips deep proxy wrapping.
+  let batteryInstances = $state.raw<string[]>([]);
   let discoveryDone = false;
 
   // Tracks which paths are currently subscribed via deps.subscribe, so syncSubscriptions can
@@ -74,6 +75,12 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return def ? [def] : [];
     });
   }
+
+  // Memoized derived values so the resolution runs once per dependency change rather than on
+  // every getter access. A plain getter would re-run resolveTiles/resolveSelectedIds each time a
+  // reactive consumer reads it (template plus effects), which is redundant for small-but-not-free work.
+  const selectedIds = $derived.by<readonly string[]>(() => resolveSelectedIds());
+  const tiles = $derived.by<TileDef[]>(() => resolveTiles());
 
   // Shared paths (two tiles using the same path) are deduplicated naturally: the desired set is a
   // union, and removal only drops paths absent from the new union.
@@ -216,10 +223,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return deps.openStore.value;
     },
     get tiles() {
-      return resolveTiles();
+      return tiles;
     },
     get selectedIds() {
-      return resolveSelectedIds();
+      return selectedIds;
     },
     get catalog(): TileDef[] {
       // Static catalog first, then one def per discovered battery instance, memoized per id so a

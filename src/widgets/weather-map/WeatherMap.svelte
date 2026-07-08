@@ -276,22 +276,23 @@ const showPrecipOrRadar = $derived(
 );
 
 // Refetch once when waves or radar is turned on, so the new source appears without a pan. Keyed on
-// the rising edge with a plain flag so a failed fetch cannot loop. This creates a $effect, so it MUST
-// be called synchronously during component setup (as below), never inside a branch or callback, or
-// the effect would be created outside the setup phase and Svelte would error.
-function refetchOnEnable(isActive: () => boolean): void {
-  let requested = false;
-  $effect(() => {
-    if (isActive() && !requested) {
-      requested = true;
-      scheduleFetch();
-    } else if (!isActive()) {
-      requested = false;
-    }
-  });
-}
-refetchOnEnable(() => wavesActive);
-refetchOnEnable(() => radarActive);
+// the rising edge with plain flags so a failed fetch cannot loop.
+let wavesRequested = false;
+let radarRequested = false;
+$effect(() => {
+  if (wavesActive && !wavesRequested) {
+    wavesRequested = true;
+    scheduleFetch();
+  } else if (!wavesActive) {
+    wavesRequested = false;
+  }
+  if (radarActive && !radarRequested) {
+    radarRequested = true;
+    scheduleFetch();
+  } else if (!radarActive) {
+    radarRequested = false;
+  }
+});
 
 // Fetch on first open if a layer is on but no grid is loaded yet.
 $effect(() => {
