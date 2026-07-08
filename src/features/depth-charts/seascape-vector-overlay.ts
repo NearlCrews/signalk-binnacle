@@ -14,7 +14,7 @@ import {
   removeSharedSourceIfOrphaned,
   setLayersVisibility,
 } from '$shared/map';
-import { SEASCAPE_GROUP, type SeascapeVectorSource } from './seascape-sources';
+import type { SeascapeVectorSource } from './seascape-sources';
 
 const VECTOR_SOURCE_ID = 'seascape-vector';
 const DRYING_LAYER_ID = 'seascape-drying-layer';
@@ -88,7 +88,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     title: 'Seascape drying areas',
     description: 'Areas that dry at low tide, not reduced to chart datum, for reference only.',
     band: 'bathymetry',
-    group: SEASCAPE_GROUP,
+    region: 'Global',
     supportsOpacity: true,
     defaultVisible: false,
     defaultOpacity: DRYING_OPACITY,
@@ -136,7 +136,7 @@ export function createSeascapeVectorOverlay(source: SeascapeVectorSource): Seasc
     description:
       'Seabed depth contours and soundings, not reduced to chart datum, for reference only.',
     band: 'bathymetry',
-    group: SEASCAPE_GROUP,
+    region: 'Global',
     supportsOpacity: true,
     defaultVisible: false,
     // Not CONTOUR_LINE_OPACITY: that weight is applied inside setOpacity's own multiplier below, so

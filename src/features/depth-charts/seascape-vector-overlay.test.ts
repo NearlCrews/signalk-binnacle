@@ -43,8 +43,8 @@ describe('createSeascapeVectorOverlay', () => {
       'seascape-contours-label',
       'seascape-soundings-layer',
     ]);
-    expect(contours.group).toEqual({ id: 'seascape', title: 'Seascape bathymetry' });
-    expect(drying.group).toEqual({ id: 'seascape', title: 'Seascape bathymetry' });
+    expect(contours.group).toBeUndefined();
+    expect(drying.group).toBeUndefined();
   });
 
   it('both rows share one vector source, created once', () => {

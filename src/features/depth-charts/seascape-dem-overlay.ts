@@ -92,6 +92,7 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     title: 'Seascape depth shading',
     description: 'Seabed depth shading, not reduced to chart datum, for reference only.',
     band: 'bathymetry',
+    region: 'Global',
     group: SEASCAPE_GROUP,
     supportsOpacity: true,
     defaultOpacity: DEPTH_SHADING_OPACITY,
@@ -137,7 +138,8 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
   const hillshade: OverlayModule = {
     id: 'seascape-hillshade',
     title: 'Seascape hillshade',
-    description: 'Seabed relief shading from the same depth model as Seascape depth shading.',
+    description:
+      'Seabed relief shading from the same depth model as Seascape depth shading, for reference only.',
     band: 'bathymetry',
     parent: 'seascape-depth-shading',
     group: SEASCAPE_GROUP,
