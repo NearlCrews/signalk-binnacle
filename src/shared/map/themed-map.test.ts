@@ -92,7 +92,7 @@ vi.mock('maplibre-gl', () => {
       return { lng: x, lat: y };
     }
   }
-  return { default: { Map: FakeMap } };
+  return { Map: FakeMap };
 });
 
 interface FakeMapInstance {
@@ -106,7 +106,7 @@ interface FakeMapInstance {
 }
 
 async function lastMap(): Promise<FakeMapInstance> {
-  const maplibregl = (await import('maplibre-gl')).default;
+  const maplibregl = await import('maplibre-gl');
   const instances = (maplibregl.Map as unknown as { instances: FakeMapInstance[] }).instances;
   return instances[instances.length - 1];
 }
@@ -135,7 +135,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  const maplibregl = (await import('maplibre-gl')).default;
+  const maplibregl = await import('maplibre-gl');
   (maplibregl.Map as unknown as { instances: unknown[] }).instances.length = 0;
   vi.unstubAllGlobals();
   vi.useRealTimers();

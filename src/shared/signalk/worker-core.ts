@@ -1,3 +1,4 @@
+import * as Comlink from 'comlink';
 import { FrameBatcher } from './batcher';
 import { SkConnection } from './connection';
 import { reconcileDelta } from './reconcile';
@@ -18,6 +19,8 @@ import {
 // to read that one optional field without a named one-field interface.
 type DeltaOrHello = Delta & { self?: string };
 
+type FrameCallback = ((frame: SKFrame) => void) & { [Comlink.releaseProxy]?: () => void };
+
 export class WorkerCore {
   #connection?: SkConnection;
   // Constructed with the core, not per connect(): a feature controller restoring persisted state
@@ -26,12 +29,16 @@ export class WorkerCore {
   // the connection lazily, and resubscribeAll on every open replays whatever registered early.
   #registry = new SubscriptionRegistry((message) => this.#connection?.send(message));
   #batcher = new FrameBatcher();
-  #onFrame?: (frame: SKFrame) => void;
+  #onFrame?: FrameCallback;
   #connectionState: ConnectionState = INITIAL_CONNECTION_STATE;
   #selfContext?: string;
 
   connect(url: string, onFrame: (frame: SKFrame) => void): void {
-    this.#onFrame = onFrame;
+    // Release the previous connect()'s callback proxy before replacing it, so a page that calls
+    // connect() again (a remount, a fresh reconnect flow) does not leak a MessagePort. Mirrors
+    // RadarWorker#teardown's release of its own callback proxies in radar-worker.ts.
+    this.#onFrame?.[Comlink.releaseProxy]?.();
+    this.#onFrame = onFrame as FrameCallback;
     this.#connection = new SkConnection(url, {
       onState: (state) => {
         this.#connectionState = state;

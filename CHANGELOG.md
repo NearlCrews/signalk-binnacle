@@ -6,6 +6,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Moved to MapLibre GL JS 6 (currently a prerelease). Map rendering, chart overlays, theming, and
+  every custom WebGL layer (wind particles, marine radar echo) behave the same; this is an
+  internal dependency update with no user-facing change expected.
+
 <a id="v0141"></a>
 
 ## [0.14.1] - 2026-07-08

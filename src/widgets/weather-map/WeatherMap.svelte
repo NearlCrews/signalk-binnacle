@@ -276,22 +276,18 @@ const showPrecipOrRadar = $derived(
 );
 
 // Refetch once when waves or radar is turned on, so the new source appears without a pan. Keyed on
-// the rising edge with a plain flag so a failed fetch cannot loop. This creates a $effect, so it MUST
-// be called synchronously during component setup (as below), never inside a branch or callback, or
-// the effect would be created outside the setup phase and Svelte would error.
-function refetchOnEnable(isActive: () => boolean): void {
-  let requested = false;
-  $effect(() => {
-    if (isActive() && !requested) {
-      requested = true;
-      scheduleFetch();
-    } else if (!isActive()) {
-      requested = false;
-    }
-  });
+// the rising edge with a plain flag so a failed fetch cannot loop.
+function requestOnRisingEdge(active: boolean, requested: boolean): boolean {
+  if (!active) return false;
+  if (!requested) scheduleFetch();
+  return true;
 }
-refetchOnEnable(() => wavesActive);
-refetchOnEnable(() => radarActive);
+let wavesRequested = false;
+let radarRequested = false;
+$effect(() => {
+  wavesRequested = requestOnRisingEdge(wavesActive, wavesRequested);
+  radarRequested = requestOnRisingEdge(radarActive, radarRequested);
+});
 
 // Fetch on first open if a layer is on but no grid is loaded yet.
 $effect(() => {
@@ -364,7 +360,7 @@ onMount(() => {
       // (a tap needs a pointer; the canvas is focusable via MapLibre's keyboard support).
       map.getCanvas().addEventListener(
         'keydown',
-        (event) => {
+        (event: KeyboardEvent) => {
           if (event.key !== 'Enter') return;
           const center = map.getCenter();
           void pointReadout.onTap(center.lng, center.lat);

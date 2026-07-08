@@ -48,6 +48,9 @@ export function createSignalKClient(): SignalKClient {
     raw,
     async connect(url, onFrame) {
       onFrameRef = onFrame;
+      // The worker side releases the previous call's callback proxy before replacing it (see
+      // WorkerCore.connect), so a reconnect does not leak a MessagePort. Comlink.proxy() only marks
+      // this same function object; it carries no releaseProxy of its own to release here.
       const workerFailed = new Promise<never>((_, reject) => {
         rejectPendingConnect = reject;
       });
