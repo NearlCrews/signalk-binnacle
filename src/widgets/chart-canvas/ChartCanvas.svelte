@@ -17,14 +17,6 @@ import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import { BOUNDARY_SOURCES, createBoundaryOverlay } from '$features/boundaries-overlay';
 import { fetchCharts } from '$features/charts';
-import {
-  createSeascapeDemOverlay,
-  createSeascapeVectorOverlay,
-  createStreamingChartOverlay,
-  SEASCAPE_DEM_SOURCES,
-  SEASCAPE_VECTOR_SOURCES,
-  STREAMING_CHART_SOURCES,
-} from '$features/depth-charts';
 import { LayersView } from '$features/layers-panel';
 import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
@@ -51,6 +43,7 @@ import { detectCompanion, proxiedSources } from '$shared/map/companion';
 import type { MapView, PersistedValue, TrackSettings } from '$shared/settings';
 import type { HistoryProviders, SignalKStore } from '$shared/signalk';
 import type { Theme } from '$shared/ui';
+import { buildBathymetryOverlays } from './build-bathymetry-overlays';
 import { buildMapCommands } from './build-commands';
 import { buildDynamicOverlays } from './build-overlays';
 import ChartContextMenu from './ChartContextMenu.svelte';
@@ -371,26 +364,12 @@ onMount(async () => {
       // so the boat shares one cache and works offline. When it is absent, the sources keep their direct
       // upstream URLs (a standalone install is unchanged). The NASA GIBS ocean fields stay direct: they
       // are date-dynamic and not yet in the companion allowlist.
-      // Seascape's DEM pair (depth shading, hillshade) registers before the existing bathymetry
-      // rasters, the same background-tint role GEBCO plays as the current bottom-most bathymetry
-      // layer. Its vector pair (drying, then contours on top, fill under line and label) registers
-      // after them, so vector detail draws over every bathymetry raster including the NOAA ENC chart,
-      // the same way soundings and contours sit over the depth-area fill on a paper chart.
-      const seascapeDem = createSeascapeDemOverlay(
-        proxiedSources(SEASCAPE_DEM_SOURCES, companionBase)[0],
-      );
-      const seascapeVector = createSeascapeVectorOverlay(
-        proxiedSources(SEASCAPE_VECTOR_SOURCES, companionBase)[0],
-      );
+      // The bathymetry band (Seascape's DEM pair, the existing STREAMING_CHART_SOURCES rasters, and
+      // Seascape's vector pair, in that registration order) is built by buildBathymetryOverlays; see
+      // its own comment for why that relative order is load-bearing.
       await mgr.registerAll([
         ...charts.map((chart) => createChartOverlay(chart, origin, 'basemap', () => chartsToken)),
-        seascapeDem.depthShading,
-        seascapeDem.hillshade,
-        ...proxiedSources(STREAMING_CHART_SOURCES, companionBase).map((source) =>
-          createStreamingChartOverlay(source),
-        ),
-        seascapeVector.drying,
-        seascapeVector.contours,
+        ...buildBathymetryOverlays({ companionBase }),
         ...buildOceanSources().map((source) => createOceanOverlay(source)),
         // Within the safety band, registration order is z, so the seamark navigation aids draw over
         // the reference area fills and boundary lines beneath them.
