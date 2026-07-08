@@ -164,21 +164,8 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   mapInstance.once('styledata', () => {
     styleArrived = true;
   });
-  mapInstance.on('error', (e) => {
+  mapInstance.on('error', () => {
     if (styleArrived || destroyed) return;
-    // Only treat style-fetch failures as triggers for the fallback base. A transient tile-loading
-    // error before the style arrives should not swap the base style. The styledata guard already
-    // makes this unlikely in practice; this message filter adds a second layer of safety by
-    // matching common style-fetch failure messages while letting tile errors pass through.
-    const message = e?.error?.message ?? '';
-    if (
-      message &&
-      !message.includes('style') &&
-      !message.includes('Source') &&
-      !message.includes('Failed to fetch') &&
-      !message.includes('Network')
-    )
-      return;
     // A companion-proxied base style that fails while the device is online should not drop straight to
     // the blank fallback: try the direct openfreemap style first (the proxy made a broken base more
     // likely than the CDN was), and reserve the one-layer offline fallback for a second failure.
