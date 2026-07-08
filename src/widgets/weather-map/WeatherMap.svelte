@@ -276,22 +276,17 @@ const showPrecipOrRadar = $derived(
 );
 
 // Refetch once when waves or radar is turned on, so the new source appears without a pan. Keyed on
-// the rising edge with plain flags so a failed fetch cannot loop.
+// the rising edge with a plain flag so a failed fetch cannot loop.
+function requestOnRisingEdge(active: boolean, requested: boolean): boolean {
+  if (!active) return false;
+  if (!requested) scheduleFetch();
+  return true;
+}
 let wavesRequested = false;
 let radarRequested = false;
 $effect(() => {
-  if (wavesActive && !wavesRequested) {
-    wavesRequested = true;
-    scheduleFetch();
-  } else if (!wavesActive) {
-    wavesRequested = false;
-  }
-  if (radarActive && !radarRequested) {
-    radarRequested = true;
-    scheduleFetch();
-  } else if (!radarActive) {
-    radarRequested = false;
-  }
+  wavesRequested = requestOnRisingEdge(wavesActive, wavesRequested);
+  radarRequested = requestOnRisingEdge(radarActive, radarRequested);
 });
 
 // Fetch on first open if a layer is on but no grid is loaded yet.
