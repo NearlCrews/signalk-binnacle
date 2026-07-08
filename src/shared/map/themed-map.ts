@@ -1,5 +1,5 @@
+import type { MapMouseEvent, MapStyleImageMissingEvent } from 'maplibre-gl';
 import * as maplibregl from 'maplibre-gl';
-import type { MapStyleImageMissingEvent, MapMouseEvent } from 'maplibre-gl';
 import type { MapView } from '$shared/geo';
 import type { Theme } from '$shared/ui';
 import { baseStyleUrl, fallbackBaseStyle } from './base-style';
