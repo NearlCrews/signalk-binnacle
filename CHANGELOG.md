@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0141"></a>
+
+## [0.14.1] - 2026-07-08
+
 ### Added
 
 - **Seascape bathymetry.** A new layer group in the Layers panel: depth shading and hillshade from
@@ -13,6 +17,13 @@ All notable changes to Binnacle are documented here. The format follows
   vector tiles. Contour and sounding labels follow the server's unit preference, in meters or feet.
   All four rows start hidden until enabled for your area, and none of the depths are reduced to a
   chart datum, so they are for reference only, not for navigation.
+
+### Fixed
+
+- The map attribution box no longer pops open full width by default. MapLibre auto-expands it the
+  first time any attribution text appears, which can happen well after the chart loads as overlays
+  like Seascape and NOAA ENC register their own credits; the control now stays collapsed to its
+  small icon until tapped, whenever that first happens.
 
 <a id="v0140"></a>
 

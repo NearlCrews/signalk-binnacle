@@ -15,28 +15,19 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.14.0
+## What's new in 0.14.1
 
-An instrument dock with customizable live gauges, and provider-absence and read-write access
-handling brought in line across every write-gated panel.
+Seascape bathymetry, and a fix for the map attribution box popping open full width.
 
-- **An instrument dock.** Tap Instruments and the chart slides left beside a column of live
-  gauges: SOG, heading, depth, and apparent wind by default, with more in the catalog. Customize
-  picks and reorders tiles, the selection rides profiles, and a tile without its sensor says so
-  instead of showing dashes.
-- **More instruments, with small visualizations.** Battery health, water and air temperature,
-  GNSS satellites, and rate of turn join the catalog, and continuous readouts draw a quiet
-  sparkline of recent history.
-- **Open KIP.** When the KIP instrument webapp is installed on the server, a menu item opens it in
-  a new tab.
-- **Window Controls Overlay support.** Installed as a desktop PWA on a browser that supports it,
-  the header bar extends into the native window title bar so the MOB button, navigation controls,
-  and profile pill sit flush with the window chrome.
-- **Clearer read-only access.** Routes, waypoints, tracks, anchor watch, alarms, and profiles now
-  explain when a read-write token is needed instead of failing with only a generic error, and the
-  Replay and track history layers gray out correctly when no history provider is present.
+- **Seascape bathymetry.** A new layer group in the Layers panel: depth shading and hillshade from
+  Seascape's globally merged elevation model, plus contours, soundings, and drying areas from its
+  vector tiles. All four rows start hidden until enabled for your area, and none of the depths are
+  reduced to a chart datum, so they are for reference only, not for navigation.
+- **Attribution box fix.** The map attribution control no longer expands to a full-width box by
+  default; it stays collapsed to its small icon until tapped, even when overlays like Seascape and
+  NOAA ENC register their credits well after the chart loads.
 
-See the [changelog](CHANGELOG.md#v0140) for the full list.
+See the [changelog](CHANGELOG.md#v0141) for the full list.
 
 ## What it does
 

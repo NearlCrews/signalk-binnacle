@@ -123,19 +123,27 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     return { destroy: () => {} };
   }
 
-  // MapLibre's compact attribution control starts expanded: AttributionControl's _updateCompact
-  // unconditionally sets the native <details> element's open attribute the first time compact is
-  // true, regardless of container width. That is unnoticeable with a short attribution string, but
-  // a source with a long one (Seascape's CC BY credit list) renders as a huge box on first paint.
-  // Close it here and again once the style has loaded (attribution content, and therefore the
-  // control's rendered height, keeps changing as overlay sources register, and a 'sourcedata'-driven
-  // _updateAttributions call queued ahead of ours could otherwise still show a first frame with the
-  // box open); the control's own icon still opens it on click either way.
-  const closeAttribution = () => {
-    map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.removeAttribute('open');
+  // MapLibre's compact attribution control auto-expands itself: AttributionControl's
+  // _updateAttributions calls _updateCompact on every 'styledata' | 'sourcedata' | 'terrain'
+  // event, and the first time that runs with a non-empty attribution string it adds the
+  // 'maplibregl-compact-show' class, which is what the control's stylesheet actually keys the
+  // expanded box on (the native <details> open attribute is never selected on). Binnacle's own
+  // overlays supply nearly all of that attribution text (Seascape, NOAA ENC, and the rest
+  // register well after the map's own 'load' event), so that first non-empty pass can land at
+  // any time, including long after load. Listening for the same three events the control itself
+  // listens for, registered after the control's own listener (so ours always runs second on a
+  // given tick), strips the class back off the instant it reappears, however late that is; the
+  // control's own icon still opens it on click either way.
+  const collapseAttribution = () => {
+    map
+      .getContainer()
+      .querySelector('.maplibregl-ctrl-attrib')
+      ?.classList.remove('maplibregl-compact-show');
   };
-  closeAttribution();
-  map.once('load', closeAttribution);
+  collapseAttribution();
+  map.on('styledata', collapseAttribution);
+  map.on('sourcedata', collapseAttribution);
+  map.on('terrain', collapseAttribution);
 
   const mapInstance = map;
   let destroyed = false;
