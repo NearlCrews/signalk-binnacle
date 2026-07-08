@@ -215,7 +215,7 @@ $effect(() => {
 // layers left off. The base map is on by default so the offline area is not a blank canvas.
 $effect(() => {
   const r = createRegionRectangle(map);
-  r.onChange((newBbox) => {
+  r.onFinish((newBbox) => {
     bbox = newBbox;
     selectedSources =
       newBbox === null ? [] : defaultSelection(coveringSources(newBbox, [minzoom, maxzoom]));

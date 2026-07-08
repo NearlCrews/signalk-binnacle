@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 
 // A touch long-press that holds still this long, and within this pixel slop, stands in for the
 // contextmenu event that touch browsers do not reliably fire.

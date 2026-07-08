@@ -365,7 +365,7 @@ onMount(() => {
       // (a tap needs a pointer; the canvas is focusable via MapLibre's keyboard support).
       map.getCanvas().addEventListener(
         'keydown',
-        (event) => {
+        (event: KeyboardEvent) => {
           if (event.key !== 'Enter') return;
           const center = map.getCenter();
           void pointReadout.onTap(center.lng, center.lat);
