@@ -127,8 +127,15 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // unconditionally sets the native <details> element's open attribute the first time compact is
   // true, regardless of container width. That is unnoticeable with a short attribution string, but
   // a source with a long one (Seascape's CC BY credit list) renders as a huge box on first paint.
-  // Close it once here; the control's own icon still opens it on click.
-  map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.removeAttribute('open');
+  // Close it here and again once the style has loaded (attribution content, and therefore the
+  // control's rendered height, keeps changing as overlay sources register, and a 'sourcedata'-driven
+  // _updateAttributions call queued ahead of ours could otherwise still show a first frame with the
+  // box open); the control's own icon still opens it on click either way.
+  const closeAttribution = () => {
+    map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.removeAttribute('open');
+  };
+  closeAttribution();
+  map.once('load', closeAttribution);
 
   const mapInstance = map;
   let destroyed = false;

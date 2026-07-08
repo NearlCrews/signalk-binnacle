@@ -148,6 +148,14 @@ describe('createThemedMap attribution', () => {
     const map = await lastMap();
     expect(map.attribElement.removeAttribute).toHaveBeenCalledWith('open');
   });
+
+  it('closes it again once the style has loaded', async () => {
+    createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+    map.attribElement.removeAttribute.mockClear();
+    map.fire('load');
+    expect(map.attribElement.removeAttribute).toHaveBeenCalledWith('open');
+  });
 });
 
 describe('createThemedMap onLoad', () => {
