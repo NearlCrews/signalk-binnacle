@@ -1509,7 +1509,7 @@ const NARROW_BREAKPOINT_PX = 600;
 
 onMount(() => {
   // origin is fixed for the page lifetime; onMount ensures this runs exactly once.
-  void detectCompanion(origin).then((base) => {
+  void detectCompanion(origin, authToken).then((base) => {
     companionBase = base;
   });
   companionStatus.start();

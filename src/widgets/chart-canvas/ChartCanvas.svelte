@@ -256,7 +256,7 @@ onMount(async () => {
   // Detect Chart Locker before the map is built: the basemap style URL is read
   // synchronously at map construction, so detection must precede it. The same result routes the
   // raster overlays in onLoad below, so it is detected once here.
-  const companionBase = await detectCompanion(origin);
+  const companionBase = await detectCompanion(origin, chartsToken);
   if (destroyed) return; // unmounted during the probe; do not build a map nothing will tear down
   // createThemedMap defaults to the world view ([0, 30], zoom 2) when no saved view is passed.
   mapHandle = createThemedMap({

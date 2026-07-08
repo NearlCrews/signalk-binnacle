@@ -24,6 +24,10 @@ vi.mock('maplibre-gl', () => {
     handlers = new Map<string, Set<(e?: unknown) => void>>();
     canvas = new FakeCanvas();
     options: Record<string, unknown>;
+    // A stand-in for the real maplibregl-ctrl-attrib <details> element, so a test can assert
+    // createThemedMap's close-on-init call actually reaches it, not just that the no-op path
+    // (selector finds nothing) is safe.
+    attribElement = { removeAttribute: vi.fn() };
     constructor(opts: Record<string, unknown> = {}) {
       FakeMap.instances.push(this);
       this.options = opts;
@@ -52,6 +56,14 @@ vi.mock('maplibre-gl', () => {
     }
     getCanvas(): FakeCanvas {
       return this.canvas;
+    }
+    getContainer(): {
+      querySelector: (selector: string) => { removeAttribute: (name: string) => void } | null;
+    } {
+      return {
+        querySelector: (selector: string) =>
+          selector === '.maplibregl-ctrl-attrib' ? this.attribElement : null,
+      };
     }
     getCenter(): { lng: number; lat: number } {
       return { lng: 0, lat: 0 };
@@ -90,6 +102,7 @@ interface FakeMapInstance {
   };
   fire(event: string, e?: unknown): void;
   options: Record<string, unknown>;
+  attribElement: { removeAttribute: ReturnType<typeof vi.fn> };
 }
 
 async function lastMap(): Promise<FakeMapInstance> {
@@ -127,6 +140,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+describe('createThemedMap attribution', () => {
+  it('closes the compact attribution control on init, since MapLibre starts it open', async () => {
+    createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+    expect(map.attribElement.removeAttribute).toHaveBeenCalledWith('open');
+  });
 });
 
 describe('createThemedMap onLoad', () => {

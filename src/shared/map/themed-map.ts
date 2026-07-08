@@ -123,6 +123,13 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     return { destroy: () => {} };
   }
 
+  // MapLibre's compact attribution control starts expanded: AttributionControl's _updateCompact
+  // unconditionally sets the native <details> element's open attribute the first time compact is
+  // true, regardless of container width. That is unnoticeable with a short attribution string, but
+  // a source with a long one (Seascape's CC BY credit list) renders as a huge box on first paint.
+  // Close it once here; the control's own icon still opens it on click.
+  map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.removeAttribute('open');
+
   const mapInstance = map;
   let destroyed = false;
   // Teardown for the sync wiring runTick installs (the 'render' listener, the interval, and the

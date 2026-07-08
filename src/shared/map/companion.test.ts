@@ -20,22 +20,48 @@ const SAMPLE: RasterOverlaySource[] = [
 
 describe('detectCompanion', () => {
   it('returns the plugin base when the readiness probe is ok', async () => {
-    const base = await detectCompanion('http://boat.local', async () => ({ ok: true }) as Response);
+    const base = await detectCompanion(
+      'http://boat.local',
+      undefined,
+      async () => ({ ok: true }) as Response,
+    );
     expect(base).toBe('http://boat.local/plugins/signalk-chart-locker');
   });
 
-  it('returns null on a non-ok response', async () => {
+  it('returns null on a non-ok response (including a 401 from a security-enabled server)', async () => {
     expect(
-      await detectCompanion('http://boat.local', async () => ({ ok: false }) as Response),
+      await detectCompanion(
+        'http://boat.local',
+        undefined,
+        async () => ({ ok: false }) as Response,
+      ),
     ).toBeNull();
   });
 
   it('returns null on a network error (no companion installed)', async () => {
     expect(
-      await detectCompanion('http://boat.local', async () => {
+      await detectCompanion('http://boat.local', undefined, async () => {
         throw new Error('refused');
       }),
     ).toBeNull();
+  });
+
+  it('sends the bearer token when present, so a security-enabled server does not 401 the probe', async () => {
+    let sentHeaders: HeadersInit | undefined;
+    await detectCompanion('http://boat.local', 'tok123', async (_url, init) => {
+      sentHeaders = init?.headers;
+      return { ok: true } as Response;
+    });
+    expect(sentHeaders).toEqual({ Authorization: 'Bearer tok123' });
+  });
+
+  it('sends no Authorization header when no token is available', async () => {
+    let sentHeaders: HeadersInit | undefined;
+    await detectCompanion('http://boat.local', undefined, async (_url, init) => {
+      sentHeaders = init?.headers;
+      return { ok: true } as Response;
+    });
+    expect(sentHeaders).toBeUndefined();
   });
 });
 

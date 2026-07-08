@@ -4,22 +4,30 @@
 // URL, so a standalone install is unchanged.
 
 import { proxyTileTemplate } from 'signalk-chart-sources';
+import { authInit } from '$shared/signalk';
 
 const COMPANION_PATH = '/plugins/signalk-chart-locker';
 
 /**
  * Probe whether the companion tile proxy is installed and ready. Returns its plugin base URL on a 200,
- * or null on a 404 or any network error (the standalone case).
+ * or null on a 404, a 401 or 403 (a security-enabled server with no token yet, or a read-only one), or
+ * any network error (the standalone case). Sent authenticated, like every other same-origin request in
+ * this app (see themed-map.ts's transformRequest and resource.ts's authInit): a security-enabled server
+ * 401s an unauthenticated probe, which otherwise reads identically to Chart Locker being absent.
  */
 export async function detectCompanion(
   origin: string,
+  token?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
   const base = `${origin}${COMPANION_PATH}`;
   try {
     // The map cannot build until this resolves (baseStyleUrl is read synchronously at construction), so
     // bound the wait: a server that accepts the connection but never answers must not hang map init.
-    const response = await fetchImpl(`${base}/tiles/ready`, { signal: AbortSignal.timeout(2000) });
+    const response = await fetchImpl(`${base}/tiles/ready`, {
+      ...authInit(token),
+      signal: AbortSignal.timeout(2000),
+    });
     return response.ok ? base : null;
   } catch {
     return null;
