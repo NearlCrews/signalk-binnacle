@@ -26,7 +26,7 @@ export default defineConfig({
       // build surfaces an Update control (registerPwa's onNeedRefresh) so the navigator chooses when
       // to reload, rather than the chart vanishing mid-passage.
       registerType: 'prompt',
-      includeAssets: ['binnacle-icon.svg'],
+      includeAssets: ['binnacle-icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Binnacle Chartplotter',
         short_name: 'Binnacle',
@@ -42,6 +42,18 @@ export default defineConfig({
             src: 'binnacle-icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'any maskable',
           },
         ],
