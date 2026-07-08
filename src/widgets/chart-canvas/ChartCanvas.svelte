@@ -299,21 +299,24 @@ onMount(async () => {
       map.on('movestart', () => {
         chartMenu = undefined;
       });
-      // While the measure tool is armed, plain taps append measurement points. Route editing wins
-      // when both are somehow active, since Terra Draw owns the chart taps then.
+      // A single click handler dispatches to measure and route highlight based on active state.
+      // Both guards are independent so they can coexist without interference.
       map.on('click', (e: MapMouseEvent) => {
-        if (!measure.active || routeStore.working) return;
-        measure.add({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
-      });
-      // While a working route is up, a tap on a waypoint dot lights it and the legs it joins; a tap
-      // on empty water clears the highlight. Terra Draw still owns the tap for selecting and dragging
-      // the vertex underneath, so this only drives the cross-highlight. A generous box makes a small
-      // dot tappable with a glove.
-      map.on('click', (e: MapMouseEvent) => {
-        if (!routeStore.working) return;
-        const index = workingRouteOverlay?.hitTestWaypoint(e.point);
-        if (index !== undefined) routeStore.setHighlight({ kind: 'waypoint', index });
-        else routeStore.clearHighlight();
+        // While the measure tool is armed, plain taps append measurement points. Route editing wins
+        // when both are somehow active, since Terra Draw owns the chart taps then.
+        if (measure.active && !routeStore.working) {
+          measure.add({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
+          return;
+        }
+        // While a working route is up, a tap on a waypoint dot lights it and the legs it joins; a
+        // tap on empty water clears the highlight. Terra Draw still owns the tap for selecting and
+        // dragging the vertex underneath, so this only drives the cross-highlight. A generous box
+        // makes a small dot tappable with a glove.
+        if (routeStore.working) {
+          const index = workingRouteOverlay?.hitTestWaypoint(e.point);
+          if (index !== undefined) routeStore.setHighlight({ kind: 'waypoint', index });
+          else routeStore.clearHighlight();
+        }
       });
       // A URL chart this device synced to the server comes back from the charts API with the same id
       // as its local user-chart descriptor. Drop those server entries so the chart registers once,

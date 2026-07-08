@@ -171,6 +171,12 @@ export function registerPmtilesArchive(httpUrl: string, getToken?: () => string 
 // but no remove, so this reaches into its keyed instance map directly. The archive's cached
 // blocks are dropped too, best-effort, so a deleted chart stops holding cache budget.
 export function unregisterPmtilesArchive(httpUrl: string): void {
-  protocol?.tiles.delete(httpUrl);
+  // Guard against an internal property rename across pmtiles versions: if `tiles` is not a Map,
+  // the delete would be a silent no-op that leaks the archive, so warn instead of failing hard.
+  if (protocol && protocol.tiles instanceof Map) {
+    protocol.tiles.delete(httpUrl);
+  } else if (protocol) {
+    console.warn('[pmtiles] protocol.tiles is not a Map; cannot unregister archive', httpUrl);
+  }
   void blockStore?.purgeArchive(httpUrl);
 }
