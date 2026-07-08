@@ -49,6 +49,7 @@
   },
   "files": [
     "public/",
+    "!public/**/*.map",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
