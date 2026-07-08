@@ -51,7 +51,10 @@ const percent = $derived(Math.round(item.opacity * 100));
 const canTune = $derived(item.supportsOpacity && item.visible);
 const dimmed = $derived(item.opacity < 1);
 // The drag handle moves the whole row, so for a facet group it names the group, otherwise the layer.
-const handleLabel = $derived(groupTitle ?? item.title);
+// A row only counts as a facet group when it actually has sub-layers nested under it: a row that
+// merely shares a group id with something it is not the parent of (for example a plain sibling row
+// tagged with the same group for display grouping alone) keeps its own title.
+const handleLabel = $derived(subLayers.length > 0 ? (groupTitle ?? item.title) : item.title);
 
 let tuneOpen = $state(false);
 // Close the popover if the layer is hidden while it is open: the popover lives inside the canTune
@@ -140,7 +143,7 @@ $effect(() => {
   class:drop-before={dropBefore}
   class:drop-after={dropAfter}
   class:unavailable={!item.available}
-  aria-label={groupTitle}
+  aria-label={subLayers.length > 0 ? groupTitle : undefined}
   title={item.available ? undefined : item.unavailableHint}
   data-layer-row={item.id}
 >
