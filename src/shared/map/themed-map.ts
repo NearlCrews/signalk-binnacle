@@ -1,4 +1,5 @@
-import maplibregl from 'maplibre-gl';
+import type { MapMouseEvent, MapStyleImageMissingEvent } from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { MapView } from '$shared/geo';
 import type { Theme } from '$shared/ui';
 import { baseStyleUrl, fallbackBaseStyle } from './base-style';
@@ -200,7 +201,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // load. Supply a 1x1 transparent placeholder so the console stays clean and the affected icon or
   // pattern renders nothing, which matches how the theme already flattens those landuse fills.
   const transparentPixel = { width: 1, height: 1, data: new Uint8Array(4) };
-  mapInstance.on('styleimagemissing', (event) => {
+  mapInstance.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
     if (mapInstance.hasImage(event.id)) return;
     mapInstance.addImage(event.id, transparentPixel);
   });
@@ -227,7 +228,9 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // follow lock survives a zoom but ends the moment the user drags the chart away.
   if (opts.onUserPan) mapInstance.on('dragstart', () => opts.onUserPan?.());
   if (opts.onClick) {
-    mapInstance.on('click', (e) => opts.onClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
+    mapInstance.on('click', (e: MapMouseEvent) =>
+      opts.onClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }),
+    );
   }
 
   // A right-click or long-press at a point, surfaced for the "go to here" menu. The contextMenu

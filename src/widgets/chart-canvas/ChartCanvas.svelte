@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
 import { onDestroy, onMount } from 'svelte';
 import type { AisTargets } from '$entities/ais';
 import type { AnchorWatch } from '$entities/anchor';
@@ -301,7 +301,7 @@ onMount(async () => {
       });
       // A single click handler dispatches to measure and route highlight based on active state.
       // Both guards are independent so they can coexist without interference.
-      map.on('click', (e) => {
+      map.on('click', (e: MapMouseEvent) => {
         // While the measure tool is armed, plain taps append measurement points. Route editing wins
         // when both are somehow active, since Terra Draw owns the chart taps then.
         if (measure.active && !routeStore.working) {
