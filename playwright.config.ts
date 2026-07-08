@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // Serial execution: the smoke test starts the preview server and navigates to the app root.
+  // If more e2e tests are added that share server state, keep this serial; if they become truly
+  // independent (each does a fresh page.goto), parallel execution could be safe.
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

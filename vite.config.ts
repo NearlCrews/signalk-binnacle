@@ -69,6 +69,26 @@ export default defineConfig({
   build: {
     outDir: 'public',
     emptyOutDir: true,
+    // Match tsconfig.app.json's target so the build output is consistent with the type-check.
+    target: 'es2023',
+    // Hidden sourcemaps are not served to users but allow error monitoring tools to symbolicate
+    // production stack traces. Critical for field debugging on a boat where reproducing an issue
+    // is not always possible.
+    sourcemap: 'hidden',
+    rollupOptions: {
+      output: {
+        // Split the large vendor libraries into separate chunks for better cache hit rates across
+        // releases (vendor code changes less often than app code) and parallel HTTP/2 download.
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('maplibre-gl')) return 'maplibre-gl';
+            if (id.includes('terra-draw') || id.includes('terra-draw-maplibre-gl-adapter'))
+              return 'terra-draw';
+            if (id.includes('pmtiles') || id.includes('pbf')) return 'pmtiles';
+          }
+        },
+      },
+    },
   },
   test: {
     // Vitest stubs CSS imports as empty modules by default (real CSS processing is wasted work for
