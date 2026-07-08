@@ -84,10 +84,16 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4, and
-  pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
+  Svelte 5, MapLibre GL JS 6.0.0-20 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
+  MapLibre GL JS is pinned to the exact prerelease `6.0.0-20` in `package.json`, with no `^` range,
+  since v6 is not yet stable and a caret would float across breaking prerelease builds. Revisit
+  once v6.0.0 stable ships: widen the pin back to `^6.x`, re-verify the
+  `terra-draw-maplibre-gl-adapter` peer dependency (its own v6 support is still an open upstream
+  issue), and re-check the custom-layer render-args shape (`matrixOf` in
+  `src/shared/map/custom-layer.ts`).
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 

@@ -1,6 +1,7 @@
-import type { AllPaintProperties, Map as MapLibreMap } from 'maplibre-gl';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { CHART_SOURCE_PREFIX } from './chart-adapter';
 import { colorProperty, type MapThemePaint } from './map-theme';
+import { getPaintProp, setPaintProp } from './overlay-helpers';
 import { RASTER_ID_PREFIX } from './raster-overlay';
 
 // The base map is the OpenFreeMap "liberty" style (OpenMapTiles schema). Its default
@@ -101,11 +102,7 @@ export function applyBaseTheme(map: MapLibreMap, paint: MapThemePaint, layers?: 
     const themed = baseLayerPaint(layer, paint);
     if (!themed) continue;
     try {
-      map.setPaintProperty(
-        layer.id,
-        themed.property as keyof AllPaintProperties,
-        themed.color as never,
-      );
+      setPaintProp(map, layer.id, themed.property, themed.color);
       // fill-pattern is a paint property in MapLibre, not a layout one; clearing it lets the
       // flat themed color show through the wetland hatch and paved-area textures.
       if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-pattern', undefined);
@@ -170,7 +167,7 @@ export function captureBaseTheme(
     // pattern) must never drop the whole entry, or the day theme cannot restore that layer.
     let color: unknown;
     try {
-      color = map.getPaintProperty(layer.id, themed.property as keyof AllPaintProperties);
+      color = getPaintProp(map, layer.id, themed.property);
     } catch {
       continue;
     }
@@ -209,17 +206,13 @@ export function captureBaseTheme(
 export function restoreBaseTheme(map: MapLibreMap, snapshot: BaseSnapshot): void {
   for (const entry of snapshot) {
     try {
-      map.setPaintProperty(
-        entry.id,
-        entry.property as keyof AllPaintProperties,
-        entry.color as never,
-      );
+      setPaintProp(map, entry.id, entry.property, entry.color);
       // Restore the label halo for every symbol, including back to undefined (the style default),
       // so the theme's added halo does not linger as a dark outline on the day map.
-      if (entry.isSymbol) map.setPaintProperty(entry.id, 'text-halo-color', entry.halo as never);
+      if (entry.isSymbol) setPaintProp(map, entry.id, 'text-halo-color', entry.halo);
       // fill-pattern is a paint property in MapLibre; restoring it (often undefined) brings back
       // the source style's hatch where the recolor had cleared it.
-      if (entry.isFill) map.setPaintProperty(entry.id, 'fill-pattern', entry.pattern as never);
+      if (entry.isFill) setPaintProp(map, entry.id, 'fill-pattern', entry.pattern);
     } catch {
       // A layer that no longer exists or lacks the property is fine; skip it.
     }
