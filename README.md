@@ -53,10 +53,11 @@ Signal K server.
 
 Binnacle ships its full feature set as a Signal K webapp:
 
-- **Charts and layers:** a GPU vector base map, server charts, four streaming bathymetry and ENC
+- **Charts and layers:** a GPU vector base map, server charts, five streaming bathymetry and ENC
   sources (NOAA ENC, BlueTopo, and EMODnet each add a nested survey-quality facet; GEBCO is global
-  base bathymetry), and your own PMTiles charts added by URL or served from the server's charts
-  folder, in a collapsible, categorized Layers panel with per-layer toggle, fade, and drag-reorder.
+  base bathymetry; Seascape adds globally merged depth shading, hillshade, contours, and soundings),
+  and your own PMTiles charts added by URL or served from the server's charts folder, in a
+  collapsible, categorized Layers panel with per-layer toggle, fade, and drag-reorder.
   A 24 hour **track history** layer draws the server-recorded past day under the live track.
 - **Overlays:** free, key-free OpenSeaMap seamarks, marine protected areas, maritime boundaries, and
   NASA GIBS ocean conditions (sea-surface temperature and sea ice), each with its source attribution.
@@ -277,7 +278,9 @@ open data and open source:
 - [NOAA](https://www.noaa.gov/) for the ENC chart, BlueTopo bathymetry, the MPA Inventory, and the
   CO-OPS tide and current predictions; [EMODnet](https://emodnet.ec.europa.eu/) for European
   bathymetry and protected areas; [GEBCO](https://www.gebco.net/) for global bathymetry;
-  [NASA EOSDIS GIBS](https://www.earthdata.nasa.gov/engage/gibs) for the ocean-conditions imagery;
+  [Open Water Software](https://openwaters.io/charts/seascape) for Seascape, merging GEBCO, EMODnet,
+  NOAA CUDEM, and other regional sources into worldwide depth shading, hillshade, contours, and
+  soundings; [NASA EOSDIS GIBS](https://www.earthdata.nasa.gov/engage/gibs) for the ocean-conditions imagery;
   [OpenSeaMap](https://www.openseamap.org/) for the seamark overlay; and the
   [Flanders Marine Institute (VLIZ)](https://www.vliz.be/) Marine Regions service for the maritime
   boundaries.

@@ -189,9 +189,10 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   rather than a hand-rolled flex column, so the section rhythm matches across panels. When the same
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
 - Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (isRecord, formatPercent,
-  formatFixed, formatBytes and the unit formatters, the SI converters, uuidv4), `$shared/map` (featureCollection,
+  formatFixed, formatBytes and the unit formatters including lengthUnit, the SI converters, uuidv4), `$shared/map` (featureCollection,
   emptyFeatureCollection, setSourceData, iconOffsetExpression with CENTERED_OFFSET, removeLayersAndSources,
-  setLayersVisibility, createSafetyOverlay for safety-band rasters, rgbaCss), `$shared/geo`
+  setLayersVisibility, createSafetyOverlay for safety-band rasters, ensureSource and removeSharedSourceIfOrphaned
+  for a MapLibre source two overlays share, rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
   quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authed fetchAuthedJson, fetchAuthedText, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a

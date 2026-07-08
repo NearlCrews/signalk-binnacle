@@ -4,6 +4,16 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Seascape bathymetry.** A new layer group in the Layers panel: depth shading and hillshade from
+  Seascape's globally merged elevation model, plus contours, soundings, and drying areas from its
+  vector tiles. Contour and sounding labels follow the server's unit preference, in meters or feet.
+  All four rows start hidden until enabled for your area, and none of the depths are reduced to a
+  chart datum, so they are for reference only, not for navigation.
+
 <a id="v0140"></a>
 
 ## [0.14.0] - 2026-07-06
