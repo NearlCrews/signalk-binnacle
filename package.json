@@ -66,6 +66,11 @@
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "uplot": "^1.6.32"
   },
+  "overrides": {
+    "terra-draw-maplibre-gl-adapter": {
+      "maplibre-gl": "$maplibre-gl"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
