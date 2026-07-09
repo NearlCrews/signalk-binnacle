@@ -18,6 +18,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- The Chart Locker companion probe, run once at page load before authentication resolves, now
+  retries once credentials arrive and again on reconnect, so an auth-gated companion is no longer
+  stuck undetected until a reload.
+- The chart's proximity highlight for a hovered search result or selected note no longer runs from
+  two places at once, and the profiles panel no longer renders a redundant empty slot alongside its
+  real one.
 - The Signal K stream and marine radar worker connections release their callback proxies on
   reconnect, so a dropped and restored connection cannot leak a browser MessagePort.
 - The marine radar's recycle-failure warning now surfaces in production too, not only during
