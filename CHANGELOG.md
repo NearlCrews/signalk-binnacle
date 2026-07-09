@@ -15,6 +15,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 - MapLibre, Terra Draw, and pmtiles now build into their own cacheable vendor chunks, and
   production builds carry hidden sourcemaps for future error-monitoring symbolication.
+- Menu polish: an unavailable item (Radar, Time travel) keeps its own icon with a small add-on
+  badge instead of a warning triangle, and tapping or clicking it now shows why it is grayed
+  instead of doing nothing. The floating menu, side panels, and bottom strip are fully opaque in
+  every theme instead of letting the map show through. The access-request banner leads with one
+  short line and a clear "Approve in Signal K" button. "Trends" and "Replay" are now "Data trends"
+  and "Time travel" everywhere they appear, instead of three different names for one feature.
 
 ### Fixed
 
