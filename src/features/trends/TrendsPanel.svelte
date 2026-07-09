@@ -70,7 +70,7 @@ const sourceNote = $derived.by(() => {
 });
 </script>
 
-<SlideOver title="Trends" closeLabel="Close trends panel" {onClose} {onBack} bodyFlex>
+<SlideOver title="Data trends" closeLabel="Close trends panel" {onClose} {onBack} bodyFlex>
   <p class="muted-note">
     Recent trends in the boat's wind, depth, and other data over the last day.
   </p>

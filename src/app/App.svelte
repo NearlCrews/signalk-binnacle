@@ -890,7 +890,8 @@ const menuItems = $derived<MenuItem[]>([
   },
   {
     id: 'trends',
-    label: 'Trends',
+    label: 'Data trends',
+    shortLabel: 'Trends',
     icon: ChartLine,
     group: 'Conditions',
     pressed: activePanel === 'trends',
@@ -922,13 +923,13 @@ const menuItems = $derived<MenuItem[]>([
   // radar tile when no history provider is known, rather than opening to an empty mode.
   {
     id: 'time-travel',
-    label: 'Replay',
+    label: 'Time travel',
     shortLabel: 'Replay',
     icon: History,
     group: 'Conditions',
     available: (historyProviders?.ids.length ?? 0) > 0,
     unavailableHint:
-      'Replay needs a history provider plugin on the server, such as signalk-questdb.',
+      'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
     pressed: timeTravel.active,
     onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
   },

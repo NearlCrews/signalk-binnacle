@@ -11,12 +11,22 @@ const { auth, requestsUrl }: Props = $props();
 
 {#if auth.status === 'requesting'}
   <div class="auth-banner" role="status" aria-live="polite">
-    Requesting access as <strong>{auth.clientId}</strong>. Approve it in Signal K under Security,
-    then Access Requests, and this connects on its own. Grant <strong>read and write</strong>:
-    routes, waypoints, tracks, course control, alarms, and profiles all save to the server.
-    <a class="btn btn-ghost btn-pill" href={requestsUrl} target="_blank" rel="noopener noreferrer">
-      Approve in Signal K
-    </a>
+    <p class="lead">
+      Binnacle needs your approval to save routes, waypoints, and alarms to the boat.
+      <a
+        class="btn btn-primary btn-pill"
+        href={requestsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Approve in Signal K
+      </a>
+    </p>
+    <p class="muted-note">
+      Approve <strong>{auth.clientId}</strong> in Signal K under Security, then Access Requests, and
+      this connects on its own. Grants <strong>read and write</strong>: routes, waypoints, tracks,
+      course control, alarms, and profiles all save to the server.
+    </p>
   </div>
 {:else if auth.status === 'denied'}
   <div class="auth-banner denied" role="alert">
@@ -60,8 +70,14 @@ const { auth, requestsUrl }: Props = $props();
 .auth-banner.warn {
   color: var(--warning);
 }
-/* The action reuses the shared .btn .btn-ghost .btn-pill vocabulary; only the display is overridden,
-   since this button sits inline within a sentence rather than in a panel button row. */
+.auth-banner p {
+  margin: 0;
+}
+.auth-banner p + p {
+  margin-block-start: var(--space-1);
+}
+/* The action reuses the shared .btn .btn-primary .btn-pill vocabulary; only the display is
+   overridden, since this button sits inline within a sentence rather than in a panel button row. */
 .auth-banner .btn {
   display: inline-flex;
   margin-inline-start: var(--space-2);

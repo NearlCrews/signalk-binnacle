@@ -57,7 +57,7 @@ const liveMessage = $derived(
 {#if store.active}
   <aside class="bottom-strip bottom-strip--accent" aria-label="Time travel">
     <div class="head">
-      <span class="title">History</span>
+      <span class="title">Time travel</span>
       {#if store.status === 'ready'}
         <span class="note num" aria-hidden="true">{clock} ({hoursAgo}h ago)</span>
       {/if}

@@ -61,7 +61,7 @@
 
   --surface: #cfe0ec;
   --surface-raised: #ffffff;
-  --surface-overlay: rgba(255, 255, 255, 0.92);
+  --surface-overlay: var(--surface-raised);
   --border: #aac3d6;
   --text: #0b2233;
   --text-muted: #3f586b;
@@ -106,7 +106,7 @@
 
   --surface: #0f1a24;
   --surface-raised: #10212e;
-  --surface-overlay: rgba(13, 24, 33, 0.92);
+  --surface-overlay: #0d1821;
   --border: #233646;
   --text: #bcd2e4;
   --text-muted: #8aa6bd;
@@ -133,7 +133,7 @@
 
   --surface: #000000;
   --surface-raised: #0a0000;
-  --surface-overlay: rgba(8, 0, 0, 0.92);
+  --surface-overlay: #080000;
   /* A deeper red border than near-black, so panel and card separation stays visible at night where
      --shadow-overlay is dropped, while keeping the pixel dark. */
   --border: #5a1813;

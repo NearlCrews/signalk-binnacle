@@ -1,8 +1,9 @@
 <script lang="ts">
 import { Menu } from '@lucide/svelte';
+import { onDestroy } from 'svelte';
 import { AnchoredMenu, CustomizeToggle, isTabKey, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
-import { itemBlocked, type MenuItem } from './menu-item';
+import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 
 interface Props {
   items?: MenuItem[];
@@ -34,6 +35,20 @@ const pinnedSet = $derived(new Set(pinnedIds));
 let trigger = $state<HTMLButtonElement>();
 let card = $state<HTMLElement>();
 
+// A tap or click on a blocked tile explains itself here instead of silently doing nothing: the
+// title tooltip it also carries is mouse-hover-only, so this is the only reason a touch user, or a
+// mouse/keyboard user who never hovered first, ever sees. Mirrors App.svelte's arrivalBanner idiom
+// (a state plus a reset timer), sized generously since this is unfamiliar explanatory text, not a
+// short confirmation.
+let blockedNote = $state<string | undefined>();
+let blockedNoteTimer: ReturnType<typeof setTimeout> | undefined;
+const BLOCKED_NOTE_MS = 8000;
+function dismissBlockedNote(): void {
+  clearTimeout(blockedNoteTimer);
+  blockedNote = undefined;
+}
+onDestroy(dismissBlockedNote);
+
 // The items split into contiguous groups by their group label, so each renders as a tile section
 // with its caps-label header. The launcher stays generic: it renders whatever it is given.
 const groups = $derived.by(() => {
@@ -50,6 +65,7 @@ const groups = $derived.by(() => {
 function closeMenu(restoreFocus = false): void {
   if (editing) onEditingChange?.(false);
   onOpenChange(false);
+  dismissBlockedNote();
   // Return focus to the trigger when the menu closes by keyboard or selection, so a keyboard
   // user lands back on the control that opened it rather than at the top of the document.
   if (restoreFocus) trigger?.focus();
@@ -63,7 +79,12 @@ function select(item: MenuItem): void {
     onTogglePin?.(item.id);
     return;
   }
-  if (itemBlocked(item)) return;
+  if (itemBlocked(item)) {
+    clearTimeout(blockedNoteTimer);
+    blockedNote = blockedReason(item);
+    blockedNoteTimer = setTimeout(dismissBlockedNote, BLOCKED_NOTE_MS);
+    return;
+  }
   item.onSelect();
   closeMenu(true);
 }
@@ -132,6 +153,13 @@ function onCardKeydown(event: KeyboardEvent): void {
     {:else}
       <div class="menu-head">
         <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
+      </div>
+      <!-- Reserved height so the note appearing or clearing never shifts the tile grid under a
+           mid-tap thumb; the box holds its size whether or not a message is inside it. -->
+      <div class="blocked-note-slot" role="status" aria-live="polite">
+        {#if blockedNote}
+          <p class="blocked-note muted-note">{blockedNote}</p>
+        {/if}
       </div>
       {#if editing}
         <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
@@ -214,6 +242,14 @@ function onCardKeydown(event: KeyboardEvent): void {
   display: flex;
   justify-content: flex-end;
 }
+/* Reserves room for two lines of the longest unavailableHint in the app at the panel's own width,
+   so mounting or clearing the note never reflows the tile grid below it. */
+.blocked-note-slot {
+  min-block-size: 2.6rem;
+}
+.blocked-note {
+  padding-inline: var(--space-1);
+}
 .group {
   display: flex;
   flex-direction: column;
@@ -255,15 +291,19 @@ function onCardKeydown(event: KeyboardEvent): void {
     border-color var(--transition-fast),
     filter var(--transition-fast);
 }
-.tile :global(svg) {
+/* Every tile-level svg color rule below excludes the add-on badge (:not(.menu-item-icon__badge)):
+   these selectors would otherwise beat MenuItemIcon's own color rule for that badge in some tile
+   state, silently recoloring it back to the same muted gray as the icon it exists to stand apart
+   from. MenuItemIcon owns the badge's color uncontested in every state instead. */
+.tile :global(svg:not(.menu-item-icon__badge)) {
   color: var(--text-muted);
   transition: color var(--transition-fast);
 }
 .tile:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--accent-tint);
 }
-.tile:hover:not(:disabled):not([aria-disabled="true"]) :global(svg),
-.tile:focus-visible:not([aria-disabled="true"]) :global(svg) {
+.tile:hover:not(:disabled):not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)),
+.tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
 .tile:active:not(:disabled):not([aria-disabled="true"]) {
@@ -278,7 +318,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   border-color: var(--accent);
   background: var(--accent-tint);
 }
-.tile.is-on :global(svg) {
+.tile.is-on :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
 /* An unavailable tile (aria-disabled) is grayed like a disabled one, but stays focusable and
