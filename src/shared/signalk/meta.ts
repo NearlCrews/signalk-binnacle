@@ -36,6 +36,8 @@ export function zoneStateFor(
   if (value === undefined || !zones || zones.length === 0) return 'normal';
   let worst: ZoneState = 'normal';
   for (const zone of zones) {
+    // Zones are right-open [lower, upper): a value equal to upper belongs to the next zone up,
+    // so adjacent zones partition the range without double-matching the shared boundary.
     if (zone.lower !== undefined && value < zone.lower) continue;
     if (zone.upper !== undefined && value >= zone.upper) continue;
     const state = displayState(zone.state);

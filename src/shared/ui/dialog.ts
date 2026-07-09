@@ -76,6 +76,7 @@ export const dialog: Action<HTMLElement, () => void> = (node, onClose) => {
         unregister();
         node.removeEventListener('cancel', handleCancel);
         try {
+          // Already-closed or detached dialog: close() throws in that state, nothing to do.
           node.close();
         } catch (_) {}
         restoreFocus();
