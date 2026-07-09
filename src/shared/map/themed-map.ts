@@ -5,6 +5,7 @@ import type { Theme } from '$shared/ui';
 import { baseStyleUrl, fallbackBaseStyle } from './base-style';
 import {
   applyBaseIconVisibility,
+  applyBaseRasterVisibility,
   applyBaseTheme,
   captureBaseTheme,
   restoreBaseTheme,
@@ -248,6 +249,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       if (theme === 'day') restoreBaseTheme(mapInstance, baseColors);
       else applyBaseTheme(mapInstance, paint, layers);
       applyBaseIconVisibility(mapInstance, paint, layers);
+      applyBaseRasterVisibility(mapInstance, paint, layers);
       manager.applyTheme(paint);
     };
 

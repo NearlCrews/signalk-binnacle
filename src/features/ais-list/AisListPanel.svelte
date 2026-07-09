@@ -31,7 +31,7 @@ let sort = $state<AisSort>('range');
 
 const SORTS: { id: AisSort; label: string }[] = [
   { id: 'range', label: 'Distance' },
-  { id: 'cpa', label: 'Closest' },
+  { id: 'cpa', label: 'CPA' },
   { id: 'name', label: 'Name' },
 ];
 
@@ -121,12 +121,12 @@ const rows = $derived(
               >
               {#if row.cpaMeters !== undefined}
                 <span class="nav-metric" title="Closest point of approach"
-                  >Closest <b class="num">{formatNm(row.cpaMeters)}</b> nm</span
+                  >CPA <b class="num">{formatNm(row.cpaMeters)}</b> nm</span
                 >
               {/if}
               {#if row.tcpaSeconds !== undefined}
                 <span class="nav-metric" title="Time to closest point of approach"
-                  >Time to closest <b class="num">{formatTcpaMin(row.tcpaSeconds, 1)}</b> min</span
+                  >TCPA <b class="num">{formatTcpaMin(row.tcpaSeconds, 1)}</b> min</span
                 >
               {/if}
             </span>

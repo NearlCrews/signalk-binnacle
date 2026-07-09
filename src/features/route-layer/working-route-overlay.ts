@@ -33,8 +33,9 @@ const HL_DOT_SRC = 'binnacle-working-hl-dot';
 const HL_HALO_LAYER = 'binnacle-working-hl-halo';
 const HL_RING_LAYER = 'binnacle-working-hl-ring';
 const BAND = 'routes';
-// Bottom to top: resting dots, labels, then the highlight group (lit segment, halo, ring on top).
-const LAYERS = [WPT_LAYER, WPT_LABEL_LAYER, HL_SEG_LAYER, HL_HALO_LAYER, HL_RING_LAYER];
+// Bottom to top: resting dots, the highlight group (lit segment, halo, ring), then labels on top so
+// the active waypoint's own number is never covered by its highlight halo or ring.
+const LAYERS = [WPT_LAYER, HL_SEG_LAYER, HL_HALO_LAYER, HL_RING_LAYER, WPT_LABEL_LAYER];
 // The box half-size in pixels for the dot hit-test, generous so a small dot is tappable with a glove.
 const HIT_PAD = 10;
 
@@ -76,9 +77,6 @@ export function createWorkingRouteOverlay(
       if (!ctx.map.getLayer(WPT_LAYER)) {
         ctx.map.addLayer(waypointCircleLayer(WPT_LAYER, WPT_SRC, paint), before);
       }
-      if (!ctx.map.getLayer(WPT_LABEL_LAYER)) {
-        ctx.map.addLayer(waypointLabelLayer(WPT_LABEL_LAYER, WPT_SRC, paint), before);
-      }
       if (!ctx.map.getLayer(HL_SEG_LAYER)) {
         const layer: LineLayerSpecification = {
           id: HL_SEG_LAYER,
@@ -118,6 +116,9 @@ export function createWorkingRouteOverlay(
           },
           before,
         );
+      }
+      if (!ctx.map.getLayer(WPT_LABEL_LAYER)) {
+        ctx.map.addLayer(waypointLabelLayer(WPT_LABEL_LAYER, WPT_SRC, paint), before);
       }
     },
     sync(ctx) {

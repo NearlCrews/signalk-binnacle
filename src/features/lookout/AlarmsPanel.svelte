@@ -194,7 +194,7 @@ const caution = $derived(thresholdsCaution(t));
       <div class="group">
         <span class="group-title caps-label danger">Danger</span>
         <UnitField
-          label="Closest pass"
+          label="Closest pass (CPA)"
           unit="nm"
           min={0}
           step={0.05}
@@ -203,7 +203,7 @@ const caution = $derived(thresholdsCaution(t));
           onCommit={(nm) => setMeters('dangerCpaMeters', nm)}
         />
         <UnitField
-          label="Time to closest"
+          label="Time to closest (TCPA)"
           unit="min"
           min={0}
           step={1}
@@ -215,7 +215,7 @@ const caution = $derived(thresholdsCaution(t));
       <div class="group">
         <span class="group-title caps-label warning">Warning</span>
         <UnitField
-          label="Closest pass"
+          label="Closest pass (CPA)"
           unit="nm"
           min={0}
           step={0.05}
@@ -224,7 +224,7 @@ const caution = $derived(thresholdsCaution(t));
           onCommit={(nm) => setMeters('warningCpaMeters', nm)}
         />
         <UnitField
-          label="Time to closest"
+          label="Time to closest (TCPA)"
           unit="min"
           min={0}
           step={1}

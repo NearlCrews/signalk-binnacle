@@ -164,7 +164,7 @@ $effect(() => {
     <button
       type="button"
       class="btn btn-primary btn--grow"
-      onclick={onNew}
+      onclick={() => onNew()}
       disabled={working !== undefined}
     >
       <Plus size={16} aria-hidden="true" />

@@ -138,6 +138,27 @@ export function applyBaseIconVisibility(
   }
 }
 
+// The base style's raster layers (Natural Earth's shaded relief, visible at low zoom) have no
+// sensible single recolor (baseLayerPaint leaves raster untouched), so they keep their real terrain
+// colors under every theme unless hidden separately. Hide them at night-red to keep the map pure
+// red on black, mirroring applyBaseIconVisibility. Other themes show them normally.
+// Accepts a precomputed layer list (same contract as applyBaseTheme).
+export function applyBaseRasterVisibility(
+  map: MapLibreMap,
+  paint: MapThemePaint,
+  layers?: BaseLayer[],
+): void {
+  const opacity = paint.theme === 'night-red' ? 0 : 1;
+  for (const layer of layers ?? themableBaseLayers(map)) {
+    if (layer.type !== 'raster') continue;
+    try {
+      map.setPaintProperty(layer.id, 'raster-opacity', opacity);
+    } catch {
+      // A raster layer without this property is fine; skip it.
+    }
+  }
+}
+
 // The source style's own paint, captured per base layer so the day theme can restore the real
 // map colors exactly rather than approximate them. Each entry keeps the property the theme would
 // recolor, its original color, the original text-halo (labels), and whether a fill pattern was
