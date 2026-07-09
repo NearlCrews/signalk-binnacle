@@ -1188,6 +1188,20 @@ $effect(() => {
   if (following && position) commands?.recenterOnVessel(position.latitude, position.longitude);
 });
 
+// A fresh install (no saved view at all) otherwise leaves the map at the meaningless whole-world
+// default forever, since centering only happens while following (off by default) or via an
+// explicit tap: a new user's first impression is an empty planet with no boat on it. Fly to the
+// vessel once its first real fix lands instead. Fires at most once per session; a manual pan or
+// Follow toggle takes over from there like normal.
+let flownToFirstFix = false;
+$effect(() => {
+  const commands = mapCommands;
+  const position = vessel.position;
+  if (savedView || flownToFirstFix || !commands || !position) return;
+  flownToFirstFix = true;
+  commands.flyTo(position.latitude, position.longitude);
+});
+
 // Fly the chart to a position: the shared locate action for the MOB mark and AIS list rows.
 function flyToPosition(position: LatLon): void {
   mapCommands?.flyTo(position.latitude, position.longitude);

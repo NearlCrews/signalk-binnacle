@@ -110,10 +110,10 @@ const closeMore = (): void => {
         {/if}
       </span>
     {/if}
-    <span class="readout"
+    <span class="readout" title="Speed over ground"
       >SOG <b class="num">{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span
     >
-    <span class="readout"
+    <span class="readout" title="Course over ground"
       >COG
       <b class="num"
         >{formatBearingOr(
