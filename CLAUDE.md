@@ -54,7 +54,7 @@ not have to be corrected after the fact.
 - Lint and format: Biome (preferred over ESLint and Prettier). Three installs must stay on the
   SAME version: the system binary at `/usr/local/bin/biome`, the `@biomejs/biome` devDependency
   (npm scripts and the git hooks resolve `node_modules/.bin` first), and the `biomejs/setup-biome`
-  version pins in both CI workflows. Bump all three together (currently 2.5.2), and bump the
+  version pins in both CI workflows. Bump all three together (currently 2.5.3), and bump the
   `$schema` version in `biome.json` with them. Config is `biome.json`. `npm run lint` is
   `biome lint .`, `npm run format` is `biome format --write .`, and CI runs `biome ci .`.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
