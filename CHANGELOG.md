@@ -21,9 +21,19 @@ All notable changes to Binnacle are documented here. The format follows
   every theme instead of letting the map show through. The access-request banner leads with one
   short line and a clear "Approve in Signal K" button. "Trends" and "Replay" are now "Data trends"
   and "Time travel" everywhere they appear, instead of three different names for one feature.
+- SOG and COG in the status strip now carry a tooltip explaining what they mean, and the AIS list
+  and the collision alarm's sensitivity fields now show CPA and TCPA alongside their existing
+  plain-English labels.
 
 ### Fixed
 
+- A fresh install with no saved chart view now flies to the vessel once its first GPS fix lands,
+  instead of leaving the map at the whole-world default forever.
+- Night-red no longer leaks the base map's shaded-relief terrain colors at low zoom; the chart
+  stays pure red on black at every zoom level now, not just where the vector layers dominate.
+- The active waypoint's number no longer disappears under its own highlight ring while drawing a
+  route.
+- Starting a new route no longer throws a console exception on every click.
 - The Chart Locker companion probe, run once at page load before authentication resolves, now
   retries once credentials arrive and again on reconnect, so an auth-gated companion is no longer
   stuck undetected until a reload.
