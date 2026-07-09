@@ -132,6 +132,7 @@ interface Props {
   poiInView: Poi[];
   historyProviders: HistoryProviders | undefined;
   serverFeatures: ServerFeatures | undefined;
+  notificationsApi: boolean;
   weatherProviderName: string | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
@@ -237,6 +238,7 @@ let {
   poiInView,
   historyProviders,
   serverFeatures,
+  notificationsApi,
   weatherProviderName,
   collisionMute,
   collisionMuteRemainingMin,
@@ -281,7 +283,6 @@ let {
 let mapCommands = $state<MapCommands | undefined>();
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
-const notificationsApi = $derived(serverFeatures?.apis.has('notifications') ?? false);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
   const distanceToGoMeters = routeDistanceToGoMeters;
@@ -384,7 +385,7 @@ $effect(() => {
       />
     </div>
   {/if}
-  {#if activePanel}
+  {#if activePanel && activePanel !== 'profiles'}
     <div class="panel-slot" id={activePanel === 'layers' ? 'layers-panel' : undefined}>
       {#if activePanel === 'layers' && layersView}
         <LayersPanel
@@ -524,8 +525,6 @@ $effect(() => {
           onClose={closePanel}
           onBack={backToMenu}
         />
-      {:else if activePanel === 'profiles'}
-      <!-- Profiles panel stays in App.svelte as it's settings/config, not chart view -->
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         <RegionsPanel
           {auth}

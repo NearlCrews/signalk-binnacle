@@ -448,10 +448,8 @@ const poiInView = $derived.by<Poi[]>(() => {
 // The result the POI search panel is pointing at, ringed on the chart. A hovered row (pointer or
 // keyboard) wins over the open selection, so moving down the list previews each marker; neither
 // moves the map.
+// PlotterView owns the highlight effect for this state (bound down via hoveredPoi/selectedNote).
 let hoveredPoi = $state<Poi | undefined>();
-$effect(() => {
-  mapCommands?.highlightPoi(hoveredPoi?.position ?? selectedNote?.position);
-});
 let updateReady = $state(false);
 const pwa = registerPwa(() => (updateReady = true));
 
@@ -510,9 +508,18 @@ const units = new UnitsStore();
 // its Terra Draw rectangle tool independently of the route editor.
 let mapInstance = $state<MapLibreMap | undefined>();
 
-// Companion feature-detect: resolved once at startup. Both the regions and chart-management panels
-// receive the resolved base URL as a prop, so they mount ready without their own probe RTT.
+// Companion feature-detect. Both the regions and chart-management panels receive the resolved
+// base URL as a prop, so they mount ready without their own probe RTT.
 let companionBase = $state<string | null>(null);
+
+// Probed at mount (unauthenticated, so map init is never blocked on auth resolving) and retried
+// wherever a stale credential could have been the reason it came back null: once real auth
+// arrives, and again on a reconnect that could catch a companion started while the link was down.
+function probeCompanion(): void {
+  void detectCompanion(origin, authToken).then((base) => {
+    companionBase = base;
+  });
+}
 
 // The single owner of Chart Locker health, polled for the status strip's offline-charts chip. The base
 // and token are getters so it reads them live: the base resolves after detectCompanion, and the token
@@ -1408,6 +1415,10 @@ $effect(() => {
   void fetchHistoryProviders(origin, authToken).then((providers) => {
     if (providers) historyProviders = providers;
   });
+  // A companion (Chart Locker) started while the link was down would otherwise stay undetected
+  // until a reload, same as the capability probes above. Untracked so the base this call resolves
+  // does not turn companionBase into a dependency of this effect.
+  if (untrack(() => companionBase === null)) probeCompanion();
   // A unit preset changed on the server while the link was down would otherwise hold until the
   // token changes or the page reloads.
   void units.syncFromServer(origin);
@@ -1494,6 +1505,11 @@ $effect(() => {
   void detectKip(origin, authToken).then((present) => {
     kipPresent = present;
   });
+  // The onMount probe runs before this token is available, so an auth-gated companion (Chart
+  // Locker) 401s once and is never retried; redo it here once real credentials exist. Untracked:
+  // the base this same call resolves would otherwise become a dependency, re-running this whole
+  // effect (and re-firing every probe above) a second time on the first successful detection.
+  if (untrack(() => companionBase === null)) probeCompanion();
   // History provider discovery: the v2 features list reports the history API even with no
   // provider registered, so the providers route is the real signal.
   void fetchHistoryProviders(origin, authToken).then((providers) => {
@@ -1505,15 +1521,12 @@ $effect(() => {
 
 // The phone breakpoint, in CSS pixels. A media query cannot reference this constant, so the same
 // 600px literal is mirrored in the `@media (max-width: 600px)` blocks in styles/panels.css and the
-// scoped styles of ChartLockerStatus, WeatherMap, PlotterView, AppMenu, WeatherConditions, and the
+// scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
 // scoped CSS below. This const is the source of truth; retune all of them together.
 const NARROW_BREAKPOINT_PX = 600;
 
 onMount(() => {
-  // origin is fixed for the page lifetime; onMount ensures this runs exactly once.
-  void detectCompanion(origin, authToken).then((base) => {
-    companionBase = base;
-  });
+  probeCompanion();
   companionStatus.start();
   trendRecorder.start(() => ({
     depth: vessel.depthMeters,
@@ -1680,6 +1693,7 @@ onDestroy(() => {
     {poiInView}
     {historyProviders}
     {serverFeatures}
+    {notificationsApi}
     {weatherProviderName}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
