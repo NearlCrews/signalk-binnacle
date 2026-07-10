@@ -64,7 +64,10 @@ export async function jsonOr<T>(response: Response, fallback: T): Promise<T> {
 // id/record entry through mapEntry (entries it returns undefined for are skipped). Returns the
 // mapped list from the first reachable path, or undefined when every path is unreachable, so a
 // caller can keep its current list rather than blank it on a transient failure. A reachable but
-// empty server returns []. onError fires for a reachable path that answers with a non-OK status.
+// empty server returns []; a 404 on every path (a resource type never created on this server, the
+// steady state for a custom collection like tracks before anything is ever saved to it) also
+// resolves to [] rather than undefined, since the server plainly responded, it just has nothing
+// there. onError fires for a reachable path that answers with a non-OK status other than 404.
 export async function fetchKeyedResource<T>(
   base: string,
   paths: readonly string[],
@@ -72,11 +75,16 @@ export async function fetchKeyedResource<T>(
   mapEntry: (id: string, raw: unknown) => T | undefined,
   onError?: (url: string, status: number) => void,
 ): Promise<T[] | undefined> {
+  let sawNotFound = false;
   for (const path of paths) {
     const out = await tryKeyedResource(`${base}${path}`, token, mapEntry, onError);
+    if (out === 'not-found') {
+      sawNotFound = true;
+      continue;
+    }
     if (out) return out;
   }
-  return undefined;
+  return sawNotFound ? [] : undefined;
 }
 
 async function tryKeyedResource<T>(
@@ -84,9 +92,10 @@ async function tryKeyedResource<T>(
   token: string | undefined,
   mapEntry: (id: string, raw: unknown) => T | undefined,
   onError?: (url: string, status: number) => void,
-): Promise<T[] | undefined> {
+): Promise<T[] | 'not-found' | undefined> {
   try {
     const response = await fetch(url, withTimeout(authInit(token)));
+    if (response.status === 404) return 'not-found';
     if (!response.ok) {
       onError?.(url, response.status);
       return undefined;

@@ -92,6 +92,14 @@ describe('fetchSavedTracks', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(500, {})));
     expect(await fetchSavedTracks('http://pi')).toBeUndefined();
   });
+
+  it('returns an empty list, not undefined, when both endpoints 404 (no track ever saved)', async () => {
+    // A fresh server has never had a track PUT to it, so the resources/tracks collection was
+    // never created and both endpoints 404; that is "reachable, nothing there" and must not read
+    // as a connection failure the way an unreachable server or a real error status does.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(404, {})));
+    expect(await fetchSavedTracks('http://pi')).toEqual([]);
+  });
 });
 
 describe('saveTrack', () => {

@@ -62,8 +62,9 @@ function symbolFromEntry(id: string, raw: unknown): SkSymbol | undefined {
   };
 }
 
-// Fetch the provided symbols. Undefined (a 404 from a stock server without a symbols provider,
-// or a transport failure) is the degrade signal: callers keep their built-in icons.
+// Fetch the provided symbols. A 404 (a stock server without a symbols provider) resolves to an
+// empty list, same as a reachable provider with none configured; undefined is reserved for a
+// genuine transport failure. Either way callers keep their built-in icons.
 export function fetchSymbols(base: string, token?: string): Promise<SkSymbol[] | undefined> {
   return fetchKeyedResource(base, [SYMBOLS_PATH], token, symbolFromEntry, (url, status) =>
     console.warn(`[symbols] ${url} returned ${status}`),

@@ -93,9 +93,9 @@ describe('fetchSymbols', () => {
     });
   });
 
-  it('returns undefined on a 404 so callers keep their built-in icons', async () => {
+  it('returns an empty list on a 404 so callers keep their built-in icons', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(404, { state: 'FAILED' })));
-    expect(await fetchSymbols('http://pi')).toBeUndefined();
+    expect(await fetchSymbols('http://pi')).toEqual([]);
   });
 
   it('returns undefined when the fetch throws', async () => {
