@@ -1,12 +1,16 @@
 /* Shared text helpers: the panel titles, the uppercase caps sub-label, the inline alarm and muted
    notes, and the tabular-numeral span. Components layer only their own box (margins, flex) on top. */
 
-/* The heading shared by the slide-over and overlay panels, so every panel title reads the same. */
+/* The heading shared by the slide-over and overlay panels, so every panel title reads the same.
+   overflow-wrap lets a single long word (a panel named with one unbreakable word, or a narrower
+   header than usual) break onto a new line inside its own flex box instead of the default visual
+   overflow painting past it and over PanelHeader's headerExtra button. */
 .panel-title {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: 600;
   color: var(--text);
+  overflow-wrap: break-word;
 }
 /* A nested detail view's title (the chart detail inside Layers) sits one size below the panel's. */
 .panel-title--sub {
