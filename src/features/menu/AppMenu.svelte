@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Menu } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
+import { Toast } from '$shared/lib';
 import { AnchoredMenu, CustomizeToggle, isTabKey, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -35,19 +36,12 @@ const pinnedSet = $derived(new Set(pinnedIds));
 let trigger = $state<HTMLButtonElement>();
 let card = $state<HTMLElement>();
 
-// A tap or click on a blocked tile explains itself here instead of silently doing nothing: the
-// title tooltip it also carries is mouse-hover-only, so this is the only reason a touch user, or a
-// mouse/keyboard user who never hovered first, ever sees. Mirrors App.svelte's arrivalBanner idiom
-// (a state plus a reset timer), sized generously since this is unfamiliar explanatory text, not a
-// short confirmation.
-let blockedNote = $state<string | undefined>();
-let blockedNoteTimer: ReturnType<typeof setTimeout> | undefined;
-const BLOCKED_NOTE_MS = 8000;
-function dismissBlockedNote(): void {
-  clearTimeout(blockedNoteTimer);
-  blockedNote = undefined;
-}
-onDestroy(dismissBlockedNote);
+// A tap or click on a blocked tile explains itself via Toast's timed-message primitive instead of
+// silently doing nothing, since the title tooltip it also carries is mouse-hover-only. Sized
+// generously (Toast's 8s default) since this is unfamiliar explanatory text, not a short
+// confirmation.
+const blockedNote = new Toast();
+onDestroy(() => blockedNote.dispose());
 
 // The items split into contiguous groups by their group label, so each renders as a tile section
 // with its caps-label header. The launcher stays generic: it renders whatever it is given.
@@ -65,7 +59,7 @@ const groups = $derived.by(() => {
 function closeMenu(restoreFocus = false): void {
   if (editing) onEditingChange?.(false);
   onOpenChange(false);
-  dismissBlockedNote();
+  blockedNote.clear();
   // Return focus to the trigger when the menu closes by keyboard or selection, so a keyboard
   // user lands back on the control that opened it rather than at the top of the document.
   if (restoreFocus) trigger?.focus();
@@ -80,11 +74,12 @@ function select(item: MenuItem): void {
     return;
   }
   if (itemBlocked(item)) {
-    clearTimeout(blockedNoteTimer);
-    blockedNote = blockedReason(item);
-    blockedNoteTimer = setTimeout(dismissBlockedNote, BLOCKED_NOTE_MS);
+    blockedNote.show(blockedReason(item) ?? item.label);
     return;
   }
+  // A tactile confirmation for a tap on a bouncing boat with wet or gloved hands, where the
+  // brightness-press CSS feedback can be hard to see; a no-op where the device lacks vibration.
+  if ('vibrate' in navigator) navigator.vibrate(10);
   item.onSelect();
   closeMenu(true);
 }
@@ -141,7 +136,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   {open}
   onClose={() => closeMenu(true)}
   backdropLabel="Close menu"
-  surfaceClass="launcher surface-elevated"
+  surfaceClass={editing ? 'launcher surface-elevated editing' : 'launcher surface-elevated'}
   ariaLabel={label}
   id="app-menu-launcher"
   bind:surfaceRef={card}
@@ -157,8 +152,8 @@ function onCardKeydown(event: KeyboardEvent): void {
       <!-- Reserved height so the note appearing or clearing never shifts the tile grid under a
            mid-tap thumb; the box holds its size whether or not a message is inside it. -->
       <div class="blocked-note-slot" role="status" aria-live="polite">
-        {#if blockedNote}
-          <p class="blocked-note muted-note">{blockedNote}</p>
+        {#if blockedNote.message}
+          <p class="blocked-note muted-note">{blockedNote.message}</p>
         {/if}
       </div>
       {#if editing}
@@ -188,7 +183,7 @@ function onCardKeydown(event: KeyboardEvent): void {
                 <UnavailableHint
                   hint={item.available === false ? item.unavailableHint : undefined}
                 />
-                <MenuItemIcon {item} size={22} />
+                <MenuItemIcon {item} size={28} />
                 <span class="tile-label">{item.label}</span>
               </button>
             {/each}
@@ -220,7 +215,10 @@ function onCardKeydown(event: KeyboardEvent): void {
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
 }
-@media (max-width: 600px) {
+/* Matches the StatusStrip's own 900px stack breakpoint, so a landscape tablet never lands in the
+   gap where the menu is still a corner dropdown but the status strip below it has already
+   stacked to a single column. */
+@media (max-width: 900px) {
   :global(.launcher) {
     position: fixed;
     inset-block-start: auto;
@@ -235,6 +233,32 @@ function onCardKeydown(event: KeyboardEvent): void {
     border-block-end: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
+  /* A grab-handle affordance, the standard mobile cue that this surface is a dismissible sheet
+     rather than a fixed panel; purely decorative, so aria-hidden via ::before's default absence
+     from the accessibility tree. */
+  :global(.launcher)::before {
+    content: "";
+    display: block;
+    inline-size: 2.5rem;
+    block-size: 0.25rem;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+    margin: 0 auto var(--space-2);
+    opacity: 0.5;
+  }
+}
+/* Edit mode is a distinct interaction (tapping a tile pins or unpins it rather than opening it),
+   so the whole surface carries a visible mode cue, not just the CustomizeToggle button and the
+   muted-note text below: a navigator who taps the menu open mid-edit-mode should see the mode
+   before tapping a tile in it. Static, not animated, so it reads at a glance without adding motion
+   at the helm. */
+/* Just the inset ring, not combined with --shadow-lg: night-red sets --shadow-lg to the literal
+   keyword none, and none is not a valid entry inside a comma-separated box-shadow list, so
+   appending it here would make the whole declaration invalid at computed-value time and drop the
+   ring in exactly the theme where a clear mode cue matters most. */
+:global(.launcher.editing) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 /* The customize entry reads as quiet header chrome above the groups: right-aligned ghost, never
    the menu's loudest action. */
@@ -260,14 +284,22 @@ function onCardKeydown(event: KeyboardEvent): void {
   padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--border);
 }
+/* night-red's --border is a deep red close to the near-black surface, too low-contrast at 1px to
+   read as a section break at a glance; a heavier rule keeps groups visually distinct without
+   introducing a brighter color at night. */
+:root[data-theme="night-red"] .group + .group {
+  border-block-start-width: 2px;
+}
 .group-label {
   padding-inline: var(--space-1);
 }
-/* Fixed 3-column grid so labels like "Layers and charts" and "Anchor watch" are not truncated.
-   minmax keeps each tile comfortably past the 44px target in both axes. */
+/* auto-fit collapses to as many columns as the group has items (a 1-item group gets one
+   full-width tile, a 2-item group gets two half-width tiles) rather than always reserving 3
+   columns and leaving dead cells; a 5.5rem floor still settles a large group at 3 per row at the
+   launcher's own width, so labels like "Layers and charts" and "Anchor watch" are not truncated. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
   gap: var(--space-1);
 }
 .tile {
@@ -276,7 +308,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
-  min-block-size: 4.5rem;
+  min-block-size: 5rem;
   padding: var(--space-2) var(--space-1);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -331,9 +363,17 @@ function onCardKeydown(event: KeyboardEvent): void {
   opacity: var(--disabled-opacity);
   cursor: default;
 }
+/* Capped at 2 lines so tiles within a group stay a uniform height even when one label ("Nearby
+   vessels (AIS)") wraps further than its neighbors; the full label remains in the DOM for a screen
+   reader, only the visual box is clipped. */
 .tile-label {
   text-align: center;
   line-height: 1.2;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
 }
 </style>

@@ -808,9 +808,10 @@ function onSetRadarPower(status: RadarStatus): void {
 }
 
 // The app menu's options, grouped into intent groups: Map (center and follow), Navigate (plan and
-// chart), Conditions (weather and tides), Safety (traffic, anchor, and alarms), Offline charts (the
-// companion-gated offline areas and chart files), and Settings. Adding an option is a single entry;
-// the launcher renders and groups whatever it is given.
+// chart), Weather (forecast and tides), Instruments (data trends, the instrument dock, KIP, and
+// time travel), Safety (traffic, anchor, and alarms), Offline charts (the companion-gated offline
+// areas and chart files), and Settings. Adding an option is a single entry; the launcher renders
+// and groups whatever it is given.
 const menuItems = $derived<MenuItem[]>([
   {
     id: 'center',
@@ -887,7 +888,7 @@ const menuItems = $derived<MenuItem[]>([
     id: 'forecast',
     label: 'Forecast',
     icon: CloudSun,
-    group: 'Conditions',
+    group: 'Weather',
     pressed: weatherPanelOpen,
     onSelect: () => (weatherPanelOpen = !weatherPanelOpen),
   },
@@ -895,7 +896,7 @@ const menuItems = $derived<MenuItem[]>([
     id: 'tides',
     label: 'Tides',
     icon: Waves,
-    group: 'Conditions',
+    group: 'Weather',
     pressed: activePanel === 'tides',
     onSelect: () => togglePanel('tides', loadTides),
   },
@@ -904,7 +905,7 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Data trends',
     shortLabel: 'Trends',
     icon: ChartLine,
-    group: 'Conditions',
+    group: 'Instruments',
     pressed: activePanel === 'trends',
     onSelect: () => togglePanel('trends'),
   },
@@ -912,7 +913,7 @@ const menuItems = $derived<MenuItem[]>([
     id: 'instruments',
     label: 'Instruments',
     icon: Gauge,
-    group: 'Conditions',
+    group: 'Instruments',
     pressed: instruments.open,
     onSelect: () => instruments.toggleOpen(),
   },
@@ -923,7 +924,7 @@ const menuItems = $derived<MenuItem[]>([
           id: 'open-kip',
           label: 'Open KIP',
           icon: ExternalLink,
-          group: 'Conditions',
+          group: 'Instruments',
           onSelect: () => {
             window.open(KIP_URL, '_blank', 'noopener,noreferrer');
           },
@@ -937,7 +938,7 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Time travel',
     shortLabel: 'Replay',
     icon: History,
-    group: 'Conditions',
+    group: 'Instruments',
     available: (historyProviders?.ids.length ?? 0) > 0,
     unavailableHint:
       'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
@@ -1819,6 +1820,7 @@ onDestroy(() => {
     {units}
     {vessel}
     pinnedActions={resolvedPinned}
+    editing={menuEditing}
     {clock}
     onReconnect={() => void client.reconnect()}
   />

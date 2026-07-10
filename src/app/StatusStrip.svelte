@@ -1,5 +1,6 @@
 <script lang="ts">
 import { Ellipsis } from '@lucide/svelte';
+import { onDestroy } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
@@ -14,15 +15,14 @@ import {
 import {
   formatBearingOr,
   formatClockTime,
-  formatFixed,
   formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
   lengthUnit,
   type ReactiveClock,
+  Toast,
 } from '$shared/lib';
-import type { MapView } from '$shared/settings';
 import type { ConnectionPhase } from '$shared/signalk';
 import { AnchoredMenu, UnavailableHint } from '$shared/ui';
 
@@ -36,8 +36,8 @@ let {
   anchor,
   units,
   vessel,
-  mapView,
   pinnedActions,
+  editing = false,
   clock,
   onReconnect,
 }: {
@@ -50,8 +50,8 @@ let {
   anchor: AnchorWatch;
   units: UnitsStore;
   vessel: OwnVessel;
-  mapView: MapView | undefined;
   pinnedActions: MenuItem[];
+  editing?: boolean;
   clock: ReactiveClock;
   onReconnect: () => void;
 } = $props();
@@ -66,9 +66,29 @@ let moreOpen = $state(false);
 const closeMore = (): void => {
   moreOpen = false;
 };
+
+// A blocked pill's reason is otherwise only reachable via its hover-only title tooltip, which
+// never fires on a tap; this explains itself the same way the app menu's blocked tiles do.
+const PILL_NOTE_MS = 5000;
+const blockedPillNote = new Toast();
+onDestroy(() => blockedPillNote.dispose());
+
+// Shared by both the visible pills and the overflow rows: `after` runs once the action fires, so
+// only the overflow row needs to close the popover afterward.
+function runPillAction(action: MenuItem, after?: () => void): void {
+  if (itemBlocked(action)) {
+    blockedPillNote.show(blockedReason(action) ?? action.label, PILL_NOTE_MS);
+    return;
+  }
+  try {
+    action.onSelect();
+  } finally {
+    after?.();
+  }
+}
 </script>
 
-<footer class="status-strip">
+<footer class="status-strip" class:editing>
   <div class="strip-start">
     <span
       class="conn"
@@ -147,6 +167,13 @@ const closeMore = (): void => {
     >
   </div>
   <div class="strip-center">
+    <!-- Reserved via absolute positioning above the pill row, so it never shifts the strip's
+         height under a mid-tap thumb; hidden until a blocked pill is tapped. -->
+    {#if blockedPillNote.message}
+      <p class="blocked-pill-note popover-card" role="status" aria-live="polite">
+        {blockedPillNote.message}
+      </p>
+    {/if}
     {#each split.visible as action (action.id)}
       <button
         type="button"
@@ -156,9 +183,7 @@ const closeMore = (): void => {
         disabled={action.disabled === true}
         aria-disabled={action.available === false ? true : undefined}
         title={blockedReason(action) ?? action.label}
-        onclick={() => {
-          if (!itemBlocked(action)) action.onSelect();
-        }}
+        onclick={() => runPillAction(action)}
       >
         <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
         <MenuItemIcon item={action} size={16} />
@@ -174,12 +199,15 @@ const closeMore = (): void => {
           aria-haspopup="true"
           aria-expanded={moreOpen}
           aria-controls={moreOpen ? 'bar-more-menu' : undefined}
-          aria-label="More actions"
+          aria-label={`More actions (${split.overflow.length})`}
           title="More actions"
           onclick={() => (moreOpen = !moreOpen)}
         >
           <Ellipsis size={16} aria-hidden="true" />
           More
+          {#if split.overflow.length > 1}
+            <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
+          {/if}
         </button>
         <AnchoredMenu
           open={moreOpen}
@@ -199,14 +227,7 @@ const closeMore = (): void => {
                 disabled={action.disabled === true}
                 aria-disabled={action.available === false ? true : undefined}
                 title={blockedReason(action) ?? action.label}
-                onclick={() => {
-                  if (itemBlocked(action)) return;
-                  try {
-                    action.onSelect();
-                  } finally {
-                    closeMore();
-                  }
-                }}
+                onclick={() => runPillAction(action, closeMore)}
               >
                 <UnavailableHint
                   hint={action.available === false ? action.unavailableHint : undefined}
@@ -221,17 +242,9 @@ const closeMore = (): void => {
     {/if}
   </div>
   <div class="center-cluster">
-    <span
-      class="readout"
-      title="Vessel position, which differs from the view below when the chart is panned"
-      >Vessel</span
-    >
+    <span class="readout" title="Vessel position">Vessel</span>
     <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
     <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
-    <span class="readout">View</span>
-    <span class="readout"><b class="num">{formatLatitude(mapView?.lat)}</b></span>
-    <span class="readout"><b class="num">{formatLongitude(mapView?.lon)}</b></span>
-    <span class="readout">z<b class="num">{formatFixed(mapView?.zoom, 1)}</b></span>
   </div>
 </footer>
 
@@ -252,6 +265,12 @@ const closeMore = (): void => {
   color: var(--text-muted);
   font-size: var(--text-md);
 }
+/* The bar's half of the two-part pin/unpin interaction (the app menu's tiles are the other half):
+   a static accent edge, not animated, so the navigator sees this row is part of an active editing
+   session without added motion at the helm. */
+.status-strip.editing {
+  border-block-start-color: var(--accent);
+}
 .strip-start {
   display: flex;
   align-items: center;
@@ -259,8 +278,10 @@ const closeMore = (): void => {
   min-inline-size: 0;
 }
 /* The pinned action pills read as one row of matching labeled pills in the flexible middle.
-   They wrap rather than overflow when a narrow phone leaves too little width. */
+   They wrap rather than overflow when a narrow phone leaves too little width. Positioned, so the
+   blocked-pill note can anchor above it. */
 .strip-center {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -282,19 +303,29 @@ const closeMore = (): void => {
 .menu-item[aria-disabled="true"]:hover {
   background: transparent;
 }
-/* The center lat, lon, and zoom readout reads as one group at the trailing edge, and is the first
-   thing dropped on a phone, where the chart and the panels still report position. */
+/* The vessel position reads as one group at the trailing edge; the Position instrument tile
+   covers the same value on demand, so this is the first thing dropped once space is tight. */
 .center-cluster {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-inline-size: 0;
 }
+/* Between a phone and a full desktop width, a landscape tablet is wide enough to keep the
+   three-column grid but too narrow to fit the flanking readouts and every pinned action pill on
+   one row; the pill row is flex-wrap and has no floor, so it is what breaks, dropping one pill
+   onto its own ragged second row. Freeing the trailing position cluster's column here, before
+   that wrap point, keeps the pinned actions on one row across the whole tablet range instead of
+   tuning to one device width. */
+@media (max-width: 1200px) {
+  .center-cluster {
+    display: none;
+  }
+}
 /* On a phone or small tablet the labeled pills and the live readouts do not fit one row, so the
    strip stacks into one centered column: the readouts above, and the labeled pills on a wrapping
-   row below within thumb reach. The duplicate position cluster drops (the chart and panels still
-   report it); the connection dot is small enough to stay. This block sits after the base rules
-   above, so it wins the cascade when the query matches. */
+   row below within thumb reach. The connection dot is small enough to stay. This block sits after
+   the base rules above, so it wins the cascade when the query matches. */
 @media (max-width: 900px) {
   .status-strip {
     grid-template-columns: 1fr;
@@ -304,9 +335,6 @@ const closeMore = (): void => {
   .strip-start {
     flex-wrap: wrap;
     justify-content: center;
-  }
-  .center-cluster {
-    display: none;
   }
 }
 .offline {
@@ -356,6 +384,28 @@ const closeMore = (): void => {
 }
 .more-wrap {
   position: relative;
+}
+/* Sets expectations for how many actions are behind the overflow tap, rather than an unqualified
+   "More"; only shown past a single overflow action, where the count is actually informative. */
+.pill-count {
+  font-size: var(--text-xs);
+  background: var(--accent-tint);
+  border-radius: var(--radius-pill);
+  padding: 0 0.3rem;
+  color: var(--accent);
+}
+/* Floats above the pinned pill row so a tap on a grayed pill explains itself, mirroring the app
+   menu's own blocked-note pattern; the frame comes from the shared .popover-card composition. */
+.blocked-pill-note {
+  position: absolute;
+  inset-block-end: calc(100% + var(--space-1));
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-menu);
+  max-inline-size: 16rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  text-align: center;
 }
 /* Positions and lays out the More popover; the frame (border, surface, radius, and shadow) comes
    from the shared .popover-card it is composed with, so it cannot drift from the other menus. */
