@@ -142,7 +142,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   quiet hint for empty states and inline guidance), `.alert-note` (an outline alarm banner) and its
   `.alert-note--filled` tinted variant, `.sev-danger` and `.sev-warning` (severity text coloring),
   `.panel-title` and `.panel-title--sub` (the panel header title and subtitle), `.num` (mono tabular
-  numerals for any aligned readout).
+  numerals for any aligned readout). The status strip's own `.readout` spans (StatusStrip.svelte,
+  component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
+  (SOG, COG, HDG, Depth, Vessel, Time), then the value wrapped in `.num`. A trailing physical unit
+  (kn, °T, ft, m) stays outside the `.num` span as plain text; a qualifier that is part of reading the
+  value itself, not a separate unit (UTC on a clock reading, the way AM/PM reads as part of a time),
+  stays inside the `.num` span with the value it qualifies. Every new readout added to the strip
+  follows this, so a future edit does not drop the bold treatment (happened twice building the Time
+  readout: once for the value, once for UTC).
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-sm +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,

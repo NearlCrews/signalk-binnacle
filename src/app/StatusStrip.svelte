@@ -250,8 +250,7 @@ function runPillAction(action: MenuItem, after?: () => void): void {
     <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
     <span class="readout" title="UTC time, for watch changes and weather schedules"
       >Time
-      {formatClockTime(clock.now, { utc: true })}
-      UTC</span
+      <b class="num">{formatClockTime(clock.now, { utc: true })} UTC</b></span
     >
   </div>
 </footer>
