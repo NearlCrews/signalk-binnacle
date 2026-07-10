@@ -254,7 +254,12 @@ function runPillAction(action: MenuItem, after?: () => void): void {
    overlay, so it can never paint over or steal taps from the readouts at any width. */
 .status-strip {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* The two flanking columns share the leftover space equally (1fr each) and the middle column
+     sizes to the pinned pills' own content, so the pills sit at the true midpoint of the strip.
+     auto 1fr auto (the middle column absorbing the leftover instead) centers the pills only
+     within whatever space is left after the flanks, which drifts off-center by however much wider
+     the readouts are than the trailing vessel position. */
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
@@ -304,10 +309,13 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   background: transparent;
 }
 /* The vessel position reads as one group at the trailing edge; the Position instrument tile
-   covers the same value on demand, so this is the first thing dropped once space is tight. */
+   covers the same value on demand, so this is the first thing dropped once space is tight.
+   justify-content pins it to the far edge of its now-equal-share column (the true-centering grid
+   above makes that column wider than its own content), matching where it sat before. */
 .center-cluster {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
   min-inline-size: 0;
 }
