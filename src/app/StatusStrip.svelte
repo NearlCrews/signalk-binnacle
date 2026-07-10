@@ -168,10 +168,6 @@ function runPillAction(action: MenuItem, after?: () => void): void {
       <b class="num">{formatLengthOr(vessel.depthMeters, units.mode)}</b>
       {lengthUnit(units.mode)}</span
     >
-    <span class="readout" title="UTC time, for watch changes and weather schedules"
-      >{formatClockTime(clock.now, { utc: true })}
-      UTC</span
-    >
   </div>
   <div class="strip-center">
     <!-- Reserved via absolute positioning above the pill row, so it never shifts the strip's
@@ -252,6 +248,11 @@ function runPillAction(action: MenuItem, after?: () => void): void {
     <span class="readout" title="Vessel position">Vessel</span>
     <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
     <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
+    <span class="readout" title="UTC time, for watch changes and weather schedules"
+      >Time
+      {formatClockTime(clock.now, { utc: true })}
+      UTC</span
+    >
   </div>
 </footer>
 
