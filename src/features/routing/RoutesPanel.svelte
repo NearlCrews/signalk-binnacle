@@ -43,6 +43,10 @@ interface Props {
   onHighlightLeg: (index: number) => void;
   // A transient error to show (a failed save, activate, stop, or delete), or undefined when clear.
   error: string | undefined;
+  // True when error is specifically the route editor's lazy-load failure, so a Retry action shows;
+  // other errors (a failed save, activate, stop, delete) have no editor to retry loading.
+  editorLoadFailed: boolean;
+  onRetryEditor: () => void;
   onNew: () => void;
   onEditRoute: (id: string) => void;
   // Called with the name the user enters; the panel collects it via the inline NameEntry form.
@@ -75,6 +79,8 @@ const {
   highlight,
   onHighlightLeg,
   error,
+  editorLoadFailed,
+  onRetryEditor,
   onNew,
   onEditRoute,
   onSave,
@@ -147,7 +153,12 @@ $effect(() => {
   {onBack}
 >
   {#if error}
-    <p class="alert-note" role="alert">{error}</p>
+    <p class="alert-note" role="alert">
+      {error}
+      {#if editorLoadFailed}
+        <button type="button" class="btn btn-ghost" onclick={onRetryEditor}>Retry</button>
+      {/if}
+    </p>
   {/if}
   {#if auth.writeBlocked}
     <p class="muted-note">

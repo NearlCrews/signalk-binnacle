@@ -97,6 +97,17 @@
 .bottom-strip .ack--warning[aria-pressed="true"] {
   background: var(--warning-tint);
 }
+/* A primary variant of the strip action (Steer to MOB), alarm-colored and bold to match the header
+   MOB button's own styling, so the strip's obvious next action reads as such next to its peer
+   Acknowledge and Cancel buttons rather than looking like just another pill. */
+.bottom-strip .ack--primary {
+  color: var(--alarm);
+  border-color: var(--alarm);
+  font-weight: 600;
+}
+.bottom-strip .ack--primary:hover:not(:disabled) {
+  background: var(--alarm-tint);
+}
 /* The trailing action cluster shared by the alarm and tool strips. The shared .ack pill carries its
    own auto margin for single-action strips, so the cluster neutralizes it and owns the push; the
    safety strips widen the gap locally so paired safety buttons do not read as twins. */

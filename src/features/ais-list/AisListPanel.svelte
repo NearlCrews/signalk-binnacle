@@ -5,6 +5,7 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
 import {
+  capitalize,
   formatBearingOr,
   formatKnotsOr,
   formatMetersOrNm,
@@ -12,6 +13,7 @@ import {
   formatTcpaMin,
 } from '$shared/lib';
 import { SlideOver } from '$shared/ui';
+import AisTargetDetail from './AisTargetDetail.svelte';
 import { type AisSort, buildAisRows } from './ais-rows';
 
 interface Props {
@@ -26,6 +28,10 @@ interface Props {
 }
 
 const { aisTargets, vessel, collision, units, onLocate, onClose, onBack }: Props = $props();
+
+// The row is recomputed live from rows below on every rebuild, so the detail panel stays live
+// while a target moves instead of freezing at the moment it was opened.
+let selectedId = $state<string | undefined>();
 
 let sort = $state<AisSort>('range');
 
@@ -52,6 +58,7 @@ const parsedOwn = $derived<LatLon | undefined>(
 const rows = $derived(
   buildAisRows(aisTargets.list(), parsedOwn, collision.assessment.contacts, sort),
 );
+const selectedRow = $derived(rows.find((r) => r.id === selectedId));
 </script>
 
 <SlideOver
@@ -92,8 +99,8 @@ const rows = $derived(
           <button
             type="button"
             class="nav-row"
-            title="Show {row.label} on the chart"
-            onclick={() => onLocate(row.position)}
+            title="{row.label} details"
+            onclick={() => (selectedId = row.id)}
           >
             <span class="nav-head">
               <span
@@ -108,6 +115,9 @@ const rows = $derived(
               {:else if row.severity === 'warning'}
                 <span class="caps-label sev-warning">Getting close</span>
               {/if}
+              {#if row.navigationState}
+                <span class="caps-label">{capitalize(row.navigationState)}</span>
+              {/if}
             </span>
             <span class="nav-metrics">
               <span class="nav-metric">
@@ -119,6 +129,11 @@ const rows = $derived(
               <span class="nav-metric" title="Speed over ground"
                 >Speed <b class="num">{formatKnotsOr(row.sogMps)}</b> kn</span
               >
+              {#if row.headingRad !== undefined}
+                <span class="nav-metric" title="Heading, true"
+                  >HDG <b class="num">{formatBearingOr(row.headingRad)}</b>&deg;T</span
+                >
+              {/if}
               {#if row.cpaMeters !== undefined}
                 <span class="nav-metric" title="Closest point of approach"
                   >CPA <b class="num">{formatNm(row.cpaMeters)}</b> nm</span
@@ -136,6 +151,9 @@ const rows = $derived(
     </ul>
   {/if}
 </SlideOver>
+{#if selectedRow}
+  <AisTargetDetail row={selectedRow} {units} onClose={() => (selectedId = undefined)} {onLocate} />
+{/if}
 
 <style>
 /* The vessel name and its plain risk badge share a baseline row so the collision state is named in

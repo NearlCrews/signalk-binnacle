@@ -238,6 +238,11 @@ const CLOCK_OPTS_HMS: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
   second: '2-digit',
 };
+const CLOCK_OPTS_HM_UTC: Intl.DateTimeFormatOptions = {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'UTC',
+};
 const DAY_CLOCK_OPTS_HM: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   hour: '2-digit',
@@ -259,7 +264,12 @@ const DAY_CLOCK_OPTS_HZ: Intl.DateTimeFormatOptions = {
 // A wall-clock time as hour and minute, shared so the nav strip, the tides display, and any other
 // readout format an absolute time the same way. The seconds opt-in serves the readouts that get
 // written in a log or relayed on the VHF (the MOB mark time), where minute resolution is too coarse.
-export function formatClockTime(timeMs: number, opts?: { seconds?: boolean }): string {
+// The utc opt-in serves the status strip's watch-change clock, where local time is the wrong answer.
+export function formatClockTime(
+  timeMs: number,
+  opts?: { seconds?: boolean; utc?: boolean },
+): string {
+  if (opts?.utc) return new Date(timeMs).toLocaleTimeString([], CLOCK_OPTS_HM_UTC);
   return new Date(timeMs).toLocaleTimeString([], opts?.seconds ? CLOCK_OPTS_HMS : CLOCK_OPTS_HM);
 }
 

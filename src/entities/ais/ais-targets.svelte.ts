@@ -46,6 +46,9 @@ export interface AisTargetView {
   shipTypeId?: number;
   cpaMeters?: number;
   tcpaSeconds?: number;
+  // Signal K's enum: underway, anchored, moored, not under command, aground, and similar. Undefined
+  // when the target has never reported it, which most Class B AIS transponders do not.
+  navigationState?: string;
 }
 
 export class AisTargets {
@@ -85,6 +88,7 @@ export class AisTargets {
       if (!isLatLon(position)) continue;
       const name = target.values.get(SK_PATHS.name);
       const approach = target.values.get(SK_PATHS.closestApproach);
+      const navState = target.values.get(SK_PATHS.navigationState);
       out.push({
         id,
         name: typeof name === 'string' ? name : undefined,
@@ -95,6 +99,7 @@ export class AisTargets {
         shipTypeId: this.#numField(target.values.get(SK_PATHS.aisShipType), 'id'),
         cpaMeters: this.#numField(approach, 'distance'),
         tcpaSeconds: this.#timeToSeconds(approach),
+        navigationState: typeof navState === 'string' ? navState : undefined,
       });
     }
     this.#cache = out;

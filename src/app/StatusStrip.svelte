@@ -13,12 +13,14 @@ import {
 } from '$features/menu';
 import {
   formatBearingOr,
+  formatClockTime,
   formatFixed,
   formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
   lengthUnit,
+  type ReactiveClock,
 } from '$shared/lib';
 import type { MapView } from '$shared/settings';
 import type { ConnectionPhase } from '$shared/signalk';
@@ -36,6 +38,8 @@ let {
   vessel,
   mapView,
   pinnedActions,
+  clock,
+  onReconnect,
 }: {
   connectionLabel: string;
   streamError: boolean;
@@ -48,6 +52,8 @@ let {
   vessel: OwnVessel;
   mapView: MapView | undefined;
   pinnedActions: MenuItem[];
+  clock: ReactiveClock;
+  onReconnect: () => void;
 } = $props();
 
 // COG is meaningless while the boat is stationary; under this speed the readout dashes.
@@ -77,6 +83,11 @@ const closeMore = (): void => {
     {#if streamError}
       <span class="readout fix-lost" role="alert" aria-live="assertive">
         Data link failed, reload
+      </span>
+    {:else if connectionDown}
+      <span class="readout fix-lost" role="status" aria-live="polite">
+        {connectionLabel}
+        <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
       </span>
     {/if}
     {#if !online}
@@ -120,6 +131,19 @@ const closeMore = (): void => {
           fixStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS ? undefined : vessel.cogRad,
         )}</b
       >&deg;T</span
+    >
+    <span class="readout" title="Heading, true"
+      >HDG
+      <b class="num">{formatBearingOr(vessel.headingRad)}</b>&deg;T</span
+    >
+    <span class="readout" title="Depth below the transducer"
+      >Depth
+      <b class="num">{formatLengthOr(vessel.depthMeters, units.mode)}</b>
+      {lengthUnit(units.mode)}</span
+    >
+    <span class="readout" title="UTC time, for watch changes and weather schedules"
+      >{formatClockTime(clock.now, { utc: true })}
+      UTC</span
     >
   </div>
   <div class="strip-center">
@@ -197,6 +221,13 @@ const closeMore = (): void => {
     {/if}
   </div>
   <div class="center-cluster">
+    <span
+      class="readout"
+      title="Vessel position, which differs from the view below when the chart is panned"
+      >Vessel</span
+    >
+    <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
+    <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
     <span class="readout">View</span>
     <span class="readout"><b class="num">{formatLatitude(mapView?.lat)}</b></span>
     <span class="readout"><b class="num">{formatLongitude(mapView?.lon)}</b></span>
@@ -281,9 +312,10 @@ const closeMore = (): void => {
 .offline {
   color: var(--alarm);
 }
-/* The connection state is a compact dot (its label stays for assistive tech and the hover title):
-   the healthy token while the stream is up, the caution color while it is reconnecting or closed,
-   so a mid-passage drop still reads at a glance without the word taking strip space. */
+/* A compact dot for the healthy state (the label stays for assistive tech and the hover title, so a
+   healthy connection does not spend strip space on the word "Connected"); a mid-passage drop shows
+   the dot's caution color plus the visible label and a Reconnect action right beside it, so a sighted
+   user who has not hovered still sees why the strip has gone quiet, not just a color change. */
 .conn {
   display: inline-flex;
   align-items: center;

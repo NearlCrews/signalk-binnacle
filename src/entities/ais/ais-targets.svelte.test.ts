@@ -73,6 +73,25 @@ describe('AisTargets', () => {
     expect(target.cpaMeters).toBe(926);
     expect(target.tcpaSeconds).toBe(90);
   });
+
+  it('reads navigation.state as navigationState, absent when never reported', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'vessels.anchored': {
+          'navigation.position': { latitude: 0, longitude: 0 },
+          'navigation.state': 'anchored',
+        },
+        'vessels.silent': {
+          'navigation.position': { latitude: 1, longitude: 1 },
+        },
+      }),
+    );
+    const list = ais.list();
+    expect(list.find((t) => t.id === 'vessels.anchored')?.navigationState).toBe('anchored');
+    expect(list.find((t) => t.id === 'vessels.silent')?.navigationState).toBeUndefined();
+  });
 });
 
 describe('parseIso8601DurationSeconds', () => {

@@ -95,4 +95,15 @@ describe('buildAisRows', () => {
     expect(row.cpaMeters).toBe(300);
     expect(row.tcpaSeconds).toBe(120);
   });
+
+  it('carries heading and navigation state through from the target', () => {
+    const [row] = buildAisRows(
+      [target({ id: 'a', headingRad: 1.2, navigationState: 'anchored' })],
+      OWN,
+      [],
+      'range',
+    );
+    expect(row.headingRad).toBe(1.2);
+    expect(row.navigationState).toBe('anchored');
+  });
 });

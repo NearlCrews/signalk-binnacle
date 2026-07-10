@@ -41,7 +41,7 @@ function tapCancel(): void {
         <span class="note ack-tag">Acknowledged</span>
       {/if}
       <div class="actions actions--safety">
-        <button type="button" class="ack" disabled={!mob.position} onclick={onSteer}>
+        <button type="button" class="ack ack--primary" disabled={!mob.position} onclick={onSteer}>
           Steer to MOB
         </button>
         {#if !mob.acknowledged}

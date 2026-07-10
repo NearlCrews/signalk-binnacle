@@ -25,14 +25,47 @@ const LABELS: Record<Theme, string> = {
 
 const Icon = $derived(ICONS[controller.theme]);
 const label = $derived(LABELS[controller.theme]);
+
+// A long hold jumps straight to night-red, skipping the day -> dusk leg of the cycle: cycling
+// through dusk's brighter palette first would hit dark-adapted eyes with exactly the flash a
+// night-red jump exists to avoid.
+const LONG_PRESS_MS = 500;
+let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+let longPressed = false;
+
+function onPointerDown(): void {
+  longPressed = false;
+  longPressTimer = setTimeout(() => {
+    longPressed = true;
+    controller.set('night-red');
+  }, LONG_PRESS_MS);
+}
+
+function cancelLongPress(): void {
+  clearTimeout(longPressTimer);
+}
+
+function onClick(): void {
+  // The long-press timer already applied the theme; swallow the trailing click so a held press
+  // does not also cycle past night-red.
+  if (longPressed) {
+    longPressed = false;
+    return;
+  }
+  controller.cycle();
+}
 </script>
 
 <button
   type="button"
   class="icon-pill"
-  aria-label={`Switch theme (currently ${label})`}
-  title={label}
-  onclick={() => controller.cycle()}
+  aria-label={`Switch theme (currently ${label}); hold to jump to night theme`}
+  title={`${label} (hold for night)`}
+  onpointerdown={onPointerDown}
+  onpointerup={cancelLongPress}
+  onpointerleave={cancelLongPress}
+  onpointercancel={cancelLongPress}
+  onclick={onClick}
 >
   <!-- The mode change recolors the whole UI, so the marquee control acknowledges it: the new glyph
        pops in on each cycle. Keyed on the theme so the swap re-mounts, gated on reduced motion. -->

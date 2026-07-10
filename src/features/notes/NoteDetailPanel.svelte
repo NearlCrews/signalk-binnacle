@@ -101,7 +101,7 @@ function measure(item: NormalizedItem): string {
             {danger.value === true ? 'Dangerous to navigation' : 'Not a danger to navigation'}
           </div>
         {/if}
-        <dl>
+        <dl class="detail-list">
           {#each listItems as item, i (item.label + i)}
             {@const linkUrl =
               item.kind === 'link' && typeof item.value === 'string'
@@ -187,25 +187,7 @@ function measure(item: NormalizedItem): string {
 .locate {
   align-self: flex-start;
 }
-dl {
-  margin: 0;
-}
-dt {
-  color: var(--text-muted);
-}
-dd {
-  margin: 0;
-}
-.item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-2);
-  padding-block: 0.15rem;
-}
-.item dd {
-  text-align: end;
-  font-variant-numeric: tabular-nums;
-}
+/* dl, dt, dd, and .item come from the shared .detail-list utility in panels.css. */
 /* A note carries prose, so it spans the full width below its label instead of being squeezed
    into the value column and right-aligned. */
 .note-item {

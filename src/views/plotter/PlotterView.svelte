@@ -349,8 +349,7 @@ $effect(() => {
       armMeasure();
       measure.add(position);
     }}
-    onRouteEditorError={() =>
-      routeController.flagRouteError('The route editor failed to load. Reload to edit routes.')}
+    onRouteEditorError={() => routeController.flagEditorLoadFailed()}
     onAnchorMoved={(position) => void anchorController.onAnchorMoved(position)}
     marineRadarLayer={marineRadar.layer}
     {onMapInstance}
@@ -411,6 +410,8 @@ $effect(() => {
           highlight={routeStore.highlight}
           {onHighlightLeg}
           error={routeController.routeError}
+          editorLoadFailed={routeController.editorLoadFailed}
+          onRetryEditor={routeController.retryRouteEdit}
           onNew={routeController.beginNewRoute}
           onEditRoute={routeController.onEditRoute}
           onSave={routeController.onSaveRoute}
@@ -513,6 +514,7 @@ $effect(() => {
         <AlarmsPanel
           {auth}
           {thresholds}
+          {units}
           collisionMuted={collisionMute.active}
           {collisionMuteRemainingMin}
           onToggleCollisionMute={toggleCollisionMute}

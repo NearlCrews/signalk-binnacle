@@ -123,6 +123,11 @@ export interface Thresholds {
   dangerTcpaSeconds: number;
   warningCpaMeters: number;
   warningTcpaSeconds: number;
+  // Optional, not required, so a threshold record persisted before this field existed still
+  // validates: isThresholds must accept it absent, or every such record (including a user's
+  // customized collision thresholds) would fail validation and silently reset to defaults.
+  // Callers read it as `t.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters`.
+  shallowDepthMeters?: number;
 }
 
 const MINUTE_S = 60;
@@ -132,17 +137,21 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   dangerTcpaSeconds: 10 * MINUTE_S,
   warningCpaMeters: Math.round(nauticalMilesToMeters(1)),
   warningTcpaSeconds: 20 * MINUTE_S,
+  shallowDepthMeters: 3,
 };
 
 // Guards stored collision thresholds against schema drift or corruption: a missing field would
 // otherwise read as NaN and silently disable the CPA/TCPA comparison that raises a collision alarm.
+// shallowDepthMeters is checked only when present, since it did not exist in earlier persisted
+// records and its absence there is expected, not corruption.
 export function isThresholds(value: unknown): value is Thresholds {
   return (
     isRecord(value) &&
     isFiniteNumber(value.dangerCpaMeters) &&
     isFiniteNumber(value.dangerTcpaSeconds) &&
     isFiniteNumber(value.warningCpaMeters) &&
-    isFiniteNumber(value.warningTcpaSeconds)
+    isFiniteNumber(value.warningTcpaSeconds) &&
+    (value.shallowDepthMeters === undefined || isFiniteNumber(value.shallowDepthMeters))
   );
 }
 

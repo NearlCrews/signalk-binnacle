@@ -25,6 +25,7 @@ export const SK_PATHS = {
   allNotifications: `${NOTIFICATIONS_PREFIX}*`,
   name: 'name',
   aisShipType: 'design.aisShipType',
+  navigationState: 'navigation.state',
   courseNextPoint: 'navigation.course.nextPoint',
   coursePreviousPoint: 'navigation.course.previousPoint',
   courseActiveRoute: 'navigation.course.activeRoute',

@@ -1,7 +1,15 @@
 <script lang="ts">
 import { Bell, BellOff } from '@lucide/svelte';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
-import { formatClockTime, metersToNauticalMiles, nauticalMilesToMeters } from '$shared/lib';
+import type { UnitsStore } from '$entities/units';
+import {
+  feetToMeters,
+  formatClockTime,
+  lengthUnit,
+  metersToFeet,
+  metersToNauticalMiles,
+  nauticalMilesToMeters,
+} from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import { Disclosure, SlideOver, UnitField } from '$shared/ui';
@@ -25,6 +33,7 @@ interface Props {
   onSilence?: (n: ActiveNotification) => void;
   onAcknowledge?: (n: ActiveNotification) => void;
   thresholds: PersistedValue<Thresholds>;
+  units: UnitsStore;
   collisionMuted: boolean;
   collisionMuteRemainingMin: number | undefined;
   onToggleCollisionMute: () => void;
@@ -41,6 +50,7 @@ const {
   onSilence,
   onAcknowledge,
   thresholds,
+  units,
   collisionMuted,
   collisionMuteRemainingMin,
   onToggleCollisionMute,
@@ -89,6 +99,18 @@ function setSeconds(key: 'dangerTcpaSeconds' | 'warningTcpaSeconds', minutes: nu
 
 const cpaNm = (meters: number): number => metersToNauticalMiles(meters) ?? 0;
 const tcpaMin = (seconds: number): number => seconds / 60;
+
+// The shallow-water threshold follows the server unit preference (meters or feet), unlike CPA and
+// TCPA above, which always read as nautical miles and minutes regardless of that preference.
+const shallowDepthMeters = $derived(t.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters);
+const shallowDepthDisplay = $derived(
+  units.mode === 'imperial' ? (metersToFeet(shallowDepthMeters) ?? 0) : (shallowDepthMeters ?? 0),
+);
+function setShallowDepth(value: number): void {
+  if (!Number.isFinite(value) || value < 0) return;
+  const meters = units.mode === 'imperial' ? feetToMeters(value) : value;
+  thresholds.set({ ...thresholds.value, shallowDepthMeters: meters });
+}
 
 const caution = $derived(thresholdsCaution(t));
 </script>
@@ -244,6 +266,19 @@ const caution = $derived(thresholdsCaution(t));
         Reset to defaults
       </button>
     </Disclosure>
+  </section>
+  <section class="panel-section" aria-label="Shallow water threshold">
+    <h3 class="caps-label">Shallow water alarm</h3>
+    <p class="muted-note">Warn me when the depth below the transducer reads under this much.</p>
+    <UnitField
+      label="Shallow depth"
+      unit={lengthUnit(units.mode)}
+      min={0}
+      step={units.mode === 'imperial' ? 1 : 0.5}
+      ariaLabel="Shallow water depth threshold"
+      value={shallowDepthDisplay}
+      onCommit={setShallowDepth}
+    />
   </section>
 </SlideOver>
 

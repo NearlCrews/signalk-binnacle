@@ -38,6 +38,10 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   const routeError = new ErrorState();
   let gotoActive = $state(false);
+  // The route or initial point the last startRouteEdit call used, so a Retry after a lazy-load
+  // failure can replay the exact same request rather than needing its own separate state machine.
+  let lastEditRequest: { route?: Route; initialPoint?: LatLon } | undefined;
+  let editorLoadFailed = $state(false);
 
   const courseActive = $derived(routeStore.activeId !== undefined || gotoActive);
 
@@ -108,6 +112,8 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   function beginNewRoute(initialPoint?: LatLon): void {
     clearRouteError();
+    editorLoadFailed = false;
+    lastEditRequest = { initialPoint };
     routeStore.setWorking({ id: uuidv4(), name: '', waypoints: [] });
     deps.startRouteEdit(undefined, initialPoint);
   }
@@ -115,9 +121,27 @@ export function createRouteController(deps: RouteControllerDeps) {
   function onEditRoute(id: string): void {
     const route = routeStore.routeById(id);
     if (!route) return;
+    clearRouteError();
+    editorLoadFailed = false;
+    lastEditRequest = { route };
     routeStore.setWorking(route);
     deps.startRouteEdit(route);
     flyToRouteStart(id);
+  }
+
+  // The editor's dynamic import failed (a bad chunk fetch, not a user action). loadRouteEditor
+  // already resets its own cache so the next startRouteEdit call re-triggers the import; Retry only
+  // needs to replay the last request, not any new recovery logic of its own.
+  function flagEditorLoadFailed(): void {
+    editorLoadFailed = true;
+    flagRouteError('The route editor failed to load.');
+  }
+
+  function retryRouteEdit(): void {
+    if (!lastEditRequest) return;
+    editorLoadFailed = false;
+    clearRouteError();
+    deps.startRouteEdit(lastEditRequest.route, lastEditRequest.initialPoint);
   }
 
   async function onSaveRoute(name: string): Promise<void> {
@@ -287,8 +311,13 @@ export function createRouteController(deps: RouteControllerDeps) {
     flyToRouteStart,
     flagRouteError,
     clearRouteError,
+    flagEditorLoadFailed,
+    retryRouteEdit,
     get routeError() {
       return routeError.message;
+    },
+    get editorLoadFailed() {
+      return editorLoadFailed;
     },
     get courseActive() {
       return courseActive;

@@ -77,6 +77,28 @@
 .panel-section h3:not(:first-child) {
   margin-block-start: var(--space-1);
 }
+/* A compact label-value list for a detail panel (a place's facts, a target's readouts): the label
+   in the muted dt column, the value right-aligned in the dd column with tabular figures so a
+   column of numbers lines up. Shared so a second detail panel does not re-derive this grid. */
+.detail-list {
+  margin: 0;
+}
+.detail-list dt {
+  color: var(--text-muted);
+}
+.detail-list dd {
+  margin: 0;
+}
+.detail-list .item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2);
+  padding-block: 0.15rem;
+}
+.detail-list .item dd {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
 /* A pinned footer below the scrolling body: action buttons or attribution that must always be
    visible at the bottom of the panel regardless of scroll position. */
 .panel-footer {

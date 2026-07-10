@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isMapView, PersistedValue } from './persisted.svelte';
+import { DEFAULT_THRESHOLDS, isMapView, isThresholds, PersistedValue } from './persisted.svelte';
 
 function fakeStorage(map: Map<string, string>): Pick<Storage, 'getItem' | 'setItem'> {
   return {
@@ -74,5 +74,25 @@ describe('isMapView', () => {
     expect(isMapView({ lat: 0, lon: 200, zoom: 5 })).toBe(false);
     expect(isMapView({ lat: 0, lon: 0, zoom: Number.NaN })).toBe(false);
     expect(isMapView({ lat: '42', lon: 0, zoom: 5 })).toBe(false);
+  });
+});
+
+describe('isThresholds', () => {
+  it('accepts a full record including shallowDepthMeters', () => {
+    expect(isThresholds(DEFAULT_THRESHOLDS)).toBe(true);
+  });
+
+  it('accepts a record persisted before shallowDepthMeters existed', () => {
+    const { shallowDepthMeters: _omit, ...legacy } = DEFAULT_THRESHOLDS;
+    expect(isThresholds(legacy)).toBe(true);
+  });
+
+  it('rejects a non-finite shallowDepthMeters when present', () => {
+    expect(isThresholds({ ...DEFAULT_THRESHOLDS, shallowDepthMeters: Number.NaN })).toBe(false);
+  });
+
+  it('rejects a record missing an original required field', () => {
+    const { dangerCpaMeters: _omit, ...broken } = DEFAULT_THRESHOLDS;
+    expect(isThresholds(broken)).toBe(false);
   });
 });

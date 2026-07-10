@@ -14,8 +14,12 @@ export interface AisListRow {
   rangeMeters?: number;
   bearingRad?: number;
   sogMps?: number;
+  headingRad?: number;
   cpaMeters?: number;
   tcpaSeconds?: number;
+  // Signal K's navigation.state enum (underway, anchored, moored, and similar); undefined when the
+  // target has never reported it.
+  navigationState?: string;
   // The lookout's grading for this contact, when it considers it a risk.
   severity?: Severity;
 }
@@ -46,8 +50,10 @@ export function buildAisRows(
         : undefined,
       bearingRad: own ? rhumbBearingRad(own, target.position) : undefined,
       sogMps: target.sogMps,
+      headingRad: target.headingRad,
       cpaMeters: target.cpaMeters ?? risk?.cpaMeters,
       tcpaSeconds: target.tcpaSeconds ?? risk?.tcpaSeconds,
+      navigationState: target.navigationState,
       severity: risk?.severity,
     };
   });

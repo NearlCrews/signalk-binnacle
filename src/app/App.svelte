@@ -52,7 +52,7 @@ import {
   KIP_URL,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
-import { CollisionMute, CollisionNotifier, LookoutAlarm } from '$features/lookout';
+import { CollisionMute, CollisionNotifier, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
 import {
   createMarineRadarController,
   RADAR_UNAVAILABLE_HINT,
@@ -111,6 +111,7 @@ import {
   createMapView,
   createThresholds,
   createTrackSettings,
+  DEFAULT_THRESHOLDS,
   isMapView,
   type MapView,
   PersistedValue,
@@ -290,6 +291,16 @@ function onAcknowledgeNotification(notification: ActiveNotification): void {
 // drag alarm mirrors the collision split: an audible tone here, the strip and live region below.
 const anchor = new AnchorWatch(store, vessel);
 const anchorAlarm = new GatedAlarm(ANCHOR_TONE);
+
+// Shallow-water depth alarm: sounds while the below-transducer depth reads under the configured
+// threshold. A live depth reading is required to sound; an absent depth (no sounder, no fix on the
+// path) stays silent rather than alarming on missing data.
+const shallowAlarm = new GatedAlarm(SHALLOW_TONE);
+$effect(() => {
+  const depth = vessel.depthMeters;
+  const limit = thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters;
+  shallowAlarm.update(depth !== undefined && limit !== undefined && depth < limit);
+});
 
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
 // raises the recovery strip; a remote station's notifications.mob raises it here too.
@@ -1341,6 +1352,7 @@ const primeAudio = () => {
   arrivalAlarm.prime();
   anchorAlarm.prime();
   mobAlarm.prime();
+  shallowAlarm.prime();
 };
 
 const CONNECTION_LABELS: Record<ConnectionPhase, string> = {
@@ -1476,6 +1488,12 @@ async function connectStream(token: string | undefined): Promise<void> {
     { path: SK_PATHS.name, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
     { path: SK_PATHS.aisShipType, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
     { path: SK_PATHS.closestApproach, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
+    {
+      path: SK_PATHS.navigationState,
+      context: ALL_VESSELS_CONTEXT,
+      policy: 'fixed',
+      period: 5000,
+    },
   ]);
   // The reads run in parallel. The course hydration restores an in-progress course after a reload: the
   // v2 course paths send
@@ -1579,6 +1597,7 @@ onDestroy(() => {
   lookoutAlarm.stop();
   anchorAlarm.stop();
   mobAlarm.stop();
+  shallowAlarm.stop();
   arrivalAlarm.stop();
   setWriteOutcomeListener(undefined);
   auth.stop();
@@ -1797,6 +1816,8 @@ onDestroy(() => {
     {vessel}
     {mapView}
     pinnedActions={resolvedPinned}
+    {clock}
+    onReconnect={() => void client.reconnect()}
   />
 </main>
 
