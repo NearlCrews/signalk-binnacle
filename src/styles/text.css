@@ -44,6 +44,12 @@
   background: var(--alarm-tint);
   color: var(--text);
 }
+/* Night-red's --text fails AA on --alarm-tint (a warm-lit fill, not near-black like the plain
+   surfaces --text is tuned for); --alarm itself already clears 4.5:1 on every tint in the
+   palette, so the hazard banner text borrows it instead of the ordinary body color. */
+:root[data-theme="night-red"] .alert-note--filled {
+  color: var(--alarm);
+}
 
 /* The quiet muted hint the panels show for empty states and inline guidance, one rule so the
    muted-note shape cannot drift (the .saved .empty rule in cards.css carries its own list margins). */

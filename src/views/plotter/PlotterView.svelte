@@ -631,7 +631,9 @@ $effect(() => {
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
-  color: var(--text);
+  /* --accent-tint-text stays the ordinary body color except in night-red, where it borrows
+     --accent instead (tokens.css): plain --text fails AA on this accent-tinted fill there. */
+  color: var(--accent-tint-text);
   font-weight: 600;
 }
 /* The toast reuses the shared .alert-note--filled treatment; only sizing and shadow are local. */

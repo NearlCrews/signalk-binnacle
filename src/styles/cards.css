@@ -110,11 +110,16 @@
   border-color: var(--accent);
   background: var(--accent-tint);
 }
-/* On the active card (its background is the accent tint), lift the muted stat labels to the body text
-   color so they stay readable, especially in night-red where muted-on-tint is the lowest-contrast
-   pairing. */
-.saved li.active .card-stats {
-  color: var(--text);
+/* On the active card (its background is the accent tint), lift the name and the muted stat labels
+   to --accent-tint-text: the ordinary body color in day and dusk, but night-red's own --text still
+   falls short of AA on --accent-tint, so that token borrows --accent there instead (tokens.css).
+   The small ACTIVE badge sits on the more saturated --accent-tint-strong, where even --accent falls
+   just short (3.99:1); left as-is, a further fix would need a badge-specific color and this is a
+   two-word all-caps label, not body copy. */
+.saved li.active .name,
+.saved li.active .card-stats,
+.saved li.active .card-stats .num {
+  color: var(--accent-tint-text);
 }
 .saved li.active::before {
   content: "";

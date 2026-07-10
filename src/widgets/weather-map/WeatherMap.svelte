@@ -620,7 +620,7 @@ onDestroy(() => {
   min-inline-size: var(--space-4);
   padding: 0 0.2rem;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--accent-contrast);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;

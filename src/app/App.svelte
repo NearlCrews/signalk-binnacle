@@ -1881,9 +1881,9 @@ onDestroy(() => {
      in-flow child is placed explicitly, because auto-placement would flow the topbar into the dock
      column. The toggle is instant by design: animating the track would resize the map per frame. */
   grid-template-columns: 1fr auto;
-  /* dvh tracks the visible viewport so the locked (overflow-hidden) shell does not hide the bottom
-     strip under a mobile browser's dynamic toolbar. */
-  block-size: 100dvh;
+  /* #app is this component's sole mount target (see main.ts) and already carries the dvh-tracked
+     (with a vh fallback) block-size, so inheriting it here keeps that fallback in one place. */
+  block-size: 100%;
   margin-block: 0;
   margin-inline: 0;
   font-family: var(--font-ui);

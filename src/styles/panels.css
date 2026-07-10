@@ -60,6 +60,14 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+/* scrollbar-color only themes Firefox; WebKit and Blink need their own pseudo-elements to match. */
+.panel-body::-webkit-scrollbar {
+  inline-size: 6px;
+}
+.panel-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-sm);
+}
 .panel-body--flex {
   display: flex;
   flex-direction: column;

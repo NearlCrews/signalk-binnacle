@@ -23,7 +23,7 @@
    the user-agent default blue. */
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: var(--accent);
+  accent-color: var(--accent-fill);
 }
 
 /* A row of action buttons under a panel header (New route, Save and Cancel), shared so the panels do

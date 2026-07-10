@@ -15,6 +15,9 @@ body {
 }
 
 #app {
+  /* vh fallback for browsers predating dvh support; dvh overrides it where available. */
+  block-size: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback pair */
   block-size: 100dvh;
 }
 

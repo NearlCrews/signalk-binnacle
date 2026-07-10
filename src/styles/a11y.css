@@ -8,11 +8,40 @@
 }
 /* Night-red dims the ring: --accent is the brightest red in the palette, and a bright 2px outline
    appearing as you tab through controls in the dark hurts dark adaptation. A thinner, dimmer red
-   (--text) still marks focus while keeping the brightest pixel low. */
+   (--text) still marks focus while keeping the brightest pixel low. 1.5px rather than 1px so the
+   ring stays perceptible on a wet, glare-lit screen. */
 :root[data-theme="night-red"]
   :where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline-width: 1px;
+  outline-width: 1.5px;
   outline-color: var(--text);
+}
+
+/* Windows High Contrast Mode and forced-colors browser modes override backgrounds, borders, and
+   shadows with system colors; without this, custom fills and hairline borders can disappear
+   entirely. Force a visible border on the shared surfaces and keep the focus ring in the
+   system's own highlight color rather than fighting it. */
+@media (forced-colors: active) {
+  .btn,
+  .input,
+  .card-frame,
+  .panel-header,
+  .panel-body {
+    border: 1px solid CanvasText;
+  }
+  :where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/* A bright-sunlight / low-vision preference: thicken the hairline borders that otherwise rely on
+   the (low-contrast, by design) --border token for surface separation. */
+@media (prefers-contrast: more) {
+  .btn,
+  .input,
+  .card-frame,
+  .panel-header {
+    border-width: 2px;
+  }
 }
 
 /* Respect a reduced-motion preference: drop transitions and animations app-wide. */
