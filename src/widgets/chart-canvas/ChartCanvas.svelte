@@ -49,6 +49,7 @@ import { buildMapCommands } from './build-commands';
 import { buildDynamicOverlays } from './build-overlays';
 import ChartContextMenu from './ChartContextMenu.svelte';
 import type { MapCommands, UserChartRegistrar } from './commands';
+import VesselOffScreenIndicator from './VesselOffScreenIndicator.svelte';
 
 interface Props {
   store: SignalKStore;
@@ -205,6 +206,9 @@ let manager = $state<LayerManager | undefined>();
 // Captured from onLoad alongside manager, so the units effect below can reach
 // map.setGlobalStateProperty once the map exists. $state so the effect re-runs once it is assigned.
 let mapRef = $state<MapLibreMap | undefined>();
+// Captured from onLoad alongside mapRef, so the off-screen vessel indicator can reuse the exact
+// same centerOnVessel behavior as the menu's Center action, rather than duplicating its fly-to math.
+let commandsRef = $state<MapCommands | undefined>();
 // The open "go to here" menu, anchored at the press point in chart pixels with the chart size
 // captured for edge clamping, or undefined when closed.
 let chartMenu = $state<
@@ -447,25 +451,25 @@ onMount(async () => {
 
       onMapReady?.(recolor);
 
-      onCommandsReady?.(
-        buildMapCommands({
-          map,
-          ctx,
-          view,
-          manager: mgr,
-          vessel,
-          routeStore,
-          notesOverlay,
-          loadRouteEditor,
-          getWorkingRouteOverlay: () => workingRouteOverlay,
-          getRouteEditor: () => routeEditor,
-          nextEditGeneration: () => ++editGeneration,
-          cancelEditGeneration: () => {
-            editGeneration += 1;
-          },
-          currentEditGeneration: () => editGeneration,
-        }),
-      );
+      const commands = buildMapCommands({
+        map,
+        ctx,
+        view,
+        manager: mgr,
+        vessel,
+        routeStore,
+        notesOverlay,
+        loadRouteEditor,
+        getWorkingRouteOverlay: () => workingRouteOverlay,
+        getRouteEditor: () => routeEditor,
+        nextEditGeneration: () => ++editGeneration,
+        cancelEditGeneration: () => {
+          editGeneration += 1;
+        },
+        currentEditGeneration: () => editGeneration,
+      });
+      commandsRef = commands;
+      onCommandsReady?.(commands);
       onMapInstance?.(map);
 
       // The working-route overlay rides the same tick but is not registered with the manager (it is
@@ -490,6 +494,13 @@ onDestroy(() => {
 </script>
 
 <div class="chart-canvas" bind:this={container}>
+  {#if mapRef}
+    <VesselOffScreenIndicator
+      map={mapRef}
+      position={vessel.position}
+      onCenter={() => commandsRef?.centerOnVessel()}
+    />
+  {/if}
   {#if chartMenu}
     {@const menu = chartMenu}
     <ChartContextMenu

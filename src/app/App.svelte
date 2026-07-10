@@ -103,7 +103,7 @@ import {
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, formatNm, formatTcpaMin, MINUTE_MS } from '$shared/lib';
+import { Clock, formatNm, formatTcpaMin, MINUTE_MS, Toast } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
@@ -1136,6 +1136,11 @@ const anchorController = createAnchorController({
   serverHasAnchorApi: () => serverFeatures?.apis.has('anchor') ?? false,
 });
 
+// A transient action failure (a failed save, activate, delete, and similar) from the route,
+// waypoint, or track controllers: shown once, app-wide, and survives the panel that raised it
+// closing, unlike each controller's own panel-local error state.
+const toast = new Toast();
+
 // Route controller: owns route CRUD, activation, editing, GPX import/export, track-to-route.
 const routeController = createRouteController({
   origin,
@@ -1148,6 +1153,7 @@ const routeController = createRouteController({
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
   getBounds: () => mapCommands?.getBounds(),
   getTrackPoints: () => recorder.points,
+  toast,
 });
 
 // Waypoints controller: owns waypoints CRUD.
@@ -1155,6 +1161,7 @@ const waypointsController = createWaypointsController({
   origin,
   getToken: () => chartsToken,
   waypointsStore,
+  toast,
 });
 
 // Track controller: owns saved tracks CRUD and display.
@@ -1163,6 +1170,7 @@ const trackController = createTrackController({
   getToken: () => chartsToken,
   getRecorderPoints: () => recorder.points,
   clearRecorder: () => recorder.clear(),
+  toast,
 });
 
 // User charts controller: owns user chart registration and sync.
@@ -1266,30 +1274,24 @@ function backFromRoutesPanel(): void {
   backToMenu();
 }
 
-// The tracks and waypoints panels' close and back clear their controller's error the same way the
-// routes panel does, so a dismissed panel does not reopen showing a stale failure from last time.
 function closeTracksPanel(): void {
-  trackController.clearTrackError();
   closePanel();
 }
 function backFromTracksPanel(): void {
-  trackController.clearTrackError();
   backToMenu();
 }
 function closeWaypointsPanel(): void {
-  waypointsController.clearWaypointError();
   closePanel();
 }
 function backFromWaypointsPanel(): void {
-  waypointsController.clearWaypointError();
   backToMenu();
 }
 
 // A waypoint dropped from the chart context menu saves through the dialog above with no waypoints
-// panel open to show a failure, so a save failure opens the panel to surface it.
+// panel open; a save failure surfaces on the app-wide toast rather than forcing the panel open just
+// to show it, so a chart-side action does not navigate the user away to a list they never asked for.
 async function confirmDroppedWaypoint(result: { name: string; icon?: string }): Promise<void> {
   await waypointsController.confirmAddWaypoint(result);
-  if (waypointsController.waypointError) activePanel = 'waypoints';
 }
 
 function onStartRouteHere(position: LatLon): void {
@@ -1591,6 +1593,7 @@ onDestroy(() => {
   trendRecorder.stop();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
+  toast.dispose();
   // Covers the case where the component unmounts before any pointer gesture; once the listener has
   // fired its `once: true` registration has already removed it, so this is a harmless no-op then.
   window.removeEventListener('pointerdown', primeAudio);
@@ -1723,6 +1726,7 @@ onDestroy(() => {
     bind:mapInstance
     {companionBase}
     {arrivalBanner}
+    toastMessage={toast.message}
     bind:hoveredPoi
     {poiInView}
     {historyProviders}
@@ -1814,7 +1818,6 @@ onDestroy(() => {
     {anchor}
     {units}
     {vessel}
-    {mapView}
     pinnedActions={resolvedPinned}
     {clock}
     onReconnect={() => void client.reconnect()}

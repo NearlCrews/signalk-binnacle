@@ -29,8 +29,6 @@ interface Props {
   onDelete: (id: string) => void;
   onToggleSaved: (id: string, shown: boolean) => void;
   onExport: (track: SavedTrack) => void;
-  // A failed save or delete, shown until the next action, matching the routes and waypoints panels.
-  error?: string;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -47,7 +45,6 @@ const {
   onDelete,
   onToggleSaved,
   onExport,
-  error,
   onClose,
   onBack,
 }: Props = $props();
@@ -98,9 +95,6 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 </script>
 
 <SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack}>
-  {#if error}
-    <p class="alert-note" role="alert">{error}</p>
-  {/if}
   {#if auth.writeBlocked}
     <p class="muted-note">
       A write token is needed to save or delete tracks. Request a read/write token to continue.

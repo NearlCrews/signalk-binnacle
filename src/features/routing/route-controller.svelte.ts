@@ -4,7 +4,7 @@ import { reverseRoute } from '$entities/route';
 import type { TrackPoint } from '$entities/track';
 import { trackToRoute } from '$features/track-layer';
 import type { LatLon } from '$shared/geo';
-import { ErrorState, uuidv4 } from '$shared/lib';
+import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import { defaultSaveName } from '$shared/ui';
 import {
   activateRoute,
@@ -23,6 +23,10 @@ export interface RouteControllerDeps {
   getToken: () => string | undefined;
   routeStore: RouteStore;
   courseGuidance: CourseGuidance;
+  // Transient action failures (a failed save, activate, stop, delete, and similar) surface here
+  // instead of the panel-local routeError, so they are still visible after the panel that raised
+  // them closes.
+  toast: Toast;
   flyTo: (lat: number, lon: number) => void;
   fitBounds: (bounds: [number, number, number, number]) => void;
   startRouteEdit: (route?: Route, initialPoint?: LatLon) => void;
@@ -55,8 +59,11 @@ export function createRouteController(deps: RouteControllerDeps) {
     wasGuidanceActive = active;
   });
 
+  // A transient action failure (a failed save, activate, stop, delete, and similar): shown as a
+  // toast so it survives the panel that raised it closing, rather than the panel-local routeError,
+  // which is reserved for the editor-load failure below (contextual, with its own Retry action).
   function flagRouteError(message: string): void {
-    routeError.flag(message);
+    deps.toast.show(message);
   }
 
   function clearRouteError(): void {
@@ -134,7 +141,7 @@ export function createRouteController(deps: RouteControllerDeps) {
   // needs to replay the last request, not any new recovery logic of its own.
   function flagEditorLoadFailed(): void {
     editorLoadFailed = true;
-    flagRouteError('The route editor failed to load.');
+    routeError.flag('The route editor failed to load.');
   }
 
   function retryRouteEdit(): void {
@@ -309,7 +316,6 @@ export function createRouteController(deps: RouteControllerDeps) {
     onImportRouteGpx,
     onGoToHere,
     flyToRouteStart,
-    flagRouteError,
     clearRouteError,
     flagEditorLoadFailed,
     retryRouteEdit,

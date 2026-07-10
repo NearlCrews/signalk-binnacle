@@ -128,6 +128,7 @@ interface Props {
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
   arrivalBanner: string | undefined;
+  toastMessage: string | undefined;
   hoveredPoi: Poi | undefined;
   poiInView: Poi[];
   historyProviders: HistoryProviders | undefined;
@@ -234,6 +235,7 @@ let {
   mapInstance = $bindable(),
   companionBase,
   arrivalBanner,
+  toastMessage,
   hoveredPoi = $bindable(),
   poiInView,
   historyProviders,
@@ -358,9 +360,14 @@ $effect(() => {
   <div class="banner-slot">
     <AuthBanner {auth} requestsUrl={accessRequestsUrl} />
   </div>
-  {#if arrivalBanner}
-    <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
-  {/if}
+  <div class="top-banner-stack">
+    {#if arrivalBanner}
+      <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
+    {/if}
+    {#if toastMessage}
+      <div class="alert-note alert-note--filled toast-banner" role="status">{toastMessage}</div>
+    {/if}
+  </div>
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
     <HistoryStrip store={timeTravel} {units} onExit={() => timeTravel.exit()} />
     <NavStrip
@@ -441,7 +448,6 @@ $effect(() => {
           onDelete={trackController.onDeleteSavedTrack}
           onToggleSaved={trackController.onToggleSaved}
           onExport={trackController.onExportSavedTrack}
-          error={trackController.trackError}
           onClose={closeTracksPanel}
           onBack={backFromTracksPanel}
         />
@@ -449,7 +455,6 @@ $effect(() => {
         <WaypointsPanel
           {auth}
           waypoints={waypointsStore.waypoints}
-          error={waypointsController.waypointError}
           onLocate={(waypoint) => flyToPosition(waypoint.position)}
           onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
           onEdit={waypointsController.onOpenEditWaypoint}
@@ -602,11 +607,23 @@ $effect(() => {
   inset-inline: 0;
   z-index: var(--z-overlay);
 }
-.arrival-banner {
+/* Positions the arrival banner and the toast in the same top-center slot, stacked when both are
+   showing at once. The wrapper spans the full width so it can center either child, but stays
+   pointer-events: none so it never blocks map taps; each banner opts back into pointer-events:
+   auto for its own content-sized box. */
+.top-banner-stack {
   position: absolute;
   inset-block-start: var(--space-3);
   inset-inline: 0;
-  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+  z-index: var(--z-safety-strips);
+}
+.arrival-banner {
+  pointer-events: auto;
   inline-size: fit-content;
   max-inline-size: calc(100% - var(--space-6));
   padding: var(--space-2) var(--space-4);
@@ -616,21 +633,36 @@ $effect(() => {
   box-shadow: var(--shadow-overlay);
   color: var(--text);
   font-weight: 600;
-  z-index: var(--z-safety-strips);
 }
+/* The toast reuses the shared .alert-note--filled treatment; only sizing and shadow are local. */
+.toast-banner {
+  pointer-events: auto;
+  inline-size: fit-content;
+  max-inline-size: calc(100% - var(--space-6));
+  padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-overlay);
+}
+/* Sized to its content (not the full inset-inline gap) and centered in it via the auto margins, so
+   pointer-events: auto here only ever covers the strips themselves, never the empty chart on either
+   side of them, which must stay tappable and pannable underneath. A rare pile-up of several active
+   strips (MOB, Danger, Anchor, Nav, Measure, History all at once) is scrollable instead of growing
+   past the viewport; MOB, already closest to the reachable bottom edge via column-reverse, stays the
+   first thing revealed. */
 .bottom-stack {
   position: absolute;
   inset-block-end: var(--space-3);
   inset-inline: var(--space-3);
+  inline-size: fit-content;
+  max-inline-size: calc(100% - 2 * var(--space-3));
+  margin-inline: auto;
+  max-block-size: min(60dvh, calc(100% - 2 * var(--space-3)));
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
   gap: var(--space-2);
-  pointer-events: none;
-  z-index: var(--z-safety-strips);
-}
-.bottom-stack :global(.bottom-strip) {
+  overflow-y: auto;
   pointer-events: auto;
+  z-index: var(--z-safety-strips);
 }
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));

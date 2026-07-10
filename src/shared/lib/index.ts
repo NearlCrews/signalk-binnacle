@@ -10,6 +10,7 @@ export { clampInt, compareOptionalNumber, isFiniteNumber, lerp, nearestBy } from
 export { prefersReducedMotion } from './motion';
 export { isRecord } from './object';
 export { capitalize } from './strings';
+export { Toast } from './toast.svelte';
 export {
   DAY_MS,
   DEG_TO_RAD,
