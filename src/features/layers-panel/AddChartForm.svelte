@@ -104,10 +104,18 @@ function cancelDraft(): void {
       </div>
     </div>
   {:else}
+    <section class="server-path" aria-label="Chart files on this server">
+      <span class="field-label caps-label">Chart files on this server</span>
+      <p class="hint">
+        Put PMTiles files in your server chart provider, such as Chart Locker or
+        signalk-pmtiles-plugin. Server charts appear in this list automatically and are available to
+        every station.
+      </p>
+    </section>
     <div class="field">
       <span class="field-label caps-label" id="add-chart-url-label">
         <Link2 size={14} aria-hidden="true" />
-        From a URL
+        From a PMTiles URL
       </span>
       <div class="url-row">
         <input
@@ -127,10 +135,7 @@ function cancelDraft(): void {
           Add
         </button>
       </div>
-      <p class="hint">
-        For chart files on the server, install the signalk-pmtiles-plugin and drop files in its
-        charts folder; they appear here automatically.
-      </p>
+      <p class="hint">Use this for a chart archive hosted outside your Signal K server.</p>
     </div>
   {/if}
 
@@ -152,10 +157,17 @@ function cancelDraft(): void {
   gap: var(--space-2);
   padding-block: var(--space-2);
 }
-.field {
+.field,
+.server-path {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+.server-path {
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
 }
 .field-label {
   display: inline-flex;

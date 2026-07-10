@@ -4,7 +4,7 @@ import type { SignalKChart } from './chart-types';
 import { applyRasterTheme, colorProperty, type MapColorKey } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility, setPaintProp } from './overlay-helpers';
 import { registerPmtilesArchive, unregisterPmtilesArchive } from './pmtiles';
-import type { OverlayModule, ZBand } from './types';
+import type { ChartLayerInfo, OverlayModule, ZBand } from './types';
 
 // How far past a chart's native max zoom its layers keep drawing before they hand off
 // to the base map. Zooming past a chart's scale overzooms the top tiles into a blocky,
@@ -18,12 +18,22 @@ const OPACITY_PROPERTY = {
   line: 'line-opacity',
   raster: 'raster-opacity',
 } as const;
+const RASTER_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
 
 // The opacity paint property for a layer type, or undefined for a type the chart adapter never
 // emits (only fill, line, and raster are produced). setOpacity skips an undefined so an unexpected
 // type is a clear no-op rather than a wrong property silently applied.
 function opacityProperty(layerType: string): string | undefined {
   return OPACITY_PROPERTY[layerType as keyof typeof OPACITY_PROPERTY];
+}
+
+function chartKind(chart: SignalKChart): ChartLayerInfo['kind'] {
+  if (chart.type === 'mapstyleJSON') return 'style';
+  if (chart.type === 'tileJSON' || chart.format === 'mvt' || chart.format === 'pbf')
+    return 'vector';
+  if (chart.format && RASTER_FORMATS.has(chart.format)) return 'raster';
+  const candidate = chart.url ?? chart.tilemapUrl ?? '';
+  return candidate.endsWith('.pmtiles') ? 'vector' : 'raster';
 }
 
 // Server charts default to the basemap band; a user-imported chart passes 'bathymetry' so it
@@ -34,6 +44,7 @@ export function createChartOverlay(
   serverBase: string,
   band: ZBand = 'basemap',
   getToken?: () => string | undefined,
+  options: { source?: ChartLayerInfo['source'] } = {},
 ): OverlayModule {
   const specs = chartToSpecs(chart, serverBase);
   const sourceIds = Object.keys(specs.sources);
@@ -58,6 +69,12 @@ export function createChartOverlay(
       : [];
   });
   let onSourceData: ((event: MapSourceDataEvent) => void) | undefined;
+  const source = options.source ?? 'server';
+  const url = chart.url ?? chart.tilemapUrl;
+  const kind = chartKind(chart);
+  const description =
+    chart.description ??
+    (source === 'user' ? 'User-added chart source' : 'Chart source from the Signal K server');
 
   // The native max zoom lives in the source's TileJSON, which a PMTiles archive reports
   // only once it has loaded, so this is applied after the source is loaded. Each layer's
@@ -77,9 +94,21 @@ export function createChartOverlay(
   return {
     id: chartSourceId(chart.identifier),
     title: chart.name,
+    description,
     band,
     supportsOpacity: true,
     layerIds,
+    chart: {
+      identifier: chart.identifier,
+      source,
+      kind,
+      type: chart.type,
+      url,
+      bounds: chart.bounds,
+      minzoom: chart.minzoom,
+      maxzoom: chart.maxzoom,
+      format: chart.format,
+    },
     add(ctx) {
       // A PMTiles archive registers a no-store source first so MapLibre resolves the
       // pmtiles:// url to it rather than the default cache-writing fetch source.

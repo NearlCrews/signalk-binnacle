@@ -36,7 +36,7 @@ import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
 import { TracksPanel } from '$features/tracks';
 import { TrendsPanel } from '$features/trends';
 import { WaypointsPanel } from '$features/waypoints';
-import type { LatLon } from '$shared/geo';
+import type { Bbox4, LatLon } from '$shared/geo';
 import type { LayerSettings } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
 import type { OnlineStatus } from '$shared/pwa';
@@ -96,7 +96,7 @@ interface Props {
   timeTravel: TimeTravelStore;
   notificationsStore: NotificationsStore;
 
-  // Additional services & loaders
+  // Additional services and loaders
   trendRecorder: import('$features/trends').TrendSessionRecorder;
   weatherLoader: ReturnType<typeof import('$features/weather').createWeatherLoader>;
   pointConditionsLoader: ReturnType<typeof import('$features/weather').createPointConditionsLoader>;
@@ -168,6 +168,7 @@ interface Props {
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
   selectPoi: (poi: Poi) => void;
   flyToPosition: (position: LatLon) => void;
+  onShowChartBounds: (bounds: Bbox4) => void;
   onHighlightLeg: (index: number) => void;
   closeRoutesPanel: () => void;
   backFromRoutesPanel: () => void;
@@ -269,6 +270,7 @@ let {
   onAcknowledgeNotification,
   selectPoi,
   flyToPosition,
+  onShowChartBounds,
   onHighlightLeg,
   closeRoutesPanel,
   backFromRoutesPanel,
@@ -400,6 +402,7 @@ $effect(() => {
           {categoriesOpen}
           onClose={closePanel}
           onBack={backToMenu}
+          {onShowChartBounds}
           onManageLayer={(id) => {
             if (id === 'marine-radar') {
               radarOpenedFrom = 'layers';

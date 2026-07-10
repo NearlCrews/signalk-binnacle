@@ -1,7 +1,8 @@
 <script lang="ts">
 import { ChevronRight, Lock, Plus } from '@lucide/svelte';
 import type { UserCharts } from '$entities/user-charts';
-import { chartSourceId, type LayerListItem } from '$shared/map';
+import type { Bbox4 } from '$shared/geo';
+import type { LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import { SlideOver } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
@@ -22,9 +23,18 @@ interface Props {
   // host to open its own controls. The host owns the panel content, so this generic panel imports no
   // feature; it just forwards the row id.
   onManageLayer?: (id: string) => void;
+  onShowChartBounds?: (bounds: Bbox4) => void;
 }
 
-const { view, userCharts, categoriesOpen, onClose, onBack, onManageLayer }: Props = $props();
+const {
+  view,
+  userCharts,
+  categoriesOpen,
+  onClose,
+  onBack,
+  onManageLayer,
+  onShowChartBounds,
+}: Props = $props();
 
 const pinned = $derived(view.items.filter((item) => item.pinned));
 // Sub-layers (a chart facet, for example the NOAA ENC data quality overlay) are not their own
@@ -59,6 +69,10 @@ const categories = $derived.by(() => {
     return bucket ? [{ id, title: bucket.title, rows: bucket.rows }] : [];
   });
 });
+const chartRows = $derived.by(() =>
+  movable.flatMap((item, i) => (layerCategory(item).id === 'charts' ? [{ item, i }] : [])),
+);
+const overlayCategories = $derived(categories.filter((cat) => cat.id !== 'charts'));
 
 function isOpen(id: string): boolean {
   return categoriesOpen?.value[id] ?? CATEGORY_DEFAULT_OPEN[id] ?? true;
@@ -69,15 +83,14 @@ function toggleCategory(id: string): void {
   categoriesOpen.set({ ...categoriesOpen.value, [id]: !isOpen(id) });
 }
 
-// The overlay id of each user-imported chart maps back to its source id, so its row can open a
-// detail (rename, info, delete) for the right source.
-const userChartIds = $derived(
-  new Map((userCharts?.sources ?? []).map((source) => [chartSourceId(source.id), source.id])),
-);
 let addOpen = $state(false);
-let manageId = $state<string | undefined>();
-const manageSource = $derived(
-  manageId ? userCharts?.sources.find((source) => source.id === manageId) : undefined,
+let detailId = $state<string | undefined>();
+let mode = $state<'charts' | 'overlays'>('charts');
+const detailItem = $derived(detailId ? view.items.find((item) => item.id === detailId) : undefined);
+const detailUserSource = $derived(
+  detailItem?.chart?.source === 'user'
+    ? userCharts?.sources.find((source) => source.id === detailItem.chart?.identifier)
+    : undefined,
 );
 
 let listEl = $state<HTMLUListElement>();
@@ -100,19 +113,91 @@ const reorder = createLayerReorder(
   title="Layers and charts"
   closeLabel="Close layers and charts"
   {onClose}
-  onBack={manageSource ? undefined : onBack}
+  onBack={detailItem ? undefined : onBack}
 >
   <div class="visually-hidden" aria-live="polite">{reorder.reorderAnnouncement}</div>
-  {#if manageSource && userCharts}
-    {#key manageSource.id}
-      <SourceDetail source={manageSource} {userCharts} onBack={() => (manageId = undefined)} />
+  {#if detailItem?.chart}
+    {#key detailItem.id}
+      <SourceDetail
+        item={detailItem}
+        {userCharts}
+        userSource={detailUserSource}
+        onBack={() => (detailId = undefined)}
+        onShowBounds={onShowChartBounds}
+      />
     {/key}
   {:else}
-    <p class="muted-note">
-      Turn chart layers and overlays on or off, and drag a row to change which sits on top.
-    </p>
-    {#if view.items.length === 0}
-      <p class="muted-note">No layers yet. Open a chart to fill this list.</p>
+    <p class="muted-note">Choose chart sources, then tune overlays and stacking for the chart.</p>
+
+    <div class="segmented layer-tabs" role="group" aria-label="Layers and charts view">
+      <button
+        type="button"
+        class="btn"
+        class:is-on={mode === 'charts'}
+        aria-pressed={mode === 'charts'}
+        onclick={() => (mode = 'charts')}
+      >
+        Charts
+      </button>
+      <button
+        type="button"
+        class="btn"
+        class:is-on={mode === 'overlays'}
+        aria-pressed={mode === 'overlays'}
+        onclick={() => (mode = 'overlays')}
+      >
+        Overlays
+      </button>
+    </div>
+
+    {#if mode === 'charts'}
+      <section class="category" aria-label="Chart sources">
+        <h3 class="category-head pinned-head">
+          <span class="category-title caps-label">Chart sources</span>
+          <span class="category-count" aria-hidden="true">{chartRows.length}</span>
+        </h3>
+        {#if chartRows.length === 0}
+          <p class="muted-note empty-note">No chart sources yet.</p>
+        {:else}
+          <ul class="category-rows bare-list chart-source-rows">
+            {#each chartRows as { item, i } (item.id)}
+              <LayerRow
+                {item}
+                {view}
+                index={i}
+                count={movable.length}
+                groupTitle={item.group?.title}
+                subLayers={childrenByParent.get(item.id) ?? []}
+                dragging={false}
+                dropBefore={false}
+                dropAfter={false}
+                draggable={false}
+                onHandlePointerDown={() => {}}
+                onHandleKeydown={() => {}}
+                manageLabel={item.chart ? `Open ${item.title} chart details` : undefined}
+                onManage={item.chart
+                  ? () => (detailId = item.id)
+                  : undefined}
+              />
+            {/each}
+          </ul>
+        {/if}
+      </section>
+
+      {#if userCharts}
+        <div class="add-chart-area">
+          {#if addOpen}
+            <AddChartForm {userCharts} onDone={() => (addOpen = false)} />
+          {:else}
+            <button type="button" class="btn" onclick={() => (addOpen = true)}>
+              <Plus size={16} aria-hidden="true" />
+              Add a chart
+            </button>
+          {/if}
+        </div>
+      {/if}
+    {:else if view.items.length === 0}
+      <p class="muted-note">No overlays yet. Open a chart to fill this list.</p>
     {:else}
       {#if pinned.length > 0}
         <section class="category" aria-label="Always on top">
@@ -131,7 +216,7 @@ const reorder = createLayerReorder(
       {/if}
 
       <ul class="rows bare-list" bind:this={listEl}>
-        {#each categories as cat (cat.id)}
+        {#each overlayCategories as cat (cat.id)}
           {@const expanded = isOpen(cat.id)}
           {@const panelId = `layer-cat-${cat.id}`}
           <li class="category">
@@ -155,7 +240,6 @@ const reorder = createLayerReorder(
             <ul class="category-rows bare-list" id={panelId} hidden={!expanded}>
               {#each cat.rows as { item, i } (item.id)}
                 {@const indicator = reorder.indicatorFor(item.id)}
-                {@const removeId = userChartIds.get(item.id)}
                 <LayerRow
                   {item}
                   {view}
@@ -168,8 +252,9 @@ const reorder = createLayerReorder(
                   dropAfter={indicator.after}
                   onHandlePointerDown={(e) => reorder.handlePointerDown(item.id, e)}
                   onHandleKeydown={(e) => reorder.handleKeydown(item.id, e)}
-                  onManage={removeId
-                    ? () => (manageId = removeId)
+                  manageLabel={item.chart ? `Open ${item.title} chart details` : undefined}
+                  onManage={item.chart
+                    ? () => (detailId = item.id)
                     : item.manageable
                       ? () => onManageLayer?.(item.id)
                       : undefined}
@@ -180,18 +265,6 @@ const reorder = createLayerReorder(
         {/each}
       </ul>
     {/if}
-    {#if userCharts}
-      <div class="add-chart-area">
-        {#if addOpen}
-          <AddChartForm {userCharts} onDone={() => (addOpen = false)} />
-        {:else}
-          <button type="button" class="btn" onclick={() => (addOpen = true)}>
-            <Plus size={16} aria-hidden="true" />
-            Add a chart
-          </button>
-        {/if}
-      </div>
-    {/if}
   {/if}
 </SlideOver>
 
@@ -200,6 +273,12 @@ const reorder = createLayerReorder(
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+.layer-tabs {
+  margin-block: var(--space-1) var(--space-2);
+}
+.layer-tabs .btn {
+  flex: 1;
 }
 /* A pinned, always-on layer (own vessel, MOB, active collision): the same flat row module as a normal
    layer, with a lock glyph in the lead rail instead of a drag handle (it cannot move or be hidden) and
@@ -282,8 +361,15 @@ const reorder = createLayerReorder(
   margin: 0;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   min-block-size: var(--control-size);
   padding-inline: var(--space-1);
+}
+.empty-note {
+  padding: 0 var(--space-1) var(--space-2);
+}
+.chart-source-rows {
+  border-block-start: 1px solid var(--border);
 }
 .add-chart-area {
   margin-block-start: var(--space-2);

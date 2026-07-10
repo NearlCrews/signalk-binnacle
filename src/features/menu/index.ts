@@ -4,6 +4,7 @@ export { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 export {
   DEFAULT_PINNED,
   MAX_BAR_PILLS,
+  reorderPinned,
   resolvePinned,
   splitBarActions,
   togglePinned,

@@ -59,14 +59,15 @@ The menu and bottom bar are data-driven, so these four steps are the whole integ
 two leaves a tile that opens nothing, or a panel with no way in.
 
 1. Add a `MenuItem` to the `menuItems` array, in the right intent group. The groups today are Map,
-   Navigate, Conditions, Safety, the plugin-gated Offline charts group, and Settings. The Settings
-   group (Profiles) MUST stay last; a plugin-gated group is inserted before it with a conditional
-   spread (`...(companionBase !== null ? [ { ... } satisfies MenuItem ] : [])`). Set `id`, `label`,
-   `icon` (a lucide component), `group`, `pressed: activePanel === '<id>'`, and `onSelect: () =>
-   togglePanel('<id>')`. Add `shortLabel` when the label is long (the bottom-bar pill renders
-   `shortLabel ?? label`). Add `disabled` plus `disabledLabel` for a transient block (a chart still
-   loading), or `available: false` plus `unavailableHint` when a provider can be absent (the menu
-   grays it with the hint as a tooltip and screen-reader text rather than dropping it).
+   Navigate, Safety, Weather, Instruments, the plugin-gated Offline charts group, and Settings.
+   Safety stays before Weather and Instruments; Settings (Profiles) MUST stay last. A plugin-gated
+   group is inserted before Settings with a conditional spread (`...(companionBase !== null ? [ { ... }
+   satisfies MenuItem ] : [])`). Set `id`, `label`, `icon` (a lucide component), `group`, `pressed:
+   activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add `shortLabel` when the label
+   is long (the bottom-bar pill renders `shortLabel ?? label`). Add `disabled` plus `disabledLabel`
+   for a transient block (a chart still loading), or `available: false` plus `unavailableHint` when a
+   provider can be absent. Keep user-relevant optional providers visible but grayed when their absence
+   explains a missing capability, such as Radar, Time travel, or Open KIP.
 2. Add the panel id to the `LeftPanel` union type.
 3. Add the mount block: `{#if activePanel === '<id>' && <guards>}` wrapping `<div
    class="panel-slot"><YourPanel ... onClose={closePanel} onBack={backToMenu} /></div>`. The guards
@@ -178,6 +179,11 @@ Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive fro
 one per surface, trailing in the header row, and open the mode with one `.muted-note` line
 stating what a tap now does. The visual and aria recipe lives in the design system's Edit modes
 entry.
+
+The app menu's toolbar editor also shows the current pinned bar order. Use the shared `createReorder`
+controller for pointer and ArrowUp or ArrowDown movement, keep the stored `pinnedActionIds` order as
+the source of truth, and include a reset action that restores `DEFAULT_PINNED`. The menu tile grid
+still controls membership by tapping tiles in edit mode.
 
 ---
 
@@ -380,3 +386,6 @@ These were inconsistent across panels and are now unified; a new panel follows t
 - One labeled text field: `TextField`, which supports a live `onInput`, a `focusOnOpen`, an
   `onEnter` submit, and a `large` deck-glove size. There is no hand-rolled "caps-label plus input"
   name field left to copy.
+- Layers and charts opens to chart sources, not overlay stacking. Put server-discovered and user-added
+  chart sources in the Charts view, with detail rows for type, origin, source, zoom, bounds, and
+  show-bounds when available. Keep opacity, visibility, and drag stacking in the Overlays view.

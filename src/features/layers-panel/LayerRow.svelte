@@ -16,6 +16,8 @@ interface Props {
   onHandleKeydown: (event: KeyboardEvent) => void;
   // Present only on a user-imported chart row, which opens a detail (rename, info, delete).
   onManage?: () => void;
+  manageLabel?: string;
+  draggable?: boolean;
   // Sub-layers of this row (a chart facet, for example NOAA ENC data quality). When present, the row
   // renders as a facet group: one handle moves the group, the parent and child toggles share one
   // aligned column, and the tune control adjusts the whole group's opacity. Each child is a toggle
@@ -38,6 +40,8 @@ const {
   onHandlePointerDown,
   onHandleKeydown,
   onManage,
+  manageLabel,
+  draggable = true,
   subLayers = [],
   groupTitle,
 }: Props = $props();
@@ -125,7 +129,12 @@ $effect(() => {
       </div>
     {/if}
     {#if onManage}
-      <button type="button" class="icon-btn" aria-label={`Manage ${item.title}`} onclick={onManage}>
+      <button
+        type="button"
+        class="icon-btn"
+        aria-label={manageLabel ?? `Manage ${item.title}`}
+        onclick={onManage}
+      >
         <Settings2 size={18} aria-hidden="true" />
       </button>
     {/if}
@@ -153,7 +162,9 @@ $effect(() => {
     <!-- A facet group: one handle moves the whole group, the parent and child toggles share one
          aligned column, and the tune control sits on the parent line. -->
     <div class="facet-row">
-      <span class="lead">{@render dragHandle()}</span>
+      {#if draggable}
+        <span class="lead">{@render dragHandle()}</span>
+      {/if}
       <div class="facet-stack">
         <div class="facet-line">
           <LayerToggle
@@ -180,7 +191,9 @@ $effect(() => {
     </div>
   {:else}
     <div class="row-main">
-      <span class="lead">{@render dragHandle()}</span>
+      {#if draggable}
+        <span class="lead">{@render dragHandle()}</span>
+      {/if}
       <LayerToggle
         title={item.title}
         description={item.description}

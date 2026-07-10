@@ -439,7 +439,11 @@ onMount(async () => {
       const userChartRegistrar: UserChartRegistrar = {
         register: async (chart) => {
           if (isDestroyed()) return;
-          await mgr.register(createChartOverlay(chart, origin, 'bathymetry', () => chartsToken));
+          await mgr.register(
+            createChartOverlay(chart, origin, 'bathymetry', () => chartsToken, {
+              source: 'user',
+            }),
+          );
           view.refresh();
         },
         unregister: (identifier) => {

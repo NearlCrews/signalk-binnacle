@@ -2,7 +2,13 @@ import type { ChartGroup } from 'signalk-chart-sources';
 
 import type { MapThemePaint } from './map-theme';
 import { installSentinels, sentinelId } from './sentinels';
-import { type OverlayContext, type OverlayModule, Z_ORDER, type ZBand } from './types';
+import {
+  type ChartLayerInfo,
+  type OverlayContext,
+  type OverlayModule,
+  Z_ORDER,
+  type ZBand,
+} from './types';
 
 // Precomputed band-to-stacking-rank lookup so an overlay's band order is an O(1) read rather than a
 // linear Z_ORDER scan on every effective-order pass.
@@ -46,6 +52,9 @@ export interface LayerListItem {
   // The row has a settings gear that asks the host to open this overlay's controls. See
   // OverlayModule.manageable.
   manageable?: boolean;
+  // Present when this row represents a chart source, so the Layers panel can expose chart-source
+  // detail without knowing how the overlay renders.
+  chart?: ChartLayerInfo;
 }
 
 export interface LayerManagerOptions {
@@ -392,6 +401,7 @@ export class LayerManager {
             available: module.available?.() ?? true,
             unavailableHint: module.unavailableHint,
             manageable: module.manageable,
+            chart: module.chart,
           },
         ];
       });

@@ -78,7 +78,7 @@
     "cruise": "depcruise src --config .dependency-cruiser.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "vite build && playwright test",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "hooks": "git config core.hooksPath .githooks"

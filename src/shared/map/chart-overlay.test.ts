@@ -26,6 +26,26 @@ describe('chart overlay', () => {
     expect(map.layers.size).toBe(1);
   });
 
+  it('exposes chart metadata for the layer list', () => {
+    const overlay = createChartOverlay(
+      {
+        identifier: 'noaa',
+        name: 'NOAA',
+        type: 'tilelayer',
+        tilemapUrl: '/t/{z}/{x}/{y}',
+        bounds: [-10, 40, 10, 60],
+      },
+      'http://pi.local',
+    );
+    expect(overlay.description).toBe('Chart source from the Signal K server');
+    expect(overlay.chart).toMatchObject({
+      identifier: 'noaa',
+      source: 'server',
+      kind: 'raster',
+      bounds: [-10, 40, 10, 60],
+    });
+  });
+
   it('remove deletes the layer and source', () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },

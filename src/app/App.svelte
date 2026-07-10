@@ -62,6 +62,7 @@ import {
   AppMenu,
   DEFAULT_PINNED,
   type MenuItem,
+  reorderPinned,
   resolvePinned,
   togglePinned,
 } from '$features/menu';
@@ -183,9 +184,9 @@ const collisionMute = new CollisionMute(clock);
 // Server capability discovery: gates the v2 Notifications transport below; an older server
 // falls back to the raw v1 delta publish.
 let serverFeatures = $state<ServerFeatures | undefined>();
-// Whether the KIP instrument webapp is installed on the server, gating the Open KIP menu item
-// (dropped when absent, the Offline-charts convention for absent plugins).
-let kipPresent = $state(false);
+// Whether the KIP instrument webapp is installed on the server, so the menu can explain the missing
+// capability instead of hiding the external launcher.
+let kipPresent = $state<boolean | undefined>();
 let historyProviders = $state<HistoryProviders | undefined>();
 const notificationsApi = $derived(serverFeatures?.apis.has('notifications') ?? false);
 
@@ -526,6 +527,12 @@ const instruments = createInstrumentsController({
 const onTogglePin = (id: string): void => {
   pinnedActions.set(togglePinned(pinnedActions.value, id));
 };
+const onReorderPinned = (id: string, slot: number): void => {
+  pinnedActions.set(reorderPinned(pinnedActions.value, id, slot));
+};
+const onResetPinned = (): void => {
+  pinnedActions.set([...DEFAULT_PINNED]);
+};
 // Which Layers-panel categories the navigator has left open or closed, so the panel reopens that way.
 const layerCategoriesOpen = new PersistedValue<Record<string, boolean>>(
   'binnacle:layer-categories',
@@ -830,11 +837,9 @@ function onSetRadarPower(status: RadarStatus): void {
   });
 }
 
-// The app menu's options, grouped into intent groups: Map (center and follow), Navigate (plan and
-// chart), Weather (forecast and tides), Instruments (data trends, the instrument dock, KIP, and
-// time travel), Safety (traffic, anchor, and alarms), Offline charts (the companion-gated offline
-// areas and chart files), and Settings. Adding an option is a single entry; the launcher renders
-// and groups whatever it is given.
+// The app menu's options, grouped into helm-first intent groups: chart controls and navigation,
+// safety, weather, instruments, optional offline charts, and settings. Adding an option is a single
+// entry; the launcher renders and groups whatever it is given.
 const menuItems = $derived<MenuItem[]>([
   {
     id: 'center',
@@ -908,6 +913,51 @@ const menuItems = $derived<MenuItem[]>([
     onSelect: () => togglePanel('layers'),
   },
   {
+    id: 'ais',
+    label: 'Nearby vessels (AIS)',
+    shortLabel: 'AIS',
+    icon: Ship,
+    group: 'Safety',
+    pressed: activePanel === 'ais',
+    onSelect: () => togglePanel('ais'),
+  },
+  // The radar tile is always present: when no radar is discovered it grays out with a hover hint
+  // rather than vanishing, matching the radar layer row and the other detect-and-degrade overlays
+  // (track history, AIS trails) so a capability never silently disappears. It opens the same controls
+  // panel reached from the radar layer row's gear.
+  {
+    id: 'radar',
+    label: 'Radar',
+    icon: Radar,
+    group: 'Safety',
+    available: marineRadar.store.hasRadar,
+    unavailableHint: RADAR_UNAVAILABLE_HINT,
+    pressed: radarControlsOpen,
+    onSelect: () => {
+      radarOpenedFrom = 'menu';
+      // The echo reveals on first radar discovery and when transmit is keyed up, so opening the
+      // panel must not force the layer back on: that would override an explicit toggle-off.
+      radarControlsOpen = !radarControlsOpen;
+    },
+  },
+  {
+    id: 'anchor',
+    label: 'Anchor watch',
+    shortLabel: 'Anchor',
+    icon: Anchor,
+    group: 'Safety',
+    pressed: activePanel === 'anchor',
+    onSelect: () => togglePanel('anchor'),
+  },
+  {
+    id: 'alarms',
+    label: 'Alarms',
+    icon: Bell,
+    group: 'Safety',
+    pressed: activePanel === 'alarms',
+    onSelect: () => togglePanel('alarms'),
+  },
+  {
     id: 'forecast',
     label: 'Forecast',
     icon: CloudSun,
@@ -940,22 +990,22 @@ const menuItems = $derived<MenuItem[]>([
     pressed: instruments.open,
     onSelect: () => instruments.toggleOpen(),
   },
-  // Third-party webapp launcher: dropped entirely when KIP is absent, never grayed.
-  ...(kipPresent
-    ? [
-        {
-          id: 'open-kip',
-          label: 'Open KIP',
-          icon: ExternalLink,
-          group: 'Instruments',
-          onSelect: () => {
-            window.open(KIP_URL, '_blank', 'noopener,noreferrer');
-          },
-        },
-      ]
-    : []),
-  // time-travel is not a LeftPanel; it has its own active flag and enter/exit API. Grays like the
-  // radar tile when no history provider is known, rather than opening to an empty mode.
+  {
+    id: 'open-kip',
+    label: 'Open KIP',
+    icon: ExternalLink,
+    group: 'Instruments',
+    available: kipPresent === true,
+    unavailableHint:
+      kipPresent === undefined
+        ? 'Checking whether the KIP webapp is installed on the Signal K server.'
+        : 'Open KIP needs the KIP webapp installed on the Signal K server.',
+    onSelect: () => {
+      window.open(KIP_URL, '_blank', 'noopener,noreferrer');
+    },
+  },
+  // Time travel is not a LeftPanel; it has its own active flag and enter and exit API. It grays like
+  // the radar tile when no history provider is known, rather than opening to an empty mode.
   {
     id: 'time-travel',
     label: 'Time travel',
@@ -967,51 +1017,6 @@ const menuItems = $derived<MenuItem[]>([
       'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
     pressed: timeTravel.active,
     onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
-  },
-  {
-    id: 'ais',
-    label: 'Nearby vessels (AIS)',
-    shortLabel: 'AIS',
-    icon: Ship,
-    group: 'Safety',
-    pressed: activePanel === 'ais',
-    onSelect: () => togglePanel('ais'),
-  },
-  // The radar tile is always present: when no radar is discovered it grays out with a hover hint
-  // rather than vanishing, matching the radar layer row and the other detect-and-degrade overlays
-  // (track history, AIS trails) so a capability never silently disappears. It opens the same controls
-  // panel reached from the radar layer row's gear.
-  {
-    id: 'radar',
-    label: 'Radar',
-    icon: Radar,
-    group: 'Safety',
-    available: marineRadar.store.hasRadar,
-    unavailableHint: RADAR_UNAVAILABLE_HINT,
-    pressed: radarControlsOpen,
-    onSelect: () => {
-      radarOpenedFrom = 'menu';
-      // The echo reveals on first radar discovery (the latched effect) and when transmit is keyed up, so
-      // opening the panel must not force the layer back on: that would override an explicit toggle-off.
-      radarControlsOpen = !radarControlsOpen;
-    },
-  },
-  {
-    id: 'anchor',
-    label: 'Anchor watch',
-    shortLabel: 'Anchor',
-    icon: Anchor,
-    group: 'Safety',
-    pressed: activePanel === 'anchor',
-    onSelect: () => togglePanel('anchor'),
-  },
-  {
-    id: 'alarms',
-    label: 'Alarms',
-    icon: Bell,
-    group: 'Safety',
-    pressed: activePanel === 'alarms',
-    onSelect: () => togglePanel('alarms'),
   },
   // Offline charts (companion-gated) comes before Settings so the Settings group stays last whether
   // or not the companion plugin is installed.
@@ -1658,6 +1663,8 @@ onDestroy(() => {
         editing={menuEditing}
         onEditingChange={(next) => (menuEditing = next)}
         {onTogglePin}
+        {onReorderPinned}
+        {onResetPinned}
       />
       <span class="brand"
         >Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></span
@@ -1788,6 +1795,7 @@ onDestroy(() => {
     {toggleCollisionMute}
     {selectPoi}
     flyToPosition={(position) => mapCommands?.flyTo(position.latitude, position.longitude)}
+    onShowChartBounds={(bounds) => mapCommands?.fitBounds(bounds)}
     {onHighlightLeg}
     {closeRoutesPanel}
     {backFromRoutesPanel}

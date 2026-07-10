@@ -208,6 +208,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   for an inline clamp position.
 - `CustomizeToggle`: the edit-mode entry control (see "Edit modes" below). Props: `object` (the
   label's object noun), `editing`, and `onToggle`. Render it, never a hand-written ghost button.
+- `createReorder`: the shared pointer and keyboard reorder controller. Use it when a list can be
+  reordered outside the Layers panel, such as the app menu's toolbar editor. Pass a stable row
+  attribute and handle selector; keep the persisted order in the owning feature, not in the UI row.
 - `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions. Never a blocking
   `window.confirm`.
 - Edit modes: a surface with a customize mode gets exactly one entry control, the `CustomizeToggle`
@@ -309,18 +312,25 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 ## 8. Menus
 
 - The app menu is the `AppMenu` launcher: a `.surface-elevated` frame holding a grid of tiles grouped by
-  intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar pill, `icon` a
-  lucide component, `group` a section heading, `pressed` for a toggle's lit state, `disabled` plus
-  `disabledLabel`, `available` plus `unavailableHint`, `onSelect`). Groups today: Map, Navigate,
-  Conditions, Safety, the plugin-gated Offline charts group, and Settings. Adding a menu option is one more `MenuItem`, never a change to the menu
-  component. A capability whose provider is absent sets `available: false` with an `unavailableHint`:
-  the launcher and bottom bar render it grayed and non-interactive with the hint as a tooltip and
-  screen-reader text, rather than dropping it from the menu. (`disabled` plus `disabledLabel` is the
-  transient block for an action that is momentarily unavailable, such as a chart still loading.)
+  helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar pill,
+  `icon` a lucide component, `group` a section heading, `pressed` for a toggle's lit state,
+  `disabled` plus `disabledLabel`, `available` plus `unavailableHint`, `onSelect`). Groups today:
+  Map, Navigate, Safety, Weather, Instruments, the plugin-gated Offline charts group, and Settings.
+  Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
+  `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
+  `available: false` with an `unavailableHint`: the launcher and bottom bar render it grayed and
+  non-interactive with the hint as a tooltip and screen-reader text, rather than dropping it from the
+  menu. (`disabled` plus `disabledLabel` is the transient block for an action that is momentarily
+  unavailable, such as a chart still loading.)
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.
-- The bottom bar renders the pinned `MenuItem`s (using `shortLabel`) plus a More overflow.
+- The bottom bar renders the pinned `MenuItem`s in stored order (using `shortLabel`) plus a More
+  overflow. The app menu's toolbar edit mode owns membership, order, reset, and the live reorder
+  announcement; the bar only renders the resolved list.
+- The Layers and charts panel opens on chart sources first. The Charts view lists server and user chart
+  sources, opens chart detail from the row gear, shows bounds when known, and keeps "Add a chart" for
+  user PMTiles URLs. The Overlays view is for overlay visibility, opacity, and stacking controls.
 
 ## 9. Interaction and accessibility
 

@@ -15,7 +15,7 @@ const CATEGORIES = [
   { id: 'live', title: 'Traffic', defaultOpen: true },
   { id: 'reference', title: 'Chart overlays and marks', defaultOpen: false },
   { id: 'ocean', title: 'Ocean conditions', defaultOpen: false },
-  { id: 'charts', title: 'Base charts and depth', defaultOpen: false },
+  { id: 'charts', title: 'Base charts and depth', defaultOpen: true },
 ] as const;
 
 const KNOWN = new Set<string>(CATEGORIES.map((c) => c.id));

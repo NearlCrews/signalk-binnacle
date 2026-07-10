@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { ChartGroup } from 'signalk-chart-sources';
+import type { Bbox4 } from '$shared/geo';
 import type { MapThemePaint } from './map-theme';
 
 export type ZBand =
@@ -35,6 +36,18 @@ export const Z_ORDER: readonly ZBand[] = [
 export interface OverlayContext {
   map: MapLibreMap;
   beforeIdFor(band: ZBand): string | undefined;
+}
+
+export interface ChartLayerInfo {
+  identifier: string;
+  source: 'server' | 'user';
+  kind: 'vector' | 'raster' | 'style' | 'unknown';
+  type: string;
+  url?: string;
+  bounds?: Bbox4;
+  minzoom?: number;
+  maxzoom?: number;
+  format?: string;
 }
 
 export interface OverlayModule {
@@ -98,4 +111,6 @@ export interface OverlayModule {
   // the panel's onManageLayer callback. The host owns the panel content, so the generic Layers panel
   // never imports a feature.
   readonly manageable?: boolean;
+  // Chart-source metadata for rows that represent a chart. Generic overlays omit it.
+  readonly chart?: ChartLayerInfo;
 }

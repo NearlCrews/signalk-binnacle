@@ -3,6 +3,7 @@ import type { MenuItem } from './menu-item';
 import {
   DEFAULT_PINNED,
   MAX_BAR_PILLS,
+  reorderPinned,
   resolvePinned,
   splitBarActions,
   togglePinned,
@@ -13,10 +14,10 @@ const item = (id: string): MenuItem => ({ id, label: id, onSelect: noop });
 const registry: MenuItem[] = ['center', 'follow', 'layers', 'anchor', 'forecast'].map(item);
 
 describe('resolvePinned', () => {
-  it('returns matches in registry (canonical) order, not pin order', () => {
+  it('returns matches in pinned order', () => {
     expect(resolvePinned(registry, ['anchor', 'center']).map((i) => i.id)).toEqual([
-      'center',
       'anchor',
+      'center',
     ]);
   });
 
@@ -38,7 +39,10 @@ describe('resolvePinned', () => {
   });
 
   it('deduplicates a repeated id (each action renders once)', () => {
-    expect(resolvePinned(registry, ['center', 'center']).map((i) => i.id)).toEqual(['center']);
+    expect(resolvePinned(registry, ['anchor', 'center', 'anchor']).map((i) => i.id)).toEqual([
+      'anchor',
+      'center',
+    ]);
   });
 
   it('returns the empty array for an empty pin list', () => {
@@ -91,5 +95,28 @@ describe('togglePinned', () => {
     const ids = ['center'];
     togglePinned(ids, 'anchor');
     expect(ids).toEqual(['center']);
+  });
+});
+
+describe('reorderPinned', () => {
+  it('moves an id to the requested slot', () => {
+    expect(reorderPinned(['center', 'follow', 'layers'], 'layers', 0)).toEqual([
+      'layers',
+      'center',
+      'follow',
+    ]);
+  });
+
+  it('bounds the requested slot', () => {
+    expect(reorderPinned(['center', 'follow', 'layers'], 'center', 99)).toEqual([
+      'follow',
+      'layers',
+      'center',
+    ]);
+  });
+
+  it('returns the same array when the id is not pinned', () => {
+    const ids = ['center', 'follow'];
+    expect(reorderPinned(ids, 'layers', 0)).toBe(ids);
   });
 });
