@@ -36,6 +36,7 @@ let {
   anchor,
   units,
   vessel,
+  shallowAlarming,
   pinnedActions,
   editing = false,
   clock,
@@ -50,6 +51,7 @@ let {
   anchor: AnchorWatch;
   units: UnitsStore;
   vessel: OwnVessel;
+  shallowAlarming: boolean;
   pinnedActions: MenuItem[];
   editing?: boolean;
   clock: ReactiveClock;
@@ -156,7 +158,12 @@ function runPillAction(action: MenuItem, after?: () => void): void {
       >HDG
       <b class="num">{formatBearingOr(vessel.headingRad)}</b>&deg;T</span
     >
-    <span class="readout" title="Depth below the transducer"
+    <span
+      class="readout"
+      class:depth-alarm={shallowAlarming}
+      title={shallowAlarming
+        ? 'Shallow water: depth below the alarm threshold'
+        : 'Depth below the transducer'}
       >Depth
       <b class="num">{formatLengthOr(vessel.depthMeters, units.mode)}</b>
       {lengthUnit(units.mode)}</span
@@ -388,6 +395,16 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   font-weight: 600;
 }
 .anchor-chip--alarm b {
+  color: var(--alarm);
+}
+/* The Depth readout is the only visible cue for why the shallow alarm is sounding: the tone alone
+   does not say which alarm is beeping, so this pairs the sound with the same alarm color and
+   weight the anchor drag chip uses. */
+.depth-alarm {
+  color: var(--alarm);
+  font-weight: 600;
+}
+.depth-alarm b {
   color: var(--alarm);
 }
 .more-wrap {

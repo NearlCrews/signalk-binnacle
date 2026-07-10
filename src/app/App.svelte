@@ -103,7 +103,15 @@ import {
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, formatNm, formatTcpaMin, MINUTE_MS, Toast } from '$shared/lib';
+import {
+  Clock,
+  formatLengthOr,
+  formatNm,
+  formatTcpaMin,
+  lengthUnit,
+  MINUTE_MS,
+  Toast,
+} from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
@@ -294,12 +302,27 @@ const anchorAlarm = new GatedAlarm(ANCHOR_TONE);
 
 // Shallow-water depth alarm: sounds while the below-transducer depth reads under the configured
 // threshold. A live depth reading is required to sound; an absent depth (no sounder, no fix on the
-// path) stays silent rather than alarming on missing data.
+// path) stays silent rather than alarming on missing data. The tone alone gives no indication of
+// what is beeping, so the strip's Depth readout and the live region below both key off the same
+// condition, matching the anchor drag alarm's own strip-chip-plus-live-region pairing.
 const shallowAlarm = new GatedAlarm(SHALLOW_TONE);
+const shallowLimit = $derived(
+  thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters,
+);
+const shallowAlarming = $derived(
+  vessel.depthMeters !== undefined &&
+    shallowLimit !== undefined &&
+    vessel.depthMeters < shallowLimit,
+);
+const shallowAlert = $derived.by(() => {
+  if (!shallowAlarming) return '';
+  const depth = formatLengthOr(vessel.depthMeters, units.mode);
+  const limit = formatLengthOr(shallowLimit, units.mode);
+  const unit = lengthUnit(units.mode);
+  return `Shallow water: depth ${depth} ${unit}, under the ${limit} ${unit} alarm threshold.`;
+});
 $effect(() => {
-  const depth = vessel.depthMeters;
-  const limit = thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters;
-  shallowAlarm.update(depth !== undefined && limit !== undefined && depth < limit);
+  shallowAlarm.update(shallowAlarming);
 });
 
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
@@ -1621,6 +1644,7 @@ onDestroy(() => {
     collision={collisionAlert}
     anchor={anchorController.anchorAlert}
     mob={mobController.mobAlert}
+    shallow={shallowAlert}
     mute={muteAlert}
     companion={companionAnnounce}
   />
@@ -1819,6 +1843,7 @@ onDestroy(() => {
     {anchor}
     {units}
     {vessel}
+    {shallowAlarming}
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}
