@@ -162,6 +162,22 @@ export class LayerManager {
     this.#persist();
   }
 
+  // Tear down every registered module before the owning MapLibre instance is removed. Reverse
+  // registration order mirrors stack unwinding, and clearing first makes repeated disposal a no-op
+  // even if one module's cleanup throws through a host integration.
+  dispose(): void {
+    const modules = [...this.#modules.values()].reverse();
+    this.#modules.clear();
+    this.#state.clear();
+    for (const module of modules) {
+      try {
+        module.remove(this.#ctx);
+      } catch (error) {
+        console.warn(`Could not remove overlay "${module.id}".`, error);
+      }
+    }
+  }
+
   toggle(id: string, visible: boolean): void {
     const module = this.#modules.get(id);
     const state = this.#state.get(id);

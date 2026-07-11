@@ -30,10 +30,12 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     // Default catalog mirrors the static tile catalog so the Customize-mode tests work without
     // needing a real controller. Tests that check battery discovery pass their own catalog override.
     catalog: [...TILE_CATALOG],
+    discovering: false,
     toggleOpen: () => {},
     setOpen: () => {},
     toggleTile: () => {},
     reorderTile: () => {},
+    refreshCatalog: () => {},
     zoneState: () => 'normal',
     dispose: () => {},
     ...overrides,

@@ -1,4 +1,4 @@
-import type { AisTargetState, ConnectionState, SKFrame, Value } from './types';
+import type { AisTargetState, ConnectionState, PathSource, SKFrame, Value } from './types';
 import { INITIAL_CONNECTION_STATE, NOTIFICATIONS_PREFIX, notificationState } from './types';
 
 // The four v2 status flags the alert list renders, so the notification dedup compares them field by
@@ -19,6 +19,7 @@ function sameFlags(a: Flags, b: Flags): boolean {
 
 export class PathCell {
   value = $state<Value | undefined>(undefined);
+  source = $state<PathSource | undefined>(undefined);
   // The wall-clock epoch of the most recent stream update, for staleness checks. Zero until the
   // first value arrives. Reactive so a consumer comparing it against a ticking clock re-renders
   // when a fresh value lands. Seeded cells (the course REST hydration writes value directly, not
@@ -78,6 +79,7 @@ export class SignalKStore {
     for (const [path, value] of frame.self) {
       const cell = this.cell(path);
       cell.value = value;
+      cell.source = frame.selfSources?.get(path);
       cell.epoch = frame.epoch;
       if (path.startsWith(NOTIFICATIONS_PREFIX)) this.#mirrorNotification(path, value);
     }

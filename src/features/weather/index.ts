@@ -10,8 +10,19 @@ export { createPointConditionsLoader, type PointConditionsLoader } from './point
 export { createPointReadout } from './point-readout.svelte';
 export { createPrecipOverlay } from './precip-overlay';
 export { createPressureOverlay } from './pressure-overlay';
-export { createRadarOverlay, radarScrubbedAway } from './radar-overlay';
-export { defaultProviderName, fetchWeatherProviders } from './signalk-weather';
+export {
+  createRadarOverlay,
+  type RadarFrameTiming,
+  radarFrameTiming,
+  radarScrubbedAway,
+} from './radar-overlay';
+export { type RadarTimeline, radarTimeline } from './rainviewer-client';
+export {
+  defaultProvider,
+  defaultProviderName,
+  fetchWeatherProviders,
+  type WeatherProvider,
+} from './signalk-weather';
 export { advancePlay, clampTime, stepTime, type TimeRange } from './time-scrub';
 export { default as WeatherConditions } from './WeatherConditions.svelte';
 export { createWavesOverlay } from './waves-overlay';

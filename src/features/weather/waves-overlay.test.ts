@@ -44,6 +44,10 @@ describe('waves overlay', () => {
     overlay.add(ctxFor(map));
     overlay.sync(ctxFor(map));
     const arrowSource = map.sources.get('binnacle-weather-waves-arrows');
+    const hidden = arrowSource?.data as GeoJSON.FeatureCollection;
+    expect(hidden.features).toHaveLength(0);
+
+    overlay.setVisible(ctxFor(map), true);
     const fc = arrowSource?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBeGreaterThan(0);
   });
@@ -59,7 +63,7 @@ describe('waves overlay', () => {
     const overlay = createWavesOverlay(store, () => canvas);
     const map = createFakeMap();
     overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.setVisible(ctxFor(map), true);
     expect(canvas.width).toBeGreaterThan(1); // the wave field was drawn
 
     // A refetch without marine data must render empty, not stretch the old pixels over the new bbox.

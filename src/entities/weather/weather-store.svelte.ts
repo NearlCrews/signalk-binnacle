@@ -1,4 +1,4 @@
-import type { Bbox, RadarData, TimeBracket, WeatherGrid } from './weather-grid';
+import type { RadarData, TimeBracket, WeatherGrid } from './weather-grid';
 import { nearestGridTime, timeBracket } from './weather-grid';
 
 export type WeatherStatus = 'idle' | 'loading' | 'ready' | 'error' | 'stale';
@@ -6,7 +6,6 @@ export type WeatherStatus = 'idle' | 'loading' | 'ready' | 'error' | 'stale';
 export class WeatherStore {
   grid = $state.raw<WeatherGrid | undefined>(undefined);
   status = $state<WeatherStatus>('idle');
-  bbox = $state<Bbox | undefined>(undefined);
   selectedTime = $state<number>(0);
   radar = $state.raw<RadarData | undefined>(undefined);
 

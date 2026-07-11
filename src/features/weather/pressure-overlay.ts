@@ -32,6 +32,7 @@ export interface PressureOverlay extends OverlayModule {
 // selected time changes, like the wind overlay.
 export function createPressureOverlay(store: WeatherStore): PressureOverlay {
   let theme: Theme = 'day';
+  let visible = false;
   const gate = gridTimeGate(store);
 
   return {
@@ -87,6 +88,7 @@ export function createPressureOverlay(store: WeatherStore): PressureOverlay {
       }
     },
     sync(ctx) {
+      if (!visible) return;
       if (!gate.changed()) return;
       const grid = store.grid;
       if (!grid) {
@@ -99,10 +101,17 @@ export function createPressureOverlay(store: WeatherStore): PressureOverlay {
       setSourceData(ctx.map, LABEL_SOURCE, labels);
     },
     remove(ctx) {
+      visible = false;
       removeLayersAndSources(ctx.map, [LABEL_LAYER, LINE_LAYER], [LABEL_SOURCE, LINE_SOURCE]);
     },
-    setVisible(ctx, visible) {
-      setLayersVisibility(ctx.map, [LINE_LAYER, LABEL_LAYER], visible);
+    setVisible(ctx, value) {
+      const becameVisible = value && !visible;
+      visible = value;
+      setLayersVisibility(ctx.map, [LINE_LAYER, LABEL_LAYER], value);
+      if (becameVisible) {
+        gate.reset();
+        this.sync(ctx);
+      }
     },
     setOpacity(ctx, opacity) {
       ctx.map.setPaintProperty(LINE_LAYER, 'line-opacity', opacity);

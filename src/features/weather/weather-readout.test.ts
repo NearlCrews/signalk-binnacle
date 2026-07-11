@@ -42,6 +42,22 @@ const grid: WeatherGrid = {
     [0.8, 0.8, 0.8, 0.8],
     [0.8, 0.8, 0.8, 0.8],
   ],
+  swellWaveHeight: [
+    [1.2, 1.2, 1.2, 1.2],
+    [1.4, 1.4, 1.4, 1.4],
+  ],
+  swellWavePeakPeriod: [
+    [9, 9, 9, 9],
+    [11, 11, 11, 11],
+  ],
+  oceanCurrentSpeed: [
+    [0.4, 0.4, 0.4, 0.4],
+    [0.6, 0.6, 0.6, 0.6],
+  ],
+  seaSurfaceTemperature: [
+    [288, 288, 288, 288],
+    [290, 290, 290, 290],
+  ],
 };
 
 describe('readoutAt', () => {
@@ -56,6 +72,10 @@ describe('readoutAt', () => {
     expect(r?.cloudCoverFraction).toBeCloseTo(0.8, 4);
     expect(r?.gustMs).toBeCloseTo(15, 4);
     expect(r?.waveFromRad).toBeCloseTo(1, 4);
+    expect(r?.swellHeightM).toBeCloseTo(1.2, 4);
+    expect(r?.swellPeriodS).toBeCloseTo(9, 4);
+    expect(r?.currentSpeedMs).toBeCloseTo(0.4, 4);
+    expect(r?.waterTempK).toBeCloseTo(288, 4);
   });
   it('returns undefined outside the grid', () => {
     expect(readoutAt(grid, 9, 9, 0)).toBeUndefined();
@@ -76,6 +96,16 @@ describe('readoutAtBracket', () => {
     expect(readoutAtBracket(grid, 0.5, 0.5, { lo: 0, hi: 0, frac: 0 })).toEqual(
       readoutAt(grid, 0.5, 0.5, 0),
     );
+  });
+
+  it('does not interpolate preceding-hour precipitation totals', () => {
+    const stepped = {
+      ...grid,
+      precipitation: [new Array(4).fill(1), new Array(4).fill(9)],
+      precipitationInterpolation: 'step' as const,
+    };
+    const r = readoutAtBracket(stepped, 0.5, 0.5, { lo: 0, hi: 1, frac: 0.75 });
+    expect(r?.precipitationMm).toBe(1);
   });
 });
 

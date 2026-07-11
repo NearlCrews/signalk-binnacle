@@ -8,23 +8,32 @@ import { Clock, formatDayClock, MINUTE_MS } from '$shared/lib';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
 import { GRID_SOURCE_LABEL } from './fills';
-import { pickForecast, tendencyText as tendencyTextFor } from './forecast-series';
+import { mergeConditions, pickForecast, tendencyText as tendencyTextFor } from './forecast-series';
 
-import { createPointConditionsLoader, type PointConditionsLoader } from './point-conditions';
+import {
+  createPointConditionsLoader,
+  type PointConditionsLoader,
+  pointConditionsKey,
+  WARNING_REFRESH_MS,
+  type WarningAvailability,
+} from './point-conditions';
 import {
   conditionsFromSignalK,
+  OBSERVATION_STALE_MS,
   type PointConditions,
   pickProviderEntry,
+  providerDisplayName,
   type SignalKWeatherData,
   type WeatherWarning,
 } from './signalk-weather';
-import { sortWarnings } from './warning-severity';
+import { activeWarnings } from './warning-severity';
 import { conditionsFromReadout, readoutAtBracket } from './weather-readout';
 
 interface Props {
   origin: string;
   token?: string;
-  // The default provider's display name, or undefined to use the free grid only (no warnings then).
+  // The stable API/cache key and the human-readable source label are separate.
+  providerId?: string;
   providerName?: string;
   position?: { latitude: number; longitude: number };
   store: WeatherStore;
@@ -38,6 +47,7 @@ interface Props {
 const {
   origin,
   token,
+  providerId,
   providerName,
   position,
   store,
@@ -72,10 +82,26 @@ let loading = $state(false);
 let obsData = $state<SignalKWeatherData | undefined>();
 let seriesData = $state<SignalKWeatherData[] | undefined>();
 let warnings = $state<WeatherWarning[]>([]);
+let warningAvailability = $state<WarningAvailability>('unavailable');
+let warningsFetchedAt = $state<number | undefined>();
+let activeRequestKey = $state('');
+let observationStatus = $state<'success' | 'empty' | 'failure' | 'unsupported'>('empty');
+let forecastStatus = $state<'success' | 'empty' | 'failure' | 'unsupported'>('empty');
 // A sequence guard so a slow earlier load cannot overwrite a newer one.
 let seq = 0;
+let warningSeq = 0;
+let loadKey = '';
+let warningsAttemptedAt = 0;
 
-const sourceLabel = $derived(providerName ?? GRID_SOURCE_LABEL);
+// providerName alone remains accepted while the host migrates from its former id-in-name contract.
+const effectiveProviderId = $derived(providerId ?? providerName);
+const providerLabel = $derived(
+  providerId
+    ? (providerName ?? providerDisplayName(providerId))
+    : providerName
+      ? providerDisplayName(providerName)
+      : undefined,
+);
 
 // A position rounded to about 110 m, kept as a string so the $derived halts propagation when the
 // rounded value is unchanged: the fix jitters every GPS delta, and a fresh tuple each tick would
@@ -91,7 +117,7 @@ const parsedPos = $derived<[number, number] | undefined>(
 // or GPS jitter; the deriveds below re-pick the step for the selected time without a request.
 $effect(() => {
   const pos = parsedPos;
-  const provider = providerName;
+  const provider = effectiveProviderId;
   // Without a position or a provider there is no provider data to show: clear any stale answers
   // (a provider that disappears at runtime must not keep its warnings on screen).
   if (!pos || !provider) {
@@ -99,14 +125,39 @@ $effect(() => {
     return;
   }
   const [lat, lon] = pos;
+  const requestKey = pointConditionsKey(provider, lat, lon);
+  if (requestKey === loadKey) return;
+  loadKey = requestKey;
+  clearForRequest(requestKey);
   void loadProvider(provider, lat, lon);
 });
+
+function clearForRequest(requestKey: string): void {
+  seq += 1;
+  warningSeq += 1;
+  activeRequestKey = requestKey;
+  obsData = undefined;
+  seriesData = undefined;
+  warnings = [];
+  warningAvailability = 'unavailable';
+  warningsFetchedAt = undefined;
+  observationStatus = 'empty';
+  forecastStatus = 'empty';
+  warningsAttemptedAt = 0;
+}
 
 function clear(): void {
   seq += 1; // an in-flight provider load must not repopulate what was just cleared
   obsData = undefined;
   seriesData = undefined;
   warnings = [];
+  warningAvailability = 'unavailable';
+  warningsFetchedAt = undefined;
+  activeRequestKey = '';
+  loadKey = '';
+  observationStatus = 'empty';
+  forecastStatus = 'empty';
+  warningSeq += 1;
   loading = false;
 }
 
@@ -114,15 +165,43 @@ async function loadProvider(provider: string, lat: number, lon: number): Promise
   const mine = ++seq;
   loading = true;
   const point = await pointLoader.load(origin, provider, lat, lon, token);
-  if (mine !== seq) return;
+  if (mine !== seq || point.requestKey !== activeRequestKey) return;
   obsData = point.obs;
   seriesData = point.series;
-  // The loader leaves warnings undefined on a transient failure and [] only when the provider
-  // genuinely reports none. Warnings have no free fallback, so keep the last set on a failure: a
-  // slow or rate-limited provider must not flicker an active gale or small-craft advisory off the
-  // panel. A real empty result clears them.
-  if (point.warnings) warnings = point.warnings;
+  observationStatus = point.observationStatus;
+  forecastStatus = point.forecastStatus;
+  warnings = point.warnings ?? [];
+  warningAvailability = point.warningAvailability;
+  warningsFetchedAt = point.warningsFetchedAt;
   loading = false;
+}
+
+// Warnings change independently of forecast series. Refresh them on a bounded cadence without
+// refetching conditions, and reject any answer for a position/provider key that is no longer active.
+$effect(() => {
+  const now = clock.now;
+  const pos = parsedPos;
+  const provider = effectiveProviderId;
+  if (!pos || !provider || !activeRequestKey || warningsFetchedAt === undefined) return;
+  if (now - Math.max(warningsFetchedAt, warningsAttemptedAt) < WARNING_REFRESH_MS) return;
+  const [lat, lon] = pos;
+  warningsAttemptedAt = now;
+  void refreshWarnings(provider, lat, lon, activeRequestKey);
+});
+
+async function refreshWarnings(
+  provider: string,
+  lat: number,
+  lon: number,
+  requestKey: string,
+): Promise<void> {
+  const mine = ++warningSeq;
+  const point = await pointLoader.loadWarnings(origin, provider, lat, lon, token);
+  if (mine !== warningSeq || requestKey !== activeRequestKey || point.requestKey !== requestKey)
+    return;
+  warnings = point.warnings ?? [];
+  warningAvailability = point.warningAvailability;
+  warningsFetchedAt = point.warningsFetchedAt;
 }
 
 // The time the conditions answer for: the scrubbed forecast time once a grid exists, otherwise now.
@@ -132,7 +211,7 @@ const targetMs = $derived(store.grid ? store.selectedTime : clock.now);
 // else the bounded nearest forecast step (never an entry days from the target).
 const providerCurrent = $derived.by<{ cond: PointConditions; observed: boolean } | undefined>(
   () => {
-    if (!providerName) return undefined;
+    if (!effectiveProviderId) return undefined;
     const picked = pickProviderEntry(obsData, seriesData, targetMs, clock.now);
     return picked
       ? { cond: conditionsFromSignalK(picked.entry), observed: picked.observed }
@@ -148,8 +227,26 @@ const freeCurrent = $derived.by<PointConditions | undefined>(() => {
   return r ? conditionsFromReadout(r, store.selectedTime) : undefined;
 });
 
-const current = $derived(providerCurrent?.cond ?? freeCurrent);
+const current = $derived(mergeConditions(freeCurrent, providerCurrent?.cond));
 const currentObserved = $derived(providerCurrent?.observed ?? false);
+const observationAgeMs = $derived(
+  currentObserved && current ? Math.max(0, clock.now - current.timeMs) : undefined,
+);
+const currentStale = $derived(
+  !!providerCurrent &&
+    (providerCurrent.observed
+      ? observationStatus === 'failure' || (observationAgeMs ?? 0) >= OBSERVATION_STALE_MS
+      : forecastStatus === 'failure'),
+);
+const currentCached = $derived(
+  !!providerCurrent &&
+    (providerCurrent.observed ? observationStatus === 'failure' : forecastStatus === 'failure'),
+);
+const sourceLabel = $derived.by(() => {
+  if (current?.provenance === 'mixed') return `${providerLabel} + ${GRID_SOURCE_LABEL}`;
+  if (current?.provenance === 'provider') return providerLabel ?? GRID_SOURCE_LABEL;
+  return GRID_SOURCE_LABEL;
+});
 
 // The barometric tendency, the datum a sailor actually decides by. The provider's qualitative
 // string wins when present; otherwise the trailing 3-hour delta computed from the free grid.
@@ -165,12 +262,24 @@ const parsedSeries = $derived(seriesData?.map(conditionsFromSignalK));
 // The forecast rows and the window they span; the provider series wins when it carries usable rows,
 // otherwise the free grid answers.
 const forecastPick = $derived(
-  pickForecast(store.grid, parsedSeries, parsedPos, store.selectedTime, targetMs, !!providerName),
+  pickForecast(
+    store.grid,
+    parsedSeries,
+    parsedPos,
+    store.selectedTime,
+    targetMs,
+    !!effectiveProviderId,
+  ),
 );
 const forecast = $derived(forecastPick.rows);
 const forecastHorizonH = $derived(forecastPick.horizonH);
 
-const sortedWarnings = $derived(sortWarnings(warnings));
+const sortedWarnings = $derived(activeWarnings(warnings, clock.now));
+const warningsAgeMinutes = $derived(
+  warningsFetchedAt === undefined
+    ? undefined
+    : Math.max(0, Math.floor((clock.now - warningsFetchedAt) / MINUTE_MS)),
+);
 
 const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTime));
 </script>
@@ -198,17 +307,41 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
           </li>
         {/each}
       </ul>
-    {:else if !providerName}
+      {#if warningAvailability === 'stale'}
+        <p class="muted-note">
+          Warnings cached{warningsAgeMinutes !== undefined ? ` ${warningsAgeMinutes} min ago` : ''};
+          refresh failed.
+        </p>
+      {/if}
+    {:else if !effectiveProviderId}
       <!-- Silence must be labeled: an empty list would read as "no warnings active" when the free
            sources simply carry none. -->
       <p class="muted-note">Warnings unavailable without a weather provider.</p>
+    {:else if warningAvailability === 'unavailable'}
+      <p class="muted-note">Warnings unavailable from this provider.</p>
+    {:else if warningAvailability === 'stale'}
+      <p class="muted-note">Cached warnings may be stale; refresh failed.</p>
+    {:else}
+      <p class="muted-note">
+        No active warnings{warningsAgeMinutes !== undefined
+          ? ` · checked ${warningsAgeMinutes} min ago`
+          : ''}.
+      </p>
     {/if}
 
     {#if current}
-      <ConditionsBlock {current} observed={currentObserved} {tendencyText} {units} />
+      <ConditionsBlock
+        {current}
+        observed={currentObserved}
+        stale={currentStale}
+        cached={currentCached}
+        {observationAgeMs}
+        {tendencyText}
+        {units}
+      />
     {:else if loading}
       <p class="muted-note" role="status">Loading conditions.</p>
-    {:else if !providerName && !store.grid}
+    {:else if !effectiveProviderId && !store.grid}
       <p class="muted-note" role="status">Turn on a weather layer to load conditions.</p>
     {:else}
       <p class="muted-note" role="status">No conditions for this point.</p>

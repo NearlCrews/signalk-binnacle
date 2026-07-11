@@ -16,8 +16,15 @@ import {
   batteryTimeTileDef,
   CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
+  insideHumidityTileDef,
+  insideTemperatureTileDef,
+  propulsionLoadTileDef,
+  propulsionRpmTileDef,
+  propulsionTemperatureTileDef,
+  solarPowerTileDef,
   TILE_CATALOG,
   TILE_STALE_MS,
+  tankLevelTileDef,
   tileById,
 } from './tile-catalog';
 
@@ -181,6 +188,32 @@ describe('depth tile', () => {
     expect(reading.unit).toBe('ft');
     // formatLengthOr rounds to 1 decimal place, so compare within 1-decimal tolerance.
     expect(Number(reading.value)).toBeCloseTo(3.281, 1);
+  });
+
+  it('prefers below-keel, then below-surface, then below-transducer and labels the reference', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'metric');
+    deps.store.applyFrame(
+      skFrame(
+        {
+          [SK_PATHS.depthBelowTransducer]: 8,
+          [SK_PATHS.depthBelowSurface]: 9,
+          [SK_PATHS.depthBelowKeel]: 7,
+        },
+        1000,
+      ),
+    );
+    let reading = readTile('depth', deps);
+    expect(reading.value).toBe('7.0');
+    expect(reading.referenceLabel).toBe('Keel');
+
+    const surfaceDeps = makeDeps(clock, 'metric');
+    surfaceDeps.store.applyFrame(
+      skFrame({ [SK_PATHS.depthBelowTransducer]: 8, [SK_PATHS.depthBelowSurface]: 9 }, 1000),
+    );
+    reading = readTile('depth', surfaceDeps);
+    expect(reading.value).toBe('9.0');
+    expect(reading.referenceLabel).toBe('Surface');
   });
 });
 
@@ -466,7 +499,8 @@ describe('batteryTileDef', () => {
   it('generates correct id, label, and path for an instance', () => {
     const def = batteryTileDef('house');
     expect(def.id).toBe('battery:house');
-    expect(def.label).toBe('BATT HOUSE');
+    expect(def.label).toBe('House battery');
+    expect(def.abbr).toBe('VOLT');
     expect(def.description).toBe('Battery house voltage.');
     expect(def.paths).toEqual(['electrical.batteries.house.voltage']);
     expect(def.zonesPath).toBe('electrical.batteries.house.voltage');
@@ -525,13 +559,13 @@ describe('tileById battery: pattern', () => {
 
 describe('CLIENT_DEFAULT_ZONES', () => {
   it('contains an entry for the depth path', () => {
-    expect(CLIENT_DEFAULT_ZONES.has(SK_PATHS.depthBelowTransducer)).toBe(true);
+    expect(CLIENT_DEFAULT_ZONES.has(SK_PATHS.depthBelowKeel)).toBe(true);
   });
 
   it('depth zones: value 1.5 → alarm, 3 → warning (warn maps to warning), 10 → normal (outside zones)', () => {
     // Verify the zone values directly without going through the controller, so the test is
     // a pure data check independent of zoneStateFor.
-    const zones = CLIENT_DEFAULT_ZONES.get(SK_PATHS.depthBelowTransducer);
+    const zones = CLIENT_DEFAULT_ZONES.get(SK_PATHS.depthBelowKeel);
     expect(zones).toBeDefined();
     expect(zones?.some((z) => z.upper === 2 && z.state === 'alarm')).toBe(true);
     expect(zones?.some((z) => z.lower === 2 && z.upper === 5 && z.state === 'warn')).toBe(true);
@@ -622,6 +656,7 @@ describe('batterySocTileDef', () => {
   it('generates the SOC id, path, abbr, and battery viz', () => {
     const def = batterySocTileDef('house');
     expect(def.id).toBe('battery-soc:house');
+    expect(def.label).toBe('House battery');
     expect(def.abbr).toBe('SOC');
     expect(def.viz).toBe('battery');
     expect(def.paths).toEqual(['electrical.batteries.house.capacity.stateOfCharge']);
@@ -662,6 +697,7 @@ describe('batteryTimeTileDef', () => {
     expect(reading.state).toBe('live');
     expect(reading.value).toBe('12h 40m');
     expect(reading.unit).toBe('');
+    expect(def.label).toBe('House battery');
     expect(def.abbr).toBe('TIME');
     expect(def.viz).toBeUndefined();
   });
@@ -708,11 +744,99 @@ describe('batteryCurrentTileDef', () => {
     expect(reading.value).toBe('-12.3');
     expect(reading.unit).toBe('A');
     expect(reading.siValue).toBeCloseTo(-12.34);
+    expect(def.label).toBe('House battery');
     expect(def.abbr).toBe('AMPS');
     expect(def.viz).toBe('spark');
   });
 
   it('resolves via tileById', () => {
     expect(tileById('battery-current:house')?.id).toBe('battery-current:house');
+  });
+});
+
+describe('dynamic non-battery tile defs', () => {
+  it('renders propulsion revolutions as RPM and resolves through tileById', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = propulsionRpmTileDef('port');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'propulsion.port.revolutions': 20 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.value).toBe('1200');
+    expect(reading.unit).toBe('rpm');
+    expect(def.label).toBe('Port engine');
+    expect(def.abbr).toBe('RPM');
+    expect(tileById('prop-rpm:port')?.category).toBe('propulsion');
+  });
+
+  it('keeps the source and measurement split across dynamic labels and abbreviations', () => {
+    expect(propulsionLoadTileDef('port')).toMatchObject({
+      label: 'Port engine',
+      abbr: 'LOAD',
+    });
+    expect(propulsionTemperatureTileDef('port')).toMatchObject({
+      label: 'Port engine',
+      abbr: 'TEMP',
+    });
+    expect(tankLevelTileDef('freshWater.main')).toMatchObject({
+      label: 'Fresh Water Main tank',
+      abbr: 'LEVEL',
+    });
+    expect(solarPowerTileDef('arch')).toMatchObject({ label: 'Arch solar', abbr: 'POWER' });
+    expect(insideTemperatureTileDef('cabin')).toMatchObject({
+      label: 'Cabin',
+      abbr: 'TEMP',
+    });
+  });
+
+  it('renders tank level as percent and resolves through tileById', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = tankLevelTileDef('fresh');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'tanks.fresh.currentLevel': 0.64 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.value).toBe('64');
+    expect(reading.unit).toBe('%');
+    expect(tileById('tank-level:fresh')?.category).toBe('tanks');
+  });
+
+  it('supports typed Signal K tank paths while rejecting dotted non-tank ids', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = tankLevelTileDef('freshWater.main');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'tanks.freshWater.main.currentLevel': 0.72 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.value).toBe('72');
+    expect(def.label).toBe('Fresh Water Main tank');
+    expect(tileById('tank-level:freshWater.main')?.paths).toEqual([
+      'tanks.freshWater.main.currentLevel',
+    ]);
+    expect(tileById('battery:house.bank')).toBeUndefined();
+  });
+
+  it('renders solar panel power with W or kW units and resolves through tileById', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = solarPowerTileDef('arch');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'electrical.solar.arch.panelPower': 1250 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.value).toBe('1.3');
+    expect(reading.unit).toBe('kW');
+    expect(tileById('solar-power:arch')?.category).toBe('electrical');
+  });
+
+  it('renders cabin humidity from relativeHumidity or humidity fallback', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    const def = insideHumidityTileDef('cabin');
+    deps.store.ensureCells(def.paths);
+    deps.store.applyFrame(skFrame({ 'environment.inside.cabin.humidity': 0.57 }, 1000));
+    const reading = def.read(deps);
+    expect(reading.value).toBe('57');
+    expect(reading.unit).toBe('%');
+    expect(tileById('inside-humidity:cabin')?.category).toBe('cabin');
   });
 });

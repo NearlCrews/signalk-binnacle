@@ -11,6 +11,7 @@ import {
   formatLatitude,
   formatLengthOr,
   formatLongitude,
+  formatMetersOrNm,
   formatNmOr,
   formatPercent,
   formatPressureOr,
@@ -39,9 +40,20 @@ export interface TileReading {
   value: string;
   unit: string;
   siValue?: number;
+  secondary?: string;
   referenceLabel?: string;
   angleRad?: number;
 }
+
+export type TileCategory =
+  | 'navigation'
+  | 'wind'
+  | 'depth'
+  | 'weather'
+  | 'electrical'
+  | 'propulsion'
+  | 'tanks'
+  | 'cabin';
 
 export interface TileDef {
   id: string;
@@ -51,6 +63,7 @@ export interface TileDef {
   sensorGloss: string;
   paths: string[];
   zonesPath: string;
+  category: TileCategory;
   kind: 'numeric' | 'wind' | 'position';
   // Rendered mark type beside the numeric readout; the mark components live beside NumericTile.
   viz?: 'spark' | 'battery' | 'rot';
@@ -81,6 +94,7 @@ const SOG_DEF: TileDef = {
   sensorGloss: 'No speed data',
   paths: [SK_PATHS.speedOverGround],
   zonesPath: SK_PATHS.speedOverGround,
+  category: 'navigation',
   kind: 'numeric',
   viz: 'spark',
   read({ vessel, store, clock }) {
@@ -100,6 +114,7 @@ const HDG_DEF: TileDef = {
   // COG is a last-resort fallback; subscribing it here keeps the cell warm.
   paths: [SK_PATHS.headingTrue, SK_PATHS.headingMagnetic, SK_PATHS.courseOverGroundTrue],
   zonesPath: SK_PATHS.headingTrue,
+  category: 'navigation',
   kind: 'numeric',
   read({ vessel, store, clock }) {
     const trueCell = store.cell(SK_PATHS.headingTrue);
@@ -142,22 +157,37 @@ const HDG_DEF: TileDef = {
 const DEPTH_DEF: TileDef = {
   id: 'depth',
   label: 'Depth',
-  description: 'Depth of water under the boat.',
+  description: 'Depth of water under the boat, preferring below-keel when the server provides it.',
   sensorGloss: 'No depth sensor',
-  paths: [SK_PATHS.depthBelowTransducer],
-  zonesPath: SK_PATHS.depthBelowTransducer,
+  paths: [SK_PATHS.depthBelowKeel, SK_PATHS.depthBelowSurface, SK_PATHS.depthBelowTransducer],
+  zonesPath: SK_PATHS.depthBelowKeel,
+  category: 'depth',
   kind: 'numeric',
   viz: 'spark',
   read({ vessel, store, clock, units }) {
-    const cell = store.cell(SK_PATHS.depthBelowTransducer);
+    const keelCell = store.cell(SK_PATHS.depthBelowKeel);
+    const surfaceCell = store.cell(SK_PATHS.depthBelowSurface);
+    const transducerCell = store.cell(SK_PATHS.depthBelowTransducer);
+    let cell = transducerCell;
+    let meters = vessel.depthMeters;
+    let referenceLabel = 'Xducer';
+    if (keelCell.epoch > 0) {
+      cell = keelCell;
+      meters = asNumber(keelCell.value);
+      referenceLabel = 'Keel';
+    } else if (surfaceCell.epoch > 0) {
+      cell = surfaceCell;
+      meters = asNumber(surfaceCell.value);
+      referenceLabel = 'Surface';
+    }
     const state = grade(cell, clock);
-    const meters = vessel.depthMeters;
     const mode = units.mode;
     return {
       state,
       value: formatLengthOr(meters, mode),
       unit: lengthUnit(mode),
       siValue: meters,
+      referenceLabel: cell.epoch > 0 ? referenceLabel : undefined,
     };
   },
 };
@@ -177,6 +207,7 @@ const WIND_APPARENT_DEF: TileDef = {
     SK_PATHS.windDirectionTrue,
   ],
   zonesPath: SK_PATHS.windSpeedApparent,
+  category: 'wind',
   kind: 'wind',
   read({ vessel, store, clock }) {
     const apparentSpeedCell = store.cell(SK_PATHS.windSpeedApparent);
@@ -221,6 +252,7 @@ const STW_DEF: TileDef = {
   sensorGloss: 'No water-speed sensor',
   paths: [SK_PATHS.speedThroughWater],
   zonesPath: SK_PATHS.speedThroughWater,
+  category: 'navigation',
   kind: 'numeric',
   viz: 'spark',
   read({ store, clock }) {
@@ -242,6 +274,7 @@ const WIND_TRUE_DEF: TileDef = {
   sensorGloss: 'No true wind data',
   paths: [SK_PATHS.windSpeedTrue, SK_PATHS.windAngleTrueWater],
   zonesPath: SK_PATHS.windSpeedTrue,
+  category: 'wind',
   kind: 'wind',
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.windSpeedTrue);
@@ -260,6 +293,7 @@ const PRESSURE_DEF: TileDef = {
   sensorGloss: 'No barometer',
   paths: [SK_PATHS.outsidePressure],
   zonesPath: SK_PATHS.outsidePressure,
+  category: 'weather',
   kind: 'numeric',
   viz: 'spark',
   read({ vessel, store, clock, units }) {
@@ -283,6 +317,7 @@ const POSITION_DEF: TileDef = {
   sensorGloss: 'No GPS position',
   paths: [SK_PATHS.position],
   zonesPath: SK_PATHS.position,
+  category: 'navigation',
   kind: 'position',
   read({ vessel, store, clock }) {
     const cell = store.cell(SK_PATHS.position);
@@ -302,14 +337,15 @@ const POSITION_DEF: TileDef = {
 // zonesPath is the calcValues distance leaf for shape consistency but zones are not expected here.
 const COURSE_ZONES_PATH = `${SK_PATHS.courseCalcValues}.distance`;
 
-const COURSE_DEF: TileDef = {
+const WAYPOINT_DEF: TileDef = {
   id: 'course',
-  label: 'Waypoint',
+  label: 'Waypoint range',
   abbr: 'WPT',
   description: 'Distance and bearing to the next waypoint while navigating a course.',
   sensorGloss: 'No active course',
   paths: [],
   zonesPath: COURSE_ZONES_PATH,
+  category: 'navigation',
   kind: 'numeric',
   read({ course }) {
     if (!course.active) {
@@ -319,6 +355,85 @@ const COURSE_DEF: TileDef = {
     // the distance path carries no zones, so banding does not apply.
     const value = `${formatNmOr(course.distanceToNextMeters)} nm\n${formatBearingOr(course.bearingToNextRad)}°`;
     return { state: 'live', value, unit: '' };
+  },
+};
+
+const COURSE_VMG_DEF: TileDef = {
+  id: 'course-vmg',
+  label: 'Waypoint VMG',
+  abbr: 'VMG',
+  description: 'Velocity made good (VMG): speed directly toward the active waypoint.',
+  sensorGloss: 'No active course',
+  paths: [],
+  zonesPath: COURSE_ZONES_PATH,
+  category: 'navigation',
+  kind: 'numeric',
+  viz: 'spark',
+  read({ course }) {
+    if (!course.active) return { state: 'never', value: PLACEHOLDER, unit: '' };
+    return {
+      state: 'live',
+      value: formatKnotsOr(course.velocityMadeGoodMps),
+      unit: 'kn',
+      siValue: course.velocityMadeGoodMps,
+      referenceLabel: course.source === 'server' ? undefined : 'Calc',
+    };
+  },
+};
+
+const COURSE_XTE_DEF: TileDef = {
+  id: 'course-xte',
+  label: 'Cross-track',
+  abbr: 'XTE',
+  description: 'Cross-track error (XTE): how far you are left or right of the active leg.',
+  sensorGloss: 'No active course',
+  paths: [],
+  zonesPath: COURSE_ZONES_PATH,
+  category: 'navigation',
+  kind: 'numeric',
+  read({ course, units }) {
+    if (!course.active) return { state: 'never', value: PLACEHOLDER, unit: '' };
+    return {
+      state: 'live',
+      value: formatMetersOrNm(
+        course.crossTrackErrorMeters === undefined
+          ? undefined
+          : Math.abs(course.crossTrackErrorMeters),
+        units.mode,
+      ),
+      unit: '',
+      siValue: course.crossTrackErrorMeters,
+      secondary:
+        course.crossTrackErrorMeters === undefined
+          ? undefined
+          : course.crossTrackErrorMeters < 0
+            ? 'Port of leg'
+            : 'Starboard of leg',
+      referenceLabel: course.source === 'server' ? undefined : 'Calc',
+    };
+  },
+};
+
+const COURSE_TTG_DEF: TileDef = {
+  id: 'course-ttg',
+  label: 'Time to waypoint',
+  abbr: 'TTG',
+  description: 'Time to go (TTG) to the active waypoint at the present speed.',
+  sensorGloss: 'No active course',
+  paths: [],
+  zonesPath: COURSE_ZONES_PATH,
+  category: 'navigation',
+  kind: 'numeric',
+  read({ course }) {
+    if (!course.active) return { state: 'never', value: PLACEHOLDER, unit: '' };
+    const seconds = course.timeToGoSeconds;
+    return {
+      state: 'live',
+      value: seconds === undefined ? PLACEHOLDER : formatDuration(seconds),
+      unit: '',
+      siValue: seconds,
+      referenceLabel: course.source === 'server' ? undefined : 'Calc',
+    };
   },
 };
 
@@ -346,6 +461,7 @@ const WATER_TEMP_DEF: TileDef = {
   sensorGloss: 'No water temperature',
   paths: [SK_PATHS.waterTemperature],
   zonesPath: SK_PATHS.waterTemperature,
+  category: 'weather',
   kind: 'numeric',
   viz: 'spark',
   read: temperatureRead(SK_PATHS.waterTemperature),
@@ -359,6 +475,7 @@ const AIR_TEMP_DEF: TileDef = {
   sensorGloss: 'No air temperature',
   paths: [SK_PATHS.outsideTemperature],
   zonesPath: SK_PATHS.outsideTemperature,
+  category: 'weather',
   kind: 'numeric',
   viz: 'spark',
   read: temperatureRead(SK_PATHS.outsideTemperature),
@@ -372,6 +489,7 @@ const GNSS_DEF: TileDef = {
   sensorGloss: 'No GNSS receiver',
   paths: [SK_PATHS.gnssSatellites],
   zonesPath: SK_PATHS.gnssSatellites,
+  category: 'navigation',
   kind: 'numeric',
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.gnssSatellites);
@@ -393,6 +511,7 @@ const ROT_DEF: TileDef = {
   sensorGloss: 'No turn sensor',
   paths: [SK_PATHS.rateOfTurn],
   zonesPath: SK_PATHS.rateOfTurn,
+  category: 'navigation',
   kind: 'numeric',
   viz: 'rot',
   read({ store, clock }) {
@@ -413,7 +532,10 @@ export const TILE_CATALOG: readonly TileDef[] = [
   WIND_TRUE_DEF,
   PRESSURE_DEF,
   POSITION_DEF,
-  COURSE_DEF,
+  WAYPOINT_DEF,
+  COURSE_VMG_DEF,
+  COURSE_XTE_DEF,
+  COURSE_TTG_DEF,
   WATER_TEMP_DEF,
   AIR_TEMP_DEF,
   GNSS_DEF,
@@ -427,13 +549,16 @@ export const DEFAULT_TILES: readonly string[] = ['sog', 'heading', 'depth', 'win
 // containing a battery tile to resolve correctly.
 export function batteryTileDef(instanceId: string): TileDef {
   const path = `electrical.batteries.${instanceId}.voltage`;
+  const name = titledSource(instanceId, 'battery');
   return {
     id: `battery:${instanceId}`,
-    label: `BATT ${instanceId.toUpperCase()}`,
+    label: name,
+    abbr: 'VOLT',
     description: `Battery ${instanceId} voltage.`,
     sensorGloss: 'No battery data',
     paths: [path],
     zonesPath: path,
+    category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
     read({ store, clock }) {
@@ -453,14 +578,16 @@ export function batteryTileDef(instanceId: string): TileDef {
 // State of charge for a single battery instance: a 0..1 ratio shown as a whole-number percent.
 export function batterySocTileDef(instanceId: string): TileDef {
   const path = `electrical.batteries.${instanceId}.capacity.stateOfCharge`;
+  const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-soc:${instanceId}`,
-    label: `Charge ${instanceId.toUpperCase()}`,
+    label: name,
     abbr: 'SOC',
     description: `Battery ${instanceId} state of charge.`,
     sensorGloss: 'No charge data',
     paths: [path],
     zonesPath: path,
+    category: 'electrical',
     kind: 'numeric',
     viz: 'battery',
     read({ store, clock }) {
@@ -475,14 +602,16 @@ export function batterySocTileDef(instanceId: string): TileDef {
 // Estimated time remaining at the present load for a single battery instance.
 export function batteryTimeTileDef(instanceId: string): TileDef {
   const path = `electrical.batteries.${instanceId}.capacity.timeRemaining`;
+  const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-time:${instanceId}`,
-    label: `Runtime ${instanceId.toUpperCase()}`,
+    label: name,
     abbr: 'TIME',
     description: `Battery ${instanceId} time remaining at the present load.`,
     sensorGloss: 'No time estimate',
     paths: [path],
     zonesPath: path,
+    category: 'electrical',
     kind: 'numeric',
     read({ store, clock }) {
       const cell = store.cell(path);
@@ -500,14 +629,16 @@ export function batteryTimeTileDef(instanceId: string): TileDef {
 // Instantaneous current for a single battery instance: signed, negative while discharging.
 export function batteryCurrentTileDef(instanceId: string): TileDef {
   const path = `electrical.batteries.${instanceId}.current`;
+  const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-current:${instanceId}`,
-    label: `Current ${instanceId.toUpperCase()}`,
+    label: name,
     abbr: 'AMPS',
     description: `Battery ${instanceId} current, negative when discharging.`,
     sensorGloss: 'No current data',
     paths: [path],
     zonesPath: path,
+    category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
     read({ store, clock }) {
@@ -519,9 +650,343 @@ export function batteryCurrentTileDef(instanceId: string): TileDef {
   };
 }
 
-// The electrical.batteries.<id> branches the tile set reads. Discovery filters instances on these
-// same keys, so "counts as a battery" and "what a battery tile reads" cannot drift apart.
-export const BATTERY_BRANCH_KEYS = ['voltage', 'capacity', 'current'] as const;
+function titleId(instanceId: string): string {
+  return instanceId
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[._-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function titledSource(instanceId: string, suffix: string): string {
+  const name = titleId(instanceId);
+  return name.toLowerCase().split(/\s+/).includes(suffix.toLowerCase())
+    ? name
+    : `${name} ${suffix}`;
+}
+
+function formatWatts(value: number | undefined): string {
+  if (value === undefined || Number.isNaN(value)) return PLACEHOLDER;
+  return Math.abs(value) >= 1000 ? (value / 1000).toFixed(1) : value.toFixed(0);
+}
+
+function wattsUnit(value: number | undefined): string {
+  return value !== undefined && Math.abs(value) >= 1000 ? 'kW' : 'W';
+}
+
+function formatEnergy(valueJoules: number | undefined): string {
+  if (valueJoules === undefined || Number.isNaN(valueJoules)) return PLACEHOLDER;
+  return (valueJoules / 3_600_000).toFixed(1);
+}
+
+function formatVolume(m3: number | undefined, mode: TileDeps['units']['mode']): string {
+  if (m3 === undefined || Number.isNaN(m3)) return PLACEHOLDER;
+  return mode === 'imperial' ? (m3 * 264.172052).toFixed(1) : (m3 * 1000).toFixed(0);
+}
+
+function volumeUnit(mode: TileDeps['units']['mode']): string {
+  return mode === 'imperial' ? 'gal' : 'L';
+}
+
+export function propulsionRpmTileDef(instanceId: string): TileDef {
+  const path = `propulsion.${instanceId}.revolutions`;
+  const name = titledSource(instanceId, 'engine');
+  return {
+    id: `prop-rpm:${instanceId}`,
+    label: name,
+    abbr: 'RPM',
+    description: `${name} engine revolutions per minute.`,
+    sensorGloss: 'No engine speed',
+    paths: [path],
+    zonesPath: path,
+    category: 'propulsion',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const rps = asNumber(cell.value);
+      const rpm = rps === undefined ? undefined : rps * 60;
+      return { state, value: formatFixed(rpm, 0), unit: 'rpm', siValue: rps };
+    },
+  };
+}
+
+export function propulsionTemperatureTileDef(instanceId: string): TileDef {
+  const path = `propulsion.${instanceId}.temperature`;
+  const name = titledSource(instanceId, 'engine');
+  return {
+    id: `prop-temp:${instanceId}`,
+    label: name,
+    abbr: 'TEMP',
+    description: `${name} engine temperature.`,
+    sensorGloss: 'No engine temperature',
+    paths: [path],
+    zonesPath: path,
+    category: 'propulsion',
+    kind: 'numeric',
+    viz: 'spark',
+    read: temperatureRead(path),
+  };
+}
+
+export function propulsionCoolantTileDef(instanceId: string): TileDef {
+  const path = `propulsion.${instanceId}.coolantTemperature`;
+  const name = titledSource(instanceId, 'engine');
+  return {
+    id: `prop-coolant:${instanceId}`,
+    label: name,
+    abbr: 'COOL',
+    description: `${name} engine coolant temperature.`,
+    sensorGloss: 'No coolant temperature',
+    paths: [path],
+    zonesPath: path,
+    category: 'propulsion',
+    kind: 'numeric',
+    viz: 'spark',
+    read: temperatureRead(path),
+  };
+}
+
+export function propulsionOilPressureTileDef(instanceId: string): TileDef {
+  const path = `propulsion.${instanceId}.oilPressure`;
+  const name = titledSource(instanceId, 'engine');
+  return {
+    id: `prop-oil:${instanceId}`,
+    label: name,
+    abbr: 'OIL',
+    description: `${name} engine oil pressure.`,
+    sensorGloss: 'No oil pressure',
+    paths: [path],
+    zonesPath: path,
+    category: 'propulsion',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock, units }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const pa = asNumber(cell.value);
+      return {
+        state,
+        value: formatPressureOr(pa, units.mode),
+        unit: pressureUnit(units.mode),
+        siValue: pa,
+      };
+    },
+  };
+}
+
+export function propulsionLoadTileDef(instanceId: string): TileDef {
+  const path = `propulsion.${instanceId}.engineLoad`;
+  const name = titledSource(instanceId, 'engine');
+  return {
+    id: `prop-load:${instanceId}`,
+    label: name,
+    abbr: 'LOAD',
+    description: `${name} engine load.`,
+    sensorGloss: 'No engine load',
+    paths: [path],
+    zonesPath: path,
+    category: 'propulsion',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const ratio = asNumber(cell.value);
+      return { state, value: formatPercent(ratio), unit: '%', siValue: ratio };
+    },
+  };
+}
+
+export function tankLevelTileDef(instanceId: string): TileDef {
+  const path = `tanks.${instanceId}.currentLevel`;
+  const name = titledSource(instanceId, 'tank');
+  return {
+    id: `tank-level:${instanceId}`,
+    label: name,
+    abbr: 'LEVEL',
+    description: `${name} tank level.`,
+    sensorGloss: 'No tank level',
+    paths: [path],
+    zonesPath: path,
+    category: 'tanks',
+    kind: 'numeric',
+    viz: 'battery',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const ratio = asNumber(cell.value);
+      return { state, value: formatPercent(ratio), unit: '%', siValue: ratio };
+    },
+  };
+}
+
+export function tankVolumeTileDef(instanceId: string): TileDef {
+  const path = `tanks.${instanceId}.currentVolume`;
+  const name = titledSource(instanceId, 'tank');
+  return {
+    id: `tank-volume:${instanceId}`,
+    label: name,
+    abbr: 'VOL',
+    description: `${name} tank volume.`,
+    sensorGloss: 'No tank volume',
+    paths: [path],
+    zonesPath: path,
+    category: 'tanks',
+    kind: 'numeric',
+    read({ store, clock, units }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const m3 = asNumber(cell.value);
+      return {
+        state,
+        value: formatVolume(m3, units.mode),
+        unit: volumeUnit(units.mode),
+        siValue: m3,
+      };
+    },
+  };
+}
+
+export function solarPowerTileDef(instanceId: string): TileDef {
+  const path = `electrical.solar.${instanceId}.panelPower`;
+  const name = titledSource(instanceId, 'solar');
+  return {
+    id: `solar-power:${instanceId}`,
+    label: name,
+    abbr: 'POWER',
+    description: `${name} solar panel power.`,
+    sensorGloss: 'No solar power',
+    paths: [path],
+    zonesPath: path,
+    category: 'electrical',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const watts = asNumber(cell.value);
+      return { state, value: formatWatts(watts), unit: wattsUnit(watts), siValue: watts };
+    },
+  };
+}
+
+export function solarCurrentTileDef(instanceId: string): TileDef {
+  const path = `electrical.solar.${instanceId}.panelCurrent`;
+  const name = titledSource(instanceId, 'solar');
+  return {
+    id: `solar-current:${instanceId}`,
+    label: name,
+    abbr: 'AMPS',
+    description: `${name} solar panel current.`,
+    sensorGloss: 'No solar current',
+    paths: [path],
+    zonesPath: path,
+    category: 'electrical',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const amps = asNumber(cell.value);
+      return { state, value: formatFixed(amps, 1), unit: 'A', siValue: amps };
+    },
+  };
+}
+
+export function solarYieldTileDef(instanceId: string): TileDef {
+  const path = `electrical.solar.${instanceId}.yieldToday`;
+  const name = titledSource(instanceId, 'solar');
+  return {
+    id: `solar-yield:${instanceId}`,
+    label: name,
+    abbr: 'TODAY',
+    description: `${name} solar energy yield today.`,
+    sensorGloss: 'No solar yield',
+    paths: [path],
+    zonesPath: path,
+    category: 'electrical',
+    kind: 'numeric',
+    read({ store, clock }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const joules = asNumber(cell.value);
+      return { state, value: formatEnergy(joules), unit: 'kWh', siValue: joules };
+    },
+  };
+}
+
+export function insideTemperatureTileDef(instanceId: string): TileDef {
+  const path = `environment.inside.${instanceId}.temperature`;
+  const name = titleId(instanceId);
+  return {
+    id: `inside-temp:${instanceId}`,
+    label: name,
+    abbr: 'TEMP',
+    description: `${name} inside temperature.`,
+    sensorGloss: 'No inside temperature',
+    paths: [path],
+    zonesPath: path,
+    category: 'cabin',
+    kind: 'numeric',
+    viz: 'spark',
+    read: temperatureRead(path),
+  };
+}
+
+export function insideHumidityTileDef(instanceId: string): TileDef {
+  const primary = `environment.inside.${instanceId}.relativeHumidity`;
+  const fallback = `environment.inside.${instanceId}.humidity`;
+  const name = titleId(instanceId);
+  return {
+    id: `inside-humidity:${instanceId}`,
+    label: name,
+    abbr: 'RH',
+    description: `${name} inside relative humidity.`,
+    sensorGloss: 'No humidity',
+    paths: [primary, fallback],
+    zonesPath: primary,
+    category: 'cabin',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock }) {
+      const primaryCell = store.cell(primary);
+      const fallbackCell = store.cell(fallback);
+      const cell = primaryCell.epoch > 0 ? primaryCell : fallbackCell;
+      const state = grade(cell, clock);
+      const ratio = asNumber(cell.value);
+      return { state, value: formatPercent(ratio), unit: '%', siValue: ratio };
+    },
+  };
+}
+
+export function insidePressureTileDef(instanceId: string): TileDef {
+  const path = `environment.inside.${instanceId}.pressure`;
+  const name = titleId(instanceId);
+  return {
+    id: `inside-pressure:${instanceId}`,
+    label: name,
+    abbr: 'BARO',
+    description: `${name} inside air pressure.`,
+    sensorGloss: 'No inside pressure',
+    paths: [path],
+    zonesPath: path,
+    category: 'cabin',
+    kind: 'numeric',
+    viz: 'spark',
+    read({ store, clock, units }) {
+      const cell = store.cell(path);
+      const state = grade(cell, clock);
+      const pa = asNumber(cell.value);
+      return {
+        state,
+        value: formatPressureOr(pa, units.mode),
+        unit: pressureUnit(units.mode),
+        siValue: pa,
+      };
+    },
+  };
+}
 
 // The full per-instance tile set: voltage, state of charge, time remaining, and current. The
 // catalog getter and cell warm-up derive their paths from this so the four defs never drift.
@@ -534,10 +999,50 @@ export function batteryDefsFor(instanceId: string): TileDef[] {
   ];
 }
 
-// One pattern for every per-battery id (battery:, battery-soc:, battery-time:, battery-current:),
-// so the id-to-def mapping stays owned by batteryDefsFor. Instance ids allow digits, letters,
-// underscores, and hyphens only; anything else (spaces, dots, slashes) would corrupt the SK path.
-const BATTERY_ID_RE = /^battery(?:-(?:soc|time|current))?:([A-Za-z0-9_-]+)$/;
+export function propulsionDefsFor(instanceId: string): TileDef[] {
+  return [
+    propulsionRpmTileDef(instanceId),
+    propulsionTemperatureTileDef(instanceId),
+    propulsionCoolantTileDef(instanceId),
+    propulsionOilPressureTileDef(instanceId),
+    propulsionLoadTileDef(instanceId),
+  ];
+}
+
+export function tankDefsFor(instanceId: string): TileDef[] {
+  return [tankLevelTileDef(instanceId), tankVolumeTileDef(instanceId)];
+}
+
+export function solarDefsFor(instanceId: string): TileDef[] {
+  return [
+    solarPowerTileDef(instanceId),
+    solarCurrentTileDef(instanceId),
+    solarYieldTileDef(instanceId),
+  ];
+}
+
+export function insideDefsFor(instanceId: string): TileDef[] {
+  return [
+    insideTemperatureTileDef(instanceId),
+    insideHumidityTileDef(instanceId),
+    insidePressureTileDef(instanceId),
+  ];
+}
+
+// Most dynamic instance ids allow digits, letters, underscores, and hyphens only. Tank ids may also
+// carry one dot because Signal K commonly nests tanks by type, such as tanks.fuel.port.
+const DYNAMIC_ID_RE =
+  /^(battery(?:-(?:soc|time|current))?|prop-(?:rpm|temp|coolant|oil|load)|tank-(?:level|volume)|solar-(?:power|current|yield)|inside-(?:temp|humidity|pressure)):([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?)$/;
+
+function dynamicDefsFor(kind: string, instanceId: string): TileDef[] {
+  if (!kind.startsWith('tank-') && instanceId.includes('.')) return [];
+  if (kind.startsWith('battery')) return batteryDefsFor(instanceId);
+  if (kind.startsWith('prop-')) return propulsionDefsFor(instanceId);
+  if (kind.startsWith('tank-')) return tankDefsFor(instanceId);
+  if (kind.startsWith('solar-')) return solarDefsFor(instanceId);
+  if (kind.startsWith('inside-')) return insideDefsFor(instanceId);
+  return [];
+}
 
 // Dynamic defs are memoized by id: tileById runs on every tiles read (a hot, reactive path), and a
 // fresh def per call would allocate per render and break identity-keyed consumers. The id space is
@@ -549,9 +1054,9 @@ export function tileById(id: string): TileDef | undefined {
   if (staticDef) return staticDef;
   const cached = dynamicDefCache.get(id);
   if (cached) return cached;
-  const match = BATTERY_ID_RE.exec(id);
+  const match = DYNAMIC_ID_RE.exec(id);
   if (!match) return undefined;
-  const def = batteryDefsFor(match[1]).find((d) => d.id === id);
+  const def = dynamicDefsFor(match[1], match[2]).find((d) => d.id === id);
   if (def) dynamicDefCache.set(id, def);
   return def;
 }
@@ -575,7 +1080,7 @@ export function minPeriodFor(path: string): number {
 // zones always take precedence when present. Depths in meters (SI).
 export const CLIENT_DEFAULT_ZONES: ReadonlyMap<string, MetaZone[]> = new Map([
   [
-    SK_PATHS.depthBelowTransducer,
+    SK_PATHS.depthBelowKeel,
     [
       { upper: 2, state: 'alarm', message: 'Shallow' },
       { lower: 2, upper: 5, state: 'warn' },

@@ -17,7 +17,9 @@ import {
   type PointConditionsLoader,
   precipUnitLabel,
   RAIN_VISIBLE_MM_H,
+  radarFrameTiming,
   radarScrubbedAway,
+  radarTimeline,
   type TimeRange,
   WEATHER_FILL_ID_SET,
   WEATHER_FILL_IDS,
@@ -25,6 +27,7 @@ import {
   WeatherConditions,
   type WeatherLegend,
   type WeatherLoader,
+  type WeatherProvider,
   weatherLegend,
 } from '$features/weather';
 import {
@@ -67,11 +70,11 @@ interface Props {
   // Hands up a function that applies a full weather-layer snapshot to the mini-map at runtime, so a
   // profile switch updates the weather layers without remounting the panel.
   onLayersReady?: (apply: (settings: LayerSettings) => void) => void;
-  // The Signal K auth token and the default weather provider's display name, when one is configured.
+  // The Signal K auth token and default weather provider, when one is configured.
   // With a provider, the tap readout prefers it and falls back to the free grid; without one, the
   // grid answers. The area overlays and radar always use the free sources.
   token?: string;
-  providerName?: string;
+  weatherProvider?: WeatherProvider;
   // The vessel position, for the "Here" conditions panel.
   position?: { latitude: number; longitude: number };
   // The shared point-conditions loader, constructed in App so the panel reuses one cache connection.
@@ -93,7 +96,7 @@ const {
   onLayersChange,
   onLayersReady,
   token,
-  providerName,
+  weatherProvider,
   position,
   pointLoader,
   online = true,
@@ -151,7 +154,8 @@ const pointReadout = createPointReadout({
   store: () => store,
   origin,
   token: () => token,
-  providerName: () => providerName,
+  providerName: () => weatherProvider?.name,
+  providerId: () => weatherProvider?.id,
   activeCount: () => activeCount,
   isDestroyed: () => destroyed,
 });
@@ -166,11 +170,17 @@ const overlayItems = $derived(items.filter((i) => !WEATHER_FILL_ID_SET.has(i.id)
 const activeCount = $derived(visibleItems.length);
 // The source and fetch-age line, surfaced in the layer menu as well as the footer so it is not
 // hidden behind a click; undefined before any grid loads.
-const menuProvenance = $derived(
-  store.grid?.fetchedAt
-    ? `${GRID_SOURCE_LABEL} · fetched ${formatClockTime(store.grid.fetchedAt)}`
-    : undefined,
-);
+const menuProvenance = $derived.by<string | undefined>(() => {
+  const grid = store.grid;
+  if (!grid?.fetchedAt) return undefined;
+  const resolution = `${grid.lons.length} x ${grid.lats.length} cells`;
+  const displacement = grid.marineAlignment?.maxDisplacementM;
+  const marineNote =
+    displacement !== undefined && Number.isFinite(displacement) && displacement >= 1000
+      ? ` · marine cells within ${Math.ceil(displacement / 1000)} km`
+      : '';
+  return `${GRID_SOURCE_LABEL} · ${resolution}${marineNote} · fetched ${formatClockTime(grid.fetchedAt)}`;
+});
 const layerOn = (id: string): boolean => items.some((i) => i.id === id && i.visible);
 const wavesActive = $derived(layerOn(WEATHER_LAYER_IDS.waves));
 const radarActive = $derived(layerOn(WEATHER_LAYER_IDS.radar));
@@ -205,13 +215,22 @@ const statusNote = $derived.by<string>(() => {
 const scrubbedAway = $derived(radarScrubbedAway(store.selectedTime, clock.now));
 // The painted frame's valid time, fed by the radar overlay (a callback, not store state).
 let radarFrameTime = $state<number | undefined>();
+const radarTimelineInfo = $derived(radarTimeline(store.radar?.frames ?? [], clock.now));
 const radarNote = $derived.by<string>(() => {
   if (scrubbedAway) return 'shows now only, hidden while the slider is off now';
   if (!online) return 'cached radar (offline), not live';
-  if (radarFrameTime === undefined) return 'radar with short-term nowcast, regional resolution';
-  const dMin = Math.round((radarFrameTime - clock.now) / MINUTE_MS);
-  const rel = dMin === 0 ? 'now' : dMin > 0 ? `+${dMin} min (nowcast)` : `${dMin} min`;
-  return `frame ${rel} · short-term nowcast`;
+  if (radarFrameTime === undefined) {
+    return radarTimelineInfo.hasFutureFrames
+      ? 'recent radar history and nowcast, regional resolution'
+      : 'recent radar history, regional resolution';
+  }
+  const timing = radarFrameTiming(radarFrameTime, clock.now);
+  const minutes = Math.round(
+    (timing.kind === 'nowcast' ? timing.offsetMs : timing.ageMs) / MINUTE_MS,
+  );
+  return timing.kind === 'nowcast'
+    ? `nowcast +${minutes} min · regional resolution`
+    : `observed ${minutes === 0 ? 'now' : `${minutes} min ago`} · regional resolution`;
 });
 // Keyed on items, theme, and the unit mode only: the live radar note is substituted at render
 // time, so the 600 ms frame beat updates one text node instead of rebuilding every legend gradient.
@@ -255,14 +274,19 @@ const playback = createForecastPlayback(
 // (forecast plus marine) rather than six. The grid is coarse anyway, and fewer, smaller requests
 // keep well under Open-Meteo's free-tier rate limit.
 const FORECAST_OPTS = { maxCells: 200, forecastDays: 5 };
+function loadCurrentWeather(currentItems = items): void {
+  if (!getBounds || currentItems.every((item) => !item.visible)) return;
+  const visible = (id: string) => currentItems.some((item) => item.id === id && item.visible);
+  void loader.load(store, getBounds(), FORECAST_OPTS, {
+    waves: visible(WEATHER_LAYER_IDS.waves),
+    radar: visible(WEATHER_LAYER_IDS.radar),
+  });
+}
+
 function scheduleFetch(): void {
   if (fetchTimer) clearTimeout(fetchTimer);
   fetchTimer = setTimeout(() => {
-    if (!getBounds || activeCount === 0) return;
-    void loader.load(store, getBounds(), FORECAST_OPTS, {
-      waves: wavesActive,
-      radar: radarActive,
-    });
+    loadCurrentWeather();
   }, FETCH_DEBOUNCE_MS);
 }
 
@@ -349,6 +373,10 @@ onMount(() => {
 
       getBounds = () => boundsToBbox(map.getBounds());
       map.on('moveend', scheduleFetch);
+      // The mount effect can run before MapLibre has loaded and supplied getBounds. Load directly
+      // from the registered snapshot so the first forecast never depends on an incidental pan or a
+      // derived layer count settling after this callback.
+      if (!store.grid) loadCurrentWeather(view.items);
       // Pinching into the cap reads as a broken map without a word of explanation, once per open.
       map.on('zoomend', () => {
         if (zoomNoteShown || map.getZoom() < MAX_ZOOM - 0.05) return;
@@ -524,7 +552,8 @@ onDestroy(() => {
         <WeatherConditions
           {origin}
           {token}
-          {providerName}
+          providerId={weatherProvider?.id}
+          providerName={weatherProvider?.name}
           {position}
           {store}
           {units}
@@ -552,7 +581,9 @@ onDestroy(() => {
       />
     {/if}
     {#if legends.length > 0}
-      <WeatherLegendBar {legends} {radarNote} />
+      <div class="legend-scroll">
+        <WeatherLegendBar {legends} {radarNote} />
+      </div>
     {/if}
     {#if menuProvenance}
       <!-- Provenance, not licensing: which source produced the fields and how old they are. The
@@ -567,7 +598,7 @@ onDestroy(() => {
   position: fixed;
   /* Sit just above the status strip, whose min-block-size is calc(--control-size + --space-2), using
      the same expression so the panel cannot drift out of sync with the strip it clears. */
-  inset-block-end: calc(var(--control-size) + var(--space-2));
+  inset-block-end: calc(var(--control-size) + var(--space-2) + env(safe-area-inset-bottom, 0px));
   inset-inline: 0;
   margin-inline: auto;
   inline-size: min(94vw, 46rem);
@@ -705,8 +736,16 @@ onDestroy(() => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  max-block-size: 42%;
+  min-inline-size: 0;
   padding: 0.45rem 0.6rem;
   border-block-start: 1px solid var(--border);
+  container-type: inline-size;
+}
+.legend-scroll {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .provenance {
   font-size: var(--text-xs);
@@ -718,6 +757,10 @@ onDestroy(() => {
     inset-block: auto;
     inset-block-end: var(--space-6);
     inset-inline: var(--space-2);
+  }
+  .weather-footer {
+    max-block-size: 46%;
+    padding-block-end: max(0.45rem, env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

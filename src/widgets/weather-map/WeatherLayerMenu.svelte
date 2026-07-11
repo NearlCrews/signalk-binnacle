@@ -52,6 +52,8 @@ const groups = $derived(
             class="menu-row row-interactive"
             class:is-on={item.visible}
             aria-pressed={item.visible}
+            aria-describedby={item.description ? `${item.id}-weather-description` : undefined}
+            title={item.description ?? item.title}
             onclick={() => onToggle(item.id, !item.visible)}
           >
             <span>{item.title}</span>
@@ -59,6 +61,11 @@ const groups = $derived(
               <Check size={16} aria-hidden="true" />
             {/if}
           </button>
+          {#if item.description}
+            <span id={`${item.id}-weather-description`} class="visually-hidden"
+              >{item.description}</span
+            >
+          {/if}
         {/each}
       {/each}
       {#if provenance}

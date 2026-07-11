@@ -6,11 +6,14 @@ interface Collected {
   context: Context;
   path: Path;
   value: Value;
+  source?: { label?: string };
 }
 
 function collect(delta: Delta): Collected[] {
   const out: Collected[] = [];
-  reconcileDelta(delta, (context, path, value) => out.push({ context, path, value }));
+  reconcileDelta(delta, (context, path, value, source) =>
+    out.push({ context, path, value, source }),
+  );
   return out;
 }
 
@@ -90,5 +93,22 @@ describe('reconcileDelta', () => {
     const writes = collect(delta);
     expect(writes).toHaveLength(1);
     expect(writes[0].path).toBe('navigation.speedOverGround');
+  });
+
+  it('passes an update source label to every value in that update', () => {
+    const delta = {
+      context: 'vessels.self' as Context,
+      updates: [
+        {
+          source: { label: 'NMEA2000.35' },
+          values: [
+            { path: 'navigation.speedOverGround', value: 3.85 },
+            { path: 'navigation.headingTrue', value: 1.1 },
+          ],
+        },
+      ],
+    } as unknown as Delta;
+    const writes = collect(delta);
+    expect(writes.map((w) => w.source?.label)).toEqual(['NMEA2000.35', 'NMEA2000.35']);
   });
 });

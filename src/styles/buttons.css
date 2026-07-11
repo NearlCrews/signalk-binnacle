@@ -73,6 +73,9 @@
   box-shadow: var(--shadow-overlay);
 }
 .btn-primary:hover:not(:disabled) {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--accent-contrast);
   filter: brightness(1.08);
 }
 .btn-primary:active:not(:disabled) {

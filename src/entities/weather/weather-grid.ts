@@ -8,6 +8,16 @@ export interface Bbox {
   north: number;
 }
 
+export interface WeatherSourceMetadata {
+  coordinates: Array<{ latitude: number; longitude: number }>;
+  times: number[];
+}
+
+export interface MarineAlignmentMetadata {
+  maxDisplacementM: number;
+  maxTimeMismatchMs: number;
+}
+
 export function boundsToBbox(b: LngLatBoundsLike): Bbox {
   const [west, south, east, north] = lngLatBoundsToBbox4(b);
   return { west, south, east, north };
@@ -27,18 +37,34 @@ export interface WeatherGrid {
   // Waves were requested but the marine endpoint failed, so the wave fields are missing from an
   // otherwise complete grid; the panel qualifies its stale note with this.
   partialWaves?: boolean;
+  atmosphericSource?: WeatherSourceMetadata;
+  marineSource?: WeatherSourceMetadata;
+  marineAlignment?: MarineAlignmentMetadata;
   // Supplementary fields, present only when fetched; absent (undefined) for a wind-only grid or
   // over cells the provider omits. All SI: pressure in Pa, wave height in m, direction in radians,
   // period in s. Marine fields are NaN over land cells. Precipitation is the one deliberate
-  // exception: it stays in mm/h to match the Signal K weather API (outside.precipitationVolume) and
-  // the Open-Meteo source, and the whole display path formats it as mm/h.
+  // exception: Open-Meteo supplies the preceding hour's accumulation in millimeters, and the
+  // display presents that hourly amount as mm/h.
   windGust?: number[][]; // m/s
   pressureMsl?: number[][]; // Pa
-  precipitation?: number[][]; // mm/h (hourly total), a deliberate non-SI exception (see above)
+  precipitation?: number[][]; // mm per preceding hour, a deliberate non-SI exception (see above)
+  precipitationInterval?: 'preceding-hour';
+  precipitationInterpolation?: 'step';
   cloudCover?: number[][]; // 0..1 fraction
   waveHeight?: number[][]; // m
   waveDirection?: number[][]; // radians, direction the waves come from
   wavePeriod?: number[][]; // s
+  windWaveHeight?: number[][]; // m
+  windWaveDirection?: number[][]; // radians, direction the wind waves come from
+  windWavePeriod?: number[][]; // s
+  windWavePeakPeriod?: number[][]; // s
+  swellWaveHeight?: number[][]; // m
+  swellWaveDirection?: number[][]; // radians, direction the swell comes from
+  swellWavePeriod?: number[][]; // s
+  swellWavePeakPeriod?: number[][]; // s
+  oceanCurrentSpeed?: number[][]; // m/s
+  oceanCurrentDirection?: number[][]; // radians, direction the current flows toward
+  seaSurfaceTemperature?: number[][]; // K
 }
 
 export interface RadarFrame {
@@ -68,12 +94,46 @@ function spanned(min: number, max: number): [number, number] {
 // Sample a bbox into a grid no larger than maxCells, keeping the axes roughly proportional to the
 // bbox so neither is starved. Inclusive of both corners so the field covers the whole viewport.
 export function sampleGrid(bbox: Bbox, maxCells: number): { lats: number[]; lons: number[] } {
+  if (!Number.isFinite(maxCells) || maxCells < 4) {
+    throw new RangeError('maxCells must be at least 4');
+  }
   const [west, east] = spanned(bbox.west, bbox.east);
   const [south, north] = spanned(bbox.south, bbox.north);
   const aspect = (east - west) / (north - south);
-  const rows = Math.max(2, Math.round(Math.sqrt(maxCells / aspect)));
-  const cols = Math.max(2, Math.floor(maxCells / rows));
+  const cols = Math.max(
+    2,
+    Math.min(Math.floor(maxCells / 2), Math.round(Math.sqrt(maxCells * aspect))),
+  );
+  const rows = Math.max(2, Math.floor(maxCells / cols));
   return { lats: axis(south, north, rows), lons: axis(west, east, cols) };
+}
+
+const wrapLongitude = (lon: number): number => ((((lon + 180) % 360) + 360) % 360) - 180;
+
+// Canonicalize equivalent world copies to one unwrapped interval. Antimeridian crossings remain
+// continuous, such as 170..-170 becoming 170..190, so regular grid axes stay ascending.
+export function normalizeBbox(bbox: Bbox): Bbox {
+  const south = Math.max(-90, Math.min(90, Math.min(bbox.south, bbox.north)));
+  const north = Math.max(-90, Math.min(90, Math.max(bbox.south, bbox.north)));
+  let west = bbox.west;
+  let east = bbox.east;
+  while (east < west) east += 360;
+  if (east - west >= 360) return { west: -180, south, east: 180, north };
+  const shift = wrapLongitude(west) - west;
+  west += shift;
+  east += shift;
+  return { west, south, east, north };
+}
+
+export function bboxContains(coverage: Bbox, viewport: Bbox): boolean {
+  const outer = normalizeBbox(coverage);
+  const inner = normalizeBbox(viewport);
+  return (
+    outer.south <= inner.south &&
+    outer.north >= inner.north &&
+    outer.west <= inner.west &&
+    outer.east >= inner.east
+  );
 }
 
 function axis(min: number, max: number, n: number): number[] {

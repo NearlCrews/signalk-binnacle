@@ -7,15 +7,23 @@ import {
   type ZoneState,
   zoneStateFor,
 } from '$shared/signalk';
-import { discoverBatteries } from './battery-discovery';
+import {
+  discoverInstrumentInstances,
+  EMPTY_INSTANCES,
+  type InstrumentInstances,
+} from './instance-discovery';
 import {
   ALL_CATALOG_PATHS,
   batteryDefsFor,
   CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
+  insideDefsFor,
   minPeriodFor,
+  propulsionDefsFor,
+  solarDefsFor,
   TILE_CATALOG,
   type TileDef,
+  tankDefsFor,
   tileById,
 } from './tile-catalog';
 
@@ -33,12 +41,14 @@ export interface InstrumentsController {
   readonly open: boolean;
   readonly tiles: TileDef[];
   readonly selectedIds: readonly string[];
-  // The full catalog available in Customize mode: static tiles plus discovered battery instances.
+  // The full catalog available in Customize mode: static tiles plus discovered Signal K instances.
   readonly catalog: TileDef[];
+  readonly discovering: boolean;
   toggleOpen(): void;
   setOpen(open: boolean): void;
   toggleTile(id: string): void;
   reorderTile(id: string, slot: number): void;
+  refreshCatalog(): void;
   zoneState(def: TileDef, value: number | undefined): ZoneState;
   dispose(): void;
 }
@@ -48,14 +58,15 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   // Per-zonesPath meta cache: null means "fetch attempted, no zones found"; absent means "not yet fetched".
   const metaCache = new Map<string, PathMeta | null>();
-  const batteryDefCache = new Map<string, TileDef[]>();
+  const dynamicDefCache = new Map<string, TileDef[]>();
   // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
   let metaVersion = $state(0);
 
-  // Discovered battery instance ids; populated on first open and never re-fetched.
+  // Discovered Signal K instance ids; populated on first open and user-refreshable from Customize.
   // Replace-only (assigned wholesale, never mutated in place), so raw state skips deep proxy wrapping.
-  let batteryInstances = $state.raw<string[]>([]);
+  let instances = $state.raw<InstrumentInstances>(EMPTY_INSTANCES);
   let discoveryDone = false;
+  let discovering = $state(false);
 
   // Tracks which paths are currently subscribed via deps.subscribe, so syncSubscriptions can
   // diff desired against live and issue only the delta.
@@ -129,18 +140,38 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   }
 
   // Runs once per controller construction when the dock is first opened. Discovery is fire-and-
-  // forget; a failure leaves batteryInstances empty, which is a safe degrade.
-  function discoverOnce(): void {
-    if (discoveryDone) return;
+  // forget; a failure leaves dynamic instances empty, which is a safe degrade.
+  function ensureDynamicCells(next: InstrumentInstances): void {
+    deps.store.ensureCells([
+      ...next.batteries.flatMap((id) => batteryDefsFor(id).flatMap((def) => def.paths)),
+      ...next.propulsion.flatMap((id) => propulsionDefsFor(id).flatMap((def) => def.paths)),
+      ...next.tanks.flatMap((id) => tankDefsFor(id).flatMap((def) => def.paths)),
+      ...next.solar.flatMap((id) => solarDefsFor(id).flatMap((def) => def.paths)),
+      ...next.inside.flatMap((id) => insideDefsFor(id).flatMap((def) => def.paths)),
+    ]);
+  }
+
+  function discover(refresh = false): void {
+    if (discoveryDone && !refresh) return;
     discoveryDone = true;
-    void discoverBatteries(deps.origin, deps.getToken()).then((instances) => {
-      batteryInstances = instances;
-      if (instances.length > 0) {
-        deps.store.ensureCells(
-          instances.flatMap((id) => batteryDefsFor(id).flatMap((def) => def.paths)),
-        );
-      }
-    });
+    discovering = true;
+    void discoverInstrumentInstances(deps.origin, deps.getToken())
+      .then((next) => {
+        instances = next;
+        ensureDynamicCells(next);
+        syncSubscriptions();
+        if (deps.openStore.value) fetchMetaForSelected();
+      })
+      .catch(() => {
+        instances = EMPTY_INSTANCES;
+      })
+      .finally(() => {
+        discovering = false;
+      });
+  }
+
+  function refreshCatalog(): void {
+    discover(true);
   }
 
   function setOpen(open: boolean): void {
@@ -148,7 +179,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     syncSubscriptions();
     if (open) {
       fetchMetaForSelected();
-      discoverOnce();
+      discover();
     }
   }
 
@@ -215,7 +246,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   syncSubscriptions();
   if (deps.openStore.value) {
     fetchMetaForSelected();
-    discoverOnce();
+    discover();
   }
 
   return {
@@ -229,24 +260,36 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return selectedIds;
     },
     get catalog(): TileDef[] {
-      // Static catalog first, then one def per discovered battery instance, memoized per id so a
-      // reactive read does not allocate fresh defs every pass.
+      // Static catalog first, then discovered instance defs, memoized per family and id so a reactive
+      // read does not allocate fresh defs every pass.
+      const cached = (family: string, id: string, create: () => TileDef[]) => {
+        const key = `${family}:${id}`;
+        let defs = dynamicDefCache.get(key);
+        if (!defs) {
+          defs = create();
+          dynamicDefCache.set(key, defs);
+        }
+        return defs;
+      };
       return [
         ...TILE_CATALOG,
-        ...batteryInstances.flatMap((id) => {
-          let defs = batteryDefCache.get(id);
-          if (!defs) {
-            defs = batteryDefsFor(id);
-            batteryDefCache.set(id, defs);
-          }
-          return defs;
-        }),
+        ...instances.batteries.flatMap((id) => cached('battery', id, () => batteryDefsFor(id))),
+        ...instances.propulsion.flatMap((id) =>
+          cached('propulsion', id, () => propulsionDefsFor(id)),
+        ),
+        ...instances.tanks.flatMap((id) => cached('tank', id, () => tankDefsFor(id))),
+        ...instances.solar.flatMap((id) => cached('solar', id, () => solarDefsFor(id))),
+        ...instances.inside.flatMap((id) => cached('inside', id, () => insideDefsFor(id))),
       ];
+    },
+    get discovering() {
+      return discovering;
     },
     toggleOpen,
     setOpen,
     toggleTile,
     reorderTile,
+    refreshCatalog,
     zoneState,
     dispose,
   };

@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Bbox, RadarData, WeatherGrid, WeatherStore } from '$entities/weather';
 import { createExpiringStore } from '$shared/storage';
-import { createWeatherLoader, weatherCacheKey } from './weather-loader';
+import type { fetchRadar } from './rainviewer-client';
+import type { fetchForecast, fetchMarine } from './weather-client';
+import { createWeatherLoader, weatherCacheKey, weatherCoverageBucket } from './weather-loader';
 
 const BBOX: Bbox = { west: 1, south: 2, east: 3, north: 4 };
 const OPTS = { maxCells: 600, forecastDays: 5 };
-const FAKE_GRID = { id: 'grid' } as unknown as WeatherGrid;
+function gridFor(bbox: Bbox, id = 'grid'): WeatherGrid {
+  return {
+    lats: [bbox.south, bbox.north],
+    lons: [bbox.west, bbox.east],
+    times: [0],
+    windU: [[0, 0, 0, 0]],
+    windV: [[0, 0, 0, 0]],
+    id,
+  } as WeatherGrid & { id: string };
+}
+
+const FAKE_GRID = gridFor(BBOX);
 const FAKE_RADAR = { host: 'h', frames: [] } as unknown as RadarData;
 
 function makeStore() {
@@ -30,9 +43,9 @@ function makeStore() {
 
 function makeDeps(nowRef: { ms: number }) {
   return {
-    forecast: vi.fn(async () => FAKE_GRID),
-    marine: vi.fn(async () => undefined),
-    radar: vi.fn(async () => FAKE_RADAR),
+    forecast: vi.fn<typeof fetchForecast>(async (bbox) => gridFor(bbox)),
+    marine: vi.fn<typeof fetchMarine>(async () => undefined),
+    radar: vi.fn<typeof fetchRadar>(async () => FAKE_RADAR),
     now: () => nowRef.ms,
     // A fresh in-memory persistent store per test (factory: undefined forces the memory fallback).
     persist: createExpiringStore<WeatherGrid>('test', { factory: undefined }),
@@ -40,10 +53,25 @@ function makeDeps(nowRef: { ms: number }) {
 }
 
 describe('weatherCacheKey', () => {
-  it('quantizes nearby bboxes to the same key', () => {
-    const a = weatherCacheKey({ west: 1.0, south: 2.0, east: 3.0, north: 4.0 }, OPTS, false);
-    const b = weatherCacheKey({ west: 1.01, south: 1.99, east: 3.02, north: 4.0 }, OPTS, false);
+  it('keys equivalent viewports by their canonical coverage bucket', () => {
+    const a = weatherCacheKey({ west: 1.01, south: 2.01, east: 2.99, north: 3.99 }, OPTS, false);
+    const b = weatherCacheKey({ west: 1.02, south: 2.02, east: 2.98, north: 3.98 }, OPTS, false);
     expect(a).toBe(b);
+    expect(weatherCacheKey({ west: 170, south: 2, east: 190, north: 4 }, OPTS, false)).toBe(
+      weatherCacheKey({ west: -190, south: 2, east: -170, north: 4 }, OPTS, false),
+    );
+    expect(weatherCacheKey({ west: 170, south: 2, east: -170, north: 4 }, OPTS, false)).toBe(
+      weatherCacheKey({ west: 170, south: 2, east: 190, north: 4 }, OPTS, false),
+    );
+  });
+
+  it('rounds coverage outward', () => {
+    expect(weatherCoverageBucket({ west: 1.01, south: 2.02, east: 2.99, north: 3.98 })).toEqual({
+      west: 1,
+      south: 2,
+      east: 3,
+      north: 4,
+    });
   });
 
   it('separates marine from atmospheric-only', () => {
@@ -153,14 +181,17 @@ describe('createWeatherLoader', () => {
   it('drops a superseded load so an older viewport cannot overwrite a newer grid', async () => {
     const nowRef = { ms: 0 };
     const deps = makeDeps(nowRef);
-    const slowGrid = { id: 'slow' } as unknown as WeatherGrid;
-    const fastGrid = { id: 'fast' } as unknown as WeatherGrid;
-    let releaseSlow!: (grid: WeatherGrid) => void;
+    const fastGrid = gridFor({ west: 10, south: 20, east: 30, north: 40 }, 'fast');
+    let firstStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
     deps.forecast
       .mockImplementationOnce(
-        () =>
-          new Promise<WeatherGrid>((resolve) => {
-            releaseSlow = resolve;
+        (_bbox, _opts, _fetchFn, signal) =>
+          new Promise<WeatherGrid>((_resolve, reject) => {
+            firstStarted();
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
           }),
       )
       .mockImplementationOnce(async () => fastGrid);
@@ -169,13 +200,59 @@ describe('createWeatherLoader', () => {
 
     const otherBbox: Bbox = { west: 10, south: 20, east: 30, north: 40 };
     const first = loader.load(store, BBOX, OPTS, { waves: false, radar: false });
+    await started;
     const second = loader.load(store, otherBbox, OPTS, { waves: false, radar: false });
     await second;
-    releaseSlow(slowGrid);
     await first;
 
     expect(grids).toHaveLength(1);
     expect((grids[0] as unknown as { id: string }).id).toBe('fast');
+  });
+
+  it('aborts superseded forecast, marine, and radar work without reporting failure', async () => {
+    const deps = makeDeps({ ms: 0 });
+    const signals: AbortSignal[] = [];
+    let startedCount = 0;
+    let allStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      allStarted = resolve;
+    });
+    const pending = (signal: AbortSignal | undefined) =>
+      new Promise<never>((_resolve, reject) => {
+        if (!signal) throw new Error('missing abort signal');
+        signals.push(signal);
+        startedCount += 1;
+        if (startedCount === 3) allStarted();
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    deps.forecast
+      .mockImplementationOnce((_bbox, _opts, _fetchFn, signal) => pending(signal))
+      .mockImplementationOnce(async (bbox) => gridFor(bbox, 'next'));
+    deps.marine.mockImplementationOnce((_bbox, _opts, _fetchFn, signal) => pending(signal));
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn((_input, init) => pending(init?.signal ?? undefined)) as typeof fetch;
+    deps.radar.mockImplementationOnce(async (fetchFn) => {
+      if (!fetchFn) throw new Error('missing fetch function');
+      await fetchFn('https://example.test/radar');
+      return undefined;
+    });
+    const loader = createWeatherLoader(deps);
+    const result = makeStore();
+
+    try {
+      const first = loader.load(result.store, BBOX, OPTS, { waves: true, radar: true });
+      await started;
+      const second = loader.load(result.store, BBOX, OPTS, { waves: false, radar: false });
+      await Promise.all([first, second]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(result.status).not.toContain('error');
+    expect(result.status).not.toContain('stale');
   });
 
   it('marks the store error when the first fetch fails, stale when a grid already exists', async () => {
@@ -241,5 +318,39 @@ describe('createWeatherLoader', () => {
     const loader = createWeatherLoader({ ...deps, persist });
     await loader.load(makeStore().store, BBOX, OPTS, { waves: false, radar: false });
     expect(deps.forecast).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses retained IndexedDB data as stale fallback after a refresh failure', async () => {
+    const nowRef = { ms: 2 * 60 * 60 * 1000 };
+    const persist = createExpiringStore<WeatherGrid>('shared', { factory: undefined });
+    const retained = { ...FAKE_GRID, fetchedAt: 0 };
+    await persist.put(weatherCacheKey(BBOX, OPTS, false), retained, nowRef.ms + 1000);
+    const deps = makeDeps(nowRef);
+    deps.forecast.mockResolvedValue(undefined as unknown as WeatherGrid);
+    const loader = createWeatherLoader({ ...deps, persist });
+    const result = makeStore();
+
+    await loader.load(result.store, BBOX, OPTS, { waves: false, radar: false });
+
+    expect(deps.forecast).toHaveBeenCalledTimes(1);
+    expect(result.grids).toEqual([retained]);
+    expect(result.status.at(-1)).toBe('stale');
+  });
+
+  it('does not reuse a cached grid that fails to cover the viewport', async () => {
+    const nowRef = { ms: 1000 };
+    const persist = createExpiringStore<WeatherGrid>('shared', { factory: undefined });
+    const tooSmall = {
+      ...gridFor({ west: 1.2, south: 2.2, east: 2.8, north: 3.8 }),
+      fetchedAt: 900,
+    };
+    await persist.put(weatherCacheKey(BBOX, OPTS, false), tooSmall, nowRef.ms + 1000);
+    const deps = makeDeps(nowRef);
+    const loader = createWeatherLoader({ ...deps, persist });
+
+    await loader.load(makeStore().store, BBOX, OPTS, { waves: false, radar: false });
+
+    expect(deps.forecast).toHaveBeenCalledTimes(1);
+    expect(deps.forecast.mock.calls[0][0]).toEqual(BBOX);
   });
 });

@@ -67,7 +67,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
   alarm bands, selections ride profiles, and an Open KIP item appears when KIP is installed.
 - **Weather:** a zoom-capped mini-map with animated WebGL wind, pressure isobars, waves,
-  precipitation, cloud, and radar, a tap-for-value readout, and a conditions and warnings panel.
+  precipitation, cloud, and radar, plus time-aware point readouts, marine forecasts, source and age
+  labels, deterministic risk cues, and official warnings when a Signal K weather provider supplies
+  them. Open-Meteo provides the key-free fallback, including wind waves, swell, currents, and sea
+  surface temperature, while cached forecasts remain available offline with explicit stale labeling.
 - **Tides:** the nearest tide station's next high and low with a 48-hour curve and the nearest
   tidal-current station's next flood or ebb. NOAA CO-OPS covers US waters out of the box; the
   signalk-tides plugin extends coverage worldwide when the server runs it.
@@ -264,7 +267,7 @@ open data and open source:
   [OpenFreeMap](https://openfreemap.org/) for the vector base map, built from
   [OpenStreetMap](https://www.openstreetmap.org/) data under the
   [Open Database License](https://opendatacommons.org/licenses/odbl/).
-- [Open-Meteo](https://open-meteo.com/) for the forecast and marine wave grids, and
+- [Open-Meteo](https://open-meteo.com/) for atmospheric and marine forecast grids, and
   [RainViewer](https://www.rainviewer.com/) for precipitation radar.
 - [NOAA](https://www.noaa.gov/) for the ENC chart, BlueTopo bathymetry, the MPA Inventory, and the
   CO-OPS tide and current predictions; [EMODnet](https://emodnet.ec.europa.eu/) for European

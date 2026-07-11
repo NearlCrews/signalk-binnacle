@@ -98,9 +98,10 @@ import { createWaypointsController, WaypointDialog } from '$features/waypoints';
 import {
   createPointConditionsLoader,
   createWeatherLoader,
-  defaultProviderName,
+  defaultProvider,
   fetchWeatherProviders,
   WEATHER_LAYER_IDS,
+  type WeatherProvider,
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
@@ -390,7 +391,7 @@ let weatherPanelOpen = $state(false);
 // The default Signal K weather provider's display name (for example AccuWeather), detected once the
 // stream connects. When set, the weather panel prefers the provider for point data and falls back to
 // the free grid; when undefined (no provider configured), the grid answers.
-let weatherProviderName = $state<string | undefined>();
+let weatherProvider = $state<WeatherProvider | undefined>();
 // The panel's own weather-layer visibility, separate from the nav chart. Default wind and
 // waves on so the first open shows something without hunting through toggles. The panel carries no
 // persisted view of its own: it always opens where the nav chart is looking.
@@ -1545,7 +1546,7 @@ async function connectStream(token: string | undefined): Promise<void> {
 // onto the free fallback. An answered {} genuinely means no provider and clears it.
 async function refreshWeatherProvider(token: string | undefined): Promise<void> {
   const providers = await fetchWeatherProviders(origin, token);
-  if (providers !== undefined) weatherProviderName = defaultProviderName(providers);
+  if (providers !== undefined) weatherProvider = defaultProvider(providers);
 }
 
 // Keyed on the auth token rather than run once at first connect, so a token that arrives later
@@ -1764,7 +1765,7 @@ onDestroy(() => {
     {historyProviders}
     {serverFeatures}
     {notificationsApi}
-    {weatherProviderName}
+    {weatherProvider}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
     {alarmActionError}

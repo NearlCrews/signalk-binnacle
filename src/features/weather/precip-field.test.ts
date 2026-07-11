@@ -34,4 +34,14 @@ describe('precipFieldRgba', () => {
     g.precipitation = undefined;
     expect(precipFieldRgba(g, bracket, 'day')).toBeUndefined();
   });
+
+  it('holds the preceding-hour value instead of smearing totals between hours', () => {
+    const g = grid();
+    g.times = [0, 3_600_000];
+    g.precipitation = [new Array(4).fill(0), new Array(4).fill(10)];
+    g.precipitationInterpolation = 'step';
+    const halfway = precipFieldRgba(g, { lo: 0, hi: 1, frac: 0.5 }, 'day');
+    const alpha = Array.from(halfway?.data ?? []).filter((_, index) => index % 4 === 3);
+    expect(alpha.every((value) => value === 0)).toBe(true);
+  });
 });

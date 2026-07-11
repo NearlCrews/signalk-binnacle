@@ -39,6 +39,13 @@ function body(props: ReturnType<typeof baseProps>): string {
 }
 
 describe('StatusStrip depth alarm', () => {
+  it('shows the toolbar clock as local time, not UTC', () => {
+    const html = body(baseProps());
+    expect(html).toContain('title="Local time"');
+    expect(html).not.toContain('UTC time');
+    expect(html).not.toContain('UTC</b>');
+  });
+
   it('does not mark the Depth readout when the shallow alarm is not sounding', () => {
     const html = body(baseProps());
     expect(html).not.toContain('depth-alarm');

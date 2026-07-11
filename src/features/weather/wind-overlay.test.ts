@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { WeatherStore } from '$entities/weather';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { createFakeMap } from '$shared/testing/fake-map';
@@ -30,6 +30,7 @@ describe('wind overlay', () => {
   it('adds a source and a line layer in the weather band', () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
+    Object.assign(map, { triggerRepaint: vi.fn() });
     overlay.add(ctxFor(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(1);
@@ -39,11 +40,18 @@ describe('wind overlay', () => {
   it('syncs the arrow features from the grid', () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
+    Object.assign(map, { triggerRepaint: vi.fn() });
     overlay.add(ctxFor(map));
     overlay.sync(ctxFor(map));
+    const hidden = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
+    expect(hidden.features).toHaveLength(0);
+
+    overlay.setVisible(ctxFor(map), true);
     const source = [...map.sources.values()][0];
     const fc = source.data as GeoJSON.FeatureCollection;
     expect(fc.features).toHaveLength(4);
+    overlay.sync(ctxFor(map));
+    expect(source.data).toBe(fc);
   });
 
   it('removes its layer and source', () => {

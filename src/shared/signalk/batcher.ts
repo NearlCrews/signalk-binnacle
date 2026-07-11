@@ -1,4 +1,4 @@
-import type { Value } from './types';
+import type { PathSource, Value } from './types';
 
 // A scheduler returns a cancel function, so a pending flush can be dropped on teardown rather than
 // firing into a store the app is disposing.
@@ -25,9 +25,15 @@ const defaultSchedule: Schedule =
       };
 
 export class FrameBatcher {
-  onFlush?: (self: Map<string, Value>, ais: Map<string, Map<string, Value>>, epoch: number) => void;
+  onFlush?: (
+    self: Map<string, Value>,
+    ais: Map<string, Map<string, Value>>,
+    epoch: number,
+    selfSources?: Map<string, PathSource>,
+  ) => void;
 
   #self = new Map<string, Value>();
+  #selfSources = new Map<string, PathSource>();
   #ais = new Map<string, Map<string, Value>>();
   #scheduled = false;
   #cancel: (() => void) | undefined;
@@ -37,8 +43,9 @@ export class FrameBatcher {
     this.#schedule = schedule;
   }
 
-  put(path: string, value: Value): void {
+  put(path: string, value: Value, source?: PathSource): void {
     this.#self.set(path, value);
+    if (source) this.#selfSources.set(path, source);
     this.#mark();
   }
 
@@ -59,6 +66,7 @@ export class FrameBatcher {
     this.#cancel = undefined;
     this.#scheduled = false;
     this.#self.clear();
+    this.#selfSources.clear();
     this.#ais.clear();
   }
 
@@ -77,9 +85,11 @@ export class FrameBatcher {
     // to a plain object on the hot path. Subsequent puts land in the new maps, not the handed-off
     // ones.
     const self = this.#self;
+    const selfSources = this.#selfSources.size > 0 ? this.#selfSources : undefined;
     const ais = this.#ais;
     this.#self = new Map();
+    this.#selfSources = new Map();
     this.#ais = new Map();
-    this.onFlush?.(self, ais, epoch);
+    this.onFlush?.(self, ais, epoch, selfSources);
   }
 }

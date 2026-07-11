@@ -11,6 +11,8 @@ export const SK_PATHS = {
   speedOverGround: 'navigation.speedOverGround',
   closestApproach: 'navigation.closestApproach',
   depthBelowTransducer: 'environment.depth.belowTransducer',
+  depthBelowKeel: 'environment.depth.belowKeel',
+  depthBelowSurface: 'environment.depth.belowSurface',
   windSpeedApparent: 'environment.wind.speedApparent',
   outsidePressure: 'environment.outside.pressure',
   waterTemperature: 'environment.water.temperature',

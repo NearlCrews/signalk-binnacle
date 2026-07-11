@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bilinearAt,
   nearestGridTime,
+  normalizeBbox,
   sampleGrid,
   timeBracket,
   type WeatherGrid,
@@ -29,6 +30,34 @@ describe('sampleGrid', () => {
     expect(g.lons[g.lons.length - 1]).toBeCloseTo(10, 6);
     expect(g.lats[0]).toBeCloseTo(40, 6);
     expect(g.lats[g.lats.length - 1]).toBeCloseTo(50, 6);
+  });
+
+  it('honors maxCells for extremely wide and tall viewports', () => {
+    const wide = sampleGrid({ west: -180, south: 0, east: 180, north: 0.02 }, 64);
+    const tall = sampleGrid({ west: 0, south: -90, east: 0.02, north: 90 }, 64);
+    expect(wide.lats.length * wide.lons.length).toBeLessThanOrEqual(64);
+    expect(tall.lats.length * tall.lons.length).toBeLessThanOrEqual(64);
+    expect(wide.lats.length).toBe(2);
+    expect(tall.lons.length).toBe(2);
+  });
+});
+
+describe('normalizeBbox', () => {
+  it.each([
+    [
+      { west: 170, south: -10, east: 190, north: 10 },
+      { west: 170, south: -10, east: 190, north: 10 },
+    ],
+    [
+      { west: -190, south: -10, east: -170, north: 10 },
+      { west: 170, south: -10, east: 190, north: 10 },
+    ],
+    [
+      { west: 170, south: -10, east: -170, north: 10 },
+      { west: 170, south: -10, east: 190, north: 10 },
+    ],
+  ])('normalizes world copies and crossings %#', (input, expected) => {
+    expect(normalizeBbox(input)).toEqual(expected);
   });
 });
 

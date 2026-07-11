@@ -33,6 +33,15 @@ export interface WeatherReadout {
   waveHeightM?: number; // present only when the grid carries waves
   wavePeriodS?: number;
   waveFromRad?: number; // direction the waves come from, radians, 0..2pi
+  windWaveHeightM?: number;
+  windWavePeriodS?: number;
+  windWaveFromRad?: number;
+  swellHeightM?: number;
+  swellPeriodS?: number;
+  swellFromRad?: number;
+  currentSpeedMs?: number;
+  currentDirectionRad?: number; // direction the current flows toward
+  waterTempK?: number;
   precipitationMm?: number; // present only when the source carries precipitation
   // Whether precipitationMm is a rate (mm/h, the free grid) or an accumulation volume (mm, the
   // provider), carried in the data so every display labels it the same way.
@@ -53,6 +62,15 @@ export function conditionsFromReadout(r: WeatherReadout, timeMs: number): PointC
     waveHeightM: r.waveHeightM,
     wavePeriodS: r.wavePeriodS,
     waveFromRad: r.waveFromRad,
+    windWaveHeightM: r.windWaveHeightM,
+    windWavePeriodS: r.windWavePeriodS,
+    windWaveFromRad: r.windWaveFromRad,
+    swellHeightM: r.swellHeightM,
+    swellPeriodS: r.swellPeriodS,
+    swellFromRad: r.swellFromRad,
+    currentSpeedMs: r.currentSpeedMs,
+    currentDirectionRad: r.currentDirectionRad,
+    waterTempK: r.waterTempK,
     precipitationMm: r.precipitationMm,
     precipIsRate: r.precipIsRate,
   };
@@ -100,7 +118,31 @@ export function readoutAtBracket(
       fieldAt(grid, grid.waveDirection, hi, lon, lat),
       frac,
     ),
-    precipitationMm: scalar(grid.precipitation),
+    windWaveHeightM: scalar(grid.windWaveHeight),
+    windWavePeriodS: scalar(grid.windWavePeakPeriod ?? grid.windWavePeriod),
+    windWaveFromRad: circularOr(
+      fieldAt(grid, grid.windWaveDirection, lo, lon, lat),
+      fieldAt(grid, grid.windWaveDirection, hi, lon, lat),
+      frac,
+    ),
+    swellHeightM: scalar(grid.swellWaveHeight),
+    swellPeriodS: scalar(grid.swellWavePeakPeriod ?? grid.swellWavePeriod),
+    swellFromRad: circularOr(
+      fieldAt(grid, grid.swellWaveDirection, lo, lon, lat),
+      fieldAt(grid, grid.swellWaveDirection, hi, lon, lat),
+      frac,
+    ),
+    currentSpeedMs: scalar(grid.oceanCurrentSpeed),
+    currentDirectionRad: circularOr(
+      fieldAt(grid, grid.oceanCurrentDirection, lo, lon, lat),
+      fieldAt(grid, grid.oceanCurrentDirection, hi, lon, lat),
+      frac,
+    ),
+    waterTempK: scalar(grid.seaSurfaceTemperature),
+    precipitationMm:
+      grid.precipitationInterpolation === 'step'
+        ? fieldAt(grid, grid.precipitation, lo, lon, lat)
+        : scalar(grid.precipitation),
     precipIsRate: true,
     cloudCoverFraction: scalar(grid.cloudCover),
   };

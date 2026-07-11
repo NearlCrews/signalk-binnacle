@@ -9,6 +9,7 @@ import {
   type Delta,
   INITIAL_CONNECTION_STATE,
   type Path,
+  type PathSource,
   SELF_CONTEXT,
   type SKFrame,
   type SubscribeEntry,
@@ -52,9 +53,10 @@ export class WorkerCore {
       onDelta: (raw) => this.#ingest(raw),
       onOpen: () => this.#registry.resubscribeAll(),
     });
-    this.#batcher.onFlush = (self, ais, epoch) => {
+    this.#batcher.onFlush = (self, ais, epoch, selfSources) => {
       this.#onFrame?.({
         self,
+        selfSources,
         ais,
         connection: this.#connectionState,
         epoch,
@@ -99,9 +101,9 @@ export class WorkerCore {
 
   // One routing callback for the life of the core, not a fresh closure per #ingest: reconciling
   // runs on the hottest path, once per incoming delta frame.
-  #route = (context: Context, path: Path, value: Value): void => {
+  #route = (context: Context, path: Path, value: Value, source?: PathSource): void => {
     if (this.#isSelf(context)) {
-      this.#batcher.put(path, value);
+      this.#batcher.put(path, value, source);
     } else {
       this.#batcher.putVessel(context, path, value);
     }

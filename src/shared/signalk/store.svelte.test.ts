@@ -23,6 +23,29 @@ describe('SignalKStore', () => {
     expect(store.cell('navigation.speedOverGround').value).toBe(5.1);
   });
 
+  it('stores source metadata for a self path when the frame provides it', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5.1]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'NMEA2000.35' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    expect(store.cell('navigation.speedOverGround').source?.label).toBe('NMEA2000.35');
+  });
+
+  it('clears source metadata when a later frame for the path has no source', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5.1]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'NMEA2000.35' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    store.applyFrame(frame({ 'navigation.speedOverGround': 5.2 }));
+    expect(store.cell('navigation.speedOverGround').source).toBeUndefined();
+  });
+
   it('bumps aisVersion only when a context actually updates', () => {
     const store = new SignalKStore();
     const before = store.aisVersion;

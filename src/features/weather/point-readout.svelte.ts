@@ -5,7 +5,8 @@ import {
   fetchPointForecasts,
   NEAR_NOW_MS,
   nearestInTimeBounded,
-  readoutFromSignalK,
+  providerDisplayName,
+  providerReadoutContribution,
 } from './signalk-weather';
 import { readoutAtBracket, type WeatherReadout } from './weather-readout';
 
@@ -17,9 +18,12 @@ export interface PointReadoutDeps {
   origin: string;
   // The Signal K auth token, when one is configured.
   token: () => string | undefined;
+  fetchFn?: typeof fetch;
   // The default weather provider's display name, when one is configured. With a provider the tap
   // prefers it and falls back to the free grid; without one the grid answers.
   providerName: () => string | undefined;
+  // The stable provider map key used to pin API requests. Kept separate from the display name.
+  providerId?: () => string | undefined;
   // How many weather layers are on: the grid sample only shows when at least one is, matching the
   // overlays drawn under the finger.
   activeCount: () => number;
@@ -32,6 +36,36 @@ const READOUT_DISMISS_MS = 8000;
 
 // Enough forecast steps to cover scrubbing past the panel window.
 const TAP_FORECAST_COUNT = 48;
+
+export function mergePointReadouts(
+  provider: Partial<WeatherReadout> | undefined,
+  grid: WeatherReadout | undefined,
+  providerName: string,
+): { value: WeatherReadout; source: string } | undefined {
+  const providerValues = provider
+    ? Object.entries(provider).filter(([, value]) => value !== undefined)
+    : [];
+  const merged = { ...grid, ...Object.fromEntries(providerValues) } as Partial<WeatherReadout>;
+  if (merged.speedMs === undefined || merged.fromRad === undefined) return undefined;
+  const value = merged as WeatherReadout;
+  if (providerValues.length === 0) return { value, source: GRID_SOURCE_LABEL };
+  const gridContributed = grid
+    ? Object.keys(grid).some((key) => provider?.[key as keyof WeatherReadout] === undefined)
+    : false;
+  return {
+    value,
+    source: gridContributed ? `${providerName} + ${GRID_SOURCE_LABEL}` : providerName,
+  };
+}
+
+export function isCurrentReadoutRequest(
+  requestSequence: number,
+  activeSequence: number,
+  requestedTime: number,
+  selectedTime: number,
+): boolean {
+  return requestSequence === activeSequence && requestedTime === selectedTime;
+}
 
 // The point-tap readout: the conditions at the tapped point for the selected time, with a fast grid
 // sample shown immediately and a configured provider upgrading it when it answers. Owns the readout
@@ -49,6 +83,8 @@ export function createPointReadout(deps: PointReadoutDeps) {
   let readoutHeld = false;
   // Each tap bumps this so a slow provider response from an earlier tap cannot overwrite a newer one.
   let tapSeq = 0;
+  let tappedPoint: { lat: number; lon: number } | undefined;
+  let requestedTime = 0;
 
   function clearReadoutTimer(): void {
     if (readoutTimer) clearTimeout(readoutTimer);
@@ -81,53 +117,101 @@ export function createPointReadout(deps: PointReadoutDeps) {
     if (readout && !readoutTimer) readoutTimer = setTimeout(dismiss, READOUT_DISMISS_MS);
   }
 
-  async function providerReadout(lat: number, lon: number): Promise<WeatherReadout | undefined> {
-    const target = deps.store().selectedTime;
+  async function providerReadout(
+    providerId: string,
+    lat: number,
+    lon: number,
+    target: number,
+  ): Promise<Partial<WeatherReadout> | undefined> {
     // selectedTime of 0 means no grid has seeded the slider yet: no meaningful target to query.
     if (target === 0) return undefined;
     if (Math.abs(target - Date.now()) < NEAR_NOW_MS) {
-      const obs = await fetchObservations(deps.origin, lat, lon, deps.token());
-      const reading = obs && readoutFromSignalK(obs);
-      if (reading) return reading;
+      const obs = await fetchObservations(
+        deps.origin,
+        providerId,
+        lat,
+        lon,
+        deps.token(),
+        deps.fetchFn,
+      );
+      const reading = obs ? providerReadoutContribution(obs) : undefined;
+      if (reading && Object.values(reading).some((value) => value !== undefined)) return reading;
     }
     // Bounded: past the provider's horizon its last step must not answer for a time days away; the
     // caller falls back to the grid sample instead.
     const series = await fetchPointForecasts(
       deps.origin,
+      providerId,
       lat,
       lon,
       TAP_FORECAST_COUNT,
       deps.token(),
+      deps.fetchFn,
     );
     const step = series && nearestInTimeBounded(series, target);
-    return step ? readoutFromSignalK(step) : undefined;
+    return step ? providerReadoutContribution(step) : undefined;
+  }
+
+  function mergeReadout(
+    provider: Partial<WeatherReadout> | undefined,
+    grid: WeatherReadout | undefined,
+  ): { value: WeatherReadout; source: string } | undefined {
+    const id = deps.providerId?.() ?? deps.providerName();
+    const providerName = deps.providerId
+      ? (deps.providerName() ?? (id ? providerDisplayName(id) : 'Weather provider'))
+      : id
+        ? providerDisplayName(id)
+        : 'Weather provider';
+    return mergePointReadouts(provider, grid, providerName);
   }
 
   // Conditions at the tapped point for the selected time. The free-grid sample (blended across the
   // time bracket, exactly as the fields are drawn) shows IMMEDIATELY; a configured provider then
   // upgrades it when it answers, so a slow boat link never leaves the tap looking dead.
-  async function onTap(lng: number, lat: number): Promise<void> {
+  async function resolveTap(lng: number, lat: number, target: number): Promise<void> {
     const seq = ++tapSeq;
     const store = deps.store();
-    const providerName = deps.providerName();
+    requestedTime = target;
+    const providerId = deps.providerId?.() ?? deps.providerName();
     const gridSample =
       deps.activeCount() > 0 && store.grid
         ? readoutAtBracket(store.grid, lng, lat, store.bracket)
         : undefined;
-    if (!providerName) {
+    if (!providerId) {
       showReadout(gridSample, gridSample ? GRID_SOURCE_LABEL : undefined);
       return;
     }
     if (gridSample) showReadout(gridSample, GRID_SOURCE_LABEL);
     else readoutPending = true;
-    const value = await providerReadout(lat, lng);
-    if (deps.isDestroyed() || seq !== tapSeq) return;
+    const provider = await providerReadout(providerId, lat, lng, target);
+    if (
+      deps.isDestroyed() ||
+      !isCurrentReadoutRequest(seq, tapSeq, target, deps.store().selectedTime)
+    ) {
+      return;
+    }
     readoutPending = false;
-    if (value) showReadout(value, providerName);
+    const merged = mergeReadout(provider, gridSample);
+    if (merged) showReadout(merged.value, merged.source);
     else if (!gridSample) dismiss();
   }
 
+  async function onTap(lng: number, lat: number): Promise<void> {
+    tappedPoint = { lat, lon: lng };
+    return resolveTap(lng, lat, deps.store().selectedTime);
+  }
+
+  // Keep the last tapped point synchronized with time scrubbing. Starting the replacement request
+  // increments tapSeq, so the old time can never land after the new one.
+  $effect(() => {
+    const target = deps.store().selectedTime;
+    if (!tappedPoint || target === requestedTime) return;
+    void resolveTap(tappedPoint.lon, tappedPoint.lat, target);
+  });
+
   function destroy(): void {
+    tapSeq += 1;
+    tappedPoint = undefined;
     clearReadoutTimer();
   }
 

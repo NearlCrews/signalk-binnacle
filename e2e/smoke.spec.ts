@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// Smoke tests route selected external APIs. Blocking service workers keeps those requests visible
+// to Playwright instead of letting a previously installed worker bypass the route hooks.
+test.use({ serviceWorkers: 'block' });
+
 test('app shell renders the brand and a connection status', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Binnacle')).toBeVisible();
@@ -88,9 +92,16 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
   // Default tiles render their plain labels.
   await expect(dock.getByText('Speed', { exact: false }).first()).toBeVisible();
+  await dock.getByRole('button', { name: /Open Speed details/ }).click();
+  await expect(dock.getByRole('button', { name: 'Back to instruments' })).toBeVisible();
+  await expect(dock.getByRole('heading', { name: 'Signal K paths' })).toBeVisible();
+  await expect(dock.getByText('navigation.speedOverGround')).toBeVisible();
+  await dock.getByRole('button', { name: 'Back to instruments' }).click();
   // Customize flips to the catalog rows and back.
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect(dock.getByText('Tap an instrument to show or hide', { exact: false })).toBeVisible();
+  await expect(dock.getByRole('button', { name: /Rescan|Scanning/ })).toBeVisible();
+  await expect(dock.getByRole('heading', { name: 'Navigation' })).toBeVisible();
   await dock.getByRole('button', { name: 'Done' }).click();
   // Close from the header returns to the chart-only shell.
   await dock.getByRole('button', { name: 'Close instruments dock' }).click();
@@ -140,4 +151,68 @@ test('instrument tiles take the full screen under the breakpoint with their own 
   // Full-screen mode swaps the close label; this chrome is the only way back on a phone.
   await dock.getByRole('button', { name: 'Close instruments, return to chart' }).click();
   await expect(dock).not.toBeVisible();
+});
+
+test('weather remains usable without horizontal overflow on a narrow phone', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'binnacle:weather-layers',
+      JSON.stringify({ 'weather-wind': { visible: true, opacity: 1 } }),
+    );
+  });
+  let forecastRequests = 0;
+  await page.context().route(/api\.open-meteo\.com\/v1\/forecast/, async (route) => {
+    forecastRequests += 1;
+    const url = new URL(route.request().url());
+    const lats = (url.searchParams.get('latitude') ?? '').split(',').map(Number);
+    const lons = (url.searchParams.get('longitude') ?? '').split(',').map(Number);
+    const start = Math.floor(Date.now() / 3_600_000) * 3600;
+    const time = [start, start + 3600, start + 7200];
+    const records = lats.map((latitude, index) => ({
+      latitude,
+      longitude: lons[index],
+      hourly: {
+        time,
+        wind_speed_10m: [6, 7, 8],
+        wind_direction_10m: [225, 230, 235],
+        wind_gusts_10m: [9, 10, 11],
+        pressure_msl: [1012, 1011, 1010],
+        precipitation: [0, 0.4, 0.8],
+        cloud_cover: [20, 40, 60],
+      },
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(records),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Forecast' }).click();
+
+  const panel = page.locator('#weather-panel');
+  await expect(panel).toBeVisible();
+  await expect.poll(() => forecastRequests).toBeGreaterThan(0);
+  await expect(panel.getByRole('slider')).toBeVisible();
+  await expect
+    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      panel
+        .locator('.weather-footer')
+        .evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+    )
+    .toBe(true);
+
+  const mapBox = await panel.locator('.panel-map').boundingBox();
+  const controlBox = await panel.locator('.scrubber button').first().boundingBox();
+  const timeBox = await panel.locator('.scrubber .time').boundingBox();
+  if (!mapBox || !controlBox || !timeBox) throw new Error('weather panel did not lay out');
+  expect(mapBox.height).toBeGreaterThan(100);
+  expect(timeBox.y).toBeGreaterThanOrEqual(controlBox.y + controlBox.height - 1);
 });

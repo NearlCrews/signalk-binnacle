@@ -4,7 +4,6 @@ import {
   isBasemapStyle,
   isChartTile,
   isCoopsRequest,
-  isOpenMeteo,
   isOverlayTile,
   isRadarIndex,
   isRadarTile,
@@ -49,10 +48,16 @@ describe('service worker route matchers', () => {
     expect(isRadarTile(ctx('https://api.rainviewer.com/public/weather-maps.json'))).toBe(false);
   });
 
-  it('matches Open-Meteo subdomains and rejects lookalike hosts', () => {
-    expect(isOpenMeteo(ctx('https://api.open-meteo.com/v1/forecast?latitude=44'))).toBe(true);
-    expect(isOpenMeteo(ctx('https://marine-api.open-meteo.com/v1/marine'))).toBe(true);
-    expect(isOpenMeteo(ctx('https://evilopen-meteo.com/v1/forecast'))).toBe(false);
+  it('does not cache Open-Meteo JSON and rejects radar lookalike hosts', () => {
+    const weather = [
+      ctx('https://api.open-meteo.com/v1/forecast?latitude=44'),
+      ctx('https://marine-api.open-meteo.com/v1/marine'),
+    ];
+    for (const entry of runtimeCaching) {
+      for (const request of weather) {
+        expect((entry.urlPattern as (c: typeof request) => boolean)(request)).toBe(false);
+      }
+    }
     expect(isRadarIndex(ctx('https://notrainviewer.com/maps.json'))).toBe(false);
   });
 

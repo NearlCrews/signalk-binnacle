@@ -71,6 +71,35 @@ describe('LayerManager', () => {
     expect(overlay.events.at(-1)).toBe('remove');
   });
 
+  it('dispose removes every overlay once and is idempotent', async () => {
+    const first = fakeOverlay('first');
+    const second = fakeOverlay('second');
+    const manager = new LayerManager(fakeCtx());
+    await manager.registerAll([first, second]);
+
+    manager.dispose();
+    manager.dispose();
+
+    expect(first.events.filter((event) => event === 'remove')).toHaveLength(1);
+    expect(second.events.filter((event) => event === 'remove')).toHaveLength(1);
+    expect(manager.layers()).toEqual([]);
+  });
+
+  it('dispose continues after one overlay cleanup throws', async () => {
+    const first = fakeOverlay('first');
+    const broken = fakeOverlay('broken');
+    broken.remove = () => {
+      throw new Error('cleanup failed');
+    };
+    const manager = new LayerManager(fakeCtx());
+    await manager.registerAll([first, broken]);
+
+    manager.dispose();
+
+    expect(first.events).toContain('remove');
+    expect(manager.layers()).toEqual([]);
+  });
+
   it('unregister drops the id from the persisted snapshot and saved order', async () => {
     const changes: Array<Record<string, { visible: boolean; opacity: number }>> = [];
     const orders: string[][] = [];

@@ -38,6 +38,11 @@ describe('pressure overlay', () => {
     const map = createFakeMap();
     overlay.add(ctxFor(map));
     overlay.sync(ctxFor(map));
+    const hidden = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
+    expect(hidden.features).toHaveLength(0);
+
+    overlay.setVisible(ctxFor(map), true);
+    overlay.sync(ctxFor(map));
     const fc = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBeGreaterThan(0);
   });

@@ -17,5 +17,23 @@ function severityRank(type: string): number {
 
 // Highest-severity first, without mutating the input list.
 export function sortWarnings(warnings: WeatherWarning[]): WeatherWarning[] {
-  return warnings.slice().sort((a, b) => severityRank(a.type) - severityRank(b.type));
+  return warnings
+    .slice()
+    .sort(
+      (a, b) =>
+        severityRank(a.type) - severityRank(b.type) ||
+        Date.parse(a.startTime) - Date.parse(b.startTime),
+    );
+}
+
+// Invalid windows are not active. An absent or malformed end time must not leave an advisory on
+// screen forever, and a future warning is not presented as currently in effect.
+export function activeWarnings(warnings: WeatherWarning[], nowMs: number): WeatherWarning[] {
+  return sortWarnings(
+    warnings.filter((warning) => {
+      const startMs = Date.parse(warning.startTime);
+      const endMs = Date.parse(warning.endTime);
+      return !Number.isNaN(startMs) && !Number.isNaN(endMs) && startMs <= nowMs && endMs > nowMs;
+    }),
+  );
 }

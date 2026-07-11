@@ -115,6 +115,12 @@
   --scrim: rgb(11 34 51 / 0.3);
 }
 
+@supports (height: 100dvh) {
+  :root {
+    --weather-panel-height: min(74dvh, 36rem);
+  }
+}
+
 :root[data-theme="dusk"] {
   color-scheme: dark;
 

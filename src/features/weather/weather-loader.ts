@@ -1,5 +1,12 @@
-import type { Bbox, RadarData, WeatherGrid, WeatherStore } from '$entities/weather';
-import { HOUR_MS, MINUTE_MS } from '$shared/lib';
+import {
+  type Bbox,
+  bboxContains,
+  normalizeBbox,
+  type RadarData,
+  type WeatherGrid,
+  type WeatherStore,
+} from '$entities/weather';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '$shared/lib';
 import { createExpiringStore, type ExpiringStore, MemoryCache } from '$shared/storage';
 import { fetchRadar } from './rainviewer-client';
 import { type ForecastOptions, fetchForecast, fetchMarine, mergeMarine } from './weather-client';
@@ -31,7 +38,10 @@ export interface WeatherLoader {
 // Open-Meteo model runs are hours apart, and the time slider shows the right hour from the cached
 // 5-day window regardless, so a forecast stays useful far longer than the old 30-minute TTL. An hour
 // keeps "now" reasonably fresh while roughly halving the request volume (and the rate-limit risk).
-const GRID_TTL_MS = HOUR_MS;
+const GRID_FRESH_MS = HOUR_MS;
+// Retain parsed grids beyond freshness so an offline reload can still show the latest known model.
+// `fetchedAt` decides freshness; this horizon only decides when IndexedDB may discard the fallback.
+const GRID_RETAIN_MS = 2 * DAY_MS;
 // Radar is a nowcast: RainViewer publishes a new frame about every 10 minutes, so keep it short.
 const RADAR_TTL_MS = 5 * MINUTE_MS;
 // The single key for the viewport-independent radar frame in its one-slot cache.
@@ -45,16 +55,28 @@ const MAX_GRID_ENTRIES = 16;
 // How long to stop fetching the grid after a failure, so a rate-limited state is not made worse.
 const GRID_FAIL_COOLDOWN_MS = MINUTE_MS;
 
-const quantize = (v: number): number => Math.round(v / QUANTIZE_DEG) * QUANTIZE_DEG;
+const bucketDown = (v: number): number => Math.floor(v / QUANTIZE_DEG) * QUANTIZE_DEG;
+const bucketUp = (v: number): number => Math.ceil(v / QUANTIZE_DEG) * QUANTIZE_DEG;
+
+export function weatherCoverageBucket(bbox: Bbox): Bbox {
+  const canonical = normalizeBbox(bbox);
+  return {
+    west: bucketDown(canonical.west),
+    south: bucketDown(canonical.south),
+    east: bucketUp(canonical.east),
+    north: bucketUp(canonical.north),
+  };
+}
 
 // A cache key quantized to a coarse grid so small pans reuse a recent fetch. The sampling options
 // and whether marine was merged are part of the key, since they change the grid's contents.
 export function weatherCacheKey(bbox: Bbox, opts: ForecastOptions, waves: boolean): string {
+  const bucket = weatherCoverageBucket(bbox);
   return [
-    quantize(bbox.west),
-    quantize(bbox.south),
-    quantize(bbox.east),
-    quantize(bbox.north),
+    bucket.west,
+    bucket.south,
+    bucket.east,
+    bucket.north,
     opts.maxCells,
     opts.forecastDays,
     waves ? 'm' : '-',
@@ -72,12 +94,12 @@ const realDeps: LoaderDeps = {
 };
 
 // A weather loader with its own in-memory, viewport-keyed cache. Repeat or adjacent views reuse a
-// recent fetch instead of hitting the network again, which keeps panning the mini-map cheap. The
-// service-worker cache still backs offline; this avoids the request entirely while the app is open.
+// recent fetch instead of hitting the network again, which keeps panning the mini-map cheap.
+// IndexedDB is the authoritative offline cache because it stores parsed data with explicit age.
 // Constructed in App and passed down so it is swappable in tests (deps and clock are injectable).
 export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): WeatherLoader {
   const deps = { ...realDeps, ...overrides };
-  const gridCache = new MemoryCache<WeatherGrid>(MAX_GRID_ENTRIES, GRID_TTL_MS);
+  const gridCache = new MemoryCache<WeatherGrid>(MAX_GRID_ENTRIES, GRID_FRESH_MS);
   // Radar has a single, viewport-independent frame, so a one-slot MemoryCache keyed by a constant
   // gives it the same TTL bookkeeping the grid cache uses without bespoke expires tracking.
   const radarCache = new MemoryCache<RadarData>(1, RADAR_TTL_MS);
@@ -90,6 +112,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
   // Bumped at each load's entry so an older viewport's slow response cannot land after a newer
   // one and overwrite its grid, radar, or status (the WeatherConditions sequence-guard pattern).
   let loadSeq = 0;
+  let active: AbortController | undefined;
 
   // Returns the merged grid plus whether it is partial: waves were requested but the marine endpoint
   // failed (commonly an Open-Meteo 429 on the separate marine host). A partial grid still carries
@@ -99,18 +122,20 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
     opts: ForecastOptions,
     waves: boolean,
     t: number,
+    signal: AbortSignal,
   ): Promise<{ grid: WeatherGrid | undefined; partial: boolean }> {
     const tryMarine = waves && t >= marineCooldownUntil;
     const [base, marine] = await Promise.all([
-      deps.forecast(bbox, opts),
-      tryMarine ? deps.marine(bbox, opts) : Promise.resolve(undefined),
+      deps.forecast(bbox, opts, undefined, signal),
+      tryMarine ? deps.marine(bbox, opts, undefined, signal) : Promise.resolve(undefined),
     ]);
     if (tryMarine && !marine) marineCooldownUntil = deps.now() + GRID_FAIL_COOLDOWN_MS;
     if (!base) return { grid: undefined, partial: false };
-    const partial = waves && !marine;
+    const merged = marine ? mergeMarine(base, marine) : base;
+    const partial = waves && (!marine || !merged.waveHeight);
     // Stamp provenance onto the grid itself so it survives both cache tiers: the panel states the
     // forecast's age from fetchedAt, and qualifies the display when the wave fields are missing.
-    const grid: WeatherGrid = { ...(marine ? mergeMarine(base, marine) : base), fetchedAt: t };
+    const grid: WeatherGrid = { ...merged, fetchedAt: t };
     if (partial) grid.partialWaves = true;
     return { grid, partial };
   }
@@ -118,9 +143,15 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
   return {
     async load(store, bbox, opts, want) {
       const seq = ++loadSeq;
+      active?.abort();
+      const controller = new AbortController();
+      active = controller;
+      const { signal } = controller;
       store.setStatus('loading');
       const t = deps.now();
-      const key = weatherCacheKey(bbox, opts, want.waves);
+      const viewport = normalizeBbox(bbox);
+      const coverage = weatherCoverageBucket(viewport);
+      const key = weatherCacheKey(coverage, opts, want.waves);
 
       // Resolve the grid from the in-memory cache, then the persistent (IndexedDB) cache, then the
       // network. `fromNetwork` distinguishes a fresh fetch (which is cached and which arms the
@@ -129,22 +160,37 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
         grid: WeatherGrid | undefined;
         partial: boolean;
         fromNetwork: boolean;
+        stale: boolean;
       }> => {
         const mem = gridCache.get(key, t);
-        if (mem) return { grid: mem, partial: false, fromNetwork: false };
+        if (mem && gridCoversViewport(mem, viewport)) {
+          return { grid: mem, partial: false, fromNetwork: false, stale: false };
+        }
         const stored = await deps.persist.get(key);
-        if (stored && stored.expires > t) {
+        if (signal.aborted)
+          return { grid: undefined, partial: false, fromNetwork: false, stale: false };
+        const retained =
+          stored && stored.expires > t && gridCoversViewport(stored.value, viewport)
+            ? stored.value
+            : undefined;
+        const fetchedAt = retained?.fetchedAt;
+        if (retained && fetchedAt !== undefined && t - fetchedAt < GRID_FRESH_MS) {
           // Promote the L2 hit into L1 with the persisted absolute expiry, so the in-memory copy
           // expires exactly when the persisted entry would, rather than restarting the TTL from now.
-          gridCache.putAt(key, stored.value, stored.expires, t);
+          gridCache.putAt(key, retained, fetchedAt + GRID_FRESH_MS, t);
           // Prune here too, not only after a network fetch: a long offline session keeps hitting the
           // cache and would otherwise never evict expired L2 entries.
           void deps.persist.prune(t);
-          return { grid: stored.value, partial: false, fromNetwork: false };
+          return { grid: retained, partial: false, fromNetwork: false, stale: false };
         }
-        if (t < gridCooldownUntil) return { grid: undefined, partial: false, fromNetwork: false };
-        const fetched = await fetchMerged(bbox, opts, want.waves, t);
-        return { ...fetched, fromNetwork: true };
+        if (t < gridCooldownUntil) {
+          return { grid: retained, partial: false, fromNetwork: false, stale: !!retained };
+        }
+        const fetched = await fetchMerged(coverage, opts, want.waves, t, signal);
+        if (!fetched.grid && retained) {
+          return { grid: retained, partial: false, fromNetwork: true, stale: true };
+        }
+        return { ...fetched, fromNetwork: true, stale: false };
       };
 
       let radarPromise: Promise<RadarData | undefined>;
@@ -154,39 +200,62 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
       // Stamp the TTL only on a real fetch: re-stamping on cache hits would slide the expiry
       // forever under steady loads and the nowcast would never refresh.
       else
-        radarPromise = deps.radar().then((fresh) => {
+        radarPromise = deps.radar(abortableFetch(signal)).then((fresh) => {
           if (fresh) radarCache.put(RADAR_KEY, fresh, t);
           return fresh;
         });
 
-      const [{ grid, partial, fromNetwork }, radar] = await Promise.all([
-        resolveGrid(),
-        radarPromise,
-      ]);
+      let resolved: Awaited<ReturnType<typeof resolveGrid>>;
+      let radar: RadarData | undefined;
+      try {
+        [resolved, radar] = await Promise.all([resolveGrid(), radarPromise]);
+      } catch (error) {
+        if (signal.aborted) return;
+        throw error;
+      }
+      const { grid, partial, fromNetwork, stale } = resolved;
       // Re-read at each store write (not once): the persist await below is another window in which
       // a newer load can start.
       const superseded = () => seq !== loadSeq;
 
       if (grid) {
-        if (!superseded()) store.setGrid(grid, t);
+        if (!superseded()) {
+          store.setGrid(grid, t);
+          if (stale) store.setStatus('stale');
+        }
         // A partial grid (waves failed) is shown but never cached, so a later view retries marine;
         // the marine backoff itself was armed inside fetchMerged, and the healthy atmospheric
         // endpoint stays unblocked. The caches are still written when superseded: they are keyed
         // by viewport, so the data stays valid for a return to this view.
-        if (!partial && fromNetwork) {
-          // One absolute expiry shared by both tiers so they expire together.
-          const expires = t + GRID_TTL_MS;
-          gridCache.putAt(key, grid, expires, t);
+        if (!partial && fromNetwork && !stale) {
+          gridCache.putAt(key, grid, t + GRID_FRESH_MS, t);
           // Persist for reloads and offline; the put never throws (it degrades to memory).
-          await deps.persist.put(key, grid, expires);
+          await deps.persist.put(key, grid, t + GRID_RETAIN_MS);
           void deps.persist.prune(t);
+        }
+        if (stale && fromNetwork && !signal.aborted) {
+          gridCooldownUntil = t + GRID_FAIL_COOLDOWN_MS;
         }
       } else {
         // A real network attempt (not a cache hit or a cooldown skip) failed: back off before retry.
-        if (fromNetwork) gridCooldownUntil = t + GRID_FAIL_COOLDOWN_MS;
+        if (fromNetwork && !signal.aborted) gridCooldownUntil = t + GRID_FAIL_COOLDOWN_MS;
         if (!superseded()) store.setStatus(store.grid ? 'stale' : 'error');
       }
       if (radar && !superseded()) store.setRadar(radar);
+      if (active === controller) active = undefined;
     },
   };
+}
+
+function gridCoversViewport(grid: WeatherGrid, viewport: Bbox): boolean {
+  const west = grid.lons[0];
+  const east = grid.lons[grid.lons.length - 1];
+  const south = grid.lats[0];
+  const north = grid.lats[grid.lats.length - 1];
+  if (![west, east, south, north].every(Number.isFinite)) return false;
+  return bboxContains({ west, south, east, north }, viewport);
+}
+
+function abortableFetch(signal: AbortSignal): typeof fetch {
+  return (input, init) => globalThis.fetch(input, { ...init, signal });
 }

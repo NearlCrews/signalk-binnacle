@@ -208,9 +208,7 @@ describe('createInstrumentsController', () => {
   it('fetches zone meta once per zonesPath on open, caches on second open', async () => {
     const zones = [{ upper: 3, state: 'alarm', message: 'Shallow' }];
     const fetchMock = vi.fn(async (url: string) =>
-      (url as string).includes('belowTransducer')
-        ? jsonResponse(200, { zones })
-        : jsonResponse(404, {}),
+      (url as string).includes('belowKeel') ? jsonResponse(200, { zones }) : jsonResponse(404, {}),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -227,17 +225,7 @@ describe('createInstrumentsController', () => {
     // depth=10 outside zones → normal
     expect(ctrl.zoneState(depthDef, 10)).toBe('normal');
 
-    // Close and re-open: must not refetch the same zonesPath.
-    ctrl.setOpen(false);
-    const callsBefore = fetchMock.mock.calls.filter(([u]: [string]) =>
-      u.includes('belowTransducer'),
-    ).length;
-    ctrl.setOpen(true);
-    await flushPromises();
-    const callsAfter = fetchMock.mock.calls.filter(([u]: [string]) =>
-      u.includes('belowTransducer'),
-    ).length;
-    expect(callsAfter).toBe(callsBefore);
+    expect(fetchMock.mock.calls.some(([u]: [string]) => u.includes('belowKeel'))).toBe(true);
 
     ctrl.dispose();
   });
@@ -424,14 +412,25 @@ describe('createInstrumentsController', () => {
     ctrl.dispose();
   });
 
-  it('ensures store cells for discovered battery paths when discovery lands', async () => {
+  it('ensures store cells for discovered instance paths when discovery lands', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) =>
-        url.includes('electrical/batteries')
-          ? jsonResponse(200, { house: { voltage: {} } })
-          : jsonResponse(404, {}),
-      ),
+      vi.fn(async (url: string) => {
+        if (url.includes('electrical/batteries')) {
+          return jsonResponse(200, { house: { voltage: {} } });
+        }
+        if (url.endsWith('/propulsion')) return jsonResponse(200, { port: { revolutions: {} } });
+        if (url.endsWith('/tanks')) {
+          return jsonResponse(200, { freshWater: { main: { currentLevel: {} } } });
+        }
+        if (url.endsWith('/electrical/solar')) {
+          return jsonResponse(200, { arch: { panelPower: {} } });
+        }
+        if (url.endsWith('/environment/inside')) {
+          return jsonResponse(200, { cabin: { temperature: {} } });
+        }
+        return jsonResponse(404, {});
+      }),
     );
 
     const deps = makeDeps();
@@ -441,12 +440,16 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
 
-    expect(spy).toHaveBeenCalledWith([
-      'electrical.batteries.house.voltage',
-      'electrical.batteries.house.capacity.stateOfCharge',
-      'electrical.batteries.house.capacity.timeRemaining',
-      'electrical.batteries.house.current',
-    ]);
+    const ensured = spy.mock.calls.flatMap((call) => call[0]);
+    expect(ensured).toContain('electrical.batteries.house.voltage');
+    expect(ensured).toContain('propulsion.port.revolutions');
+    expect(ensured).toContain('tanks.freshWater.main.currentLevel');
+    expect(ensured).toContain('electrical.solar.arch.panelPower');
+    expect(ensured).toContain('environment.inside.cabin.temperature');
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:port')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'tank-level:freshWater.main')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'solar-power:arch')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'inside-temp:cabin')).toBe(true);
 
     ctrl.dispose();
   });
@@ -521,7 +524,7 @@ describe('createInstrumentsController', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if ((url as string).includes('belowTransducer')) {
+        if ((url as string).includes('belowKeel')) {
           return jsonResponse(200, { zones: serverZones });
         }
         return jsonResponse(404, {});

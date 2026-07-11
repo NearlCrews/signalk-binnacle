@@ -153,6 +153,9 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // visibilitychange listener). A no-op until the overlay tick is built on 'load', then it delegates
   // to the controller's live teardown; invoked once on destroy.
   let stopTick = () => {};
+  // Set after map load. Destroy disposes registered overlays before map.remove(), so module-owned
+  // animation frames, workers, WebGL resources, and listeners never run against a removed map.
+  let manager: LayerManager | undefined;
 
   // If the base style JSON itself never arrives (plain http at sea: no service worker, no
   // internet), the map can never fire 'load' and nothing mounts, including the charts already
@@ -236,7 +239,8 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
-    const manager = new LayerManager(ctx, opts.managerOptions);
+    const loadedManager = new LayerManager(ctx, opts.managerOptions);
+    manager = loadedManager;
 
     // Snapshot the source style's own colors before any recolor, so the day theme can restore the
     // real map rather than approximate it.
@@ -250,7 +254,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       else applyBaseTheme(mapInstance, paint, layers);
       applyBaseIconVisibility(mapInstance, paint, layers);
       applyBaseRasterVisibility(mapInstance, paint, layers);
-      manager.applyTheme(paint);
+      loadedManager.applyTheme(paint);
     };
 
     const tick = createOverlayTick(mapInstance, ctx, () => destroyed);
@@ -262,7 +266,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       opts.onLoad({
         map: mapInstance,
         ctx,
-        manager,
+        manager: loadedManager,
         recolor,
         isDestroyed: () => destroyed,
         runTick: tick.runTick,
@@ -277,6 +281,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       removeCanvasListeners();
       stopTick();
       resizeObserver.disconnect();
+      manager?.dispose();
       mapInstance.remove();
     },
   };

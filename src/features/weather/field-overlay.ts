@@ -53,12 +53,20 @@ export function createFieldOverlay(
   const { id, title, description, sourceId, layerId, defaultOpacity, fieldRgba } = options;
   const canvas = makeCanvas();
   let theme: Theme = 'day';
+  let visible = false;
+  let active = false;
   const gate = gridTimeGate(store);
   let lastTheme: Theme | undefined;
   // Pending frames during which the non-animated source stays "playing" so it re-reads the canvas.
   // A single rAF chain runs at a time; a redraw mid-window just extends the count, never stacks.
   let refreshFrames = 0;
-  let refreshScheduled = false;
+  let refreshRequest: number | undefined;
+
+  function cancelRefresh(): void {
+    if (refreshRequest !== undefined) cancelAnimationFrame(refreshRequest);
+    refreshRequest = undefined;
+    refreshFrames = 0;
+  }
 
   // Force a texture re-upload of the non-animated canvas source after a redraw, then stop. play()
   // sets the source playing and triggers a repaint; the source re-reads the canvas on each render's
@@ -71,18 +79,18 @@ export function createFieldOverlay(
     if (typeof source?.play !== 'function' || typeof source.pause !== 'function') return;
     source.play();
     refreshFrames = 2;
-    if (refreshScheduled) return;
-    refreshScheduled = true;
+    if (refreshRequest !== undefined) return;
     const step = () => {
+      refreshRequest = undefined;
+      if (!active) return;
       refreshFrames -= 1;
       if (refreshFrames > 0) {
-        requestAnimationFrame(step);
+        refreshRequest = requestAnimationFrame(step);
         return;
       }
-      refreshScheduled = false;
       (map.getSource(sourceId) as Partial<CanvasSource> | undefined)?.pause?.();
     };
-    requestAnimationFrame(step);
+    refreshRequest = requestAnimationFrame(step);
   }
 
   function redraw(): void {
@@ -130,6 +138,7 @@ export function createFieldOverlay(
     defaultOpacity,
     layerIds: [layerId],
     add(ctx) {
+      active = true;
       if (!ctx.map.getSource(sourceId)) {
         const source: CanvasSourceSpecification = {
           type: 'canvas',
@@ -156,6 +165,7 @@ export function createFieldOverlay(
       lastTheme = undefined;
     },
     sync(ctx) {
+      if (!visible || !active) return;
       // gate.changed() always records the current grid and time; the theme dimension is tracked
       // separately so a theme swap alone (unchanged grid and time) still forces a recolored redraw.
       if (!gate.changed() && theme === lastTheme) return;
@@ -169,10 +179,20 @@ export function createFieldOverlay(
       refreshSource(ctx.map);
     },
     remove(ctx) {
+      active = false;
+      visible = false;
+      cancelRefresh();
       removeLayersAndSources(ctx.map, [layerId], [sourceId]);
     },
-    setVisible(ctx, visible) {
-      ctx.map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+    setVisible(ctx, value) {
+      const becameVisible = value && !visible;
+      visible = value;
+      ctx.map.setLayoutProperty(layerId, 'visibility', value ? 'visible' : 'none');
+      if (becameVisible) {
+        gate.reset();
+        lastTheme = undefined;
+        this.sync(ctx);
+      }
     },
     setOpacity(ctx, opacity) {
       ctx.map.setPaintProperty(layerId, 'raster-opacity', opacity);

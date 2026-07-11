@@ -145,11 +145,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   numerals for any aligned readout). The status strip's own `.readout` spans (StatusStrip.svelte,
   component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
   (SOG, COG, HDG, Depth, Vessel, Time), then the value wrapped in `.num`. A trailing physical unit
-  (kn, °T, ft, m) stays outside the `.num` span as plain text; a qualifier that is part of reading the
-  value itself, not a separate unit (UTC on a clock reading, the way AM/PM reads as part of a time),
-  stays inside the `.num` span with the value it qualifies. Every new readout added to the strip
-  follows this, so a future edit does not drop the bold treatment (happened twice building the Time
-  readout: once for the value, once for UTC).
+  (kn, °T, ft, m) stays outside the `.num` span as plain text. The Time readout uses local time, and
+  any qualifier that is part of reading a value itself, such as AM or PM, stays inside the `.num` span
+  with that value.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-sm +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
@@ -170,9 +168,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   full dock height (`grid-auto-rows: minmax(min-content, 1fr)`, falling back to min-content and the
   dock scroll when the tile set outgrows it), tile content centers vertically in a stretched row, an
   empty tile is never full width (`.tile--empty` overrides the full-row modifiers back to a single
-  column),
-  and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the customize
-  order only where a hole would otherwise sit.
+  column), and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the
+  customize order only where a hole would otherwise sit. Instrument tiles are buttons: selecting one
+  opens an in-dock detail view with value, status, zone, source, update age, and the Signal K paths
+  behind the reading. Customize groups available instruments by category, and its Rescan action reruns
+  instance discovery for batteries, engines, tanks, solar, and cabin sensors.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
@@ -374,9 +374,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   (the Signal K client, the map, the stores) are constructed in `app/App.svelte` and passed down as
   props, not global singletons, so they are swappable in tests.
 - Units: all values are SI in the store (radians, meters, m/s, Kelvin). The two sanctioned
-  exceptions are `navigation.position` (decimal degrees) and weather-grid precipitation (mm/h,
-  provider-native from Open-Meteo, read only at the display edge). Convert only at the display edge,
-  in a separate pure module.
+  exceptions are `navigation.position` (decimal degrees) and Open-Meteo's preceding-hour
+  precipitation in millimeters, read only at the display edge and labeled as an hourly rate. Signal
+  K provider precipitation is converted from meters to millimeters at ingestion. Convert all other
+  values only at the display edge, in a separate pure module.
 - Plugins are detected and degraded, never assumed: a capability backed by a Signal K plugin detects the
   provider (the `/signalk/v2/features` endpoint or a probe) and falls back to a built-in or client-side
   path when it is absent. See CLAUDE.md for the full Signal K integration contract.

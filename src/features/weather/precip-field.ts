@@ -10,5 +10,9 @@ export function precipFieldRgba(
   bracket: TimeBracket,
   theme: Theme,
 ): FieldBitmap | undefined {
-  return fieldRgba(grid, grid.precipitation, bracket, (v) => precipColor(v, theme));
+  const effective =
+    grid.precipitationInterpolation === 'step'
+      ? { lo: bracket.lo, hi: bracket.lo, frac: 0 }
+      : bracket;
+  return fieldRgba(grid, grid.precipitation, effective, (v) => precipColor(v, theme));
 }

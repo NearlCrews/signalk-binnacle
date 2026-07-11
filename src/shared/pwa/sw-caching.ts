@@ -14,7 +14,6 @@
 
 const DAY_SECONDS = 60 * 60 * 24;
 const THIRTY_SIX_HOURS_SECONDS = 36 * 60 * 60;
-const SIX_HOURS_SECONDS = 6 * 60 * 60;
 const TWO_HOURS_SECONDS = 60 * 60 * 2;
 
 interface MatchContext {
@@ -53,12 +52,6 @@ export const isOverlayTile = ({ url }: MatchContext): boolean =>
 
 export const isCoopsRequest = ({ url }: MatchContext): boolean =>
   url.hostname === 'api.tidesandcurrents.noaa.gov';
-
-// Each weather and radar matcher inlines its own host check, the host itself or a real subdomain (a
-// bare endsWith would also match an evil-open-meteo.com style lookalike). The check is repeated, not
-// a shared helper, so each serialized worker matcher stays self-contained (file header).
-export const isOpenMeteo = ({ url }: MatchContext): boolean =>
-  url.hostname === 'open-meteo.com' || url.hostname.endsWith('.open-meteo.com');
 
 export const isRadarIndex = ({ url }: MatchContext): boolean =>
   (url.hostname === 'rainviewer.com' || url.hostname.endsWith('.rainviewer.com')) &&
@@ -136,17 +129,6 @@ export const runtimeCaching = [
         maxAgeSeconds: THIRTY_SIX_HOURS_SECONDS,
         purgeOnQuotaError: true,
       },
-      cacheableResponse: { statuses: [200] },
-    },
-  },
-  {
-    // Open-Meteo forecast and marine data: prefer fresh, fall back to the last fetch offline.
-    urlPattern: isOpenMeteo,
-    handler: 'NetworkFirst',
-    options: {
-      cacheName: 'binnacle-weather',
-      networkTimeoutSeconds: 8,
-      expiration: { maxEntries: 64, maxAgeSeconds: SIX_HOURS_SECONDS, purgeOnQuotaError: true },
       cacheableResponse: { statuses: [200] },
     },
   },

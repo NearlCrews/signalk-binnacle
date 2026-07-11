@@ -124,7 +124,7 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
         particles?.dispose();
         particles = undefined;
         addArrowLayer(ctx);
-        syncArrows(ctx);
+        if (visible) syncArrows(ctx);
       }
     };
     // render() stops requesting frames while the tab is hidden, and nothing else repaints the map on
@@ -151,14 +151,14 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
           particles = new WindParticles(gl);
           particles.setTheme(windColorTexture(theme));
           particles.setOpacity(opacity);
-          pushWind();
+          if (visible) pushWind();
         } catch (error) {
           // A rare secondary failure after the probe passed: degrade to arrows. The empty custom
           // layer stays but renders nothing because `particles` is undefined.
           console.warn('[wind] particle init failed, using arrows', error);
           particles = undefined;
           addArrowLayer(ctx);
-          syncArrows(ctx);
+          if (visible) syncArrows(ctx);
         }
       },
       render(gl: GL, args: unknown) {
@@ -219,17 +219,24 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
       gate.reset();
     },
     sync(ctx) {
+      if (!visible) return;
       if (!gate.changed()) return;
       pushWind(); // a no-op without particles
       if (!particles && ctx.map.getLayer(LAYER_ID)) syncArrows(ctx);
     },
     remove(ctx) {
+      visible = false;
       removeLayersAndSources(ctx.map, [GL_LAYER_ID, LAYER_ID], [SOURCE_ID]);
     },
     setVisible(ctx, value) {
+      const becameVisible = value && !visible;
       visible = value;
       if (ctx.map.getLayer(LAYER_ID)) {
         ctx.map.setLayoutProperty(LAYER_ID, 'visibility', value ? 'visible' : 'none');
+      }
+      if (becameVisible) {
+        gate.reset();
+        this.sync(ctx);
       }
       // Restart the particle render loop when turned on; render() stops requesting frames when off.
       if (value) ctx.map.triggerRepaint();

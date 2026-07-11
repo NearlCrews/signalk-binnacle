@@ -40,6 +40,7 @@ export function createWavesOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
     makeCanvas,
   );
   let theme: Theme = 'day';
+  let visible = false;
   const gate = gridTimeGate(store);
 
   // Spread the composed field overlay so its description and default opacity (0.7) carry through,
@@ -69,6 +70,7 @@ export function createWavesOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
       gate.reset();
     },
     sync(ctx) {
+      if (!visible) return;
       field.sync(ctx);
       if (!gate.changed()) return;
       const grid = store.grid;
@@ -79,12 +81,19 @@ export function createWavesOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
       );
     },
     remove(ctx) {
+      visible = false;
       removeLayersAndSources(ctx.map, [ARROW_LAYER], [ARROW_SOURCE]);
       field.remove(ctx);
     },
-    setVisible(ctx, visible) {
-      field.setVisible(ctx, visible);
-      setLayersVisibility(ctx.map, [ARROW_LAYER], visible);
+    setVisible(ctx, value) {
+      const becameVisible = value && !visible;
+      visible = value;
+      field.setVisible(ctx, value);
+      setLayersVisibility(ctx.map, [ARROW_LAYER], value);
+      if (becameVisible) {
+        gate.reset();
+        this.sync(ctx);
+      }
     },
     setOpacity(ctx, opacity) {
       field.setOpacity?.(ctx, opacity);

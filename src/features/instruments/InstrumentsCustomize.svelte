@@ -1,5 +1,5 @@
 <script lang="ts">
-import { GripVertical } from '@lucide/svelte';
+import { GripVertical, RotateCw } from '@lucide/svelte';
 import { createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import type { TileDeps } from './tile-catalog';
@@ -20,6 +20,22 @@ let listEl: HTMLElement | undefined = $state(undefined);
 const shown = $derived(controller.tiles);
 const selectedIds = $derived(new Set(controller.selectedIds));
 const available = $derived(controller.catalog.filter((def) => !selectedIds.has(def.id)));
+const categoryTitles = {
+  navigation: 'Navigation',
+  wind: 'Wind',
+  depth: 'Depth',
+  weather: 'Weather',
+  electrical: 'Electrical',
+  propulsion: 'Engines',
+  tanks: 'Tanks',
+  cabin: 'Cabin',
+} as const;
+const availableGroups = $derived.by(() =>
+  Object.entries(categoryTitles).flatMap(([id, title]) => {
+    const rows = available.filter((def) => def.category === id);
+    return rows.length > 0 ? [{ id, title, rows }] : [];
+  }),
+);
 
 const reorder = createReorder({
   getItems: () => shown.map((t) => ({ id: t.id, title: t.label })),
@@ -68,28 +84,44 @@ function neverReported(paths: string[]): boolean {
       </li>
     {/each}
   </ul>
-  {#if available.length > 0}
+  <div class="available-head">
     <h3 class="caps-label section-label">Available</h3>
-    <ul class="tile-list bare-list">
-      {#each available as def (def.id)}
-        {@const unavailable = neverReported(def.paths)}
-        <li
-          class="row-interactive"
-          class:unavailable
-          title={unavailable ? 'No data received from this sensor yet' : undefined}
-        >
-          <LayerToggle
-            title={def.label}
-            description={def.description}
-            visible={false}
-            onToggle={() => controller.toggleTile(def.id)}
-          />
-          {#if unavailable}
-            <UnavailableHint hint="No data received from this sensor yet" />
-          {/if}
-        </li>
-      {/each}
-    </ul>
+    <button
+      type="button"
+      class="btn btn-ghost rescan"
+      disabled={controller.discovering}
+      onclick={() => controller.refreshCatalog()}
+    >
+      <RotateCw size={16} aria-hidden="true" />
+      {controller.discovering ? 'Scanning' : 'Rescan'}
+    </button>
+  </div>
+  {#if availableGroups.length > 0}
+    {#each availableGroups as group (group.id)}
+      <h4 class="caps-label group-label">{group.title}</h4>
+      <ul class="tile-list bare-list">
+        {#each group.rows as def (def.id)}
+          {@const unavailable = neverReported(def.paths)}
+          <li
+            class="row-interactive"
+            class:unavailable
+            title={unavailable ? 'No data received from this sensor yet' : undefined}
+          >
+            <LayerToggle
+              title={def.label}
+              description={def.description}
+              visible={false}
+              onToggle={() => controller.toggleTile(def.id)}
+            />
+            {#if unavailable}
+              <UnavailableHint hint="No data received from this sensor yet" />
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/each}
+  {:else}
+    <p class="muted-note empty-note">No other instruments found yet.</p>
   {/if}
 </div>
 <span class="visually-hidden" role="status">{reorder.reorderAnnouncement}</span>
@@ -105,6 +137,22 @@ function neverReported(paths: string[]): boolean {
 }
 .section-label:first-child {
   padding-block-start: 0;
+}
+.available-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline-end: var(--space-3);
+}
+.rescan {
+  min-block-size: var(--row-size);
+}
+.group-label {
+  padding: var(--space-1) var(--space-3);
+}
+.empty-note {
+  padding: 0 var(--space-3) var(--space-2);
 }
 /* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
    block-flow row wraps the grip onto its own line and every selected row doubles in height. */

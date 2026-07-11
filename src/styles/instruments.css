@@ -5,6 +5,9 @@
    keeps alarm and warning distinguishable by brightness. */
 .tile {
   --hero-leading: 1.1;
+  appearance: none;
+  color: inherit;
+  font: inherit;
   display: flex;
   flex-direction: column;
   /* Centered on both axes so a tile stretched by the dock's row fill reads as a gauge face, not
@@ -16,6 +19,7 @@
   gap: var(--space-1);
   min-block-size: 4rem;
   padding: var(--space-2);
+  cursor: pointer;
 }
 .tile .num {
   font-size: var(--text-readout-lg);
@@ -37,6 +41,10 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
   margin-inline-start: var(--space-1);
+}
+.tile-secondary {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 .tile--warning {
   border-color: var(--warning);

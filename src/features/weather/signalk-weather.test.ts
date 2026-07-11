@@ -2,248 +2,257 @@ import { describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '$shared/testing/fetch-stub';
 import {
   conditionsFromSignalK,
+  defaultProvider,
   defaultProviderName,
-  fetchObservations,
-  fetchPointForecasts,
+  fetchObservationsResult,
+  fetchPointForecastsResult,
   fetchWeatherProviders,
-  fetchWeatherWarnings,
-  nearestInTime,
+  fetchWeatherWarningsResult,
+  MAX_OBSERVATION_AGE_MS,
   nearestInTimeBounded,
+  normalizePressureTendency,
+  pickProviderEntry,
+  providerDisplayName,
+  providerReadoutContribution,
   readoutFromSignalK,
   type SignalKWeatherData,
 } from './signalk-weather';
 
 const ORIGIN = 'https://boat.local';
 
-function mockFetch(body: unknown, ok = true) {
-  return vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(ok ? 200 : 500, body));
+function mockFetch(body: unknown, status = 200) {
+  return vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(status, body));
 }
 
-describe('fetchWeatherProviders', () => {
-  it('returns the providers object', async () => {
-    const fetchFn = mockFetch({ 'open-meteo': { name: 'OpenMeteo', isDefault: true } });
-    const providers = await fetchWeatherProviders(ORIGIN, undefined, fetchFn);
-    expect(providers).toEqual({ 'open-meteo': { name: 'OpenMeteo', isDefault: true } });
-    expect(fetchFn).toHaveBeenCalledWith(
-      'https://boat.local/signalk/v2/api/weather/_providers',
-      undefined,
-    );
+describe('weather providers', () => {
+  it('keeps the default provider id separate from its display name', async () => {
+    const providers = {
+      'open-meteo': { name: 'OpenMeteo Marine', isDefault: true },
+      backup: { name: 'Backup', isDefault: false },
+    };
+    const provider = defaultProvider(providers);
+    expect(provider).toEqual({ id: 'open-meteo', name: 'OpenMeteo Marine' });
+    expect(defaultProviderName(providers)).toBe('OpenMeteo Marine');
+    expect(providerDisplayName('open-meteo')).toBe('Open Meteo');
+
+    const fetchFn = mockFetch(providers);
+    expect(await fetchWeatherProviders(ORIGIN, undefined, fetchFn)).toEqual(providers);
   });
 
-  it('returns {} when none configured', async () => {
+  it('prettifies an id when the provider has no display name', () => {
+    expect(defaultProvider({ 'signalk-weather-accuweather': { isDefault: true } })).toEqual({
+      id: 'signalk-weather-accuweather',
+      name: 'Accuweather',
+    });
+  });
+
+  it('normalizes current Signal K wave, swell, and current field names', () => {
+    const current = conditionsFromSignalK({
+      date: '2026-06-03T12:00:00Z',
+      water: {
+        waves: { significantHeight: 2, period: 7, directionTrue: 1 },
+        swell: { height: 1.5, period: 10, directionTrue: 2 },
+        current: { drift: 0.8, set: 3 },
+      },
+    });
+    expect(current).toMatchObject({
+      waveHeightM: 2,
+      wavePeriodS: 7,
+      waveFromRad: 1,
+      swellHeightM: 1.5,
+      swellPeriodS: 10,
+      swellFromRad: 2,
+      currentSpeedMs: 0.8,
+      currentDirectionRad: 3,
+    });
+  });
+
+  it('distinguishes no providers from transport failure', async () => {
     expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch({}))).toEqual({});
-  });
-
-  it('returns undefined on a non-ok response', async () => {
-    expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch({}, false))).toBeUndefined();
-  });
-
-  it('returns undefined on a thrown transport error', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockRejectedValue(new Error('offline'));
-    expect(await fetchWeatherProviders(ORIGIN, undefined, fetchFn)).toBeUndefined();
+    expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch({}, 500))).toBeUndefined();
   });
 });
 
-describe('defaultProviderName', () => {
-  it('picks the default provider name', () => {
+describe('point endpoint outcomes', () => {
+  it('pins every point request to the provider id', async () => {
+    const observation = { date: '2026-06-03T12:00:00Z' };
+    const obsFetch = mockFetch(observation);
+    const forecastFetch = mockFetch([observation]);
+    const warningsFetch = mockFetch([]);
+
+    await fetchObservationsResult(ORIGIN, 'provider-id', 5.5, -7.25, 'tok', obsFetch);
+    await fetchPointForecastsResult(ORIGIN, 'provider-id', 1, 2, 12, undefined, forecastFetch);
+    await fetchWeatherWarningsResult(ORIGIN, 'provider-id', 1, 2, undefined, warningsFetch);
+
+    expect(obsFetch.mock.calls[0][0]).toBe(
+      'https://boat.local/signalk/v2/api/weather/observations?lat=5.5&lon=-7.25&provider=provider-id',
+    );
+    expect(forecastFetch.mock.calls[0][0]).toBe(
+      'https://boat.local/signalk/v2/api/weather/forecasts/point?lat=1&lon=2&provider=provider-id&count=12',
+    );
+    expect(warningsFetch.mock.calls[0][0]).toBe(
+      'https://boat.local/signalk/v2/api/weather/warnings?lat=1&lon=2&provider=provider-id',
+    );
+  });
+
+  it('distinguishes success, empty, unsupported, and failure', async () => {
     expect(
-      defaultProviderName({
-        a: { name: 'AccuWeather', isDefault: true },
-        b: { name: 'OpenMeteo', isDefault: false },
-      }),
-    ).toBe('AccuWeather');
-  });
-
-  it('falls back to the first when none is flagged default', () => {
-    expect(defaultProviderName({ b: { name: 'OpenMeteo', isDefault: false } })).toBe('OpenMeteo');
-  });
-
-  it('falls back to a prettified provider id when no name is present', () => {
-    expect(defaultProviderName({ 'open-meteo': { isDefault: true } })).toBe('Open Meteo');
-    expect(defaultProviderName({ 'signalk-weather-accuweather': { isDefault: true } })).toBe(
-      'Weather Accuweather',
+      await fetchObservationsResult(
+        ORIGIN,
+        'p',
+        0,
+        0,
+        undefined,
+        mockFetch({ date: '2026-01-01T00:00:00Z' }),
+      ),
+    ).toMatchObject({ status: 'success' });
+    expect(await fetchObservationsResult(ORIGIN, 'p', 0, 0, undefined, mockFetch([]))).toEqual({
+      status: 'empty',
+    });
+    expect(await fetchObservationsResult(ORIGIN, 'p', 0, 0, undefined, mockFetch({}, 404))).toEqual(
+      { status: 'unsupported' },
+    );
+    expect(await fetchObservationsResult(ORIGIN, 'p', 0, 0, undefined, mockFetch({}, 500))).toEqual(
+      { status: 'failure' },
     );
   });
 
-  it('is undefined when there are no providers', () => {
-    expect(defaultProviderName({})).toBeUndefined();
-    expect(defaultProviderName(undefined)).toBeUndefined();
+  it('sorts provider forecasts by valid time and drops invalid dates', async () => {
+    const result = await fetchPointForecastsResult(
+      ORIGIN,
+      'p',
+      0,
+      0,
+      12,
+      undefined,
+      mockFetch([
+        { date: '2026-06-03T18:00:00Z' },
+        { date: 'bad' },
+        { date: '2026-06-03T12:00:00Z' },
+      ]),
+    );
+    expect(result).toEqual({
+      status: 'success',
+      value: [{ date: '2026-06-03T12:00:00Z' }, { date: '2026-06-03T18:00:00Z' }],
+    });
   });
 });
 
-describe('fetchWeatherWarnings', () => {
-  it('returns the warnings array', async () => {
-    const warnings = [{ startTime: 'a', endTime: 'b', details: 'Gale', source: 's', type: 'gale' }];
-    const fetchFn = mockFetch(warnings);
-    expect(await fetchWeatherWarnings(ORIGIN, 1, 2, undefined, fetchFn)).toEqual(warnings);
-    expect(fetchFn.mock.calls[0][0]).toBe(
-      'https://boat.local/signalk/v2/api/weather/warnings?lat=1&lon=2',
+describe('Signal K adapter', () => {
+  it('converts precipitationVolume meters to millimeters at the boundary', () => {
+    const data = { date: '2026-06-03T12:00:00Z', outside: { precipitationVolume: 0.002 } };
+    expect(conditionsFromSignalK(data).precipitationMm).toBe(2);
+    expect(providerReadoutContribution(data).precipitationMm).toBe(2);
+  });
+
+  it('supports legacy flat and current nested waves, swell, and currents', () => {
+    const legacy = conditionsFromSignalK({
+      date: '2026-06-03T12:00:00Z',
+      water: {
+        waveSignificantHeight: 1,
+        wavePeriod: 6,
+        swellHeight: 2,
+        swellPeriod: 10,
+        surfaceCurrentSpeed: 0.4,
+      },
+    });
+    const nested = conditionsFromSignalK({
+      date: '2026-06-03T12:00:00Z',
+      water: {
+        waves: { significantHeight: 3, period: 8, direction: 1 },
+        swell: { height: 4, period: 12, direction: 2 },
+        current: { speed: 0.8, direction: 3 },
+      },
+    });
+    expect(legacy).toMatchObject({
+      waveHeightM: 1,
+      wavePeriodS: 6,
+      swellHeightM: 2,
+      swellPeriodS: 10,
+      currentSpeedMs: 0.4,
+    });
+    expect(nested).toMatchObject({
+      waveHeightM: 3,
+      wavePeriodS: 8,
+      waveFromRad: 1,
+      swellHeightM: 4,
+      swellPeriodS: 12,
+      swellFromRad: 2,
+      currentSpeedMs: 0.8,
+      currentDirectionRad: 3,
+    });
+  });
+
+  it('maps the high-value atmospheric, solar, and marine fields', () => {
+    const conditions = conditionsFromSignalK({
+      date: '2026-06-03T12:00:00Z',
+      outside: {
+        feelsLikeTemperature: 295,
+        dewPointTemperature: 288,
+        relativeHumidity: 0.8,
+        precipitationType: 'Rain',
+        uvIndex: 6,
+      },
+      sun: { sunrise: '2026-06-03T10:00:00Z', sunset: '2026-06-04T00:00:00Z' },
+      current: { speed: 0.5, direction: 2.5 },
+    });
+    expect(conditions).toMatchObject({
+      feelsLikeK: 295,
+      dewPointK: 288,
+      humidityFraction: 0.8,
+      precipitationType: 'Rain',
+      uvIndex: 6,
+      currentSpeedMs: 0.5,
+      currentDirectionRad: 2.5,
+      sunriseMs: Date.parse('2026-06-03T10:00:00Z'),
+      sunsetMs: Date.parse('2026-06-04T00:00:00Z'),
+    });
+  });
+
+  it('normalizes pressure tendency and rejects not-available values for fallback', () => {
+    expect(normalizePressureTendency(' Increasing ')).toBe('rising');
+    expect(normalizePressureTendency(-2)).toBe('falling');
+    expect(normalizePressureTendency('not available')).toBeUndefined();
+    expect(normalizePressureTendency('N/A')).toBeUndefined();
+  });
+
+  it('lets a pressure-only provider contribute over grid wind', () => {
+    const grid = { speedMs: 8, fromRad: 1, pressurePa: 100_000 };
+    expect(readoutFromSignalK({ date: 'now', outside: { pressure: 101_000 } }, grid)).toMatchObject(
+      {
+        speedMs: 8,
+        fromRad: 1,
+        pressurePa: 101_000,
+      },
     );
   });
-
-  it('returns undefined when the body is not an array', async () => {
-    expect(await fetchWeatherWarnings(ORIGIN, 0, 0, undefined, mockFetch({}))).toBeUndefined();
-  });
-
-  it('returns undefined on a non-ok response', async () => {
-    expect(
-      await fetchWeatherWarnings(ORIGIN, 0, 0, undefined, mockFetch([], false)),
-    ).toBeUndefined();
-  });
-
-  it('returns undefined on a thrown transport error', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockRejectedValue(new Error('offline'));
-    expect(await fetchWeatherWarnings(ORIGIN, 0, 0, undefined, fetchFn)).toBeUndefined();
-  });
 });
 
-describe('fetchObservations', () => {
-  it('builds the point query and returns the first record', async () => {
-    const obs: SignalKWeatherData = { date: '2026-06-03T12:00:00Z', wind: { speedTrue: 5 } };
-    const fetchFn = mockFetch(obs);
-    const result = await fetchObservations(ORIGIN, 5.5, -7.25, 'tok', fetchFn);
-    expect(result).toEqual(obs);
-    expect(fetchFn.mock.calls[0][0]).toBe(
-      'https://boat.local/signalk/v2/api/weather/observations?lat=5.5&lon=-7.25',
-    );
+describe('provider time selection', () => {
+  const now = Date.parse('2026-06-03T12:00:00Z');
+
+  it('bounds observation age and falls back to a forecast when the observation is too old', () => {
+    const old = { date: new Date(now - MAX_OBSERVATION_AGE_MS - 1).toISOString() };
+    const forecast = [{ date: new Date(now).toISOString(), wind: { speedTrue: 5 } }];
+    expect(pickProviderEntry(old, forecast, now, now)).toEqual({
+      entry: forecast[0],
+      observed: false,
+    });
   });
 
-  it('returns undefined when the body is not weather data', async () => {
-    expect(await fetchObservations(ORIGIN, 0, 0, undefined, mockFetch(null))).toBeUndefined();
+  it('uses a recent observation near now', () => {
+    const observation = { date: new Date(now - 30 * 60_000).toISOString() };
+    expect(pickProviderEntry(observation, undefined, now, now)).toEqual({
+      entry: observation,
+      observed: true,
+    });
   });
 
-  it('picks the latest observation by date, not by position', async () => {
-    // The API does not guarantee ordering; an oldest-first provider must not serve a stale "now".
-    const fetchFn = mockFetch([
-      { date: '2026-06-03T09:00:00Z', wind: { speedTrue: 1 } },
-      { date: '2026-06-03T12:00:00Z', wind: { speedTrue: 9 } },
-      { date: '2026-06-03T11:00:00Z', wind: { speedTrue: 5 } },
-    ]);
-    const result = await fetchObservations(ORIGIN, 0, 0, undefined, fetchFn);
-    expect(result?.wind?.speedTrue).toBe(9);
-  });
-});
-
-describe('fetchPointForecasts', () => {
-  it('includes the count and returns the series', async () => {
+  it('does not use a forecast step beyond its cadence bound', () => {
     const series: SignalKWeatherData[] = [
       { date: '2026-06-03T12:00:00Z' },
       { date: '2026-06-03T15:00:00Z' },
     ];
-    const fetchFn = mockFetch(series);
-    const result = await fetchPointForecasts(ORIGIN, 1, 2, 12, undefined, fetchFn);
-    expect(result).toEqual(series);
-    expect(fetchFn.mock.calls[0][0]).toBe(
-      'https://boat.local/signalk/v2/api/weather/forecasts/point?lat=1&lon=2&count=12',
-    );
-  });
-});
-
-describe('readoutFromSignalK', () => {
-  it('maps a point reading to a WeatherReadout', () => {
-    const data: SignalKWeatherData = {
-      date: 'now',
-      wind: { speedTrue: 10, directionTrue: 1.2 },
-      outside: { pressure: 101300, cloudCover: 0.5, precipitationVolume: 2 },
-      water: { waveSignificantHeight: 1.5, wavePeriod: 7 },
-    };
-    expect(readoutFromSignalK(data)).toEqual({
-      speedMs: 10,
-      fromRad: 1.2,
-      pressurePa: 101300,
-      waveHeightM: 1.5,
-      wavePeriodS: 7,
-      precipitationMm: 2,
-      precipIsRate: false,
-      cloudCoverFraction: 0.5,
-    });
-  });
-
-  it('returns undefined when wind is missing, so the caller falls back to the grid', () => {
-    expect(readoutFromSignalK({ date: 'now', outside: { pressure: 101000 } })).toBeUndefined();
-  });
-});
-
-describe('conditionsFromSignalK', () => {
-  it('maps a point reading to PointConditions, carrying temperature and gust', () => {
-    const data: SignalKWeatherData = {
-      date: '2026-06-03T12:00:00Z',
-      wind: { speedTrue: 8, directionTrue: 2, gust: 12 },
-      outside: { temperature: 290, pressure: 101000, cloudCover: 0.25, precipitationVolume: 0.5 },
-      water: { waveSignificantHeight: 1, wavePeriod: 6 },
-    };
-    expect(conditionsFromSignalK(data)).toEqual({
-      timeMs: Date.parse('2026-06-03T12:00:00Z'),
-      windMs: 8,
-      fromRad: 2,
-      gustMs: 12,
-      pressurePa: 101000,
-      airTempK: 290,
-      cloudFraction: 0.25,
-      waveHeightM: 1,
-      wavePeriodS: 6,
-      precipitationMm: 0.5,
-      // Provider precipitation is an accumulation volume, not a rate; the display labels it "mm".
-      precipIsRate: false,
-    });
-  });
-
-  it('carries tendency, swell, visibility, and water temperature when supplied', () => {
-    const data: SignalKWeatherData = {
-      date: '2026-06-03T12:00:00Z',
-      outside: { pressureTendency: 'falling', horizontalVisibility: 4000 },
-      water: { temperature: 288, swellHeight: 2.5, swellPeriod: 11, swellDirection: 3.1 },
-    };
-    const cond = conditionsFromSignalK(data);
-    expect(cond.pressureTendency).toBe('falling');
-    expect(cond.visibilityM).toBe(4000);
-    expect(cond.waterTempK).toBe(288);
-    expect(cond.swellHeightM).toBe(2.5);
-    expect(cond.swellPeriodS).toBe(11);
-    expect(cond.swellFromRad).toBe(3.1);
-  });
-});
-
-describe('nearestInTime', () => {
-  const series: SignalKWeatherData[] = [
-    { date: '2026-06-03T12:00:00Z' },
-    { date: '2026-06-03T15:00:00Z' },
-    { date: '2026-06-03T18:00:00Z' },
-  ];
-
-  it('finds the entry closest to the target time', () => {
-    const target = Date.parse('2026-06-03T15:40:00Z');
-    expect(nearestInTime(series, target)?.date).toBe('2026-06-03T15:00:00Z');
-  });
-
-  it('skips entries with an unparseable date', () => {
-    const mixed: SignalKWeatherData[] = [{ date: 'not-a-date' }, { date: '2026-06-03T15:00:00Z' }];
-    expect(nearestInTime(mixed, Date.parse('2026-06-03T15:10:00Z'))?.date).toBe(
-      '2026-06-03T15:00:00Z',
-    );
-    expect(nearestInTime([{ date: 'nope' }], 0)).toBeUndefined();
-  });
-
-  it('is undefined for an empty series', () => {
-    expect(nearestInTime([], 0)).toBeUndefined();
-  });
-});
-
-describe('nearestInTimeBounded', () => {
-  const series: SignalKWeatherData[] = [
-    { date: '2026-06-03T12:00:00Z' },
-    { date: '2026-06-03T15:00:00Z' },
-    { date: '2026-06-03T18:00:00Z' },
-  ];
-
-  it('answers within one series step of the target', () => {
-    const target = Date.parse('2026-06-03T19:30:00Z');
-    expect(nearestInTimeBounded(series, target)?.date).toBe('2026-06-03T18:00:00Z');
-  });
-
-  it('refuses to answer for a target far past the horizon', () => {
-    // The last step must never stand in for a time days away.
-    const target = Date.parse('2026-06-06T18:00:00Z');
-    expect(nearestInTimeBounded(series, target)).toBeUndefined();
+    expect(nearestInTimeBounded(series, Date.parse('2026-06-05T00:00:00Z'))).toBeUndefined();
   });
 });

@@ -1,4 +1,9 @@
-import { type Bbox, sampleGrid, type WeatherGrid } from '$entities/weather';
+import {
+  type Bbox,
+  sampleGrid,
+  type WeatherGrid,
+  type WeatherSourceMetadata,
+} from '$entities/weather';
 import { DEG_TO_RAD, PA_PER_HPA, withTimeout } from '$shared/lib';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -15,29 +20,56 @@ export interface ForecastOptions {
 }
 
 interface OmLoc {
+  latitude?: number;
+  longitude?: number;
   hourly?: {
     time?: number[];
-    wind_speed_10m?: number[];
-    wind_direction_10m?: number[];
-    wind_gusts_10m?: number[];
-    pressure_msl?: number[];
-    precipitation?: number[];
-    cloud_cover?: number[];
+    wind_speed_10m?: Array<number | null>;
+    wind_direction_10m?: Array<number | null>;
+    wind_gusts_10m?: Array<number | null>;
+    pressure_msl?: Array<number | null>;
+    precipitation?: Array<number | null>;
+    cloud_cover?: Array<number | null>;
   };
 }
 
 export interface MarineFields {
+  source: WeatherSourceMetadata;
   waveHeight: number[][];
   waveDirection: number[][];
   wavePeriod: number[][];
+  windWaveHeight: number[][];
+  windWaveDirection: number[][];
+  windWavePeriod: number[][];
+  windWavePeakPeriod: number[][];
+  swellWaveHeight: number[][];
+  swellWaveDirection: number[][];
+  swellWavePeriod: number[][];
+  swellWavePeakPeriod: number[][];
+  oceanCurrentSpeed: number[][];
+  oceanCurrentDirection: number[][];
+  seaSurfaceTemperature: number[][];
 }
 
 interface MarineLoc {
+  latitude?: number;
+  longitude?: number;
   hourly?: {
     time?: number[];
-    wave_height?: number[];
-    wave_direction?: number[];
-    wave_period?: number[];
+    wave_height?: Array<number | null>;
+    wave_direction?: Array<number | null>;
+    wave_period?: Array<number | null>;
+    wind_wave_height?: Array<number | null>;
+    wind_wave_direction?: Array<number | null>;
+    wind_wave_period?: Array<number | null>;
+    wind_wave_peak_period?: Array<number | null>;
+    swell_wave_height?: Array<number | null>;
+    swell_wave_direction?: Array<number | null>;
+    swell_wave_period?: Array<number | null>;
+    swell_wave_peak_period?: Array<number | null>;
+    ocean_current_velocity?: Array<number | null>;
+    ocean_current_direction?: Array<number | null>;
+    sea_surface_temperature?: Array<number | null>;
   };
 }
 
@@ -57,6 +89,7 @@ async function fetchGridLocations<T>(
   bbox: Bbox,
   opts: ForecastOptions,
   fetchFn: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<GridLocations<T> | undefined> {
   const { lats, lons } = sampleGrid(bbox, opts.maxCells);
   const points: Array<{ lat: number; lon: number }> = [];
@@ -65,12 +98,7 @@ async function fetchGridLocations<T>(
   try {
     const chunks = chunk(points, MAX_LOCS_PER_REQUEST);
     const responses = await Promise.all(
-      chunks.map((c) =>
-        fetchFn(
-          buildUrl(baseUrl, c, hourly, extra, opts),
-          withTimeout({ credentials: 'omit' }, FETCH_TIMEOUT_MS),
-        ),
-      ),
+      chunks.map((c) => fetchFn(buildUrl(baseUrl, c, hourly, extra, opts), requestInit(signal))),
     );
     const locs: T[] = [];
     for (const r of responses) {
@@ -79,9 +107,23 @@ async function fetchGridLocations<T>(
       for (const l of Array.isArray(body) ? body : [body]) locs.push(l);
     }
     return { locs, lats, lons };
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return undefined;
   }
+}
+
+function requestInit(signal?: AbortSignal): RequestInit {
+  const timed = withTimeout({ credentials: 'omit' }, FETCH_TIMEOUT_MS);
+  if (!signal) return timed;
+  const timeoutSignal = timed.signal;
+  return {
+    credentials: 'omit',
+    signal:
+      timeoutSignal && typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([signal, timeoutSignal])
+        : signal,
+  };
 }
 
 function buildUrl(
@@ -93,7 +135,7 @@ function buildUrl(
 ): string {
   const params = new URLSearchParams({
     latitude: points.map((p) => p.lat.toFixed(4)).join(','),
-    longitude: points.map((p) => p.lon.toFixed(4)).join(','),
+    longitude: points.map((p) => providerLongitude(p.lon).toFixed(4)).join(','),
     hourly,
     forecast_days: String(opts.forecastDays),
     timeformat: 'unixtime',
@@ -103,6 +145,10 @@ function buildUrl(
     ...extra,
   });
   return `${baseUrl}?${params}`;
+}
+
+function providerLongitude(lon: number): number {
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -122,6 +168,7 @@ export async function fetchForecast(
   bbox: Bbox,
   opts: ForecastOptions,
   fetchFn: typeof fetch = globalThis.fetch.bind(globalThis),
+  signal?: AbortSignal,
 ): Promise<WeatherGrid | undefined> {
   const result = await fetchGridLocations<OmLoc>(
     FORECAST_URL,
@@ -132,6 +179,7 @@ export async function fetchForecast(
     bbox,
     opts,
     fetchFn,
+    signal,
   );
   return result ? parse(result.locs, result.lats, result.lons) : undefined;
 }
@@ -143,8 +191,8 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
   const steps = times.length;
   const cells = lats.length * lons.length;
   if (locs.length !== cells) return undefined;
-  const windU = grid2d(steps, cells, 0);
-  const windV = grid2d(steps, cells, 0);
+  const windU = grid2d(steps, cells);
+  const windV = grid2d(steps, cells);
   const windGust = grid2d(steps, cells);
   const pressureMsl = grid2d(steps, cells);
   const precipitation = grid2d(steps, cells);
@@ -158,21 +206,54 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
     const precip = h?.precipitation ?? [];
     const cloud = h?.cloud_cover ?? [];
     for (let t = 0; t < steps; t += 1) {
-      const s = spd[t] ?? 0;
-      const d = (dir[t] ?? 0) * DEG_TO_RAD;
-      windU[t][c] = -s * Math.sin(d);
-      windV[t][c] = -s * Math.cos(d);
-      const g = gust[t];
+      const s = finite(spd[t]);
+      const direction = finite(dir[t]);
+      if (s !== undefined && direction !== undefined) {
+        const d = direction * DEG_TO_RAD;
+        windU[t][c] = -s * Math.sin(d);
+        windV[t][c] = -s * Math.cos(d);
+      }
+      const g = finite(gust[t]);
       if (g !== undefined) windGust[t][c] = g;
-      const hpa = pres[t];
+      const hpa = finite(pres[t]);
       if (hpa !== undefined) pressureMsl[t][c] = hpa * PA_PER_HPA;
-      const mm = precip[t];
+      const mm = finite(precip[t]);
       if (mm !== undefined) precipitation[t][c] = mm;
-      const cc = cloud[t];
+      const cc = finite(cloud[t]);
       if (cc !== undefined) cloudCover[t][c] = cc / 100;
     }
   }
-  return { lats, lons, times, windU, windV, windGust, pressureMsl, precipitation, cloudCover };
+  return {
+    lats,
+    lons,
+    times,
+    windU,
+    windV,
+    windGust,
+    pressureMsl,
+    precipitation,
+    precipitationInterval: 'preceding-hour',
+    precipitationInterpolation: 'step',
+    cloudCover,
+    atmosphericSource: sourceMetadata(locs, times),
+  };
+}
+
+function finite(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function sourceMetadata(
+  locs: Array<{ latitude?: number; longitude?: number }>,
+  times: number[],
+): WeatherSourceMetadata {
+  return {
+    coordinates: locs.map((loc) => ({
+      latitude: finite(loc.latitude) ?? Number.NaN,
+      longitude: finite(loc.longitude) ?? Number.NaN,
+    })),
+    times,
+  };
 }
 
 // Fetch Open-Meteo marine wave data for the same sampled grid as the forecast. Best-effort: returns
@@ -182,15 +263,17 @@ export async function fetchMarine(
   bbox: Bbox,
   opts: ForecastOptions,
   fetchFn: typeof fetch = globalThis.fetch.bind(globalThis),
+  signal?: AbortSignal,
 ): Promise<MarineFields | undefined> {
   const result = await fetchGridLocations<MarineLoc>(
     MARINE_URL,
-    'wave_height,wave_direction,wave_period',
+    'wave_height,wave_direction,wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,wind_wave_peak_period,swell_wave_height,swell_wave_direction,swell_wave_period,swell_wave_peak_period,ocean_current_velocity,ocean_current_direction,sea_surface_temperature',
     // Marine data exists only at sea cells; the forecast above keeps the default land selection.
-    { cell_selection: 'sea' },
+    { cell_selection: 'sea', velocity_unit: 'ms', temperature_unit: 'kelvin' },
     bbox,
     opts,
     fetchFn,
+    signal,
   );
   return result ? parseMarine(result.locs, result.lats.length * result.lons.length) : undefined;
 }
@@ -203,19 +286,65 @@ function parseMarine(locs: MarineLoc[], cells: number): MarineFields | undefined
   const waveHeight = grid2d(steps, cells);
   const waveDirection = grid2d(steps, cells);
   const wavePeriod = grid2d(steps, cells);
+  const windWaveHeight = grid2d(steps, cells);
+  const windWaveDirection = grid2d(steps, cells);
+  const windWavePeriod = grid2d(steps, cells);
+  const windWavePeakPeriod = grid2d(steps, cells);
+  const swellWaveHeight = grid2d(steps, cells);
+  const swellWaveDirection = grid2d(steps, cells);
+  const swellWavePeriod = grid2d(steps, cells);
+  const swellWavePeakPeriod = grid2d(steps, cells);
+  const oceanCurrentSpeed = grid2d(steps, cells);
+  const oceanCurrentDirection = grid2d(steps, cells);
+  const seaSurfaceTemperature = grid2d(steps, cells);
   for (let c = 0; c < cells; c += 1) {
     const h = locs[c]?.hourly;
-    const wh = h?.wave_height ?? [];
-    const wd = h?.wave_direction ?? [];
-    const wp = h?.wave_period ?? [];
+    const scalarFields: Array<[number[][], Array<number | null>]> = [
+      [waveHeight, h?.wave_height ?? []],
+      [wavePeriod, h?.wave_period ?? []],
+      [windWaveHeight, h?.wind_wave_height ?? []],
+      [windWavePeriod, h?.wind_wave_period ?? []],
+      [windWavePeakPeriod, h?.wind_wave_peak_period ?? []],
+      [swellWaveHeight, h?.swell_wave_height ?? []],
+      [swellWavePeriod, h?.swell_wave_period ?? []],
+      [swellWavePeakPeriod, h?.swell_wave_peak_period ?? []],
+      [oceanCurrentSpeed, h?.ocean_current_velocity ?? []],
+      [seaSurfaceTemperature, h?.sea_surface_temperature ?? []],
+    ];
+    const directionFields: Array<[number[][], Array<number | null>]> = [
+      [waveDirection, h?.wave_direction ?? []],
+      [windWaveDirection, h?.wind_wave_direction ?? []],
+      [swellWaveDirection, h?.swell_wave_direction ?? []],
+      [oceanCurrentDirection, h?.ocean_current_direction ?? []],
+    ];
     for (let t = 0; t < steps; t += 1) {
-      waveHeight[t][c] = wh[t] ?? Number.NaN;
-      const d = wd[t];
-      waveDirection[t][c] = d === undefined ? Number.NaN : d * DEG_TO_RAD;
-      wavePeriod[t][c] = wp[t] ?? Number.NaN;
+      for (const [target, values] of scalarFields) target[t][c] = finite(values[t]) ?? Number.NaN;
+      for (const [target, values] of directionFields) {
+        const d = finite(values[t]);
+        target[t][c] = d === undefined ? Number.NaN : d * DEG_TO_RAD;
+      }
     }
   }
-  return { waveHeight, waveDirection, wavePeriod };
+  return {
+    source: sourceMetadata(
+      locs,
+      first.time.map((time) => time * 1000),
+    ),
+    waveHeight,
+    waveDirection,
+    wavePeriod,
+    windWaveHeight,
+    windWaveDirection,
+    windWavePeriod,
+    windWavePeakPeriod,
+    swellWaveHeight,
+    swellWaveDirection,
+    swellWavePeriod,
+    swellWavePeakPeriod,
+    oceanCurrentSpeed,
+    oceanCurrentDirection,
+    seaSurfaceTemperature,
+  };
 }
 
 // The marine fetch uses the same sampled grid and forecast horizon, so the cell and step indices
@@ -228,10 +357,63 @@ export function mergeMarine(grid: WeatherGrid, marine: MarineFields): WeatherGri
   // step-count mismatch (the field builders then fall back to no wave layer), mirroring the
   // cell-count guard in parseMarine.
   if (marine.waveHeight.length !== grid.windU.length) return grid;
-  return {
+  const maxTimeMismatchMs = maxTimeMismatch(grid.times, marine.source.times);
+  const maxDisplacementM = maxSourceDisplacement(grid.atmosphericSource, marine.source);
+  const qualified = {
     ...grid,
+    marineSource: marine.source,
+    marineAlignment: { maxDisplacementM, maxTimeMismatchMs },
+  };
+  if (maxTimeMismatchMs !== 0 || maxDisplacementM > 100_000) return qualified;
+  return {
+    ...qualified,
     waveHeight: marine.waveHeight,
     waveDirection: marine.waveDirection,
     wavePeriod: marine.wavePeriod,
+    windWaveHeight: marine.windWaveHeight,
+    windWaveDirection: marine.windWaveDirection,
+    windWavePeriod: marine.windWavePeriod,
+    windWavePeakPeriod: marine.windWavePeakPeriod,
+    swellWaveHeight: marine.swellWaveHeight,
+    swellWaveDirection: marine.swellWaveDirection,
+    swellWavePeriod: marine.swellWavePeriod,
+    swellWavePeakPeriod: marine.swellWavePeakPeriod,
+    oceanCurrentSpeed: marine.oceanCurrentSpeed,
+    oceanCurrentDirection: marine.oceanCurrentDirection,
+    seaSurfaceTemperature: marine.seaSurfaceTemperature,
   };
+}
+
+function maxTimeMismatch(a: number[], b: number[]): number {
+  if (a.length !== b.length) return Number.POSITIVE_INFINITY;
+  return a.reduce((max, time, index) => Math.max(max, Math.abs(time - b[index])), 0);
+}
+
+function maxSourceDisplacement(
+  atmospheric: WeatherSourceMetadata | undefined,
+  marine: WeatherSourceMetadata,
+): number {
+  if (!atmospheric || atmospheric.coordinates.length !== marine.coordinates.length) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return atmospheric.coordinates.reduce(
+    (max, point, index) => Math.max(max, distanceMeters(point, marine.coordinates[index])),
+    0,
+  );
+}
+
+function distanceMeters(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  if (![a.latitude, a.longitude, b.latitude, b.longitude].every(Number.isFinite)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const dLat = (b.latitude - a.latitude) * DEG_TO_RAD;
+  const longitudeDelta = ((b.longitude - a.longitude + 540) % 360) - 180;
+  const dLon = longitudeDelta * DEG_TO_RAD;
+  const lat1 = a.latitude * DEG_TO_RAD;
+  const lat2 = b.latitude * DEG_TO_RAD;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }

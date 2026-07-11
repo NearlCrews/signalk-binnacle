@@ -33,13 +33,32 @@ export interface RadarOverlay extends OverlayModule {
 // tile-URL builder, and a data-URL tile fails to decode. So instead of a placeholder, the layer
 // simply does not exist until there is a real frame to point it at. The desired visibility, opacity,
 // and theme are tracked and applied when the layer is created or changed.
-// Radar spans roughly the past two hours plus a short nowcast: it can only ever show "now". When
-// the forecast scrubber is parked away from now, painting the live loop over a +72 h wind field
+// Radar spans roughly the past two hours and may include a short nowcast. When the forecast scrubber
+// is parked away from now, painting this recent timeline over a +72 h wind field
 // would invite false correlation, so the layer hides itself until the slider returns. selectedTime
 // of 0 means no grid has seeded the slider yet, which is not a scrub. ONE predicate, shared with
 // the widget's legend note, so "hidden" in the legend and hidden on the map cannot disagree.
 export function radarScrubbedAway(selectedTimeMs: number, nowMs: number): boolean {
   return selectedTimeMs !== 0 && Math.abs(selectedTimeMs - nowMs) > HOUR_MS;
+}
+
+export type RadarFrameKind = 'observed' | 'nowcast';
+
+export interface RadarFrameTiming {
+  kind: RadarFrameKind;
+  offsetMs: number;
+  ageMs: number;
+}
+
+// RainViewer's useful default is recent radar history. Only a frame whose valid time is later than
+// the current wall clock is a nowcast; current and older frames are observations with an age.
+export function radarFrameTiming(frameTimeMs: number, nowMs: number): RadarFrameTiming {
+  const offsetMs = frameTimeMs - nowMs;
+  return {
+    kind: offsetMs > 0 ? 'nowcast' : 'observed',
+    offsetMs,
+    ageMs: Math.max(0, -offsetMs),
+  };
 }
 
 export function createRadarOverlay(
@@ -132,6 +151,9 @@ export function createRadarOverlay(
     sync(ctx) {
       const radar = store.radar;
       const frames = radar?.frames ?? [];
+      // Re-evaluate the scrub gate every tick: the slider moves without any radar data change.
+      applyEffectiveVisibility(ctx);
+      if (!effectiveVisible()) return;
       // On new radar data, jump to the latest frame and point the source at it (creating it).
       if (radar !== lastRadar) {
         lastRadar = radar;
@@ -140,9 +162,6 @@ export function createRadarOverlay(
         lastAdvance = now();
         return;
       }
-      // Re-evaluate the scrub gate every tick: the slider moves without any radar data change.
-      applyEffectiveVisibility(ctx);
-      if (!effectiveVisible()) return;
       if (!ctx.map.getLayer(LAYER_ID) || !radar || frames.length < 2) return;
       // A reduced-motion preference holds the radar on its latest frame (set on each new-radar branch
       // above) rather than looping, mirroring the wind field and the camera moves.
@@ -156,16 +175,15 @@ export function createRadarOverlay(
       applyFrame(ctx);
     },
     remove(ctx) {
+      desiredVisible = false;
+      lastRadar = undefined;
       removeLayersAndSources(ctx.map, [LAYER_ID], [SOURCE_ID]);
     },
     setVisible(ctx, isVisible) {
+      const becameVisible = isVisible && !desiredVisible;
       desiredVisible = isVisible;
-      if (ctx.map.getLayer(LAYER_ID)) {
-        applyEffectiveVisibility(ctx);
-      } else if (isVisible) {
-        // Toggled on while a frame is already loaded: create and show it now.
-        applyFrame(ctx);
-      }
+      applyEffectiveVisibility(ctx);
+      if (becameVisible) this.sync(ctx);
     },
     setOpacity(ctx, value) {
       opacity = value;

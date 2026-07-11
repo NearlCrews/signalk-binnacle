@@ -14,9 +14,10 @@ interface Props {
   abbr?: string;
   viz?: TileDef['viz'];
   sparkPoints?: number[];
+  onOpen?: () => void;
 }
 
-const { label, reading, zone, sensorGloss, kind, abbr, viz, sparkPoints }: Props = $props();
+const { label, reading, zone, sensorGloss, kind, abbr, viz, sparkPoints, onOpen }: Props = $props();
 
 // One expression, so the formatter cannot split the label from its reference parenthetical.
 const labelText = $derived(
@@ -26,13 +27,16 @@ const labelText = $derived(
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
      styles/instruments.css, shared with WindTile. -->
-<div
+<button
+  type="button"
   class="tile card-frame"
   class:tile--warning={zone === 'warning'}
   class:tile--alarm={zone === 'alarm'}
   class:tile--stale={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--position={kind === 'position'}
+  aria-label={`Open ${labelText} details`}
+  onclick={onOpen}
 >
   {#if reading.state === 'never'}
     <span class="value"><span class="muted-note">{sensorGloss}</span></span>
@@ -47,6 +51,9 @@ const labelText = $derived(
     {:else if sparkPoints}
       <Sparkline points={sparkPoints} />
     {/if}
+    {#if reading.secondary}
+      <span class="tile-secondary">{reading.secondary}</span>
+    {/if}
   {/if}
   <span class="caps-label"
     >{labelText}
@@ -54,4 +61,4 @@ const labelText = $derived(
       <span class="abbr">{abbr}</span>
     {/if}</span
   >
-</div>
+</button>

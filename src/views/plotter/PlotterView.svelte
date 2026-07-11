@@ -36,6 +36,7 @@ import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
 import { TracksPanel } from '$features/tracks';
 import { TrendsPanel } from '$features/trends';
 import { WaypointsPanel } from '$features/waypoints';
+import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
 import type { LayerSettings } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
@@ -134,7 +135,7 @@ interface Props {
   historyProviders: HistoryProviders | undefined;
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
-  weatherProviderName: string | undefined;
+  weatherProvider: WeatherProvider | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
   alarmActionError: string | undefined;
@@ -242,7 +243,7 @@ let {
   historyProviders,
   serverFeatures,
   notificationsApi,
-  weatherProviderName,
+  weatherProvider,
   collisionMute,
   collisionMuteRemainingMin,
   alarmActionError,
@@ -586,7 +587,7 @@ $effect(() => {
       onLayersChange={onWeatherLayersChange}
       onLayersReady={onWeatherLayersReady}
       token={chartsToken}
-      providerName={weatherProviderName}
+      {weatherProvider}
       position={vessel.position}
       pointLoader={pointConditionsLoader}
       online={net.online}

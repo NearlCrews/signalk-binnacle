@@ -1,6 +1,7 @@
 <script lang="ts">
 import { untrack } from 'svelte';
 import { CustomizeToggle, PanelHeader, registerDismiss } from '$shared/ui';
+import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import NumericTile from './NumericTile.svelte';
@@ -16,6 +17,7 @@ interface Props {
 const { controller, deps }: Props = $props();
 
 let customizing = $state(false);
+let detailId = $state<string | undefined>();
 
 const FULLSCREEN_BREAKPOINT_PX = 900;
 // Paired with the @media (max-width: 900px) block below: mirrors the CSS breakpoint so the
@@ -43,6 +45,7 @@ $effect(() => {
 // Hoisted so the tile selection resolves (validate the persisted ids, scan the catalog) once per
 // real change instead of once per clock tick: both the effect below and the template read this.
 const tiles = $derived(controller.tiles);
+const detailDef = $derived(detailId ? tiles.find((def) => def.id === detailId) : undefined);
 
 // Session-only sparkline history: sampled here on the shared reactive clock so the buffers only
 // accumulate while the dock is mounted, matching the subscription lifecycle. The reads are
@@ -77,11 +80,24 @@ $effect(() => {
       <CustomizeToggle
         object="instruments"
         editing={customizing}
-        onToggle={() => (customizing = !customizing)}
+        onToggle={() => {
+          detailId = undefined;
+          customizing = !customizing;
+        }}
       />
     {/snippet}
   </PanelHeader>
-  {#if customizing}
+  {#if detailDef}
+    {@const reading = detailDef.read(deps)}
+    {@const zone = controller.zoneState(detailDef, reading.siValue)}
+    <InstrumentDetail
+      def={detailDef}
+      {deps}
+      {reading}
+      {zone}
+      onBack={() => (detailId = undefined)}
+    />
+  {:else if customizing}
     <div class="customize-instruction">
       <span class="muted-note">Tap an instrument to show or hide. Drag to reorder.</span>
     </div>
@@ -99,6 +115,7 @@ $effect(() => {
             sensorGloss={def.sensorGloss}
             kind={def.kind}
             abbr={def.abbr}
+            onOpen={() => (detailId = def.id)}
           />
         {:else}
           <NumericTile
@@ -110,6 +127,7 @@ $effect(() => {
             abbr={def.abbr}
             viz={def.viz}
             sparkPoints={def.viz === 'spark' ? history.series(def.id) : undefined}
+            onOpen={() => (detailId = def.id)}
           />
         {/if}
       {/each}

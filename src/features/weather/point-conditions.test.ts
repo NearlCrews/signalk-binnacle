@@ -5,7 +5,7 @@ import {
   type ProviderPoint,
   pointConditionsKey,
 } from './point-conditions';
-import type { SignalKWeatherData, WeatherWarning } from './signalk-weather';
+import type { EndpointOutcome, SignalKWeatherData, WeatherWarning } from './signalk-weather';
 
 const OBS: SignalKWeatherData = {
   date: '2026-06-11T12:00:00Z',
@@ -22,119 +22,185 @@ const WARNING: WeatherWarning = {
   type: 'Gale',
 };
 
+const success = <T>(value: T): EndpointOutcome<T> => ({ status: 'success', value });
+
 function makeDeps(nowRef: { ms: number }) {
   return {
-    observations: vi.fn(async () => OBS),
-    forecasts: vi.fn(async () => SERIES),
-    warnings: vi.fn(async () => [WARNING]),
+    observations: vi.fn(async () => success(OBS)),
+    forecasts: vi.fn(async () => success(SERIES)),
+    warnings: vi.fn(async () => success([WARNING])),
     now: () => nowRef.ms,
     persist: createExpiringStore<ProviderPoint>('test', { factory: undefined }),
   };
 }
 
-const failingDeps = (nowRef: { ms: number }) => ({
-  ...makeDeps(nowRef),
-  observations: vi.fn(async () => undefined),
-  forecasts: vi.fn(async () => undefined),
-  warnings: vi.fn(async () => undefined),
-});
+function failureDeps(nowRef: { ms: number }) {
+  return {
+    ...makeDeps(nowRef),
+    observations: vi.fn(async () => ({ status: 'failure' }) as const),
+    forecasts: vi.fn(async () => ({ status: 'failure' }) as const),
+    warnings: vi.fn(async () => ({ status: 'failure' }) as const),
+  };
+}
 
 describe('pointConditionsKey', () => {
-  it('quantizes nearby positions to the same key', () => {
-    expect(pointConditionsKey('AccuWeather', 27.71, -82.69)).toBe(
-      pointConditionsKey('AccuWeather', 27.74, -82.74),
+  it('uses 0.001-degree precision consistently', () => {
+    expect(pointConditionsKey('provider-id', 27.7104, -82.6904)).toBe('provider-id:27.710,-82.690');
+    expect(pointConditionsKey('provider-id', 27.7104, -82.6904)).toBe(
+      pointConditionsKey('provider-id', 27.7103, -82.6903),
+    );
+    expect(pointConditionsKey('provider-id', 27.7104, -82.6904)).not.toBe(
+      pointConditionsKey('provider-id', 27.712, -82.69),
     );
   });
 
-  it('separates providers and distant positions', () => {
-    expect(pointConditionsKey('AccuWeather', 27.7, -82.7)).not.toBe(
-      pointConditionsKey('OpenWeather', 27.7, -82.7),
-    );
-    expect(pointConditionsKey('AccuWeather', 27.7, -82.7)).not.toBe(
-      pointConditionsKey('AccuWeather', 28.7, -82.7),
-    );
+  it('keys by provider id, not display name', () => {
+    expect(pointConditionsKey('provider-a', 1, 2)).not.toBe(pointConditionsKey('provider-b', 1, 2));
   });
 });
 
 describe('createPointConditionsLoader', () => {
-  it('returns the provider answers stamped with the fetch time and persists them', async () => {
+  it('passes the provider id to every endpoint and tracks successful outcomes', async () => {
     const nowRef = { ms: 50_000 };
     const deps = makeDeps(nowRef);
     const loader = createPointConditionsLoader(deps);
+    const point = await loader.load('http://pi', 'provider-id', 27.7, -82.7, 'token');
 
-    const point = await loader.load('http://pi', 'AccuWeather', 27.7, -82.7);
-    expect(point.obs).toBe(OBS);
-    expect(point.series).toBe(SERIES);
-    expect(point.warnings).toEqual([WARNING]);
-    expect(point.fetchedAt).toBe(50_000);
-    expect(await deps.persist.get(pointConditionsKey('AccuWeather', 27.7, -82.7))).toBeDefined();
+    expect(deps.observations).toHaveBeenCalledWith(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+      'token',
+    );
+    expect(deps.forecasts).toHaveBeenCalledWith(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+      12,
+      'token',
+    );
+    expect(point).toMatchObject({
+      obs: OBS,
+      series: SERIES,
+      warnings: [WARNING],
+      observationStatus: 'success',
+      forecastStatus: 'success',
+      warningAvailability: 'fresh',
+      warningsFetchedAt: 50_000,
+    });
   });
 
-  it('replays the persisted bundle to a fresh loader (a reload) when every fetch fails', async () => {
+  it('coalesces concurrent loads for the same provider and point', async () => {
+    const deps = makeDeps({ ms: 50_000 });
+    const loader = createPointConditionsLoader(deps);
+    const [first, second, warnings] = await Promise.all([
+      loader.load('http://pi', 'provider-id', 27.7, -82.7),
+      loader.load('http://pi', 'provider-id', 27.7, -82.7),
+      loader.loadWarnings('http://pi', 'provider-id', 27.7, -82.7),
+    ]);
+
+    expect(second).toBe(first);
+    expect(warnings.warnings).toEqual(first.warnings);
+    expect(deps.observations).toHaveBeenCalledTimes(1);
+    expect(deps.forecasts).toHaveBeenCalledTimes(1);
+    expect(deps.warnings).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves each cached endpoint only on a same-key transient failure', async () => {
     const nowRef = { ms: 50_000 };
     const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
+    await createPointConditionsLoader({ ...makeDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+    );
+    nowRef.ms += 30 * 60_000;
 
-    const first = createPointConditionsLoader({ ...makeDeps(nowRef), persist });
-    await first.load('http://pi', 'AccuWeather', 27.7, -82.7);
-
-    nowRef.ms += 30 * 60_000; // half an hour later, still within the hour
-    const second = createPointConditionsLoader({ ...failingDeps(nowRef), persist });
-    const point = await second.load('http://pi', 'AccuWeather', 27.7, -82.7);
+    const point = await createPointConditionsLoader({ ...failureDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+    );
     expect(point.obs).toEqual(OBS);
     expect(point.series).toEqual(SERIES);
     expect(point.warnings).toEqual([WARNING]);
-    expect(point.fetchedAt).toBe(50_000); // the replay states the original fetch time
+    expect(point.observationsState).toMatchObject({ status: 'failure', stale: true });
+    expect(point.warningAvailability).toBe('stale');
+
+    const otherProvider = await createPointConditionsLoader({
+      ...failureDeps(nowRef),
+      persist,
+    }).load('http://pi', 'other-provider', 27.7, -82.7);
+    expect(otherProvider.obs).toBeUndefined();
+    expect(otherProvider.warnings).toBeUndefined();
   });
 
-  it('does not replay a bundle past the hour expiry', async () => {
-    const nowRef = { ms: 50_000 };
-    const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
-
-    const first = createPointConditionsLoader({ ...makeDeps(nowRef), persist });
-    await first.load('http://pi', 'AccuWeather', 27.7, -82.7);
-
-    nowRef.ms += 61 * 60_000;
-    const second = createPointConditionsLoader({ ...failingDeps(nowRef), persist });
-    const point = await second.load('http://pi', 'AccuWeather', 27.7, -82.7);
-    expect(point.obs).toBeUndefined();
-    expect(point.series).toBeUndefined();
-  });
-
-  it('keeps a fresh warnings answer over the replayed set when only conditions fail', async () => {
+  it.each([
+    'empty',
+    'unsupported',
+  ] as const)('does not replay cached data for a definitive %s outcome', async (status) => {
     const nowRef = { ms: 0 };
     const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
-    const first = createPointConditionsLoader({ ...makeDeps(nowRef), persist });
-    await first.load('http://pi', 'AccuWeather', 27.7, -82.7);
-
-    const newWarning = { ...WARNING, type: 'Storm' };
-    const second = createPointConditionsLoader({
-      ...failingDeps(nowRef),
-      warnings: vi.fn(async () => [newWarning]),
+    await createPointConditionsLoader({ ...makeDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      1,
+      2,
+    );
+    const loader = createPointConditionsLoader({
+      ...makeDeps(nowRef),
+      observations: vi.fn(async () => ({ status }) as const),
+      forecasts: vi.fn(async () => ({ status }) as const),
+      warnings: vi.fn(async () => ({ status }) as const),
       persist,
     });
-    const point = await second.load('http://pi', 'AccuWeather', 27.7, -82.7);
-    expect(point.obs).toEqual(OBS); // the replayed conditions
-    expect(point.warnings).toEqual([newWarning]); // but the warnings just fetched
-  });
-
-  it('returns an empty bundle when fetches fail and nothing is persisted', async () => {
-    const loader = createPointConditionsLoader(failingDeps({ ms: 0 }));
-    const point = await loader.load('http://pi', 'AccuWeather', 27.7, -82.7);
+    const point = await loader.load('http://pi', 'provider-id', 1, 2);
     expect(point.obs).toBeUndefined();
     expect(point.series).toBeUndefined();
-    expect(point.warnings).toBeUndefined();
+    expect(point.warnings).toEqual(status === 'empty' ? [] : undefined);
+    expect(point.warningAvailability).toBe(status === 'empty' ? 'fresh' : 'unavailable');
   });
 
-  it('does not replay another provider or another cell', async () => {
+  it('does not replay data after the cache age bound', async () => {
     const nowRef = { ms: 0 };
     const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
-    const first = createPointConditionsLoader({ ...makeDeps(nowRef), persist });
-    await first.load('http://pi', 'AccuWeather', 27.7, -82.7);
+    await createPointConditionsLoader({ ...makeDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      1,
+      2,
+    );
+    nowRef.ms += 61 * 60_000;
+    const point = await createPointConditionsLoader({ ...failureDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      1,
+      2,
+    );
+    expect(point.obs).toBeUndefined();
+    expect(point.series).toBeUndefined();
+  });
 
-    const second = createPointConditionsLoader({ ...failingDeps(nowRef), persist });
-    const otherProvider = await second.load('http://pi', 'OpenWeather', 27.7, -82.7);
-    expect(otherProvider.obs).toBeUndefined();
-    const otherCell = await second.load('http://pi', 'AccuWeather', 28.7, -82.7);
-    expect(otherCell.obs).toBeUndefined();
+  it('refreshes warnings independently and keeps same-key cached warnings on failure', async () => {
+    const nowRef = { ms: 0 };
+    const deps = makeDeps(nowRef);
+    const loader = createPointConditionsLoader(deps);
+    await loader.load('http://pi', 'provider-id', 1, 2);
+    nowRef.ms = 10 * 60_000;
+    deps.warnings.mockResolvedValueOnce({ status: 'failure' });
+
+    const warningPoint = await loader.loadWarnings('http://pi', 'provider-id', 1, 2);
+    expect(warningPoint).toMatchObject({
+      requestKey: pointConditionsKey('provider-id', 1, 2),
+      warnings: [WARNING],
+      warningAvailability: 'stale',
+      warningsFetchedAt: 0,
+    });
+    expect(deps.observations).toHaveBeenCalledTimes(1);
+    expect(deps.forecasts).toHaveBeenCalledTimes(1);
   });
 });

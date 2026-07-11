@@ -264,7 +264,7 @@ const DAY_CLOCK_OPTS_HZ: Intl.DateTimeFormatOptions = {
 // A wall-clock time as hour and minute, shared so the nav strip, the tides display, and any other
 // readout format an absolute time the same way. The seconds opt-in serves the readouts that get
 // written in a log or relayed on the VHF (the MOB mark time), where minute resolution is too coarse.
-// The utc opt-in serves the status strip's watch-change clock, where local time is the wrong answer.
+// The utc opt-in serves consumers that need an absolute schedule label rather than local time.
 export function formatClockTime(
   timeMs: number,
   opts?: { seconds?: boolean; utc?: boolean },

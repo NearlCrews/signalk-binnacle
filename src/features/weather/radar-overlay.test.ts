@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WeatherStore } from '$entities/weather';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { createFakeMap } from '$shared/testing/fake-map';
-import { createRadarOverlay } from './radar-overlay';
+import { createRadarOverlay, radarFrameTiming } from './radar-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
   return { map: map as never, beforeIdFor: () => undefined };
@@ -29,6 +29,7 @@ describe('radar overlay', () => {
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
 
+    overlay.setVisible(ctxFor(map), true);
     overlay.sync(ctxFor(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(1);
@@ -39,7 +40,7 @@ describe('radar overlay', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
     overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.setVisible(ctxFor(map), true);
     const source = [...map.sources.values()][0];
     expect(source.tiles).toEqual([
       'https://tilecache.rainviewer.com/v2/radar/b/256/{z}/{x}/{y}/2/1_1.png',
@@ -72,7 +73,7 @@ describe('radar overlay', () => {
     expect(map.layers.size).toBe(1);
   });
 
-  it('creates the layer hidden when toggled on while the slider is scrubbed away', () => {
+  it('defers layer creation when toggled on while the slider is scrubbed away', () => {
     const store = storeWithRadar();
     store.setSelectedTime(2 * 60 * 60 * 1000); // two hours from "now" (wallNow = 0): scrubbed away
     const overlay = createRadarOverlay(
@@ -89,14 +90,15 @@ describe('radar overlay', () => {
     };
     overlay.add(ctxFor(map));
     overlay.setVisible(ctxFor(map), true);
-    expect(map.layers.size).toBe(1);
-    expect(added[0]?.layout?.visibility).toBe('none');
+    expect(map.layers.size).toBe(0);
+    expect(added).toHaveLength(0);
   });
 
   it('removes its layer and source', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
     overlay.add(ctxFor(map));
+    overlay.setVisible(ctxFor(map), true);
     overlay.sync(ctxFor(map));
     overlay.remove(ctxFor(map));
     expect(map.layers.size).toBe(0);
@@ -110,5 +112,24 @@ describe('radar overlay', () => {
     expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
     overlay.sync(ctxFor(map));
     expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
+  });
+});
+
+describe('radar frame timing', () => {
+  it('classifies current and past frames as observed with an age', () => {
+    expect(radarFrameTiming(9_000, 10_000)).toEqual({
+      kind: 'observed',
+      offsetMs: -1_000,
+      ageMs: 1_000,
+    });
+    expect(radarFrameTiming(10_000, 10_000).kind).toBe('observed');
+  });
+
+  it('classifies only future frames as nowcasts', () => {
+    expect(radarFrameTiming(11_000, 10_000)).toEqual({
+      kind: 'nowcast',
+      offsetMs: 1_000,
+      ageMs: 0,
+    });
   });
 });

@@ -56,8 +56,13 @@ export interface PathValue {
   value: Value;
 }
 
+export interface PathSource {
+  label?: string;
+}
+
 interface DeltaUpdate {
   values?: PathValue[];
+  source?: unknown;
   [key: string]: unknown;
 }
 
@@ -96,6 +101,7 @@ export interface SubscribeEntry {
 // boundary, so there is no per-path or per-context object to build on either side.
 export interface SKFrame {
   self: Map<string, Value>;
+  selfSources?: Map<string, PathSource>;
   ais?: Map<string, Map<string, Value>>;
   connection: ConnectionState;
   epoch: number;

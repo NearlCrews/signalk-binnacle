@@ -248,9 +248,9 @@ function runPillAction(action: MenuItem, after?: () => void): void {
     <span class="readout" title="Vessel position">Vessel</span>
     <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
     <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
-    <span class="readout" title="UTC time, for watch changes and weather schedules"
+    <span class="readout" title="Local time"
       >Time
-      <b class="num">{formatClockTime(clock.now, { utc: true })} UTC</b></span
+      <b class="num">{formatClockTime(clock.now)}</b></span
     >
   </div>
 </footer>

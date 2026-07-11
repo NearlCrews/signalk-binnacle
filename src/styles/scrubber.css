@@ -11,6 +11,7 @@
   display: flex;
   align-items: center;
   flex: 1;
+  min-inline-size: 0;
 }
 .scrubber .track {
   inline-size: 100%;
@@ -29,4 +30,21 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+/* A narrow weather footer cannot fit three deck-size controls, a useful slider, and a timestamp on
+   one line. Move the timestamp below while preserving the controls and track as one stable row. */
+@container (max-width: 26rem) {
+  .scrubber {
+    display: grid;
+    grid-template-columns: repeat(3, var(--control-size)) minmax(4rem, 1fr);
+    gap: var(--space-1);
+  }
+  .scrubber .track-wrap {
+    grid-column: 4;
+  }
+  .scrubber .time {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
 }

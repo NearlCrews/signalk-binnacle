@@ -172,8 +172,9 @@ resize the map every frame). Under its 900px breakpoint the same panel goes full
 --z-panel, below the safety strips, with its own close chrome ("Close instruments, return to
 chart"). Its tile grid fills the dock: rows share the full height, dense flow backfills holes,
 and an empty tile is never full width (the layout rules live in the design system's instruments
-module entry). Do not add further split panels without a matching product case; overlays stay the
-default.
+module entry). Selecting a tile opens an in-dock detail view, and Customize groups available
+instruments by category with a Rescan action for dynamic Signal K instances. Do not add further split
+panels without a matching product case; overlays stay the default.
 
 Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive from `$shared/ui`,
 one per surface, trailing in the header row, and open the mode with one `.muted-note` line
@@ -287,8 +288,10 @@ These are the style corrections we keep making. Each has a one-line fix.
 - A raster overlay cannot recolor, so it routes through `applyRasterTheme` (which desaturates and
   dims it at night), never a CSS filter.
 - All values are SI in the store (meters, radians, Kelvin). The two sanctioned exceptions are
-  `navigation.position` in decimal degrees and weather-grid precipitation in mm/h (provider-native,
-  read only at the display edge). Convert only at the display edge.
+  `navigation.position` in decimal degrees and Open-Meteo's preceding-hour precipitation in
+  millimeters, read only at the display edge and labeled as an hourly rate. Signal K provider
+  precipitation is converted from meters to millimeters at ingestion. Convert all other values only
+  at the display edge.
 - Follow the server unit preference through the `UnitsStore`, never a panel-local imperial or metric
   toggle and never a locale guess. A unit-bearing field consumes the resolved `UnitsMode` as a prop
   and converts only when rendering.
