@@ -46,6 +46,8 @@ All notable changes to Binnacle are documented here. The format follows
 - Saved night-red restores before the first paint and updates browser theme color. Icon pickers flip
   and clamp to available viewport space, and full-screen instruments contain and restore focus.
 - KIP and history discovery distinguish checking, available, absent, failed, and retrying states.
+- The Instruments dock keeps its title on one line, the chart scale is labeled, and the enlarged
+  attribution control renders one information glyph instead of a tiled group.
 
 <a id="v0150"></a>
 

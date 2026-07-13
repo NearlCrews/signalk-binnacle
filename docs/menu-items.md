@@ -14,7 +14,7 @@ source, and surrounding traffic before relying on it.
 - **Follow boat** keeps the vessel centered until the chart is panned. Follow turns off automatically
   when the GPS fix becomes stale.
 - The chart stays flat. The compass shows chart orientation and resets north, zoom controls provide
-  gloved-hand alternatives to pinch, and the scale reports nautical distance.
+  gloved-hand alternatives to pinch, and the labeled scale reports nautical distance.
 - Long press, right-click, the Context Menu key, and Shift+F10 open chart actions. Keyboard actions
   use the chart center.
 

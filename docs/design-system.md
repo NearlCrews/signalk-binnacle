@@ -111,9 +111,9 @@ Rules:
 - Hoist at the second copy. When the same markup or CSS appears in a second place, hoist it into a
   shared global class or a shared primitive. A third copy is a review failure.
 - Same purpose, same control. A control that does the same job on two surfaces carries the identical
-  label pattern, variant, and box everywhere ("Customize toolbar" and "Customize instruments" are the
-  same ghost button). Backdrop tint may differ, since a ghost inherits its surface; the control itself
-  may not. Judged at the second copy, like CSS.
+  accessible-label pattern, variant, and box everywhere ("Customize toolbar" and "Customize
+  instruments" are the same ghost button). Backdrop tint may differ, since a ghost inherits its
+  surface; the control itself may not. Judged at the second copy, like CSS.
 - A component's scoped `<style>` is for layout that is genuinely local to that component. It composes
   global classes and tokens; it does not re-implement them. A panel that re-declares the row chrome, the
   card frame, the alert banner, or the field shape that a global class already provides is wrong.
@@ -205,7 +205,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
-  its "Customize instruments" entry through `headerExtra`), so the headers cannot drift apart. Do not
+  its compact "Customize" entry through `headerExtra`, with "Customize instruments" retained as the
+  accessible name), so the headers cannot drift apart. Do not
   hand-roll a panel header.
 - `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with a scale transition
   and the dismiss-stack registration). Use it for any anchored menu (the app-menu launcher, the
@@ -224,13 +225,13 @@ Shared behavior lives here. Compose these; do not re-implement them.
   navigation handoffs. Never a blocking `window.confirm`. The prompt names the effect and, for derived
   guidance, the data scope. Retrace track names the latest continuous segment.
 - Edit modes: a surface with a customize mode gets exactly one entry control, the `CustomizeToggle`
-  primitive (a `.btn btn-ghost` text button at intrinsic width trailing in its header row), labeled
-  "Customize <object>" (as in "Customize toolbar", "Customize instruments"), always naming the
-  object even when the surface's title repeats it, so the same control reads the same on every
-  surface. The label swapping to "Done" is the entire state story: never aria-pressed, never is-on,
-  never a static aria-label. The mode opens with one leading `.muted-note` line stating what a tap
-  now does. The instrument dock and the menu's toolbar editor are the two shipped examples; both
-  render the primitive, never a hand-written copy.
+  primitive (a `.btn btn-ghost` text button at intrinsic width trailing in its header row), with the
+  accessible name "Customize <object>" (as in "Customize toolbar" and "Customize instruments"). A
+  constrained header that already names the object may display the compact text "Customize" while
+  retaining that full accessible name. The label swapping to "Done" is the entire state story: never
+  aria-pressed or is-on. The mode opens with one leading `.muted-note` line stating what a tap now
+  does. The instrument dock and the menu's toolbar editor are the two shipped examples; both render
+  the primitive, never a hand-written copy.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints,
   profiles, and Chart Locker saved-area panels): arming one row disarms the rest. Use it instead of a
   per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.

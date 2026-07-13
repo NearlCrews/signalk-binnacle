@@ -31,6 +31,36 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
     .toBe(true);
 });
 
+test('keeps chart controls legible and the instrument title on one line', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  const attribution = page.locator('.maplibregl-ctrl-attrib-button');
+  await expect(attribution).toHaveCSS('background-image', 'none');
+  await expect
+    .poll(() =>
+      page
+        .locator('.maplibregl-ctrl-scale')
+        .evaluate((scale) => getComputedStyle(scale, '::before').content),
+    )
+    .toBe('"Scale"');
+
+  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  const heading = dock.getByRole('heading', { name: 'Instruments' });
+  await expect(heading).toBeVisible();
+  await expect
+    .poll(() =>
+      heading.evaluate((element) => {
+        const textRange = document.createRange();
+        textRange.selectNodeContents(element);
+        return textRange.getClientRects().length;
+      }),
+    )
+    .toBe(1);
+  await expect(dock.getByRole('button', { name: 'Customize instruments' })).toHaveText('Customize');
+});
+
 test('honors reduced motion and keeps menu keyboard focus contained', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => localStorage.clear());

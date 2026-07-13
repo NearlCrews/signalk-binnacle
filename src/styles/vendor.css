@@ -15,17 +15,22 @@
 }
 .maplibregl-ctrl-attrib-button {
   background-color: var(--surface-overlay);
+  background-image: none;
   inline-size: var(--control-size);
   block-size: var(--control-size);
 }
-/* The library draws the compact toggle's "i" glyph with an embedded dark SVG; recolor it to the
-   theme via mask so night-red shows a red glyph on near-black. */
-.maplibregl-ctrl-attrib-button .maplibregl-ctrl-icon {
-  background-image: none;
+/* MapLibre paints its compact attribution glyph as a repeating button background. Replacing that
+   background with one masked pseudo-element prevents multiple "i" glyphs when the target grows to
+   44 px and keeps the glyph theme-aware in night-red. */
+.maplibregl-ctrl-attrib-button::after {
+  position: absolute;
+  inset: 0;
   background-color: var(--text-muted);
+  content: "";
   mask:
     url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0"/></svg>')
     center / 18px 18px no-repeat;
+  pointer-events: none;
 }
 
 /* Map controls are helm actions, so their hit boxes follow the same gloved-hand floor as Binnacle's
@@ -49,9 +54,20 @@
   filter: none;
 }
 .maplibregl-ctrl-scale {
+  position: relative;
   border-color: var(--text-muted);
   background: var(--surface-overlay);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
+}
+.maplibregl-ctrl-scale::before {
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-start: -2px;
+  padding: 0 var(--space-1);
+  background: var(--surface-overlay);
+  color: var(--text-muted);
+  content: "Scale";
+  line-height: 1.4;
 }

@@ -81,6 +81,7 @@ $effect(() => {
       <CustomizeToggle
         object="instruments"
         editing={customizing}
+        compact
         onToggle={() => {
           detailId = undefined;
           customizing = !customizing;
@@ -141,7 +142,7 @@ $effect(() => {
 
 <style>
 .instruments {
-  inline-size: clamp(16rem, 24vw, 22rem);
+  inline-size: clamp(20rem, 28vw, 24rem);
   border-inline-start: 1px solid var(--border);
   display: flex;
   flex-direction: column;
