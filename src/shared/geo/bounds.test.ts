@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bboxContainsPoint, boundsOfPoints, normalizeBounds, padBbox } from './bounds';
+import {
+  bboxCenter,
+  bboxContainsPoint,
+  bboxIntersects,
+  boundsOfPoints,
+  normalizeBounds,
+  padBbox,
+} from './bounds';
 
 describe('bboxContainsPoint', () => {
   const box: [number, number, number, number] = [-10, -5, 10, 5];
@@ -47,6 +54,28 @@ describe('normalizeBounds', () => {
     expect(e).toBeGreaterThan(5);
     expect(s).toBeLessThan(5);
     expect(n).toBeGreaterThan(5);
+  });
+});
+
+describe('bboxCenter', () => {
+  it('returns the center of a normal box', () => {
+    expect(bboxCenter([-10, 20, 10, 40])).toEqual({ latitude: 30, longitude: 0 });
+  });
+
+  it('uses the short span for an antimeridian-crossing box', () => {
+    expect(bboxCenter([170, -10, -170, 10])).toEqual({ latitude: 0, longitude: 180 });
+  });
+});
+
+describe('bboxIntersects', () => {
+  it('finds overlap between normal boxes', () => {
+    expect(bboxIntersects([-10, 0, 10, 10], [5, 5, 15, 15])).toBe(true);
+    expect(bboxIntersects([-10, 0, 10, 10], [20, 5, 30, 15])).toBe(false);
+  });
+
+  it('finds overlap across the antimeridian', () => {
+    expect(bboxIntersects([170, 45, -170, 60], [-175, 50, -160, 65])).toBe(true);
+    expect(bboxIntersects([170, 45, -170, 60], [-150, 50, -140, 65])).toBe(false);
   });
 });
 

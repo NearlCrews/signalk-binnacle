@@ -1,12 +1,18 @@
+import {
+  chartSourceById,
+  DEFAULT_TILE_BYTES_BY_MODE,
+  tileCountInBbox,
+} from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
 import {
   bboxFromRectangle,
   coveringSources,
-  DEFAULT_TILE_BYTES,
   estimateBytes,
+  estimateRegionBytes,
   exceedsRegionsFree,
   formatBySource,
   positionWarmSources,
+  rectangleRingFromBbox,
   regionSources,
   regionsFreeBytes,
 } from './estimate.js';
@@ -37,7 +43,7 @@ describe('regions estimate', () => {
     expect(positionWarmSources().some((s) => s.id === 'seamark')).toBe(true);
   });
 
-  it('uses the per-source average when present, the default otherwise', () => {
+  it('uses the measured average when present and the source fallback otherwise', () => {
     const bbox: [number, number, number, number] = [-1, -1, 1, 1];
     const withAvg = estimateBytes(
       ['seamark'],
@@ -46,9 +52,12 @@ describe('regions estimate', () => {
       stats({ perSourceAvgBytes: { seamark: 100 } }).perSourceAvgBytes,
     );
     const withDefault = estimateBytes(['seamark'], bbox, [6, 6], stats().perSourceAvgBytes);
+    const seamark = chartSourceById('seamark');
+    if (!seamark) throw new Error('missing seamark fixture');
+    const tiles = tileCountInBbox(seamark, bbox, [6, 6]);
     expect(withAvg).toBeGreaterThan(0);
-    expect(withDefault).toBeGreaterThan(0);
-    expect(withDefault % DEFAULT_TILE_BYTES).toBe(0);
+    expect(withDefault).toBe(tiles * 256_000);
+    expect(DEFAULT_TILE_BYTES_BY_MODE.wmts).toBe(1_000_000);
   });
 
   it('derives a bbox from a drawn rectangle ring', () => {
@@ -60,6 +69,19 @@ describe('regions estimate', () => {
       [10, 50],
     ];
     expect(bboxFromRectangle(ring)).toEqual([10, 50, 20, 55]);
+  });
+
+  it('round-trips an antimeridian-crossing rectangle through draw coordinates', () => {
+    const bbox = [170, 45, -170, 60] as const;
+    const ring = rectangleRingFromBbox(bbox);
+    expect(ring[1][0]).toBe(190);
+    expect(bboxFromRectangle(ring)).toEqual(bbox);
+  });
+
+  it('returns a safe error state for malformed estimate statistics', () => {
+    expect(estimateRegionBytes(['seamark'], [-1, -1, 1, 1], [6, 6], { seamark: 0 })).toMatchObject({
+      ok: false,
+    });
   });
 });
 

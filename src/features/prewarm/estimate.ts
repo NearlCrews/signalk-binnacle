@@ -1,23 +1,22 @@
 /** Pure estimate helpers for the regions panel: project the tile count with the shared enumerator and
  * multiply by the per-source byte average from the cache stats, gated against the regions-free budget.
- * The estimate is a ceiling (a warm negative-caches 404s at zero bytes, so the real footprint is
- * smaller). DEFAULT_TILE_BYTES and estimateBytes are hoisted into the shared package so the panel and
- * the companion plugin share one implementation and the server-side budget re-validation agrees. */
+ * This is planning data, not a mathematical upper bound. The companion still enforces actual tile and
+ * byte limits while saving. */
 
 import {
   type Bbox,
   CHART_SOURCES,
   type ChartSource,
-  DEFAULT_TILE_BYTES,
   estimateBytes,
   tileCountInBbox,
   type ZoomRange,
 } from 'signalk-chart-sources';
+import { boundsOfPoints, isLatitude } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
 import type { CacheStats, WarmStatus } from './regions-client.js';
 
 /** Re-exported from the shared package so the panel, the plugin, and any caller share one estimate. */
-export { DEFAULT_TILE_BYTES, estimateBytes };
+export { estimateBytes };
 
 /** The basemap source id; the region list includes it, the position-warm list and the new-box
  * auto-select exclude it (it is global and large). */
@@ -68,6 +67,7 @@ export type DownloadGateReason =
   | 'draw-area'
   | 'storage-loading'
   | 'choose-charts'
+  | 'estimate-error'
   | 'insufficient-space';
 
 /** The one reason the region builder cannot proceed, in the same order the navigator encounters the
@@ -78,30 +78,68 @@ export function downloadGateReason(opts: {
   sources: string[];
   writeBlocked: boolean;
   stats: CacheStats | null;
-  estimate: number;
+  estimate: number | null;
 }): DownloadGateReason | null {
   if (opts.writeBlocked) return 'write-access';
   if (opts.bbox === null) return 'draw-area';
   if (opts.stats === null) return 'storage-loading';
   if (opts.sources.length === 0) return 'choose-charts';
+  if (opts.estimate === null) return 'estimate-error';
   if (exceedsRegionsFree(opts.estimate, opts.stats)) return 'insufficient-space';
   return null;
 }
 
-/** The [minLng, minLat, maxLng, maxLat] of a drawn rectangle ring of [lng, lat] points. A manual
- * scan, not a spread into Math.min/max (unbounded in arg count), matching tides-display. */
+/** The bbox of a drawn rectangle ring. Longitude is wrapped before finding its shortest enclosing
+ * interval, so a rectangle spanning 170 through 190 degrees returns [170, ..., -170, ...]. */
 export function bboxFromRectangle(ring: Array<[number, number]>): Bbox {
-  let minLng = Number.POSITIVE_INFINITY;
-  let minLat = Number.POSITIVE_INFINITY;
-  let maxLng = Number.NEGATIVE_INFINITY;
-  let maxLat = Number.NEGATIVE_INFINITY;
+  if (ring.length === 0) throw new RangeError('rectangle ring must not be empty');
+  const points: Array<{ latitude: number; longitude: number }> = [];
   for (const [lng, lat] of ring) {
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
+    if (!Number.isFinite(lng) || !isLatitude(lat)) {
+      throw new RangeError('rectangle coordinates must be finite geographic coordinates');
+    }
+    let longitude = ((((lng + 180) % 360) + 360) % 360) - 180;
+    if (longitude === -180 && lng > 0) longitude = 180;
+    points.push({ latitude: lat, longitude });
   }
-  return [minLng, minLat, maxLng, maxLat];
+  const bbox = boundsOfPoints(points);
+  if (bbox === undefined) throw new RangeError('rectangle ring must not be empty');
+  return bbox;
+}
+
+/** A GeoJSON rectangle ring for a bbox. East is unwrapped when the box crosses the antimeridian so
+ * Terra Draw seeds the short rectangle instead of drawing nearly the whole world. */
+export function rectangleRingFromBbox(bbox: Bbox): Array<[number, number]> {
+  const [west, south, east, north] = bbox;
+  const drawEast = east < west ? east + 360 : east;
+  return [
+    [west, south],
+    [drawEast, south],
+    [drawEast, north],
+    [west, north],
+    [west, south],
+  ];
+}
+
+export type EstimateResult = { ok: true; bytes: number } | { ok: false; message: string };
+
+/** Convert strict package estimate failures into a render-safe state at the panel boundary. */
+export function estimateRegionBytes(
+  sources: readonly string[],
+  bbox: Bbox,
+  zoomRange: ZoomRange,
+  perSourceAvgBytes: Readonly<Record<string, number>>,
+): EstimateResult {
+  try {
+    return { ok: true, bytes: estimateBytes(sources, bbox, zoomRange, perSourceAvgBytes) };
+  } catch (cause) {
+    if (!(cause instanceof TypeError || cause instanceof RangeError)) throw cause;
+    return {
+      ok: false,
+      message:
+        'Could not calculate the download estimate. Retry the storage check, or redraw the area.',
+    };
+  }
 }
 
 /** The single gate predicate shared by the panel and its test. Returns true only when a box is
@@ -115,10 +153,13 @@ export function canDownloadRegion(opts: {
   zoomRange: ZoomRange;
 }): boolean {
   if (opts.bbox === null || opts.sources.length === 0 || opts.writeBlocked) return false;
-  return !exceedsRegionsFree(
-    estimateBytes(opts.sources, opts.bbox, opts.zoomRange, opts.stats.perSourceAvgBytes),
-    opts.stats,
+  const estimate = estimateRegionBytes(
+    opts.sources,
+    opts.bbox,
+    opts.zoomRange,
+    opts.stats.perSourceAvgBytes,
   );
+  return estimate.ok && !exceedsRegionsFree(estimate.bytes, opts.stats);
 }
 
 /** A poll status is terminal when the job is no longer running. A null status means the job is

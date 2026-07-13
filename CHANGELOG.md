@@ -6,6 +6,20 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Updated `signalk-chart-sources` to 0.3.1, adopted its readonly catalog metadata for NOAA ENC
+  rendering, and describe offline download size as a planning estimate.
+
+### Fixed
+
+- Offline chart planning now validates cache statistics, reports retryable estimate failures, uses
+  source-specific byte estimates, and keeps actual storage enforcement in the downloader.
+- Offline areas now preserve antimeridian-crossing rectangles when drawing, naming, fitting, and
+  reusing saved settings, and the area tool now accepts the drag gesture described in the UI.
+- NOAA ENC remains available across its service envelope but is selected automatically only for
+  conservative United States coverage areas, including Alaska across the antimeridian.
+
 <a id="v0150"></a>
 
 ## [0.15.0] - 2026-07-13

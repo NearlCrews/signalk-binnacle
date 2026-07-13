@@ -119,6 +119,18 @@ describe('download gate explanation', () => {
       }),
     ).toBe('insufficient-space');
   });
+
+  it('reports an estimate validation failure', () => {
+    expect(
+      downloadGateReason({
+        bbox: [-1, -1, 1, 1],
+        sources: ['seamark'],
+        writeBlocked: false,
+        stats,
+        estimate: null,
+      }),
+    ).toBe('estimate-error');
+  });
 });
 
 it('persists position-warm settings through postConfig', async () => {

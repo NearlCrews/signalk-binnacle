@@ -88,6 +88,30 @@ describe('regions client', () => {
     expect(await client.getCacheStats()).toEqual(stats);
   });
 
+  it('getCacheStats rejects a malformed measured average', async () => {
+    const fetchImpl = vi.fn(async () =>
+      ok({ rows: 3, bytes: 4096, cap: 1000, perSourceAvgBytes: { seamark: 0 } }),
+    );
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      'tok',
+      fetchImpl as unknown as typeof fetch,
+    );
+    await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
+  });
+
+  it('getCacheStats rejects unsafe or negative totals', async () => {
+    const fetchImpl = vi.fn(async () =>
+      ok({ rows: 3, bytes: -1, cap: 1000, perSourceAvgBytes: {} }),
+    );
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      'tok',
+      fetchImpl as unknown as typeof fetch,
+    );
+    await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
+  });
+
   it('posts config with the bearer token', async () => {
     const fetchImpl = vi.fn(async () => ok(undefined));
     const client = createRegionsClient(

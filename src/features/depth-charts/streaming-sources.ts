@@ -1,4 +1,4 @@
-import type { ChartGroup } from 'signalk-chart-sources';
+import { chartSourceById } from 'signalk-chart-sources';
 
 import { type RasterOverlaySource, wmsTiles } from '$shared/map';
 
@@ -15,9 +15,6 @@ export type StreamingChartSource = RasterOverlaySource;
 // deliberately left out: 11 just duplicates the chart's depth-area shading, and 12 is the overscale
 // crosshatch, both clutter on a not-for-navigation reference overlay. Each subset is its own WMS
 // request, and the data-quality overlay defaults hidden, so the default view is the chart alone.
-const NOAA_ENC_WMS =
-  'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer';
-
 // The GEBCO, EMODnet, NOAA ENC, and BlueTopo-facet sources build their WMS GetMap templates with the
 // shared wmsTiles helper. The optional styles names a non-default WMS style (the EMODnet quality
 // index and the BlueTopo uncertainty render the same layer in a different style); empty selects the
@@ -25,31 +22,31 @@ const NOAA_ENC_WMS =
 // base 512 WMTS is load-bearing.)
 const noaaEncSource = (
   id: string,
-  title: string,
-  layers: string,
   opts: {
     parent?: string;
-    group?: ChartGroup;
     region?: string;
     description?: string;
   } = {},
-): StreamingChartSource => ({
-  id,
-  title,
-  description: opts.description,
-  tiles: [wmsTiles(NOAA_ENC_WMS, layers)],
-  minzoom: 0,
-  maxzoom: 18,
-  bounds: [-180, -15, 180, 75],
-  attribution: 'NOAA Office of Coast Survey, Electronic Navigational Charts (ENC)',
-  parent: opts.parent,
-  group: opts.group,
-  region: opts.region,
-});
-
-// The two NOAA ENC facets (the chart and its data-quality overlay) share this group, so the Layers
-// panel lists them under one "NOAA ENC (US)" header.
-const NOAA_ENC_GROUP = { id: 'noaa-enc', title: 'NOAA ENC (US)' };
+): StreamingChartSource => {
+  const source = chartSourceById(id);
+  if (source?.upstream.mode !== 'wms') {
+    throw new TypeError(`Missing WMS chart source metadata for ${id}`);
+  }
+  return {
+    id: source.id,
+    title: source.title,
+    description: opts.description,
+    tiles: [wmsTiles(source.upstream.base, source.upstream.layers, source.upstream.styles)],
+    tileSize: source.tileSize,
+    minzoom: source.minzoom,
+    maxzoom: source.maxzoom,
+    bounds: source.bounds,
+    attribution: source.attribution,
+    parent: opts.parent,
+    group: source.group,
+    region: opts.region,
+  };
+};
 
 // EMODnet and BlueTopo each render a bathymetry base plus a survey-confidence facet from one WMS, so
 // each is a group: a "Bathymetry" base facet and, nested under it, a quality facet (EMODnet's
@@ -148,14 +145,12 @@ export const STREAMING_CHART_SOURCES: StreamingChartSource[] = [
   // Registered last so the US nautical chart sits on top of the bathymetry when several are enabled,
   // and leads the Charts and depth section. The chart sits below its own data-quality overlay, and
   // both facets share the "NOAA ENC (US)" group.
-  noaaEncSource('depth-noaa-enc', 'NOAA ENC', '0,1,2,3,4,5,6,7,10', {
-    group: NOAA_ENC_GROUP,
+  noaaEncSource('depth-noaa-enc', {
     region: 'US',
     description: 'US official electronic navigation charts, for reference (not for navigation).',
   }),
-  noaaEncSource('depth-noaa-enc-quality', 'Data quality (ZOC)', '8,9', {
+  noaaEncSource('depth-noaa-enc-quality', {
     parent: 'depth-noaa-enc',
-    group: NOAA_ENC_GROUP,
     description: "Survey-quality zones (ZOC): how trustworthy the chart's depths are.",
   }),
 ];

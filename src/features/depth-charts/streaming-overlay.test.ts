@@ -1,3 +1,4 @@
+import { chartSourceById } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
 import { createStreamingChartOverlay } from './streaming-overlay';
 import { STREAMING_CHART_SOURCES } from './streaming-sources';
@@ -27,6 +28,22 @@ describe('streaming chart sources', () => {
     expect(tilesById('depth-noaa-enc')).toContain('LAYERS=0,1,2,3,4,5,6,7,10&');
     expect(tilesById('depth-noaa-enc-quality')).toContain('LAYERS=8,9&');
     expect(STREAMING_CHART_SOURCES.some((s) => s.tiles[0].includes('LAYERS=11,12&'))).toBe(false);
+  });
+
+  it('uses shared NOAA ENC display metadata', () => {
+    for (const id of ['depth-noaa-enc', 'depth-noaa-enc-quality']) {
+      const rendered = STREAMING_CHART_SOURCES.find((source) => source.id === id);
+      const catalog = chartSourceById(id);
+      expect(rendered).toMatchObject({
+        title: catalog?.title,
+        tileSize: catalog?.tileSize,
+        minzoom: catalog?.minzoom,
+        maxzoom: catalog?.maxzoom,
+        bounds: catalog?.bounds,
+        attribution: catalog?.attribution,
+        group: catalog?.group,
+      });
+    }
   });
 
   it('builds a hidden bathymetry overlay for each source', () => {

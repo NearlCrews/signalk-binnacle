@@ -95,7 +95,7 @@ export function createRasterOverlay(source: RasterOverlaySource, band: ZBand): O
         };
         if (source.minzoom !== undefined) spec.minzoom = source.minzoom;
         if (source.maxzoom !== undefined) spec.maxzoom = source.maxzoom;
-        if (source.bounds) spec.bounds = source.bounds;
+        if (source.bounds) spec.bounds = [...source.bounds];
         ctx.map.addSource(sourceId, spec);
       }
       if (!ctx.map.getLayer(layerId)) {

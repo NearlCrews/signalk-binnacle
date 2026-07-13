@@ -53,7 +53,7 @@ Binnacle ships its full feature set as a Signal K webapp:
   stacking for marks, routes, weather-adjacent data, and other map overlays.
   A 24 hour **track history** layer draws the server-recorded past day under the live track.
 - **Offline charts:** with the optional Chart Locker plugin, draw and save the chart area needed for a
-  passage, choose overview, coastal, or harbor detail, review the maximum download and available
+  passage, choose overview, coastal, or harbor detail, review the estimated download and available
   storage, and watch visible tile, byte, and error progress. Saved-area cards show coverage, included
   charts, detail, size, update date, and readiness, with actions to show the area on the chart,
   download it again, or reuse its settings for an adjusted copy. The same landing page manages
@@ -231,7 +231,7 @@ visible but unavailable and explains whether to install, start, or authenticate 
 The Offline charts landing page has four jobs:
 
 1. **Saved areas.** Choose **Save a chart area**, draw a rectangle on the chart, review the smart
-   default chart selection, pick Overview, Coastal, or Harbor detail, check the maximum download and
+   default chart selection, pick Overview, Coastal, or Harbor detail, check the estimated download and
    free space, name it, and start the download. On a phone, the panel collapses while drawing so the
    chart owns the gesture. A saved-area card is ready only when it says **Saved, works offline**.
 2. **Automatic caching.** Optionally keep selected charts cached around the moving boat. This is a

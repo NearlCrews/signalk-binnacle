@@ -44,6 +44,94 @@ export interface CacheStats {
   ttlDays?: number;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isNonNegativeSafeInteger = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= 0;
+
+const isPositiveSafeInteger = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) > 0;
+
+/** Validate the cache statistics before strict estimate code consumes them. Invalid server or stale
+ * cache data fails as a load error instead of throwing during Svelte rendering. */
+export function parseCacheStats(value: unknown): CacheStats {
+  if (!isRecord(value)) throw new TypeError('invalid cache stats');
+  if (
+    !isNonNegativeSafeInteger(value.rows) ||
+    !isNonNegativeSafeInteger(value.bytes) ||
+    !isNonNegativeSafeInteger(value.cap) ||
+    !isRecord(value.perSourceAvgBytes)
+  ) {
+    throw new TypeError('invalid cache stats');
+  }
+
+  const perSourceAvgBytes: Record<string, number> = {};
+  for (const [source, bytes] of Object.entries(value.perSourceAvgBytes)) {
+    if (source.length === 0 || !isPositiveSafeInteger(bytes)) {
+      throw new TypeError('invalid cache stats');
+    }
+    perSourceAvgBytes[source] = bytes;
+  }
+
+  const optionalByteFields = [
+    'pinnedBytes',
+    'scrollBytes',
+    'regionsBudgetBytes',
+    'positionWarmBudgetBytes',
+    'positionWarmBytes',
+    'regionsFreeBytes',
+  ] as const;
+  for (const field of optionalByteFields) {
+    if (value[field] !== undefined && !isNonNegativeSafeInteger(value[field])) {
+      throw new TypeError('invalid cache stats');
+    }
+  }
+  if (value.ttlDays !== undefined && !isNonNegativeSafeInteger(value.ttlDays)) {
+    throw new TypeError('invalid cache stats');
+  }
+
+  let bySource: CacheStats['bySource'];
+  if (value.bySource !== undefined) {
+    if (!Array.isArray(value.bySource)) throw new TypeError('invalid cache stats');
+    bySource = value.bySource.map((row) => {
+      if (
+        !isRecord(row) ||
+        typeof row.source !== 'string' ||
+        row.source.length === 0 ||
+        !isNonNegativeSafeInteger(row.bytes) ||
+        !isNonNegativeSafeInteger(row.rows)
+      ) {
+        throw new TypeError('invalid cache stats');
+      }
+      return { source: row.source, bytes: row.bytes, rows: row.rows };
+    });
+  }
+
+  return {
+    rows: value.rows,
+    bytes: value.bytes,
+    cap: value.cap,
+    perSourceAvgBytes,
+    ...(value.pinnedBytes !== undefined ? { pinnedBytes: value.pinnedBytes as number } : {}),
+    ...(value.scrollBytes !== undefined ? { scrollBytes: value.scrollBytes as number } : {}),
+    ...(value.regionsBudgetBytes !== undefined
+      ? { regionsBudgetBytes: value.regionsBudgetBytes as number }
+      : {}),
+    ...(value.positionWarmBudgetBytes !== undefined
+      ? { positionWarmBudgetBytes: value.positionWarmBudgetBytes as number }
+      : {}),
+    ...(value.positionWarmBytes !== undefined
+      ? { positionWarmBytes: value.positionWarmBytes as number }
+      : {}),
+    ...(value.regionsFreeBytes !== undefined
+      ? { regionsFreeBytes: value.regionsFreeBytes as number }
+      : {}),
+    ...(bySource !== undefined ? { bySource } : {}),
+    ...(value.ttlDays !== undefined ? { ttlDays: value.ttlDays as number } : {}),
+  };
+}
+
 export interface SavedRegionDto {
   id: string;
   name: string;
@@ -120,7 +208,7 @@ export function createRegionsClient(
       );
     },
     async getCacheStats() {
-      return json<CacheStats>(await fetchImpl(url('/cache/stats'), init()));
+      return parseCacheStats(await json<unknown>(await fetchImpl(url('/cache/stats'), init())));
     },
     async getRegions() {
       return json<SavedRegionDto[]>(await fetchImpl(url('/regions'), init()));

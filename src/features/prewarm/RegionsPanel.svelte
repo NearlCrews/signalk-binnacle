@@ -14,7 +14,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { type Bbox, chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
-import { formatBounds } from '$shared/geo';
+import { bboxCenter, formatBounds, normalizeBounds } from '$shared/geo';
 import {
   clampInt,
   feetToMeters,
@@ -40,7 +40,7 @@ import { DETAIL_PRESETS, presetForRange, rangeForPreset } from './detail-level.j
 import {
   coveringSources,
   downloadGateReason,
-  estimateBytes,
+  estimateRegionBytes,
   exceedsRegionsFree,
   formatBySource,
   isTerminal,
@@ -184,13 +184,16 @@ function applyDetailPreset(key: 'overview' | 'coastal' | 'harbor'): void {
   [minzoom, maxzoom] = rangeForPreset(key);
 }
 
-// The estimated download size, computed once and fed to both the size row and the gate so
-// estimateBytes runs a single time per change rather than once here and again inside the gate.
-const estimateVal = $derived(
-  stats !== null && bbox !== null && activeSourceIds.length > 0
-    ? estimateBytes(activeSourceIds, bbox, [minzoom, maxzoom], stats.perSourceAvgBytes)
-    : 0,
-);
+// The planning estimate is computed once and fed to both the size row and the gate. Strict package
+// validation errors become a retryable state instead of escaping from reactive rendering.
+const estimateResult = $derived.by(() => {
+  if (stats === null || bbox === null || activeSourceIds.length === 0) {
+    return { ok: true, bytes: 0 } as const;
+  }
+  return estimateRegionBytes(activeSourceIds, bbox, [minzoom, maxzoom], stats.perSourceAvgBytes);
+});
+const estimateVal = $derived(estimateResult.ok ? estimateResult.bytes : 0);
+const estimateError = $derived(estimateResult.ok ? null : estimateResult.message);
 const estimateFmt = $derived(formatBytes(estimateVal));
 
 // Download is enabled only with a box drawn, at least one source picked, write access, storage that
@@ -202,6 +205,7 @@ const gate = $derived(
     bbox !== null &&
     activeSourceIds.length > 0 &&
     !auth.writeBlocked &&
+    estimateResult.ok &&
     !exceedsRegionsFree(estimateVal, stats),
 );
 const gateReason = $derived(
@@ -210,7 +214,7 @@ const gateReason = $derived(
     sources: activeSourceIds,
     writeBlocked: auth.writeBlocked,
     stats,
-    estimate: estimateVal,
+    estimate: estimateResult.ok ? estimateResult.bytes : null,
   }),
 );
 const regionsFreeFmt = $derived(stats !== null ? formatBytes(regionsFreeBytes(stats)) : null);
@@ -244,7 +248,9 @@ $effect(() => {
   r.onFinish((newBbox) => {
     bbox = newBbox;
     selectedSources =
-      newBbox === null ? [] : defaultSelection(coveringSources(newBbox, [minzoom, maxzoom]));
+      newBbox === null
+        ? []
+        : defaultSelection(coveringSources(newBbox, [minzoom, maxzoom]), newBbox);
     namePrep = false;
     drawing = false;
     panelCollapsed = false;
@@ -416,13 +422,9 @@ function pollRegion(id: string): void {
   pollTimers.set(id, timer);
 }
 
-function centerOf(box: Bbox): { lat: number; lon: number } {
-  return { lat: (box[1] + box[3]) / 2, lon: (box[0] + box[2]) / 2 };
-}
-
 function coordName(box: Bbox): string {
-  const { lat, lon } = centerOf(box);
-  return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+  const { latitude, longitude } = bboxCenter(box);
+  return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
 }
 
 // The geocode lookup fires once here, on the Download action, never on rectangle drag, which is the
@@ -434,10 +436,10 @@ async function prepareDownload(): Promise<void> {
   // Capture the box the lookup is for; a Clear or redraw during the await changes bbox, so the
   // result is stale and must not reopen the prompt or seed a name under the wrong box.
   const startedFor = bbox;
-  const { lat, lon } = centerOf(bbox);
+  const { latitude, longitude } = bboxCenter(bbox);
   const fallback = coordName(bbox);
   try {
-    const name = await client.geocode(lat, lon);
+    const name = await client.geocode(latitude, longitude);
     if (bbox === startedFor) regionName = name ?? fallback;
   } catch {
     if (bbox === startedFor) regionName = fallback;
@@ -554,14 +556,12 @@ function backToOfflineHome(): void {
 }
 
 function showRegion(region: SavedRegionDto): void {
-  const [west, south, east, north] = region.bbox;
-  map.fitBounds(
-    [
-      [west, south],
-      [east, north],
-    ],
-    { padding: 48, maxZoom: region.maxzoom },
-  );
+  const bounds = normalizeBounds(region.bbox);
+  if (bounds === null) {
+    error = 'This saved area has invalid bounds and cannot be shown.';
+    return;
+  }
+  map.fitBounds(bounds, { padding: 48, maxZoom: region.maxzoom });
 }
 
 // The current Chart Locker API cannot mutate a saved region safely in place. Reusing its settings
@@ -896,14 +896,22 @@ function chartLabel(id: string): string {
         <h3 class="caps-label">3. Review and download</h3>
         {#if statsError !== null}
           <p class="alert-note" role="alert">{statsError}</p>
+          <button type="button" class="btn btn-ghost" onclick={() => void loadStats()}>
+            <RefreshCw size={16} aria-hidden="true" />
+            Retry storage check
+          </button>
         {:else if stats === null}
           <p class="muted-note" role="status">Checking storage...</p>
         {:else}
           <dl class="stat-grid">
-            <dt>Maximum download</dt>
+            <dt>Estimated download</dt>
             <dd>
-              <span class="num">{estimateFmt.value}</span>
-              <span class="unit">{estimateFmt.unit}</span>
+              {#if estimateError === null}
+                <span class="num">{estimateFmt.value}</span>
+                <span class="unit">{estimateFmt.unit}</span>
+              {:else}
+                <span class="num">--</span>
+              {/if}
             </dd>
             <dt>Space available</dt>
             <dd>
@@ -912,8 +920,9 @@ function chartLabel(id: string): string {
             </dd>
           </dl>
           <p class="muted-note">
-            Empty water with no chart data is skipped. Shared base-map labels are downloaded only
-            once.
+            This planning estimate can vary with tile content. Empty water with no chart data is
+            skipped, shared base-map labels are downloaded only once, and storage limits are
+            enforced while saving.
           </p>
         {/if}
 
@@ -957,6 +966,12 @@ function chartLabel(id: string): string {
             </button>
           {:else if gateReason === 'storage-loading'}
             <p class="muted-note" role="status">Waiting for storage information.</p>
+          {:else if gateReason === 'estimate-error'}
+            <p class="alert-note" role="alert">{estimateError}</p>
+            <button type="button" class="btn btn-ghost" onclick={() => void loadStats()}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Retry storage check
+            </button>
           {:else if gateReason === 'write-access'}
             <p class="muted-note" role="status">Read/write access is required to download.</p>
           {/if}

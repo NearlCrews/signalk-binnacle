@@ -6,7 +6,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { Bbox } from 'signalk-chart-sources';
 import { type GeoJSONStoreFeatures, TerraDraw, TerraDrawRectangleMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
-import { bboxFromRectangle } from './estimate.js';
+import { bboxFromRectangle, rectangleRingFromBbox } from './estimate.js';
 
 export interface RegionRectangle {
   start(): void;
@@ -19,7 +19,7 @@ export interface RegionRectangle {
 export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
   const draw = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({ map, prefixId: 'chart-locker-region-draw' }),
-    modes: [new TerraDrawRectangleMode()],
+    modes: [new TerraDrawRectangleMode({ drawInteraction: 'click-move-or-drag' })],
   });
 
   let onFinishCb: (bbox: Bbox | null) => void = () => {};
@@ -34,7 +34,12 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
     const ring = (feature.geometry.coordinates as number[][][])[0].map(
       (p) => [p[0], p[1]] as [number, number],
     );
-    onFinishCb(bboxFromRectangle(ring));
+    try {
+      onFinishCb(bboxFromRectangle(ring));
+    } catch (cause) {
+      if (!(cause instanceof TypeError || cause instanceof RangeError)) throw cause;
+      onFinishCb(null);
+    }
   };
   draw.on('finish', onFinish);
 
@@ -52,21 +57,12 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
         started = true;
       }
       draw.clear();
-      const [west, south, east, north] = bbox;
       const feature: GeoJSONStoreFeatures<GeoJSON.Polygon> = {
         type: 'Feature',
         properties: { mode: 'rectangle' },
         geometry: {
           type: 'Polygon',
-          coordinates: [
-            [
-              [west, south],
-              [east, south],
-              [east, north],
-              [west, north],
-              [west, south],
-            ],
-          ],
+          coordinates: [rectangleRingFromBbox(bbox)],
         },
       };
       const [validation] = draw.addFeatures([feature]);

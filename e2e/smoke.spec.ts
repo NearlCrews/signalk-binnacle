@@ -155,6 +155,77 @@ test('offline charts stays discoverable when Chart Locker is not installed', asy
   await expect(menu.locator('.blocked-note')).toContainText('signalk-chart-locker');
 });
 
+test('offline area review shows a planning estimate and conservative chart defaults', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/tiles/ready')) {
+      await route.fulfill({ status: 200, body: 'ready' });
+      return;
+    }
+    if (path.endsWith('/style/basemap')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
+      });
+      return;
+    }
+    if (path.endsWith('/api/cache/stats')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          rows: 0,
+          bytes: 0,
+          cap: 1_000_000_000,
+          regionsFreeBytes: 500_000_000,
+          perSourceAvgBytes: {},
+        }),
+      });
+      return;
+    }
+    if (path.endsWith('/api/regions')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      return;
+    }
+    if (path.endsWith('/api/position-warm/config')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    await route.fulfill({ status: 404, body: 'not found' });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  const offline = page.locator('#app-menu-launcher').getByRole('button', {
+    name: 'Offline charts',
+    exact: true,
+  });
+  await expect(offline).toBeEnabled({ timeout: 10_000 });
+  await offline.click();
+
+  const panel = page.locator('aside.slide-over');
+  await panel.getByRole('button', { name: 'Save a chart area' }).click();
+  await panel.getByRole('button', { name: 'Draw on the chart' }).click();
+
+  const canvas = page.locator('.maplibregl-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('map canvas did not lay out');
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.78, box.y + box.height * 0.62, { steps: 6 });
+  await page.mouse.up();
+
+  await expect(panel.getByText('Area set. Draw again to change it.')).toBeVisible();
+  await expect(panel.getByText('Estimated download')).toBeVisible();
+  await expect(panel.getByText('Maximum download')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Customize included charts' }).click();
+  await expect(panel.getByRole('checkbox', { name: 'NOAA ENC' })).not.toBeChecked();
+});
+
 test('layers and charts opens chart sources before overlay stack controls', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');

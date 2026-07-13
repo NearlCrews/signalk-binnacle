@@ -19,7 +19,7 @@ export function isBbox4(x: unknown): x is Bbox4 {
 
 // A Bbox4 as "lat, lon to lat, lon" at two decimals, the south-west then north-east corner text the
 // charts and layers panels show. Reads the [west, south, east, north] order as [1], [0] then [3], [2].
-export function formatBounds(bbox: Bbox4): string {
+export function formatBounds(bbox: readonly [number, number, number, number]): string {
   const r = (n: number): string => n.toFixed(2);
   return `${r(bbox[1])}, ${r(bbox[0])} to ${r(bbox[3])}, ${r(bbox[2])}`;
 }
@@ -42,7 +42,9 @@ function unwrapEast(west: number, east: number): number {
 // west greater than east, latitude has no wraparound to explain the inversion). A west greater
 // than east box crosses the antimeridian, expressed by adding 360 to east so the fit takes the
 // short way. A zero-area box is padded so it has a real extent.
-export function normalizeBounds(bbox: Bbox4): CornerBounds | null {
+export function normalizeBounds(
+  bbox: readonly [number, number, number, number],
+): CornerBounds | null {
   const [west, south, east, north] = bbox;
   if (!allFinite(west, south, east, north)) return null;
   if (south > north) return null;
@@ -55,6 +57,36 @@ export function normalizeBounds(bbox: Bbox4): CornerBounds | null {
     [w, s],
     [e, n],
   ];
+}
+
+// The center of a box, including an antimeridian-crossing box. Longitude is measured through the
+// unwrapped short span and then returned in the conventional [-180, 180] range.
+export function bboxCenter(bbox: readonly [number, number, number, number]): LatLon {
+  const [west, south, east, north] = bbox;
+  let longitude = (west + unwrapEast(west, east)) / 2;
+  if (longitude > 180) longitude -= 360;
+  return { latitude: (south + north) / 2, longitude };
+}
+
+// Whether two geographic boxes overlap. Longitude intervals are split at the antimeridian so the
+// west > east crossing convention works for either box.
+export function bboxIntersects(
+  a: readonly [number, number, number, number],
+  b: readonly [number, number, number, number],
+): boolean {
+  if (a[3] < b[1] || b[3] < a[1]) return false;
+  const longitudeIntervals = ([west, , east]: readonly [number, number, number, number]): Array<
+    readonly [number, number]
+  > =>
+    east < west
+      ? [
+          [west, 180],
+          [-180, east],
+        ]
+      : [[west, east]];
+  return longitudeIntervals(a).some(([aWest, aEast]) =>
+    longitudeIntervals(b).some(([bWest, bEast]) => aWest <= bEast && bWest <= aEast),
+  );
 }
 
 // Clamp a box to the world and the Web Mercator latitude limit, the bounds a map fit cannot exceed.
