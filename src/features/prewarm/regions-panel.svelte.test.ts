@@ -3,7 +3,8 @@ import { canDownloadRegion, downloadGateReason } from './estimate.js';
 import type { CacheStats } from './regions-client.js';
 
 // Pins the gate predicate the panel uses: Download is enabled only when a box is drawn, at least
-// one source is selected, the user can write, and the estimate fits the regions-free budget.
+// one source is selected, administrator access is available, and the estimate fits the regions-free
+// budget.
 
 const stats: CacheStats = {
   rows: 0,
@@ -20,19 +21,19 @@ describe('regions gate', () => {
       canDownloadRegion({
         bbox: null,
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         zoomRange: [6, 8],
       }),
     ).toBe(false);
   });
 
-  it('disabled when write is blocked', () => {
+  it('disabled when administrator access is blocked', () => {
     expect(
       canDownloadRegion({
         bbox: [-1, -1, 1, 1],
         sources: ['seamark'],
-        writeBlocked: true,
+        accessBlocked: true,
         stats,
         zoomRange: [6, 8],
       }),
@@ -45,7 +46,7 @@ describe('regions gate', () => {
       canDownloadRegion({
         bbox: [-5, -5, 5, 5],
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats: tiny,
         zoomRange: [6, 10],
       }),
@@ -57,7 +58,7 @@ describe('regions gate', () => {
       canDownloadRegion({
         bbox: [-0.1, -0.1, 0.1, 0.1],
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         zoomRange: [6, 7],
       }),
@@ -69,7 +70,7 @@ describe('regions gate', () => {
       canDownloadRegion({
         bbox: [-1, -1, 1, 1],
         sources: [],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         zoomRange: [6, 8],
       }),
@@ -78,12 +79,24 @@ describe('regions gate', () => {
 });
 
 describe('download gate explanation', () => {
+  it('reports administrator access before the chart workflow', () => {
+    expect(
+      downloadGateReason({
+        bbox: null,
+        sources: [],
+        accessBlocked: true,
+        stats: null,
+        estimate: null,
+      }),
+    ).toBe('administrator-access');
+  });
+
   it('reports the first workflow step that blocks the download', () => {
     expect(
       downloadGateReason({
         bbox: null,
         sources: [],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         estimate: 0,
       }),
@@ -92,7 +105,7 @@ describe('download gate explanation', () => {
       downloadGateReason({
         bbox: [-1, -1, 1, 1],
         sources: [],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         estimate: 0,
       }),
@@ -104,7 +117,7 @@ describe('download gate explanation', () => {
       downloadGateReason({
         bbox: [-1, -1, 1, 1],
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats: null,
         estimate: 1,
       }),
@@ -113,7 +126,7 @@ describe('download gate explanation', () => {
       downloadGateReason({
         bbox: [-1, -1, 1, 1],
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats: { ...stats, regionsFreeBytes: 10 },
         estimate: 11,
       }),
@@ -125,7 +138,7 @@ describe('download gate explanation', () => {
       downloadGateReason({
         bbox: [-1, -1, 1, 1],
         sources: ['seamark'],
-        writeBlocked: false,
+        accessBlocked: false,
         stats,
         estimate: null,
       }),

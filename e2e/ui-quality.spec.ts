@@ -38,19 +38,23 @@ test('keeps chart controls legible and the instrument title on one line', async 
   const attribution = page.locator('.maplibregl-ctrl-attrib-button');
   await expect(attribution).toHaveCSS('background-image', 'none');
   await expect
-    .poll(() =>
-      page
-        .locator('.maplibregl-ctrl-scale')
-        .evaluate((scale) => getComputedStyle(scale, '::before').content),
-    )
+    .poll(() => attribution.evaluate((button) => getComputedStyle(button, '::after').maskSize))
+    .toBe('20px 20px');
+  const scale = page.locator('.maplibregl-ctrl-scale');
+  await expect
+    .poll(() => scale.evaluate((element) => getComputedStyle(element, '::before').content))
     .toBe('"Scale"');
+  await expect(scale).toHaveCSS('display', 'flex');
+  await expect(scale).toHaveCSS('flex-direction', 'column');
   await expect
     .poll(() =>
-      page
-        .locator('.maplibregl-ctrl-scale')
-        .evaluate((scale) => getComputedStyle(scale, '::before').position),
+      scale.evaluate(
+        (element) =>
+          element.scrollWidth <= element.clientWidth + 1 &&
+          element.scrollHeight <= element.clientHeight + 1,
+      ),
     )
-    .toBe('static');
+    .toBe(true);
   await expect(page.locator('.maplibregl-ctrl-top-right button')).toHaveCount(2);
   await expect(page.locator('.maplibregl-ctrl-bottom-right')).toHaveCSS('bottom', '12px');
 
@@ -68,6 +72,16 @@ test('keeps chart controls legible and the instrument title on one line', async 
     )
     .toBe(1);
   await expect(dock.getByRole('button', { name: 'Customize instruments' })).toHaveText('Customize');
+  await expect
+    .poll(async () => {
+      const [mapBox, scaleBox] = await Promise.all([
+        page.locator('.maplibregl-map').boundingBox(),
+        scale.boundingBox(),
+      ]);
+      if (!mapBox || !scaleBox) return false;
+      return scaleBox.x + scaleBox.width <= mapBox.x + mapBox.width;
+    })
+    .toBe(true);
 });
 
 test('honors reduced motion and keeps menu keyboard focus contained', async ({ page }) => {

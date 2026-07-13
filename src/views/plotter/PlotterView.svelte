@@ -131,6 +131,7 @@ interface Props {
   radarOpenedFrom: 'menu' | 'layers';
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
+  chartLockerAdminAccess: boolean;
   arrivalBanner: string | undefined;
   toastMessage: string | undefined;
   hoveredPoi: Poi | undefined;
@@ -251,6 +252,7 @@ let {
   radarOpenedFrom = $bindable(),
   mapInstance = $bindable(),
   companionBase,
+  chartLockerAdminAccess,
   arrivalBanner,
   toastMessage,
   hoveredPoi = $bindable(),
@@ -599,7 +601,8 @@ $effect(() => {
         />
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         <RegionsPanel
-          {auth}
+          adminAccess={chartLockerAdminAccess}
+          accessUrl={`${origin}/admin/#/login`}
           map={mapInstance}
           {units}
           {companionBase}
@@ -609,7 +612,8 @@ $effect(() => {
         />
       {:else if activePanel === 'charts-management' && companionBase !== null}
         <ChartsManagementPanel
-          {auth}
+          adminAccess={chartLockerAdminAccess}
+          accessUrl={`${origin}/admin/#/login`}
           {companionBase}
           onClose={closePanel}
           onBack={backToOfflineCharts}

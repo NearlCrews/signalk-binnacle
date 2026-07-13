@@ -1,12 +1,12 @@
 /** The webapp client for the companion regions and config routes. The panel never calls the container
  * directly; it always goes through the admin-gated plugin routes, so the container port stays private.
- * Auth follows the webapp scheme: a bearer token through the shared authInit, the origin as the base,
- * and the client owning the path. */
+ * Auth uses the browser's same-origin Signal K administrator session because every route is protected
+ * by the server's administrator middleware. The Binnacle device token must not be attached. */
 
 import type { Bbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
-import { authInit } from '$shared/signalk';
+import { adminSessionInit } from '$shared/signalk';
 
 /** A non-ok HTTP response from a companion route, carrying the status so a caller can branch on it
  * (401 and 403 are a missing or refused token, other codes are a server or transport fault). Thrown
@@ -171,21 +171,20 @@ export interface RegionsClient {
 
 export function createRegionsClient(
   origin: string,
-  token: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): RegionsClient {
   const url = (path: string): string => companionApiUrl(origin, path);
   // Without an r.ok check a 401 or a 500 would parse an error body into garbage data (or vanish
-  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to an access-needed
-  // prompt and any other fault to a not-responding state.
+  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to an administrator
+  // access prompt and any other fault to a not-responding state.
   const ensureOk = (r: Response): Response => {
     if (!r.ok) throw new HttpStatusError(r.status);
     return r;
   };
   const json = async <T>(r: Response): Promise<T> => (await ensureOk(r).json()) as T;
-  // Every container call carries the bearer token and a request timeout, so a half-open link on a
-  // boat bounds the wait rather than hanging, matching the charts-management client.
-  const init = (extra?: RequestInit): RequestInit => withTimeout(authInit(token, extra));
+  // Every management call carries the administrator session cookie and a request timeout, so a
+  // half-open link on a boat bounds the wait without masking the session with a device bearer token.
+  const init = (extra?: RequestInit): RequestInit => withTimeout(adminSessionInit(extra));
   const jsonPost = (body: unknown): RequestInit =>
     init({
       method: 'POST',

@@ -7,11 +7,13 @@ let {
   present,
   state,
   cacheBytes,
+  accessUrl,
   onOpen,
 }: {
   present: boolean;
   state: CompanionState;
   cacheBytes: number | null;
+  accessUrl: string;
   onOpen: () => void;
 } = $props();
 
@@ -21,7 +23,7 @@ let {
 // Offline charts panel where it can be verified against coverage and update time.
 const STATE_META: Record<CompanionState, { label: string; icon: typeof Check }> = {
   serving: { label: 'cached', icon: Check },
-  'needs-auth': { label: 'access needed', icon: KeyRound },
+  'needs-auth': { label: 'admin sign-in', icon: KeyRound },
   offline: { label: 'unavailable', icon: Unplug },
   error: { label: 'error', icon: TriangleAlert },
 };
@@ -38,28 +40,48 @@ const title = $derived.by(() => {
     return `Offline charts: online, cache ${bytes.value} ${bytes.unit}`;
   }
   if (state === 'needs-auth') {
-    return 'Offline charts: online, cache details require Signal K access';
+    return 'Offline charts: sign in to Signal K as an administrator, then return to Binnacle';
   }
   if (state === 'offline') return 'Offline charts: not responding';
   return 'Offline charts: server error';
 });
-const ariaLabel = $derived(`Offline charts, ${visibleValue}, open offline charts`);
+const actionLabel = $derived(
+  state === 'needs-auth' ? 'open Signal K administrator sign-in' : 'open offline charts',
+);
+const ariaLabel = $derived(`Offline charts, ${visibleValue}, ${actionLabel}`);
 </script>
 
+{#snippet content()}
+  <span class="cl-state-mark"><StateIcon size={16} aria-hidden="true" /></span>
+  <span class="cl-brand">Offline:</span>
+  <span class="cl-value">{visibleValue}</span>
+{/snippet}
+
 {#if present}
-  <button
-    type="button"
-    class="btn btn-pill cl-status"
-    class:cl--offline={state === 'offline'}
-    class:cl--error={state === 'error'}
-    aria-label={ariaLabel}
-    {title}
-    onclick={onOpen}
-  >
-    <span class="cl-state-mark"><StateIcon size={16} aria-hidden="true" /></span>
-    <span class="cl-brand">Offline:</span>
-    <span class="cl-value">{visibleValue}</span>
-  </button>
+  {#if state === 'needs-auth'}
+    <a
+      class="btn btn-pill cl-status cl--access"
+      href={accessUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={ariaLabel}
+      {title}
+    >
+      {@render content()}
+    </a>
+  {:else}
+    <button
+      type="button"
+      class="btn btn-pill cl-status"
+      class:cl--offline={state === 'offline'}
+      class:cl--error={state === 'error'}
+      aria-label={ariaLabel}
+      {title}
+      onclick={onOpen}
+    >
+      {@render content()}
+    </button>
+  {/if}
 {/if}
 
 <style>
@@ -69,8 +91,10 @@ const ariaLabel = $derived(`Offline charts, ${visibleValue}, open offline charts
   --chip-accent: var(--ok);
   flex: none;
   min-inline-size: var(--control-size);
+  text-decoration: none;
 }
-.cl-status.cl--offline {
+.cl-status.cl--offline,
+.cl-status.cl--access {
   --chip-accent: var(--warning);
 }
 .cl-status.cl--error {

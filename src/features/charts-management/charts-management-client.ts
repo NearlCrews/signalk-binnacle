@@ -1,11 +1,10 @@
-/** Talks to the companion chart-management routes. Admin-gated, so calls carry the bearer token
- * through the shared authInit, with companionApiUrl as the base, exactly like the regions client
- * and the other resource clients. Never throws: a failed read returns undefined so the panel keeps
- * its last list. */
+/** Talks to the companion chart-management routes. They use Signal K's administrator middleware, so
+ * requests carry the browser's same-origin admin session and never Binnacle's device bearer token.
+ * Never throws: a failed read returns undefined so the panel keeps its last list. */
 
 import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
-import { authInit } from '$shared/signalk';
+import { adminSessionInit } from '$shared/signalk';
 
 export interface ManagedChart {
   identifier: string;
@@ -27,13 +26,12 @@ export interface ManagedChartsResponse {
 
 export async function fetchManagedCharts(
   origin: string,
-  token: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ManagedChartsResponse | undefined> {
   try {
     const response = await fetchImpl(
       companionApiUrl(origin, '/charts'),
-      withTimeout(authInit(token)),
+      withTimeout(adminSessionInit()),
     );
     if (!response.ok) return undefined;
     return (await response.json()) as ManagedChartsResponse;
@@ -44,7 +42,6 @@ export async function fetchManagedCharts(
 
 export async function putChartOverride(
   origin: string,
-  token: string | undefined,
   id: string,
   override: { name?: string; description?: string; scale?: number },
   fetchImpl: typeof fetch = fetch,
@@ -53,7 +50,7 @@ export async function putChartOverride(
     const response = await fetchImpl(
       companionApiUrl(origin, `/charts/${encodeURIComponent(id)}/override`),
       withTimeout(
-        authInit(token, {
+        adminSessionInit({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(override),

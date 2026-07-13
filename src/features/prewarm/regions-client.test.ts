@@ -9,14 +9,13 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok({}, 404));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     expect(await client.getRegionJobStatus('region-9')).toBeNull();
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://h/plugins/signalk-chart-locker/api/regions/region-9/status',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
+        credentials: 'same-origin',
       }),
     );
   });
@@ -25,13 +24,12 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok({ display_name: 'Test City' }));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      undefined,
       fetchImpl as unknown as typeof fetch,
     );
     expect(await client.geocode(37.77, -122.41)).toBe('Test City');
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://h/plugins/signalk-chart-locker/api/geocode?lat=37.77&lon=-122.41',
-      expect.not.objectContaining({ headers: expect.anything() }),
+      expect.objectContaining({ credentials: 'same-origin' }),
     );
   });
 
@@ -40,13 +38,12 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok(stats));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      undefined,
       fetchImpl as unknown as typeof fetch,
     );
     expect(await client.getCacheStats()).toEqual(stats);
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://h/plugins/signalk-chart-locker/api/cache/stats',
-      expect.not.objectContaining({ headers: expect.anything() }),
+      expect.objectContaining({ credentials: 'same-origin' }),
     );
   });
 
@@ -54,7 +51,6 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok({ error: 'unauthorized' }, 401));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     await expect(client.getCacheStats()).rejects.toMatchObject({
@@ -68,7 +64,6 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok({ error: 'boom' }, 500));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     await expect(client.getCacheStats()).rejects.toMatchObject({
@@ -82,7 +77,6 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok(stats));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     expect(await client.getCacheStats()).toEqual(stats);
@@ -94,7 +88,6 @@ describe('regions client', () => {
     );
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
@@ -106,17 +99,15 @@ describe('regions client', () => {
     );
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
   });
 
-  it('posts config with the bearer token', async () => {
+  it('posts config with the administrator session and no bearer token', async () => {
     const fetchImpl = vi.fn(async () => ok(undefined));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     const config = { sources: ['seamark'] };
@@ -125,17 +116,18 @@ describe('regions client', () => {
       'http://h/plugins/signalk-chart-locker/api/position-warm/config',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
+        credentials: 'same-origin',
         body: JSON.stringify(config),
       }),
     );
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).has('Authorization')).toBe(false);
   });
 
   it('setCacheConfig posts ttlDays to the cache config route', async () => {
     const fetchImpl = vi.fn(async () => ok(undefined));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     await client.setCacheConfig(14);
@@ -149,7 +141,6 @@ describe('regions client', () => {
     const fetchImpl = vi.fn(async () => ok({ freedBytes: 9, freedRows: 2 }));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
-      'tok',
       fetchImpl as unknown as typeof fetch,
     );
     const out = await client.clearScrollCache();

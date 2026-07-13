@@ -2,19 +2,19 @@
 import { RefreshCw } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { formatBounds } from '$shared/geo';
-import type { AuthController } from '$shared/signalk';
 import { Disclosure, SlideOver, TextField } from '$shared/ui';
 import type { ManagedChart, ManagedChartsResponse } from './charts-management-client.js';
 import { fetchManagedCharts, putChartOverride } from './charts-management-client.js';
 
 interface Props {
-  auth: AuthController;
+  adminAccess: boolean;
+  accessUrl: string;
   companionBase: string;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const { auth, companionBase, onClose, onBack }: Props = $props();
+const { adminAccess, accessUrl, companionBase, onClose, onBack }: Props = $props();
 
 let data = $state<ManagedChartsResponse | null>(null);
 let loadError = $state<string | null>(null);
@@ -30,16 +30,12 @@ onDestroy(() => {
   for (const id of timerIds) clearTimeout(id);
 });
 
-// Rebuild the token shape the REST clients expect whenever auth changes so every call carries
-// the current bearer token, matching the regions panel's client-rebuild pattern.
-const token = $derived(auth.token ?? undefined);
-
 async function loadCharts(manual = false): Promise<void> {
   const generation = ++loadGeneration;
   if (manual) refreshing = true;
   loadError = null;
   try {
-    const result = await fetchManagedCharts(companionBase, token);
+    const result = await fetchManagedCharts(companionBase);
     if (generation !== loadGeneration) return;
     if (result === undefined) {
       loadError = 'Could not load installed charts. Check the connection and access.';
@@ -51,10 +47,9 @@ async function loadCharts(manual = false): Promise<void> {
   }
 }
 
-// Load on mount and whenever the live auth token changes. The generation guard in loadCharts drops a
-// stale response if a manual refresh or credential rotation overtakes it.
+// Load on mount. The browser supplies the current same-origin administrator session on every call.
+// The generation guard drops a stale response if a manual refresh overtakes it.
 $effect(() => {
-  void token;
   void loadCharts();
 });
 
@@ -63,11 +58,11 @@ async function saveOverride(
   field: 'name' | 'description',
   value: string,
 ): Promise<void> {
-  if (auth.writeBlocked || data === null) return;
+  if (!adminAccess || data === null) return;
   const key = `${chart.identifier}:${field}`;
   const override = { ...chart.override, [field]: value };
   saveStates[key] = 'saving';
-  const ok = await putChartOverride(companionBase, token, chart.identifier, override);
+  const ok = await putChartOverride(companionBase, chart.identifier, override);
   saveStates[key] = ok ? 'saved' : 'error';
   if (ok) {
     // Optimistically update the local override so a subsequent save on the same chart
@@ -108,10 +103,11 @@ async function saveOverride(
     Edit how installed charts are named in Binnacle and check whether Chart Locker can read each
     file. Text changes save when you leave the field or press Enter.
   </p>
-  {#if auth.writeBlocked}
+  {#if !adminAccess}
     <p class="muted-note">
-      A write token is needed to edit chart names and descriptions. Request a read/write token to
-      continue.
+      Signal K administrator sign-in is needed to edit chart names and descriptions.
+      <a href={accessUrl} target="_blank" rel="noopener noreferrer">Sign in to Signal K</a>, then
+      return here and refresh the list.
     </p>
   {/if}
 
@@ -172,7 +168,7 @@ async function saveOverride(
             variant="stacked"
             label="Display name"
             value={chart.override.name ?? chart.name}
-            disabled={auth.writeBlocked}
+            disabled={!adminAccess}
             ariaLabel="Display name for {chart.fileName}"
             onCommit={(value) => void saveOverride(chart, 'name', value)}
           />
@@ -181,7 +177,7 @@ async function saveOverride(
             variant="stacked"
             label="Description"
             value={chart.override.description ?? chart.description}
-            disabled={auth.writeBlocked}
+            disabled={!adminAccess}
             ariaLabel="Description for {chart.fileName}"
             onCommit={(value) => void saveOverride(chart, 'description', value)}
           />

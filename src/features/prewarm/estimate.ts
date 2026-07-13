@@ -63,7 +63,7 @@ export function exceedsRegionsFree(estimate: number, stats: CacheStats): boolean
 }
 
 export type DownloadGateReason =
-  | 'write-access'
+  | 'administrator-access'
   | 'draw-area'
   | 'storage-loading'
   | 'choose-charts'
@@ -76,11 +76,11 @@ export type DownloadGateReason =
 export function downloadGateReason(opts: {
   bbox: Bbox | null;
   sources: string[];
-  writeBlocked: boolean;
+  accessBlocked: boolean;
   stats: CacheStats | null;
   estimate: number | null;
 }): DownloadGateReason | null {
-  if (opts.writeBlocked) return 'write-access';
+  if (opts.accessBlocked) return 'administrator-access';
   if (opts.bbox === null) return 'draw-area';
   if (opts.stats === null) return 'storage-loading';
   if (opts.sources.length === 0) return 'choose-charts';
@@ -143,16 +143,16 @@ export function estimateRegionBytes(
 }
 
 /** The single gate predicate shared by the panel and its test. Returns true only when a box is
- * drawn, at least one source is selected, the user can write, and the estimate fits the regions-free
- * budget. */
+ * drawn, at least one source is selected, administrator access is available, and the estimate fits
+ * the regions-free budget. */
 export function canDownloadRegion(opts: {
   bbox: Bbox | null;
   sources: string[];
-  writeBlocked: boolean;
+  accessBlocked: boolean;
   stats: CacheStats;
   zoomRange: ZoomRange;
 }): boolean {
-  if (opts.bbox === null || opts.sources.length === 0 || opts.writeBlocked) return false;
+  if (opts.bbox === null || opts.sources.length === 0 || opts.accessBlocked) return false;
   const estimate = estimateRegionBytes(
     opts.sources,
     opts.bbox,

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { authInit, sendJson, setWriteOutcomeListener, str, strArray } from './resource';
+import {
+  adminSessionInit,
+  authInit,
+  sendJson,
+  setWriteOutcomeListener,
+  str,
+  strArray,
+} from './resource';
 
 describe('authInit', () => {
   it('returns undefined with no token and no extra', () => {
@@ -23,6 +30,19 @@ describe('authInit', () => {
     expect(authInit(undefined, { credentials: 'omit' })).toEqual({
       credentials: 'omit',
       headers: {},
+    });
+  });
+});
+
+describe('adminSessionInit', () => {
+  it('uses the same-origin administrator session without a bearer header', () => {
+    expect(adminSessionInit()).toEqual({ credentials: 'same-origin' });
+    expect(
+      adminSessionInit({ method: 'POST', headers: { 'Content-Type': 'application/json' } }),
+    ).toEqual({
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
     });
   });
 });

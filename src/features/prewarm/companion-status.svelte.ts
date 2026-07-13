@@ -24,7 +24,7 @@ export class CompanionStatus {
   #cacheBytes = $state<number | null>(null);
 
   #timer: ReturnType<typeof setInterval> | null = null;
-  #onVisibility: (() => void) | null = null;
+  #onResume: (() => void) | null = null;
   #inFlight = false;
   // Consecutive 5xx or transport failures, so a single dropped poll does not flicker the pill to
   // offline. Reset on any success or auth answer.
@@ -33,7 +33,8 @@ export class CompanionStatus {
   // credential still equals it the poller stays backed off, so a secured server is not re-hit with the
   // same refused credential every interval. This tracks a null credential too: a secured server that
   // refuses the anonymous viewer backs off instead of 401-spamming, yet the moment a real token arrives
-  // (token !== the refused null) it polls again. Fresh or refreshed access likewise clears it.
+  // (token !== the refused null) it polls again. Resuming after administrator sign-in also retries once
+  // because the same-origin session cookie can change without the device token changing.
   #refusedCred: string | null | undefined = undefined;
 
   constructor(
@@ -66,15 +67,28 @@ export class CompanionStatus {
     return this.#cacheBytes;
   }
 
+  // Feature detection resolves asynchronously after start() performs its first tick. Let the owner
+  // request a poll as soon as the base becomes available instead of showing the default state until
+  // the next interval.
+  refresh(): Promise<void> {
+    return this.#tick();
+  }
+
   start(): void {
     // Idempotent: a visibility resume or a double mount must not stack a second interval or listener.
     if (this.#timer !== null) return;
+    this.#onResume = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      // The administrator session is a same-origin cookie, not the Binnacle device token. Returning
+      // from the Signal K sign-in tab can therefore make the same token valid for this admin-gated
+      // route. Clear only the auth backoff and retry once on resume.
+      if (this.#state === 'needs-auth') this.#refusedCred = undefined;
+      void this.#tick();
+    };
     if (typeof document !== 'undefined') {
-      this.#onVisibility = () => {
-        if (!document.hidden) void this.#tick();
-      };
-      document.addEventListener('visibilitychange', this.#onVisibility);
+      document.addEventListener('visibilitychange', this.#onResume);
     }
+    if (typeof window !== 'undefined') window.addEventListener('focus', this.#onResume);
     this.#timer = setInterval(() => void this.#tick(), COMPANION_POLL_MS);
     // An immediate first poll resolves serving versus not-reachable within a tick rather than after the
     // full interval.
@@ -86,10 +100,13 @@ export class CompanionStatus {
       clearInterval(this.#timer);
       this.#timer = null;
     }
-    if (this.#onVisibility !== null && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.#onVisibility);
+    if (this.#onResume !== null && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.#onResume);
     }
-    this.#onVisibility = null;
+    if (this.#onResume !== null && typeof window !== 'undefined') {
+      window.removeEventListener('focus', this.#onResume);
+    }
+    this.#onResume = null;
   }
 
   async #tick(): Promise<void> {
@@ -111,11 +128,7 @@ export class CompanionStatus {
 
     this.#inFlight = true;
     try {
-      const stats = await createRegionsClient(
-        base,
-        token ?? undefined,
-        this.#fetchImpl,
-      ).getCacheStats();
+      const stats = await createRegionsClient(base, this.#fetchImpl).getCacheStats();
       this.#state = 'serving';
       this.#cacheBytes = stats.bytes;
       this.#refusedCred = undefined;

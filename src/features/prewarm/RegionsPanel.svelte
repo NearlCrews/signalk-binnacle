@@ -23,7 +23,6 @@ import {
   metersToFeet,
   nauticalMilesToMeters,
 } from '$shared/lib';
-import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
   Disclosure,
@@ -55,7 +54,8 @@ import { buildConfigPayload, extractPositionWarm } from './settings-payload.js';
 import { coveringGroups, includedSummary, sourceDescription } from './source-summary.js';
 
 interface Props {
-  auth: AuthController;
+  adminAccess: boolean;
+  accessUrl: string;
   companionBase: string;
   map: MapLibreMap;
   units: UnitsStore;
@@ -64,7 +64,8 @@ interface Props {
   onOpenCharts: () => void;
 }
 
-const { auth, companionBase, map, units, onClose, onBack, onOpenCharts }: Props = $props();
+const { adminAccess, accessUrl, companionBase, map, units, onClose, onBack, onOpenCharts }: Props =
+  $props();
 
 // The whole-world box stands in for "no box drawn" when enumerating covering sources.
 const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
@@ -133,8 +134,9 @@ const POLL_FAIL_CAP = 5;
 // position-warm section, which is not box-scoped and never warms the basemap.
 const positionWarmSourceList = positionWarmSources();
 
-// Rebuild the client when the auth token changes so every call carries the current bearer token.
-const client = $derived(createRegionsClient(companionBase, auth.token ?? undefined));
+// Chart Locker management uses the browser's Signal K administrator session, not Binnacle's device
+// token. The browser supplies the current same-origin cookie whenever the companion base changes.
+const client = $derived(createRegionsClient(companionBase));
 
 // Position-warm settings, loaded from getConfig on open, which seeds them from the server default
 // (on, with no charts picked, so the panel prompts the navigator to choose). This false is only the
@@ -204,7 +206,7 @@ const gate = $derived(
     !namePrep &&
     bbox !== null &&
     activeSourceIds.length > 0 &&
-    !auth.writeBlocked &&
+    adminAccess &&
     estimateResult.ok &&
     !exceedsRegionsFree(estimateVal, stats),
 );
@@ -212,7 +214,7 @@ const gateReason = $derived(
   downloadGateReason({
     bbox,
     sources: activeSourceIds,
-    writeBlocked: auth.writeBlocked,
+    accessBlocked: !adminAccess,
     stats,
     estimate: estimateResult.ok ? estimateResult.bytes : null,
   }),
@@ -227,9 +229,8 @@ const usedPercent = $derived(
 );
 const autoCacheFmt = $derived(stats !== null ? formatBytes(stats.positionWarmBytes ?? 0) : null);
 
-// Load the cache stats on mount and refresh when the auth token changes (the client rebuilds on a
-// token change, so the effect re-runs with the new credentials). The generation guard inside
-// loadStats drops a slow earlier response.
+// Load the cache stats on mount. The generation guard inside loadStats drops a slow earlier response;
+// the browser supplies the current administrator session cookie for every request.
 $effect(() => {
   void loadStats();
 });
@@ -292,7 +293,7 @@ $effect(() => {
 });
 
 async function savePositionWarm(): Promise<void> {
-  if (auth.writeBlocked) return;
+  if (!adminAccess) return;
   try {
     await client.postConfig(
       buildConfigPayload({
@@ -320,13 +321,13 @@ function commitMoveThreshold(entered: number): void {
 }
 
 function commitTtlDays(entered: number): void {
-  if (auth.writeBlocked) return;
+  if (!adminAccess) return;
   ttlDays = clampInt(entered, 0, 365);
   void client.setCacheConfig(ttlDays).catch(() => {});
 }
 
 async function clearScrollCache(): Promise<void> {
-  if (auth.writeBlocked) return;
+  if (!adminAccess) return;
   confirmingClear = false;
   clearNote = null;
   try {
@@ -395,9 +396,8 @@ function stopRegionPoll(id: string): void {
 function pollRegion(id: string): void {
   stopRegionPoll(id);
   pollFailures.set(id, 0);
-  // Read the reactive client each tick, not a captured snapshot, so a token that rotates during a
-  // long poll is picked up on the next request instead of the poll running on the stale bearer token
-  // until it caps out on auth failures.
+  // Read the shared client each tick. The browser supplies the current administrator session cookie,
+  // so a session established during a long poll is picked up on the next request.
   const timer = setInterval(() => {
     void client
       .getRegionJobStatus(id)
@@ -489,7 +489,7 @@ function setPending(id: string, busy: boolean): void {
 }
 
 async function redownloadRegion(id: string): Promise<void> {
-  if (auth.writeBlocked || submitting || pendingRegion[id]) return;
+  if (!adminAccess || submitting || pendingRegion[id]) return;
   error = null;
   setPending(id, true);
   try {
@@ -504,7 +504,7 @@ async function redownloadRegion(id: string): Promise<void> {
 }
 
 async function deleteRegion(id: string): Promise<void> {
-  if (auth.writeBlocked || submitting || pendingRegion[id]) return;
+  if (!adminAccess || submitting || pendingRegion[id]) return;
   error = null;
   setPending(id, true);
   stopRegionPoll(id);
@@ -625,9 +625,11 @@ function chartLabel(id: string): string {
   {#if error !== null}
     <p class="alert-note" role="alert">{error}</p>
   {/if}
-  {#if auth.writeBlocked}
+  {#if !adminAccess}
     <p class="muted-note">
-      A write token is needed to download charts. Request a read/write token to continue.
+      Signal K administrator sign-in is needed to manage offline charts.
+      <a href={accessUrl} target="_blank" rel="noopener noreferrer">Sign in to Signal K</a>, then
+      return to Binnacle. Chart Locker retries automatically.
     </p>
   {/if}
 
@@ -639,7 +641,7 @@ function chartLabel(id: string): string {
       <button
         type="button"
         class="btn btn-primary btn--grow"
-        disabled={auth.writeBlocked}
+        disabled={!adminAccess}
         onclick={startNewRegion}
       >
         <DownloadCloud size={16} aria-hidden="true" />
@@ -718,7 +720,7 @@ function chartLabel(id: string): string {
                 <button
                   type="button"
                   class="btn btn-ghost"
-                  disabled={auth.writeBlocked || region.status === 'downloading'}
+                  disabled={!adminAccess || region.status === 'downloading'}
                   onclick={() => useRegionAsTemplate(region)}
                 >
                   <PencilRuler size={16} aria-hidden="true" />
@@ -743,7 +745,7 @@ function chartLabel(id: string): string {
                   class="icon-btn"
                   aria-label="Download this area again"
                   title="Download again"
-                  disabled={auth.writeBlocked ||
+                  disabled={!adminAccess ||
                     submitting ||
                     pendingRegion[region.id] ||
                     region.status === 'downloading'}
@@ -756,7 +758,7 @@ function chartLabel(id: string): string {
                   class="icon-btn icon-btn--danger"
                   aria-label="Delete this area"
                   title="Delete"
-                  disabled={auth.writeBlocked || submitting || pendingRegion[region.id]}
+                  disabled={!adminAccess || submitting || pendingRegion[region.id]}
                   onclick={() => armedDelete.arm(region.id)}
                 >
                   <Trash2 size={18} aria-hidden="true" />
@@ -798,7 +800,7 @@ function chartLabel(id: string): string {
         <button
           type="button"
           class="btn btn--grow"
-          disabled={auth.writeBlocked}
+          disabled={!adminAccess}
           class:is-on={drawing}
           aria-pressed={drawing}
           onclick={startDrawing}
@@ -809,7 +811,7 @@ function chartLabel(id: string): string {
         <button
           type="button"
           class="btn btn-ghost"
-          disabled={bbox === null || auth.writeBlocked}
+          disabled={bbox === null || !adminAccess}
           onclick={() => rect?.clear()}
         >
           <Trash2 size={16} aria-hidden="true" />
@@ -843,7 +845,7 @@ function chartLabel(id: string): string {
                     : source.title}
                   description={sourceDescription(source.id)}
                   visible={selectedSet.has(source.id)}
-                  disabled={auth.writeBlocked}
+                  disabled={!adminAccess}
                   onToggle={(on) => toggleSource(source.id, on)}
                 />
               </div>
@@ -972,8 +974,10 @@ function chartLabel(id: string): string {
               <RefreshCw size={16} aria-hidden="true" />
               Retry storage check
             </button>
-          {:else if gateReason === 'write-access'}
-            <p class="muted-note" role="status">Read/write access is required to download.</p>
+          {:else if gateReason === 'administrator-access'}
+            <p class="muted-note" role="status">
+              Signal K administrator sign-in is required to download.
+            </p>
           {/if}
         {/if}
         <p class="muted-note">Once complete, this area remains available without internet.</p>
@@ -1066,7 +1070,7 @@ function chartLabel(id: string): string {
           <button
             type="button"
             class="btn btn-danger"
-            disabled={auth.writeBlocked}
+            disabled={!adminAccess}
             onclick={() => (confirmingClear = true)}
           >
             <Trash2 size={16} aria-hidden="true" />
@@ -1088,7 +1092,7 @@ function chartLabel(id: string): string {
         visible={positionEnabled}
         label="Enable automatic caching"
         description="Caches chart tiles around the boat as it moves, so the water ahead is ready offline."
-        disabled={auth.writeBlocked}
+        disabled={!adminAccess}
         onToggle={(on) => {
           positionEnabled = on;
           void savePositionWarm();
@@ -1111,7 +1115,7 @@ function chartLabel(id: string): string {
               title={source.title}
               description={sourceDescription(source.id)}
               visible={positionSet.has(source.id)}
-              disabled={auth.writeBlocked}
+              disabled={!adminAccess}
               onToggle={(on) => {
                 positionSources = toggleId(positionSources, source.id, on);
                 void savePositionWarm();
@@ -1130,7 +1134,7 @@ function chartLabel(id: string): string {
           value={positionRadiusDisplay}
           min={1}
           step={1}
-          disabled={!positionEnabled || auth.writeBlocked}
+          disabled={!positionEnabled || !adminAccess}
           onCommit={commitPositionRadius}
         />
         <UnitField
@@ -1139,7 +1143,7 @@ function chartLabel(id: string): string {
           value={positionMoveDisplay}
           min={1}
           step={1}
-          disabled={!positionEnabled || auth.writeBlocked}
+          disabled={!positionEnabled || !adminAccess}
           onCommit={commitMoveThreshold}
         />
         <UnitField
@@ -1148,7 +1152,7 @@ function chartLabel(id: string): string {
           value={positionIntervalSecs}
           min={60}
           step={1}
-          disabled={!positionEnabled || auth.writeBlocked}
+          disabled={!positionEnabled || !adminAccess}
           onCommit={(v) => {
             positionIntervalSecs = Math.max(60, Math.round(v));
             void savePositionWarm();
@@ -1160,7 +1164,7 @@ function chartLabel(id: string): string {
           min={0}
           max={22}
           step={1}
-          disabled={!positionEnabled || auth.writeBlocked}
+          disabled={!positionEnabled || !adminAccess}
           onCommit={(v) => {
             positionBaseZoom = clampInt(v, 0, 22);
             void savePositionWarm();

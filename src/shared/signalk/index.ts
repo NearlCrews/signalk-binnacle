@@ -28,6 +28,7 @@ export {
 export { appendToken, serverOrigin, streamUrl } from './origin';
 export { SK_PATHS } from './paths';
 export {
+  adminSessionInit,
   asKeyedObject,
   authInit,
   deleteResource,

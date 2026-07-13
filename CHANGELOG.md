@@ -46,12 +46,13 @@ All notable changes to Binnacle are documented here. The format follows
 - Saved night-red restores before the first paint and updates browser theme color. Icon pickers flip
   and clamp to available viewport space, and full-screen instruments contain and restore focus.
 - KIP and history discovery distinguish checking, available, absent, failed, and retrying states.
-- The Instruments dock keeps its title on one line, the chart scale is labeled, and the enlarged
-  attribution control renders one information glyph instead of a tiled group.
-- The chart scale keeps its label and distance together, bottom controls clear the helm toolbar, and
-  the inert north-reset icon is removed by locking chart rotation north-up.
-- Chart Locker access failures now say that Signal K access is needed instead of offering a sign-in
-  action that the status control does not provide.
+- The Instruments dock keeps its title on one line, and the enlarged attribution target renders one
+  full-size information glyph instead of a tiled group.
+- The chart scale stacks its label and distance inside its measured box, bottom controls clear the
+  helm toolbar, and the inert north-reset icon is removed by locking chart rotation north-up.
+- Chart Locker management requests use the signed-in Signal K administrator session instead of a
+  Binnacle device token that could mask valid access. The access status opens administrator sign-in
+  directly and retries the service when the navigator returns.
 
 <a id="v0150"></a>
 
@@ -216,9 +217,9 @@ All notable changes to Binnacle are documented here. The format follows
   points remain unnamed, exported filenames are portable, stale vessel positions no longer draw an
   active course line, and route geometry remains finite at the poles.
 - Offline charts no longer disappears when Chart Locker is missing or temporarily unreachable. It
-  remains visible and explains how to install, start, or grant Binnacle Signal K access. Long saved-area
-  names no longer compete with status text, download progress includes a visible percentage and
-  counts, and storage-cap failures now offer a direct path to Storage.
+  remains visible and explains how to install, start, or sign in to Signal K as an administrator.
+  Long saved-area names no longer compete with status text, download progress includes a visible
+  percentage and counts, and storage-cap failures now offer a direct path to Storage.
 
 <a id="v0141"></a>
 

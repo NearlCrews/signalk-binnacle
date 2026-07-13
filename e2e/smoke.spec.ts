@@ -23,7 +23,9 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
   const follow = menu.getByRole('button', { name: /Follow/ });
   await expect(center).toHaveAttribute('aria-disabled', 'true');
   await expect(follow).toHaveAttribute('aria-disabled', 'true');
-  await expect(center).toHaveAttribute('title', /GPS position/);
+  // MapLibre can take longer than the default assertion window to finish on the Pi. Wait for the
+  // chart-loading gate to resolve before checking the distinct no-position explanation.
+  await expect(center).toHaveAttribute('title', /GPS position/, { timeout: 15_000 });
   await center.click({ force: true });
   await expect(menu.locator('.blocked-note')).toContainText('GPS position');
 });
@@ -241,7 +243,7 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
   await page.goto('/');
 
   const charts = page.getByRole('button', { name: 'Charts' }).first();
-  await expect(charts).toBeEnabled();
+  await expect(charts).toBeEnabled({ timeout: 15_000 });
   await charts.click();
 
   const panel = page.locator('#layers-panel');

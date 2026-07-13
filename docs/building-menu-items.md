@@ -69,9 +69,12 @@ two leaves a tile that opens nothing, or a panel with no way in.
    user-relevant optional provider is absent, keep the item visible with `available: false` plus an
    actionable `unavailableHint`; do not hide it with a conditional spread. Offline charts is the
    canonical example: one entry is always present, and its hint explains how to install, start, or
-   grant Binnacle Signal K access. Radar, Time travel, and Open KIP follow the same availability rule.
-   When discovery has multiple failure states, derive the hint from current state so absence, an access
-   refusal, malformed provider data, and a transport failure do not collapse into the same message.
+   sign in to Signal K as an administrator. Radar, Time travel, and Open KIP follow the same
+   availability rule. When discovery has multiple failure states, derive the hint from current state
+   so absence, an access refusal, malformed provider data, and a transport failure do not collapse
+   into the same message.
+   Chart Locker management requests use the same-origin Signal K administrator session. Do not attach
+   Binnacle's device bearer token to its administrator-gated `/api` routes.
 2. Add the panel id to the `LeftPanel` union type.
 3. Add the mount block: `{#if activePanel === '<id>' && <guards>}` wrapping `<div
    class="panel-slot"><YourPanel ... onClose={closePanel} onBack={backToMenu} /></div>`. The guards

@@ -9,6 +9,14 @@ export function authInit(token: string | undefined, extra?: RequestInit): Reques
   return { ...extra, headers: { ...headers, ...extra?.headers } };
 }
 
+// Chart Locker management routes use Signal K's administrator middleware, which authenticates the
+// browser's same-origin admin session. Never attach Binnacle's device bearer token to these requests:
+// that token represents the webapp client, not the signed-in administrator, and can mask a valid
+// administrator cookie on secured servers.
+export function adminSessionInit(extra?: RequestInit): RequestInit {
+  return { ...extra, credentials: 'same-origin' };
+}
+
 // Best-effort authenticated GET returning parsed JSON, or undefined on any non-OK status, network
 // failure, timeout, or parse error. The bearer-auth GET-then-degrade shape recurs across the
 // applicationData, trails, notes-detail, and tides clients; this is its single home.

@@ -351,13 +351,18 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   unavailable, such as a chart still loading.)
 - A user-relevant optional feature never disappears merely because its provider is missing. Offline
   charts is the canonical case: its one menu entry remains visible with `available: false`, and its
-  `unavailableHint` explains how to install, start, or grant Binnacle Signal K access. When available,
-  that entry opens one landing page for saved areas, automatic caching, installed charts, and storage,
-  rather than exposing provider internals as separate menu tiles.
+  `unavailableHint` explains how to install, start, or sign in to Signal K as an administrator. When
+  available, that entry opens one landing page for saved areas, automatic caching, installed charts,
+  and storage, rather than exposing provider internals as separate menu tiles.
 - A compact subsystem status reports only what it knows. The Offline header control may report cached
   bytes, required access, an unreachable service, or an error. It must never turn provider health into
   a claim that a passage is ready. Coverage, included charts, completion state, and update time belong
-  on the saved-area card where the navigator can verify them together.
+  on the saved-area card where the navigator can verify them together. Its access-needed state links
+  directly to Signal K administrator sign-in and explains that returning to Binnacle retries the
+  service; the other states open the Offline charts landing page.
+- Chart Locker management clients authenticate with the browser's same-origin Signal K administrator
+  session. They must not attach Binnacle's device bearer token because it can mask a valid
+  administrator cookie.
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.

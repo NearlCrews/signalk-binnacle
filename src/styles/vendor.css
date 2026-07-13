@@ -28,8 +28,8 @@
   background-color: var(--text-muted);
   content: "";
   mask:
-    url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0"/></svg>')
-    center / 18px 18px no-repeat;
+    url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>')
+    center / 20px 20px no-repeat;
   pointer-events: none;
 }
 
@@ -54,14 +54,17 @@
   filter: none;
 }
 .maplibregl-ctrl-scale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   border-color: var(--text-muted);
   background: var(--surface-overlay);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
+  line-height: 1.2;
 }
 .maplibregl-ctrl-scale::before {
-  margin-inline-end: var(--space-1);
   color: var(--text-muted);
   content: "Scale";
 }

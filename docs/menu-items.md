@@ -96,7 +96,9 @@ source, and surrounding traffic before relying on it.
 
 - **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
   and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
-  storage. See the Offline charts section in the [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
+  storage. The access-needed header status opens Signal K administrator sign-in directly. Return to
+  Binnacle after signing in; Chart Locker retries automatically. See the Offline charts section in the
+  [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 
 ## Settings
 

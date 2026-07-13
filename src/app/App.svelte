@@ -150,6 +150,7 @@ import StatusStrip from './StatusStrip.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
 const origin = serverOrigin();
+const chartLockerAccessUrl = `${origin}/admin/#/login`;
 
 const store = new SignalKStore();
 // A one-second reactive clock drives every staleness check (a frozen GPS fix, a dropped feed), so
@@ -601,6 +602,7 @@ function probeCompanion(): void {
   void detectCompanion(origin, authToken).then((base) => {
     companionBase = base;
     companionProbeComplete = true;
+    void companionStatus.refresh();
   });
 }
 
@@ -1130,7 +1132,7 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Offline charts',
     available: companionBase !== null,
     unavailableHint: companionProbeComplete
-      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or grant Binnacle access on a secured Signal K server.'
+      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or sign in to Signal K as an administrator on a secured server.'
       : 'Checking whether Chart Locker is available on the Signal K server.',
     pressed: activePanel === 'regions' || activePanel === 'charts-management',
     // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
@@ -1843,6 +1845,7 @@ onDestroy(() => {
         present={companionStatus.present}
         state={companionStatus.state}
         cacheBytes={companionStatus.cacheBytes}
+        accessUrl={chartLockerAccessUrl}
         onOpen={() => openPanel('regions')}
       />
       <ProfileSwitcher
@@ -1909,6 +1912,7 @@ onDestroy(() => {
     bind:radarOpenedFrom
     bind:mapInstance
     {companionBase}
+    chartLockerAdminAccess={companionStatus.state === 'serving'}
     {arrivalBanner}
     toastMessage={toast.message}
     bind:hoveredPoi

@@ -66,6 +66,26 @@ describe('CompanionStatus', () => {
     expect(status.present).toBe(true);
   });
 
+  it('can poll immediately when feature detection resolves after start', async () => {
+    let base: string | null = null;
+    const fetchImpl = vi.fn(async () => okResponse(16));
+    const status = new CompanionStatus(
+      () => base,
+      () => 'tok',
+      fetchImpl as unknown as typeof fetch,
+    );
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    base = BASE;
+    await status.refresh();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(status.state).toBe('serving');
+    expect(status.cacheBytes).toBe(16);
+    status.stop();
+  });
+
   it('polls the companion base, not the bare origin, so the /plugins prefix is present', async () => {
     const urls: string[] = [];
     const fetchImpl = (async (url: string) => {
@@ -163,6 +183,27 @@ describe('CompanionStatus', () => {
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(fetchImpl.mock.calls.length).toBe(afterAuthFail + 1);
     expect(status.state).toBe('serving');
+    status.stop();
+  });
+
+  it('retries a refused credential after returning from administrator sign-in', async () => {
+    let adminSession = false;
+    const fetchImpl = vi.fn(async () => (adminSession ? okResponse(12) : errorResponse(403)));
+    const status = new CompanionStatus(
+      () => BASE,
+      () => 'same-device-token',
+      fetchImpl as unknown as typeof fetch,
+    );
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('needs-auth');
+
+    adminSession = true;
+    doc.fire();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(status.state).toBe('serving');
+    expect(status.cacheBytes).toBe(12);
     status.stop();
   });
 
