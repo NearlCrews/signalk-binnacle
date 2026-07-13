@@ -1,12 +1,13 @@
 <script lang="ts">
 import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
-import type { Profile } from '$entities/profile';
+import type { Profile, ProfileSyncState } from '$entities/profile';
 import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
   defaultSaveName,
   InlineConfirm,
   NameEntry,
+  OverflowActions,
   pickTextFile,
   readErrorMessage,
   SavedList,
@@ -20,6 +21,8 @@ interface Props {
   activeId: string | undefined;
   defaultId: string | undefined;
   isDirty: boolean;
+  syncState: ProfileSyncState;
+  onRetrySync: () => void;
   onApply: (id: string) => void;
   onSaveNew: (name: string) => void;
   onUpdate: (id: string) => void;
@@ -39,6 +42,8 @@ const {
   activeId,
   defaultId,
   isDirty,
+  syncState,
+  onRetrySync,
   onApply,
   onSaveNew,
   onUpdate,
@@ -97,6 +102,7 @@ async function importProfiles(): Promise<void> {
 // than firing on a single tap, matching the Routes panel.
 const armedDelete = new ArmedRow((id) => onRemove(id));
 let confirmingApplyId = $state<string | undefined>();
+let actionMenuId = $state<string | undefined>();
 
 function useProfile(id: string): void {
   if (isDirty && activeId !== undefined && activeId !== id) {
@@ -108,11 +114,21 @@ function useProfile(id: string): void {
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
-  {#if auth.writeBlocked}
-    <p class="muted-note">
-      Profiles save on this device, but a write token is needed to sync them to other stations.
-      Request a read/write token to continue.
+  {#if syncState === 'syncing'}
+    <p class="muted-note" role="status">Syncing profiles with this Signal K account…</p>
+  {:else if syncState === 'synced'}
+    <p class="muted-note" role="status">Profiles are synced with this Signal K account.</p>
+  {:else if syncState === 'error'}
+    <p class="alert-note" role="alert">
+      Profiles are saved on this device. Server sync is unavailable.
     </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+  {:else if auth.writeBlocked}
+    <p class="muted-note">
+      Profiles are saved on this device. A write token is needed to sync them to other stations.
+    </p>
+  {:else}
+    <p class="muted-note">Profiles are saved on this device.</p>
   {/if}
   <p class="muted-note">
     A profile saves which layers and overlays are on, so you can switch between setups like coastal
@@ -226,44 +242,63 @@ function useProfile(id: string): void {
               <Save size={18} aria-hidden="true" />
             </button>
           {/if}
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Rename profile"
-            title="Rename"
-            onclick={() => (naming = { mode: 'rename', id: profile.id })}
+          <OverflowActions
+            open={actionMenuId === profile.id}
+            label={`More actions for ${profile.name}`}
+            onToggle={() => (actionMenuId = actionMenuId === profile.id ? undefined : profile.id)}
+            onClose={() => (actionMenuId = undefined)}
           >
-            <SquarePen size={18} aria-hidden="true" />
-          </button>
-          {#if !isDefault}
             <button
               type="button"
-              class="icon-btn"
-              aria-label="Set as default profile"
-              title="Set as the default, loaded when the app starts"
-              onclick={() => onSetDefault(profile.id)}
+              role="menuitem"
+              class="menu-item"
+              onclick={() => {
+                actionMenuId = undefined;
+                naming = { mode: 'rename', id: profile.id };
+              }}
             >
-              <Star size={18} aria-hidden="true" />
+              <SquarePen size={18} aria-hidden="true" />
+              Rename profile
             </button>
-          {/if}
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Export profile"
-            title="Download this profile as a file to load on another device"
-            onclick={() => onExport(profile.id)}
-          >
-            <Download size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn icon-btn--danger"
-            aria-label="Delete profile"
-            title="Delete"
-            onclick={() => armedDelete.arm(profile.id)}
-          >
-            <Trash2 size={18} aria-hidden="true" />
-          </button>
+            {#if !isDefault}
+              <button
+                type="button"
+                role="menuitem"
+                class="menu-item"
+                onclick={() => {
+                  actionMenuId = undefined;
+                  onSetDefault(profile.id);
+                }}
+              >
+                <Star size={18} aria-hidden="true" />
+                Set as default
+              </button>
+            {/if}
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item"
+              onclick={() => {
+                actionMenuId = undefined;
+                onExport(profile.id);
+              }}
+            >
+              <Download size={18} aria-hidden="true" />
+              Export profile
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item sev-danger"
+              onclick={() => {
+                actionMenuId = undefined;
+                armedDelete.arm(profile.id);
+              }}
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              Delete profile
+            </button>
+          </OverflowActions>
         </div>
       {/if}
     {/snippet}

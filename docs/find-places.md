@@ -14,8 +14,10 @@ same resource API.
 
 The chart overlay fetches a padded area for efficient panning, but Find places clips those records to
 the current visible chart bounds. Opening Find places also turns on the Points of interest overlay, so
-the list and the chart markers cannot disagree because of a hidden layer. Panning or zooming refreshes
-the list. Below zoom level 9, the panel asks the navigator to zoom in before it requests places.
+the list and the chart markers cannot disagree because of a hidden layer. The panel's **Show places on
+chart** control reads and writes that same overlay state and restores a hidden layer directly. Panning
+or zooming refreshes the list. Below zoom level 9, the panel asks the navigator to zoom in before it
+requests places. On a phone, minimize the panel to inspect or move the chart without closing the list.
 
 Coordinates are accepted only when latitude is from -90 through 90 and longitude is from -180 through
 180. Blank provider names fall back to the title and then the resource id. Resource ids and optional
@@ -77,4 +79,5 @@ pending results so data fetched under prior credentials cannot leak into the new
 Focused tests cover parsing, bounds, cache corruption and failure, provider and connectivity changes,
 token invalidation, search normalization, stable sorting, and hover and selection wiring. The
 Playwright suite covers a provider-backed menu flow, a layer initially saved as hidden, metadata
-search, selection, the zoom-limit message, narrow-screen overflow, and phone detail navigation.
+search, the direct visibility toggle, selection, the zoom-limit message, narrow-screen overflow, and
+phone detail navigation.

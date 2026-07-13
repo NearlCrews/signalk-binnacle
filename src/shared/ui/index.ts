@@ -5,11 +5,23 @@ export { ConfirmArm } from './confirm-arm.svelte';
 export { default as Disclosure } from './Disclosure.svelte';
 export { dialog, registerDismiss } from './dialog';
 export { pickTextFile, readErrorMessage } from './file-pick';
-export { focusOnMount, focusOnMountIf, focusSelectOnMount, isTabKey, rovingFocus } from './focus';
+export {
+  focusOnMount,
+  focusOnMountIf,
+  focusSelectOnMount,
+  isTabKey,
+  rovingFocus,
+  trapFocus,
+} from './focus';
 export { default as InlineConfirm } from './InlineConfirm.svelte';
 export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as NameEntry } from './NameEntry.svelte';
+export { default as OverflowActions } from './OverflowActions.svelte';
 export { default as PanelHeader } from './PanelHeader.svelte';
+export {
+  createPanelMinimize,
+  type PanelMinimizeController,
+} from './panel-minimize.svelte';
 export { defaultSaveName, resolveSaveName } from './prompt';
 export type { Reorder } from './reorder.svelte';
 export { createReorder } from './reorder.svelte';

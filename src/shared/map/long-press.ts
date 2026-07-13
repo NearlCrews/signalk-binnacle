@@ -67,12 +67,22 @@ export function installContextMenu(
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', cancel);
   canvas.addEventListener('pointercancel', cancel);
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!(event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))) return;
+    event.preventDefault();
+    const x = canvas.clientWidth / 2;
+    const y = canvas.clientHeight / 2;
+    const at = map.unproject([x, y]);
+    emit({ lng: at.lng, lat: at.lat, x, y });
+  };
+  canvas.addEventListener('keydown', onKeyDown);
   const remove = () => {
     map.off('contextmenu', onContextMenu);
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
     canvas.removeEventListener('pointerup', cancel);
     canvas.removeEventListener('pointercancel', cancel);
+    canvas.removeEventListener('keydown', onKeyDown);
   };
   return { cancel, remove };
 }

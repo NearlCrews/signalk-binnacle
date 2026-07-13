@@ -46,6 +46,15 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+.tile-state {
+  color: var(--text-muted);
+}
+.tile--warning .tile-state {
+  color: var(--warning);
+}
+.tile--alarm .tile-state {
+  color: var(--alarm);
+}
 .tile--warning {
   border-color: var(--warning);
   background: var(--warning-tint);

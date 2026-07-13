@@ -13,22 +13,29 @@ source, and surrounding traffic before relying on it.
   loading, before GPS is available, and when the last fix is stale.
 - **Follow boat** keeps the vessel centered until the chart is panned. Follow turns off automatically
   when the GPS fix becomes stale.
+- The chart stays north-up and flat. The compass resets north, zoom controls provide gloved-hand
+  alternatives to pinch, and the scale reports nautical distance.
+- Long press, right-click, the Context Menu key, and Shift+F10 open chart actions. Keyboard actions
+  use the chart center.
 
 ## Navigate
 
 - **Routes** loads Signal K route resources independently of the live WebSocket. Creating, editing,
   importing, reversing, deleting, activating, stopping, skipping, and chart-side route actions
   require write access. Route activation and chart-position navigation require confirmation. Failed
-  refreshes keep the last accepted list, and route ids, names, geometry, and collection size are
-  bounded before use.
+  refreshes keep the last accepted list and offer Retry. Secondary card actions live in a labeled
+  overflow menu. Route ids, names, geometry, and collection size are bounded before use.
 - **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
   remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
-  continuous segment. Retrace requires confirmation. See [Tracks](tracks.md).
+  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
+  startup toast. See [Tracks](tracks.md).
 - **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
-  location, and confirmed navigation. See [Waypoints](waypoints.md).
+  location, and confirmed navigation. Locate collapses the phone panel so the chart stays visible,
+  and failed loads offer Retry. See [Waypoints](waypoints.md).
 - **Find places** searches chart notes and points of interest, including cached offline results.
   Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
-  distinct. See [Find places](find-places.md).
+  distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
+  [Find places](find-places.md).
 - **Measure** arms chart taps for distance and bearing. The active strip gives the next gesture, and
   selecting Measure again preserves current work. See [Measure](measure.md).
 - **Layers and charts** opens to chart sources first. Signal K chart discovery can be retried without
@@ -44,8 +51,9 @@ source, and surrounding traffic before relying on it.
   disconnected Signal K stream, shows collision severity, and exposes target identity, position,
   course, heading, speed, CPA, TCPA, navigation state, and reported ship type.
 - **Radar** stays discoverable without a provider and explains what is missing. Controls report radar
-  identity, control-write state, spoke-stream health, renderer health, and stale pictures. See
-  [Marine radar](marine-radar.md).
+  identity, control-write state, spoke-stream health, renderer health, and stale pictures. Transmit
+  requires confirmation, Standby stays immediate, and Open overlay settings moves directly to the
+  Overlays view. See [Marine radar](marine-radar.md).
 - **Anchor watch** prefers the Signal K Anchor API and falls back to a browser-only watch. A fresh GPS
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
   watch remains active independently. Server-mode changes require write access; client-mode changes
@@ -71,7 +79,7 @@ source, and surrounding traffic before relying on it.
 
 - **Data trends** shows the last 24 hours when a history provider works and otherwise uses this
   session's recorder. History and chart-module failures have separate retry actions. Provider
-  discovery in progress, query failure, and session-only operation are labeled separately.
+  discovery checking, available, absent, failed, and retrying states are labeled separately.
 - **Instruments** opens the live instrument dock. Customize can show, hide, and reorder tiles,
   including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. An
   intentionally empty selection explains how to add a tile. Duplicate, invalid, and oversized saved
@@ -96,4 +104,6 @@ source, and surrounding traffic before relying on it.
   planning settings. Switching away from a dirty active profile requires confirmation. Imports are
   size-limited, deeply validated, bounded, and report the number saved. Profile names, ids, settings,
   timestamps, list sizes, and server documents are validated before merge. Without server write
-  access, edits remain local, and delete confirmation warns that a server copy may remain.
+  access, edits remain local, and delete confirmation warns that a server copy may remain. The panel
+  reports Local, Syncing, Synced, and Failed states, offers Retry after a sync failure, and keeps
+  secondary card actions in a labeled overflow menu.

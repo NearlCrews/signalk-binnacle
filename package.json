@@ -78,12 +78,14 @@
     "cruise": "depcruise src --config .dependency-cruiser.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vite build && playwright test",
+    "test:e2e": "vite build && playwright test --project=chromium",
+    "test:e2e:cross-browser": "vite build && playwright test",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.5.3",
     "@playwright/test": "^1.61.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

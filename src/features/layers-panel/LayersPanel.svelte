@@ -5,7 +5,7 @@ import type { Bbox4 } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
-import { SlideOver } from '$shared/ui';
+import { createPanelMinimize, SlideOver } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
 import LayerRow from './LayerRow.svelte';
 import { CATEGORY_DEFAULT_OPEN, CATEGORY_ORDER, layerCategory } from './layer-category';
@@ -28,6 +28,7 @@ interface Props {
   // feature; it just forwards the row id.
   onManageLayer?: (id: string) => void;
   onShowChartBounds?: (bounds: Bbox4) => void;
+  initialMode?: 'charts' | 'overlays';
 }
 
 const {
@@ -41,6 +42,7 @@ const {
   onBack,
   onManageLayer,
   onShowChartBounds,
+  initialMode = 'charts',
 }: Props = $props();
 
 const pinned = $derived(view.items.filter((item) => item.pinned));
@@ -93,6 +95,10 @@ function toggleCategory(id: string): void {
 let addOpen = $state(false);
 let detailId = $state<string | undefined>();
 let mode = $state<'charts' | 'overlays'>('charts');
+$effect(() => {
+  mode = initialMode;
+});
+const minimize = createPanelMinimize();
 const detailItem = $derived(detailId ? view.items.find((item) => item.id === detailId) : undefined);
 const detailUserSource = $derived(
   detailItem?.chart?.source === 'user'
@@ -121,6 +127,7 @@ const reorder = createLayerReorder(
   closeLabel="Close layers and charts"
   {onClose}
   onBack={detailItem ? undefined : onBack}
+  {minimize}
 >
   <div class="visually-hidden" aria-live="polite">{reorder.reorderAnnouncement}</div>
   {#if detailItem?.chart}
@@ -131,7 +138,10 @@ const reorder = createLayerReorder(
         userSource={detailUserSource}
         writeBlocked={auth.writeBlocked}
         onBack={() => (detailId = undefined)}
-        onShowBounds={onShowChartBounds}
+        onShowBounds={(bounds) => {
+          onShowChartBounds?.(bounds);
+          minimize.collapse();
+        }}
       />
     {/key}
   {:else}
@@ -160,7 +170,7 @@ const reorder = createLayerReorder(
 
     {#if mode === 'charts'}
       {#if auth.writeBlocked}
-        <p class="muted-note" role="alert">
+        <p class="muted-note" role="status">
           A write token is needed to add, rename, or delete URL charts. Request a read/write token
           to continue.
         </p>

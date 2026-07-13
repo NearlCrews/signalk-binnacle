@@ -25,5 +25,5 @@ jobs:
       - run: npm run build
         env:
           NODE_ENV: production
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e:cross-browser

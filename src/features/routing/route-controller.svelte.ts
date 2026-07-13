@@ -111,11 +111,6 @@ export function createRouteController(deps: RouteControllerDeps) {
       return;
     }
     loadState = 'error';
-    flagRouteError(
-      routeStore.routes.length === 0
-        ? 'Could not load routes. Check the connection.'
-        : 'Could not refresh routes. Showing the current list.',
-    );
   }
 
   async function stopActiveCourse(): Promise<boolean> {

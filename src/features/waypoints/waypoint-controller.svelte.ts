@@ -41,11 +41,6 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       return;
     }
     loadState = 'error';
-    deps.toast.show(
-      waypointsStore.waypoints.length === 0
-        ? 'Could not load waypoints. Check the connection.'
-        : 'Could not refresh waypoints. Showing the current list.',
-    );
   }
 
   function onDropWaypoint(position: LatLon): void {

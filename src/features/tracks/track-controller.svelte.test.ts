@@ -58,7 +58,7 @@ describe('createTrackController', () => {
   });
 
   it('keeps a successful save locally when the follow-up refresh fails', async () => {
-    const { controller, clearRecorderThrough } = makeController();
+    const { controller, clearRecorderThrough, toast } = makeController();
     vi.mocked(tracksClient.fetchSavedTracks).mockResolvedValue(undefined);
     await controller.onSaveTrack('Passage');
     expect(clearRecorderThrough).toHaveBeenCalledWith(10_000);
@@ -66,6 +66,7 @@ describe('createTrackController', () => {
     expect(controller.savedTracks[0].name).toBe('Passage');
     expect(controller.shownSaved.has(controller.savedTracks[0].id)).toBe(true);
     expect(controller.loadState).toBe('error');
+    expect(toast.show).not.toHaveBeenCalled();
   });
 
   it('blocks overlapping saves', async () => {

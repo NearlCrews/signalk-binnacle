@@ -56,11 +56,6 @@ export function createTrackController(deps: TrackControllerDeps) {
       return;
     }
     loadState = 'error';
-    deps.toast.show(
-      savedTracks.length === 0
-        ? 'Could not load saved tracks. Check the connection.'
-        : 'Could not refresh saved tracks. Showing the current list.',
-    );
   }
 
   async function onSaveTrack(name: string): Promise<void> {

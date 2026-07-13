@@ -92,6 +92,9 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       zoom: Math.min(wanted, opts.maxZoom ?? Number.POSITIVE_INFINITY),
       minZoom: opts.minZoom,
       maxZoom: opts.maxZoom,
+      touchPitch: false,
+      pitchWithRotate: false,
+      maxPitch: 0,
       attributionControl: { compact: true },
       transformRequest: (url: string) => {
         let parsed: URL;
@@ -148,6 +151,14 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   map.on('terrain', collapseAttribution);
 
   const mapInstance = map;
+  mapInstance.addControl(
+    new maplibregl.NavigationControl({ showCompass: true, showZoom: true, visualizePitch: false }),
+    'top-right',
+  );
+  mapInstance.addControl(
+    new maplibregl.ScaleControl({ maxWidth: 120, unit: 'nautical' }),
+    'bottom-right',
+  );
   let destroyed = false;
   // Teardown for the sync wiring runTick installs (the 'render' listener, the interval, and the
   // visibilitychange listener). A no-op until the overlay tick is built on 'load', then it delegates

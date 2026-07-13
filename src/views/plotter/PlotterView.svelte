@@ -111,6 +111,7 @@ interface Props {
   currentView: import('$shared/settings').MapView | undefined;
   layerSettings: LayerSettings;
   layerOrder: string[];
+  layersInitialMode: 'charts' | 'overlays';
   weatherLayerSettings: LayerSettings;
   trackSettings: import('$shared/settings').PersistedValue<
     import('$shared/settings').TrackSettings
@@ -136,6 +137,7 @@ interface Props {
   poiInView: Poi[];
   poiViewState: PoiViewState;
   historyProviders: HistoryProviders | undefined;
+  historyProviderState: 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
   weatherProvider: WeatherProvider | undefined;
@@ -166,8 +168,10 @@ interface Props {
   backToMenu: () => void;
   openInstalledCharts: () => void;
   backToOfflineCharts: () => void;
+  openLayersPanel: (mode: 'charts' | 'overlays') => void;
   setLayerVisible: (id: string, visible: boolean) => void;
   onRetryTides: () => void;
+  onRetryHistoryProviders: () => void;
   // Arms the measure tool (shows the layer and resets prior points); owned by the shell so the
   // menu tile and the chart's context action share one meaning.
   armMeasure: (reset?: boolean) => void;
@@ -231,6 +235,7 @@ let {
   currentView,
   layerSettings,
   layerOrder,
+  layersInitialMode,
   weatherLayerSettings,
   trackSettings,
   trackPersistenceDegraded,
@@ -252,6 +257,7 @@ let {
   poiInView,
   poiViewState,
   historyProviders,
+  historyProviderState,
   serverFeatures,
   notificationsApi,
   weatherProvider,
@@ -278,8 +284,10 @@ let {
   backToMenu,
   openInstalledCharts,
   backToOfflineCharts,
+  openLayersPanel,
   setLayerVisible,
   onRetryTides,
+  onRetryHistoryProviders,
   armMeasure,
   toggleCollisionMute,
   onSilenceNotification,
@@ -393,17 +401,21 @@ $effect(() => {
     {/if}
   </div>
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
-    <HistoryStrip store={timeTravel} {units} onExit={() => timeTravel.exit()} />
-    <NavStrip
-      guidance={courseGuidance}
-      {routeProgress}
-      onStop={() => routeController.onStopCourse()}
-      onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
-    />
-    <MeasureStrip {measure} {units} />
-    <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
-    <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
-    <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
+    <div class="secondary-strips">
+      <HistoryStrip store={timeTravel} {units} onExit={() => timeTravel.exit()} />
+      <NavStrip
+        guidance={courseGuidance}
+        {routeProgress}
+        onStop={() => routeController.onStopCourse()}
+        onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
+      />
+      <MeasureStrip {measure} {units} />
+    </div>
+    <div class="safety-strips">
+      <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
+      <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
+      <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
+    </div>
   </div>
   {#if selectedNote && noteLoader}
     <div class="panel-slot panel-slot--end">
@@ -421,6 +433,7 @@ $effect(() => {
       {#if activePanel === 'layers' && layersView}
         <LayersPanel
           view={layersView}
+          initialMode={layersInitialMode}
           {auth}
           chartsLoadState={serverChartsStatus}
           onRetryCharts={retryServerCharts}
@@ -451,6 +464,7 @@ $effect(() => {
           error={routeController.routeError}
           editorLoadFailed={routeController.editorLoadFailed}
           onRetryEditor={routeController.retryRouteEdit}
+          onRetry={() => void routeController.refreshRoutes()}
           onNew={routeController.beginNewRoute}
           onEditRoute={routeController.onEditRoute}
           onSave={routeController.onSaveRoute}
@@ -478,6 +492,7 @@ $effect(() => {
           busy={trackController.busy}
           routeBusy={routeController.busy}
           persistenceDegraded={trackPersistenceDegraded}
+          onRetry={() => void trackController.refreshSavedTracks()}
           onSave={trackController.onSaveTrack}
           onSaveAsRoute={routeController.onSaveTrackAsRoute}
           onTrackHome={routeController.onTrackHome}
@@ -494,6 +509,7 @@ $effect(() => {
           loadState={waypointsController.loadState}
           busy={waypointsController.busy}
           routeBusy={routeController.busy}
+          onRetry={() => void waypointsController.refreshWaypoints()}
           onLocate={(waypoint) => flyToPosition(waypoint.position)}
           onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
           onEdit={waypointsController.onOpenEditWaypoint}
@@ -516,6 +532,8 @@ $effect(() => {
           {origin}
           token={chartsToken}
           providers={historyProviders}
+          providerState={historyProviderState}
+          onRetryProvider={onRetryHistoryProviders}
           recorder={trendRecorder}
           mode={units.mode}
           theme={theme.theme}
@@ -540,6 +558,8 @@ $effect(() => {
           {units}
           viewState={poiViewState}
           selectedId={selectedNote?.id}
+          placesShown={layerSettings.notes?.visible ?? false}
+          onTogglePlaces={(shown) => setLayerVisible('notes', shown)}
           onSelect={selectPoi}
           onHover={(poi) => (hoveredPoi = poi)}
           onClose={closePoiSearch}
@@ -620,6 +640,10 @@ $effect(() => {
           onSetPower={onSetRadarPower}
           echoShown={radarEchoShown}
           onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
+          onOpenOverlaySettings={() => {
+            radarControlsOpen = false;
+            openLayersPanel('overlays');
+          }}
         />
       </SlideOver>
     </div>
@@ -698,12 +722,9 @@ $effect(() => {
   padding: var(--space-2) var(--space-4);
   box-shadow: var(--shadow-overlay);
 }
-/* Sized to its content (not the full inset-inline gap) and centered in it via the auto margins, so
-   pointer-events: auto here only ever covers the strips themselves, never the empty chart on either
-   side of them, which must stay tappable and pannable underneath. A rare pile-up of several active
-   strips (MOB, Danger, Anchor, Nav, Measure, History all at once) is scrollable instead of growing
-   past the viewport; MOB, already closest to the reachable bottom edge via column-reverse, stays the
-   first thing revealed. */
+/* Keep safety strips pinned above the reachable bottom edge. Lower-priority review, navigation, and
+   tool strips scroll in their own tier, so a pileup can never clip MOB, collision, or anchor actions
+   behind History or Measure. */
 .bottom-stack {
   position: absolute;
   inset-block-end: var(--space-3);
@@ -713,12 +734,27 @@ $effect(() => {
   margin-inline: auto;
   max-block-size: min(60dvh, calc(100% - 2 * var(--space-3)));
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  overflow-y: auto;
+  overflow: hidden;
   pointer-events: auto;
   z-index: var(--z-safety-strips);
+}
+.secondary-strips,
+.safety-strips {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+}
+.secondary-strips {
+  min-block-size: 0;
+  overflow-y: auto;
+}
+.safety-strips {
+  flex: none;
 }
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));

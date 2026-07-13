@@ -12,7 +12,7 @@ const { auth, requestsUrl }: Props = $props();
 {#if auth.status === 'requesting'}
   <div class="auth-banner" role="status" aria-live="polite">
     <p class="lead">
-      Binnacle needs your approval to save routes, waypoints, and alarms to the boat.
+      This Signal K server requires approval before Binnacle can connect and save to the boat.
       <a
         class="btn btn-primary btn-pill"
         href={requestsUrl}
@@ -24,8 +24,9 @@ const { auth, requestsUrl }: Props = $props();
     </p>
     <p class="muted-note">
       Approve <strong>{auth.clientId}</strong> in Signal K under Security, then Access Requests, and
-      this connects on its own. Grants <strong>read and write</strong>: routes, waypoints, tracks,
-      course control, alarms, and profiles all save to the server.
+      leave this tab open. Binnacle connects automatically after approval. Grant
+      <strong>read and write</strong>
+      so routes, waypoints, tracks, course control, alarms, and profiles can use the server.
     </p>
   </div>
 {:else if auth.status === 'denied'}

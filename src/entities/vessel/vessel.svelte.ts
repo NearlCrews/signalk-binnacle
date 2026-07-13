@@ -6,7 +6,7 @@ import { type SignalKStore, SK_PATHS } from '$shared/signalk';
 // position is subscribed near 1 Hz, so a gap this long is a real dropout, not stream jitter. Holding
 // a frozen fix out as if it were live is the worst lie to tell a navigator, so the readouts, the nav
 // guidance, and the collision math all degrade once the fix ages past this.
-const FIX_STALE_MS = 10_000;
+export const VESSEL_DATA_STALE_MS = 10_000;
 
 export class OwnVessel {
   #store: SignalKStore;
@@ -65,19 +65,33 @@ export class OwnVessel {
     return isLatLon(value) ? value : undefined;
   }
 
-  // True when a fix was once received but has not refreshed within FIX_STALE_MS, so the last
+  // True when a fix was once received but has not refreshed within VESSEL_DATA_STALE_MS, so the last
   // position is no longer trustworthy. False before the first fix (absent, not stale) and false
   // when no clock is wired (tests, and any caller that does not need staleness). Reads the ticking
   // clock, so it flips on its own the moment the feed stops, without a fresh frame to trigger it.
   #stale = $derived.by<boolean>(() => {
     if (!this.#clock) return false;
-    const epoch = this.#store.cell(SK_PATHS.position).epoch;
-    if (epoch === 0) return false;
-    return this.#clock.now - epoch > FIX_STALE_MS;
+    return this.#pathStale(SK_PATHS.position);
   });
 
   get positionStale(): boolean {
     return this.#stale;
+  }
+
+  get sogStale(): boolean {
+    return this.#pathStale(SK_PATHS.speedOverGround);
+  }
+
+  get cogStale(): boolean {
+    return this.#pathStale(SK_PATHS.courseOverGroundTrue);
+  }
+
+  get headingStale(): boolean {
+    return this.#pathStale(SK_PATHS.headingTrue);
+  }
+
+  get depthStale(): boolean {
+    return this.#pathStale(SK_PATHS.depthBelowTransducer);
   }
 
   #raw(path: string): unknown {
@@ -88,5 +102,11 @@ export class OwnVessel {
   // numeric getter shares.
   #num(path: string): number | undefined {
     return asNumber(this.#raw(path));
+  }
+
+  #pathStale(path: string): boolean {
+    if (!this.#clock) return false;
+    const epoch = this.#store.cell(path).epoch;
+    return epoch > 0 && this.#clock.now - epoch > VESSEL_DATA_STALE_MS;
   }
 }

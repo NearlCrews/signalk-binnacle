@@ -62,9 +62,10 @@ Binnacle ships its full feature set as a Signal K webapp:
 - **Overlays:** free, key-free OpenSeaMap seamarks, marine protected areas, maritime boundaries, and
   NASA GIBS ocean conditions (sea-surface temperature and sea ice), each with its source attribution.
 - **Marine radar:** an optional live radar picture from the Signal K Radar API, rendered over the chart
-  with range rings, a heading line, strict night-red colors, transmit and standby controls, and the
-  tuning controls reported by the radar. Provider, stream, stale-data, access, and renderer failures
-  remain distinct so an old picture is never presented as live. See [Marine radar](docs/marine-radar.md).
+  with range rings, a heading line, strict night-red colors, confirmed transmit, immediate standby,
+  direct overlay settings, and the tuning controls reported by the radar. Provider, stream,
+  stale-data, access, and renderer failures remain distinct so an old picture is never presented as
+  live. See [Marine radar](docs/marine-radar.md).
 - **Routing:** draw and save routes as Signal K resources, or tap **Go to here** (long-press or
   right-click the chart) to navigate straight to a point. Follow a route with a nav strip (cross-track,
   distance, bearing, velocity made good, and time to go) over the v2 Course API, with an arrival alarm
@@ -75,7 +76,7 @@ Binnacle ships its full feature set as a Signal K webapp:
 - **Profiles:** save named bundles of your settings (theme, which layers are on and their order, the
   weather layers, the collision thresholds, and the track and planning settings), switch between them
   in one tap, set a default, export and import them as files, and sync them across devices through the
-  server when you are logged in.
+  server when you are logged in. The panel identifies local-only, syncing, synced, and failed states.
 - **Instruments:** tap the Instruments pill and the chart slides left for a gauge dock (SOG,
   heading, depth, apparent wind, and more from a curated catalog you pick and reorder); on a phone
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
@@ -198,9 +199,9 @@ Open Binnacle from the **Webapps** list in the Signal K admin UI, or go straight
 
 A few interactions cover most of the helm:
 
-- **Open the context menu.** Long-press the chart on a touch screen, or right-click with a mouse, to
-  drop a waypoint, choose **Go to here** to navigate straight to that point, start a route or a
-  measurement, or place an on-chart widget.
+- **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
+  the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
+  navigate straight to that point, or start a route or measurement.
 - **Measure a chart leg.** Open **Measure**, tap a start and destination, then read the latest rhumb
   range, true bearing, and total in the strip. Use **Done** when finished.
 - **Manage charts and overlays.** Open **Charts** to select chart sources or inspect their details.
@@ -305,7 +306,8 @@ npm run ci:biome   # format, lint, and import-order verification
 npm run cruise     # dependency-cruiser boundary check
 npm test           # Vitest unit tests
 npm run build      # production build into public/
-npm run test:e2e   # Playwright end-to-end smoke test
+npm run test:e2e   # Chromium browser, mobile, keyboard, and accessibility checks
+npm run test:e2e:cross-browser # Chromium and WebKit UI checks used by CI
 ```
 
 After `npm run hooks`, git runs a fast format, lint, and boundary check before each commit, and the

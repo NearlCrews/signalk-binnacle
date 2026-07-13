@@ -4,7 +4,7 @@ import { onDestroy } from 'svelte';
 import type { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import { Clock, formatBearingOr, formatClockTime, MINUTE_MS } from '$shared/lib';
-import { ShowOnChartToggle, SlideOver } from '$shared/ui';
+import { createPanelMinimize, ShowOnChartToggle, SlideOver } from '$shared/ui';
 import {
   formatCurrentRate,
   formatStationDistance,
@@ -62,6 +62,7 @@ const curve = $derived(tide ? tideCurvePoints(tide.events) : []);
 const nowFrac = $derived(tide ? nowFraction(tide.events, clock.now) : undefined);
 const nextCurrent = $derived(current ? nextCurrentEvent(current.events, clock.now) : undefined);
 const sourceNote = $derived(tideSourceNote(store.source));
+const minimize = createPanelMinimize();
 // The rate and set as one string, so no stray whitespace creeps in between the rate and the comma.
 const currentRate = $derived.by(() => {
   if (!nextCurrent) return '';
@@ -97,7 +98,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 }
 </script>
 
-<SlideOver title="Tides" closeLabel="Close tides panel" {onClose} {onBack} bodyFlex>
+<SlideOver title="Tides" closeLabel="Close tides panel" {onClose} {onBack} bodyFlex {minimize}>
   <p class="muted-note">Tide and current predictions for the nearest station.</p>
   {#if onToggleStations}
     <ShowOnChartToggle
@@ -108,7 +109,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
     />
   {/if}
   {#if !tide && store.status === 'loading'}
-    <p class="muted-note" role="status">Finding nearby tide stations...</p>
+    <p class="muted-note" role="status">Finding nearby tide stations…</p>
   {:else if store.status === 'no-coverage'}
     <p class="muted-note" role="status">
       No tide station nearby. NOAA tide predictions cover US waters only.
@@ -191,7 +192,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 
     {#if store.status === 'error'}
       <div class="refresh-note" role="alert">
-        <p class="muted-note sev-warning">
+        <p class="alert-note">
           Showing the last update; the latest refresh did not reach the tide source.
         </p>
         {#if onRetry}
@@ -214,7 +215,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
     </p>
   {:else if store.status === 'error'}
     <div class="refresh-note" role="alert">
-      <p class="muted-note sev-warning">Could not load tide predictions. Check the connection.</p>
+      <p class="alert-note">Could not load tide predictions. Check the connection.</p>
       {#if onRetry}
         <button type="button" class="btn" onclick={onRetry}>
           <RefreshCw size={16} aria-hidden="true" />
@@ -277,7 +278,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
   justify-content: space-between;
   gap: var(--space-2);
 }
-.refresh-note .muted-note {
+.refresh-note > p {
   flex: 1 1 14rem;
 }
 /* The provenance note sits with the footnote, so it drops to the same fine-print scale. */

@@ -84,7 +84,7 @@ $effect(() => {
     Other boats and navigation aids broadcasting their position over AIS. The nearest show first.
   </p>
   {#if vessel.positionStale}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       Own GPS fix is stale. Distance and bearing are unavailable until a fresh fix arrives.
     </p>
   {:else if !vessel.position}

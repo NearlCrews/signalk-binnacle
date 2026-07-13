@@ -225,6 +225,17 @@ let commandsRef = $state<MapCommands | undefined>();
 let chartMenu = $state<
   { x: number; y: number; lat: number; lon: number; width: number; height: number } | undefined
 >();
+const CONTEXT_HINT_KEY = 'binnacle:chart-actions-hint';
+let showContextHint = $state(false);
+
+function dismissContextHint(): void {
+  showContextHint = false;
+  try {
+    localStorage.setItem(CONTEXT_HINT_KEY, 'seen');
+  } catch {
+    // The hint remains session-only when local storage is unavailable.
+  }
+}
 
 // Restyle the on-chart route editor and the working-route overlay whenever the theme changes (the
 // saved-route overlay recolors through the layer manager; these two unmanaged pieces are restyled
@@ -281,6 +292,13 @@ $effect(() => {
 });
 
 onMount(async () => {
+  try {
+    showContextHint =
+      window.matchMedia('(pointer: coarse)').matches &&
+      localStorage.getItem(CONTEXT_HINT_KEY) !== 'seen';
+  } catch {
+    showContextHint = window.matchMedia('(pointer: coarse)').matches;
+  }
   // Detect Chart Locker before the map is built: the basemap style URL is read
   // synchronously at map construction, so detection must precede it. The same result routes the
   // raster overlays in onLoad below, so it is detected once here.
@@ -309,6 +327,7 @@ onMount(async () => {
       // (this suppresses every item, not just "Go to here"): Terra Draw and the measure tool own the
       // chart taps then.
       if (!onGoToHere || routeStore.working || measure.active) return;
+      dismissContextHint();
       chartMenu = {
         x: point.x,
         y: point.y,
@@ -561,6 +580,12 @@ onDestroy(() => {
 </script>
 
 <div class="chart-canvas" bind:this={container}>
+  {#if showContextHint}
+    <div class="context-hint popover-card" role="status">
+      <span>Press and hold the chart for actions.</span>
+      <button type="button" class="btn btn-ghost" onclick={dismissContextHint}>Got it</button>
+    </div>
+  {/if}
   {#if mapRef}
     <VesselOffScreenIndicator
       map={mapRef}
@@ -607,5 +632,20 @@ onDestroy(() => {
   position: relative;
   inline-size: 100%;
   block-size: 100%;
+}
+
+.context-hint {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: 50%;
+  z-index: var(--z-menu);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: max-content;
+  max-inline-size: calc(100% - 2 * var(--space-4));
+  padding: var(--space-1) var(--space-2);
+  transform: translateX(-50%);
+  font-size: var(--text-sm);
 }
 </style>

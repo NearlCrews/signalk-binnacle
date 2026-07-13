@@ -6,10 +6,26 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The chart now has 44 px north-reset and zoom controls, plus a nautical scale. Chart actions also
+  open from the keyboard Context Menu key or Shift+F10 at the chart center.
+- Phone chart workflows can collapse Routes, Tracks, Waypoints, Find places, Tides, Layers and
+  charts, and Anchor watch to their headers. A one-time touch hint teaches the chart action gesture.
+- Browser coverage now includes desktop and phone WebKit, reduced motion, night-red restoration,
+  touch target sizing, keyboard focus, and automated accessibility checks.
+
 ### Changed
 
 - Updated `signalk-chart-sources` to 0.3.1, adopted its readonly catalog metadata for NOAA ENC
   rendering, and describe offline download size as a planning estimate.
+- The phone shell keeps full-size header controls, condenses secondary status readouts and actions,
+  places Safety near the top of the menu, and keeps emergency strips pinned above secondary strips.
+- Route and profile cards keep their primary action visible and move secondary actions into a labeled
+  keyboard-accessible overflow menu. Progress copy consistently uses an ellipsis, and actionable
+  failures use the shared alert treatment.
+- Starter profiles now configure distinct helm actions and instruments for coastal day, night
+  passage, and anchor use. Profile sync reports Local, Syncing, Synced, and Failed states with Retry.
 
 ### Fixed
 
@@ -19,6 +35,17 @@ All notable changes to Binnacle are documented here. The format follows
   reusing saved settings, and the area tool now accepts the drag gesture described in the UI.
 - NOAA ENC remains available across its service envelope but is selected automatically only for
   conservative United States coverage areas, including Alaska across the antimeridian.
+- Depth, heading, course, and speed freshness are evaluated independently. Stale depth can no longer
+  trigger or suppress the shallow-water alarm, and the status strip identifies the unavailable feed.
+- MOB, collision, anchor, and shallow-water announcements no longer repeat changing metrics on every
+  update. Generic Signal K alarms now have a deduplicated assistive alert channel.
+- Routes, Tracks, and Waypoints expose real Retry actions without raising background-load toasts.
+  Find places has a direct chart-layer toggle, and Radar links directly to overlay settings.
+- Radar transmit now requires an inline confirmation. Instrument tiles expose their value, unit,
+  freshness, and alarm state to assistive technology, with visible Warning, Alarm, and Stale labels.
+- Saved night-red restores before the first paint and updates browser theme color. Icon pickers flip
+  and clamp to available viewport space, and full-screen instruments contain and restore focus.
+- KIP and history discovery distinguish checking, available, absent, failed, and retrying states.
 
 <a id="v0150"></a>
 

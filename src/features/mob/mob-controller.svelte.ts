@@ -1,7 +1,7 @@
 import type { MobMark, MobStore } from '$entities/mob';
 import type { GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
-import { formatMetersOrNm, type UnitsMode } from '$shared/lib';
+import type { UnitsMode } from '$shared/lib';
 import { postMobNotification, resolveNotification, SK_PATHS } from '$shared/signalk';
 import { mobClearNotification, mobNotification } from './mob-notification';
 
@@ -49,9 +49,7 @@ export function createMobController(deps: MobControllerDeps) {
   // The MOB channel of the assertive live region, the most urgent announcement in the app.
   const mobAlert = $derived.by(() => {
     if (!mob.active || mob.acknowledged) return '';
-    const distance = mob.distanceMeters;
-    const range = distance == null ? '' : `, range ${formatMetersOrNm(distance, deps.units.mode)}`;
-    return `Man overboard${range}. Steer back to the mark.`;
+    return 'Man overboard. Steer back to the mark.';
   });
 
   // Commit the press-time mark, tell the whole boat, and bring the mark into view. Guidance only;

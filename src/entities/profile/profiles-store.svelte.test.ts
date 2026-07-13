@@ -265,6 +265,7 @@ describe('ProfileStore.syncWithServer', () => {
     expect(store.activeId).toBe('p1');
     expect(store.defaultId).toBe('p2');
     await flush();
+    expect(store.syncState).toBe('synced');
     expect(
       server.saved
         .at(-1)
@@ -337,6 +338,7 @@ describe('ProfileStore.syncWithServer', () => {
       save,
     });
     await store.syncWithServer({ load: async () => undefined, save });
+    expect(store.syncState).toBe('error');
     store.save('Another', settings());
     await flush();
     expect(store.profiles.map((x) => x.name)).toEqual([p.name, 'Another']);
@@ -373,6 +375,7 @@ describe('ProfileStore.syncWithServer', () => {
     });
     await flush();
     expect(save).toHaveBeenCalledTimes(1);
+    expect(store.syncState).toBe('error');
     // The first failure detached the server, so a later mutation must not fire another doomed write.
     store.save('Offshore', settings());
     await flush();

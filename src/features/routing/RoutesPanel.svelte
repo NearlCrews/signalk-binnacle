@@ -17,9 +17,11 @@ import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
+  createPanelMinimize,
   defaultSaveName,
   InlineConfirm,
   NameEntry,
+  OverflowActions,
   pickTextFile,
   readErrorMessage,
   resolveSaveName,
@@ -51,6 +53,7 @@ interface Props {
   // other errors (a failed save, activate, stop, delete) have no editor to retry loading.
   editorLoadFailed: boolean;
   onRetryEditor: () => void;
+  onRetry: () => void;
   onNew: () => void;
   onEditRoute: (id: string) => void;
   // Called with the name the user enters; the panel collects it via the inline NameEntry form.
@@ -88,6 +91,7 @@ const {
   error,
   editorLoadFailed,
   onRetryEditor,
+  onRetry,
   onNew,
   onEditRoute,
   onSave,
@@ -111,6 +115,7 @@ const writesDisabled = $derived(auth.writeBlocked || busy);
 // rather than firing on a single tap where a mis-tap on a rolling deck would lose a saved route.
 const armedDelete = new ArmedRow((id) => onDelete(id));
 let confirmingActivateId = $state<string | undefined>();
+let actionMenuId = $state<string | undefined>();
 
 function confirmActivation(): void {
   const id = confirmingActivateId;
@@ -171,13 +176,13 @@ const savedCards = $derived(
 // tapped in. Expand it whenever an edit begins, so the edit controls are visible before the navigator
 // chooses to minimize; the transition check keeps a minimize during editing from springing back open
 // on the next waypoint.
-let minimized = $state(false);
+const minimize = createPanelMinimize();
 // A non-reactive edge sentinel, tracked by hand so the effect fires only on the false to true edit
 // transition; deliberately not $state, so writing it does not re-trigger the effect.
 let wasEditing = false;
 $effect(() => {
   const editing = working !== undefined;
-  if (editing && !wasEditing) minimized = false;
+  if (editing && !wasEditing) minimize.expand();
   wasEditing = editing;
 });
 </script>
@@ -186,7 +191,7 @@ $effect(() => {
   title="Routes"
   bodyFlex
   closeLabel="Close routes panel"
-  minimize={{ collapsed: minimized, onToggle: () => (minimized = !minimized) }}
+  {minimize}
   onClose={() => requestExit('close')}
   onBack={onBack ? () => requestExit('back') : undefined}
 >
@@ -199,7 +204,7 @@ $effect(() => {
     </p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       A write token is needed to save, activate, or delete routes. Request a read/write token to
       continue.
     </p>
@@ -280,11 +285,12 @@ $effect(() => {
   {/if}
 
   {#if loadState === 'error'}
-    <p class="muted-note" role="alert">
+    <p class="alert-note" role="alert">
       {routes.length > 0
         ? 'Could not refresh routes. Showing the last loaded routes.'
-        : 'Could not load routes. Check the connection, then reopen this panel.'}
+        : 'Could not load routes. Check the connection, then retry.'}
     </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry routes</button>
   {:else if loadState === 'loading' && routes.length > 0}
     <p class="muted-note" role="status">Refreshing routes…</p>
   {/if}
@@ -306,7 +312,10 @@ $effect(() => {
           type="button"
           class="name"
           title="Show the entire route on the chart"
-          onclick={() => onLocate(route.id)}
+          onclick={() => {
+            onLocate(route.id);
+            minimize.collapse();
+          }}
         >
           {route.name}
         </button>
@@ -344,35 +353,6 @@ $effect(() => {
             visible={shownIds.has(route.id)}
             onToggle={(v) => onToggleShown(route.id, v)}
           />
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Edit route"
-            title="Edit"
-            disabled={working !== undefined || writesDisabled}
-            onclick={() => onEditRoute(route.id)}
-          >
-            <SquarePen size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Reverse route"
-            title="Save a reversed copy"
-            disabled={writesDisabled}
-            onclick={() => onReverse(route.id)}
-          >
-            <ArrowLeftRight size={18} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            aria-label="Download route as a GPX file"
-            title="Download as a GPX file for another chartplotter"
-            onclick={() => onExportGpx(route.id)}
-          >
-            <Download size={18} aria-hidden="true" />
-          </button>
           {#if route.id === activeId}
             <button
               type="button"
@@ -396,16 +376,64 @@ $effect(() => {
               <Navigation size={18} aria-hidden="true" />
             </button>
           {/if}
-          <button
-            type="button"
-            class="icon-btn icon-btn--danger"
-            aria-label="Delete route"
-            title="Delete"
-            disabled={writesDisabled}
-            onclick={() => armedDelete.arm(route.id)}
+          <OverflowActions
+            open={actionMenuId === route.id}
+            label={`More actions for ${route.name}`}
+            onToggle={() => (actionMenuId = actionMenuId === route.id ? undefined : route.id)}
+            onClose={() => (actionMenuId = undefined)}
           >
-            <Trash2 size={18} aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item"
+              disabled={working !== undefined || writesDisabled}
+              onclick={() => {
+                actionMenuId = undefined;
+                onEditRoute(route.id);
+              }}
+            >
+              <SquarePen size={18} aria-hidden="true" />
+              Edit route
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item"
+              disabled={writesDisabled}
+              onclick={() => {
+                actionMenuId = undefined;
+                onReverse(route.id);
+              }}
+            >
+              <ArrowLeftRight size={18} aria-hidden="true" />
+              Save reversed copy
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item"
+              onclick={() => {
+                actionMenuId = undefined;
+                onExportGpx(route.id);
+              }}
+            >
+              <Download size={18} aria-hidden="true" />
+              Download GPX
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item sev-danger"
+              disabled={writesDisabled}
+              onclick={() => {
+                actionMenuId = undefined;
+                armedDelete.arm(route.id);
+              }}
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              Delete route
+            </button>
+          </OverflowActions>
         </div>
       {/if}
     {/snippet}

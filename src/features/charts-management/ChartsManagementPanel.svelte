@@ -88,7 +88,7 @@ async function saveOverride(
 
 {#snippet saveIndicator(key: string, errorMessage: string)}
   {#if saveStates[key] === 'saving'}
-    <p class="muted-note save-note" role="status">Saving...</p>
+    <p class="muted-note save-note" role="status">Saving…</p>
   {:else if saveStates[key] === 'saved'}
     <p class="muted-note save-note" role="status">Saved.</p>
   {:else if saveStates[key] === 'error'}
@@ -125,7 +125,7 @@ async function saveOverride(
         onclick={() => void loadCharts(true)}
       >
         <RefreshCw size={16} aria-hidden="true" />
-        {refreshing ? 'Refreshing...' : 'Refresh list'}
+        {refreshing ? 'Refreshing…' : 'Refresh list'}
       </button>
     </div>
 
@@ -133,7 +133,7 @@ async function saveOverride(
       <p class="alert-note" role="alert">{loadError}</p>
       <button type="button" class="btn" onclick={() => void loadCharts(true)}>Try again</button>
     {:else if data === null}
-      <p class="muted-note" role="status">Loading charts...</p>
+      <p class="muted-note" role="status">Loading charts…</p>
     {:else if data.charts.length === 0}
       <p class="muted-note">
         No charts yet. Drop chart files (.pmtiles) into the server's chart folder and they show up
@@ -197,7 +197,7 @@ async function saveOverride(
       {#each data.invalid as item (item.fileName)}
         <div class="card-frame invalid-card">
           <p class="chart-file">{item.fileName}</p>
-          <p class="alert-note">{item.error}</p>
+          <p class="alert-note" role="alert">{item.error}</p>
           <p class="muted-note">
             Replace or remove this file in the Chart Locker chart folder on the Signal K server,
             then refresh this list.

@@ -105,7 +105,8 @@ level. Inside, in this order:
 4. One or more `<section aria-label="...">` blocks, each led by an `<h3 class="caps-label">` heading,
    then its control primitives and readouts. A sub-heading is `<h4 class="caps-label">`.
 5. A list of saved records uses `<SavedList>` with a next-step `empty` message. A destructive action
-   on a card arms an `<InlineConfirm>` first.
+   on a card arms an `<InlineConfirm>` first. When a card needs more than one primary and two secondary
+   actions, keep the primary visible and put the rest in `OverflowActions` with plain text labels.
 6. Live status carries a role: `role="progressbar"` with aria-valuemin/max/now for a determinate
    bar, `role="status"` for a soft advisory, `role="alert"` for a hard error. A determinate bar also
    shows a visible percentage, byte count, or item count and supplies matching `aria-valuetext`.
@@ -354,6 +355,12 @@ and guides.
   Use the `SavedList` `empty` prop rather than a hand-rolled `<p>`.
 - Voice: second person, imperative for actions, present tense, short sentences. No marketing tone, no
   exclamation except a true alarm.
+- Progress uses the single ellipsis character `…`. **Retry** repeats a failed network or provider
+  operation, **Refresh list** manually reloads an already usable collection, and **Rescan** repeats
+  local sensor discovery. Do not use these verbs interchangeably.
+- Use `.alert-note` with `role="alert"` only for actionable failure or safety state. Write-access
+  teaching and optional-capability explanations use `.muted-note`; add `role="status"` only when a
+  state change should be announced politely.
 
 House writing rules, mandatory in UI text, labels, commit messages, PR bodies, comments, and docs:
 

@@ -100,8 +100,8 @@ segment is drawable. Record another connected point, or use the earlier trail on
 
 - **Loading saved tracks:** the HTTP resource read is still pending. It does not depend on the live
   Signal K WebSocket.
-- **Could not refresh:** previously loaded or newly saved tracks remain visible. Reopen the panel or
-  restore server connectivity to retry.
+- **Could not refresh:** previously loaded or newly saved tracks remain visible. Restore server
+  connectivity, then select **Retry saved tracks**.
 - **Saved tracks unavailable:** neither the v2 nor v1 collection produced a usable response. A 404 on
   both collections is treated as a reachable server with no saved tracks.
 - **Track storage is memory-only:** IndexedDB is unavailable or failed. Save the current trail to the

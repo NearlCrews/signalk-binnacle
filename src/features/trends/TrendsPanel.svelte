@@ -12,6 +12,8 @@ interface Props {
   token: string | undefined;
   // undefined while unknown or unavailable; empty ids means the API exists with no provider.
   providers: HistoryProviders | undefined;
+  providerState: 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
+  onRetryProvider: () => void;
   recorder: TrendSessionRecorder;
   mode: UnitsMode;
   theme: Theme;
@@ -19,7 +21,18 @@ interface Props {
   onBack?: () => void;
 }
 
-const { origin, token, providers, recorder, mode, theme, onClose, onBack }: Props = $props();
+const {
+  origin,
+  token,
+  providers,
+  providerState,
+  onRetryProvider,
+  recorder,
+  mode,
+  theme,
+  onClose,
+  onBack,
+}: Props = $props();
 
 const hasProvider = $derived((providers?.ids.length ?? 0) > 0);
 
@@ -77,10 +90,14 @@ const sourceNote = $derived.by(() => {
   if (history?.series) {
     return history.provider ? `Last 24 hours, from ${history.provider}` : 'Last 24 hours';
   }
-  if (loading) return 'Loading the last 24 hours...';
+  if (loading) return 'Loading the last 24 hours…';
   if (hasProvider && loadFailed) return 'History query failed; showing this session only.';
-  if (providers === undefined)
+  if (providerState === 'checking')
     return 'Checking for a history provider; showing this session meanwhile.';
+  if (providerState === 'retrying')
+    return 'Checking again for a history provider; showing this session meanwhile.';
+  if (providerState === 'failed')
+    return 'Could not check for a history provider. This session remains available.';
   return 'This session only. A history provider on the server (for example signalk-questdb or signalk-to-influxdb2) unlocks the full 24 hour view.';
 });
 </script>
@@ -90,6 +107,11 @@ const sourceNote = $derived.by(() => {
     Recent trends in the boat's wind, depth, and other data over the last day.
   </p>
   <p class="muted-note" role="status">{sourceNote}</p>
+  {#if providerState === 'failed' || providerState === 'absent'}
+    <button type="button" class="btn" onclick={onRetryProvider}>
+      {providerState === 'failed' ? 'Retry provider check' : 'Check for provider again'}
+    </button>
+  {/if}
   {#if loadFailed && hasProvider}
     <button type="button" class="btn" disabled={loading} onclick={refreshHistory}>
       Retry history

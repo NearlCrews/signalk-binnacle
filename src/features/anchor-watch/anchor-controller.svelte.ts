@@ -68,11 +68,7 @@ export function createAnchorController(deps: AnchorControllerDeps) {
       return 'Anchor watch degraded: no GPS fix, so drag detection has stopped.';
     }
     if (!anchor.dragging || anchor.acknowledged) return '';
-    const distance = anchor.distanceMeters;
-    const radius = anchor.radiusMeters;
-    const where = distance == null ? '' : ` ${Math.round(distance)} meters from the anchor`;
-    const limit = radius == null ? '' : `, watch radius ${Math.round(radius)} meters`;
-    return `Anchor alarm: the boat is dragging${where}${limit}.`;
+    return 'Anchor alarm: the boat is dragging.';
   });
 
   async function onDrop(): Promise<void> {

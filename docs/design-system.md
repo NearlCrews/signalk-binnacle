@@ -173,8 +173,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   column), and `grid-auto-flow: row dense` keeps the grid hole-free, allowed to deviate from the
   customize order only where a hole would otherwise sit. Instrument tiles are buttons: selecting one
   opens an in-dock detail view with value, status, zone, source, update age, and the Signal K paths
-  behind the reading. Customize groups available instruments by category, and its Rescan action reruns
-  instance discovery for batteries, engines, tanks, solar, and cabin sensors.
+  behind the reading. The button's accessible name includes the value, unit, freshness, alarm zone,
+  and action. Warning, Alarm, and Stale also render as visible text badges, never color alone.
+  Customize groups available instruments by category, and its Rescan action reruns instance discovery
+  for batteries, engines, tanks, solar, and cabin sensors.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
@@ -210,6 +212,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
   for an inline clamp position.
+- `OverflowActions`: a labeled More button and keyboard-focused anchored menu for secondary saved-card
+  actions. Keep one primary action visible, then move dense secondary actions here instead of wrapping
+  five or six icon-only controls across a phone card.
 - `CustomizeToggle`: the edit-mode entry control (see "Edit modes" below). Props: `object` (the
   label's object noun), `editing`, and `onToggle`. Render it, never a hand-written ghost button.
 - `createReorder`: the shared pointer and keyboard reorder controller. Use it when a list can be
@@ -237,6 +242,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
   supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
   must distinguish loading, refresh with retained cards, real empty, and failure outside the
   primitive. Disable conflicting mutations while one is pending.
+- `createPanelMinimize`: the shared reactive controller passed to `SlideOver` as `{minimize}`. Use its
+  `collapse`, `expand`, and `onToggle` methods instead of creating panel-local collapse state.
 - `SubViewHeader`: the back header for an in-panel sub-view drilled into inside one SlideOver (the
   Layers panel opening a chart-source detail). The parent suppresses its own panel-level back while
   it is open, so only one back control shows.
@@ -252,7 +259,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
   tooltip. Set a plain-language `description` on every toggle row.
 - `VisibilityToggle`: the show/hide eye toggle for a saved overlay item.
 - `IconPicker`: the waypoint and note symbol chooser. Pass `disabled` with the enclosing mutation
-  state so a pending dialog cannot change fields while its accepted values are in flight.
+  state so a pending dialog cannot change fields while its accepted values are in flight. Its list
+  chooses the roomier vertical direction and clamps to the live viewport.
 - `ShowOnChartToggle`: the full-width "Show X on chart" `.btn` toggle in a panel body that mirrors a
   layer's visibility, with the Layers eye as the source of truth.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
@@ -320,6 +328,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - Empty and degraded states are first-class: a `.muted-note` for "none yet", an `.alert-note` for an
   error, a grayed unavailable row with a tooltip (via `UnavailableHint`) when a provider is absent.
   Never a blank panel.
+- Reserve `.alert-note` with `role="alert"` for actionable failures and safety state changes. Access
+  guidance and ordinary degraded capability explanations use `.muted-note` with `role="status"` when
+  a live announcement is useful. Loading and saving copy uses the single ellipsis character `…`.
 - Determinate progress always has both a visual bar and visible progress text, such as a percentage,
   byte count, or item count. Give the bar `role="progressbar"`, numeric aria values, and matching
   `aria-valuetext`; never rely on an unlabeled thin track.

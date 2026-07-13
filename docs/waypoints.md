@@ -7,13 +7,15 @@ hazards, conditions, and direct observation.
 
 ## Quick use
 
-1. Press and hold the chart, then choose **Drop waypoint**.
+1. Press and hold or right-click the chart, or focus it and use the Context Menu key or Shift+F10,
+   then choose **Drop waypoint**.
 2. Enter a name, choose the default marker, a built-in place icon, or a compatible custom symbol, then
    select **Save**.
 3. Open **Menu**, then **Waypoints** to locate, edit, or delete saved marks.
 4. Select the navigation icon, review the named destination, then select **Start navigation**. The
    confirmation prevents a rolling-deck mis-tap from replacing an active course.
-5. Select the waypoint name to move the chart to it without changing navigation.
+5. Select the waypoint name to move the chart to it without changing navigation. On a phone, this
+   also minimizes the panel so the mark remains visible.
 
 Adding, editing, deleting, and starting navigation require read/write access on a secured Signal K
 server. The panel leaves local read actions available and explains when writes are blocked.
@@ -42,7 +44,8 @@ reconnect also refreshes the collection.
 
 The panel distinguishes initial loading, refresh with retained rows, a real empty collection, and a
 failed load. A refresh failure keeps the current marks on the chart and in the panel. Refreshes are
-latest-result-wins, so an older response cannot overwrite newer data.
+latest-result-wins, so an older response cannot overwrite newer data. A failed load or refresh offers
+**Retry waypoints** in place and does not raise a repetitive startup toast.
 
 Only one waypoint mutation runs at a time. The dialog and conflicting panel controls show or enter a
 disabled state while a write is pending. A failed add or edit leaves the dialog open with its values,

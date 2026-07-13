@@ -27,6 +27,7 @@ interface Props {
   // additional non-semantic div that would trip the a11y no-static-element-interactions rule.
   surfaceRef?: HTMLElement;
   onKeydown?: (event: KeyboardEvent) => void;
+  onFocusOut?: (event: FocusEvent) => void;
   children: Snippet;
 }
 
@@ -41,6 +42,7 @@ let {
   id,
   surfaceRef = $bindable(),
   onKeydown,
+  onFocusOut,
   children,
 }: Props = $props();
 
@@ -72,6 +74,7 @@ $effect(() => {
     {id}
     bind:this={surfaceRef}
     use:onKeydownAction={onKeydown}
+    onfocusout={onFocusOut}
     transition:scale={{
       start: 0.92,
       duration: prefersReducedMotion() ? 0 : 140,

@@ -106,15 +106,7 @@ import {
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import {
-  Clock,
-  formatLengthOr,
-  formatNm,
-  formatTcpaMin,
-  lengthUnit,
-  MINUTE_MS,
-  Toast,
-} from '$shared/lib';
+import { Clock, formatLengthOr, lengthUnit, MINUTE_MS, Toast } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
@@ -188,9 +180,27 @@ const collisionMute = new CollisionMute(clock);
 let serverFeatures = $state<ServerFeatures | undefined>();
 // Whether the KIP instrument webapp is installed on the server, so the menu can explain the missing
 // capability instead of hiding the external launcher.
+type ProviderProbeState = 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
 let kipPresent = $state<boolean | undefined>();
+let kipProbeState = $state<ProviderProbeState>('checking');
 let historyProviders = $state<HistoryProviders | undefined>();
+let historyProviderState = $state<ProviderProbeState>('checking');
 const notificationsApi = $derived(serverFeatures?.apis.has('notifications') ?? false);
+
+async function probeKip(retrying = false): Promise<void> {
+  kipProbeState = retrying ? 'retrying' : 'checking';
+  const present = await detectKip(origin, authToken);
+  kipPresent = present;
+  kipProbeState = present === undefined ? 'failed' : present ? 'available' : 'absent';
+}
+
+async function probeHistoryProviders(retrying = false): Promise<void> {
+  historyProviderState = retrying ? 'retrying' : 'checking';
+  const providers = await fetchHistoryProviders(origin, authToken);
+  historyProviders = providers;
+  historyProviderState =
+    providers === undefined ? 'failed' : providers.ids.length > 0 ? 'available' : 'absent';
+}
 
 function publishDelta(path: string, value: unknown): void {
   void client.publish({ context: SELF_CONTEXT, updates: [{ values: [{ path, value }] }] });
@@ -323,10 +333,12 @@ const shallowLimit = $derived(
 );
 const shallowAlarming = $derived(
   vessel.depthMeters !== undefined &&
+    !vessel.depthStale &&
     shallowLimit !== undefined &&
     vessel.depthMeters < shallowLimit,
 );
 const shallowAlert = $derived.by(() => {
+  if (vessel.depthStale) return 'Depth data lost. Shallow-water monitoring is unavailable.';
   if (!shallowAlarming) return '';
   const depth = formatLengthOr(vessel.depthMeters, units.mode);
   const limit = formatLengthOr(shallowLimit, units.mode);
@@ -441,6 +453,7 @@ type LeftPanel =
   | 'regions'
   | 'charts-management';
 let activePanel = $state<LeftPanel | null>(null);
+let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
 let menuOpen = $state(false);
@@ -706,10 +719,16 @@ if (!profileStore.loadedFromStorage && profileStore.profiles.length === 0) {
 // profiles local, since applicationData is disabled without security. No local latch: syncWithServer is
 // idempotent while attached, and the effect re-runs only on an auth change, so a token rotation (the
 // read-write upgrade approval) retries a sync that a read-only token had detached.
-$effect(() => {
+async function syncProfiles(): Promise<void> {
   if (auth.status !== 'authenticated' || !auth.token) return;
   const adapter = new SignalKProfileAdapter(origin, () => auth.token ?? undefined);
-  void profileStore.syncWithServer(adapter);
+  await profileStore.syncWithServer(adapter);
+}
+
+$effect(() => {
+  if (auth.status !== 'authenticated' || !auth.token) return;
+  store.connection.phase;
+  void syncProfiles();
 });
 
 function onApplyProfile(id: string): void {
@@ -894,7 +913,8 @@ function onSetRadarPower(status: RadarStatus): void {
 const menuItems = $derived<MenuItem[]>([
   {
     id: 'center',
-    label: 'Center',
+    label: 'Center on boat',
+    shortLabel: 'Center',
     icon: LocateFixed,
     group: 'Map',
     disabled: !mapCommands || !vessel.position || vessel.positionStale,
@@ -907,7 +927,8 @@ const menuItems = $derived<MenuItem[]>([
   },
   {
     id: 'follow',
-    label: 'Follow',
+    label: 'Follow boat',
+    shortLabel: 'Follow',
     icon: Navigation,
     group: 'Map',
     disabled: !mapCommands || !vessel.position || vessel.positionStale,
@@ -980,7 +1001,10 @@ const menuItems = $derived<MenuItem[]>([
     disabled: !layersView,
     disabledLabel: 'Layers and charts (chart is loading)',
     pressed: activePanel === 'layers',
-    onSelect: () => togglePanel('layers'),
+    onSelect: () => {
+      layersInitialMode = 'charts';
+      togglePanel('layers');
+    },
   },
   {
     id: 'ais',
@@ -1067,9 +1091,11 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Instruments',
     available: kipPresent === true,
     unavailableHint:
-      kipPresent === undefined
+      kipProbeState === 'checking' || kipProbeState === 'retrying'
         ? 'Checking whether the KIP webapp is installed on the Signal K server.'
-        : 'Open KIP needs the KIP webapp installed on the Signal K server.',
+        : kipProbeState === 'failed'
+          ? 'Could not check for KIP. Reconnect or reload to retry.'
+          : 'Open KIP needs the KIP webapp installed on the Signal K server.',
     onSelect: () => {
       const opened = window.open(KIP_URL, '_blank', 'noopener,noreferrer');
       if (!opened) toast.show('The browser blocked the KIP window. Allow pop-ups, then try again.');
@@ -1085,7 +1111,11 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Instruments',
     available: (historyProviders?.ids.length ?? 0) > 0,
     unavailableHint:
-      'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
+      historyProviderState === 'checking' || historyProviderState === 'retrying'
+        ? 'Checking for a Signal K history provider.'
+        : historyProviderState === 'failed'
+          ? 'Could not check for a history provider. Open Data trends to retry.'
+          : 'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
     pressed: timeTravel.active,
     onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
   },
@@ -1152,11 +1182,37 @@ const collisionAlert = $derived.by(() => {
   if ((collision.suppressed && !collision.escalating) || contacts.length === 0) return '';
   const nearest = contacts[0];
   const who = vesselLabel(nearest.name, nearest.id);
-  const count = contacts.length;
   // Lead with the worst contact's grade (contacts[0] is severity-then-time sorted), so a
   // warning-only situation is not announced as full danger.
   const lead = nearest.severity === 'warning' ? 'Collision warning' : 'Collision danger';
-  return `${lead}: ${count} ${count === 1 ? 'contact' : 'contacts'}, nearest ${who}, CPA ${formatNm(nearest.cpaMeters)} nautical miles in ${formatTcpaMin(nearest.tcpaSeconds, 1)} minutes.`;
+  return `${lead}: ${who}. Open Nearby vessels for closest-pass details.`;
+});
+
+const genericNotifications = $derived(
+  notificationsStore
+    .list()
+    .filter(
+      (notification) =>
+        !notification.acknowledged &&
+        !notification.path.startsWith(SK_PATHS.mobNotification) &&
+        notification.path !== SK_PATHS.anchorNotification &&
+        notification.path !== 'notifications.navigation.collision',
+    ),
+);
+let genericNotificationAlert = $state('');
+let lastGenericNotificationKey = '';
+$effect(() => {
+  const notification = genericNotifications[0];
+  if (!notification) {
+    lastGenericNotificationKey = '';
+    genericNotificationAlert = '';
+    return;
+  }
+  const key = `${notification.path}:${notification.state}:${notification.message}`;
+  if (key === lastGenericNotificationKey) return;
+  lastGenericNotificationKey = key;
+  const label = notification.message || notification.path.replace(/^notifications\./, '');
+  genericNotificationAlert = `${notification.state}: ${label}. Open Alarms for details.`;
 });
 // A muted collision alarm is a safety state, so announce it politely; clearing it on expiry or unmute
 // is silent. The mute auto-expires, so the badge shows the minutes left to make the bounded window
@@ -1563,12 +1619,8 @@ $effect(() => {
     if (features) serverFeatures = features;
     void marineRadar.start();
   });
-  void detectKip(origin, authToken).then((present) => {
-    if (present !== undefined) kipPresent = present;
-  });
-  void fetchHistoryProviders(origin, authToken).then((providers) => {
-    if (providers) historyProviders = providers;
-  });
+  void probeKip(true);
+  void probeHistoryProviders(true);
   // A companion (Chart Locker) started while the link was down would otherwise stay undetected
   // until a reload, same as the capability probes above. Untracked so the base this call resolves
   // does not turn companionBase into a dependency of this effect.
@@ -1666,9 +1718,7 @@ $effect(() => {
     if (features) serverFeatures = features;
     void marineRadar.start();
   });
-  void detectKip(origin, authToken).then((present) => {
-    if (present !== undefined) kipPresent = present;
-  });
+  void probeKip();
   // The onMount probe runs before this token is available, so an auth-gated companion (Chart
   // Locker) 401s once and is never retried; redo it here once real credentials exist. Untracked:
   // the base this same call resolves would otherwise become a dependency, re-running this whole
@@ -1676,9 +1726,7 @@ $effect(() => {
   if (untrack(() => companionBase === null)) probeCompanion();
   // History provider discovery: the v2 features list reports the history API even with no
   // provider registered, so the providers route is the real signal.
-  void fetchHistoryProviders(origin, authToken).then((providers) => {
-    if (providers) historyProviders = providers;
-  });
+  void probeHistoryProviders();
   symbolsStore.setAuth(authToken);
   void refreshSymbols();
 });
@@ -1750,6 +1798,7 @@ onDestroy(() => {
     anchor={anchorController.anchorAlert}
     mob={mobController.mobAlert}
     shallow={shallowAlert}
+    notification={genericNotificationAlert}
     mute={muteAlert}
     companion={companionAnnounce}
   />
@@ -1844,6 +1893,7 @@ onDestroy(() => {
     {currentView}
     layerSettings={layerSettings.value}
     layerOrder={layerOrder.value}
+    {layersInitialMode}
     weatherLayerSettings={weatherLayerSettings.value}
     {trackSettings}
     {trackPersistenceDegraded}
@@ -1865,6 +1915,7 @@ onDestroy(() => {
     {poiInView}
     {poiViewState}
     {historyProviders}
+    {historyProviderState}
     {serverFeatures}
     {notificationsApi}
     {weatherProvider}
@@ -1896,8 +1947,13 @@ onDestroy(() => {
     {backToMenu}
     {openInstalledCharts}
     {backToOfflineCharts}
+    openLayersPanel={(mode) => {
+      layersInitialMode = mode;
+      openPanel('layers');
+    }}
     {setLayerVisible}
     onRetryTides={() => loadTides(true)}
+    onRetryHistoryProviders={() => void probeHistoryProviders(true)}
     {armMeasure}
     {toggleCollisionMute}
     {selectPoi}
@@ -1925,6 +1981,8 @@ onDestroy(() => {
         activeId={profileStore.activeId}
         defaultId={profileStore.defaultId}
         isDirty={profileStore.isDirty}
+        syncState={profileStore.syncState}
+        onRetrySync={() => void syncProfiles()}
         onApply={onApplyProfile}
         onSaveNew={onSaveNewProfile}
         onUpdate={(id) => {
@@ -2067,7 +2125,25 @@ onDestroy(() => {
    Phone override after the base rule: a media block before a same-specificity base is silently
    defeated by source order. It works here only because the base sets no display. */
 @media (max-width: 600px) {
+  .topbar {
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
+    padding-inline-start: max(var(--space-2), env(titlebar-area-x, 0px));
+    padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--space-2));
+  }
+  .topbar-actions {
+    gap: var(--space-1);
+  }
+  .brand {
+    display: none;
+  }
   .version {
+    display: none;
+  }
+}
+@media (max-width: 360px) {
+  .topbar-actions :global(.cl-status) {
     display: none;
   }
 }

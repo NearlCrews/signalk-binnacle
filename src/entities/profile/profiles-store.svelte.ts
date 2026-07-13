@@ -23,6 +23,8 @@ export interface AsyncProfileAdapter {
   save(state: ProfilesState): Promise<boolean>;
 }
 
+export type ProfileSyncState = 'local' | 'syncing' | 'synced' | 'error';
+
 // Reads and writes the whole profiles state to localStorage as one JSON document. Guarded for SSR
 // (no localStorage) and for a throwing or quota-full store, returning undefined on any read failure
 // so a corrupt or absent value falls back to empty rather than breaking startup.
@@ -69,6 +71,7 @@ export class ProfileStore {
   // True when the active profile's live settings have drifted from what was saved, so the UI can
   // offer to update it. Cleared on every profile switch and on an explicit save or update.
   isDirty = $state(false);
+  syncState = $state<ProfileSyncState>('local');
 
   #defaultId = $state<string | undefined>(undefined);
   #adapter: ProfileAdapter;
@@ -134,7 +137,11 @@ export class ProfileStore {
   // call), false when it stayed local because the server was unavailable, so the caller can retry
   // on a later auth or reconnect rather than latching after one transient failure.
   async syncWithServer(server: AsyncProfileAdapter): Promise<boolean> {
-    if (this.#server) return true;
+    if (this.#server) {
+      this.syncState = 'synced';
+      return true;
+    }
+    this.syncState = 'syncing';
     let remote: ProfilesState | undefined;
     try {
       remote = await server.load();
@@ -144,7 +151,10 @@ export class ProfileStore {
     // undefined means the server is unavailable (unsecured, the token lacks access, or unreachable):
     // stay local and do not attach the adapter, so no further writes are attempted and the console is
     // not flooded with failures. A reachable server (even an empty one) attaches and pushes once.
-    if (remote === undefined) return false;
+    if (remote === undefined) {
+      this.syncState = 'error';
+      return false;
+    }
     this.#server = server;
     this.#mergeRemote(remote);
     this.#schedulePush();
@@ -254,6 +264,7 @@ export class ProfileStore {
   // in-flight request followed by one more with the final state.
   #schedulePush(): void {
     if (!this.#server) return;
+    this.syncState = 'syncing';
     this.#pushPending = true;
     if (this.#pushing) return;
     void this.#runPush();
@@ -276,9 +287,11 @@ export class ProfileStore {
         // rather than firing a doomed request on every later edit. The next auth change (a
         // read-write upgrade, a reconnect, or a new session) re-attaches and retries.
         this.#server = undefined;
+        this.syncState = 'error';
         break;
       }
     }
+    if (this.#server) this.syncState = 'synced';
     this.#pushing = false;
   }
 }

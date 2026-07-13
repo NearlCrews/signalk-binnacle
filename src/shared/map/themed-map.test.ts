@@ -5,7 +5,15 @@ import { createThemedMap, type ThemedMapApi } from './themed-map';
 // canvas (for the touch long-press listeners), and the style and image calls the load handler
 // makes. Instances are collected on the constructor so a test can reach the map it created.
 vi.mock('maplibre-gl', () => {
+  class FakeNavigationControl {
+    constructor(readonly options: Record<string, unknown>) {}
+  }
+  class FakeScaleControl {
+    constructor(readonly options: Record<string, unknown>) {}
+  }
   class FakeCanvas {
+    clientWidth = 800;
+    clientHeight = 600;
     listeners = new Map<string, Set<(e: unknown) => void>>();
     addEventListener(type: string, fn: (e: unknown) => void): void {
       const set = this.listeners.get(type) ?? new Set();
@@ -24,6 +32,7 @@ vi.mock('maplibre-gl', () => {
     handlers = new Map<string, Set<(e?: unknown) => void>>();
     canvas = new FakeCanvas();
     options: Record<string, unknown>;
+    controls: { control: unknown; position?: string }[] = [];
     // A stand-in for the real maplibregl-ctrl-attrib <details> element, so a test can assert
     // createThemedMap's collapse call actually reaches it, not just that the no-op path
     // (selector finds nothing) is safe.
@@ -79,6 +88,9 @@ vi.mock('maplibre-gl', () => {
       return undefined;
     }
     addLayer(): void {}
+    addControl(control: unknown, position?: string): void {
+      this.controls.push({ control, position });
+    }
     getStyle(): { layers: never[] } {
       return { layers: [] };
     }
@@ -92,7 +104,11 @@ vi.mock('maplibre-gl', () => {
       return { lng: x, lat: y };
     }
   }
-  return { Map: FakeMap };
+  return {
+    Map: FakeMap,
+    NavigationControl: FakeNavigationControl,
+    ScaleControl: FakeScaleControl,
+  };
 });
 
 interface FakeMapInstance {
@@ -102,6 +118,7 @@ interface FakeMapInstance {
   };
   fire(event: string, e?: unknown): void;
   options: Record<string, unknown>;
+  controls: { control: { options: Record<string, unknown> }; position?: string }[];
   attribElement: { classList: { remove: ReturnType<typeof vi.fn> } };
 }
 
@@ -254,6 +271,33 @@ describe('createThemedMap long-press', () => {
     vi.advanceTimersByTime(600);
     expect(onContextMenu).toHaveBeenCalledTimes(1);
     expect(onContextMenu).toHaveBeenCalledWith({ lng: 1, lat: 2, x: 3, y: 4 });
+  });
+
+  it('opens chart actions at the center for the keyboard context-menu shortcut', async () => {
+    const onContextMenu = vi.fn();
+    createThemedMap({ container, onContextMenu, onLoad: () => {} });
+    const map = await lastMap();
+    const preventDefault = vi.fn();
+    map.canvas.dispatch('keydown', { key: 'F10', shiftKey: true, preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(onContextMenu).toHaveBeenCalledWith({ lng: 400, lat: 300, x: 400, y: 300 });
+  });
+});
+
+describe('createThemedMap navigation controls', () => {
+  it('installs north-reset, zoom, and nautical scale controls', async () => {
+    createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+    expect(map.controls).toEqual([
+      {
+        control: { options: { showCompass: true, showZoom: true, visualizePitch: false } },
+        position: 'top-right',
+      },
+      {
+        control: { options: { maxWidth: 120, unit: 'nautical' } },
+        position: 'bottom-right',
+      },
+    ]);
   });
 });
 

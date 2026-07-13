@@ -3,6 +3,8 @@ import type { ZoneState } from '$shared/signalk';
 import BatteryBar from './BatteryBar.svelte';
 import RotNeedle from './RotNeedle.svelte';
 import Sparkline from './Sparkline.svelte';
+import TileStateBadge from './TileStateBadge.svelte';
+import { tileAccessibleLabel } from './tile-accessibility';
 import type { TileDef, TileReading } from './tile-catalog';
 
 interface Props {
@@ -23,6 +25,7 @@ const { label, reading, zone, sensorGloss, kind, abbr, viz, sparkPoints, onOpen 
 const labelText = $derived(
   `${label}${reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}`,
 );
+const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, sensorGloss));
 </script>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in
@@ -35,7 +38,7 @@ const labelText = $derived(
   class:tile--stale={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--position={kind === 'position'}
-  aria-label={`Open ${labelText} details`}
+  aria-label={accessibleLabel}
   onclick={onOpen}
 >
   {#if reading.state === 'never'}
@@ -61,4 +64,5 @@ const labelText = $derived(
       <span class="abbr">{abbr}</span>
     {/if}</span
   >
+  <TileStateBadge state={reading.state} {zone} />
 </button>

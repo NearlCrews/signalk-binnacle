@@ -70,7 +70,7 @@ const liveMessage = $derived(
     </div>
 
     {#if store.status === 'loading'}
-      <div class="row"><span class="muted-note">Loading history...</span></div>
+      <div class="row"><span class="muted-note">Loading history…</span></div>
     {:else if store.status === 'no-provider'}
       <div class="row">
         <span class="muted-note">

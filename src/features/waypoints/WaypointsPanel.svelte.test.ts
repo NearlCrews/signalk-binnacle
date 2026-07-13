@@ -18,6 +18,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
       loadState: 'ready',
       busy: false,
       routeBusy: false,
+      onRetry: vi.fn(),
       onLocate: vi.fn(),
       onGoTo: vi.fn(),
       onEdit: vi.fn(),

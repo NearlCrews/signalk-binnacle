@@ -5,7 +5,7 @@ import { categoryLabel, poiInlineIconSvg } from '$entities/poi-icons';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
-import { SlideOver } from '$shared/ui';
+import { createPanelMinimize, ShowOnChartToggle, SlideOver } from '$shared/ui';
 import {
   defaultSort,
   filterRows,
@@ -22,6 +22,8 @@ interface Props {
   units: UnitsStore;
   viewState: PoiViewState;
   selectedId?: string;
+  placesShown: boolean;
+  onTogglePlaces: (shown: boolean) => void;
   // Choose a result: rings its marker on the chart and opens its detail. Never moves the map.
   onSelect: (poi: Poi) => void;
   // Preview a result on the chart while the pointer or keyboard focus is on its row, and clear with
@@ -31,13 +33,25 @@ interface Props {
   onBack?: () => void;
 }
 
-const { pois, vessel, units, viewState, selectedId, onSelect, onHover, onClose, onBack }: Props =
-  $props();
+const {
+  pois,
+  vessel,
+  units,
+  viewState,
+  selectedId,
+  placesShown,
+  onTogglePlaces,
+  onSelect,
+  onHover,
+  onClose,
+  onBack,
+}: Props = $props();
 
 let query = $state('');
 let sortState = $state<{ key: PoiSort; dir: SortDir }>(defaultSort(false));
 let sortTouched = $state(false);
 let previewedId = $state<string | undefined>();
+const minimize = createPanelMinimize();
 const vesselPosition = $derived(vessel.positionStale ? undefined : vessel.position);
 
 const allRows = $derived(
@@ -96,16 +110,23 @@ onDestroy(() => onHover(undefined));
   {onBack}
   closeLabel="Close find places"
   bodyFlex
+  {minimize}
 >
   <p class="muted-note">
     Harbors, anchorages, marinas, services, and hazards in the current chart view.
   </p>
+  <ShowOnChartToggle
+    visible={placesShown}
+    label="Show places on chart"
+    description="Markers for places in the current chart view"
+    onToggle={onTogglePlaces}
+  />
   {#if viewState.phase === 'error' && pois.length > 0}
     <p class="alert-note" role="alert">
       Places could not refresh. Showing the last results for this area.
     </p>
   {:else if viewState.phase === 'loading' && pois.length > 0}
-    <p class="muted-note" role="status">Refreshing places for this chart view...</p>
+    <p class="muted-note" role="status">Refreshing places for this chart view…</p>
   {:else if viewState.phase === 'ready' && viewState.offline && pois.length > 0}
     <p class="muted-note" role="status">
       Offline: showing cached places. Recent provider changes may be missing.
@@ -160,7 +181,7 @@ onDestroy(() => onHover(undefined));
       </p>
     {:else if viewState.phase === 'hidden'}
       <p class="muted-note" role="status">
-        Points of interest are hidden. Reopen Find places to turn the layer on.
+        Places are hidden. Use Show places on chart above to turn the layer on.
       </p>
     {:else if viewState.phase === 'error'}
       <p class="alert-note" role="alert">
@@ -168,7 +189,7 @@ onDestroy(() => onHover(undefined));
         or zoom to retry.
       </p>
     {:else if viewState.phase === 'loading' || viewState.phase === 'idle'}
-      <p class="muted-note" role="status">Loading places for this chart view...</p>
+      <p class="muted-note" role="status">Loading places for this chart view…</p>
     {:else}
       <p class="muted-note" role="status">
         No places were returned for this view. Pan or zoom in, or check that a notes provider is

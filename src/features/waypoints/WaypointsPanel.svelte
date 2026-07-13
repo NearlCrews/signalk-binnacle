@@ -3,7 +3,7 @@ import { Navigation, SquarePen, Trash2 } from '@lucide/svelte';
 import type { Waypoint } from '$entities/waypoint';
 import { formatLatitude, formatLongitude } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
-import { ArmedRow, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
+import { ArmedRow, createPanelMinimize, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
 import type { WaypointLoadState } from './waypoint-controller.svelte';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   loadState: WaypointLoadState;
   busy: boolean;
   routeBusy: boolean;
+  onRetry: () => void;
   // Pan the chart to the waypoint without changing anything else.
   onLocate: (waypoint: Waypoint) => void;
   // Arm the Course API destination at this waypoint; the action renders only when provided.
@@ -29,6 +30,7 @@ const {
   loadState,
   busy,
   routeBusy,
+  onRetry,
   onLocate,
   onGoTo,
   onEdit,
@@ -47,6 +49,12 @@ const armedDelete = new ArmedRow((id) => {
 });
 
 let confirmingNavigate = $state<Waypoint | undefined>();
+const minimize = createPanelMinimize();
+
+function locate(waypoint: Waypoint): void {
+  onLocate(waypoint);
+  minimize.collapse();
+}
 
 function confirmNavigation(): void {
   const waypoint = confirmingNavigate;
@@ -56,22 +64,32 @@ function confirmNavigation(): void {
 }
 </script>
 
-<SlideOver title="Waypoints" closeLabel="Close waypoints panel" bodyFlex {onClose} {onBack}>
+<SlideOver
+  title="Waypoints"
+  closeLabel="Close waypoints panel"
+  bodyFlex
+  {onClose}
+  {onBack}
+  {minimize}
+>
   {#if auth.writeBlocked}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       A write token is needed to add, edit, or delete waypoints. Request a read/write token to
       continue.
     </p>
   {/if}
 
-  <p class="muted-note">Press and hold anywhere on the chart to drop a waypoint.</p>
+  <p class="muted-note">
+    Press and hold, right-click, or use Shift+F10 on the chart to drop a waypoint.
+  </p>
 
   {#if loadState === 'error'}
-    <p class="muted-note" role="alert">
+    <p class="alert-note" role="alert">
       {waypoints.length > 0
         ? 'Could not refresh waypoints. Showing the last loaded waypoints.'
-        : 'Could not load waypoints. Check the connection, then reopen this panel.'}
+        : 'Could not load waypoints. Check the connection, then retry.'}
     </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry waypoints</button>
   {:else if loadState === 'loading' && waypoints.length > 0}
     <p class="muted-note" role="status">Refreshing waypoints…</p>
   {/if}
@@ -92,7 +110,7 @@ function confirmNavigation(): void {
           type="button"
           class="name"
           title="Show this waypoint on the chart"
-          onclick={() => onLocate(waypoint)}
+          onclick={() => locate(waypoint)}
         >
           {waypoint.name}
         </button>

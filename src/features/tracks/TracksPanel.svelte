@@ -11,6 +11,7 @@ import type { PersistedValue, TrackSettings } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
+  createPanelMinimize,
   defaultSaveName,
   InlineConfirm,
   NameEntry,
@@ -32,6 +33,7 @@ interface Props {
   busy: boolean;
   routeBusy: boolean;
   persistenceDegraded: boolean;
+  onRetry: () => void;
   onSave: (name: string) => void;
   // Save the current track as a reusable route, and navigate back along it (retrace home).
   onSaveAsRoute: (name: string) => void;
@@ -53,6 +55,7 @@ const {
   busy,
   routeBusy,
   persistenceDegraded,
+  onRetry,
   onSave,
   onSaveAsRoute,
   onTrackHome,
@@ -72,6 +75,7 @@ const canMakeRoute = $derived(latestTrackSegment(recorder.points).length >= 2);
 const trackHasGaps = $derived(hasTrackGaps(recorder.points));
 const writesDisabled = $derived(auth.writeBlocked || busy);
 const routeActionsDisabled = $derived(auth.writeBlocked || busy || routeBusy || !canMakeRoute);
+const minimize = createPanelMinimize();
 
 // Each saved track's distance and duration, formatted once per change. They ride on the SavedTrack as
 // SI metadata saved with the geometry, so the card reads them without re-walking the points; a track
@@ -114,14 +118,14 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 }
 </script>
 
-<SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack}>
+<SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack} {minimize}>
   {#if auth.writeBlocked}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       A write token is needed to save or delete tracks. Request a read/write token to continue.
     </p>
   {/if}
   {#if persistenceDegraded}
-    <p class="muted-note" role="alert">
+    <p class="alert-note" role="alert">
       Track storage is memory-only. The current track will be lost on reload. Save it to the server
       before leaving.
     </p>
@@ -287,11 +291,12 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
   </section>
 
   {#if loadState === 'error'}
-    <p class="muted-note" role="alert">
+    <p class="alert-note" role="alert">
       {saved.length > 0
         ? 'Could not refresh saved tracks. Showing the last loaded tracks.'
-        : 'Could not load saved tracks. Check the connection, then reopen this panel.'}
+        : 'Could not load saved tracks. Check the connection, then retry.'}
     </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry saved tracks</button>
   {:else if loadState === 'loading' && saved.length > 0}
     <p class="muted-note" role="status">Refreshing saved tracks…</p>
   {/if}

@@ -65,6 +65,11 @@ test('find places enables its layer, searches provider metadata, and keeps selec
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
   await expect(panel).toBeVisible();
+  const placesToggle = panel.getByRole('button', { name: 'Show places on chart' });
+  await expect(placesToggle).toHaveAttribute('aria-pressed', 'true');
+  await placesToggle.click();
+  await expect(placesToggle).toHaveAttribute('aria-pressed', 'false');
+  await placesToggle.click();
   await expect.poll(() => listRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(panel.getByText('Harbor Marina')).toBeVisible();
   await expect(panel.getByText("Marina · Crow's Nest")).toBeVisible();

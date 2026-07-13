@@ -590,7 +590,7 @@ function progressText(status: WarmStatus, percent: number): string {
 // in text.css; an empty severity leaves the plain muted caps label, so a failed or capped region
 // reads at a glance while a normal one stays quiet.
 const STATUS_META: Record<SavedRegionDto['status'], { label: string; severity: string }> = {
-  downloading: { label: 'Saving...', severity: '' },
+  downloading: { label: 'Saving…', severity: '' },
   ready: { label: 'Saved, works offline', severity: '' },
   capped: { label: 'Storage full, some left out', severity: 'sev-warning' },
   error: { label: 'Could not finish', severity: 'sev-danger' },
@@ -652,7 +652,7 @@ function chartLabel(id: string): string {
       {#if loadError !== null}
         <p class="alert-note" role="alert">{loadError}</p>
       {:else if regions === null}
-        <p class="muted-note" role="status">Loading areas...</p>
+        <p class="muted-note" role="status">Loading areas…</p>
       {:else}
         <SavedList
           items={regions}
@@ -693,7 +693,7 @@ function chartLabel(id: string): string {
               </div>
               <p class="progress-note muted-note" role="status">{progressText(live, pct)}</p>
             {:else if region.status === 'downloading'}
-              <p class="progress-note muted-note" role="status">Starting download...</p>
+              <p class="progress-note muted-note" role="status">Starting download…</p>
             {/if}
             <Disclosure label="Area details">
               <dl class="detail-list area-details">
@@ -901,7 +901,7 @@ function chartLabel(id: string): string {
             Retry storage check
           </button>
         {:else if stats === null}
-          <p class="muted-note" role="status">Checking storage...</p>
+          <p class="muted-note" role="status">Checking storage…</p>
         {:else}
           <dl class="stat-grid">
             <dt>Estimated download</dt>
@@ -1041,7 +1041,7 @@ function chartLabel(id: string): string {
           </dl>
         </Disclosure>
       {:else}
-        <p class="muted-note" role="status">Loading storage...</p>
+        <p class="muted-note" role="status">Loading storage…</p>
       {/if}
       <UnitField
         label="Auto-clear after"

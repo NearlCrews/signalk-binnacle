@@ -65,7 +65,8 @@ const ariaLabel = $derived(`Offline charts, ${visibleValue}, open offline charts
    visible text says what is known on both pointer and touch devices. */
 .cl-status {
   --chip-accent: var(--ok);
-  min-inline-size: 3rem;
+  flex: none;
+  min-inline-size: var(--control-size);
 }
 .cl-status.cl--offline {
   --chip-accent: var(--warning);
@@ -85,7 +86,8 @@ const ariaLabel = $derived(`Offline charts, ${visibleValue}, open offline charts
 /* On a phone, "Offline:" is redundant with the persistent download-and-state icon. Keep the truthful
    cache or failure value visible instead of collapsing the control to an ambiguous glyph. */
 @media (max-width: 600px) {
-  .cl-brand {
+  .cl-brand,
+  .cl-value {
     display: none;
   }
 }

@@ -59,9 +59,11 @@
    controls (the menu trigger and the theme toggle) so they lift, hover, and press alike. */
 .icon-pill {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   inline-size: var(--control-size);
+  min-inline-size: var(--control-size);
   block-size: var(--control-size);
   padding: 0;
   border: 1px solid var(--border);

@@ -39,6 +39,7 @@ describe('NumericTile', () => {
     const html = numericBody({ label: LABEL, reading: LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('7.4');
     expect(html).toContain('kn');
+    expect(html).toContain('aria-label="SOG, 7.4 kn. Open details"');
   });
 
   it('renders sensorGloss and hides value span when state is never', () => {
@@ -63,6 +64,8 @@ describe('NumericTile', () => {
   it('adds tile--stale class when state is stale', () => {
     const html = numericBody({ label: LABEL, reading: STALE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('tile--stale');
+    expect(html).toContain('Stale');
+    expect(html).toContain('stale. Open details');
   });
 
   it('adds tile--alarm class for alarm zone', () => {
@@ -73,6 +76,8 @@ describe('NumericTile', () => {
       sensorGloss: GLOSS,
     });
     expect(html).toContain('tile--alarm');
+    expect(html).toContain('Alarm');
+    expect(html).toContain('alarm. Open details');
     expect(html).not.toContain('tile--warning');
   });
 
@@ -84,6 +89,7 @@ describe('NumericTile', () => {
       sensorGloss: GLOSS,
     });
     expect(html).toContain('tile--warning');
+    expect(html).toContain('Warning');
     expect(html).not.toContain('tile--alarm');
   });
 
@@ -122,7 +128,7 @@ describe('WindTile', () => {
 
   it('renders an SVG with a needle rotated by angleRad', () => {
     const html = windBody({ label: 'AWS', reading: WIND_LIVE, zone: normal, sensorGloss: GLOSS });
-    // deg = angleRad * 180 / Math.PI — compute the same way the component does.
+    // deg = angleRad * 180 / Math.PI. Compute the same way the component does.
     const expectedDeg = (WIND_LIVE.angleRad ?? 0) * (180 / Math.PI);
     expect(html).toContain(`rotate(${expectedDeg} 50 50)`);
   });
@@ -136,6 +142,7 @@ describe('WindTile', () => {
     const html = windBody({ label: 'AWS', reading: WIND_LIVE, zone: normal, sensorGloss: GLOSS });
     expect(html).toContain('12.3');
     expect(html).toContain('kn');
+    expect(html).toContain('AWS, 12.3 kn. Open details');
   });
 
   it('shows formatted angle text beside speed', () => {

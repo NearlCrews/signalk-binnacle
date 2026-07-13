@@ -19,6 +19,8 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
       vessel: { position: undefined, positionStale: false } as unknown as OwnVessel,
       units: { mode: 'metric' } as UnitsStore,
       viewState: { phase: 'ready', offline: false },
+      placesShown: true,
+      onTogglePlaces: vi.fn(),
       onSelect: vi.fn(),
       onHover: vi.fn(),
       onClose: vi.fn(),
@@ -37,7 +39,7 @@ describe('PoiSearchPanel', () => {
 
   it('reports a refresh while retaining current rows', () => {
     const body = renderPanel({ pois: [place], viewState: { phase: 'loading', offline: false } });
-    expect(body).toContain('Refreshing places for this chart view...');
+    expect(body).toContain('Refreshing places for this chart view…');
     expect(body).toContain('Harbor Marina');
   });
 

@@ -10,5 +10,6 @@ export {
 export {
   type ProfileAdapter,
   ProfileStore,
+  type ProfileSyncState,
 } from './profiles-store.svelte';
 export { SignalKProfileAdapter } from './signalk-adapter';

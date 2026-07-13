@@ -26,8 +26,10 @@ the Radar menu item stays visible and explains the missing capability.
 2. Open Binnacle and approve read access in Signal K. Approve read-write access to change transmit,
    standby, range, gain, clutter, or other controls.
 3. Open **Radar** from the Safety group. If several radars are present, select one.
-4. Key **Transmit** only when it is safe to emit, then enable **Show echo on chart**.
-5. Use **Charts**, then **Overlays**, to adjust opacity and stacking.
+4. Select **Transmit**, review the emission confirmation, and confirm only when it is safe to emit.
+   **Standby** remains immediate so emission can stop without another confirmation.
+5. Enable **Show echo on chart**, then select **Open overlay settings** to adjust opacity and stacking
+   directly in the Overlays view.
 
 On an HTTPS page, the spoke stream must use `wss:`. A browser will reject an insecure `ws:` stream as
 mixed content. Relative stream URLs resolve against the Signal K origin. Authentication is appended only
@@ -82,7 +84,8 @@ Focused tests cover Radar API parsing, bounded geometry, relative and cross-orig
 protobuf decoding, spoke integration, pending-frame state, buffer recycling, control sequencing, provider
 removal, heading math, WebGL setup, theme tables, range geometry, vector overlays, and synthetic radar
 frames. The Playwright smoke suite verifies both the unavailable Radar menu path on a stock server and
-a provider-backed discovery, control hydration, identity, status, and slider path.
+a provider-backed discovery, control hydration, identity, status, transmit confirmation, direct
+overlay-settings transition, and slider path.
 
 For provider development, use the current Mayara emulator or a captured binary fixture and run:
 

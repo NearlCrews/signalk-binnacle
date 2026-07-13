@@ -72,9 +72,7 @@ describe('createRouteController', () => {
     await controller.onSaveRoute('Passage');
     expect(routeStore.routeById('r1')).toEqual(route);
     expect(routeStore.shownIds.has('r1')).toBe(true);
-    expect(vi.mocked(toast.show)).toHaveBeenCalledWith(
-      'Could not refresh routes. Showing the current list.',
-    );
+    expect(vi.mocked(toast.show)).not.toHaveBeenCalled();
   });
 
   it('does not let an older route refresh overwrite a newer response', async () => {
@@ -140,10 +138,11 @@ describe('createRouteController', () => {
   });
 
   it('reports load failure without turning it into a real empty result', async () => {
-    const { controller } = makeController();
+    const { controller, toast } = makeController();
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue(undefined);
     await controller.refreshRoutes();
     expect(controller.loadState).toBe('error');
+    expect(toast.show).not.toHaveBeenCalled();
   });
 
   it('blocks chart-side route creation without write access', () => {

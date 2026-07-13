@@ -15,6 +15,8 @@
 }
 .maplibregl-ctrl-attrib-button {
   background-color: var(--surface-overlay);
+  inline-size: var(--control-size);
+  block-size: var(--control-size);
 }
 /* The library draws the compact toggle's "i" glyph with an embedded dark SVG; recolor it to the
    theme via mask so night-red shows a red glyph on near-black. */
@@ -24,4 +26,32 @@
   mask:
     url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0"/></svg>')
     center / 18px 18px no-repeat;
+}
+
+/* Map controls are helm actions, so their hit boxes follow the same gloved-hand floor as Binnacle's
+   own buttons. The glyph stays compact inside the larger target. */
+.maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-overlay);
+}
+.maplibregl-ctrl-group button {
+  inline-size: var(--control-size);
+  block-size: var(--control-size);
+  background-color: var(--surface-overlay);
+}
+.maplibregl-ctrl-group button + button {
+  border-block-start-color: var(--border);
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: none;
+}
+.maplibregl-ctrl-scale {
+  border-color: var(--text-muted);
+  background: var(--surface-overlay);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
 }

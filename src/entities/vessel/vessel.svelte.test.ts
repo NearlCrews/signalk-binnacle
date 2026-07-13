@@ -92,6 +92,33 @@ describe('OwnVessel', () => {
     expect(vessel.positionStale).toBe(false);
   });
 
+  it('grades each safety-relevant path independently', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    const vessel = new OwnVessel(store, clock);
+    store.applyFrame(
+      frame({
+        'navigation.speedOverGround': 3,
+        'navigation.courseOverGroundTrue': 1,
+        'navigation.headingTrue': 2,
+        'environment.depth.belowTransducer': 8,
+      }),
+    );
+    clock.now = 20_000;
+    expect(vessel.sogStale).toBe(true);
+    expect(vessel.cogStale).toBe(true);
+    expect(vessel.headingStale).toBe(true);
+    expect(vessel.depthStale).toBe(true);
+
+    store.applyFrame({
+      self: new Map([['environment.depth.belowTransducer', 7]]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: clock.now,
+    });
+    expect(vessel.depthStale).toBe(false);
+    expect(vessel.headingStale).toBe(true);
+  });
+
   it('pre-creates its cells at construction so reactive reads track them', () => {
     // The store creates a cell lazily on first access. If that first access were a
     // reactive template read, the freshly created $state source would not be tracked

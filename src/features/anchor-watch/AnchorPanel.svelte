@@ -12,7 +12,7 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
-import { InlineConfirm, SlideOver, UnitField } from '$shared/ui';
+import { createPanelMinimize, InlineConfirm, SlideOver, UnitField } from '$shared/ui';
 
 interface Props {
   auth: AuthController;
@@ -87,6 +87,7 @@ function commitRadius(entered: number): void {
 // Raising ends the watch and silences the alarm in one motion, so the panel matches the strip's
 // armed-confirm protection: the first tap swaps the controls row for an inline confirm.
 let raiseArmed = $state(false);
+const minimize = createPanelMinimize();
 $effect(() => {
   // Reset the armed confirm when the watch ends. The write is untracked so the effect depends only on
   // `watching`, never re-running on its own reset (no read-and-write of the same signal).
@@ -100,9 +101,16 @@ function captureFromDistance(): void {
 }
 </script>
 
-<SlideOver title="Anchor watch" closeLabel="Close anchor watch" {onClose} {onBack} bodyFlex>
+<SlideOver
+  title="Anchor watch"
+  closeLabel="Close anchor watch"
+  {onClose}
+  {onBack}
+  bodyFlex
+  {minimize}
+>
   {#if auth.writeBlocked}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       Server anchor changes need a write token. A browser-only watch remains available when no
       server watch is active.
     </p>

@@ -2,13 +2,7 @@
 import { GripVertical, Menu, RotateCcw } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
-import {
-  AnchoredMenu,
-  CustomizeToggle,
-  createReorder,
-  isTabKey,
-  UnavailableHint,
-} from '$shared/ui';
+import { AnchoredMenu, CustomizeToggle, createReorder, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import { resolvePinned } from './pinned-actions';
@@ -120,14 +114,7 @@ $effect(() => {
 });
 
 // Arrow keys step through the tiles in reading order, wrapping; Home and End jump to the ends.
-// Tab and Shift+Tab close the menu and restore focus to the trigger, since the surface is
-// non-modal and a Tab that silently moved into the chart would be a WCAG 2.1.1 failure.
 function onCardKeydown(event: KeyboardEvent): void {
-  if (isTabKey(event)) {
-    event.preventDefault();
-    closeMenu(true);
-    return;
-  }
   // Keep blocked tiles in arrow navigation. They remain focusable so keyboard users can invoke them
   // and receive the same visible explanation as pointer users.
   const tiles = [...(card?.querySelectorAll<HTMLButtonElement>('.tile') ?? [])];
@@ -146,6 +133,12 @@ function onCardKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     tiles.at(-1)?.focus();
   }
+}
+
+function onCardFocusOut(event: FocusEvent): void {
+  const next = event.relatedTarget;
+  if (next instanceof Node && (card?.contains(next) || next === trigger)) return;
+  closeMenu(false);
 }
 </script>
 
@@ -172,6 +165,7 @@ function onCardKeydown(event: KeyboardEvent): void {
   id="app-menu-launcher"
   bind:surfaceRef={card}
   onKeydown={onCardKeydown}
+  onFocusOut={onCardFocusOut}
 >
   {#snippet children()}
     {#if items.length === 0}
@@ -243,7 +237,12 @@ function onCardKeydown(event: KeyboardEvent): void {
       {#each groups as group, gi (gi)}
         <!-- Every menu item carries a group label, so role="group" always has an accessible name
              here; the static role is required by the linter's valid-role rule. -->
-        <section class="group" role="group" aria-label={group.label || undefined}>
+        <section
+          class="group"
+          role="group"
+          aria-label={group.label || undefined}
+          data-group={group.label || undefined}
+        >
           {#if group.label}
             <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
           {/if}
@@ -323,6 +322,29 @@ function onCardKeydown(event: KeyboardEvent): void {
     background: var(--text-muted);
     margin: 0 auto var(--space-2);
     opacity: 0.5;
+  }
+}
+@media (max-width: 600px) {
+  :global(.launcher) .group[data-group="Map"] {
+    order: 1;
+  }
+  :global(.launcher) .group[data-group="Safety"] {
+    order: 2;
+  }
+  :global(.launcher) .group[data-group="Navigate"] {
+    order: 3;
+  }
+  :global(.launcher) .group[data-group="Weather"] {
+    order: 4;
+  }
+  :global(.launcher) .group[data-group="Instruments"] {
+    order: 5;
+  }
+  :global(.launcher) .group[data-group="Offline charts"] {
+    order: 6;
+  }
+  :global(.launcher) .group[data-group="Settings"] {
+    order: 7;
   }
 }
 /* Edit mode is a distinct interaction (tapping a tile pins or unpins it rather than opening it),

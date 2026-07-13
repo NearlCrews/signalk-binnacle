@@ -95,6 +95,8 @@ const poiOverrides = $derived(
 );
 
 let isOpen = $state(false);
+let opensAbove = $state(false);
+let listMaxHeight = $state(256);
 let pickerEl: HTMLElement | undefined;
 let triggerEl: HTMLButtonElement | undefined;
 const optionEls: (HTMLElement | null)[] = [];
@@ -133,8 +135,17 @@ function openAndFocus(): void {
   isOpen = true;
   const idx = options.findIndex((o) => o.value === value);
   const target = idx >= 0 ? idx : 0;
-  // After the list paints (the bind:this refs repopulate on render), move focus to the active row.
-  requestAnimationFrame(() => optionEls[target]?.focus());
+  // After the list paints, place it in the roomier direction and focus the active row.
+  requestAnimationFrame(() => {
+    const rect = triggerEl?.getBoundingClientRect();
+    if (rect) {
+      const below = window.innerHeight - rect.bottom - 8;
+      const above = rect.top - 8;
+      opensAbove = below < 256 && above > below;
+      listMaxHeight = Math.max(128, Math.min(256, opensAbove ? above : below));
+    }
+    optionEls[target]?.focus();
+  });
 }
 
 function handleTriggerKey(e: KeyboardEvent): void {
@@ -214,7 +225,13 @@ $effect(() => {
   </button>
 
   {#if isOpen}
-    <div class="picker-list popover-card" role="listbox" aria-label="Icon">
+    <div
+      class="picker-list popover-card"
+      class:opens-above={opensAbove}
+      style:max-block-size={`${listMaxHeight}px`}
+      role="listbox"
+      aria-label="Icon"
+    >
       {#each options as opt, i (opt.value)}
         {#if i === poiStart}
           <div class="caps-label picker-group-label" aria-hidden="true">POI categories</div>
@@ -297,6 +314,11 @@ $effect(() => {
   margin: 0;
   padding: var(--space-1) 0;
   z-index: var(--z-menu);
+}
+
+.picker-list.opens-above {
+  inset-block-start: auto;
+  inset-block-end: calc(100% + 2px);
 }
 
 /* Option rows compose the shared .row-interactive primitive (hover tint, lit .is-on body, control

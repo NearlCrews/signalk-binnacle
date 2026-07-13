@@ -2,6 +2,11 @@ export const THEMES = ['day', 'dusk', 'night-red'] as const;
 export type Theme = (typeof THEMES)[number];
 
 const STORAGE_KEY = 'binnacle:theme';
+const THEME_COLORS: Record<Theme, string> = {
+  day: '#cfe0ec',
+  dusk: '#0f1a24',
+  'night-red': '#000000',
+};
 
 function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
@@ -43,6 +48,9 @@ export function createThemeController(onApply?: (theme: Theme) => void): ThemeCo
     (theme) => {
       if (typeof document !== 'undefined') {
         document.documentElement.dataset.theme = theme;
+        document
+          .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+          ?.setAttribute('content', THEME_COLORS[theme]);
       }
       onApply?.(theme);
     },

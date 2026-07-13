@@ -34,6 +34,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
       busy: false,
       routeBusy: false,
       persistenceDegraded: false,
+      onRetry: vi.fn(),
       onSave: vi.fn(),
       onSaveAsRoute: vi.fn(),
       onTrackHome: vi.fn(),

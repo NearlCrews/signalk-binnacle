@@ -4,6 +4,7 @@ import { AnchorWatch } from '$entities/anchor';
 import { UnitsStore } from '$entities/units';
 import { OwnVessel } from '$entities/vessel';
 import type { ReactiveClock } from '$shared/lib';
+import type { SKFrame } from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
 import { createFakeStorage } from '$shared/testing/fake-storage';
 import StatusStrip from './StatusStrip.svelte';
@@ -56,5 +57,22 @@ describe('StatusStrip depth alarm', () => {
     const html = body({ ...baseProps(), shallowAlarming: true });
     expect(html).toContain('depth-alarm');
     expect(html).toContain('Shallow water: depth below the alarm threshold');
+    expect(html).toContain('Shallow');
+  });
+
+  it('replaces a stale depth with an explicit unavailable state', () => {
+    const store = new SignalKStore();
+    const vesselClock = $state({ now: 20_000 });
+    const vessel = new OwnVessel(store, vesselClock);
+    store.applyFrame({
+      self: new Map([['environment.depth.belowTransducer', 4]]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const props = baseProps();
+    const html = body({ ...props, vessel });
+    expect(html).toContain('Depth stale');
+    expect(html).toContain('Depth data is stale');
+    expect(html).not.toContain('>4.0<');
   });
 });

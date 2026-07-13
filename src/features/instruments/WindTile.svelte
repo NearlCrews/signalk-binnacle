@@ -1,6 +1,8 @@
 <script lang="ts">
 import { formatSignedAngleOr, RAD_TO_DEG } from '$shared/lib';
 import type { ZoneState } from '$shared/signalk';
+import TileStateBadge from './TileStateBadge.svelte';
+import { tileAccessibleLabel } from './tile-accessibility';
 import type { TileReading } from './tile-catalog';
 
 interface Props {
@@ -19,6 +21,7 @@ const { label, reading, zone, sensorGloss, kind, abbr, onOpen }: Props = $props(
 const labelText = $derived(
   `${label}${reading.referenceLabel ? ` (${reading.referenceLabel})` : ''}`,
 );
+const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, sensorGloss));
 
 // BOW-UP: 0 rad points up. SVG rotate() uses degrees, positive = clockwise.
 const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
@@ -32,7 +35,7 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   class:tile--stale={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--wide={kind === 'wind'}
-  aria-label={`Open ${labelText} details`}
+  aria-label={accessibleLabel}
   onclick={onOpen}
 >
   {#if reading.state === 'never'}
@@ -80,6 +83,7 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
       <span class="abbr">{abbr}</span>
     {/if}</span
   >
+  <TileStateBadge state={reading.state} {zone} />
 </button>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in

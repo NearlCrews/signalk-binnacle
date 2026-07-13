@@ -170,13 +170,13 @@ $effect(() => {
     <p class="alert-note" role="alert">{error}</p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note" role="alert">
+    <p class="muted-note" role="status">
       A write token is needed to silence or acknowledge alarms. Request a read/write token to
       continue.
     </p>
   {/if}
   {#if connectionPhase === 'reconnecting' || connectionPhase === 'closed'}
-    <p class="muted-note" role="alert">
+    <p class="alert-note" role="alert">
       Signal K is disconnected. Active alarm status may be stale until the stream reconnects.
     </p>
   {/if}

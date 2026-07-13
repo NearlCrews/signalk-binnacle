@@ -1,6 +1,6 @@
 <script lang="ts">
 import { untrack } from 'svelte';
-import { CustomizeToggle, PanelHeader, registerDismiss } from '$shared/ui';
+import { CustomizeToggle, dialog, PanelHeader, trapFocus } from '$shared/ui';
 import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
@@ -36,12 +36,6 @@ $effect(() => {
   return () => query.removeEventListener('change', handler);
 });
 
-// Register with the shared Escape stack while open, so one Escape closes only the topmost surface.
-$effect(() => {
-  if (!controller.open) return;
-  return registerDismiss(() => controller.setOpen(false));
-});
-
 // Hoisted so the tile selection resolves (validate the persisted ids, scan the catalog) once per
 // real change instead of once per clock tick: both the effect below and the template read this.
 const tiles = $derived(controller.tiles);
@@ -68,7 +62,14 @@ $effect(() => {
 });
 </script>
 
-<aside class="instruments" aria-label="Instruments" tabindex="-1">
+<aside
+  class="instruments"
+  role={fullscreenQueryMatches ? 'dialog' : undefined}
+  aria-label="Instruments"
+  tabindex="-1"
+  use:dialog={() => controller.setOpen(false)}
+  use:trapFocus={fullscreenQueryMatches}
+>
   <PanelHeader
     title="Instruments"
     closeLabel={fullscreenQueryMatches

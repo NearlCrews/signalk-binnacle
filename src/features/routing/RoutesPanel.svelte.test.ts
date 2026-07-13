@@ -29,6 +29,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
       error: undefined,
       editorLoadFailed: false,
       onRetryEditor: vi.fn(),
+      onRetry: vi.fn(),
       onNew: vi.fn(),
       onEditRoute: vi.fn(),
       onSave: vi.fn(),
@@ -60,10 +61,8 @@ describe('RoutesPanel', () => {
   it('disables conflicting route mutations while an operation is in flight', () => {
     const body = renderPanel({ routes: [route], busy: true });
     expect(body).toMatch(/<button[^>]*disabled[^>]*>[^<]*<svg[^>]*>[\s\S]*?New route/);
-    expect(body).toContain('aria-label="Reverse route"');
-    expect(body).toMatch(/aria-label="Reverse route"[^>]*disabled/);
     expect(body).toMatch(/aria-label="Start navigation on route"[^>]*disabled/);
-    expect(body).toMatch(/aria-label="Delete route"[^>]*disabled/);
+    expect(body).toContain('aria-label="More actions for Passage"');
   });
 
   it('labels the route-name action and activation by their actual behavior', () => {
@@ -74,10 +73,8 @@ describe('RoutesPanel', () => {
 
   it('disables route writes without write access while keeping read actions available', () => {
     const body = renderPanel({ auth: { writeBlocked: true }, routes: [route] });
-    expect(body).toMatch(/aria-label="Edit route"[^>]*disabled/);
-    expect(body).toMatch(/aria-label="Reverse route"[^>]*disabled/);
     expect(body).toMatch(/aria-label="Start navigation on route"[^>]*disabled/);
-    expect(body).toMatch(/aria-label="Delete route"[^>]*disabled/);
-    expect(body).not.toMatch(/aria-label="Download route as a GPX file"[^>]*disabled/);
+    expect(body).toContain('A write token is needed');
+    expect(body).toContain('aria-label="More actions for Passage"');
   });
 });

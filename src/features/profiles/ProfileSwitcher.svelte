@@ -38,7 +38,8 @@ const ariaLabel = $derived(
 /* The base look is the shared global .btn .btn-pill; only the long-name ellipsis, the muted
    no-profile text, and the unsaved-changes dot are switcher-specific. */
 .switcher {
-  min-inline-size: 0;
+  flex: none;
+  min-inline-size: var(--control-size);
 }
 .name {
   overflow: hidden;
@@ -56,5 +57,10 @@ const ariaLabel = $derived(
   block-size: 0.4rem;
   border-radius: var(--radius-pill);
   background: var(--accent);
+}
+@media (max-width: 600px) {
+  .name {
+    display: none;
+  }
 }
 </style>

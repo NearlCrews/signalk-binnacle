@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Ellipsis } from '@lucide/svelte';
-import { onDestroy } from 'svelte';
+import { onDestroy, onMount } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
@@ -62,7 +62,8 @@ let {
 const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
-const split = $derived(splitBarActions(pinnedActions, MAX_BAR_PILLS));
+let compactPhone = $state(false);
+const split = $derived(splitBarActions(pinnedActions, compactPhone ? 2 : MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((a) => a.pressed === true));
 let moreOpen = $state(false);
 const closeMore = (): void => {
@@ -74,6 +75,16 @@ const closeMore = (): void => {
 const PILL_NOTE_MS = 5000;
 const blockedPillNote = new Toast();
 onDestroy(() => blockedPillNote.dispose());
+
+onMount(() => {
+  const query = window.matchMedia('(max-width: 600px)');
+  const sync = (): void => {
+    compactPhone = query.matches;
+  };
+  sync();
+  query.addEventListener('change', sync);
+  return () => query.removeEventListener('change', sync);
+});
 
 // Shared by both the visible pills and the overflow rows: `after` runs once the action fires, so
 // only the overflow row needs to close the popover afterward.
@@ -127,7 +138,6 @@ function runPillAction(action: MenuItem, after?: () => void): void {
       <span
         class="readout anchor-chip"
         class:anchor-chip--alarm={anchor.dragging || anchor.fixLost}
-        role="status"
         title={anchor.fixLost
           ? 'Anchor watch: no GPS fix, drag detection degraded'
           : 'Anchor watch: distance from the anchor over the watch radius'}
@@ -143,29 +153,40 @@ function runPillAction(action: MenuItem, after?: () => void): void {
         {/if}
       </span>
     {/if}
-    <span class="readout" title="Speed over ground"
-      >SOG <b class="num">{formatKnotsOr(fixStale ? undefined : vessel.sogMps)}</b> kn</span
+    <span class="readout sog-readout" class:fix-lost={vessel.sogStale} title="Speed over ground"
+      >SOG
+      <b class="num">{formatKnotsOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps)}</b>
+      kn</span
     >
-    <span class="readout" title="Course over ground"
+    <span class="readout cog-readout" title="Course over ground"
       >COG
       <b class="num"
         >{formatBearingOr(
-          fixStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS ? undefined : vessel.cogRad,
+          fixStale || vessel.cogStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS
+            ? undefined
+            : vessel.cogRad,
         )}</b
       >&deg;T</span
     >
-    <span class="readout" title="Heading, true"
+    <span class="readout hdg-readout" class:fix-lost={vessel.headingStale} title="Heading, true"
       >HDG
-      <b class="num">{formatBearingOr(vessel.headingRad)}</b>&deg;T</span
+      <b class="num"
+        >{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
+      >&deg;T</span
     >
     <span
-      class="readout"
+      class="readout depth-readout"
       class:depth-alarm={shallowAlarming}
-      title={shallowAlarming
-        ? 'Shallow water: depth below the alarm threshold'
-        : 'Depth below the transducer'}
-      >Depth
-      <b class="num">{formatLengthOr(vessel.depthMeters, units.mode)}</b>
+      class:fix-lost={vessel.depthStale}
+      title={vessel.depthStale
+        ? 'Depth data is stale'
+        : shallowAlarming
+          ? 'Shallow water: depth below the alarm threshold'
+          : 'Depth below the transducer'}
+      >{shallowAlarming ? 'Shallow' : vessel.depthStale ? 'Depth stale' : 'Depth'}
+      <b class="num"
+        >{formatLengthOr(vessel.depthStale ? undefined : vessel.depthMeters, units.mode)}</b
+      >
       {lengthUnit(units.mode)}</span
     >
   </div>
@@ -350,6 +371,24 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   .strip-start {
     flex-wrap: wrap;
     justify-content: center;
+  }
+}
+@media (max-width: 600px) {
+  .status-strip {
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+  }
+  .strip-start {
+    gap: var(--space-2);
+  }
+  .cog-readout,
+  .hdg-readout,
+  .lookout {
+    display: none;
+  }
+  .strip-center {
+    flex-wrap: nowrap;
+    gap: var(--space-1);
   }
 }
 .offline {

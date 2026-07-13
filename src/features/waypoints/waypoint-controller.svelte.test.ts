@@ -67,7 +67,7 @@ describe('createWaypointsController', () => {
   });
 
   it('keeps an accepted add locally when the follow-up refresh fails', async () => {
-    const { controller, waypointsStore } = makeController();
+    const { controller, waypointsStore, toast } = makeController();
     vi.mocked(waypointsClient.fetchWaypoints).mockResolvedValue(undefined);
     controller.onDropWaypoint({ latitude: 44, longitude: -86 });
     await controller.confirmAddWaypoint({ name: '  Harbor  ' });
@@ -75,6 +75,7 @@ describe('createWaypointsController', () => {
     expect(waypointsStore.waypoints[0].name).toBe('Harbor');
     expect(controller.addWaypointAt).toBeUndefined();
     expect(controller.loadState).toBe('error');
+    expect(toast.show).not.toHaveBeenCalled();
   });
 
   it('keeps the edit dialog open after a failed edit', async () => {

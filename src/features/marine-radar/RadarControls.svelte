@@ -9,7 +9,7 @@ import {
   RAD_TO_DEG,
   type UnitsMode,
 } from '$shared/lib';
-import { Disclosure, ShowOnChartToggle } from '$shared/ui';
+import { Disclosure, InlineConfirm, ShowOnChartToggle } from '$shared/ui';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
 import { isPowerControl, isPrimaryControl, widgetKind } from './radar-controls-model';
 import type { ControlDefinition, RadarStatus } from './radar-types';
@@ -22,6 +22,7 @@ let {
   onSetPower,
   echoShown,
   onToggleEcho,
+  onOpenOverlaySettings,
   unitsMode,
 }: {
   store: MarineRadarStore;
@@ -31,8 +32,11 @@ let {
   onSetPower: (status: RadarStatus) => void;
   echoShown: boolean;
   onToggleEcho: (shown: boolean) => void;
+  onOpenOverlaySettings?: () => void;
   unitsMode: UnitsMode;
 } = $props();
+
+let confirmingTransmit = $state(false);
 
 const controls = $derived(
   [...store.capabilities].sort(
@@ -338,7 +342,10 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class:is-on={operational === 'standby'}
           aria-pressed={operational === 'standby'}
           disabled={powerBusy}
-          onclick={() => onSetPower('standby')}
+          onclick={() => {
+            confirmingTransmit = false;
+            onSetPower('standby');
+          }}
         >
           Standby
         </button>
@@ -348,7 +355,9 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class:is-on={operational === 'transmit'}
           aria-pressed={operational === 'transmit'}
           disabled={transmitDisabled}
-          onclick={() => onSetPower('transmit')}
+          onclick={() => {
+            if (operational !== 'transmit') confirmingTransmit = true;
+          }}
         >
           Transmit
         </button>
@@ -362,6 +371,17 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
         {operationalLabel}
       </span>
     </div>
+    {#if confirmingTransmit}
+      <InlineConfirm
+        question="Start transmitting radar energy?"
+        confirmLabel="Transmit"
+        onConfirm={() => {
+          confirmingTransmit = false;
+          onSetPower('transmit');
+        }}
+        onCancel={() => (confirmingTransmit = false)}
+      />
+    {/if}
     <p class="muted-note">
       Standby keeps the radar powered but not emitting. Transmit scans and paints returns.
     </p>
@@ -375,6 +395,11 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       <p class="control-error" role="alert">{store.controlErrors.power}</p>
     {/if}
     <p class="muted-note">Opacity and stacking are in Overlays.</p>
+    {#if onOpenOverlaySettings}
+      <button type="button" class="btn btn-ghost" onclick={onOpenOverlaySettings}>
+        Open overlay settings
+      </button>
+    {/if}
   </section>
 {/if}
 

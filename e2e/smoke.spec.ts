@@ -140,6 +140,16 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await expect(panel.locator('.power-status')).toHaveText('Standby');
   await expect(panel.getByText('42', { exact: true })).toBeVisible();
   await expect(panel.getByRole('slider', { name: 'Gain' })).toHaveValue('42');
+  await panel.getByRole('button', { name: 'Transmit', exact: true }).click();
+  const transmitConfirm = panel.getByRole('group', { name: 'Start transmitting radar energy?' });
+  await expect(transmitConfirm).toBeVisible();
+  await transmitConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await panel.getByRole('button', { name: 'Open overlay settings' }).click();
+  const layers = page.locator('#layers-panel');
+  await expect(layers.getByRole('button', { name: 'Overlays', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
 test('offline charts stays discoverable when Chart Locker is not installed', async ({ page }) => {
@@ -279,6 +289,50 @@ test('route editing confirms before discarding plotted changes', async ({ page }
   await expect(panel).toBeVisible();
 });
 
+test('saved route secondary actions use a labeled overflow menu', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  let routeRequests = 0;
+  await page.route(/\/signalk\/v2\/api\/resources\/routes$/, async (route) => {
+    routeRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        passage: {
+          name: 'Harbor passage',
+          feature: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [-83.5, 42.6],
+                [-83.4, 42.7],
+              ],
+            },
+            properties: {},
+          },
+        },
+      }),
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Routes' }).click();
+
+  const panel = page.getByRole('complementary', { name: 'Routes' });
+  await expect.poll(() => routeRequests).toBeGreaterThan(0);
+  await expect(panel.getByText('Harbor passage')).toBeVisible();
+  await panel.getByRole('button', { name: 'More actions for Harbor passage' }).click();
+  const actions = page.getByRole('menu', { name: 'More actions for Harbor passage' });
+  await expect(actions.getByRole('menuitem', { name: 'Edit route' })).toBeVisible();
+  await expect(actions.getByRole('menuitem', { name: 'Save reversed copy' })).toBeVisible();
+  await expect(actions.getByRole('menuitem', { name: 'Download GPX' })).toBeVisible();
+  await expect(actions.getByRole('menuitem', { name: 'Delete route' })).toBeVisible();
+});
+
 test('instrument dock opens beside a still-present chart and closes from its header', async ({
   page,
 }) => {
@@ -291,7 +345,7 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
   // Default tiles render their plain labels.
   await expect(dock.getByText('Speed', { exact: false }).first()).toBeVisible();
-  await dock.getByRole('button', { name: /Open Speed details/ }).click();
+  await dock.getByRole('button', { name: /Speed.*Open details/ }).click();
   await expect(dock.getByRole('button', { name: 'Back to instruments' })).toBeVisible();
   await expect(dock.getByRole('heading', { name: 'Signal K paths' })).toBeVisible();
   await expect(dock.getByText('navigation.speedOverGround')).toBeVisible();
@@ -345,7 +399,7 @@ test('instrument tiles take the full screen under the breakpoint with their own 
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Instruments' }).first().click();
-  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  const dock = page.getByRole('dialog', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // Full-screen mode swaps the close label; this chrome is the only way back on a phone.
   await dock.getByRole('button', { name: 'Close instruments, return to chart' }).click();

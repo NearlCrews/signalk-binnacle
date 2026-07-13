@@ -9,6 +9,7 @@ let {
   anchor,
   mob,
   shallow,
+  notification,
   mute,
   companion,
 }: {
@@ -16,6 +17,7 @@ let {
   anchor: string;
   mob: string;
   shallow: string;
+  notification: string;
   mute: string;
   companion: string;
 } = $props();
@@ -32,6 +34,9 @@ let {
 </div>
 <div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
   {shallow}
+</div>
+<div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
+  {notification}
 </div>
 <div class="visually-hidden" aria-live="polite" aria-atomic="true">{mute}</div>
 <div class="visually-hidden" aria-live="polite" aria-atomic="true">{companion}</div>

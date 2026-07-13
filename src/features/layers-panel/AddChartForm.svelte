@@ -150,7 +150,7 @@ function cancelDraft(): void {
   {/if}
 
   {#if busy}
-    <p class="muted-note" role="status">{staged ? 'Saving chart...' : 'Reading chart...'}</p>
+    <p class="muted-note" role="status">{staged ? 'Saving chart…' : 'Reading chart…'}</p>
   {:else if error}
     <p class="alert-note" role="alert">{error}</p>
   {/if}

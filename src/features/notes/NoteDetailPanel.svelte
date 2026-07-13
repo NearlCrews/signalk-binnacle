@@ -83,7 +83,7 @@ function measure(item: NormalizedItem): string {
     </button>
   {/if}
   {#if loading}
-    <p class="muted-note" role="status">Loading...</p>
+    <p class="muted-note" role="status">Loading…</p>
   {:else if failed}
     <p class="alert-note" role="alert">Could not load the details for this place.</p>
     <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>Retry</button>
