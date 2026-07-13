@@ -15,8 +15,9 @@ hazards, depth, traffic, leeway, current, restricted areas, or the vessel's mane
    **Done** to end the tool and remove all points.
 
 Press and hold or right-click a chart position before Measure is active, then choose **Measure from
-here** to start a fresh measurement at that exact position. Selecting the already-active Measure menu
-item closes the menu without erasing current work.
+here** to start a fresh measurement at that exact position. Keyboard users can focus the chart and use
+the Context Menu key or Shift+F10 to open the same actions at the chart center. Selecting the
+already-active Measure menu item closes the menu without erasing current work.
 
 Escape ends Measure when it is the topmost dismissible surface. Route editing owns chart taps if both
 states ever overlap.
@@ -57,6 +58,6 @@ while adding legs, and at the limit. Metric changes are announced politely, cont
 - `src/app/App.svelte` reveals the overlay and distinguishes menu activation from Measure from here.
 
 Unit coverage verifies state transitions, invalid and duplicate points, point limits, incremental
-redraw, unit changes, opacity, cleanup, and antimeridian geometry. The Playwright flow covers a real
-two-point chart gesture, active-menu retention, Undo, Done, cursor restoration, and narrow-screen
-layout.
+redraw, unit changes, opacity, cleanup, and antimeridian geometry. The Playwright flow covers keyboard
+chart actions, a real two-point chart gesture, active-menu retention, Undo, Done, cursor restoration,
+and narrow-screen layout.

@@ -457,7 +457,8 @@ short version:
    the SlideOver in the panel slot, and add a `MenuItem` to open it. If a user-relevant provider is
    optional, keep the item visible with `available` and an actionable `unavailableHint`; do not hide
    it conditionally.
-6. Run the gate: `npx @biomejs/biome ci <files>` (the scoped name; a bare `npx biome` resolves the
-   wrong package), `npm run check`, `npm run cruise`, then `npm test` and `npm run build` before a
-   release, all green. See `docs/building-menu-items.md` section 0 for the per-file loop and the
-   tooling traps.
+6. Run the gate: `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, and
+   `npm run build`, all green. Run `npm run test:e2e` when app-shell, layout, map, interaction, or
+   browser behavior changes. CI adds desktop and phone WebKit coverage through
+   `npm run test:e2e:cross-browser`. See `docs/building-menu-items.md` section 0 for the per-file loop
+   and the tooling traps.

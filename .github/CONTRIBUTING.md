@@ -31,8 +31,9 @@ serves, and any implementation ideas you have.
 3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
-6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, `npm run build`, and
-   `npm run test:e2e` before pushing when browser behavior is affected.
+6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, and `npm run build`.
+   Run `npm run test:e2e` when browser behavior is affected. CI runs the Chromium and WebKit suite
+   through `npm run test:e2e:cross-browser`.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 

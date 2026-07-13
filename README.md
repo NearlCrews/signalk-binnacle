@@ -307,7 +307,7 @@ npm run cruise     # dependency-cruiser boundary check
 npm test           # Vitest unit tests
 npm run build      # production build into public/
 npm run test:e2e   # Chromium browser, mobile, keyboard, and accessibility checks
-npm run test:e2e:cross-browser # Chromium and WebKit UI checks used by CI
+npm run test:e2e:cross-browser # Chromium and WebKit UI checks; CI runs this gate
 ```
 
 After `npm run hooks`, git runs a fast format, lint, and boundary check before each commit, and the

@@ -27,8 +27,9 @@ During edits, the fast per-file loop:
 3. `npx @biomejs/biome ci <files>` (no-write verify, the same engine the commit hook runs)
 
 Then commit. The pre-commit hook runs `biome ci .` and `npm run cruise` (dependency-cruiser). The
-heavier gates (`npm test`, `npm run build`) run at pre-push; run them yourself before a release or a
-large change.
+heavier gates (`npm test`, `npm run build`) run at pre-push. Run them yourself before a release or a
+large change. When app-shell, layout, map, interaction, or browser behavior changes, also run
+`npm run test:e2e`. CI runs `npm run test:e2e:cross-browser` for Chromium and WebKit coverage.
 
 Tooling traps, each of which has bitten us:
 
@@ -427,8 +428,9 @@ Tick all of these before you commit a new menu item.
       a placeholder occupies the value slot, it never collapses the box.
 - [ ] Every text size comes from the type-role table in the design system; no new token-role
       pairing without a design-system edit.
-- [ ] The gate is green: `npx @biomejs/biome check --write` then `npm run check` then `npx
-      @biomejs/biome ci`, then the commit hook (`biome ci .` and `npm run cruise`) passes.
+- [ ] The gate is green: `npx @biomejs/biome check --write .`, `npm run check`, `npm run ci:biome`,
+      `npm run cruise`, `npm test`, and `npm run build` pass. Run `npm run test:e2e` when app-shell,
+      layout, map, interaction, or browser behavior changes.
 
 ---
 
