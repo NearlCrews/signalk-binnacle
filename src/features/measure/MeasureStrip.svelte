@@ -11,6 +11,16 @@ interface Props {
 
 const { measure, units }: Props = $props();
 
+const instruction = $derived(
+  measure.atLimit
+    ? 'Point limit reached. Undo or clear points to continue.'
+    : measure.isEmpty
+      ? 'Tap the chart to set the start point'
+      : measure.points.length === 1
+        ? 'Tap the chart to set the next point'
+        : `${measure.points.length} points. Tap the chart to add another`,
+);
+
 // An active measurement is a dismissable like the slide-overs and the app menu, so it joins the
 // shared Escape stack: one Escape ends only the topmost surface, with no listener-order games.
 $effect(() => {
@@ -22,9 +32,7 @@ $effect(() => {
   <aside class="bottom-strip bottom-strip--accent" aria-label="Measure">
     <div class="head">
       <span class="title">Measure</span>
-      {#if measure.isEmpty}
-        <span class="note">Tap the chart to set points</span>
-      {/if}
+      <span class="note" role="status">{instruction}</span>
       <div class="actions">
         <button type="button" class="ack" disabled={measure.isEmpty} onclick={() => measure.undo()}>
           Undo
@@ -41,7 +49,7 @@ $effect(() => {
       </div>
     </div>
     {#if measure.lastLeg}
-      <div class="row">
+      <div class="row" aria-live="polite">
         <span class="metric">
           Leg <b>{formatMetersOrNm(measure.lastLeg.distanceMeters, units.mode)}</b>
         </span>

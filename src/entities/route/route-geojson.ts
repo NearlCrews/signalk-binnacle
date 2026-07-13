@@ -1,8 +1,23 @@
 import { isLonLat, type LonLat, latLonToLonLat, lonLatToLatLon } from '$shared/geo';
-import { isRecord } from '$shared/lib';
+import { hasControlCharacters, isRecord } from '$shared/lib';
 import { rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
 import { str } from '$shared/signalk';
 import type { Route, RouteWaypoint } from './route-types';
+
+export const MAX_ROUTE_WAYPOINTS = 10_000;
+export const MAX_ROUTE_ID_LENGTH = 512;
+export const MAX_ROUTE_NAME_LENGTH = 256;
+export const MAX_ROUTE_WAYPOINT_NAME_LENGTH = 256;
+
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  const text = str(value)?.trim();
+  if (!text || hasControlCharacters(text)) return undefined;
+  return text.slice(0, maxLength);
+}
+
+export function cleanRouteId(value: unknown): string | undefined {
+  return cleanText(value, MAX_ROUTE_ID_LENGTH);
+}
 
 // The Signal K v2 route resource body: a GeoJSON Feature with a LineString, plus name and the
 // total SI distance. Per-waypoint names ride in properties.coordinatesMeta, index-aligned.
@@ -22,12 +37,15 @@ export function routeToFeature(route: Route): RouteResourceBody {
   // The server validates the standard route resource: each coordinatesMeta entry must have a name
   // (or href), so an unnamed-waypoint placeholder of {} is rejected. Emit coordinatesMeta only when
   // a waypoint is named, filling the unnamed gaps with their 1-based index, and omit it otherwise.
-  const named = route.waypoints.some((w) => w.name);
+  const names = route.waypoints.map((waypoint) =>
+    cleanText(waypoint.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH),
+  );
+  const named = names.some(Boolean);
   const properties = named
-    ? { coordinatesMeta: route.waypoints.map((w, i) => ({ name: w.name ?? `${i + 1}` })) }
+    ? { coordinatesMeta: names.map((name, index) => ({ name: name ?? `${index + 1}` })) }
     : {};
   return {
-    name: route.name,
+    name: cleanText(route.name, MAX_ROUTE_NAME_LENGTH) ?? cleanRouteId(route.id) ?? 'Route',
     distance: routeDistanceMeters(route.waypoints),
     feature: {
       type: 'Feature',
@@ -41,6 +59,8 @@ export function routeToFeature(route: Route): RouteResourceBody {
 }
 
 export function featureToRoute(id: string, raw: unknown): Route | undefined {
+  const safeId = cleanRouteId(id);
+  if (!safeId) return undefined;
   if (!isRecord(raw)) return undefined;
   const r = raw as {
     name?: unknown;
@@ -51,19 +71,19 @@ export function featureToRoute(id: string, raw: unknown): Route | undefined {
   };
   const geom = r.feature?.geometry;
   if (geom?.type !== 'LineString' || !Array.isArray(geom.coordinates)) return undefined;
+  if (geom.coordinates.length < 2 || geom.coordinates.length > MAX_ROUTE_WAYPOINTS)
+    return undefined;
   const meta = Array.isArray(r.feature?.properties?.coordinatesMeta)
     ? (r.feature?.properties?.coordinatesMeta as Array<{ name?: unknown }>)
     : [];
   const waypoints: RouteWaypoint[] = [];
   for (const [i, coord] of geom.coordinates.entries()) {
-    if (isLonLat(coord)) {
-      const name = str(meta[i]?.name);
-      waypoints.push({ position: lonLatToLatLon(coord), ...(name ? { name } : {}) });
-    }
+    if (!isLonLat(coord)) return undefined;
+    const name = cleanText(meta[i]?.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH);
+    waypoints.push({ position: lonLatToLatLon(coord), ...(name ? { name } : {}) });
   }
-  if (waypoints.length < 2) return undefined;
-  const name = str(r.name) ?? id;
-  return { id, name, waypoints };
+  const name = cleanText(r.name, MAX_ROUTE_NAME_LENGTH) ?? safeId;
+  return { id: safeId, name, waypoints };
 }
 
 export function routeDistanceMeters(waypoints: readonly RouteWaypoint[]): number {

@@ -63,7 +63,7 @@ const liveMessage = $derived(
       {/if}
       <div class="actions">
         {#if store.status === 'ready'}
-          <button type="button" class="ack" onclick={() => void store.reload()}>Now</button>
+          <button type="button" class="ack" onclick={() => store.goToLatest()}>Now</button>
         {/if}
         <button type="button" class="ack" onclick={onExit}>Exit</button>
       </div>
@@ -90,6 +90,7 @@ const liveMessage = $derived(
           type="button"
           class="icon-btn step"
           aria-label="Earlier"
+          disabled={store.scrubMs <= store.from}
           onclick={() => store.setScrub(store.scrubMs - STEP_MS)}
         >
           <ChevronLeft size={16} aria-hidden="true" />
@@ -98,6 +99,7 @@ const liveMessage = $derived(
           type="button"
           class="icon-btn step"
           aria-label="Later"
+          disabled={store.scrubMs >= store.to}
           onclick={() => store.setScrub(store.scrubMs + STEP_MS)}
         >
           <ChevronRight size={16} aria-hidden="true" />

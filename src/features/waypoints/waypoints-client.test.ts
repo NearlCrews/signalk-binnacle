@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Waypoint } from '$entities/waypoint';
 import { jsonResponse } from '$shared/testing/fetch-stub';
-import { deleteWaypoint, fetchWaypoints, saveWaypoint } from './waypoints-client';
+import { deleteWaypoint, fetchWaypoints, MAX_WAYPOINTS, saveWaypoint } from './waypoints-client';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -47,6 +47,14 @@ describe('fetchWaypoints', () => {
     const waypoints = await fetchWaypoints('http://pi');
     expect(waypoints?.map((w) => w.id)).toEqual(['good']);
   });
+
+  it('bounds the accepted waypoint list', async () => {
+    const resources = Object.fromEntries(
+      Array.from({ length: MAX_WAYPOINTS + 2 }, (_, index) => [`id-${index}`, WAYPOINT_BODY]),
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, resources));
+    expect(await fetchWaypoints('http://pi')).toHaveLength(MAX_WAYPOINTS);
+  });
 });
 
 describe('saveWaypoint', () => {
@@ -68,6 +76,25 @@ describe('saveWaypoint', () => {
     expect(sent.description).toBe('D');
     expect(sent.feature.geometry.coordinates).toEqual([1, 2]);
   });
+
+  it('rejects an unsafe id or invalid position before fetching', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    expect(
+      await saveWaypoint('http://pi', 'tok', {
+        id: 'bad\u0000id',
+        name: 'W',
+        position: { latitude: 2, longitude: 1 },
+      }),
+    ).toBe(false);
+    expect(
+      await saveWaypoint('http://pi', 'tok', {
+        id: 'abc',
+        name: 'W',
+        position: { latitude: 200, longitude: 1 },
+      }),
+    ).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('deleteWaypoint', () => {
@@ -76,5 +103,11 @@ describe('deleteWaypoint', () => {
     const ok = await deleteWaypoint('http://pi', 'tok', 'abc');
     expect(ok).toBe(true);
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('rejects an unsafe id before fetching', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    expect(await deleteWaypoint('http://pi', 'tok', '')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

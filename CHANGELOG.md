@@ -6,13 +6,82 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0150"></a>
+
+## [0.15.0] - 2026-07-13
+
 ### Added
 
+- Every chartplotter menu action now has one operational reference covering availability, loading,
+  recovery, write access, stale sensors, provider fallback, and safety behavior.
+- Layers and charts, Forecast, Tides, Data trends, and Time travel now expose explicit recovery for
+  failed provider or module loads while preserving accepted data where available.
+
+- Waypoints now reports loading, retained-data refresh, real empty results, and failures. Navigation
+  requires a destination-specific confirmation, and browser coverage verifies HTTP-only loading,
+  confirmation, and narrow-screen layout.
+- Measure now guides each next chart tap, shows a crosshair while active, announces changing metrics,
+  reports its point limit, and has browser coverage for drawing, active-menu retention, Undo, Done,
+  cursor restoration, and narrow-screen layout.
+- Tracks now reports saved-resource loading and refresh failures, memory-only recording, point counts,
+  GPS-gap route behavior, and pending operations. Retrace requires an explicit safety confirmation,
+  and browser coverage verifies HTTP-only loading and narrow-screen layout.
+- Find places now reports loading, chart zoom limit, real empty results, cached-offline data, and
+  provider failures separately. Provider-backed and narrow-screen browser coverage exercises the
+  complete menu flow.
+- Marine radar now reports provider availability, radar identity, separate spoke-stream and renderer
+  health, pending control writes, rejected controls, and stale-picture state in the controls panel.
+- Radar capability parsing now preserves string, button, sector, zone, rectangle, compound, category,
+  ordering, enabled, allowed, and read-only metadata instead of silently dropping unfamiliar controls.
 - An apple-touch-icon and larger PNG app icons, for a proper icon on an iOS home screen install
   alongside the existing SVG favicon.
+- The instrument catalog now discovers batteries, engines, tanks, chargers, inverters, shore power,
+  solar controllers, and environmental sensor instances from the live Signal K tree. Instrument
+  detail views show the path, source, update age, units, and recent values, and the weather display
+  adds richer observed, forecast, warning, wave, current, visibility, and provenance data.
+- Route cards can import and export standard GPX routes, show the entire route on the chart, reverse
+  a saved route, and present a leg-by-leg passage plan with a bounded planning speed.
+- Saved offline areas now expose their bounds, included charts, detail range, size, update date, and
+  visible tile and byte progress. They can be shown on the chart or reused as the safe starting point
+  for an adjusted copy without deleting known-good coverage first.
 
 ### Changed
 
+- Center, Follow, Nearby vessels, and Anchor watch no longer derive actions, distances, or bearings
+  from stale GPS. AIS and alarm panels now identify disconnected stream state instead of presenting
+  cached state as current.
+- Routes, chart sources, AIS targets, alarms, weather and tide providers, instrument discovery,
+  history rows, profile documents, names, ids, numeric settings, imports, and persisted collections
+  now enforce explicit validation and size bounds before entering UI state.
+- Profiles now confirm before replacing unsaved active settings, report completed imports, and explain
+  local-only deletion when server write access is unavailable. Time travel's Now action moves to the
+  newest loaded sample without issuing a hidden refresh.
+
+- Waypoint reads load when access resolves without waiting for the WebSocket, reject stale refreshes,
+  serialize writes, disable conflicting controls, and update accepted adds, edits, and deletes before
+  the follow-up refresh. Failed saves retain the dialog and entered values.
+- Waypoint resources now bound ids, names, descriptions, icons, and collection size, reject invalid
+  coordinates and control characters, and keep the v1 collection as a read-only fallback.
+- Measure preserves active work when its menu item is selected again, limits measurements to 1,000
+  validated points, ignores duplicate consecutive points, and draws date-line crossings by the short
+  leg. Measure from here still starts fresh.
+- Saved-track writes and deletes update the panel and overlay immediately, serialize conflicting
+  mutations, retain confirmed writes through refresh failures, and ignore stale refresh results.
+  Saved tracks load when access resolves even if the Signal K WebSocket cannot connect.
+- Track-to-route and retrace use only the latest continuous segment. Stored track settings are bounded,
+  incoming resources and filenames are hardened, and shared profile validation uses the same settings
+  guard.
+- Find places now searches names, categories, sources, and attribution without case or accent
+  sensitivity; exposes category and source on each row; uses stable sort tie-breakers; limits the
+  rendered list to 250 results; and turns on its matching chart overlay when opened.
+- Find places uses only a fresh GPS fix for distance, true bearing, and its nearest-first default. A
+  selected result stays visually identified, and returning to the menu clears selection and preview.
+- Marine radar now hydrates controls from the standard `/controls` endpoint and reconciles live values
+  from `radars.*.controls.*` Signal K deltas. Discovery is refreshable, including token changes,
+  provider removal, malformed providers, access refusal, and transport failure.
+- The radar spoke worker runs only while the overlay is visible, the page is visible, and the selected
+  radar is transmitting. Radar range and angle controls remain SI internally and convert only at the
+  display edge according to the server unit preference.
 - MapLibre, Terra Draw, and pmtiles now build into their own cacheable vendor chunks, and
   production builds carry hidden sourcemaps for future error-monitoring symbolication.
 - Menu polish: an unavailable item (Radar, Time travel) keeps its own icon with a small add-on
@@ -24,9 +93,51 @@ All notable changes to Binnacle are documented here. The format follows
 - SOG and COG in the status strip now carry a tooltip explaining what they mean, and the AIS list
   and the collision alarm's sensitivity fields now show CPA and TCPA alongside their existing
   plain-English labels.
+- Charts and overlays now have separate, purpose-specific views. Charts selects and inspects chart
+  sources, while Overlays owns visibility, opacity, and stacking. The toolbar editor and instrument
+  customizer use the same compact editing pattern, and the status-strip clock uses local time.
+- Route lists keep their current data when a refresh fails, route writes update the list immediately,
+  active-route edits refresh through the Signal K Course API, and route mutations are serialized to
+  prevent duplicate saves or conflicting actions.
+- Offline charts now has one discoverable menu entry and landing page for saved areas, automatic
+  caching, installed charts, and storage. The area builder follows a select, customize, and review
+  sequence; explains every disabled download; gives Overview, Coastal, and Harbor plain-language
+  guidance; and collapses to its header while a phone user draws on the chart. Installed charts adds
+  refresh, autosave guidance, scale details, and server-folder remediation for invalid files.
+- The header's offline control now shows the cache amount or visible access and service state instead
+  of presenting a provider-health check as passage readiness. Saved-area status remains the
+  authoritative readiness check.
 
 ### Fixed
 
+- URL-backed charts now sync on unsecured Signal K servers, restored charts resync after access
+  changes, and sync failures are visible. A malformed server chart can no longer abort chart startup.
+- Anchor actions are serialized, browser-only fallback remains usable without server writes, alarm
+  server actions cannot double-submit, and weather or time-travel loader exceptions no longer leave
+  their UI stuck loading.
+
+- Measure points now replace the store array instead of mutating it in place, so the overlay's
+  identity-based dirty check redraws every accepted tap instead of stopping after the first render.
+- Find places skips provider requests when offline without cache, refreshes immediately on reconnect,
+  invalidates cache and pending work when credentials change, discards malformed persisted notes, and
+  keeps live results independent of IndexedDB failures. Phone detail now returns to the result list.
+- Track recording now rejects stale, malformed, out-of-order, and out-of-range fixes, normalizes bad
+  speed values, splits implausible GPS jumps, prevents a late restore from undoing Discard, and orders
+  persistent appends and clears. Fixes captured during a server save remain in the active recording.
+  Route conversion no longer draws a guidance leg across a GPS gap.
+- Find places no longer presents provider failure, a hidden layer, low chart zoom, and a real empty
+  response as the same empty state. Out-of-range note coordinates and blank provider strings are now
+  rejected or normalized before they reach the chart. A slow IndexedDB cache write no longer holds a
+  successful provider response in the Loading state.
+- Marine radar no longer keeps repainting and transferring a full polar buffer after spoke data stops.
+  A five-second freshness guard clears the old echo and rings, and reports the picture as stale.
+- Radar discovery now rejects unsafe or unbounded frame geometry, validates legend colors, resolves
+  relative spoke-stream URLs safely, keeps tokens off cross-origin streams, catches worker-open failures,
+  and ignores late discovery, selection, stream, and control-write results.
+- Marine radar uses the vessel's true heading when a spoke omits bearing data and suppresses the echo
+  when no safe heading is available. WebGL failures no longer overwrite spoke-stream health.
+- Every radar legend pixel and sweep pixel has zero green and blue in night-red, including Doppler and
+  history accents, which remain distinguishable through red intensity.
 - A fresh install with no saved chart view now flies to the vessel once its first GPS fix lands,
   instead of leaving the map at the whole-world default forever.
 - Night-red no longer leaks the base map's shaded-relief terrain colors at low zoom; the chart
@@ -47,6 +158,20 @@ All notable changes to Binnacle are documented here. The format follows
 - Wind particle WebGL textures are reused across forecast updates instead of recreated, and a
   removed PMTiles chart archive is dropped defensively rather than silently leaking if the
   library's internal shape ever changes.
+- Instrument labels no longer repeat their unit or terminal path segment, battery labels include a
+  useful instance name and measurement, and the Update button keeps readable contrast on hover.
+- Route editing now emits its final geometry as soon as drawing finishes, ignores deferred editor
+  work after cancellation, confirms before discarding an in-progress route, preserves an existing
+  route name while editing, and disables waypoint skipping when the server does not provide a valid
+  route extent.
+- Route and Course API input validation now rejects malformed coordinates, route extents, calculated
+  values, and active-route links. GPX import is bounded and strict about coordinates, unnamed GPX
+  points remain unnamed, exported filenames are portable, stale vessel positions no longer draw an
+  active course line, and route geometry remains finite at the poles.
+- Offline charts no longer disappears when Chart Locker is missing or temporarily unreachable. It
+  remains visible and explains how to install, start, or authenticate to the plugin. Long saved-area
+  names no longer compete with status text, download progress includes a visible percentage and
+  counts, and storage-cap failures now offer a direct path to Storage.
 
 <a id="v0141"></a>
 
@@ -513,12 +638,6 @@ built across the intervening development versions, and adds a Chart Locker statu
   to its own entry, the radar range labels no longer read brighter than their ring, and the POI search
   close button has a descriptive label.
 
-### Internal
-
-- Added `docs/design-system.md`, the authoritative design and front-end build standard, and hoisted
-  the shared row, card, panel-frame, note, and banner styles into global utility classes so panels
-  stop re-implementing them.
-
 <a id="v0101"></a>
 
 ## [0.10.1] - 2026-06-24
@@ -839,21 +958,6 @@ set of previously silent failures visible, and moves the weather layer toggles i
 - The layer opacity slider is a full-size touch target again, panel error lines use the shared
   alarm framing, and the chart action menu supports arrow-key navigation.
 
-### Internal
-
-- IndexedDB and local-storage degrades, and an unavailable audible alarm, now log a one-line
-  breadcrumb so a field report is diagnosable.
-- Shared cleanups: one safety-button gutter rule, the collision overlay on the shared layer
-  helpers, the tracking token on the alarms tag, anonymous access-request fetches, named collision
-  threshold constants, a once-computed day paint object, and a dropped redundant per-tick sort.
-- New tests cover the stream connection and worker lifecycle, the unit conversion family, the
-  anchor acknowledge escalation, client-computed course VMG and time-to-go, and several boundary
-  and error paths the audit found untested.
-- A shared rovingFocus arrow-key action and an overlay-backdrop utility class now back both the
-  chart context menu and the new weather layers menu, replacing duplicated handlers and CSS, and
-  the chart context menu moved onto the shared Escape dismiss stack. The now-unused scrollEdges
-  action was removed.
-
 <a id="v061"></a>
 
 ## [0.6.1] - 2026-06-12
@@ -881,12 +985,6 @@ or two taps, and the weather panel's layer row scrolls honestly instead of clipp
 - Voice control can activate the Charts pill by its visible word, its expanded state is not
   announced while it is still disabled during chart load, and its tooltip says the chart is
   loading while it is.
-
-### Internal
-
-- One armMeasure helper replaces the duplicated reveal-then-arm sequence, new measure tests pin
-  the seed-after-arm contract and the deliberate reset on re-arm, and CI test flakes from cold
-  ICU loading are prevented by a per-worker warm-up rather than per-test timeouts.
 
 <a id="v060"></a>
 
@@ -1046,19 +1144,6 @@ server's imperial-or-metric unit preference, and route editing loads on demand.
 - A unit preset changed on the server while the link was down is picked up on reconnect.
 - The offline cache's third-party host matchers accept only the real weather and radar domains
   and their subdomains, not lookalike hostnames that merely end in the same letters.
-
-### Internal
-
-- Map tile, WebGL shader, and PMTiles resources are released on teardown, dead exports and the
-  unused weather view persistence were removed, and assorted hot-path allocations were trimmed.
-- Shared bbox helpers, a shared test fetch stub, the shared input primitive, and one global
-  segmented-control rule replaced per-feature copies.
-- The notification mirror compares the four status flags directly instead of serializing the
-  status object on every delta, a coordinate-cell quantizer shared by the tides and weather
-  caches replaced two copies, an IndexedDB store that degrades to memory now logs one
-  diagnostic breadcrumb, and the alarm mute rows sit on the shared button base. New tests cover
-  the session trend recorder, the notification dedup, the refused silence and acknowledge
-  paths, and the history provider fallbacks.
 
 <a id="v050"></a>
 
@@ -1299,52 +1384,6 @@ and accessibility, plus a few navigation additions.
   are usable underway.
 - The precipitation legend now reads up to 40 mm/h, matching the range the precipitation field paints.
 
-### Internal
-
-- A simplification pass over the overlay work: each new overlay slice (seamarks, protected areas,
-  boundaries, ocean conditions) now exposes a band-owning factory, so the chart widget no longer
-  hardcodes which map band each draws into (matching the depth-charts sibling). Deduplicated the
-  chart zoom-range expression and the tides upcoming-events computation, moved the station-distance
-  formatter into the tides display module, and tidied a handful of comments.
-- A simplification pass over the plotter and UI changes: the saved-item card list moved to one global
-  `.saved` system in `app.css` consumed by both panels, a shared `downloadBlob` helper backs the
-  track and route exporters, the GPX escape and unescape pair moved to one `xml-entities` module, the
-  distance-over-speed time uses the shared `etaSeconds` everywhere, the meters-per-degree constant is
-  shared from `$shared/nav`, the nav-strip `RouteProgress` type has one definition, the plan-speed
-  field uses the shared `.input`, and the whole-route distance derives from the leg table so the total
-  and the per-leg numbers cannot drift.
-- A simplification pass over the contrast work: the route, selection-ring, and AIS dark contrast aids share
-  one `DARK_SCRIM` constant and an `rgbaCss` helper in `$shared/map` instead of three drifting literals,
-  and the SlideOver minimize takes one `{ collapsed, onToggle }` object so the state and its toggle are
-  always supplied together.
-- A simplification pass over the profiles feature: the active-card accent edge-bar and "Active" badge moved
-  to the one global `.saved` system in `app.css` consumed by the Routes, Tracks, and Profiles panels, a
-  shared `pickTextFile` helper in `$shared/ui` backs both the route GPX import and the profile JSON
-  import instead of two hidden-input handlers, the profile importer validates the theme against the
-  shared `THEMES` list, and the default profile now auto-applies on a fresh device that has a default
-  but no active profile. The server sync also stops pushing after one rejected write, so a read-only
-  token attaches for reads but does not fire a doomed write on every later edit.
-- A project-wide modularization pass. The labeled current-item stats grid that the
-  Routes editor and the Tracks panel duplicated verbatim is now one global `.stat-grid` system in
-  `app.css`. A shared `downloadText(filename, text, type)` helper backs the route GPX, track GeoJSON,
-  and profile JSON exporters, so the Blob construction lives in one place. The four weather colormaps
-  (wind, waves, precipitation, and cloud) build on a new `themedRamp(day, night)` factory in
-  `color-ramp.ts`, so the night-red ramp swap is defined once instead of repeated per colormap. Two
-  dependency-cruiser rules, `no-cross-slice-shared` and `no-cross-slice-entities`, now enforce that a
-  shared or entities slice reaches a sibling only through its index public API, matching the existing
-  `no-cross-feature` rule.
-- The deferred modularization items. A shared `fetchJsonOrUndefined` helper backs the free-API weather
-  clients and the course REST hydration; a shared `MemoryCache` backs the weather grid cache and the
-  tides per-station caches; the `SlideOver` shell gained a subtitle and a footer so the last hand-rolled
-  panel (the note detail) folds into it; a shared `SavedList` and `VisibilityToggle` back the Routes,
-  Tracks, and Profiles cards; the coordinate guards moved to a `shared/geo` slice so geometry no longer
-  imports the SignalK transport slice for a type; and the portable profile settings are a single
-  declarative registry typed so a forgotten setting fails the build.
-- A whole-repo cleanup. Correctness fixes (the GPX entity guard, the route label opacity, a
-  marine-merge step-count guard, a deferred object-URL revoke, and a wind-arrow bounds guard), a round
-  of dead index re-export trimming, the four repeated course hydrate-and-seed sites folded into one
-  helper, and assorted comment and legend fixes.
-
 <a id="v021"></a>
 
 ## [0.2.1] - 2026-06-09
@@ -1372,16 +1411,6 @@ and accessibility, plus a few navigation additions.
 - Silenced a stream of "styleimagemissing" console warnings: the base map style references a few
   sprite icons and landuse patterns its published sprite does not contain, so a transparent
   placeholder is supplied for each. The map is unaffected; the console stays clean.
-
-### Internal
-
-- Bounded two more caches to a fixed size: the note-detail memo, and the persistent weather-grid
-  store (now matching its in-memory tier).
-- A whole-codebase cleanup pass: deduplicated the local-date computation shared by
-  the tides fetch window and its session-cache key, sourced the vessel and AIS default colors from
-  the day theme token, dropped over-broad slice exports, reset the stream reconnect backoff on an
-  explicit disconnect, and tidied several comments, an accessibility region, and a redundant live
-  region. No user-facing behavior change beyond the fixes above.
 
 <a id="v020"></a>
 
@@ -1447,14 +1476,6 @@ and accessibility, plus a few navigation additions.
 - The nearest tide and tidal-current readings no longer briefly go stale around local midnight: the
   session cache now rolls over on the same local day the NOAA forecast window uses, rather than on
   the UTC day.
-
-### Internal
-
-- A whole-codebase cleanup pass: named the shared millisecond constants once (MINUTE_MS, HOUR_MS,
-  DAY_MS), added a placeholder-aware nautical-miles readout, deduplicated the base-theme style
-  lookups, removed a dead weather-provider field and an empty re-export shim, tightened the
-  storage and chart-adapter export surface, and aligned the route and wave overlay label font and
-  arrow color with the other overlays. No user-facing behavior change beyond the fixes above.
 
 <a id="v013"></a>
 

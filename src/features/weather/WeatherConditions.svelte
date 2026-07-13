@@ -36,6 +36,7 @@ interface Props {
   providerId?: string;
   providerName?: string;
   position?: { latitude: number; longitude: number };
+  positionUnavailableReason?: string;
   store: WeatherStore;
   units: UnitsStore;
   // The point-conditions loader, constructed once by the host so reopening the panel reuses one
@@ -50,6 +51,7 @@ const {
   providerId,
   providerName,
   position,
+  positionUnavailableReason,
   store,
   units,
   pointLoader: pointLoaderProp,
@@ -291,7 +293,9 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
   </header>
 
   {#if !position}
-    <p class="muted-note" role="status">Waiting for a vessel position.</p>
+    <p class="muted-note" role="status">
+      {positionUnavailableReason ?? 'Waiting for a vessel position.'}
+    </p>
   {:else}
     {#if sortedWarnings.length > 0}
       <ul class="warnings bare-list" role="alert">

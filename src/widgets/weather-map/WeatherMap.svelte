@@ -1,6 +1,6 @@
 <script lang="ts">
-import { ChevronDown, ChevronUp, Layers, X } from '@lucide/svelte';
-import { onDestroy, onMount } from 'svelte';
+import { ChevronDown, ChevronUp, Layers, RefreshCw, X } from '@lucide/svelte';
+import { onDestroy, onMount, untrack } from 'svelte';
 import { fly } from 'svelte/transition';
 import type { UnitsStore } from '$entities/units';
 import { type Bbox, boundsToBbox, type WeatherStore } from '$entities/weather';
@@ -48,7 +48,6 @@ import {
 } from '$shared/lib';
 import { createThemedMap, type LayerSettings, type ThemedMapHandle } from '$shared/map';
 import type { MapView } from '$shared/settings';
-import { serverOrigin } from '$shared/signalk';
 import { dialog, PANEL_TRANSITION_MS, PanelHeader, type Theme } from '$shared/ui';
 import { createForecastPlayback } from './playback.svelte';
 import WeatherLayerMenu from './WeatherLayerMenu.svelte';
@@ -57,6 +56,7 @@ import WeatherScrubber from './WeatherScrubber.svelte';
 
 interface Props {
   store: WeatherStore;
+  origin: string;
   // The shared, cached weather loader (Open-Meteo plus RainViewer), constructed in App.
   loader: WeatherLoader;
   theme: Theme;
@@ -77,6 +77,7 @@ interface Props {
   weatherProvider?: WeatherProvider;
   // The vessel position, for the "Here" conditions panel.
   position?: { latitude: number; longitude: number };
+  positionStale?: boolean;
   // The shared point-conditions loader, constructed in App so the panel reuses one cache connection.
   pointLoader?: PointConditionsLoader;
   // Connectivity, so cached radar is labeled rather than passing as live.
@@ -88,6 +89,7 @@ interface Props {
 
 const {
   store,
+  origin,
   loader,
   theme,
   units,
@@ -98,6 +100,7 @@ const {
   token,
   weatherProvider,
   position,
+  positionStale = false,
   pointLoader,
   online = true,
   onBack,
@@ -123,8 +126,6 @@ const clock = new Clock(MINUTE_MS);
 
 let container: HTMLDivElement;
 let mapHandle: ThemedMapHandle | undefined;
-// serverOrigin reads location, fixed for the page lifetime: capture once, not per tap and per render.
-const origin = serverOrigin();
 // Set in onDestroy so a provider readout that resolves after teardown does not write component state.
 let destroyed = false;
 // Explicit teardown for the canvas keydown listener: map.remove() drops the canvas with it, but
@@ -152,7 +153,7 @@ let fetchTimer: ReturnType<typeof setTimeout> | undefined;
 // dismiss timer. The grid sample only shows when at least one layer is on.
 const pointReadout = createPointReadout({
   store: () => store,
-  origin,
+  origin: untrack(() => origin),
   token: () => token,
   providerName: () => weatherProvider?.name,
   providerId: () => weatherProvider?.id,
@@ -274,13 +275,19 @@ const playback = createForecastPlayback(
 // (forecast plus marine) rather than six. The grid is coarse anyway, and fewer, smaller requests
 // keep well under Open-Meteo's free-tier rate limit.
 const FORECAST_OPTS = { maxCells: 200, forecastDays: 5 };
-function loadCurrentWeather(currentItems = items): void {
+function loadCurrentWeather(currentItems = items, force = false): void {
   if (!getBounds || currentItems.every((item) => !item.visible)) return;
   const visible = (id: string) => currentItems.some((item) => item.id === id && item.visible);
-  void loader.load(store, getBounds(), FORECAST_OPTS, {
-    waves: visible(WEATHER_LAYER_IDS.waves),
-    radar: visible(WEATHER_LAYER_IDS.radar),
-  });
+  void loader.load(
+    store,
+    getBounds(),
+    FORECAST_OPTS,
+    {
+      waves: visible(WEATHER_LAYER_IDS.waves),
+      radar: visible(WEATHER_LAYER_IDS.radar),
+    },
+    force,
+  );
 }
 
 function scheduleFetch(): void {
@@ -537,9 +544,20 @@ onDestroy(() => {
       <div
         class="popover-card map-note map-note--status"
         class:show={!!statusNote || !!zoomNote}
-        role="status"
+        role={store.status === 'error' ? 'alert' : 'status'}
       >
-        {statusNote || zoomNote}
+        <span>{statusNote || zoomNote}</span>
+        {#if !zoomNote && (store.status === 'error' || store.status === 'stale')}
+          <button
+            type="button"
+            class="btn btn-ghost retry"
+            disabled={!online}
+            onclick={() => loadCurrentWeather(items, true)}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            Retry
+          </button>
+        {/if}
       </div>
     </div>
     {#if conditionsOpen}
@@ -554,7 +572,8 @@ onDestroy(() => {
           {token}
           providerId={weatherProvider?.id}
           providerName={weatherProvider?.name}
-          {position}
+          position={positionStale ? undefined : position}
+          positionUnavailableReason={positionStale ? 'Own GPS fix is stale.' : undefined}
           {store}
           {units}
           {pointLoader}
@@ -697,6 +716,9 @@ onDestroy(() => {
   align-self: center;
   color: var(--text-muted);
   text-align: center;
+}
+.map-note--status .retry {
+  margin-inline-start: var(--space-1);
 }
 .map-note--readout {
   position: relative;

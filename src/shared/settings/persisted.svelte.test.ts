@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_THRESHOLDS, isMapView, isThresholds, PersistedValue } from './persisted.svelte';
+import {
+  DEFAULT_THRESHOLDS,
+  isMapView,
+  isThresholds,
+  isTrackSettings,
+  PersistedValue,
+} from './persisted.svelte';
 
 function fakeStorage(map: Map<string, string>): Pick<Storage, 'getItem' | 'setItem'> {
   return {
@@ -94,5 +100,22 @@ describe('isThresholds', () => {
   it('rejects a record missing an original required field', () => {
     const { dangerCpaMeters: _omit, ...broken } = DEFAULT_THRESHOLDS;
     expect(isThresholds(broken)).toBe(false);
+  });
+});
+
+describe('isTrackSettings', () => {
+  it('accepts bounded recording settings', () => {
+    expect(isTrackSettings({ intervalSeconds: 10, minMeters: 10, colorMode: 'speed' })).toBe(true);
+  });
+
+  it('rejects nonpositive and excessive recording settings', () => {
+    expect(isTrackSettings({ intervalSeconds: 0, minMeters: 10, colorMode: 'speed' })).toBe(false);
+    expect(isTrackSettings({ intervalSeconds: 10, minMeters: -1, colorMode: 'solid' })).toBe(false);
+    expect(isTrackSettings({ intervalSeconds: 3601, minMeters: 10, colorMode: 'speed' })).toBe(
+      false,
+    );
+    expect(isTrackSettings({ intervalSeconds: 10, minMeters: 10_001, colorMode: 'speed' })).toBe(
+      false,
+    );
   });
 });

@@ -11,11 +11,12 @@ interface Props {
   selection: NoteSelection;
   load: (id: string) => Promise<NoteDetail | undefined>;
   onClose: () => void;
+  onBack?: () => void;
   // Pan the chart to this place; the action renders only when the host wires it.
   onLocate?: () => void;
 }
 
-const { selection, load, onClose, onLocate }: Props = $props();
+const { selection, load, onClose, onBack, onLocate }: Props = $props();
 
 let detail = $state<NoteDetail | undefined>();
 let loading = $state(true);
@@ -70,6 +71,8 @@ function measure(item: NormalizedItem): string {
   ariaLabel="Details for {selection.name}"
   closeLabel="Close place details"
   {onClose}
+  {onBack}
+  backLabel="Back to find places"
   footer={hasFooter ? footer : undefined}
   bodyFlex
 >

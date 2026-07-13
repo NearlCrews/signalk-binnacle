@@ -1,3 +1,4 @@
+import type { PoiViewPhase, PoiViewState } from '$entities/poi';
 import { registerPoiIcons } from '$entities/poi-icons';
 import { createOverlayIconResolver, type SymbolsStore } from '$entities/symbols';
 import { type Bbox4, bboxContains, type LatLon, lngLatBoundsToBbox4, padBbox } from '$shared/geo';
@@ -49,6 +50,9 @@ export interface NotesOverlayOptions {
   // Fired with the on-screen note set whenever it changes, and with [] when the overlay clears below
   // the zoom floor, so a consumer (the POI search) can mirror the chart.
   onNotes?: (notes: NotePoint[]) => void;
+  // Reports why the viewport has results, or why it does not, so Find places can distinguish
+  // loading, zoom limits, offline cache, provider failure, and an intentionally hidden overlay.
+  onStatus?: (state: PoiViewState) => void;
 }
 
 // The Points-of-interest overlay: renders community notes as clustered markers. The where-notes-
@@ -64,12 +68,25 @@ export function createNotesOverlay(
 ): NotesOverlay {
   const isOnline = options.isOnline ?? (() => true);
   const onNotes = options.onNotes;
-  const source = createNotesSource(serverBase, getToken, options.persist);
+  const onStatus = options.onStatus;
+  const source = createNotesSource(serverBase, options.persist);
   const hit = createNoteHitHandlers(onSelect);
   const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a
   // failed fetch keeps it on screen instead of blanking the markers.
   let renderedNotes: NotePoint[] | undefined;
+  let lastStatus: PoiViewState | undefined;
+  let failed = false;
+  let requestGeneration = 0;
+  let lastToken = getToken();
+  let lastOnline = isOnline();
+  let forceRefresh = false;
+
+  function report(phase: PoiViewPhase, offline = false): void {
+    if (lastStatus?.phase === phase && lastStatus.offline === offline) return;
+    lastStatus = { phase, offline };
+    onStatus?.(lastStatus);
+  }
   let lastZoom: number | undefined;
   let lastLng: number | undefined;
   let lastLat: number | undefined;
@@ -138,6 +155,8 @@ export function createNotesOverlay(
     onNotes?.([]);
   }
 
+  report('idle');
+
   return {
     id: 'notes',
     title: 'Points of interest',
@@ -164,6 +183,22 @@ export function createNotesOverlay(
       // A hidden layer pays nothing: no network fetch, no clustering, no GeoJSON rebuild. The next
       // show re-syncs from the cache (or fetches) for wherever the map ended up.
       if (!visible) return;
+      const token = getToken();
+      if (token !== lastToken) {
+        lastToken = token;
+        requestGeneration += 1;
+        source.invalidate();
+        failed = false;
+        invalidateIdleAnchor();
+      }
+      const online = isOnline();
+      if (online !== lastOnline) {
+        // Reconnect asks the provider immediately instead of waiting for the five-minute cache TTL.
+        // Going offline keeps the cache intact so an expired set can still answer.
+        if (online) forceRefresh = true;
+        lastOnline = online;
+        invalidateIdleAnchor();
+      }
       const zoom = ctx.map.getZoom();
       const center = ctx.map.getCenter();
       // Idle fast-path: nothing moved since the last sync, so skip the viewport work entirely.
@@ -173,32 +208,58 @@ export function createNotesOverlay(
       lastLat = center.lat;
       if (zoom < MIN_ZOOM) {
         clearRendered(ctx);
+        report('zoomed-out');
         return;
       }
       const viewport: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
       // A recent fetch whose padded area still covers the viewport serves the markers with no
       // network. This runs before the in-flight guard, so a cache hit renders even mid-fetch.
-      const cached = source.cached(viewport, !isOnline());
+      const cached = forceRefresh ? undefined : source.cached(viewport, !online);
       if (cached) {
+        failed = false;
+        report('ready', !online);
         render(ctx, cached);
         return;
       }
-      if (source.inFlight()) return;
-      if (source.coolingDown()) {
+      if (source.inFlight()) {
+        report('loading');
+        return;
+      }
+      if (online && source.coolingDown()) {
         // Still backing off from a failed fetch; retry once the cooldown passes, even stationary.
         invalidateIdleAnchor();
+        report(failed ? 'error' : 'loading');
         return;
       }
       // Fetch a padded area so the next small pan or zoom-in reuses this fetch from the cache.
       const fetchBbox = padBbox(viewport);
-      void source.load(fetchBbox).then((notes) => {
+      forceRefresh = false;
+      report('loading');
+      const loadGeneration = requestGeneration;
+      const loadToken = token;
+      const loadOnline = online;
+      void source.load(fetchBbox, loadToken, loadOnline).then((notes) => {
+        if (
+          loadGeneration !== requestGeneration ||
+          getToken() !== loadToken ||
+          isOnline() !== loadOnline
+        ) {
+          return;
+        }
+        // Hiding or removing the overlay while a request is in flight keeps the successful response
+        // cached, but it must not repopulate the list or replace the explicit hidden state.
+        if (!visible) return;
         // undefined is a transient failure: keep the markers already shown and retry after the
         // source's cooldown, even stationary (the fast-path would otherwise pin the failure
         // forever). An empty array is a real "no POIs here" answer, so it renders and clears them.
         if (!notes) {
+          failed = true;
+          report('error');
           invalidateIdleAnchor();
           return;
         }
+        failed = false;
+        report('ready', !loadOnline);
         render(ctx, notes);
         // The map may have moved while the fetch was in flight; when this fetch no longer covers
         // the current viewport, drop the fast-path anchor so the next sync serves the new area.
@@ -228,6 +289,13 @@ export function createNotesOverlay(
     setVisible(ctx, isVisible) {
       visible = isVisible;
       setLayersVisibility(ctx.map, LAYERS, isVisible);
+      if (!isVisible) {
+        clearRendered(ctx);
+        report('hidden');
+      } else {
+        invalidateIdleAnchor();
+        report('idle');
+      }
       // If the theme changed while hidden, refresh the icons now that the layer is shown again.
       if (isVisible && pendingIconPaint) {
         const paint = pendingIconPaint;
@@ -249,8 +317,11 @@ export function createNotesOverlay(
       ctx.map.setPaintProperty(SELECT_LAYER, 'circle-stroke-opacity', opacity);
     },
     remove(ctx) {
+      visible = false;
       hit.detach(ctx);
       removeNoteLayers(ctx.map);
+      onNotes?.([]);
+      report('hidden');
     },
   };
 }

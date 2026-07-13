@@ -1,4 +1,5 @@
 <script lang="ts">
+import { RefreshCw } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { formatBounds } from '$shared/geo';
 import type { AuthController } from '$shared/signalk';
@@ -17,6 +18,8 @@ const { auth, companionBase, onClose, onBack }: Props = $props();
 
 let data = $state<ManagedChartsResponse | null>(null);
 let loadError = $state<string | null>(null);
+let refreshing = $state(false);
+let loadGeneration = 0;
 type SaveState = 'saving' | 'saved' | 'error';
 // Per-field save state keyed as "<identifier>:<field>", so each field tracks independently. A field
 // with no feedback is simply absent; there is no empty-string sentinel state.
@@ -31,25 +34,28 @@ onDestroy(() => {
 // the current bearer token, matching the regions panel's client-rebuild pattern.
 const token = $derived(auth.token ?? undefined);
 
-// Load the chart list on mount and refresh when the auth token changes.
-// A stale flag guards against a previous slow request overwriting a fresh response when the
-// token rotates mid-flight, matching the regions panel's stats-load effect.
-$effect(() => {
-  // Track the token so a token change triggers a re-fetch with the new credentials.
-  void token;
-  let stale = false;
+async function loadCharts(manual = false): Promise<void> {
+  const generation = ++loadGeneration;
+  if (manual) refreshing = true;
   loadError = null;
-  void fetchManagedCharts(companionBase, token).then((result) => {
-    if (stale) return;
+  try {
+    const result = await fetchManagedCharts(companionBase, token);
+    if (generation !== loadGeneration) return;
     if (result === undefined) {
-      loadError = 'Could not load charts. Check the connection and access.';
+      loadError = 'Could not load installed charts. Check the connection and access.';
     } else {
       data = result;
     }
-  });
-  return () => {
-    stale = true;
-  };
+  } finally {
+    if (generation === loadGeneration) refreshing = false;
+  }
+}
+
+// Load on mount and whenever the live auth token changes. The generation guard in loadCharts drops a
+// stale response if a manual refresh or credential rotation overtakes it.
+$effect(() => {
+  void token;
+  void loadCharts();
 });
 
 async function saveOverride(
@@ -90,8 +96,18 @@ async function saveOverride(
   {/if}
 {/snippet}
 
-<SlideOver title="Chart files" closeLabel="Close chart files panel" {onClose} {onBack} bodyFlex>
-  <p class="muted-note">Rename the chart files installed on your server so they read plainly.</p>
+<SlideOver
+  title="Installed charts"
+  closeLabel="Close installed charts panel"
+  {onClose}
+  {onBack}
+  backLabel="Back to offline charts"
+  bodyFlex
+>
+  <p class="muted-note">
+    Edit how installed charts are named in Binnacle and check whether Chart Locker can read each
+    file. Text changes save when you leave the field or press Enter.
+  </p>
   {#if auth.writeBlocked}
     <p class="muted-note">
       A write token is needed to edit chart names and descriptions. Request a read/write token to
@@ -100,10 +116,22 @@ async function saveOverride(
   {/if}
 
   <section class="panel-section" aria-label="Charts">
-    <h3 class="caps-label">Charts</h3>
+    <div class="section-heading">
+      <h3 class="caps-label">Installed charts</h3>
+      <button
+        type="button"
+        class="btn btn-ghost refresh-button"
+        disabled={refreshing}
+        onclick={() => void loadCharts(true)}
+      >
+        <RefreshCw size={16} aria-hidden="true" />
+        {refreshing ? 'Refreshing...' : 'Refresh list'}
+      </button>
+    </div>
 
     {#if loadError !== null}
       <p class="alert-note" role="alert">{loadError}</p>
+      <button type="button" class="btn" onclick={() => void loadCharts(true)}>Try again</button>
     {:else if data === null}
       <p class="muted-note" role="status">Loading charts...</p>
     {:else if data.charts.length === 0}
@@ -127,6 +155,10 @@ async function saveOverride(
               <dd>
                 <span class="num">{chart.minzoom} to {chart.maxzoom}</span
                 ><span class="unit"></span>
+              </dd>
+              <dt>Nominal scale</dt>
+              <dd>
+                <span class="num">1:{chart.scale.toLocaleString()}</span><span class="unit"></span>
               </dd>
               {#if chart.bounds}
                 <dt>Bounds</dt>
@@ -166,12 +198,19 @@ async function saveOverride(
         <div class="card-frame invalid-card">
           <p class="chart-file">{item.fileName}</p>
           <p class="alert-note">{item.error}</p>
+          <p class="muted-note">
+            Replace or remove this file in the Chart Locker chart folder on the Signal K server,
+            then refresh this list.
+          </p>
         </div>
       {/each}
     </section>
   {/if}
 
-  <p class="muted-note deferred-note">Browser upload of chart archives is not yet available.</p>
+  <p class="muted-note deferred-note">
+    To add, replace, or remove chart archives, manage the Chart Locker chart folder on the Signal K
+    server, then refresh this list. Browser upload is not available yet.
+  </p>
 </SlideOver>
 
 <style>
@@ -182,6 +221,20 @@ async function saveOverride(
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.section-heading h3 {
+  margin: 0;
+}
+.refresh-button {
+  min-block-size: var(--row-size);
+  white-space: nowrap;
 }
 
 .invalid-card {

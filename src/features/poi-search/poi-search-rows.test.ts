@@ -39,7 +39,21 @@ describe('filterRows', () => {
 
   it('matches the name case-insensitively', () => {
     expect(filterRows(rows, 'cove').map((r) => r.poi.id)).toEqual(['b']);
-    expect(filterRows(rows, 'MARINA').map((r) => r.poi.id)).toEqual(['a']);
+    expect(filterRows(rows, 'HARBOR').map((r) => r.poi.id)).toEqual(['a']);
+  });
+
+  it('matches names without accents and searches category, source, and attribution', () => {
+    const searchable = toRows([
+      {
+        ...poi('c', 'Port de Québec', 0, 3, 'fuel'),
+        source: "Crow's Nest",
+        attribution: 'Community harbor guide',
+      },
+    ]);
+    expect(filterRows(searchable, 'quebec')).toHaveLength(1);
+    expect(filterRows(searchable, 'fuel')).toHaveLength(1);
+    expect(filterRows(searchable, 'crow')).toHaveLength(1);
+    expect(filterRows(searchable, 'harbor guide')).toHaveLength(1);
   });
 
   it('keeps every row for an empty or whitespace query', () => {
@@ -89,6 +103,16 @@ describe('sortRows', () => {
     const before = rows.map((r) => r.poi.id);
     sortRows(rows, 'name', 'asc');
     expect(rows.map((r) => r.poi.id)).toEqual(before);
+  });
+
+  it('breaks equal sort values deterministically by name and id', () => {
+    const tied: PoiRow[] = [
+      { poi: poi('b', 'Same', 0, 0), distanceMeters: 10 },
+      { poi: poi('z', 'Zulu', 0, 0), distanceMeters: 10 },
+      { poi: poi('a', 'Same', 0, 0), distanceMeters: 10 },
+    ];
+    expect(sortRows(tied, 'distance', 'asc').map((r) => r.poi.id)).toEqual(['a', 'b', 'z']);
+    expect(sortRows(tied, 'distance', 'desc').map((r) => r.poi.id)).toEqual(['z', 'b', 'a']);
   });
 });
 

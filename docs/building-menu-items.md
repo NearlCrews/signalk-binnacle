@@ -32,8 +32,9 @@ large change.
 
 Tooling traps, each of which has bitten us:
 
-1. `npx biome` resolves the WRONG package (an abandoned 0.3.3). Biome is not a dependency, so it is
-   npx-only and you must use the scoped name: `npx @biomejs/biome` (2.5.1). Always the scoped name.
+1. Biome is a development dependency. Use the npm scripts (`npm run format`, `npm run lint`, and
+   `npm run ci:biome`) or the local binary through `npx @biomejs/biome`. Never run unscoped
+   `npx biome`, which resolves an unrelated package.
 2. Biome `lineWidth` is 100. Wrap to 100.
 3. dependency-cruiser `no-cross-feature`: a feature may import another feature ONLY through that
    feature's `index.ts` public barrel, never a deep path. The same holds for shared and entities
@@ -59,21 +60,28 @@ The menu and bottom bar are data-driven, so these four steps are the whole integ
 two leaves a tile that opens nothing, or a panel with no way in.
 
 1. Add a `MenuItem` to the `menuItems` array, in the right intent group. The groups today are Map,
-   Navigate, Safety, Weather, Instruments, the plugin-gated Offline charts group, and Settings.
-   Safety stays before Weather and Instruments; Settings (Profiles) MUST stay last. A plugin-gated
-   group is inserted before Settings with a conditional spread (`...(companionBase !== null ? [ { ... }
-   satisfies MenuItem ] : [])`). Set `id`, `label`, `icon` (a lucide component), `group`, `pressed:
-   activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add `shortLabel` when the label
-   is long (the bottom-bar pill renders `shortLabel ?? label`). Add `disabled` plus `disabledLabel`
-   for a transient block (a chart still loading), or `available: false` plus `unavailableHint` when a
-   provider can be absent. Keep user-relevant optional providers visible but grayed when their absence
-   explains a missing capability, such as Radar, Time travel, or Open KIP.
+   Navigate, Safety, Weather, Instruments, Offline charts, and Settings. Safety stays before Weather
+   and Instruments; Settings (Profiles) MUST stay last. Set `id`, `label`, `icon` (a lucide component),
+   `group`, `pressed: activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add
+   `shortLabel` when the label is long (the bottom-bar pill renders `shortLabel ?? label`). Add
+   `disabled` plus `disabledLabel` for a transient block, such as a chart still loading. When a
+   user-relevant optional provider is absent, keep the item visible with `available: false` plus an
+   actionable `unavailableHint`; do not hide it with a conditional spread. Offline charts is the
+   canonical example: one entry is always present, and its hint explains how to install, start, or
+   authenticate to Chart Locker. Radar, Time travel, and Open KIP follow the same availability rule.
+   When discovery has multiple failure states, derive the hint from current state so absence, an access
+   refusal, malformed provider data, and a transport failure do not collapse into the same message.
 2. Add the panel id to the `LeftPanel` union type.
 3. Add the mount block: `{#if activePanel === '<id>' && <guards>}` wrapping `<div
    class="panel-slot"><YourPanel ... onClose={closePanel} onBack={backToMenu} /></div>`. The guards
    mirror the menu gating.
 4. Construct the feature's controller and services in `App.svelte` and pass them down as props.
    Services are never global singletons; they are built here so they are swappable in tests.
+
+When a menu destination depends on a matching chart layer, opening the destination must establish the
+visible state it needs. Use `togglePanel('<id>', () => setLayerVisible('<layer-id>', true))`, as Find
+places does for Points of interest. The panel must still render explicit hidden, loading, empty,
+offline, and error states reported by the provider path. Do not infer them all from an empty list.
 
 ---
 
@@ -87,6 +95,9 @@ level. Inside, in this order:
    controls and readouts (the common case). Omit `bodyFlex` only for a continuous accordion list
    that owns its own spacing (LayersPanel), and say why in a comment. Optional: `subtitle`, `footer`,
    `minimize` (the phone collapse, as one `{ collapsed, onToggle }` object), `dock`, `ariaLabel`.
+   When a phone workflow needs a chart gesture, pass `minimize`, collapse the panel before enabling
+   the gesture, and restore it when the gesture finishes or is canceled. Offline area drawing is the
+   canonical example.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
    role="alert">{error}</p>`, and a write-gate teach note as `<p class="muted-note">A write token is
    needed to ...</p>` when `auth.writeBlocked`.
@@ -96,7 +107,35 @@ level. Inside, in this order:
 5. A list of saved records uses `<SavedList>` with a next-step `empty` message. A destructive action
    on a card arms an `<InlineConfirm>` first.
 6. Live status carries a role: `role="progressbar"` with aria-valuemin/max/now for a determinate
-   bar, `role="status"` for a soft advisory, `role="alert"` for a hard error.
+   bar, `role="status"` for a soft advisory, `role="alert"` for a hard error. A determinate bar also
+   shows a visible percentage, byte count, or item count and supplies matching `aria-valuetext`.
+   Never make a thin, unlabeled track the only progress readout.
+7. A server-backed list distinguishes initial loading, refresh with retained rows, true empty, and
+   failure. Confirmed writes update local state before a follow-up refresh, late refreshes cannot
+   overwrite newer results, and conflicting mutations disable until completion. Tracks and Waypoints
+   are the canonical saved-resource examples. A failed modal write must preserve the dialog and its
+   entered values.
+8. An action that starts navigation or turns incomplete sensor history into guidance requires an
+   explicit confirmation and states what data it will use. Retrace track and Navigate to waypoint are
+   the canonical examples.
+9. A background recorder must explain where unsaved and saved data live, what survives reload, and
+   what a destructive action removes. If persistence degrades to memory, surface that state before the
+   user leaves the panel. The Tracks guide documents the complete lifecycle pattern.
+10. A chart-tap tool uses a visible mode affordance, gives the next gesture in its live strip, validates
+    and bounds collected points, and restores chart chrome on exit. Selecting an already-active menu
+    item must not silently erase work. Measure is the canonical example.
+11. Sensor-derived actions must reject stale inputs at the action boundary, not only gray the button.
+    Center, Follow, and Anchor watch are the canonical GPS examples. Readouts derived from stale own
+    position must become unavailable instead of keeping frozen range or bearing values.
+12. A provider load with automatic cooldown must also offer an explicit retry that bypasses that
+    cooldown. Keep already accepted data visible during refresh and after failure. Chart sources,
+    Forecast, Tides, Data trends, and Time travel are the canonical examples.
+13. Bound every externally supplied collection, string, coordinate, and numeric range before it
+    reaches reactive state or rendering. This includes server resources, plugin discovery, imported
+    files, local persistence, IndexedDB replay, and history-provider rows.
+14. Switching configurations must confirm before discarding unsaved work. Profiles is the canonical
+    example. A button labeled Now changes the current view to the newest loaded data; it must not hide
+    a network refresh behind navigation wording.
 
 Skeleton:
 
@@ -144,12 +183,13 @@ let error = $state<string | null>(null);
 
 Three established shapes. Pick by what the second screen IS, not by size.
 
-1. Single flat panel (alarms, chart files, profiles). The whole feature is one screen of stacked
+1. Single flat panel (alarms, installed charts, profiles). The whole feature is one screen of stacked
    sections. Constant `title`, no sub-view state. This is the default; reach for it first.
 2. Landing plus sibling sub-views (RegionsPanel). One feature with several peer destinations that
-   each deserve a titled screen (home, build, storage, auto). One `subView` state in the parent, a
-   `$derived` `subViewTitle` fed to `SlideOver`, the back repurposed so it returns to the landing
-   first: `onBack={subView === 'home' ? onBack : () => (subView = 'home')}`. Landing rows are a
+   each deserve a titled screen (home, build, automatic caching, storage). One `subView` state in the
+   parent, a `$derived` `subViewTitle` fed to `SlideOver`, and a cleanup-aware `backToOfflineHome`
+   callback that returns to the landing first and clears any active map drawing. Installed charts can
+   open as a sibling panel, whose back action returns to this landing. Landing rows are a
    `.subview-link row-interactive` button with a label, a current value, and a trailing chevron.
 3. Detail drill-in (LayersPanel opening SourceDetail). Selecting one record from a list opens that
    record's detail or editor in the SAME SlideOver. The detail renders `<SubViewHeader title=...
@@ -201,7 +241,7 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | A labeled text field | `TextField` | a raw `<input type="text">` |
 | A numeric setting with a unit | `UnitField` | a raw `<input type="number">` |
 | Collect or rename a name | `NameEntry` (seeded with `defaultSaveName`) | `window.prompt` |
-| Confirm a destructive action in a panel | `InlineConfirm` | `window.confirm` |
+| Confirm a destructive or immediate navigation action in a panel | `InlineConfirm` | `window.confirm` |
 | Confirm a destructive one-tap strip action | `ConfirmArm` | an unguarded one-tap delete |
 | Collapse advanced or optional content | `Disclosure` (prop `expanded`) | a hand-rolled toggle, or the prop name `open` |
 | A layer or chart toggle row | `LayerToggle` with `description` | a bare checkbox row |
@@ -363,7 +403,12 @@ Tick all of these before you commit a new menu item.
 - [ ] Every control is a shared primitive (section 4), every row and section uses a shared class
       (section 5), and no global class name is reused for a different shape.
 - [ ] Every toggle row sets a `description`; every saved list uses `SavedList` with a next-step
-      `empty`; every destructive action arms an `InlineConfirm` or `ConfirmArm`.
+      `empty`; every destructive action or immediate navigation handoff arms an `InlineConfirm` or
+      `ConfirmArm`.
+- [ ] A user-relevant optional provider remains visible through `available` and `unavailableHint`;
+      the menu does not conditionally hide the missing capability.
+- [ ] Determinate progress has a visible percentage or count plus matching progressbar semantics; a
+      phone workflow that needs the chart collapses and restores its panel around the gesture.
 - [ ] Tokens only, no hard-coded px or color; reads color tokens so it survives night-red; values
       stored in SI and converted only at the edge through the server unit preference.
 - [ ] Copy follows the house writing rules; acronyms are glossed; aria-labels, roles, and headings

@@ -27,9 +27,17 @@ describe('createTrackStore', () => {
   });
 
   it('degrades to an in-memory log when indexedDB fails to open, never throwing', async () => {
-    const store = createTrackStore<Point>(failingFactory());
+    const degraded: string[] = [];
+    const store = createTrackStore<Point>(failingFactory(), () => degraded.push('degraded'));
     expect(await store.all()).toEqual([]);
     await store.append({ t: 7 });
     expect((await store.all()).map((x) => x.t)).toEqual([7]);
+    expect(degraded).toEqual(['degraded']);
+  });
+
+  it('reports memory-only storage when indexedDB is unavailable', () => {
+    const degraded: string[] = [];
+    createTrackStore<Point>(undefined, () => degraded.push('degraded'));
+    expect(degraded).toEqual(['degraded']);
   });
 });

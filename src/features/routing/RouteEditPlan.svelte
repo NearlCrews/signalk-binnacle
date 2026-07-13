@@ -25,7 +25,13 @@ interface Props {
 
 const { working, highlight, onHighlightLeg, planningSpeed }: Props = $props();
 
-const planSpeedMps = $derived(knotsToMetersPerSecond(Math.max(0, planningSpeed.value ?? 0)));
+const MAX_PLANNING_SPEED_KN = 100;
+const boundedPlanningSpeed = $derived(
+  Number.isFinite(planningSpeed.value)
+    ? Math.min(MAX_PLANNING_SPEED_KN, Math.max(0, planningSpeed.value))
+    : 0,
+);
+const planSpeedMps = $derived(knotsToMetersPerSecond(boundedPlanningSpeed));
 // Each leg's distance, bearing, and the cumulative distance to reach that leg's end waypoint, so the
 // plan reads as a leg table the way a navigator lays out a passage, updating live as waypoints are
 // dragged or inserted. The per-leg passage times are layered on at render so this geometry walk does
@@ -70,12 +76,16 @@ const totalTime = $derived.by(() => {
 <UnitField
   label="Planning speed"
   unit="kn"
-  value={planningSpeed.value}
+  value={boundedPlanningSpeed}
   min={0}
+  max={MAX_PLANNING_SPEED_KN}
   step={0.5}
   inputWidth="4rem"
   ariaLabel="Planning speed in knots, used to estimate the time to each point"
-  onCommit={(speed) => planningSpeed.set(Math.max(0, speed))}
+  onCommit={(speed) =>
+    planningSpeed.set(
+      Number.isFinite(speed) ? Math.min(MAX_PLANNING_SPEED_KN, Math.max(0, speed)) : 0,
+    )}
 />
 {#if workingLegs.length > 0}
   <div class="leg-row leg-head" aria-hidden="true">

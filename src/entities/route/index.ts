@@ -1,5 +1,10 @@
 export {
+  cleanRouteId,
   featureToRoute,
+  MAX_ROUTE_ID_LENGTH,
+  MAX_ROUTE_NAME_LENGTH,
+  MAX_ROUTE_WAYPOINT_NAME_LENGTH,
+  MAX_ROUTE_WAYPOINTS,
   type RouteLeg,
   remainingRouteDistanceMeters,
   routeDistanceMeters,

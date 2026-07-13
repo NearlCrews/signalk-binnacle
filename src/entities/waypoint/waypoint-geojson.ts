@@ -1,7 +1,30 @@
 import { isLonLat, type LonLat, latLonToLonLat, lonLatToLatLon } from '$shared/geo';
-import { isRecord } from '$shared/lib';
+import { hasControlCharacters, isRecord } from '$shared/lib';
 import { str } from '$shared/signalk';
 import type { Waypoint } from './waypoint-types';
+
+export const MAX_WAYPOINT_NAME_LENGTH = 256;
+export const MAX_WAYPOINT_DESCRIPTION_LENGTH = 10_000;
+export const MAX_WAYPOINT_ICON_LENGTH = 256;
+export const MAX_WAYPOINT_ID_LENGTH = 512;
+
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  const valueString = str(value)?.trim();
+  if (!valueString || hasControlCharacters(valueString)) return undefined;
+  return valueString.slice(0, maxLength);
+}
+
+export function cleanWaypointId(value: unknown): string | undefined {
+  return cleanText(value, MAX_WAYPOINT_ID_LENGTH);
+}
+
+export function cleanWaypointName(value: unknown, fallback: string): string {
+  return cleanText(value, MAX_WAYPOINT_NAME_LENGTH) ?? fallback.slice(0, MAX_WAYPOINT_NAME_LENGTH);
+}
+
+export function cleanWaypointIcon(value: unknown): string | undefined {
+  return cleanText(value, MAX_WAYPOINT_ICON_LENGTH);
+}
 
 // The Signal K v2 waypoint resource body: name and description ride at the top level (not in
 // feature.properties), and the feature wraps a GeoJSON Point in [longitude, latitude] order,
@@ -18,18 +41,24 @@ interface WaypointResourceBody {
 }
 
 export function waypointToFeature(waypoint: Waypoint): WaypointResourceBody {
+  const fallbackName = cleanWaypointId(waypoint.id) ?? 'Waypoint';
+  const name = cleanWaypointName(waypoint.name, fallbackName);
+  const description = cleanText(waypoint.description, MAX_WAYPOINT_DESCRIPTION_LENGTH);
+  const icon = cleanWaypointIcon(waypoint.icon);
   return {
-    name: waypoint.name,
-    ...(waypoint.description ? { description: waypoint.description } : {}),
+    name,
+    ...(description ? { description } : {}),
     feature: {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: latLonToLonLat(waypoint.position) },
-      properties: { skIcon: waypoint.icon ?? 'waypoint' },
+      properties: { skIcon: icon ?? 'waypoint' },
     },
   };
 }
 
 export function featureToWaypoint(id: string, raw: unknown): Waypoint | undefined {
+  const safeId = cleanWaypointId(id);
+  if (!safeId) return undefined;
   if (!isRecord(raw)) return undefined;
   const w = raw as {
     name?: unknown;
@@ -41,11 +70,11 @@ export function featureToWaypoint(id: string, raw: unknown): Waypoint | undefine
   };
   const geom = w.feature?.geometry;
   if (geom?.type !== 'Point' || !isLonLat(geom.coordinates)) return undefined;
-  const description = str(w.description);
-  const icon = str(w.feature?.properties?.skIcon);
+  const description = cleanText(w.description, MAX_WAYPOINT_DESCRIPTION_LENGTH);
+  const icon = cleanWaypointIcon(w.feature?.properties?.skIcon);
   return {
-    id,
-    name: str(w.name) ?? id,
+    id: safeId,
+    name: cleanWaypointName(w.name, safeId),
     position: lonLatToLatLon(geom.coordinates),
     ...(description ? { description } : {}),
     ...(icon ? { icon } : {}),

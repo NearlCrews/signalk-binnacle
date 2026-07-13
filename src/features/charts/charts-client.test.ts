@@ -69,4 +69,49 @@ describe('fetchCharts', () => {
       expect.objectContaining({ headers: { Authorization: 'Bearer tok' } }),
     );
   });
+
+  it('rejects unsafe chart records and bounds optional fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        jsonResponse(200, {
+          unsafe: { name: 'Bad\nname', type: 'tilelayer' },
+          unknown: { name: 'Unknown', type: 'made-up' },
+          safe: {
+            name: ' Safe ',
+            type: 'tileJSON',
+            bounds: [-181, -20, 20, 20],
+            minzoom: 5,
+            maxzoom: 3,
+            layers: [' water ', 'bad\nlayer'],
+            injected: 'ignored',
+          },
+        }),
+      ),
+    );
+    const charts = (await fetchCharts('http://pi.local')) ?? [];
+    expect(charts).toEqual([
+      {
+        identifier: 'safe',
+        name: 'Safe',
+        type: 'tileJSON',
+        minzoom: 5,
+        layers: ['water'],
+      },
+    ]);
+  });
+
+  it('caps provider chart collections', async () => {
+    const records = Object.fromEntries(
+      Array.from({ length: 1_001 }, (_, index) => [
+        `chart-${index}`,
+        { name: `Chart ${index}`, type: 'tilelayer' },
+      ]),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => jsonResponse(200, records)),
+    );
+    expect(await fetchCharts('http://pi.local')).toHaveLength(1_000);
+  });
 });

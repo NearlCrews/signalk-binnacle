@@ -54,7 +54,7 @@ body:
     attributes:
       label: Binnacle Version
       description: Which version of signalk-binnacle are you using?
-      placeholder: "0.8.0"
+      placeholder: Current version shown in the Binnacle header
     validations:
       required: true
 
@@ -63,7 +63,7 @@ body:
     attributes:
       label: Signal K Server Version
       description: Which version of Signal K server are you running?
-      placeholder: "2.27.0"
+      placeholder: Version shown in Signal K Server settings
     validations:
       required: true
 
@@ -109,7 +109,7 @@ body:
     attributes:
       label: Chart Sources
       description: Optional. If the bug involves specific charts, describe the chart sources or providers in use.
-      placeholder: signalk-charts plugin with local MBTiles, OpenSeaMap online
+      placeholder: NOAA ENC, a server PMTiles chart, or Seascape
 
   - type: checkboxes
     id: checks

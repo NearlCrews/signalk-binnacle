@@ -4,12 +4,24 @@ import {
   type TideEvent,
   type TideStation,
 } from '$entities/tides';
-import { DEG_TO_RAD, isFiniteNumber, withTimeout } from '$shared/lib';
+import { isLatitude, isLongitude } from '$shared/geo';
+import { DEG_TO_RAD, hasControlCharacters, isFiniteNumber, withTimeout } from '$shared/lib';
 
 // NOAA CO-OPS, the US tide and tidal-current authority. Public domain, key-free, CORS-open. The
 // metadata API lists stations; the datagetter returns predictions for one station.
 const MDAPI = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json';
 const DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
+const MAX_STATIONS = 20_000;
+const MAX_EVENTS = 200;
+const MAX_STATION_ID_LENGTH = 128;
+const MAX_STATION_NAME_LENGTH = 256;
+
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
+  return trimmed;
+}
 
 // Prediction times arrive as 'YYYY-MM-DD HH:MM' with no zone marker. The URLs request
 // time_zone=gmt, so they parse as UTC here; a browser-local parse would shift every epoch
@@ -46,12 +58,14 @@ async function fetchStations(
   const data = (await fetchJson(`${MDAPI}?type=${type}`)) as {
     stations?: Array<{ id: string; name: string; lat: number; lng: number }>;
   };
-  return (data.stations ?? []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    latitude: s.lat,
-    longitude: s.lng,
-  }));
+  return (data.stations ?? [])
+    .flatMap((station) => {
+      const id = cleanText(station.id, MAX_STATION_ID_LENGTH);
+      const name = cleanText(station.name, MAX_STATION_NAME_LENGTH);
+      if (!id || !name || !isLatitude(station.lat) || !isLongitude(station.lng)) return [];
+      return [{ id, name, latitude: station.lat, longitude: station.lng }];
+    })
+    .slice(0, MAX_STATIONS);
 }
 
 export function fetchTideStations(): Promise<TideStation[]> {
@@ -72,12 +86,21 @@ export async function fetchTideEvents(
   const data = (await fetchJson(url)) as {
     predictions?: Array<{ t: string; v: string; type: string }>;
   };
-  return (data.predictions ?? []).flatMap((p) => {
-    const timeMs = parseGmtTime(p.t);
-    const heightMeters = Number.parseFloat(p.v);
-    if (!isFiniteNumber(timeMs) || !isFiniteNumber(heightMeters)) return [];
-    return [{ timeMs, heightMeters, kind: p.type === 'H' ? 'high' : 'low' } as TideEvent];
-  });
+  return (data.predictions ?? [])
+    .flatMap((p) => {
+      const timeMs = parseGmtTime(p.t);
+      const heightMeters = Number.parseFloat(p.v);
+      if (
+        !isFiniteNumber(timeMs) ||
+        !isFiniteNumber(heightMeters) ||
+        Math.abs(heightMeters) > 100 ||
+        (p.type !== 'H' && p.type !== 'L')
+      ) {
+        return [];
+      }
+      return [{ timeMs, heightMeters, kind: p.type === 'H' ? 'high' : 'low' } as TideEvent];
+    })
+    .slice(0, MAX_EVENTS);
 }
 
 export async function fetchCurrentEvents(
@@ -101,14 +124,27 @@ export async function fetchCurrentEvents(
     };
   };
   const cp = data.current_predictions?.cp ?? [];
-  return cp.flatMap((c) => {
-    const timeMs = parseGmtTime(c.Time);
-    if (!isFiniteNumber(timeMs) || !isFiniteNumber(c.Velocity_Major)) return [];
-    const kind = c.Type === 'flood' ? 'flood' : c.Type === 'ebb' ? 'ebb' : 'slack';
-    const directionDeg =
-      kind === 'flood' ? c.meanFloodDir : kind === 'ebb' ? c.meanEbbDir : undefined;
-    // CO-OPS reports the set in degrees true; store it in radians (SI).
-    const directionRad = directionDeg === undefined ? undefined : directionDeg * DEG_TO_RAD;
-    return [{ timeMs, velocityMps: Math.abs(c.Velocity_Major) / 100, directionRad, kind }];
-  });
+  return cp
+    .flatMap((c) => {
+      const timeMs = parseGmtTime(c.Time);
+      if (
+        !isFiniteNumber(timeMs) ||
+        !isFiniteNumber(c.Velocity_Major) ||
+        Math.abs(c.Velocity_Major) > 10_000 ||
+        (c.Type !== 'flood' && c.Type !== 'ebb' && c.Type !== 'slack')
+      ) {
+        return [];
+      }
+      const kind: CurrentEvent['kind'] =
+        c.Type === 'flood' ? 'flood' : c.Type === 'ebb' ? 'ebb' : 'slack';
+      const directionDeg =
+        kind === 'flood' ? c.meanFloodDir : kind === 'ebb' ? c.meanEbbDir : undefined;
+      // CO-OPS reports the set in degrees true; store it in radians (SI).
+      const directionRad =
+        isFiniteNumber(directionDeg) && directionDeg >= 0 && directionDeg <= 360
+          ? directionDeg * DEG_TO_RAD
+          : undefined;
+      return [{ timeMs, velocityMps: Math.abs(c.Velocity_Major) / 100, directionRad, kind }];
+    })
+    .slice(0, MAX_EVENTS);
 }

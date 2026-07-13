@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Signal K plugin icon for signalk-binnacle.
+  Signal K webapp icon for Binnacle Chartplotter.
 
   Family identity (shared across @NearlCrews Signal K plugins): rounded
   square with a deep-ocean gradient and three stacked stylized wave lines.
@@ -17,7 +17,7 @@
   Sibling badges already in use: crimson (Crow's Nest), yellow (Virtual
   Weather), orange (NMEA 2000 Emitter), violet (OpenRouter Companion).
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Binnacle plugin icon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Binnacle Chartplotter icon">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0E4D6B"/>

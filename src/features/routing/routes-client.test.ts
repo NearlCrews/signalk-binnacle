@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Route } from '$entities/route';
 import { jsonResponse } from '$shared/testing/fetch-stub';
-import { deleteRoute, fetchRoutes, saveRoute } from './routes-client';
+import { deleteRoute, fetchRoutes, MAX_ROUTES, saveRoute } from './routes-client';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -45,6 +45,14 @@ describe('fetchRoutes', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('/signalk/v1/api/resources/routes');
     expect(routes).toHaveLength(1);
   });
+
+  it('bounds the accepted route collection', async () => {
+    const resources = Object.fromEntries(
+      Array.from({ length: MAX_ROUTES + 2 }, (_, index) => [`id-${index}`, ROUTE_BODY]),
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, resources));
+    expect(await fetchRoutes('http://pi')).toHaveLength(MAX_ROUTES);
+  });
 });
 
 describe('saveRoute', () => {
@@ -66,6 +74,30 @@ describe('saveRoute', () => {
     const sent = JSON.parse(init.body as string);
     expect(sent.feature.geometry.coordinates[1]).toEqual([1, 0]);
   });
+
+  it('rejects unsafe ids and invalid geometry before fetching', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    expect(
+      await saveRoute('http://pi', 'tok', {
+        id: 'bad\u0000id',
+        name: 'R',
+        waypoints: ROUTE_BODY.feature.geometry.coordinates.map(([longitude, latitude]) => ({
+          position: { latitude, longitude },
+        })),
+      }),
+    ).toBe(false);
+    expect(
+      await saveRoute('http://pi', 'tok', {
+        id: 'abc',
+        name: 'R',
+        waypoints: [
+          { position: { latitude: 0, longitude: 0 } },
+          { position: { latitude: 100, longitude: 1 } },
+        ],
+      }),
+    ).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('deleteRoute', () => {
@@ -74,5 +106,11 @@ describe('deleteRoute', () => {
     const ok = await deleteRoute('http://pi', 'tok', 'abc');
     expect(ok).toBe(true);
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('rejects an unsafe id before fetching', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    expect(await deleteRoute('http://pi', 'tok', '')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -100,9 +100,9 @@ that matter when you do touch this:
 `src/app.css` is only an ordered `@import` manifest over `src/styles/` modules, and the import order IS
 the cascade order. Do not reorder it blindly: the order keeps `.is-on` (in `icon-controls.css`) able to
 light the bases that precede it, and keeps `overlays.css` and `panels.css` after the bases they extend.
-The order is: maplibre, tokens, base, text, buttons, forms, cards, icon-controls, scrubber, overlays,
-reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so the dragging state
-wins over a lit `.row-interactive.is-on` row at equal specificity.)
+The order is: maplibre, tokens, base, text, buttons, forms, cards, instruments, icon-controls,
+scrubber, overlays, reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so
+the dragging state wins over a lit `.row-interactive.is-on` row at equal specificity.)
 
 Rules:
 
@@ -151,7 +151,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-sm +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
-  `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS and POI two-line sortable lists.
+  `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS and POI two-line sortable lists. A selected
+  row uses `aria-current="true"`, an accent border, an accent tint, and a leading inset accent line;
+  hover or keyboard preview alone must not claim selection.
 - Instruments (`instruments.css`): the `.tile` vocabulary on the `.card-frame` surface, shared by
   NumericTile and WindTile: the `--text-readout-lg` hero `.num`, the `--text-xs` `.unit` and `.abbr`,
   the zone tints (`.tile--warning`, `.tile--alarm`, `.tile--stale`), `.tile--wide`, and `.tile--empty`.
@@ -195,7 +197,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   `bodyFlex` (lay the body out as a 0.6rem gapped column; pass it on any panel whose body is a stack of
   controls), `closeLabel`, `onClose`, `onBack` (when set, a leading back arrow returns to the menu via
   the App's `backToMenu`; omit on panels opened from the chart), `headerExtra`, `footer`, and `minimize`
-  (a phone collapse-to-header control). Every left-docked panel is a SlideOver.
+  (a phone collapse-to-header control). Use `minimize` when a phone workflow needs a chart gesture:
+  collapse before enabling the gesture, then restore the panel when it finishes or is canceled.
+  Offline area drawing is the canonical example. Every left-docked panel is a SlideOver.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
@@ -211,8 +215,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `createReorder`: the shared pointer and keyboard reorder controller. Use it when a list can be
   reordered outside the Layers panel, such as the app menu's toolbar editor. Pass a stable row
   attribute and handle selector; keep the persisted order in the owning feature, not in the UI row.
-- `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions. Never a blocking
-  `window.confirm`.
+- `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions and immediate
+  navigation handoffs. Never a blocking `window.confirm`. The prompt names the effect and, for derived
+  guidance, the data scope. Retrace track names the latest continuous segment.
 - Edit modes: a surface with a customize mode gets exactly one entry control, the `CustomizeToggle`
   primitive (a `.btn btn-ghost` text button at intrinsic width trailing in its header row), labeled
   "Customize <object>" (as in "Customize toolbar", "Customize instruments"), always naming the
@@ -222,21 +227,23 @@ Shared behavior lives here. Compose these; do not re-implement them.
   now does. The instrument dock and the menu's toolbar editor are the two shipped examples; both
   render the primitive, never a hand-written copy.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints,
-  profiles, and chart locker regions panels): arming one row disarms the rest. Use it instead of a
+  profiles, and Chart Locker saved-area panels): arming one row disarms the rest. Use it instead of a
   per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
   back to the effective value). Use it for a single number field with a unit; do not use it for a live
   drag (that is a `.range` slider).
 - `SavedList`: the saved-item card list (used by routes, tracks, waypoints, profiles). Renders the
   `.saved` card frame and the actions row, plus the caps heading and the `empty` state; the panel
-  supplies the card body. Do not also render your own `<h3>` for the same list.
+  supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
+  must distinguish loading, refresh with retained cards, real empty, and failure outside the
+  primitive. Disable conflicting mutations while one is pending.
 - `SubViewHeader`: the back header for an in-panel sub-view drilled into inside one SlideOver (the
   Layers panel opening a chart-source detail). The parent suppresses its own panel-level back while
   it is open, so only one back control shows.
 - `TextField`: the labeled text-input row (inline or stacked variant), a controlled value that
   commits on blur or Enter. It also offers a live `onInput` (validate while typing), a `focusOnOpen`,
-  an `onEnter` submit, and a `large` deck-glove size. Use it for any labeled text field; never a raw
-  `<input type="text">`.
+  an `onEnter` submit, `disabled`, `maxLength`, and a `large` deck-glove size. Use it for any labeled
+  text field; never a raw `<input type="text">`.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
   seeded default starts selected). Seed it with `defaultSaveName`.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
@@ -244,6 +251,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `LayerToggle`: the layer or chart toggle row, with a `description` that becomes the hover and focus
   tooltip. Set a plain-language `description` on every toggle row.
 - `VisibilityToggle`: the show/hide eye toggle for a saved overlay item.
+- `IconPicker`: the waypoint and note symbol chooser. Pass `disabled` with the enclosing mutation
+  state so a pending dialog cannot change fields while its accepted values are in flight.
 - `ShowOnChartToggle`: the full-width "Show X on chart" `.btn` toggle in a panel body that mirrors a
   layer's visibility, with the Layers eye as the source of truth.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
@@ -300,14 +309,20 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   - A larger enum: `<select class="input">`, full width in a label-on-top field.
   - A toggle list row (a layer, a weather overlay): `.row-interactive` with `.is-on` for the lit state.
   - A saved-item list: `SavedList` over `.card-frame` cards.
-  - A destructive action: `InlineConfirm` (armed), never a blocking confirm.
+  - A destructive or immediate navigation action: `InlineConfirm` (armed), never a blocking confirm.
   - A row of panel actions (Save, Cancel, New): `.panel-controls`.
-- Display values are SI in the store; convert only at the display edge. A control whose value the
-  provider already sends in display units (a radar capability range) is rendered as given, not
-  re-converted.
+- Display values are SI in the store; convert only at the display edge. This includes provider-defined
+  controls such as radar range in meters, angles in radians, and durations in seconds. Convert both the
+  value and its capability bounds for the widget, then convert the committed value back to SI.
+- A live-data panel reports transport, data freshness, and renderer health separately when they can fail
+  independently. Never label an open connection as live until usable data arrives, and clear a stale
+  safety-relevant picture instead of leaving it frozen on screen.
 - Empty and degraded states are first-class: a `.muted-note` for "none yet", an `.alert-note` for an
   error, a grayed unavailable row with a tooltip (via `UnavailableHint`) when a provider is absent.
   Never a blank panel.
+- Determinate progress always has both a visual bar and visible progress text, such as a percentage,
+  byte count, or item count. Give the bar `role="progressbar"`, numeric aria values, and matching
+  `aria-valuetext`; never rely on an unlabeled thin track.
 
 ## 8. Menus
 
@@ -315,13 +330,22 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar pill,
   `icon` a lucide component, `group` a section heading, `pressed` for a toggle's lit state,
   `disabled` plus `disabledLabel`, `available` plus `unavailableHint`, `onSelect`). Groups today:
-  Map, Navigate, Safety, Weather, Instruments, the plugin-gated Offline charts group, and Settings.
+  Map, Navigate, Safety, Weather, Instruments, Offline charts, and Settings.
   Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
   `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
   `available: false` with an `unavailableHint`: the launcher and bottom bar render it grayed and
   non-interactive with the hint as a tooltip and screen-reader text, rather than dropping it from the
   menu. (`disabled` plus `disabledLabel` is the transient block for an action that is momentarily
   unavailable, such as a chart still loading.)
+- A user-relevant optional feature never disappears merely because its provider is missing. Offline
+  charts is the canonical case: its one menu entry remains visible with `available: false`, and its
+  `unavailableHint` explains how to install, start, or authenticate to Chart Locker. When available,
+  that entry opens one landing page for saved areas, automatic caching, installed charts, and storage,
+  rather than exposing provider internals as separate menu tiles.
+- A compact subsystem status reports only what it knows. The Offline header control may report cached
+  bytes, required access, an unreachable service, or an error. It must never turn provider health into
+  a claim that a passage is ready. Coverage, included charts, completion state, and update time belong
+  on the saved-area card where the navigator can verify them together.
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.
@@ -335,9 +359,13 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 ## 9. Interaction and accessibility
 
 - 44 px (`--control-size`) for every action target; the denser `--row-size` for list rows.
-- Destructive actions arm (InlineConfirm), they do not fire on a single tap.
+- Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
+  fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened
   order, not a raw window listener.
+- A temporary chart-tap mode changes the chart cursor where a pointer exists, keeps a live strip with
+  the next gesture, and restores the prior cursor and interaction state on exit. The Measure tool is
+  the reference.
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.
@@ -410,12 +438,14 @@ short version:
    and add `onBack` if it is reached from the menu.
 3. Lay the body out as `<section>`s with `.caps-label` headings. Use the field idioms in section 7:
    UnitField for SI number fields, `.range` plus `.num` for live sliders, `.segmented` for binary
-   choices, `select.input` for enums, `SavedList` for saved items, InlineConfirm for destructive
-   actions, `.panel-controls` for the action row.
+   choices, `select.input` for enums, `SavedList` for saved items, InlineConfirm for destructive or
+   immediate navigation actions, and `.panel-controls` for the action row.
 4. Use only tokens and shared classes. If you need a shape twice, hoist it into a shared class or
    primitive, not a second scoped copy.
 5. Wire it in `app/App.svelte`: construct the controller and services there and pass them down, render
-   the SlideOver in the panel slot, and add a gated or ungated `MenuItem` to open it.
+   the SlideOver in the panel slot, and add a `MenuItem` to open it. If a user-relevant provider is
+   optional, keep the item visible with `available` and an actionable `unavailableHint`; do not hide
+   it conditionally.
 6. Run the gate: `npx @biomejs/biome ci <files>` (the scoped name; a bare `npx biome` resolves the
    wrong package), `npm run check`, `npm run cruise`, then `npm test` and `npm run build` before a
    release, all green. See `docs/building-menu-items.md` section 0 for the per-file loop and the

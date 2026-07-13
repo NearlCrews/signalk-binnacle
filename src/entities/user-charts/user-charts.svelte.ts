@@ -1,6 +1,52 @@
 import { type Bbox4, isBbox4 } from '$shared/geo';
-import { isRecord, uuidv4 } from '$shared/lib';
+import { hasControlCharacters, isRecord, uuidv4 } from '$shared/lib';
 import { readPmtilesMeta, type SignalKChart } from '$shared/map';
+
+export const MAX_USER_CHARTS = 1_000;
+export const MAX_USER_CHART_ID_LENGTH = 512;
+export const MAX_USER_CHART_NAME_LENGTH = 256;
+export const MAX_USER_CHART_URL_LENGTH = 4_096;
+export const MAX_USER_CHART_LAYERS = 512;
+export const MAX_USER_CHART_LAYER_ID_LENGTH = 256;
+const MAX_CHART_ZOOM = 30;
+
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
+  return trimmed;
+}
+
+export function normalizeUserChartUrl(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_USER_CHART_URL_LENGTH || hasControlCharacters(trimmed)) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validZoom(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= MAX_CHART_ZOOM;
+}
+
+function validBounds(value: unknown): value is Bbox4 {
+  if (!isBbox4(value)) return false;
+  const [west, south, east, north] = value;
+  return (
+    west >= -180 &&
+    west <= 180 &&
+    east >= -180 &&
+    east <= 180 &&
+    south >= -90 &&
+    north <= 90 &&
+    south <= north
+  );
+}
 
 // A chart the user imported by URL, persisted as a descriptor pointing at a remote archive. Both
 // vector and raster archives are supported. Local .pmtiles files are served by the
@@ -23,12 +69,29 @@ export interface UserChartSource {
 // blobs no longer have a store.
 export function isUserChartSource(value: unknown): value is UserChartSource {
   if (!isRecord(value)) return false;
-  if (typeof value.id !== 'string' || typeof value.name !== 'string') return false;
+  if (!cleanText(value.id, MAX_USER_CHART_ID_LENGTH)) return false;
+  if (!cleanText(value.name, MAX_USER_CHART_NAME_LENGTH)) return false;
   if (value.kind !== 'vector' && value.kind !== 'raster') return false;
   const origin = value.origin;
   if (!isRecord(origin)) return false;
   if (origin.type !== 'url' || typeof origin.url !== 'string') return false;
-  if (value.bounds !== undefined && !isBbox4(value.bounds)) return false;
+  if (!normalizeUserChartUrl(origin.url)) return false;
+  if (value.bounds !== undefined && !validBounds(value.bounds)) return false;
+  if (value.minzoom !== undefined && !validZoom(value.minzoom)) return false;
+  if (value.maxzoom !== undefined && !validZoom(value.maxzoom)) return false;
+  if (
+    value.minzoom !== undefined &&
+    value.maxzoom !== undefined &&
+    (value.minzoom as number) > (value.maxzoom as number)
+  ) {
+    return false;
+  }
+  if (value.layers !== undefined) {
+    if (!Array.isArray(value.layers) || value.layers.length > MAX_USER_CHART_LAYERS) return false;
+    if (!value.layers.every((layer) => cleanText(layer, MAX_USER_CHART_LAYER_ID_LENGTH))) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -96,7 +159,15 @@ export class UserCharts {
     // Drop any persisted descriptor that no longer matches the schema, so a drifted entry from an
     // older build cannot flow in as a partly-undefined source. This also drops the file-origin
     // charts of older builds, whose browser-local blobs are gone with the file import path.
-    this.sources = persisted.filter(isUserChartSource);
+    const ids = new Set<string>();
+    this.sources = persisted
+      .filter(isUserChartSource)
+      .filter((source) => {
+        if (ids.has(source.id)) return false;
+        ids.add(source.id);
+        return true;
+      })
+      .slice(0, MAX_USER_CHARTS);
     this.#persist = persist;
     this.#onAdd = onAdd;
     this.#onRemove = onRemove;
@@ -106,13 +177,15 @@ export class UserCharts {
   // Read a remote archive's metadata and stage it as a draft, without saving, so the user can review
   // and rename it before committing.
   async stageUrl(url: string): Promise<DraftChart> {
-    const meta = await readPmtilesMeta(url);
+    const safeUrl = normalizeUserChartUrl(url);
+    if (!safeUrl) throw new Error('Enter a valid HTTP or HTTPS PMTiles URL.');
+    const meta = await readPmtilesMeta(safeUrl);
     return {
       source: {
         id: uuidv4(),
-        name: meta.name ?? nameFromUrl(url),
+        name: (meta.name ?? nameFromUrl(safeUrl)).slice(0, MAX_USER_CHART_NAME_LENGTH),
         kind: meta.kind,
-        origin: { type: 'url', url },
+        origin: { type: 'url', url: safeUrl },
         bounds: meta.bounds,
         minzoom: meta.minzoom,
         maxzoom: meta.maxzoom,
@@ -123,7 +196,13 @@ export class UserCharts {
 
   // Save a staged draft with the reviewed name, which fires onAdd so the map flies to the new chart.
   commit(draft: DraftChart, name: string): void {
-    const source: UserChartSource = { ...draft.source, name: name.trim() || draft.source.name };
+    if (this.sources.length >= MAX_USER_CHARTS) throw new Error('Chart limit reached.');
+    if (this.sources.some((source) => source.id === draft.source.id)) {
+      throw new Error('That chart is already saved.');
+    }
+    const nextName = cleanText(name, MAX_USER_CHART_NAME_LENGTH) ?? draft.source.name;
+    const source: UserChartSource = { ...draft.source, name: nextName };
+    if (!isUserChartSource(source)) throw new Error('Chart metadata is invalid.');
     this.sources = [...this.sources, source];
     this.#persist(this.sources);
     this.#onAdd?.(source);
@@ -132,7 +211,9 @@ export class UserCharts {
   rename(id: string, name: string): void {
     const index = this.sources.findIndex((source) => source.id === id);
     if (index < 0) return;
-    const renamed = { ...this.sources[index], name };
+    const safeName = cleanText(name, MAX_USER_CHART_NAME_LENGTH);
+    if (!safeName) return;
+    const renamed = { ...this.sources[index], name: safeName };
     this.sources = this.sources.with(index, renamed);
     this.#persist(this.sources);
     this.#onRename?.(renamed);

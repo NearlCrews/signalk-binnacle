@@ -113,10 +113,10 @@ function handleToolbarKeydown(id: string, event: KeyboardEvent): void {
   toolbarReorder.handleKeydown(id, event);
 }
 
-// On open, move focus to the first enabled tile via a $effect (not inside the transition) so a
+// On open, move focus to the first actionable tile via a $effect (not inside the transition) so a
 // keyboard user lands inside the menu without a DOM query at transition time.
 $effect(() => {
-  if (open) card?.querySelector<HTMLButtonElement>('.tile:not([disabled])')?.focus();
+  if (open) card?.querySelector<HTMLButtonElement>('.tile:not([aria-disabled="true"])')?.focus();
 });
 
 // Arrow keys step through the tiles in reading order, wrapping; Home and End jump to the ends.
@@ -128,7 +128,9 @@ function onCardKeydown(event: KeyboardEvent): void {
     closeMenu(true);
     return;
   }
-  const tiles = [...(card?.querySelectorAll<HTMLButtonElement>('.tile:not([disabled])') ?? [])];
+  // Keep blocked tiles in arrow navigation. They remain focusable so keyboard users can invoke them
+  // and receive the same visible explanation as pointer users.
+  const tiles = [...(card?.querySelectorAll<HTMLButtonElement>('.tile') ?? [])];
   if (tiles.length === 0) return;
   const at = Math.max(0, tiles.indexOf(document.activeElement as HTMLButtonElement));
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -252,9 +254,8 @@ function onCardKeydown(event: KeyboardEvent): void {
                 class="tile"
                 class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
                 aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
-                disabled={editing ? false : item.disabled === true}
-                aria-disabled={!editing && item.available === false ? true : undefined}
-                title={item.available === false ? item.unavailableHint : undefined}
+                aria-disabled={!editing && itemBlocked(item) ? true : undefined}
+                title={!editing ? blockedReason(item) : undefined}
                 onclick={() => select(item)}
               >
                 <UnavailableHint

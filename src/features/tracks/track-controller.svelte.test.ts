@@ -1,0 +1,95 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TrackPoint } from '$entities/track';
+import type { Toast } from '$shared/lib';
+import { createTrackController } from './track-controller.svelte';
+import * as tracksClient from './tracks-client';
+
+vi.mock('./tracks-client', () => ({
+  deleteTrack: vi.fn(),
+  fetchSavedTracks: vi.fn(),
+  saveTrack: vi.fn(),
+  savedTrackFromPoints: vi.fn((id: string, name: string, points: TrackPoint[]) => ({
+    id,
+    name,
+    points: [points],
+    distanceMeters: 10,
+    durationSeconds: 10,
+  })),
+  savedTracksToFeatures: vi.fn(() => ({ type: 'FeatureCollection', features: [] })),
+}));
+
+const points: TrackPoint[] = [
+  { lat: 1, lon: 1, t: 0, sog: 1 },
+  { lat: 1.001, lon: 1, t: 10_000, sog: 1 },
+];
+
+function makeController() {
+  const clearRecorderThrough = vi.fn();
+  const toast = { show: vi.fn() } as unknown as Toast;
+  const controller = createTrackController({
+    origin: 'http://sk',
+    getToken: () => 'token',
+    getRecorderPoints: () => points,
+    clearRecorderThrough,
+    toast,
+  });
+  return { controller, clearRecorderThrough, toast };
+}
+
+describe('createTrackController', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tracksClient.fetchSavedTracks).mockResolvedValue([]);
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue(true);
+    vi.mocked(tracksClient.deleteTrack).mockResolvedValue(true);
+  });
+
+  it('does not let an older refresh overwrite a newer response', async () => {
+    const { controller } = makeController();
+    let resolveFirst!: (tracks: tracksClient.SavedTrack[]) => void;
+    vi.mocked(tracksClient.fetchSavedTracks)
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce([{ id: 'new', name: 'New', points: [points] }]);
+    const first = controller.refreshSavedTracks();
+    await controller.refreshSavedTracks();
+    resolveFirst([{ id: 'old', name: 'Old', points: [points] }]);
+    await first;
+    expect(controller.savedTracks.map((track) => track.id)).toEqual(['new']);
+  });
+
+  it('keeps a successful save locally when the follow-up refresh fails', async () => {
+    const { controller, clearRecorderThrough } = makeController();
+    vi.mocked(tracksClient.fetchSavedTracks).mockResolvedValue(undefined);
+    await controller.onSaveTrack('Passage');
+    expect(clearRecorderThrough).toHaveBeenCalledWith(10_000);
+    expect(controller.savedTracks).toHaveLength(1);
+    expect(controller.savedTracks[0].name).toBe('Passage');
+    expect(controller.shownSaved.has(controller.savedTracks[0].id)).toBe(true);
+    expect(controller.loadState).toBe('error');
+  });
+
+  it('blocks overlapping saves', async () => {
+    const { controller } = makeController();
+    let resolveSave!: (ok: boolean) => void;
+    vi.mocked(tracksClient.saveTrack).mockImplementationOnce(
+      () => new Promise((resolve) => (resolveSave = resolve)),
+    );
+    const first = controller.onSaveTrack('One');
+    const second = controller.onSaveTrack('Two');
+    expect(tracksClient.saveTrack).toHaveBeenCalledOnce();
+    resolveSave(true);
+    await Promise.all([first, second]);
+  });
+
+  it('removes a deleted track before a failed refresh', async () => {
+    const { controller } = makeController();
+    vi.mocked(tracksClient.fetchSavedTracks)
+      .mockResolvedValueOnce([{ id: 'a', name: 'A', points: [points] }])
+      .mockResolvedValueOnce(undefined);
+    await controller.refreshSavedTracks();
+    controller.onToggleSaved('a', true);
+    await controller.onDeleteSavedTrack('a');
+    expect(controller.savedTracks).toEqual([]);
+    expect(controller.shownSaved.has('a')).toBe(false);
+  });
+});

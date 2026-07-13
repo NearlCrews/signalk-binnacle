@@ -61,6 +61,10 @@ export class TimeTravelStore {
     return this.#load();
   }
 
+  goToLatest(): void {
+    if (this.status === 'ready') this.setScrub(this.to);
+  }
+
   async #load(): Promise<void> {
     const providers = this.#providers();
     // A stock server with no history plugin returns { ids: [] } (truthy), so guard on the id count,
@@ -72,7 +76,12 @@ export class TimeTravelStore {
     }
     const mine = ++this.#loadSeq;
     this.status = 'loading';
-    const data = await this.#deps.load(this.#origin, this.#token(), providers);
+    let data: Awaited<ReturnType<typeof loadTimeTravelHistory>>;
+    try {
+      data = await this.#deps.load(this.#origin, this.#token(), providers);
+    } catch {
+      data = undefined;
+    }
     if (mine !== this.#loadSeq || !this.active) return;
     if (!data) {
       this.status = 'failed';

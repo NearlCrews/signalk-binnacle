@@ -5,11 +5,12 @@ export { downloadText } from './download';
 export { ErrorState } from './error-state.svelte';
 export { fetchJsonOrUndefined } from './fetch-json';
 export { withTimeout } from './fetch-timeout';
+export { portableFilename } from './filename';
 export { uuidv4 } from './id';
 export { clampInt, compareOptionalNumber, isFiniteNumber, lerp, nearestBy } from './math';
 export { prefersReducedMotion } from './motion';
 export { isRecord } from './object';
-export { capitalize } from './strings';
+export { capitalize, hasControlCharacters } from './strings';
 export { Toast } from './toast.svelte';
 export {
   DAY_MS,

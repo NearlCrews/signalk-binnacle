@@ -16,4 +16,19 @@ describe('WaypointsStore', () => {
     expect(s.waypoints.map((w) => w.id)).toEqual(['a', 'b']);
     expect(s.version).toBeGreaterThan(v0);
   });
+
+  it('upserts and removes waypoints while bumping the version', () => {
+    const s = new WaypointsStore();
+    s.setWaypoints([waypoint('a'), waypoint('b')]);
+    const beforeUpsert = s.version;
+    s.upsertWaypoint({ ...waypoint('b'), name: 'Updated' });
+    expect(s.waypoints.map((item) => item.id)).toEqual(['b', 'a']);
+    expect(s.waypoints[0].name).toBe('Updated');
+    expect(s.version).toBeGreaterThan(beforeUpsert);
+
+    const beforeRemove = s.version;
+    s.removeWaypoint('b');
+    expect(s.waypoints.map((item) => item.id)).toEqual(['a']);
+    expect(s.version).toBeGreaterThan(beforeRemove);
+  });
 });

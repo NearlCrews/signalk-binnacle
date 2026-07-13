@@ -40,5 +40,6 @@ describe('source-summary', () => {
       'Depth, navigation marks, and the base map.',
     );
     expect(includedSummary(pick('basemap', 'depth-noaa-enc-quality'))).toBe('The base map.');
+    expect(includedSummary([])).toBe('No charts selected for this area.');
   });
 });

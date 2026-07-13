@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MeasureStore } from './measure.svelte';
+import { MAX_MEASURE_POINTS, MeasureStore } from './measure.svelte';
 
 const A = { latitude: 0, longitude: 0 };
 const B = { latitude: 0.001, longitude: 0 };
@@ -76,5 +76,42 @@ describe('MeasureStore', () => {
     expect(measure.points).toHaveLength(0);
     measure.start();
     expect(measure.points).toHaveLength(0);
+  });
+
+  it('rejects invalid and duplicate consecutive points', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    expect(measure.add({ latitude: Number.NaN, longitude: 0 })).toBe(false);
+    expect(measure.add({ latitude: 91, longitude: 0 })).toBe(false);
+    expect(measure.add(A)).toBe(true);
+    expect(measure.add(A)).toBe(false);
+    expect(measure.points).toEqual([A]);
+  });
+
+  it('caps the number of points and accepts more after undo', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    for (let index = 0; index < MAX_MEASURE_POINTS; index += 1) {
+      expect(measure.add({ latitude: 0, longitude: index / 10_000 })).toBe(true);
+    }
+    expect(measure.atLimit).toBe(true);
+    expect(measure.add({ latitude: 1, longitude: 1 })).toBe(false);
+    measure.undo();
+    expect(measure.atLimit).toBe(false);
+    expect(measure.add({ latitude: 1, longitude: 1 })).toBe(true);
+  });
+
+  it('copies accepted points and replaces the collection identity', () => {
+    const measure = new MeasureStore();
+    const point = { ...A };
+    measure.start();
+    const initial = measure.points;
+    measure.add(point);
+    const afterFirst = measure.points;
+    measure.add(B);
+    expect(afterFirst).not.toBe(initial);
+    expect(measure.points).not.toBe(afterFirst);
+    point.latitude = 10;
+    expect(measure.points[0]).toEqual(A);
   });
 });

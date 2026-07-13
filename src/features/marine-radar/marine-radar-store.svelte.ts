@@ -1,20 +1,29 @@
-import type { RadarStateSnapshot } from './radar-client';
 import {
   type ControlDefinition,
   POWER_PENDING_KEY,
+  type RadarAvailability,
+  type RadarControlEntry,
   type RadarInfo,
   type RadarStatus,
 } from './radar-types';
 
 // The stream connection state, distinct from the radar's own operational status (off/standby/transmit).
-export type RadarConnectionStatus = 'idle' | 'connecting' | 'live' | 'error';
+export type RadarConnectionStatus =
+  | 'idle'
+  | 'paused'
+  | 'connecting'
+  | 'waiting'
+  | 'live'
+  | 'stale'
+  | 'error';
+export type RadarRendererStatus = 'idle' | 'ready' | 'blocked' | 'context-lost' | 'error';
 
 // Seed the displayed control values from a radar's reported controls so the panel shows real values
 // immediately, before any capability fetch or stream delta.
-function controlValuesOf(radar: RadarInfo): Record<string, number> {
-  const out: Record<string, number> = {};
+function controlValuesOf(radar: RadarInfo): Record<string, number | string | boolean> {
+  const out: Record<string, number | string | boolean> = {};
   for (const [id, entry] of Object.entries(radar.controls)) {
-    if (entry) out[id] = entry.value;
+    if (entry?.value !== undefined) out[id] = entry.value;
   }
   return out;
 }
@@ -24,7 +33,7 @@ function controlValuesOf(radar: RadarInfo): Record<string, number> {
 function controlAutoOf(radar: RadarInfo): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const [id, entry] of Object.entries(radar.controls)) {
-    if (entry?.auto) out[id] = true;
+    if (entry?.auto !== undefined) out[id] = entry.auto;
   }
   return out;
 }
@@ -35,23 +44,45 @@ function controlAutoOf(radar: RadarInfo): Record<string, boolean> {
 export class MarineRadarStore {
   radars = $state<RadarInfo[]>([]);
   selectedId = $state<string | undefined>(undefined);
+  availability = $state<RadarAvailability>('idle');
   status = $state<RadarConnectionStatus>('idle');
+  statusDetail = $state<string | undefined>(undefined);
+  rendererStatus = $state<RadarRendererStatus>('idle');
+  rendererDetail = $state<string | undefined>(undefined);
+  lastSpokeAt = $state<number | undefined>(undefined);
   // The radar's own operational state (off/standby/transmit/warming), distinct from the stream
-  // connection status above. Seeded from discovery and reconciled from GET /state, so the panel shows
+  // connection status above. Seeded from discovery and reconciled from the standard controls endpoint
   // whether the radar is transmitting and the TX/Standby control reflects the real state.
   operationalStatus = $state<RadarStatus | undefined>(undefined);
   capabilities = $state<ControlDefinition[]>([]);
-  controlValues = $state<Record<string, number>>({});
+  controlValues = $state<Record<string, number | string | boolean>>({});
   // Which controls are currently in auto mode, keyed by control id, for the controls that report an
   // auto/manual capability. A direct property write stays reactive without reallocating the object.
   controlAuto = $state<Record<string, boolean>>({});
+  controlEntries = $state<Record<string, RadarControlEntry | undefined>>({});
   // True once a control write was refused for lack of write access: the controls need a read-write token.
   controlsForbidden = $state(false);
+  pendingControls = $state<Record<string, boolean>>({});
+  controlErrors = $state<Record<string, string>>({});
 
   selected = $derived(this.radars.find((r) => r.id === this.selectedId));
   // A radar is detected once discovery returns at least one. Shared by the layer row's availability
   // gate and the menu tile so the two cannot drift on what "has a radar" means.
   hasRadar = $derived(this.radars.length > 0);
+  unavailableHint = $derived.by(() => {
+    switch (this.availability) {
+      case 'probing':
+        return 'Checking the Signal K server for a radar.';
+      case 'auth-required':
+        return 'Radar access is restricted. Approve Binnacle in Signal K, then reconnect.';
+      case 'unreachable':
+        return 'The Signal K radar provider could not be reached.';
+      case 'invalid':
+        return 'The radar provider returned invalid radar geometry or metadata.';
+      default:
+        return 'No radar detected. Configure a Signal K Radar API provider, such as Mayara.';
+    }
+  });
 
   setDiscovered(radars: RadarInfo[]): void {
     this.radars = radars;
@@ -59,15 +90,25 @@ export class MarineRadarStore {
     // reconnected, the next control write should be allowed to prove itself rather than the banner
     // lingering from the previous session.
     this.controlsForbidden = false;
-    if (!radars.some((r) => r.id === this.selectedId)) {
+    const retained = radars.find((radar) => radar.id === this.selectedId);
+    if (retained) {
+      this.operationalStatus = retained.status;
+    } else {
       const first = radars[0];
       this.selectedId = first?.id;
       // A new selection starts with that radar's own controls, never another radar's gain, sea, or rain.
       this.capabilities = [];
       this.controlValues = first ? controlValuesOf(first) : {};
       this.controlAuto = first ? controlAutoOf(first) : {};
+      this.controlEntries = first ? { ...first.controls } : {};
+      this.pendingControls = {};
+      this.controlErrors = {};
       this.operationalStatus = first?.status;
     }
+  }
+
+  setAvailability(availability: RadarAvailability): void {
+    this.availability = availability;
   }
 
   select(id: string): void {
@@ -77,6 +118,9 @@ export class MarineRadarStore {
       this.capabilities = [];
       this.controlValues = controlValuesOf(radar);
       this.controlAuto = controlAutoOf(radar);
+      this.controlEntries = { ...radar.controls };
+      this.pendingControls = {};
+      this.controlErrors = {};
       this.operationalStatus = radar.status;
     }
   }
@@ -85,18 +129,23 @@ export class MarineRadarStore {
     this.operationalStatus = status;
   }
 
-  // Reconcile live control values and the operational status from GET /state, skipping any control id
-  // in `pending` so a value the user just set (an in-flight optimistic write the server has not yet
-  // echoed) is not clobbered back to its old value.
-  reconcile(snapshot: RadarStateSnapshot, pending: ReadonlySet<string>): void {
+  // Reconcile live control values from the standard controls endpoint or Signal K stream. Skip pending
+  // ids so a server echo cannot clobber an optimistic write that has not completed.
+  reconcile(
+    controls: Record<string, RadarControlEntry | undefined>,
+    pending: ReadonlySet<string>,
+  ): void {
     // POWER_PENDING_KEY guards the operational status the same way a control id guards its value: a
     // poll landing right after an optimistic transmit/standby must not flip the pill back to stale.
-    if (snapshot.status && !pending.has(POWER_PENDING_KEY))
-      this.operationalStatus = snapshot.status;
-    for (const [id, entry] of Object.entries(snapshot.controls)) {
+    for (const [id, entry] of Object.entries(controls)) {
       if (!entry || pending.has(id)) continue;
-      this.controlValues[id] = entry.value;
+      this.controlEntries[id] = entry;
+      if (entry.value !== undefined) this.controlValues[id] = entry.value;
       if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
+      if (id === POWER_PENDING_KEY && !pending.has(POWER_PENDING_KEY)) {
+        const status = statusFromPower(entry.value);
+        if (status) this.operationalStatus = status;
+      }
     }
   }
 
@@ -104,11 +153,12 @@ export class MarineRadarStore {
     this.capabilities = controls;
   }
 
-  setStatus(status: RadarConnectionStatus): void {
+  setStatus(status: RadarConnectionStatus, detail?: string): void {
     this.status = status;
+    this.statusDetail = detail;
   }
 
-  setControlValue(id: string, value: number): void {
+  setControlValue(id: string, value: number | string | boolean): void {
     // controlValues is a $state object, so a direct property write is reactive and avoids allocating a
     // fresh object on every slider move.
     this.controlValues[id] = value;
@@ -121,4 +171,26 @@ export class MarineRadarStore {
   setControlsForbidden(forbidden: boolean): void {
     this.controlsForbidden = forbidden;
   }
+
+  setRendererStatus(status: RadarRendererStatus, detail?: string): void {
+    this.rendererStatus = status;
+    this.rendererDetail = detail;
+  }
+
+  setControlPending(id: string, value: boolean): void {
+    if (value) this.pendingControls[id] = true;
+    else delete this.pendingControls[id];
+  }
+
+  setControlError(id: string, message?: string): void {
+    if (message) this.controlErrors[id] = message;
+    else delete this.controlErrors[id];
+  }
+}
+
+function statusFromPower(value: unknown): RadarStatus | undefined {
+  if (value === 'off' || value === 'standby' || value === 'transmit' || value === 'warming')
+    return value;
+  if (typeof value !== 'number') return undefined;
+  return (['off', 'standby', 'transmit', 'warming'] as const)[value];
 }

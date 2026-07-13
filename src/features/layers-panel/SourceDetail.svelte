@@ -1,6 +1,10 @@
 <script lang="ts">
 import { LocateFixed, Trash2 } from '@lucide/svelte';
-import type { UserChartSource, UserCharts } from '$entities/user-charts';
+import {
+  MAX_USER_CHART_NAME_LENGTH,
+  type UserChartSource,
+  type UserCharts,
+} from '$entities/user-charts';
 import { type Bbox4, formatBounds } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
 import { InlineConfirm, SubViewHeader, TextField } from '$shared/ui';
@@ -10,11 +14,19 @@ interface Props {
   item: LayerListItem;
   userCharts?: UserCharts;
   userSource?: UserChartSource;
+  writeBlocked?: boolean;
   onBack: () => void;
   onShowBounds?: (bounds: Bbox4) => void;
 }
 
-const { item, userCharts, userSource, onBack, onShowBounds }: Props = $props();
+const {
+  item,
+  userCharts,
+  userSource,
+  writeBlocked = false,
+  onBack,
+  onShowBounds,
+}: Props = $props();
 
 let confirming = $state(false);
 // Not `name`: that shadows the global window.name, which the linter flags on reassignment.
@@ -52,13 +64,13 @@ $effect(() => {
 });
 
 function saveName(): void {
-  if (!canEdit || !userSource || !userCharts) return;
+  if (!canEdit || writeBlocked || !userSource || !userCharts) return;
   const trimmed = chartName.trim();
   if (trimmed && trimmed !== userSource.name) userCharts.rename(userSource.id, trimmed);
 }
 
 function doDelete(): void {
-  if (!userSource || !userCharts) return;
+  if (writeBlocked || !userSource || !userCharts) return;
   // Capture the id before onBack: onBack clears the panel's detail id, which can remove the live
   // userSource prop before the delete runs.
   const { id } = userSource;
@@ -76,6 +88,8 @@ function doDelete(): void {
       label="Name"
       value={chartName}
       ariaLabel="Chart name"
+      disabled={writeBlocked}
+      maxLength={MAX_USER_CHART_NAME_LENGTH}
       onCommit={(value) => {
         chartName = value;
         saveName();
@@ -100,7 +114,12 @@ function doDelete(): void {
         onCancel={() => (confirming = false)}
       />
     {:else}
-      <button type="button" class="btn btn-danger" onclick={() => (confirming = true)}>
+      <button
+        type="button"
+        class="btn btn-danger"
+        onclick={() => (confirming = true)}
+        disabled={writeBlocked}
+      >
         <Trash2 size={16} aria-hidden="true" />
         Delete chart
       </button>

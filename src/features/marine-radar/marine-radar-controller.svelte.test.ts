@@ -106,4 +106,68 @@ describe('createMarineRadarController', () => {
     expect(controller.store.controlAuto.gain).toBe(true);
     controller.dispose();
   });
+
+  it('refresh removes a provider that disappeared and clears the selection', async () => {
+    let discoveryCount = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars')) {
+          discoveryCount += 1;
+          return new Response(JSON.stringify(discoveryCount === 1 ? [fakeRadar] : []), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    expect(controller.store.selectedId).toBe('a');
+    await controller.refresh();
+    expect(controller.store.availability).toBe('absent');
+    expect(controller.store.selectedId).toBeUndefined();
+    await controller.dispose();
+  });
+
+  it('keeps the latest control write when an older request fails later', async () => {
+    let resolveFirst: ((response: Response) => void) | undefined;
+    let controlWrites = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([fakeRadar]), { status: 200 });
+        if (url.includes('/controls/gain')) {
+          controlWrites += 1;
+          if (controlWrites === 1)
+            return new Promise<Response>((resolve) => {
+              resolveFirst = resolve;
+            });
+          return new Response('', { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    const first = controller.setControl('gain', { value: 55 });
+    const second = controller.setControl('gain', { value: 60 });
+    await second;
+    resolveFirst?.(new Response('', { status: 500 }));
+    await first;
+    expect(controller.store.controlValues.gain).toBe(60);
+    expect(controller.store.controlErrors.gain).toBeUndefined();
+    await controller.dispose();
+  });
 });

@@ -7,59 +7,52 @@ import {
   capabilitiesFromControls,
   discoverRadars,
   fetchCapabilities,
-  fetchRadarState,
+  fetchRadarControls,
+  parseRadarControls,
   setPower as setPowerRequest,
   spokesUrl,
   writeControl,
 } from './radar-client';
 import type { RadarFrame } from './radar-frame-core';
-import { POWER_PENDING_KEY, type RadarStatus } from './radar-types';
+import { POWER_PENDING_KEY, type RadarControlEntry, type RadarStatus } from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
 
 export interface MarineRadarDeps {
   origin: string;
   getToken: () => string | undefined;
   getCenter: () => LatLon | undefined;
+  getHeading?: () => number | undefined;
   radarAvailable: () => boolean;
 }
 
-// The worker flushes integrated frames at this rate (a worker timer, never requestAnimationFrame, so a
-// backgrounded tab keeps sweeping). Faster than the eye needs; the spokes integrate continuously between.
 const FLUSH_HZ = 15;
-
-// Spoke-stream reconnect backoff: a dropped stream (provider restart, radar power cycle, network blip)
-// re-opens on a jittered capped exponential delay (the shared fullJitterDelay, as the Signal K stream
-// uses), the attempt counter reset once a live frame arrives.
 const REOPEN_BASE_MS = 1000;
-const REOPEN_MAX_MS = 30000;
-
-// Poll GET /state on this cadence while a radar is selected, to reconcile control values and the
-// operational status (transmit/standby/warming) that change out of band (another station, warmup).
-const STATE_POLL_MS = 8000;
-
-// How long after an optimistic control write to treat that control as "in flight", so a state poll
-// landing in the gap before the server echoes the new value does not revert the slider.
+const REOPEN_MAX_MS = 30_000;
+const CONTROL_POLL_MS = 15_000;
 const PENDING_MS = 3000;
+const STALE_MS = 5000;
 
-// Orchestrates the marine radar: discovers radars on the Signal K v2 radar API, opens the selected
-// radar's spoke worker, polls live state, and feeds frames to the ppi layer. Owns the worker lifecycle
-// (a new pattern: no other controller owns a worker), so dispose() must tear it down, mirroring the
-// Signal K client's dispose().
 export function createMarineRadarController(deps: MarineRadarDeps) {
   const store = new MarineRadarStore();
-  const layer: PpiLayer = createPpiLayer(store, deps.getCenter);
+  let overlayVisible = false;
+  const layer: PpiLayer = createPpiLayer(store, deps.getCenter, deps.getHeading, (visible) => {
+    overlayVisible = visible;
+    void syncStreamLifecycle();
+  });
   let worker: RadarWorkerClient | undefined;
-  let starting = false;
   let disposed = false;
+  let documentVisible = typeof document === 'undefined' || !document.hidden;
   let reopenTimer: ReturnType<typeof setTimeout> | undefined;
   let reopenAttempt = 0;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
-  // The frame most recently handed to the ppi layer. When the next one arrives and replaces it,
-  // its buffer goes back to the worker's pool, so steady-state flushing allocates nothing.
+  let staleTimer: ReturnType<typeof setInterval> | undefined;
   let liveFrame: RadarFrame | undefined;
-  // Control ids with an in-flight optimistic write, mapped to the time the write should no longer be
-  // considered pending. A state-poll reconcile skips these so it cannot revert a value the user just set.
+  let discoveryGeneration = 0;
+  let selectionGeneration = 0;
+  let streamGeneration = 0;
+  let streamRadarId: string | undefined;
   const pending = new Map<string, number>();
+  const writeGenerations = new Map<string, number>();
 
   function markPending(id: string): void {
     pending.set(id, Date.now() + PENDING_MS);
@@ -76,189 +69,303 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   }
 
   function clearReopen(): void {
-    if (reopenTimer) {
-      clearTimeout(reopenTimer);
-      reopenTimer = undefined;
-    }
+    if (reopenTimer) clearTimeout(reopenTimer);
+    reopenTimer = undefined;
   }
 
-  // Re-open the spoke stream after a drop, on a jittered capped backoff. The error-then-close pair a
-  // socket fires on a drop both call this, so an already-scheduled timer makes the second a no-op.
+  function shouldStream(): boolean {
+    return (
+      !disposed &&
+      overlayVisible &&
+      documentVisible &&
+      store.operationalStatus === 'transmit' &&
+      store.selected !== undefined &&
+      deps.radarAvailable()
+    );
+  }
+
+  async function closeStream(status: 'idle' | 'paused' = 'paused'): Promise<void> {
+    streamGeneration += 1;
+    streamRadarId = undefined;
+    clearReopen();
+    if (worker) await worker.close().catch(() => undefined);
+    if (liveFrame) worker?.recycle(liveFrame.buffer);
+    liveFrame = undefined;
+    layer.clearFrame();
+    store.lastSpokeAt = undefined;
+    store.setStatus(status);
+  }
+
   function scheduleReopen(): void {
-    if (disposed || reopenTimer || !store.selected || !deps.radarAvailable()) return;
+    if (!shouldStream() || reopenTimer) return;
     reopenAttempt += 1;
+    streamRadarId = undefined;
+    store.setStatus('error', 'The radar spoke stream disconnected. Reconnecting.');
     reopenTimer = setTimeout(
       () => {
         reopenTimer = undefined;
-        void openSelected();
+        void openSelectedStream();
       },
       fullJitterDelay(reopenAttempt, REOPEN_BASE_MS, REOPEN_MAX_MS),
     );
   }
 
-  async function reconcileState(): Promise<void> {
-    const radar = store.selected;
-    if (!radar) return;
-    const snapshot = await fetchRadarState(deps.origin, deps.getToken(), radar.id);
-    if (snapshot) store.reconcile(snapshot, pendingIds());
+  async function hydrateControls(radarId: string, generation: number): Promise<void> {
+    const controls = await fetchRadarControls(deps.origin, deps.getToken(), radarId);
+    if (disposed || generation !== selectionGeneration || store.selectedId !== radarId || !controls)
+      return;
+    store.reconcile(controls, pendingIds());
   }
 
-  // Drive the recurring /state poll from panel visibility: its only outputs (operationalStatus and
-  // control values) are shown only in the radar panel, so polling every STATE_POLL_MS while the panel is
-  // closed would be hundreds of needless GETs an hour. The echo render is fed by the spoke stream, not
-  // this poll. An immediate reconcile on activation keeps the panel fresh the moment it opens.
   function setPolling(active: boolean): void {
     if (disposed) return;
     if (!active) {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = undefined;
-      }
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = undefined;
       return;
     }
-    void reconcileState();
-    if (!pollTimer) pollTimer = setInterval(() => void reconcileState(), STATE_POLL_MS);
-  }
-
-  async function openSelected(): Promise<void> {
     const radar = store.selected;
-    if (!radar) return;
-    clearReopen();
-    // The control definitions ride alongside the picture. When a provider does not serve
-    // /capabilities, fall back to the controls the radar reported at discovery so the panel still
-    // shows them rather than collapsing to value-only.
-    void fetchCapabilities(deps.origin, deps.getToken(), radar.id).then((caps) => {
-      store.setCapabilities(caps?.controls ?? capabilitiesFromControls(radar));
-    });
-    // Reconcile live state once on open so the operational status and control values are current even if
-    // the radar is in standby and no spoke ever flows; the recurring poll is gated on panel visibility.
-    void reconcileState();
-    if (!worker) worker = createRadarWorkerClient();
-    store.setStatus('connecting');
-    await worker.open(
-      spokesUrl(deps.origin, radar, deps.getToken()),
-      radar.spokesPerRevolution,
-      radar.maxSpokeLen,
-      radar.range,
-      FLUSH_HZ,
-      (frame) => {
-        // The ppi layer only ever reads the frame it was last pushed, so once this one replaces
-        // the previous, the old buffer is safe to hand back to the worker for reuse.
-        const spent = liveFrame;
-        liveFrame = frame;
-        layer.pushFrame(frame);
-        if (spent) worker?.recycle(spent.buffer);
-        store.setStatus('live');
-        // A live frame means the stream is healthy: reset the reconnect attempt count so a future drop
-        // retries quickly rather than at the last (possibly long) backoff delay.
-        reopenAttempt = 0;
-      },
-      (status) => {
-        if (status === 'open') {
-          store.setStatus('connecting');
-        } else {
-          store.setStatus('error');
-          // 'closed' and 'error' both mean the stream dropped; schedule a backoff re-open.
-          scheduleReopen();
-        }
-      },
-    );
+    if (radar) void hydrateControls(radar.id, selectionGeneration);
+    if (!pollTimer) {
+      pollTimer = setInterval(() => {
+        const selected = store.selected;
+        if (selected) void hydrateControls(selected.id, selectionGeneration);
+      }, CONTROL_POLL_MS);
+    }
   }
 
-  async function start(): Promise<void> {
-    // Two reactive effects (connect and reconnect) call start(); the guard makes concurrent calls a
-    // no-op. The radar spoke stream is a separate WebSocket independent of the Signal K stream, so once
-    // a radar is discovered a Signal K reconnect must not re-probe and re-open it (a needless flap).
-    if (starting || store.radars.length > 0 || !deps.radarAvailable()) return;
-    starting = true;
-    try {
-      const { radars, authRequired } = await discoverRadars(deps.origin, deps.getToken());
-      if (radars.length === 0) {
-        // An access refusal at discovery is surfaced as "needs read-write" rather than "no radar".
-        if (authRequired) store.setControlsForbidden(true);
-        return;
+  function startFreshnessWatch(): void {
+    if (staleTimer) return;
+    staleTimer = setInterval(() => {
+      if (!shouldStream() || store.lastSpokeAt === undefined) return;
+      if (Date.now() - store.lastSpokeAt > STALE_MS && store.status !== 'stale') {
+        store.setStatus(
+          'stale',
+          'No fresh spokes have arrived. The old radar picture was cleared.',
+        );
+        layer.clearFrame();
       }
-      store.setDiscovered(radars);
-      await openSelected();
-    } finally {
-      starting = false;
+    }, 1000);
+  }
+
+  async function openSelectedStream(): Promise<void> {
+    const radar = store.selected;
+    if (!radar || !shouldStream()) return;
+    if (streamRadarId === radar.id && ['connecting', 'waiting', 'live'].includes(store.status))
+      return;
+    clearReopen();
+    if (!worker) worker = createRadarWorkerClient();
+    const generation = ++streamGeneration;
+    streamRadarId = radar.id;
+    store.setStatus('connecting');
+    let url: string;
+    try {
+      url = spokesUrl(deps.origin, radar, deps.getToken());
+      await worker.open(
+        url,
+        radar.spokesPerRevolution,
+        radar.maxSpokeLen,
+        radar.range,
+        FLUSH_HZ,
+        (frame) => {
+          if (disposed || generation !== streamGeneration || store.selectedId !== radar.id) {
+            worker?.recycle(frame.buffer);
+            return;
+          }
+          if (frame.spokeCount <= 0) {
+            worker?.recycle(frame.buffer);
+            return;
+          }
+          const spent = liveFrame;
+          liveFrame = frame;
+          layer.pushFrame(frame);
+          if (spent) worker?.recycle(spent.buffer);
+          store.lastSpokeAt = Date.now();
+          store.setStatus('live');
+          reopenAttempt = 0;
+        },
+        (status) => {
+          if (disposed || generation !== streamGeneration) return;
+          if (status === 'open')
+            store.setStatus('waiting', 'Connected and waiting for radar spokes.');
+          else scheduleReopen();
+        },
+      );
+    } catch (error) {
+      if (generation !== streamGeneration) return;
+      streamRadarId = undefined;
+      store.setStatus(
+        'error',
+        error instanceof Error ? error.message : 'The radar spoke stream could not be opened.',
+      );
+      scheduleReopen();
     }
+  }
+
+  async function syncStreamLifecycle(): Promise<void> {
+    if (shouldStream()) await openSelectedStream();
+    else await closeStream(store.selected ? 'paused' : 'idle');
+  }
+
+  async function loadSelected(): Promise<void> {
+    const radar = store.selected;
+    const generation = ++selectionGeneration;
+    if (!radar) {
+      await closeStream('idle');
+      return;
+    }
+    const [caps] = await Promise.all([
+      fetchCapabilities(deps.origin, deps.getToken(), radar.id),
+      hydrateControls(radar.id, generation),
+    ]);
+    if (disposed || generation !== selectionGeneration || store.selectedId !== radar.id) return;
+    store.setCapabilities(caps?.controls ?? capabilitiesFromControls(radar));
+    await syncStreamLifecycle();
+  }
+
+  async function refresh(): Promise<void> {
+    if (disposed) return;
+    const generation = ++discoveryGeneration;
+    if (!deps.radarAvailable()) {
+      store.setAvailability('absent');
+      store.setDiscovered([]);
+      await closeStream('idle');
+      return;
+    }
+    store.setAvailability('probing');
+    const result = await discoverRadars(deps.origin, deps.getToken());
+    if (disposed || generation !== discoveryGeneration) return;
+    store.setAvailability(result.availability);
+    store.setDiscovered(result.radars);
+    if (result.availability === 'auth-required') store.setControlsForbidden(true);
+    store.statusDetail = result.detail;
+    await loadSelected();
   }
 
   function selectRadar(id: string): void {
+    if (id === store.selectedId) return;
     clearReopen();
     reopenAttempt = 0;
     store.select(id);
-    void openSelected();
+    layer.clearFrame();
+    void loadSelected();
   }
 
-  // Apply a write outcome: clear the read-only flag on success, otherwise run the caller's revert and
-  // raise the read-only flag on a 401/403. Returns whether the write succeeded. Shared by setControl and
-  // setPower so the optimistic-rollback and forbidden handling are spelled once.
-  function applyWriteOutcome(result: { ok: boolean; status: number }, revert: () => void): boolean {
-    if (result.ok) {
-      store.setControlsForbidden(false);
-      return true;
-    }
-    revert();
-    if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
-    return false;
+  function errorMessage(status: number): string {
+    if (status === 401 || status === 403) return 'Read-write radar access is required.';
+    if (status === 0) return 'The radar provider could not be reached.';
+    return `The radar rejected the change (HTTP ${status}).`;
   }
 
-  // Write a control back to the radar and update the value optimistically. A 401/403 means the session
-  // token is read-only, which the panel surfaces; any other failure rolls the optimistic value back to
-  // what it was so the slider never lies about the radar's state.
   async function setControl(controlId: string, write: ControlWrite): Promise<void> {
-    const priorValue = store.controlValues[controlId];
-    const priorAuto = store.controlAuto[controlId];
-    // Optimistic update: a manual value also takes the control out of auto; an auto write just flips
-    // the auto flag and leaves the last value showing until the radar reports a new one.
-    if ('value' in write) {
-      store.setControlValue(controlId, write.value);
-      store.setControlAuto(controlId, false);
-    } else {
-      store.setControlAuto(controlId, write.auto);
-    }
-    markPending(controlId);
     const radar = store.selected;
     if (!radar) return;
-    const result = await writeControl(deps.origin, deps.getToken(), radar.id, controlId, write);
-    applyWriteOutcome(result, () => {
-      // Revert the optimistic change: the radar did not take it. The auto flag always reverts; only a
-      // value write also restores the prior value.
-      if ('value' in write && priorValue !== undefined)
-        store.setControlValue(controlId, priorValue);
-      store.setControlAuto(controlId, priorAuto === true);
-    });
+    const priorExists = Object.hasOwn(store.controlValues, controlId);
+    const priorValue = store.controlValues[controlId];
+    const priorAutoExists = Object.hasOwn(store.controlAuto, controlId);
+    const priorAuto = store.controlAuto[controlId];
+    const generation = (writeGenerations.get(controlId) ?? 0) + 1;
+    writeGenerations.set(controlId, generation);
+    const definition = store.capabilities.find((entry) => entry.id === controlId);
+    const payload =
+      'value' in write && definition?.modes?.includes('auto') ? { ...write, auto: false } : write;
+    if ('value' in payload) {
+      store.setControlValue(controlId, payload.value);
+      store.setControlAuto(controlId, false);
+    }
+    if ('auto' in payload && typeof payload.auto === 'boolean')
+      store.setControlAuto(controlId, payload.auto);
+    markPending(controlId);
+    store.setControlPending(controlId, true);
+    store.setControlError(controlId);
+    const result = await writeControl(deps.origin, deps.getToken(), radar.id, controlId, payload);
+    if (writeGenerations.get(controlId) !== generation || store.selectedId !== radar.id) return;
+    store.setControlPending(controlId, false);
+    if (result.ok) {
+      store.setControlsForbidden(false);
+      return;
+    }
+    if (priorExists && priorValue !== undefined) store.setControlValue(controlId, priorValue);
+    else delete store.controlValues[controlId];
+    if (priorAutoExists) store.setControlAuto(controlId, priorAuto === true);
+    else delete store.controlAuto[controlId];
+    if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
+    store.setControlError(controlId, errorMessage(result.status));
   }
 
-  // Set the radar's operational state (transmit/standby). Optimistically reflects it in the status pill,
-  // reverting on a failed write, and surfaces a read-only refusal like setControl. Returns whether the
-  // write succeeded. The RadarControls panel prop is typed void so it does not consume this value;
-  // echo-reveal-on-transmit must key off store.operationalStatus reactively in the composition root.
   async function setPower(status: RadarStatus): Promise<boolean> {
     const radar = store.selected;
     if (!radar) return false;
+    const generation = (writeGenerations.get(POWER_PENDING_KEY) ?? 0) + 1;
+    writeGenerations.set(POWER_PENDING_KEY, generation);
     const prior = store.operationalStatus;
     store.setOperationalStatus(status);
+    store.setControlPending(POWER_PENDING_KEY, true);
+    store.setControlError(POWER_PENDING_KEY);
     markPending(POWER_PENDING_KEY);
     const result = await setPowerRequest(deps.origin, deps.getToken(), radar.id, status);
-    return applyWriteOutcome(result, () => {
+    if (writeGenerations.get(POWER_PENDING_KEY) !== generation || store.selectedId !== radar.id)
+      return false;
+    store.setControlPending(POWER_PENDING_KEY, false);
+    if (!result.ok) {
       if (prior) store.setOperationalStatus(prior);
-    });
+      if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
+      store.setControlError(POWER_PENDING_KEY, errorMessage(result.status));
+      return false;
+    }
+    store.setControlsForbidden(false);
+    await syncStreamLifecycle();
+    return true;
   }
 
+  // Apply standard Signal K control deltas such as radars.navico.controls.gain. The delta value can
+  // be a complete control object or a scalar value from providers that flatten the leaf.
+  function applyControlDelta(path: string, value: unknown): void {
+    const match = /^radars\.([^.]+)\.controls\.([^.]+)$/.exec(path);
+    if (!match || match[1] !== store.selectedId) return;
+    const entry: RadarControlEntry | undefined =
+      typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
+        ? { value }
+        : parseRadarControls({ [match[2]]: value })[match[2]];
+    if (entry) store.reconcile({ [match[2]]: entry }, pendingIds());
+    void syncStreamLifecycle();
+  }
+
+  function onDocumentVisibility(): void {
+    documentVisible = !document.hidden;
+    void syncStreamLifecycle();
+  }
+
+  if (typeof document !== 'undefined')
+    document.addEventListener('visibilitychange', onDocumentVisibility);
+  startFreshnessWatch();
+
   async function dispose(): Promise<void> {
-    setPolling(false);
     disposed = true;
+    discoveryGeneration += 1;
+    selectionGeneration += 1;
+    streamGeneration += 1;
+    setPolling(false);
     clearReopen();
-    if (!worker) return;
-    // Await the clean close (a WebSocket close frame) before terminate(); otherwise terminate kills the
-    // Comlink message and the provider sees an abrupt drop.
-    await worker.close();
-    worker.dispose();
+    if (staleTimer) clearInterval(staleTimer);
+    staleTimer = undefined;
+    if (typeof document !== 'undefined')
+      document.removeEventListener('visibilitychange', onDocumentVisibility);
+    await worker?.close().catch(() => undefined);
+    worker?.dispose();
     worker = undefined;
   }
 
-  return { store, layer, start, dispose, selectRadar, setControl, setPower, setPolling };
+  return {
+    store,
+    layer,
+    start: refresh,
+    refresh,
+    dispose,
+    selectRadar,
+    setControl,
+    setPower,
+    setPolling,
+    applyControlDelta,
+  };
 }

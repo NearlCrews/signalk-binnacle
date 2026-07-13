@@ -74,6 +74,35 @@ describe('fetchNoteDetail', () => {
     });
   });
 
+  it('drops non-finite measures and out-of-range ratings', async () => {
+    const body = {
+      ...structured,
+      properties: {
+        ...structured.properties,
+        crowsNest: {
+          schemaVersion: 1,
+          type: 'Marina',
+          sections: [
+            {
+              id: 'quality',
+              title: 'Quality',
+              items: [
+                { label: 'Depth', value: Number.NaN, kind: 'measure', unit: 'm' },
+                { label: 'Rating', value: 99, kind: 'rating' },
+                { label: 'Valid rating', value: 4.5, kind: 'rating' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));
+    const detail = await fetchNoteDetail('http://pi', undefined, 'safe');
+    expect(detail?.sections?.[0].items).toEqual([
+      { label: 'Valid rating', value: 4.5, kind: 'rating' },
+    ]);
+  });
+
   it('falls back to plain text when crowsNest is absent', async () => {
     const body = { name: 'Plain Note', description: '<p>Hello <b>there</b></p>', properties: {} };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));
@@ -148,5 +177,6 @@ describe('plainText and safeHttpUrl', () => {
     expect(safeHttpUrl('https://x.test/p')).toBe('https://x.test/p');
     expect(safeHttpUrl('javascript:alert(1)')).toBeUndefined();
     expect(safeHttpUrl('not a url')).toBeUndefined();
+    expect(safeHttpUrl(`https://x.test/${'x'.repeat(3_000)}`)).toBeUndefined();
   });
 });

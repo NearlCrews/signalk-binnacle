@@ -20,6 +20,37 @@ describe('RouteStore', () => {
     expect(s.version).toBeGreaterThan(v0);
   });
 
+  it('sorts routes by name and does not bump for an identical refresh', () => {
+    const s = new RouteStore();
+    const alpha = { ...route('z'), name: 'Alpha' };
+    const bravo = { ...route('a'), name: 'bravo' };
+    s.setRoutes([bravo, alpha]);
+    expect(s.routes.map((item) => item.name)).toEqual(['Alpha', 'bravo']);
+    const version = s.version;
+    s.setRoutes([bravo, alpha]);
+    expect(s.version).toBe(version);
+  });
+
+  it('upserts and removes routes while pruning display and active state', () => {
+    const s = new RouteStore();
+    s.setRoutes([route('a')]);
+    s.setActive('a');
+    s.upsertRoute({ ...route('a'), name: 'Updated' });
+    expect(s.routeById('a')?.name).toBe('Updated');
+    s.removeRoute('a');
+    expect(s.routes).toEqual([]);
+    expect(s.shownIds.has('a')).toBe(false);
+    expect(s.activeId).toBeUndefined();
+  });
+
+  it('prunes shown route ids that are no longer returned by the server', () => {
+    const s = new RouteStore();
+    s.setRoutes([route('a'), route('b')]);
+    s.toggleShown('b', true);
+    s.setRoutes([route('a')]);
+    expect(s.shownIds.has('b')).toBe(false);
+  });
+
   it('toggles a route shown and reports it', () => {
     const s = new RouteStore();
     s.setRoutes([route('a')]);

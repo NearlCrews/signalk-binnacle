@@ -139,6 +139,25 @@ describe('course overlay', () => {
     expect(pointFeatures(map)).toHaveLength(0);
   });
 
+  it('sync clears both sources when the vessel position is stale', () => {
+    const guidance: FakeGuidance = {
+      active: true,
+      nextPosition: { latitude: 10, longitude: 20 },
+      nextPointName: undefined,
+    };
+    const vessel: FakeVessel = { position: { latitude: 5, longitude: 15 }, positionStale: false };
+    const overlay = createCourseOverlay(guidance as never, vessel as never);
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    overlay.sync(ctx);
+    expect(lineFeatures(map)).toHaveLength(1);
+    vessel.positionStale = true;
+    overlay.sync(ctx);
+    expect(lineFeatures(map)).toHaveLength(0);
+    expect(pointFeatures(map)).toHaveLength(0);
+  });
+
   it('sync is a no-op when neither the vessel nor the destination has moved', () => {
     const guidance: FakeGuidance = {
       active: true,

@@ -7,7 +7,7 @@ import { createFakeMap } from '$shared/testing/fake-map';
 import { fetchNotes, type NotePoint } from './notes-client';
 import { createNotesOverlay } from './notes-overlay';
 
-vi.mock('./notes-client', () => ({ fetchNotes: vi.fn() }));
+vi.mock('./notes-client', () => ({ fetchNotes: vi.fn(), MAX_NOTES_PER_VIEW: 5_000 }));
 const fetchNotesMock = vi.mocked(fetchNotes);
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
@@ -320,6 +320,137 @@ describe('notes overlay', () => {
     overlay.sync(ctx);
     await settle();
     expect(seen.at(-1)).toEqual([]);
+  });
+
+  it('reports loading, ready, zoom-limit, hidden, and error states', async () => {
+    fetchNotesMock.mockResolvedValueOnce([MARINA_NOTE]).mockResolvedValueOnce(undefined);
+    const states: string[] = [];
+    const seen: NotePoint[][] = [];
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      onNotes: (notes) => seen.push(notes),
+      onStatus: (state) => states.push(`${state.phase}:${state.offline}`),
+    });
+    const state = { zoom: 12, lng: 0, lat: 0 };
+    const map = viewFakeMap(state);
+    const ctx = ctxFor(map);
+    await overlay.add(ctx);
+
+    overlay.sync(ctx);
+    expect(states.at(-1)).toBe('loading:false');
+    await settle();
+    expect(states.at(-1)).toBe('ready:false');
+
+    state.zoom = 8;
+    overlay.sync(ctx);
+    expect(states.at(-1)).toBe('zoomed-out:false');
+    expect(seen.at(-1)).toEqual([]);
+
+    overlay.setVisible(ctx, false);
+    expect(states.at(-1)).toBe('hidden:false');
+    overlay.setVisible(ctx, true);
+    expect(states.at(-1)).toBe('idle:false');
+
+    state.zoom = 12;
+    state.lng = 30;
+    overlay.sync(ctx);
+    await settle();
+    expect(states.at(-1)).toBe('error:false');
+  });
+
+  it('does not repopulate places when hidden during an in-flight request', async () => {
+    let resolveFetch!: (notes: NotePoint[]) => void;
+    fetchNotesMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const seen: NotePoint[][] = [];
+    const statuses: string[] = [];
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      onNotes: (notes) => seen.push(notes),
+      onStatus: (state) => statuses.push(state.phase),
+    });
+    const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
+    const ctx = ctxFor(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    await settle();
+    overlay.setVisible(ctx, false);
+    resolveFetch([MARINA_NOTE]);
+    await settle();
+
+    expect(seen.at(-1)).not.toEqual([MARINA_NOTE]);
+    expect(statuses.at(-1)).toBe('hidden');
+  });
+
+  it('labels an offline cache result without fetching again', async () => {
+    fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
+    let online = true;
+    const statuses: { phase: string; offline: boolean }[] = [];
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      isOnline: () => online,
+      persist: createExpiringStore<NotePoint[]>('status', { factory: undefined }),
+      onStatus: (state) => statuses.push(state),
+    });
+    const state = { zoom: 12, lng: 0, lat: 0 };
+    const ctx = viewCtx(state);
+    overlay.sync(ctx);
+    await settle();
+    online = false;
+    state.lng = 0.05;
+    overlay.sync(ctx);
+    expect(statuses.at(-1)).toEqual({ phase: 'ready', offline: true });
+    expect(fetchNotesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an offline empty state without issuing a provider request', async () => {
+    const statuses: { phase: string; offline: boolean }[] = [];
+    const seen: NotePoint[][] = [];
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      isOnline: () => false,
+      persist: createExpiringStore<NotePoint[]>('offline-empty', { factory: undefined }),
+      onNotes: (notes) => seen.push(notes),
+      onStatus: (state) => statuses.push(state),
+    });
+    overlay.sync(viewCtx({ zoom: 12, lng: 0, lat: 0 }));
+    await settle();
+    expect(fetchNotesMock).not.toHaveBeenCalled();
+    expect(statuses.at(-1)).toEqual({ phase: 'ready', offline: true });
+    expect(seen.at(-1) ?? []).toEqual([]);
+  });
+
+  it('refreshes immediately when connectivity returns', async () => {
+    let online = false;
+    fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
+    const state = { zoom: 12, lng: 0, lat: 0 };
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      isOnline: () => online,
+      persist: createExpiringStore<NotePoint[]>('reconnect', { factory: undefined }),
+    });
+    const ctx = viewCtx(state);
+    overlay.sync(ctx);
+    await settle();
+    online = true;
+    overlay.sync(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledOnce();
+  });
+
+  it('invalidates a fresh cache when the access token changes', async () => {
+    let token = 'read';
+    fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
+    const state = { zoom: 12, lng: 0, lat: 0 };
+    const overlay = createNotesOverlay('http://pi', () => token);
+    const ctx = viewCtx(state);
+    overlay.sync(ctx);
+    await settle();
+    token = 'readwrite';
+    overlay.sync(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledTimes(2);
+    expect(fetchNotesMock.mock.calls[0][1]).toBe('read');
+    expect(fetchNotesMock.mock.calls[1][1]).toBe('readwrite');
   });
 
   it('retries a failed fetch on a stationary map once the cooldown passes', async () => {

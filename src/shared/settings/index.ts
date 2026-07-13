@@ -6,5 +6,10 @@ export {
   createTrackSettings,
   DEFAULT_THRESHOLDS,
   isMapView,
+  isThresholds,
+  isTrackSettings,
+  MAX_COLLISION_CPA_METERS,
+  MAX_COLLISION_TCPA_SECONDS,
+  MAX_SHALLOW_DEPTH_METERS,
   PersistedValue,
 } from './persisted.svelte';

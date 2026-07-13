@@ -72,10 +72,21 @@ describe('mapPmtilesMeta', () => {
     expect(meta.vectorLayers).toBeUndefined();
   });
 
-  it('omits a degenerate or inverted bounds box', () => {
+  it('omits degenerate latitude bounds and preserves an antimeridian crossing', () => {
     const zeroArea = mapPmtilesMeta(header({ minLon: 0, maxLon: 0, minLat: 0, maxLat: 0 }), {});
     expect(zeroArea.bounds).toBeUndefined();
-    const inverted = mapPmtilesMeta(header({ minLon: 10, maxLon: -10 }), {});
-    expect(inverted.bounds).toBeUndefined();
+    const crossing = mapPmtilesMeta(header({ minLon: 170, maxLon: -170 }), {});
+    expect(crossing.bounds).toEqual([170, 37.7, -170, 37.9]);
+  });
+
+  it('bounds metadata text, deduplicates layers, and normalizes invalid zoom', () => {
+    const meta = mapPmtilesMeta(header({ minZoom: -1, maxZoom: 99 }), {
+      name: ` ${'x'.repeat(300)} `,
+      vector_layers: [{ id: ' water ' }, { id: 'water' }, { id: 'bad\nlayer' }],
+    });
+    expect(meta.name).toBeUndefined();
+    expect(meta.vectorLayers).toEqual(['water']);
+    expect(meta.minzoom).toBe(0);
+    expect(meta.maxzoom).toBe(0);
   });
 });

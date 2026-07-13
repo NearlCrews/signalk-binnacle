@@ -104,7 +104,11 @@ export function isTrackSettings(value: unknown): value is TrackSettings {
   return (
     isRecord(value) &&
     isFiniteNumber(value.intervalSeconds) &&
+    value.intervalSeconds >= 1 &&
+    value.intervalSeconds <= 3600 &&
     isFiniteNumber(value.minMeters) &&
+    value.minMeters >= 1 &&
+    value.minMeters <= 10_000 &&
     (value.colorMode === 'speed' || value.colorMode === 'solid')
   );
 }
@@ -132,6 +136,10 @@ export interface Thresholds {
 
 const MINUTE_S = 60;
 
+export const MAX_COLLISION_CPA_METERS = 1_852_000;
+export const MAX_COLLISION_TCPA_SECONDS = 7 * 24 * 60 * MINUTE_S;
+export const MAX_SHALLOW_DEPTH_METERS = 11_000;
+
 export const DEFAULT_THRESHOLDS: Thresholds = {
   dangerCpaMeters: Math.round(nauticalMilesToMeters(0.5)),
   dangerTcpaSeconds: 10 * MINUTE_S,
@@ -148,10 +156,21 @@ export function isThresholds(value: unknown): value is Thresholds {
   return (
     isRecord(value) &&
     isFiniteNumber(value.dangerCpaMeters) &&
+    value.dangerCpaMeters >= 0 &&
+    value.dangerCpaMeters <= MAX_COLLISION_CPA_METERS &&
     isFiniteNumber(value.dangerTcpaSeconds) &&
+    value.dangerTcpaSeconds >= 0 &&
+    value.dangerTcpaSeconds <= MAX_COLLISION_TCPA_SECONDS &&
     isFiniteNumber(value.warningCpaMeters) &&
+    value.warningCpaMeters >= 0 &&
+    value.warningCpaMeters <= MAX_COLLISION_CPA_METERS &&
     isFiniteNumber(value.warningTcpaSeconds) &&
-    (value.shallowDepthMeters === undefined || isFiniteNumber(value.shallowDepthMeters))
+    value.warningTcpaSeconds >= 0 &&
+    value.warningTcpaSeconds <= MAX_COLLISION_TCPA_SECONDS &&
+    (value.shallowDepthMeters === undefined ||
+      (isFiniteNumber(value.shallowDepthMeters) &&
+        value.shallowDepthMeters >= 0 &&
+        value.shallowDepthMeters <= MAX_SHALLOW_DEPTH_METERS))
   );
 }
 

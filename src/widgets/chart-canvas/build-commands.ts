@@ -65,7 +65,7 @@ export function buildMapCommands(deps: MapCommandsDeps): MapCommands {
   return {
     centerOnVessel: () => {
       const position = vessel.position;
-      if (!position) return;
+      if (!position || vessel.positionStale) return;
       flyToMinZoom([position.longitude, position.latitude], 12, 14);
     },
     recenterOnVessel: (latitude, longitude) => {

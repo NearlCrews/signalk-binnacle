@@ -1,6 +1,6 @@
 <script lang="ts">
 import { MapPin, Navigation, Route, Ruler } from '@lucide/svelte';
-import { AnchoredMenu, rovingFocus } from '$shared/ui';
+import { AnchoredMenu, InlineConfirm, rovingFocus } from '$shared/ui';
 
 interface Props {
   // The press point in chart pixels, and the chart's pixel size, so the menu clamps inside the
@@ -42,7 +42,7 @@ const close = (): void => onClose();
 
 // Wide enough for the longest label ("Start a route here") at the inherited font size; the menu
 // is fixed to this width below so the clamp math always matches the rendered box.
-const MENU_WIDTH = 200;
+const MENU_WIDTH = 240;
 // Mirrors the .menu-item control height (--control-size, 2.75rem at the 16px base) for the
 // above-or-below clamp math; the layout arithmetic needs a pixel number, not a CSS token.
 const ITEM_HEIGHT = 44;
@@ -60,7 +60,10 @@ const left = $derived(
   ),
 );
 // Prefer above the press so a finger does not cover the menu; drop below near the top edge.
-const itemCount = $derived(2 + (onDropWaypoint ? 1 : 0) + (onMeasureFrom ? 1 : 0));
+let confirmingGoTo = $state(false);
+const itemCount = $derived(
+  confirmingGoTo ? 3 : 2 + (onDropWaypoint ? 1 : 0) + (onMeasureFrom ? 1 : 0),
+);
 const menuHeight = $derived(itemCount * ITEM_HEIGHT + MENU_PADDING);
 const above = $derived(y > menuHeight + EDGE * 2 || y > height / 2);
 const top = $derived(above ? y - EDGE : y + EDGE);
@@ -71,36 +74,52 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   onClose={close}
   backdropLabel="Dismiss menu"
   surfaceClass="popover-card chart-context-menu"
-  ariaLabel="Chart actions"
-  role="menu"
+  ariaLabel={confirmingGoTo ? 'Confirm chart navigation' : 'Chart actions'}
+  role={confirmingGoTo ? 'dialog' : 'menu'}
   surfaceStyle={`left: ${left}px; top: ${top}px; inline-size: ${MENU_WIDTH}px; transform: translate(-50%, ${above ? '-100%' : '0'});`}
 >
   {#snippet children()}
-    <!-- rovingFocus lands the keyboard on the first row and moves it with the arrow keys; the
-         display:contents wrapper carries the action without inserting a box between the menu surface
-         and its rows. -->
-    <div class="rows" use:rovingFocus={'[role="menuitem"]'}>
-      <button type="button" role="menuitem" class="menu-item item" onclick={onGoToHere}>
-        <Navigation size={16} aria-hidden="true" />
-        Go to here
-      </button>
-      <button type="button" role="menuitem" class="menu-item item" onclick={onStartRoute}>
-        <Route size={16} aria-hidden="true" />
-        Start a route here
-      </button>
-      {#if onDropWaypoint}
-        <button type="button" role="menuitem" class="menu-item item" onclick={onDropWaypoint}>
-          <MapPin size={16} aria-hidden="true" />
-          Drop waypoint
+    {#if confirmingGoTo}
+      <div class="goto-confirm">
+        <InlineConfirm
+          question="Start navigation to this chart position? Check the destination before relying on it."
+          confirmLabel="Start navigation"
+          onConfirm={onGoToHere}
+          onCancel={() => (confirmingGoTo = false)}
+        />
+      </div>
+    {:else}
+      <!-- rovingFocus lands the keyboard on the first row and moves it with the arrow keys; the
+           display:contents wrapper carries the action without inserting a box between the menu surface
+           and its rows. -->
+      <div class="rows" use:rovingFocus={'[role="menuitem"]'}>
+        <button
+          type="button"
+          role="menuitem"
+          class="menu-item item"
+          onclick={() => (confirmingGoTo = true)}
+        >
+          <Navigation size={16} aria-hidden="true" />
+          Go to here
         </button>
-      {/if}
-      {#if onMeasureFrom}
-        <button type="button" role="menuitem" class="menu-item item" onclick={onMeasureFrom}>
-          <Ruler size={16} aria-hidden="true" />
-          Measure from here
+        <button type="button" role="menuitem" class="menu-item item" onclick={onStartRoute}>
+          <Route size={16} aria-hidden="true" />
+          Start a route here
         </button>
-      {/if}
-    </div>
+        {#if onDropWaypoint}
+          <button type="button" role="menuitem" class="menu-item item" onclick={onDropWaypoint}>
+            <MapPin size={16} aria-hidden="true" />
+            Drop waypoint
+          </button>
+        {/if}
+        {#if onMeasureFrom}
+          <button type="button" role="menuitem" class="menu-item item" onclick={onMeasureFrom}>
+            <Ruler size={16} aria-hidden="true" />
+            Measure from here
+          </button>
+        {/if}
+      </div>
+    {/if}
   {/snippet}
 </AnchoredMenu>
 
@@ -117,5 +136,8 @@ const top = $derived(above ? y - EDGE : y + EDGE);
 }
 .item {
   white-space: nowrap;
+}
+.goto-confirm {
+  padding: var(--space-2);
 }
 </style>

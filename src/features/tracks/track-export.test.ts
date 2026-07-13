@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackPoint } from '$entities/track';
-import { toGeoJsonString } from './track-export';
+import { toGeoJsonString, trackGeoJsonFilename } from './track-export';
 
 const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   lat,
@@ -8,6 +8,14 @@ const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   t: 0,
   sog: 1,
   gap,
+});
+
+describe('trackGeoJsonFilename', () => {
+  it('creates a portable bounded filename', () => {
+    expect(trackGeoJsonFilename(' Port/Starboard?.. ')).toBe('Port-Starboard-.geojson');
+    expect(trackGeoJsonFilename('x'.repeat(200))).toHaveLength(128);
+    expect(trackGeoJsonFilename('...')).toBe('track.geojson');
+  });
 });
 
 describe('toGeoJsonString', () => {

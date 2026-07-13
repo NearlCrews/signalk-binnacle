@@ -28,6 +28,7 @@ import {
   VisibilityToggle,
 } from '$shared/ui';
 import RouteEditPlan from './RouteEditPlan.svelte';
+import type { RouteLoadState } from './route-controller.svelte';
 
 interface Props {
   auth: AuthController;
@@ -37,6 +38,9 @@ interface Props {
   working: Route | undefined;
   // The active (being navigated) route id, or undefined when none is active.
   activeId: string | undefined;
+  refreshing: boolean;
+  loadState: RouteLoadState;
+  busy: boolean;
   // Which leg or waypoint of the working route is cross-highlighted, so the matching rows light up.
   highlight: RouteHighlight | undefined;
   // Tap a leg row to highlight it on the chart, and pan the chart to it when it is off-screen.
@@ -76,6 +80,9 @@ const {
   shownIds,
   working,
   activeId,
+  refreshing,
+  loadState,
+  busy,
   highlight,
   onHighlightLeg,
   error,
@@ -98,9 +105,18 @@ const {
   onBack,
 }: Props = $props();
 
+const writesDisabled = $derived(auth.writeBlocked || busy);
+
 // Delete is destructive and, for the active route, also stops navigation, so it arms a confirm step
 // rather than firing on a single tap where a mis-tap on a rolling deck would lose a saved route.
 const armedDelete = new ArmedRow((id) => onDelete(id));
+let confirmingActivateId = $state<string | undefined>();
+
+function confirmActivation(): void {
+  const id = confirmingActivateId;
+  confirmingActivateId = undefined;
+  if (id && !writesDisabled) onActivate(id);
+}
 
 // A failed file read must not look like a quiet cancel: surface it so the navigator knows the import
 // did not happen, not just that nothing changed.
@@ -122,6 +138,28 @@ function confirmName(value: string): void {
   onSave(resolveSaveName(value, 'Route'));
   naming = false;
 }
+
+type ExitIntent = 'cancel' | 'close' | 'back';
+let exitIntent = $state<ExitIntent | undefined>();
+
+function finishExit(intent: ExitIntent): void {
+  exitIntent = undefined;
+  onCancelEdit();
+  if (intent === 'close') onClose();
+  else if (intent === 'back') onBack?.();
+}
+
+function requestExit(intent: ExitIntent): void {
+  if (working && working.waypoints.length > 0) {
+    exitIntent = intent;
+    return;
+  }
+  finishExit(intent);
+}
+
+$effect(() => {
+  if (!working) exitIntent = undefined;
+});
 
 // Precompute each route's formatted distance once per change rather than re-walking every route's
 // waypoints on every panel render inside the each-block.
@@ -149,8 +187,8 @@ $effect(() => {
   bodyFlex
   closeLabel="Close routes panel"
   minimize={{ collapsed: minimized, onToggle: () => (minimized = !minimized) }}
-  {onClose}
-  {onBack}
+  onClose={() => requestExit('close')}
+  onBack={onBack ? () => requestExit('back') : undefined}
 >
   {#if error}
     <p class="alert-note" role="alert">
@@ -161,7 +199,7 @@ $effect(() => {
     </p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note">
+    <p class="muted-note" role="alert">
       A write token is needed to save, activate, or delete routes. Request a read/write token to
       continue.
     </p>
@@ -176,7 +214,7 @@ $effect(() => {
       type="button"
       class="btn btn-primary btn--grow"
       onclick={() => onNew()}
-      disabled={working !== undefined}
+      disabled={working !== undefined || writesDisabled}
     >
       <Plus size={16} aria-hidden="true" />
       New route
@@ -186,6 +224,7 @@ $effect(() => {
       class="btn"
       title="Import routes from a GPX file (the standard route-exchange format) made by another chartplotter"
       onclick={importGpx}
+      disabled={writesDisabled}
     >
       <Upload size={16} aria-hidden="true" />
       Import
@@ -201,7 +240,7 @@ $effect(() => {
       {#if naming}
         <NameEntry
           label="Save route as"
-          value={defaultSaveName('Route')}
+          value={working.name.trim() || defaultSaveName('Route')}
           onConfirm={confirmName}
           onCancel={() => (naming = false)}
         />
@@ -210,17 +249,25 @@ $effect(() => {
           <button
             type="button"
             class="btn btn-primary btn--grow"
-            disabled={working.waypoints.length < 2}
+            disabled={working.waypoints.length < 2 || writesDisabled}
             onclick={() => (naming = true)}
           >
             <Save size={16} aria-hidden="true" />
             Save
           </button>
-          <button type="button" class="btn" onclick={onCancelEdit}>
+          <button type="button" class="btn" onclick={() => requestExit('cancel')} disabled={busy}>
             <X size={16} aria-hidden="true" />
             Cancel
           </button>
         </div>
+      {/if}
+      {#if exitIntent}
+        <InlineConfirm
+          question="Discard unsaved route changes?"
+          confirmLabel="Discard"
+          onConfirm={() => finishExit(exitIntent ?? 'cancel')}
+          onCancel={() => (exitIntent = undefined)}
+        />
       {/if}
       {#if working.waypoints.length < 2}
         <p class="muted-note">Add at least two points to save this route.</p>
@@ -232,10 +279,24 @@ $effect(() => {
     </div>
   {/if}
 
+  {#if loadState === 'error'}
+    <p class="muted-note" role="alert">
+      {routes.length > 0
+        ? 'Could not refresh routes. Showing the last loaded routes.'
+        : 'Could not load routes. Check the connection, then reopen this panel.'}
+    </p>
+  {:else if loadState === 'loading' && routes.length > 0}
+    <p class="muted-note" role="status">Refreshing routes…</p>
+  {/if}
+
   <SavedList
     heading="Saved routes"
     items={savedCards}
-    empty="No routes yet. Tap New route, then tap the chart to drop points along your path."
+    empty={loadState === 'loading' || refreshing
+      ? 'Loading routes…'
+      : loadState === 'error'
+        ? 'Routes are unavailable.'
+        : 'No routes yet. Tap New route, then tap the chart to drop points along your path.'}
     key={({ route }) => route.id}
     isActive={({ route }) => route.id === activeId}
   >
@@ -244,7 +305,7 @@ $effect(() => {
         <button
           type="button"
           class="name"
-          title="Show this route on the chart"
+          title="Show the entire route on the chart"
           onclick={() => onLocate(route.id)}
         >
           {route.name}
@@ -262,7 +323,14 @@ $effect(() => {
         <dt class="caps-label">Waypoints</dt>
         <dd><span class="num">{route.waypoints.length}</span></dd>
       </dl>
-      {#if armedDelete.isArmed(route.id)}
+      {#if confirmingActivateId === route.id}
+        <InlineConfirm
+          question={`Start navigation on ${route.name}? Check the route before relying on it.`}
+          confirmLabel="Start navigation"
+          onConfirm={confirmActivation}
+          onCancel={() => (confirmingActivateId = undefined)}
+        />
+      {:else if armedDelete.isArmed(route.id)}
         <InlineConfirm
           question={route.id === activeId
             ? 'Delete this route and stop navigating?'
@@ -281,7 +349,7 @@ $effect(() => {
             class="icon-btn"
             aria-label="Edit route"
             title="Edit"
-            disabled={working !== undefined}
+            disabled={working !== undefined || writesDisabled}
             onclick={() => onEditRoute(route.id)}
           >
             <SquarePen size={18} aria-hidden="true" />
@@ -291,6 +359,7 @@ $effect(() => {
             class="icon-btn"
             aria-label="Reverse route"
             title="Save a reversed copy"
+            disabled={writesDisabled}
             onclick={() => onReverse(route.id)}
           >
             <ArrowLeftRight size={18} aria-hidden="true" />
@@ -310,6 +379,7 @@ $effect(() => {
               class="icon-btn icon-btn--accent"
               aria-label="Stop navigation"
               title="Stop navigation"
+              disabled={writesDisabled}
               onclick={onStop}
             >
               <Square size={18} aria-hidden="true" />
@@ -318,10 +388,10 @@ $effect(() => {
             <button
               type="button"
               class="icon-btn"
-              aria-label="Activate route"
-              title="Activate route"
-              disabled={working !== undefined}
-              onclick={() => onActivate(route.id)}
+              aria-label="Start navigation on route"
+              title="Start navigation on route"
+              disabled={working !== undefined || writesDisabled}
+              onclick={() => (confirmingActivateId = route.id)}
             >
               <Navigation size={18} aria-hidden="true" />
             </button>
@@ -331,6 +401,7 @@ $effect(() => {
             class="icon-btn icon-btn--danger"
             aria-label="Delete route"
             title="Delete"
+            disabled={writesDisabled}
             onclick={() => armedDelete.arm(route.id)}
           >
             <Trash2 size={18} aria-hidden="true" />

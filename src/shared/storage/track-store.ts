@@ -36,8 +36,12 @@ function memoryStore<T>(cap = Number.POSITIVE_INFINITY): TrackStore<T> {
 
 export function createTrackStore<T>(
   factory: IDBFactory | undefined = globalThis.indexedDB,
+  onDegrade?: () => void,
 ): TrackStore<T> {
-  if (!factory) return memoryStore<T>();
+  if (!factory) {
+    onDegrade?.();
+    return memoryStore<T>();
+  }
 
   const memory = memoryStore<T>(MEMORY_MIRROR_CAP);
   const { run } = openIdbStore(factory, DB_NAME, STORE, (db) =>
@@ -47,6 +51,7 @@ export function createTrackStore<T>(
   // corruption) stops the boat's track surviving reloads, which a field report needs to diagnose.
   const idb = degradeToMemory(() => {
     console.warn(`Track persistence "${DB_NAME}" degraded to memory for this session.`);
+    onDegrade?.();
   });
 
   return {

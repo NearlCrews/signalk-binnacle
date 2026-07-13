@@ -21,6 +21,7 @@ interface Props {
   units: UnitsStore;
   // A failed server call (set radius, move, raise), shown until the next anchor action.
   error?: string;
+  busy?: boolean;
   onDrop: () => void;
   onRaise: () => void;
   onSetRadius: (meters: number) => void;
@@ -28,11 +29,23 @@ interface Props {
   onBack?: () => void;
 }
 
-const { auth, anchor, vessel, units, error, onDrop, onRaise, onSetRadius, onClose, onBack }: Props =
-  $props();
+const {
+  auth,
+  anchor,
+  vessel,
+  units,
+  error,
+  busy = false,
+  onDrop,
+  onRaise,
+  onSetRadius,
+  onClose,
+  onBack,
+}: Props = $props();
 
 const watching = $derived(anchor.watching);
-const distance = $derived(anchor.distanceMeters);
+const distance = $derived(anchor.fixLost ? undefined : anchor.distanceMeters);
+const serverWritesBlocked = $derived(auth.writeBlocked && anchor.mode === 'server');
 const mode = $derived(units.mode);
 const unit = $derived(lengthUnit(mode));
 // The radius field deals in the display unit; the entity stays meters, so imperial entries
@@ -54,9 +67,13 @@ const MODE_STATUS: Record<AnchorMode, string> = {
   off: 'No anchor down.',
 };
 const statusLine = $derived(
-  anchor.dragging
-    ? 'Anchor dragging: the boat is outside the watch radius.'
-    : MODE_STATUS[anchor.mode],
+  anchor.degraded
+    ? 'Warning: GPS fix lost. Browser drag detection has stopped.'
+    : anchor.fixLost
+      ? 'GPS fix lost on this display. The server anchor watch remains active.'
+      : anchor.dragging
+        ? 'Anchor dragging: the boat is outside the watch radius.'
+        : MODE_STATUS[anchor.mode],
 );
 
 // Below-minimum entries clamp up, matching the entity; UnitField snaps the text back to the
@@ -85,15 +102,19 @@ function captureFromDistance(): void {
 
 <SlideOver title="Anchor watch" closeLabel="Close anchor watch" {onClose} {onBack} bodyFlex>
   {#if auth.writeBlocked}
-    <p class="muted-note">
-      A write token is needed to drop, move, or raise the anchor. Request a read/write token to
-      continue.
+    <p class="muted-note" role="alert">
+      Server anchor changes need a write token. A browser-only watch remains available when no
+      server watch is active.
     </p>
   {/if}
   <p class="muted-note">
     Drop the anchor to start a drift alarm that sounds if the boat swings past the watch radius.
   </p>
-  <p class="muted-note status" class:status--alarm={anchor.dragging} role="status">
+  <p
+    class="muted-note status"
+    class:status--alarm={anchor.dragging || anchor.degraded}
+    role={anchor.dragging || anchor.degraded ? 'alert' : 'status'}
+  >
     {statusLine}
   </p>
   <dl class="stat-grid">
@@ -113,13 +134,14 @@ function captureFromDistance(): void {
     step={1}
     ariaLabel="Watch radius in {mode === 'imperial' ? 'feet' : 'meters'}"
     value={radiusDisplay}
+    disabled={busy || serverWritesBlocked}
     onCommit={commitRadius}
   />
   <p class="muted-note">The alarm sounds if the boat drifts further than this from the anchor.</p>
   <button
     type="button"
     class="btn btn-ghost"
-    disabled={!watching || distance == null}
+    disabled={busy || serverWritesBlocked || !watching || distance == null}
     title={captureTitle}
     onclick={captureFromDistance}
   >
@@ -132,7 +154,7 @@ function captureFromDistance(): void {
       confirmLabel="Raise"
       onConfirm={() => {
         raiseArmed = false;
-        onRaise();
+        if (!busy && !serverWritesBlocked) onRaise();
       }}
       onCancel={() => {
         raiseArmed = false;
@@ -144,6 +166,7 @@ function captureFromDistance(): void {
         <button
           type="button"
           class="btn btn-danger"
+          disabled={busy || serverWritesBlocked}
           onclick={() => {
             raiseArmed = true;
           }}
@@ -152,21 +175,32 @@ function captureFromDistance(): void {
           Raise anchor
         </button>
       {:else}
-        <button type="button" class="btn btn-primary" disabled={!vessel.position} onclick={onDrop}>
+        <button
+          type="button"
+          class="btn btn-primary"
+          disabled={busy || !vessel.position || vessel.positionStale}
+          onclick={onDrop}
+        >
           <Anchor size={16} aria-hidden="true" />
           Drop anchor here
         </button>
       {/if}
     </div>
   {/if}
-  {#if !watching && !vessel.position}
-    <p class="muted-note">Waiting for a GPS fix to drop the anchor at.</p>
+  {#if !watching && (!vessel.position || vessel.positionStale)}
+    <p class="muted-note">
+      {vessel.positionStale
+        ? 'Waiting for a fresh GPS fix before dropping the anchor.'
+        : 'Waiting for a GPS fix to drop the anchor at.'}
+    </p>
   {/if}
   {#if watching}
     <p class="muted-note">Drag the anchor marker on the chart to correct the drop point.</p>
   {/if}
   {#if error}
     <p class="alert-note" role="alert">{error}</p>
+  {:else if busy}
+    <p class="muted-note" role="status">Updating anchor watch…</p>
   {/if}
 </SlideOver>
 

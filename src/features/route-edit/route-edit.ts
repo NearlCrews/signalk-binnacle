@@ -171,6 +171,7 @@ export function createRouteEditor(opts: {
   // between two taps, so the next tap sees one line.
   let pruning = false;
   let prunePending = false;
+  let started = false;
 
   // Terra Draw appends features in creation order, so the line being drawn or edited is the last
   // entry; any earlier linestrings are stale extras left when one line was finished and a new one
@@ -188,6 +189,7 @@ export function createRouteEditor(opts: {
 
   const prune = (): void => {
     prunePending = false;
+    if (!started) return;
     const lines = linestrings();
     if (lines.length <= 1) return;
     const { extraIds } = workingLine(lines);
@@ -229,6 +231,9 @@ export function createRouteEditor(opts: {
   // coordinate; the finished line's coordinates are then all placed points.
   const onRouteFinish = () => {
     drawing = false;
+    const next = read();
+    remember(next);
+    opts.onChange(next);
   };
   draw.on('finish', onRouteFinish);
 
@@ -238,6 +243,7 @@ export function createRouteEditor(opts: {
   // click. Deferred a microtask so linestring mode's listeners are attached first.
   const placeFirstPoint = (point: LatLon): void => {
     queueMicrotask(() => {
+      if (!started) return;
       const canvas = opts.map.getCanvas();
       const rect = canvas.getBoundingClientRect();
       const { x, y } = opts.map.project([point.longitude, point.latitude]);
@@ -257,7 +263,6 @@ export function createRouteEditor(opts: {
     });
   };
 
-  let started = false;
   return {
     start(route, initialPoint) {
       remember(route ? route.waypoints.slice() : []);
@@ -292,6 +297,8 @@ export function createRouteEditor(opts: {
       // rather than a Terra Draw "not started" throw.
       if (!started) return;
       started = false;
+      drawing = false;
+      prunePending = false;
       // onRouteChange and onRouteFinish are registered once at construction, not per start(), and
       // this editor instance is reused across every edit session (ChartCanvas memoizes it, so
       // start()/stop() cycle on the same instance): draw.stop() does not remove listeners, and

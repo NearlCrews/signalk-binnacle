@@ -4,12 +4,13 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { Bbox } from 'signalk-chart-sources';
-import { TerraDraw, TerraDrawRectangleMode } from 'terra-draw';
+import { type GeoJSONStoreFeatures, TerraDraw, TerraDrawRectangleMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { bboxFromRectangle } from './estimate.js';
 
 export interface RegionRectangle {
   start(): void;
+  set(bbox: Bbox): void;
   clear(): void;
   onFinish(cb: (bbox: Bbox | null) => void): void;
   destroy(): void;
@@ -43,6 +44,33 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
         draw.start();
         started = true;
       }
+      draw.setMode('rectangle');
+    },
+    set(bbox) {
+      if (!started) {
+        draw.start();
+        started = true;
+      }
+      draw.clear();
+      const [west, south, east, north] = bbox;
+      const feature: GeoJSONStoreFeatures<GeoJSON.Polygon> = {
+        type: 'Feature',
+        properties: { mode: 'rectangle' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [west, south],
+              [east, south],
+              [east, north],
+              [west, north],
+              [west, south],
+            ],
+          ],
+        },
+      };
+      const [validation] = draw.addFeatures([feature]);
+      if (validation && !validation.valid) console.warn('Offline area seed rejected by Terra Draw');
       draw.setMode('rectangle');
     },
     clear() {

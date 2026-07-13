@@ -5,6 +5,7 @@ import {
   deleteTrack,
   fetchSavedTracks,
   type SavedTrack,
+  savedTrackFromPoints,
   savedTracksToFeatures,
   saveTrack,
 } from './tracks-client';
@@ -99,6 +100,40 @@ describe('fetchSavedTracks', () => {
     // as a connection failure the way an unreachable server or a real error status does.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(404, {})));
     expect(await fetchSavedTracks('http://pi')).toEqual([]);
+  });
+
+  it('trims names and rejects negative metadata', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          t1: {
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+            properties: { name: '  Passage  ', distance: -1, timespan: -2 },
+          },
+        }),
+      ),
+    );
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks?.[0]).toMatchObject({ name: 'Passage' });
+    expect(tracks?.[0].distanceMeters).toBeUndefined();
+    expect(tracks?.[0].durationSeconds).toBeUndefined();
+  });
+});
+
+describe('savedTrackFromPoints', () => {
+  it('builds optimistic saved geometry and SI metadata', () => {
+    const track = savedTrackFromPoints('id', '  Day 1  ', [p(0, 0), p(0, 0.001)]);
+    expect(track.name).toBe('Day 1');
+    expect(track.points).toHaveLength(1);
+    expect(track.distanceMeters).toBeGreaterThan(100);
+    expect(track.durationSeconds).toBe(0);
   });
 });
 

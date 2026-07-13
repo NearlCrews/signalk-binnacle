@@ -1,5 +1,11 @@
-import { isRecord, uuidv4 } from '$shared/lib';
+import { uuidv4 } from '$shared/lib';
 import type { Profile, ProfileSettings, ProfilesState } from './profile-types';
+import {
+  cleanProfileName,
+  isProfileSettings,
+  isStoredProfile,
+  MAX_PROFILES,
+} from './profile-validation';
 
 const STORAGE_KEY = 'binnacle:profiles';
 
@@ -42,12 +48,17 @@ class LocalProfileAdapter implements ProfileAdapter {
   }
 }
 
-// A light shape guard for a stored profile: enough to drop a grossly malformed or drifted entry at
-// load rather than trust it. The deep settings validation lives in the features layer (isProfileSettings)
-// and runs on import; entities cannot reach up to it, so a load-time guard stays minimal here.
-function isStoredProfile(value: unknown): value is Profile {
-  if (!isRecord(value)) return false;
-  return typeof value.id === 'string' && typeof value.name === 'string' && isRecord(value.settings);
+function validProfiles(value: unknown): Profile[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const profiles: Profile[] = [];
+  for (const profile of value) {
+    if (!isStoredProfile(profile) || seen.has(profile.id)) continue;
+    seen.add(profile.id);
+    profiles.push(profile);
+    if (profiles.length >= MAX_PROFILES) break;
+  }
+  return profiles;
 }
 
 // The reactive home for saved profiles. Each mutation updates the runes and persists the whole
@@ -79,9 +90,13 @@ export class ProfileStore {
       this.loadedFromStorage = true;
       // Array.isArray, not a nullish fallback: a corrupt document where profiles is a truthy
       // non-array would otherwise throw here during App init and blank the app.
-      this.profiles = Array.isArray(stored.profiles) ? stored.profiles.filter(isStoredProfile) : [];
-      this.activeId = stored.activeId;
-      this.#defaultId = stored.defaultId;
+      this.profiles = validProfiles(stored.profiles);
+      this.activeId = this.profiles.some((profile) => profile.id === stored.activeId)
+        ? stored.activeId
+        : undefined;
+      this.#defaultId = this.profiles.some((profile) => profile.id === stored.defaultId)
+        ? stored.defaultId
+        : undefined;
     }
   }
 
@@ -106,7 +121,7 @@ export class ProfileStore {
   // Seeds carry stable ids so the same starters from two devices merge to one, not duplicate.
   seed(profiles: Profile[]): void {
     if (this.profiles.length > 0) return;
-    this.profiles = profiles;
+    this.profiles = validProfiles(profiles);
     this.#persist();
   }
 
@@ -141,29 +156,43 @@ export class ProfileStore {
     for (const p of this.profiles) byId.set(p.id, p);
     // The same shape guards the local load applies: a remote document is just another stored
     // document, so a malformed entry (or a non-array profiles field) must not enter the store.
-    const incoming = Array.isArray(remote.profiles) ? remote.profiles.filter(isStoredProfile) : [];
+    const incoming = validProfiles(remote.profiles);
     for (const p of incoming) {
       const existing = byId.get(p.id);
       if (!existing || (p.updatedAt ?? 0) >= (existing.updatedAt ?? 0)) byId.set(p.id, p);
     }
-    this.profiles = [...byId.values()];
+    this.profiles = [...byId.values()].slice(0, MAX_PROFILES);
     // Merge only the profile list and the default. The active selection is per-device state:
     // adopting the remote activeId would show a profile as Active while this device still runs
     // its previous settings, with no dirty flag to say so.
-    this.#defaultId = remote.defaultId ?? this.#defaultId;
+    if (this.profiles.some((profile) => profile.id === remote.defaultId)) {
+      this.#defaultId = remote.defaultId;
+    } else if (!this.profiles.some((profile) => profile.id === this.#defaultId)) {
+      this.#defaultId = undefined;
+    }
     // Cache the merged state locally without re-scheduling a push; syncWithServer pushes once.
     this.#adapter.save(this.#snapshot());
   }
 
   save(name: string, settings: ProfileSettings): Profile {
+    if (this.profiles.length >= MAX_PROFILES) throw new Error('Profile limit reached.');
+    const safeName = cleanProfileName(name);
+    if (!safeName || !isProfileSettings(settings)) throw new Error('Profile is invalid.');
     const now = Date.now();
-    const profile: Profile = { id: uuidv4(), name, settings, createdAt: now, updatedAt: now };
+    const profile: Profile = {
+      id: uuidv4(),
+      name: safeName,
+      settings,
+      createdAt: now,
+      updatedAt: now,
+    };
     this.profiles = [...this.profiles, profile];
     this.#persist();
     return profile;
   }
 
   update(id: string, settings: ProfileSettings): void {
+    if (!isProfileSettings(settings)) return;
     const now = Date.now();
     this.profiles = this.profiles.map((p) =>
       p.id === id ? { ...p, settings, updatedAt: now } : p,
@@ -172,8 +201,10 @@ export class ProfileStore {
   }
 
   rename(id: string, name: string): void {
+    const safeName = cleanProfileName(name);
+    if (!safeName) return;
     this.profiles = this.profiles.map((p) =>
-      p.id === id ? { ...p, name, updatedAt: Date.now() } : p,
+      p.id === id ? { ...p, name: safeName, updatedAt: Date.now() } : p,
     );
     this.#persist();
   }
@@ -186,6 +217,7 @@ export class ProfileStore {
   }
 
   setDefault(id: string): void {
+    if (!this.#byId.has(id)) return;
     this.#defaultId = id;
     this.#persist();
   }
@@ -193,6 +225,7 @@ export class ProfileStore {
   // Mark which profile is active and clear the dirty flag. This does NOT apply the profile's settings:
   // the settings live in App's stores, so the caller applies them and then marks the result active.
   setActive(id: string | undefined): void {
+    if (id !== undefined && !this.#byId.has(id)) return;
     this.activeId = id;
     this.isDirty = false;
     this.#persist();

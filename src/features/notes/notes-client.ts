@@ -5,8 +5,8 @@ import {
   type PoiType,
   poiCategoryForType,
 } from '$entities/poi-icons';
-import type { Bbox4 } from '$shared/geo';
-import { isFiniteNumber } from '$shared/lib';
+import { type Bbox4, isLatLon } from '$shared/geo';
+import { hasControlCharacters } from '$shared/lib';
 import { fetchKeyedResource, str } from '$shared/signalk';
 
 // The note shape itself lives in $entities/poi (the POI search panel renders the same points, and
@@ -28,11 +28,20 @@ export interface NoteSelection {
 }
 
 export const NOTES_PATH = '/signalk/v2/api/resources/notes';
+const NOTES_V1_PATH = '/signalk/v1/api/resources/notes';
+export const MAX_NOTES_PER_VIEW = 5_000;
+
+function cleanId(value: string): string | undefined {
+  const id = value.trim();
+  return id && id.length <= 512 && !hasControlCharacters(id) ? id : undefined;
+}
 
 // Map one keyed resource entry to a NotePoint, or undefined to skip it. An error payload
 // ({state, statusCode, message}) has non-object values or no position, so it falls through here;
 // only real notes with a position become markers.
 function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
+  const resourceId = cleanId(id);
+  if (!resourceId) return undefined;
   if (!raw || typeof raw !== 'object') return undefined;
   const note = raw as {
     name?: unknown;
@@ -46,22 +55,25 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
       crowsNest?: { type?: unknown };
     };
   };
-  const lat = note.position?.latitude;
-  const lon = note.position?.longitude;
-  if (!isFiniteNumber(lat) || !isFiniteNumber(lon)) return undefined;
+  const position = note.position;
+  if (!isLatLon(position)) return undefined;
   const props = note.properties ?? {};
+  const clean = (value: unknown, maxLength: number): string | undefined => {
+    const text = str(value)?.trim();
+    return text ? text.slice(0, maxLength) : undefined;
+  };
   return {
-    id,
-    name: str(note.name) ?? str(note.title) ?? id,
-    position: { latitude: lat, longitude: lon },
+    id: resourceId,
+    name: clean(note.name, 256) ?? clean(note.title, 256) ?? resourceId,
+    position,
     category:
       poiCategoryForType(
         typeof props.crowsNest?.type === 'string' ? (props.crowsNest.type as PoiType) : undefined,
-      ) ?? categoryForSkIcon(str(props.skIcon)),
-    skIcon: str(props.skIcon),
-    url: str(note.url),
-    source: str(props.source),
-    attribution: str(props.attribution),
+      ) ?? categoryForSkIcon(clean(props.skIcon, 256)),
+    skIcon: clean(props.skIcon, 256),
+    url: clean(note.url, 2048),
+    source: clean(props.source, 256),
+    attribution: clean(props.attribution, 1024),
   };
 }
 
@@ -78,11 +90,17 @@ export function fetchNotes(
   bbox: Bbox4,
 ): Promise<NotePoint[] | undefined> {
   const params = new URLSearchParams({ bbox: JSON.stringify(bbox) });
+  let accepted = 0;
   return fetchKeyedResource(
     serverBase,
-    [`${NOTES_PATH}?${params}`],
+    [`${NOTES_PATH}?${params}`, `${NOTES_V1_PATH}?${params}`],
     token,
-    noteFromEntry,
+    (id, raw) => {
+      if (accepted >= MAX_NOTES_PER_VIEW) return undefined;
+      const note = noteFromEntry(id, raw);
+      if (note) accepted += 1;
+      return note;
+    },
     (url, status) => console.warn(`[notes] ${url} returned ${status}`),
   );
 }

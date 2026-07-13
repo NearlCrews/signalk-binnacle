@@ -22,3 +22,17 @@ export function splitAtGaps(points: readonly TrackPoint[]): TrackPoint[][] {
   if (current.length > 0) runs.push(current);
   return runs;
 }
+
+// Route conversion and action availability use only the newest uninterrupted run. Crossing a GPS
+// dropout with a straight route leg would invent navigation guidance that the recorder never saw.
+export function latestTrackSegment(points: readonly TrackPoint[]): TrackPoint[] {
+  return splitAtGaps(points).at(-1) ?? [];
+}
+
+export function hasDrawableTrack(points: readonly TrackPoint[]): boolean {
+  return splitAtGaps(points).some((segment) => segment.length >= 2);
+}
+
+export function hasTrackGaps(points: readonly TrackPoint[]): boolean {
+  return points.slice(1).some((point) => point.gap === true);
+}

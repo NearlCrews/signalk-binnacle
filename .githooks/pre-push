@@ -41,4 +41,7 @@ npm run --silent test
 echo "[pre-push] production build"
 NODE_ENV=production npm run --silent build
 
+echo "[pre-push] end-to-end smoke tests"
+npm run --silent test:e2e
+
 echo "[pre-push] all gates green"

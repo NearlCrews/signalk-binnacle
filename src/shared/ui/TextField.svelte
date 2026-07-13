@@ -10,6 +10,7 @@ interface Props {
   variant?: 'inline' | 'stacked';
   placeholder?: string;
   disabled?: boolean;
+  maxLength?: number;
   // Overrides the accessible name; left unset, the visible label names the input through the wrapping
   // label, so most callers can omit it.
   ariaLabel?: string;
@@ -31,6 +32,7 @@ const {
   variant = 'inline',
   placeholder,
   disabled = false,
+  maxLength,
   ariaLabel,
   large = false,
   focusOnOpen = false,
@@ -55,6 +57,7 @@ function commit(event: Event): void {
     {value}
     {placeholder}
     {disabled}
+    maxlength={maxLength}
     aria-label={ariaLabel}
     use:focusOnMountIf={focusOnOpen}
     onchange={commit}

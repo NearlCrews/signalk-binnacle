@@ -1,5 +1,5 @@
 import type { Route, RouteWaypoint } from '$entities/route';
-import type { TrackPoint } from '$entities/track';
+import { latestTrackSegment, type TrackPoint } from '$entities/track';
 import { uuidv4 } from '$shared/lib';
 import { METERS_PER_DEG } from '$shared/nav';
 import { douglasPeucker } from './simplify';
@@ -18,7 +18,7 @@ export function trackToRoute(
   name: string,
   toleranceMeters: number = DEFAULT_ROUTE_TOLERANCE_M,
 ): Route {
-  const kept = douglasPeucker(points, toleranceMeters / METERS_PER_DEG);
+  const kept = douglasPeucker(latestTrackSegment(points), toleranceMeters / METERS_PER_DEG);
   const waypoints: RouteWaypoint[] = kept.map((p) => ({
     position: { latitude: p.lat, longitude: p.lon },
   }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canDownloadRegion } from './estimate.js';
+import { canDownloadRegion, downloadGateReason } from './estimate.js';
 import type { CacheStats } from './regions-client.js';
 
 // Pins the gate predicate the panel uses: Download is enabled only when a box is drawn, at least
@@ -74,6 +74,50 @@ describe('regions gate', () => {
         zoomRange: [6, 8],
       }),
     ).toBe(false);
+  });
+});
+
+describe('download gate explanation', () => {
+  it('reports the first workflow step that blocks the download', () => {
+    expect(
+      downloadGateReason({
+        bbox: null,
+        sources: [],
+        writeBlocked: false,
+        stats,
+        estimate: 0,
+      }),
+    ).toBe('draw-area');
+    expect(
+      downloadGateReason({
+        bbox: [-1, -1, 1, 1],
+        sources: [],
+        writeBlocked: false,
+        stats,
+        estimate: 0,
+      }),
+    ).toBe('choose-charts');
+  });
+
+  it('distinguishes storage loading and insufficient space', () => {
+    expect(
+      downloadGateReason({
+        bbox: [-1, -1, 1, 1],
+        sources: ['seamark'],
+        writeBlocked: false,
+        stats: null,
+        estimate: 1,
+      }),
+    ).toBe('storage-loading');
+    expect(
+      downloadGateReason({
+        bbox: [-1, -1, 1, 1],
+        sources: ['seamark'],
+        writeBlocked: false,
+        stats: { ...stats, regionsFreeBytes: 10 },
+        estimate: 11,
+      }),
+    ).toBe('insufficient-space');
   });
 });
 

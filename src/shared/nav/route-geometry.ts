@@ -8,12 +8,16 @@ function rhumbDPhi(lat1Rad: number, lat2Rad: number): number {
   return Math.log(Math.tan(Math.PI / 4 + lat2Rad / 2) / Math.tan(Math.PI / 4 + lat1Rad / 2));
 }
 
+const MERCATOR_MAX_LAT_RAD = (89.999999 * Math.PI) / 180;
+const mercatorLatitudeRad = (latitude: number): number =>
+  Math.max(-MERCATOR_MAX_LAT_RAD, Math.min(MERCATOR_MAX_LAT_RAD, latitude * DEG_TO_RAD));
+
 // Rhumb-line (constant-bearing) distance: the line you actually steer over a short to medium leg.
 export function rhumbDistanceMeters(from: LatLon, to: LatLon): number {
   const dLatRad = (to.latitude - from.latitude) * DEG_TO_RAD;
   const dLonRad = normalizeLonDeltaDeg(to.longitude - from.longitude) * DEG_TO_RAD;
-  const lat1 = from.latitude * DEG_TO_RAD;
-  const lat2 = to.latitude * DEG_TO_RAD;
+  const lat1 = mercatorLatitudeRad(from.latitude);
+  const lat2 = mercatorLatitudeRad(to.latitude);
   const dPhi = rhumbDPhi(lat1, lat2);
   const q = Math.abs(dPhi) > 1e-12 ? dLatRad / dPhi : Math.cos(lat1);
   return Math.hypot(dLatRad, q * dLonRad) * EARTH_RADIUS_M;
@@ -22,8 +26,8 @@ export function rhumbDistanceMeters(from: LatLon, to: LatLon): number {
 // Constant compass bearing from -> to, radians clockwise from true north in [0, 2pi).
 export function rhumbBearingRad(from: LatLon, to: LatLon): number {
   const dLonRad = normalizeLonDeltaDeg(to.longitude - from.longitude) * DEG_TO_RAD;
-  const lat1 = from.latitude * DEG_TO_RAD;
-  const lat2 = to.latitude * DEG_TO_RAD;
+  const lat1 = mercatorLatitudeRad(from.latitude);
+  const lat2 = mercatorLatitudeRad(to.latitude);
   const dPhi = rhumbDPhi(lat1, lat2);
   return (Math.atan2(dLonRad, dPhi) + 2 * Math.PI) % (2 * Math.PI);
 }
@@ -78,7 +82,8 @@ export function vmgMps(position: LatLon, mark: LatLon, sogMps: number, cogRad: n
 
 // Seconds to cover `distanceMeters` at `speedMps`. Undefined for a non-positive speed (no ETA).
 export function etaSeconds(distanceMeters: number, speedMps: number): number | undefined {
-  if (speedMps <= 0) return undefined;
+  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) return undefined;
+  if (!Number.isFinite(speedMps) || speedMps <= 0) return undefined;
   return distanceMeters / speedMps;
 }
 

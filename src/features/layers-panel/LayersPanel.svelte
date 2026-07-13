@@ -1,9 +1,10 @@
 <script lang="ts">
-import { ChevronRight, Lock, Plus } from '@lucide/svelte';
+import { ChevronRight, Lock, Plus, RefreshCw } from '@lucide/svelte';
 import type { UserCharts } from '$entities/user-charts';
 import type { Bbox4 } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
+import type { AuthController } from '$shared/signalk';
 import { SlideOver } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
 import LayerRow from './LayerRow.svelte';
@@ -14,6 +15,9 @@ import SourceDetail from './SourceDetail.svelte';
 
 interface Props {
   view: LayersView;
+  auth: AuthController;
+  chartsLoadState?: 'loading' | 'ready' | 'partial' | 'error';
+  onRetryCharts?: () => void;
   userCharts?: UserCharts;
   // Per-category open/closed state, persisted so the panel reopens the way it was left.
   categoriesOpen?: PersistedValue<Record<string, boolean>>;
@@ -28,6 +32,9 @@ interface Props {
 
 const {
   view,
+  auth,
+  chartsLoadState = 'ready',
+  onRetryCharts,
   userCharts,
   categoriesOpen,
   onClose,
@@ -122,6 +129,7 @@ const reorder = createLayerReorder(
         item={detailItem}
         {userCharts}
         userSource={detailUserSource}
+        writeBlocked={auth.writeBlocked}
         onBack={() => (detailId = undefined)}
         onShowBounds={onShowChartBounds}
       />
@@ -151,6 +159,37 @@ const reorder = createLayerReorder(
     </div>
 
     {#if mode === 'charts'}
+      {#if auth.writeBlocked}
+        <p class="muted-note" role="alert">
+          A write token is needed to add, rename, or delete URL charts. Request a read/write token
+          to continue.
+        </p>
+      {/if}
+      {#if chartsLoadState === 'loading'}
+        <p class="muted-note" role="status">Loading Signal K chart sources…</p>
+      {:else if chartsLoadState === 'error'}
+        <div class="load-note" role="alert">
+          <p class="muted-note">
+            Could not load Signal K chart sources. Saved URL charts remain available.
+          </p>
+          {#if onRetryCharts}
+            <button type="button" class="btn" onclick={onRetryCharts}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Retry
+            </button>
+          {/if}
+        </div>
+      {:else if chartsLoadState === 'partial'}
+        <div class="load-note" role="alert">
+          <p class="muted-note">Some Signal K chart sources could not be opened.</p>
+          {#if onRetryCharts}
+            <button type="button" class="btn" onclick={onRetryCharts}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Retry
+            </button>
+          {/if}
+        </div>
+      {/if}
       <section class="category" aria-label="Chart sources">
         <h3 class="category-head pinned-head">
           <span class="category-title caps-label">Chart sources</span>
@@ -187,9 +226,18 @@ const reorder = createLayerReorder(
       {#if userCharts}
         <div class="add-chart-area">
           {#if addOpen}
-            <AddChartForm {userCharts} onDone={() => (addOpen = false)} />
+            <AddChartForm
+              {userCharts}
+              writeBlocked={auth.writeBlocked}
+              onDone={() => (addOpen = false)}
+            />
           {:else}
-            <button type="button" class="btn" onclick={() => (addOpen = true)}>
+            <button
+              type="button"
+              class="btn"
+              onclick={() => (addOpen = true)}
+              disabled={auth.writeBlocked}
+            >
               <Plus size={16} aria-hidden="true" />
               Add a chart
             </button>
@@ -279,6 +327,16 @@ const reorder = createLayerReorder(
 }
 .layer-tabs .btn {
   flex: 1;
+}
+.load-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.load-note .muted-note {
+  flex: 1 1 14rem;
 }
 /* A pinned, always-on layer (own vessel, MOB, active collision): the same flat row module as a normal
    layer, with a lock glyph in the lead rail instead of a drag handle (it cannot move or be hidden) and

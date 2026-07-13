@@ -4,8 +4,8 @@ import type { CompanionState } from '$features/prewarm';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 
 // Renders the pill to an SSR HTML string (the suite runs in the node environment, no DOM), enough to
-// pin its presence, the per-state glyph, the accessible word, the warning modifier classes, and that
-// the cache figure stays in the hover title. The node environment cannot dispatch a real DOM click, so
+// pin its presence, the per-state glyph and text, the warning modifier classes, and the cache figure.
+// The node environment cannot dispatch a real DOM click, so
 // the onOpen wiring is verified structurally: the click target (the button) exists only when present,
 // which is exactly the "fires only when present" guard, and no target renders when absent.
 function body(props: {
@@ -22,26 +22,22 @@ const noop = (): void => {};
 describe('ChartLockerStatus', () => {
   it('renders nothing when the companion is not present', () => {
     const html = body({ present: false, state: 'serving', cacheBytes: 4096, onOpen: noop });
-    expect(html).not.toContain('Chart Locker');
+    expect(html).not.toContain('Offline:');
     expect(html).not.toContain('<button');
   });
 
-  it('shows the state as a glyph, with the word in the accessible name, plus a steady drive mark', () => {
-    for (const [state, glyph, word] of [
-      ['serving', 'lucide-check', 'online'],
-      ['needs-auth', 'lucide-check', 'online'],
-      ['offline', 'lucide-unplug', 'offline'],
+  it('shows every state as visible text plus a distinct glyph', () => {
+    for (const [state, glyph, value] of [
+      ['serving', 'lucide-check', 'cache ready'],
+      ['needs-auth', 'lucide-key-round', 'sign in'],
+      ['offline', 'lucide-unplug', 'unavailable'],
       ['error', 'lucide-triangle-alert', 'error'],
     ] as const) {
       const html = body({ present: true, state, cacheBytes: null, onOpen: noop });
-      // The brand label and its steady drive mark are always shown.
-      expect(html).toContain('Chart Locker:');
-      expect(html).toContain('lucide-hard-drive');
-      // The state shows as its glyph, and the literal word stays in the accessible name only.
+      expect(html).toContain('Offline:');
       expect(html).toContain(glyph);
-      expect(html).toContain(`aria-label="Chart Locker ${word}, open offline charts"`);
-      // The state word is never rendered as visible body text.
-      expect(html).not.toContain(`>${word}</span>`);
+      expect(html).toContain(`>${value}</span>`);
+      expect(html).toContain(`aria-label="Offline charts, ${value}, open offline charts"`);
     }
   });
 
@@ -61,9 +57,10 @@ describe('ChartLockerStatus', () => {
     }
   });
 
-  it('keeps the cache figure in the hover title, never in the visible pill', () => {
+  it('shows the cache figure visibly instead of hiding it in a pointer-only tooltip', () => {
     const serving = body({ present: true, state: 'serving', cacheBytes: 4096, onOpen: noop });
     expect(serving).toContain('title="Offline charts: online, cache 4.0 KB"');
+    expect(serving).toContain('>4.0 KB</span>');
     // needs-auth cannot read the size, so no byte figure appears at all.
     const needsAuth = body({ present: true, state: 'needs-auth', cacheBytes: 4096, onOpen: noop });
     expect(needsAuth).toContain('sign in to see cache size');
@@ -75,7 +72,7 @@ describe('ChartLockerStatus', () => {
     // no target for a click to fire onOpen from.
     const present = body({ present: true, state: 'serving', cacheBytes: null, onOpen: noop });
     expect(present).toContain('<button');
-    expect(present).toContain('aria-label="Chart Locker online, open offline charts"');
+    expect(present).toContain('aria-label="Offline charts, cache ready, open offline charts"');
 
     const absent = body({ present: false, state: 'serving', cacheBytes: null, onOpen: noop });
     expect(absent).not.toContain('<button');

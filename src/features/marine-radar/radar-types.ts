@@ -1,9 +1,17 @@
 // The Signal K v2 radar API shapes Binnacle consumes, mirrored from `@signalk/server-api`'s radarapi
 // types. That package is never imported in browser or worker code (its barrel pulls in Node's
 // EventEmitter via FullSignalK), so the few wire types live here. The server serves these at
-// `/signalk/v2/api/vessels/self/radars`; a provider plugin (mayara) populates them.
+// `/signalk/v2/api/vessels/self/radars`; a Radar API provider, such as Mayara, populates them.
 
 export type RadarStatus = 'off' | 'standby' | 'transmit' | 'warming';
+export type RadarAvailability =
+  | 'idle'
+  | 'probing'
+  | 'available'
+  | 'absent'
+  | 'auth-required'
+  | 'unreachable'
+  | 'invalid';
 
 // The pending-set key for an in-flight transmit/standby write. Shared by the controller (which marks
 // it pending on setPower) and the store (which skips it in reconcile), so the optimistic-write guard
@@ -13,9 +21,21 @@ export const POWER_PENDING_KEY = 'power';
 
 // A live control value. `auto` is present on controls that support an automatic mode (gain, sea); a
 // value-only control (rain on some radars) omits it.
-interface RadarControlEntry {
-  value: number;
+export type RadarControlScalar = number | string | boolean;
+
+export interface RadarControlEntry {
+  value?: RadarControlScalar;
   auto?: boolean;
+  autoValue?: number;
+  enabled?: boolean;
+  endValue?: number;
+  startDistance?: number;
+  endDistance?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  allowed?: boolean;
 }
 
 // Current control settings keyed by control id, as reported in RadarInfo.controls.
@@ -53,11 +73,24 @@ export interface ControlDefinition {
   id: string;
   name: string;
   description?: string;
-  type: 'boolean' | 'number' | 'enum' | 'compound';
+  type:
+    | 'boolean'
+    | 'number'
+    | 'enum'
+    | 'string'
+    | 'button'
+    | 'sector'
+    | 'zone'
+    | 'rect'
+    | 'compound';
   range?: { min: number; max: number; step?: number; unit?: string };
-  values?: Array<{ value: number; label: string }>;
+  values?: Array<{ value: number | string; label: string }>;
   modes?: Array<'auto' | 'manual'>;
   readOnly?: boolean;
+  category?: string;
+  order?: number;
+  hasEnabled?: boolean;
+  allowed?: boolean;
 }
 
 // The subset of GET /radars/{id}/capabilities Binnacle reads.

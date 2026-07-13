@@ -16,7 +16,7 @@ export interface MenuItem {
   icon?: LucideIcon;
   disabled?: boolean;
   // A capability whose provider is absent. When false, the launcher and bar render the item grayed and
-  // non-interactive with `unavailableHint` as a hover tooltip and screen-reader text, mirroring the
+  // action-blocked with `unavailableHint` as a hover tooltip and screen-reader text, mirroring the
   // layers panel's detect-and-degrade rows, rather than dropping it from the menu. Distinct from
   // `disabled`, which is a transient block (a chart still loading); an absent provider is the steady
   // state until a plugin is installed. Defaults to available when unset.

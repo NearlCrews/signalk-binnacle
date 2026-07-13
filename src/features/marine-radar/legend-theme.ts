@@ -29,14 +29,24 @@ export function themedColorTable(
     const [r, g, b, a] = hexToRgba(entry.color, 255);
     const o = v * 4;
     table[o + 3] = v === 0 ? 0 : a;
-    if (v === 0 || isAccent(entry.label)) {
+    if (v === 0) {
       table[o] = r;
       table[o + 1] = g;
       table[o + 2] = b;
     } else if (theme === 'night-red') {
-      table[o] = Math.max(r, g, b);
+      // Night-red is a hard color-space boundary. Accent returns stay distinguishable through red
+      // intensity, but never retain green or blue pixels.
+      const intensity = Math.max(r, g, b);
+      table[o] =
+        isAccent(entry.label) && r < Math.max(g, b)
+          ? Math.max(96, Math.round(intensity * 0.75))
+          : intensity;
       table[o + 1] = 0;
       table[o + 2] = 0;
+    } else if (isAccent(entry.label)) {
+      table[o] = r;
+      table[o + 1] = g;
+      table[o + 2] = b;
     } else {
       table[o] = Math.round(r * 0.7);
       table[o + 1] = Math.round(g * 0.7);

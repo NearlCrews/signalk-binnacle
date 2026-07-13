@@ -1,8 +1,15 @@
-import { featureToWaypoint, type Waypoint, waypointToFeature } from '$entities/waypoint';
+import {
+  cleanWaypointId,
+  featureToWaypoint,
+  type Waypoint,
+  waypointToFeature,
+} from '$entities/waypoint';
+import { isLatLon } from '$shared/geo';
 import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
 
 const V2 = '/signalk/v2/api/resources/waypoints';
 const V1 = '/signalk/v1/api/resources/waypoints';
+export const MAX_WAYPOINTS = 5_000;
 
 // Returns the waypoints, or undefined when both the v2 and v1 endpoints are unreachable (a
 // transient failure), so a caller can keep the current list rather than blanking it. A reachable
@@ -11,8 +18,18 @@ const V1 = '/signalk/v1/api/resources/waypoints';
 // v1-only server gets list-but-not-edit behavior rather than writes against a legacy API the
 // rest of the app does not speak.
 export function fetchWaypoints(base: string, token?: string): Promise<Waypoint[] | undefined> {
-  return fetchKeyedResource(base, [V2, V1], token, featureToWaypoint, (url, status) =>
-    console.warn(`[waypoints] ${url} returned ${status}`),
+  let accepted = 0;
+  return fetchKeyedResource(
+    base,
+    [V2, V1],
+    token,
+    (id, raw) => {
+      if (accepted >= MAX_WAYPOINTS) return undefined;
+      const waypoint = featureToWaypoint(id, raw);
+      if (waypoint) accepted += 1;
+      return waypoint;
+    },
+    (url, status) => console.warn(`[waypoints] ${url} returned ${status}`),
   );
 }
 
@@ -22,11 +39,9 @@ export function saveWaypoint(
   token: string | undefined,
   waypoint: Waypoint,
 ): Promise<boolean> {
-  return putResource(
-    `${base}${V2}/${encodeURIComponent(waypoint.id)}`,
-    token,
-    waypointToFeature(waypoint),
-  );
+  const id = cleanWaypointId(waypoint.id);
+  if (!id || !isLatLon(waypoint.position)) return Promise.resolve(false);
+  return putResource(`${base}${V2}/${encodeURIComponent(id)}`, token, waypointToFeature(waypoint));
 }
 
 export function deleteWaypoint(
@@ -34,5 +49,7 @@ export function deleteWaypoint(
   token: string | undefined,
   id: string,
 ): Promise<boolean> {
-  return deleteResource(`${base}${V2}/${encodeURIComponent(id)}`, token);
+  const safeId = cleanWaypointId(id);
+  if (!safeId) return Promise.resolve(false);
+  return deleteResource(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
 }

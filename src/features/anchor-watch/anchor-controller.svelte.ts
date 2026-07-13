@@ -19,6 +19,7 @@ export interface AnchorControllerDeps {
   // Whether the server exposes the standard Anchor API. A getter because it resolves asynchronously
   // from server feature discovery, and the transport is reselected as it changes.
   serverHasAnchorApi: () => boolean;
+  writeBlocked: () => boolean;
 }
 
 // The anchor watch orchestration: server-driven when the standard Anchor API or the anchoralarm plugin
@@ -33,6 +34,7 @@ export function createAnchorController(deps: AnchorControllerDeps) {
   // An anchor error shown in the panel until the next anchor action clears it, rather than
   // auto-dismissing: on a boat an error must persist until the operator has acted on it.
   let anchorError = $state<string | undefined>();
+  let busy = $state(false);
 
   // The anchor action chain, selected once at resolve time from capabilities: the standard Anchor
   // API when the server exposes it (a proposal today, tracked by the weekly watch), otherwise the
@@ -74,21 +76,36 @@ export function createAnchorController(deps: AnchorControllerDeps) {
   });
 
   async function onDrop(): Promise<void> {
+    if (busy) return;
     anchorError = undefined;
     const position = vessel.position;
-    if (!position) return;
+    if (!position || vessel.positionStale) {
+      anchorError = 'A fresh GPS fix is needed to drop the anchor.';
+      return;
+    }
     const radius = anchor.preferredRadiusMeters;
+    if (deps.writeBlocked()) {
+      anchor.dropLocal(position, radius);
+      anchorError =
+        'Server write access is unavailable. Anchor watch is running in this browser only.';
+      return;
+    }
     // The server drop doubles as detection: when the standard API or the anchoralarm plugin answers,
     // the server owns the watch (and keeps alarming with the browser closed) and the stream reflects
     // it back. Any failure degrades to the client-side watch; the panel's mode line says which.
-    if (await anchorTransport.drop(radius)) return;
-    // A server whose standard Anchor API was feature-detected and then refused the drop has a problem
-    // the silent local fallback would hide; surface it, then still start the local watch so the boat
-    // is covered. The plugin-probe path cannot tell absent from refused, so it degrades quietly.
-    if (anchorTransport.kind === 'standard') {
-      anchorError = 'Could not drop the anchor on the server. Check the connection.';
+    busy = true;
+    try {
+      if (await anchorTransport.drop(radius)) return;
+      // A server whose standard Anchor API was feature-detected and then refused the drop has a problem
+      // the silent local fallback would hide; surface it, then still start the local watch so the boat
+      // is covered. The plugin-probe path cannot tell absent from refused, so it degrades quietly.
+      if (anchorTransport.kind === 'standard') {
+        anchorError = 'Could not drop the anchor on the server. Check the connection.';
+      }
+      anchor.dropLocal(position, radius);
+    } finally {
+      busy = false;
     }
-    anchor.dropLocal(position, radius);
   }
 
   // Route an anchor action by mode. In server mode the plugin call must succeed; a failure is
@@ -99,13 +116,23 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     action: string,
     local: () => void,
   ): Promise<void> {
+    if (busy) return;
     anchorError = undefined;
+    if (anchor.mode === 'server' && deps.writeBlocked()) {
+      anchorError = `Could not ${action}. Server write access is required.`;
+      return;
+    }
     if (anchor.mode !== 'server') {
       local();
       return;
     }
-    if (!(await serverCall())) {
-      anchorError = `Could not ${action} on the server. Check the connection.`;
+    busy = true;
+    try {
+      if (!(await serverCall())) {
+        anchorError = `Could not ${action} on the server. Check the connection.`;
+      }
+    } finally {
+      busy = false;
     }
   }
 
@@ -144,6 +171,9 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     },
     get anchorAlert() {
       return anchorAlert;
+    },
+    get busy() {
+      return busy;
     },
   };
 }

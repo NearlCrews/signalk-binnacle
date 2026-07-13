@@ -12,6 +12,8 @@ export interface HistorySample {
   sog?: number | null;
 }
 
+const MAX_HISTORY_SAMPLES = 10_000;
+
 export function toSamples(values: HistoryValues): HistorySample[] {
   const col = (path: string) => columnIndex(values, path);
   const iPos = col(SK_PATHS.position);
@@ -22,7 +24,7 @@ export function toSamples(values: HistoryValues): HistorySample[] {
   const num = (row: readonly unknown[], i: number): number | null | undefined => {
     if (i < 0) return undefined;
     const v = row[i + 1];
-    return typeof v === 'number' ? v : null;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
   };
   const out: HistorySample[] = [];
   for (const row of values.rows) {
@@ -41,8 +43,9 @@ export function toSamples(values: HistoryValues): HistorySample[] {
       sample.lat = pos.latitude;
     }
     out.push(sample);
+    if (out.length >= MAX_HISTORY_SAMPLES) break;
   }
-  return out;
+  return out.sort((a, b) => a.t - b.t);
 }
 
 export function nearestSample(

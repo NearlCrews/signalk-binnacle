@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGpxRoutes } from './gpx-import';
+import { parseGpxRoutes, parseGpxRoutesDetailed } from './gpx-import';
 import { routeToGpx } from './route-gpx';
 
 const GPX = `<?xml version="1.0" encoding="UTF-8"?>
@@ -39,8 +39,7 @@ describe('parseGpxRoutes', () => {
     expect(back).toHaveLength(1);
     expect(back[0].name).toBe('Passage');
     expect(back[0].waypoints[0]).toEqual({ position: { latitude: 10, longitude: 20 }, name: 'A' });
-    // routeToGpx fills an unnamed waypoint with its 1-based index, so it round-trips as a name.
-    expect(back[0].waypoints[1]).toEqual({ position: { latitude: 11, longitude: 21 }, name: '2' });
+    expect(back[0].waypoints[1]).toEqual({ position: { latitude: 11, longitude: 21 } });
   });
 
   it('tolerates namespace prefixes and attribute order', () => {
@@ -64,5 +63,29 @@ describe('parseGpxRoutes', () => {
   it('returns an empty array for non-route or malformed input', () => {
     expect(parseGpxRoutes('<gpx></gpx>')).toEqual([]);
     expect(parseGpxRoutes('not xml at all')).toEqual([]);
+  });
+
+  it('rejects partially numeric and non-finite coordinates', () => {
+    const malformed = `<gpx><rte>
+      <rtept lat="42north" lon="-83"/><rtept lat="42" lon="-83west"/>
+      <rtept lat="Infinity" lon="0"/><rtept lat="1" lon="1"/>
+    </rte></gpx>`;
+    expect(parseGpxRoutes(malformed)).toEqual([]);
+  });
+
+  it('rejects files over the import size limit', () => {
+    const result = parseGpxRoutesDetailed('x'.repeat(5 * 1024 * 1024 + 1));
+    expect(result).toEqual({ routes: [], error: 'file-too-large' });
+  });
+
+  it('applies the import size limit to UTF-8 bytes, not JavaScript characters', () => {
+    const result = parseGpxRoutesDetailed('é'.repeat(3 * 1024 * 1024));
+    expect(result).toEqual({ routes: [], error: 'file-too-large' });
+  });
+
+  it('rejects files over the route-count limit', () => {
+    const route = '<rte><rtept lat="1" lon="1"/><rtept lat="2" lon="2"/></rte>';
+    const result = parseGpxRoutesDetailed(`<gpx>${route.repeat(101)}</gpx>`);
+    expect(result).toEqual({ routes: [], error: 'too-many-routes' });
   });
 });

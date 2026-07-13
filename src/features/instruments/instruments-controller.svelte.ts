@@ -54,6 +54,7 @@ export interface InstrumentsController {
 }
 
 export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsController {
+  const MAX_SELECTED_TILES = 100;
   deps.store.ensureCells(ALL_CATALOG_PATHS);
 
   // Per-zonesPath meta cache: null means "fetch attempted, no zones found"; absent means "not yet fetched".
@@ -75,9 +76,16 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   function resolveSelectedIds(): string[] {
     const raw = deps.tilesStore.value;
     // Runtime guard: PersistedValue without a validator can hold any JSON shape if storage drifted.
-    if (!Array.isArray(raw) || raw.length === 0) return [...DEFAULT_TILES];
-    const valid = raw.filter((id) => typeof id === 'string' && tileById(id) !== undefined);
-    return valid.length > 0 ? valid : [...DEFAULT_TILES];
+    if (!Array.isArray(raw)) return [...DEFAULT_TILES];
+    const seen = new Set<string>();
+    const valid: string[] = [];
+    for (const id of raw) {
+      if (typeof id !== 'string' || seen.has(id) || tileById(id) === undefined) continue;
+      seen.add(id);
+      valid.push(id);
+      if (valid.length >= MAX_SELECTED_TILES) break;
+    }
+    return valid;
   }
 
   function resolveTiles(): TileDef[] {
@@ -96,9 +104,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   // Shared paths (two tiles using the same path) are deduplicated naturally: the desired set is a
   // union, and removal only drops paths absent from the new union.
   function syncSubscriptions(): void {
-    const desired = deps.openStore.value
-      ? new Set(resolveTiles().flatMap((def) => def.paths))
-      : new Set<string>();
+    const desired =
+      deps.openStore.value === true
+        ? new Set(resolveTiles().flatMap((def) => def.paths))
+        : new Set<string>();
 
     const toAdd = [...desired].filter((p) => !subscribedPaths.has(p));
     const toRemove = [...subscribedPaths].filter((p) => !desired.has(p));
@@ -160,7 +169,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
         instances = next;
         ensureDynamicCells(next);
         syncSubscriptions();
-        if (deps.openStore.value) fetchMetaForSelected();
+        if (deps.openStore.value === true) fetchMetaForSelected();
       })
       .catch(() => {
         instances = EMPTY_INSTANCES;
@@ -196,6 +205,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     deps.store.ensureCells(def.paths);
     const current = resolveSelectedIds();
     const idx = current.indexOf(id);
+    if (idx < 0 && current.length >= MAX_SELECTED_TILES) return;
     const next = idx >= 0 ? current.filter((_, i) => i !== idx) : [...current, id];
     deps.tilesStore.set(next);
     syncSubscriptions();
@@ -244,14 +254,14 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   // Restore subscriptions, meta, and discovery if the dock was persisted open before construction.
   syncSubscriptions();
-  if (deps.openStore.value) {
+  if (deps.openStore.value === true) {
     fetchMetaForSelected();
     discover();
   }
 
   return {
     get open() {
-      return deps.openStore.value;
+      return deps.openStore.value === true;
     },
     get tiles() {
       return tiles;

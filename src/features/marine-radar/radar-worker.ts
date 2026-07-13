@@ -51,8 +51,14 @@ class RadarWorker {
     this.#callbacks = [onFrame as Releasable, onStatus as Releasable];
     const core = new RadarFrameCore(spokesPerRev, maxSpokeLen, initialRange);
     this.#core = core;
-    let hasData = false;
-    const socket = new WebSocket(url);
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(url);
+    } catch (error) {
+      console.warn('[marine-radar] could not open spokes WebSocket', error);
+      onStatus('error');
+      throw error;
+    }
     socket.binaryType = 'arraybuffer';
     socket.onopen = () => onStatus('open');
     socket.onmessage = (event) => {
@@ -63,7 +69,7 @@ class RadarWorker {
       try {
         // hasData flips only once a message actually decodes to >= 1 spoke, so a stream of undecodable
         // or empty messages never starts flushing and the controller never reports a false "live".
-        if (core.ingest(new Uint8Array(event.data)) > 0) hasData = true;
+        core.ingest(new Uint8Array(event.data));
       } catch (error) {
         // One malformed or truncated frame must not kill the stream: drop it and keep integrating.
         console.warn('[marine-radar] dropped a malformed radar frame', error);
@@ -83,7 +89,7 @@ class RadarWorker {
     // spoke count since the last flush so the controller can tell painting from connected-but-no-data.
     this.#timer = setInterval(
       () => {
-        if (!hasData) return;
+        if (!core.hasPendingSpokes) return;
         const frame = core.flush();
         onFrame(Comlink.transfer(frame, [frame.buffer]));
       },

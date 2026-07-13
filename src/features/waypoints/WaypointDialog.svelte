@@ -2,7 +2,7 @@
 import { type DefaultOption, IconPicker } from '$entities/icon-picker';
 import { isPoiCategory } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
-import type { Waypoint } from '$entities/waypoint';
+import { MAX_WAYPOINT_NAME_LENGTH, type Waypoint } from '$entities/waypoint';
 import { dialog, TextField } from '$shared/ui';
 
 interface Props {
@@ -12,11 +12,12 @@ interface Props {
   // When set the dialog is in edit mode: name and icon are pre-populated from this waypoint.
   waypoint?: Waypoint;
   symbols?: SymbolsStore;
+  busy?: boolean;
   onSave: (result: { name: string; icon?: string }) => void;
   onCancel: () => void;
 }
 
-const { defaultName, waypoint, symbols, onSave, onCancel }: Props = $props();
+const { defaultName, waypoint, symbols, busy = false, onSave, onCancel }: Props = $props();
 
 const WAYPOINT_DEFAULT: DefaultOption = {
   iconId: 'waypoint',
@@ -57,6 +58,7 @@ let wpName = $state(waypoint?.name ?? '');
 let icon = $state(pickerValueFromStoredIcon(waypoint?.icon));
 
 function save(): void {
+  if (busy) return;
   onSave({ name: wpName.trim() || defaultName, icon: finalIconRef(icon) });
 }
 
@@ -72,6 +74,8 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
       label="Name"
       value={wpName}
       placeholder={waypoint?.name ?? defaultName}
+      disabled={busy}
+      maxLength={MAX_WAYPOINT_NAME_LENGTH}
       focusOnOpen
       onInput={(value) => (wpName = value)}
       onCommit={(value) => (wpName = value)}
@@ -85,12 +89,15 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
         {symbols}
         symbolRole="waypoint"
         defaultOption={WAYPOINT_DEFAULT}
+        disabled={busy}
       />
     </div>
   </div>
   <footer>
-    <button type="button" class="btn" onclick={onCancel}>Cancel</button>
-    <button type="button" class="btn btn-primary btn-pill" onclick={save}>Save</button>
+    <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
+    <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={busy}>
+      {busy ? 'Saving…' : 'Save'}
+    </button>
   </footer>
 </dialog>
 

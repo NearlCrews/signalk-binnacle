@@ -29,4 +29,21 @@ describe('trackToRoute', () => {
     expect(route.name).toBe('My passage');
     expect(route.id).toBeTruthy();
   });
+
+  it('uses only the latest continuous segment after a GPS gap', () => {
+    const route = trackToRoute(
+      [pt(0, 0), pt(0, 0.01), { ...pt(10, 10), gap: true }, pt(10, 10.01)],
+      'After gap',
+      10,
+    );
+    expect(route.waypoints.map((waypoint) => waypoint.position)).toEqual([
+      { latitude: 10, longitude: 10 },
+      { latitude: 10, longitude: 10.01 },
+    ]);
+  });
+
+  it('does not invent a route when the latest segment has one point', () => {
+    const route = trackToRoute([pt(0, 0), pt(0, 0.01), { ...pt(10, 10), gap: true }], 'Gap');
+    expect(route.waypoints).toHaveLength(1);
+  });
 });

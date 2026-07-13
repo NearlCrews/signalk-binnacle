@@ -111,7 +111,7 @@ export function createCourseOverlay(guidance: CourseGuidance, vessel: OwnVessel)
       }
       const dest = guidance.nextPosition;
       const pos = vessel.position;
-      if (!dest || !pos) {
+      if (!dest || !pos || vessel.positionStale) {
         clearBoth(ctx);
         return;
       }

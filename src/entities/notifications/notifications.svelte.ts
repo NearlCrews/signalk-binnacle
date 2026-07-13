@@ -1,4 +1,4 @@
-import { isRecord } from '$shared/lib';
+import { hasControlCharacters, isRecord } from '$shared/lib';
 import {
   notificationState,
   type RaisedNotificationState,
@@ -14,6 +14,19 @@ const SEVERITY_RANK: Record<RaisedNotificationState, number> = {
   warn: 2,
   alert: 3,
 };
+
+export const MAX_ACTIVE_NOTIFICATIONS = 500;
+const MAX_NOTIFICATION_PATH_LENGTH = 512;
+const MAX_NOTIFICATION_MESSAGE_LENGTH = 2_048;
+const MAX_NOTIFICATION_ID_LENGTH = 512;
+const MAX_NOTIFICATION_TIMESTAMP_LENGTH = 128;
+
+function cleanString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
+  return trimmed;
+}
 
 // The Signal K notification delivery methods (server-api), the only values method carries.
 type NotificationMethod = 'visual' | 'sound';
@@ -38,6 +51,8 @@ const boolField = (v: unknown): boolean | undefined => (typeof v === 'boolean' ?
 
 function parseNotification(path: string, value: unknown): ActiveNotification | undefined {
   if (!isRecord(value)) return undefined;
+  const safePath = cleanString(path, MAX_NOTIFICATION_PATH_LENGTH);
+  if (!safePath) return undefined;
   const raw = value;
   const state = notificationState(value);
   // Object.hasOwn, not `in`: a junk state like 'constructor' must not match the prototype.
@@ -46,13 +61,14 @@ function parseNotification(path: string, value: unknown): ActiveNotification | u
     ? raw.method.filter((m): m is NotificationMethod => m === 'visual' || m === 'sound')
     : [];
   const status = isRecord(raw.status) ? raw.status : {};
+  const message = cleanString(raw.message, MAX_NOTIFICATION_MESSAGE_LENGTH) ?? '';
   return {
-    path,
+    path: safePath,
     state: state as RaisedNotificationState,
-    message: typeof raw.message === 'string' ? raw.message : '',
+    message,
     method,
-    timestamp: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
-    id: typeof raw.id === 'string' ? raw.id : undefined,
+    timestamp: cleanString(raw.createdAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
+    id: cleanString(raw.id, MAX_NOTIFICATION_ID_LENGTH),
     silenced: boolField(status.silenced),
     acknowledged: boolField(status.acknowledged),
     canSilence: boolField(status.canSilence),
@@ -88,8 +104,8 @@ export class NotificationsStore {
     out.sort(
       (a, b) => SEVERITY_RANK[a.state] - SEVERITY_RANK[b.state] || a.path.localeCompare(b.path),
     );
-    this.#cache = out;
+    this.#cache = out.slice(0, MAX_ACTIVE_NOTIFICATIONS);
     this.#cacheVersion = version;
-    return out;
+    return this.#cache;
   }
 }

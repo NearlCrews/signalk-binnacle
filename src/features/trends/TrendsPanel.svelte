@@ -26,12 +26,19 @@ const hasProvider = $derived((providers?.ids.length ?? 0) > 0);
 let history = $state<TrendHistory | undefined>(undefined);
 let loading = $state(false);
 let loadFailed = $state(false);
+let chartsPromise = $state(import('./TrendCharts.svelte'));
 
 // The sequence counter keeps a stale in-flight load from clobbering a newer result when
 // providers (or the token) change mid-fetch; only the latest load may write state.
 let loadSeq = 0;
-$effect(() => {
-  if (!providers?.ids.length) return;
+function refreshHistory(): void {
+  if (!providers?.ids.length) {
+    loadSeq += 1;
+    history = undefined;
+    loading = false;
+    loadFailed = false;
+    return;
+  }
   const mine = ++loadSeq;
   loading = true;
   loadFailed = false;
@@ -48,6 +55,12 @@ $effect(() => {
       loading = false;
       loadFailed = true;
     });
+}
+
+$effect(() => {
+  void providers;
+  void token;
+  refreshHistory();
 });
 
 // The session recorder's version is the reactive pulse for the fallback series; reading it here
@@ -66,6 +79,8 @@ const sourceNote = $derived.by(() => {
   }
   if (loading) return 'Loading the last 24 hours...';
   if (hasProvider && loadFailed) return 'History query failed; showing this session only.';
+  if (providers === undefined)
+    return 'Checking for a history provider; showing this session meanwhile.';
   return 'This session only. A history provider on the server (for example signalk-questdb or signalk-to-influxdb2) unlocks the full 24 hour view.';
 });
 </script>
@@ -75,7 +90,35 @@ const sourceNote = $derived.by(() => {
     Recent trends in the boat's wind, depth, and other data over the last day.
   </p>
   <p class="muted-note" role="status">{sourceNote}</p>
-  {#await import('./TrendCharts.svelte') then charts}
+  {#if loadFailed && hasProvider}
+    <button type="button" class="btn" disabled={loading} onclick={refreshHistory}>
+      Retry history
+    </button>
+  {/if}
+  {#await chartsPromise}
+    <p class="muted-note" role="status">Loading trend charts…</p>
+  {:then charts}
     <charts.default history={history?.series} {sessionSeries} {mode} {theme} />
+  {:catch}
+    <div class="chart-error" role="alert">
+      <p class="muted-note">Could not open the trend charts.</p>
+      <button
+        type="button"
+        class="btn"
+        onclick={() => (chartsPromise = import('./TrendCharts.svelte'))}
+      >
+        Retry charts
+      </button>
+    </div>
   {/await}
 </SlideOver>
+
+<style>
+.chart-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+</style>

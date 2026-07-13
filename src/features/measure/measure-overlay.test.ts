@@ -39,6 +39,37 @@ describe('measure overlay', () => {
     expect(labeled?.properties?.label).toBe('111 m');
   });
 
+  it('redraws after each accepted point, not only the first one', () => {
+    const { measure, overlay, map, ctx } = setup();
+    overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    overlay.sync(ctx);
+    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(1);
+    measure.add({ latitude: 0.001, longitude: 0 });
+    overlay.sync(ctx);
+    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(3);
+  });
+
+  it('unwraps an antimeridian crossing into the short visual leg', () => {
+    const { measure, overlay, map, ctx } = setup();
+    overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 179 });
+    measure.add({ latitude: 0, longitude: -179 });
+    overlay.sync(ctx);
+    const line = sourceFeatures(map, 'binnacle-measure').find(
+      (feature) => feature.geometry.type === 'LineString',
+    );
+    expect(line?.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [179, 0],
+        [181, 0],
+      ],
+    });
+  });
+
   it('relabels the total when the unit preference flips', () => {
     const { measure, overlay, map, units, ctx } = setup();
     overlay.add(ctx);

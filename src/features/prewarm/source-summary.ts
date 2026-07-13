@@ -136,6 +136,6 @@ export function includedSummary(selected: ChartSource[]): string {
     const noun = PLAIN_NOUN[source.id];
     if (noun !== undefined && !nouns.includes(noun)) nouns.push(noun);
   }
-  if (nouns.length === 0) return 'Nothing yet. Pick at least one chart layer below.';
+  if (nouns.length === 0) return 'No charts selected for this area.';
   return `${capitalize(joinPlain(nouns))}.`;
 }

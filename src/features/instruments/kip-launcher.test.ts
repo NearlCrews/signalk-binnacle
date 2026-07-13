@@ -30,13 +30,13 @@ describe('detectKip', () => {
     expect(await detectKip(ORIGIN, TOKEN)).toBe(false);
   });
 
-  it('resolves false on 401', async () => {
+  it('keeps availability unknown on 401', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, {})));
-    expect(await detectKip(ORIGIN, TOKEN)).toBe(false);
+    expect(await detectKip(ORIGIN, TOKEN)).toBeUndefined();
   });
 
-  it('resolves false on network rejection', async () => {
+  it('keeps availability unknown on network rejection', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')));
-    expect(await detectKip(ORIGIN, TOKEN)).toBe(false);
+    expect(await detectKip(ORIGIN, TOKEN)).toBeUndefined();
   });
 });

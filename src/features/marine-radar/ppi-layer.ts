@@ -44,7 +44,7 @@ const ringLabel = (meters: number): string =>
 // Shared by the radar layer row and the app-menu radar tile so both grayed surfaces explain the
 // same thing when no radar is discovered. One source of truth keeps the wording from drifting.
 export const RADAR_UNAVAILABLE_HINT =
-  'No radar detected. Install a Signal K radar provider plugin (mayara) to see the radar picture.';
+  'Radar is not available. Open Radar for provider or access details.';
 
 function ringColor(theme: MapThemePaint['theme']): string {
   return theme === 'night-red' ? RING_COLOR_NIGHT : RING_COLOR_DAY;
@@ -53,12 +53,13 @@ function ringColor(theme: MapThemePaint['theme']): string {
 // The sweep wedge color as shader RGB floats: red on night-red (no green at night), classic bright radar
 // green otherwise, brighter than the rings so the scanning edge stands out over the echo.
 function sweepColor(theme: MapThemePaint['theme']): [number, number, number] {
-  return theme === 'night-red' ? [1, 0.2, 0.2] : [0.4, 1, 0.55];
+  return theme === 'night-red' ? [0.75, 0, 0] : [0.4, 1, 0.55];
 }
 
 export interface PpiLayer extends OverlayModule {
   sync(ctx: OverlayContext): void;
   pushFrame(frame: RadarFrame): void;
+  clearFrame(): void;
 }
 
 // The marine radar echo as a MapLibre custom WebGL layer (polar texture unwrapped in a shader,
@@ -68,6 +69,8 @@ export interface PpiLayer extends OverlayModule {
 export function createPpiLayer(
   store: MarineRadarStore,
   getCenter: () => LatLon | undefined,
+  getHeading: () => number | undefined = () => undefined,
+  onVisibilityChange: (visible: boolean) => void = () => undefined,
 ): PpiLayer {
   let gl: RadarGl | undefined;
   let echoMap: MapLibreMap | undefined;
@@ -122,19 +125,24 @@ export function createPpiLayer(
         gl.setOpacity(opacity);
         gl.setSweepColor(sweepColor(theme));
         dirty = true;
+        store.setRendererStatus('ready');
       } catch (error) {
         // A shader compile or link failure must not abort the whole overlay registration (it runs
         // synchronously inside registerAll): degrade to an empty echo, which the render guard no-ops,
         // and flag the radar status. This mirrors wind-overlay's degrade-on-GL-failure.
         console.warn('[marine-radar] WebGL init failed; radar echo disabled', error);
         gl = undefined;
-        store.setStatus('error');
+        store.setRendererStatus(
+          'error',
+          error instanceof Error ? error.message : 'WebGL initialization failed.',
+        );
       }
     }
 
     const onLost = (event: Event) => {
       event.preventDefault();
       contextLost = true;
+      store.setRendererStatus('context-lost', 'The chart graphics context was lost.');
     };
     const onRestored = () => {
       if (removed) return;
@@ -162,13 +170,22 @@ export function createPpiLayer(
         if (!gl || !visible || contextLost) return suppress('not-ready');
         const center = getCenter();
         if (!frame || !center) return suppress(frame ? 'no-fix' : 'no-frame');
+        const effectiveHeading = frame.heading ?? getHeading();
+        if (effectiveHeading === undefined) {
+          store.setRendererStatus(
+            'blocked',
+            'No radar bearing or navigation.headingTrue is available, so the echo is suppressed.',
+          );
+          return suppress('no-heading');
+        }
+        if (store.rendererStatus === 'blocked') store.setRendererStatus('ready');
         const matrix = matrixOf(args);
         if (matrix.length < 16) return suppress('bad-matrix');
         const range = effectiveRange();
         if (range <= 0) return suppress('no-range');
         if (dirty) {
           gl.setData(frame.buffer, frame.spokesPerRev, frame.maxSpokeLen);
-          if (frame.heading !== undefined) gl.setHeading(frame.heading);
+          gl.setHeading(effectiveHeading);
           gl.setSweep(frame.sweep);
           dirty = false;
         }
@@ -240,7 +257,8 @@ export function createPpiLayer(
       }
       return;
     }
-    const heading = frame.heading ?? Number.NaN;
+    const effectiveHeading = frame.heading ?? getHeading();
+    const heading = effectiveHeading ?? Number.NaN;
     // Object.is so the no-heading (NaN) case compares equal to itself and does not rebuild every sync.
     if (
       ringsDrawn &&
@@ -257,8 +275,8 @@ export function createPpiLayer(
     lastRingHeading = heading;
     ringsDrawn = true;
     const rings = rangeRingFeatures(center, range, RANGE_RINGS, ringLabel);
-    if (frame.heading !== undefined) {
-      rings.features.push(headingLineFeature(center, frame.heading, range));
+    if (effectiveHeading !== undefined) {
+      rings.features.push(headingLineFeature(center, effectiveHeading, range));
     }
     setSourceData(ctx.map, RINGS_SOURCE_ID, rings);
   }
@@ -287,6 +305,15 @@ export function createPpiLayer(
       // when the vessel moves. So there is a single repaint path, not a self-scheduling loop plus a tick.
       if (visible) echoMap?.triggerRepaint();
     },
+    clearFrame() {
+      frame = undefined;
+      dirty = true;
+      ringsDrawn = false;
+      if (echoMap?.getSource(RINGS_SOURCE_ID)) {
+        setSourceData(echoMap, RINGS_SOURCE_ID, emptyFeatureCollection());
+      }
+      echoMap?.triggerRepaint();
+    },
     reset() {
       // Drop the cached frame too: on a base-style swap or a radar switch the next render must wait for
       // a fresh spoke frame rather than painting the previous radar's echo at the new geometry.
@@ -312,6 +339,7 @@ export function createPpiLayer(
     },
     setVisible(ctx, value) {
       visible = value;
+      onVisibilityChange(value);
       setLayersVisibility(ctx.map, [RADAR_RINGS_LAYER_ID, RADAR_RING_LABELS_LAYER_ID], value);
       if (value) ctx.map.triggerRepaint();
     },

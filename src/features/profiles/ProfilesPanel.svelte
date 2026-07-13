@@ -28,7 +28,7 @@ interface Props {
   onSetDefault: (id: string) => void;
   // Download a profile as a JSON file, and import profiles from the text of a JSON file.
   onExport: (id: string) => void;
-  onImport: (profiles: ImportedProfile[]) => void;
+  onImport: (profiles: ImportedProfile[]) => number;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -68,25 +68,43 @@ function confirmName(value: string): void {
 // A parse error or a file with no valid entries must not fail silently: the panel parses once,
 // says so when nothing was usable, and hands the already-parsed profiles to the importer.
 let importError = $state<string | undefined>();
+let importStatus = $state<string | undefined>();
+let importing = $state(false);
 
 async function importProfiles(): Promise<void> {
+  if (importing) return;
+  importing = true;
+  importStatus = undefined;
   const picked = await pickTextFile('.json,application/json');
   if (!picked.ok) {
     importError = readErrorMessage(picked);
+    importing = false;
     return;
   }
   const parsed = parseProfilesJson(picked.text);
   if (parsed.length === 0) {
     importError = 'No valid profiles in that file.';
+    importing = false;
     return;
   }
   importError = undefined;
-  onImport(parsed);
+  const imported = onImport(parsed);
+  importStatus = `Imported ${imported} ${imported === 1 ? 'profile' : 'profiles'}.`;
+  importing = false;
 }
 
 // Delete is destructive and propagates to every synced device, so it arms a confirm step rather
 // than firing on a single tap, matching the Routes panel.
 const armedDelete = new ArmedRow((id) => onRemove(id));
+let confirmingApplyId = $state<string | undefined>();
+
+function useProfile(id: string): void {
+  if (isDirty && activeId !== undefined && activeId !== id) {
+    confirmingApplyId = id;
+    return;
+  }
+  onApply(id);
+}
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
@@ -114,9 +132,10 @@ const armedDelete = new ArmedRow((id) => onRemove(id));
       class="btn"
       title="Import profiles from a file another device exported"
       onclick={importProfiles}
+      disabled={importing}
     >
       <Upload size={16} aria-hidden="true" />
-      Import
+      {importing ? 'Importing…' : 'Import'}
     </button>
   </div>
 
@@ -131,6 +150,8 @@ const armedDelete = new ArmedRow((id) => onRemove(id));
 
   {#if importError}
     <p class="alert-note" role="alert">{importError}</p>
+  {:else if importStatus}
+    <p class="muted-note" role="status">{importStatus}</p>
   {/if}
 
   <SavedList
@@ -162,9 +183,21 @@ const armedDelete = new ArmedRow((id) => onRemove(id));
           onConfirm={confirmName}
           onCancel={() => (naming = null)}
         />
+      {:else if confirmingApplyId === profile.id}
+        <InlineConfirm
+          question={`Use ${profile.name} and discard unsaved changes to the active profile?`}
+          confirmLabel="Use profile"
+          onConfirm={() => {
+            confirmingApplyId = undefined;
+            onApply(profile.id);
+          }}
+          onCancel={() => (confirmingApplyId = undefined)}
+        />
       {:else if armedDelete.isArmed(profile.id)}
         <InlineConfirm
-          question="Delete this profile on every synced device?"
+          question={auth.writeBlocked
+            ? 'Delete this profile from this device? Its server copy may remain.'
+            : 'Delete this profile on every synced device?'}
           onConfirm={() => armedDelete.confirm(profile.id)}
           onCancel={() => armedDelete.cancel()}
         />
@@ -176,7 +209,7 @@ const armedDelete = new ArmedRow((id) => onRemove(id));
               class="icon-btn"
               aria-label="Use this profile"
               title="Use this profile"
-              onclick={() => onApply(profile.id)}
+              onclick={() => useProfile(profile.id)}
             >
               <Check size={18} aria-hidden="true" />
             </button>

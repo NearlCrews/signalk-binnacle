@@ -1,5 +1,5 @@
 import { splitAtGaps, type TrackPoint, toLonLat } from '$entities/track';
-import { downloadText } from '$shared/lib';
+import { downloadText, portableFilename } from '$shared/lib';
 
 // Split a flat point list into per-segment coordinate arrays, breaking at gap points so a
 // dropout shows as a real break. Each coordinate is GeoJSON [lon, lat]. Single-coordinate
@@ -23,7 +23,11 @@ export function toGeoJsonString(name: string, points: readonly TrackPoint[]): st
   return JSON.stringify(toGeoJsonFeature(name, points), null, 2);
 }
 
+export function trackGeoJsonFilename(name: string): string {
+  return portableFilename(name, 'track', 'geojson');
+}
+
 // Trigger a browser download of the track as a .geojson file.
 export function downloadGeoJson(name: string, points: readonly TrackPoint[]): void {
-  downloadText(`${name || 'track'}.geojson`, toGeoJsonString(name, points), 'application/geo+json');
+  downloadText(trackGeoJsonFilename(name), toGeoJsonString(name, points), 'application/geo+json');
 }

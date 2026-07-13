@@ -17,6 +17,19 @@ export interface PoiRow {
   bearingRad?: number;
 }
 
+const COLLATOR = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+
+function normalized(value: string | undefined): string {
+  return (value ?? '')
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('en');
+}
+
+function compareIdentity(a: PoiRow, b: PoiRow): number {
+  return COLLATOR.compare(a.poi.name, b.poi.name) || COLLATOR.compare(a.poi.id, b.poi.id);
+}
+
 export function toRows(pois: readonly Poi[], vessel?: LatLon): PoiRow[] {
   return pois.map((poi) => ({
     poi,
@@ -28,11 +41,19 @@ export function toRows(pois: readonly Poi[], vessel?: LatLon): PoiRow[] {
 }
 
 export function filterRows(rows: readonly PoiRow[], query: string): readonly PoiRow[] {
-  const q = query.trim().toLowerCase();
+  const q = normalized(query.trim());
   // Return the input as-is for an empty query: sortRows owns the copy, so a spread here would be a
   // redundant second allocation of the whole list.
   if (q === '') return rows;
-  return rows.filter((row) => row.poi.name.toLowerCase().includes(q));
+  return rows.filter((row) => {
+    const searchable = [
+      row.poi.name,
+      categoryLabel(row.poi.category),
+      row.poi.source,
+      row.poi.attribution,
+    ];
+    return searchable.some((value) => normalized(value).includes(q));
+  });
 }
 
 export function sortRows(rows: readonly PoiRow[], key: PoiSort, dir: SortDir): PoiRow[] {
@@ -42,16 +63,23 @@ export function sortRows(rows: readonly PoiRow[], key: PoiSort, dir: SortDir): P
     // comparator does not recompute categoryLabel on every comparison.
     return rows
       .map((row) => ({ row, label: categoryLabel(row.poi.category) }))
-      .sort((a, b) => sign * a.label.localeCompare(b.label))
+      .sort((a, b) => sign * (COLLATOR.compare(a.label, b.label) || compareIdentity(a.row, b.row)))
       .map((entry) => entry.row);
   }
   const sorted = [...rows];
   if (key === 'name') {
-    sorted.sort((a, b) => sign * a.poi.name.localeCompare(b.poi.name));
+    sorted.sort((a, b) => sign * compareIdentity(a, b));
   } else if (key === 'distance') {
-    sorted.sort((a, b) => compareOptionalNumber(a.distanceMeters, b.distanceMeters, dir));
+    sorted.sort(
+      (a, b) =>
+        compareOptionalNumber(a.distanceMeters, b.distanceMeters, dir) ||
+        sign * compareIdentity(a, b),
+    );
   } else {
-    sorted.sort((a, b) => compareOptionalNumber(a.bearingRad, b.bearingRad, dir));
+    sorted.sort(
+      (a, b) =>
+        compareOptionalNumber(a.bearingRad, b.bearingRad, dir) || sign * compareIdentity(a, b),
+    );
   }
   return sorted;
 }

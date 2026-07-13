@@ -33,9 +33,17 @@ interface Props {
   symbolRole: string;
   defaultOption?: DefaultOption;
   id?: string;
+  disabled?: boolean;
 }
 
-let { value = $bindable(), symbols, symbolRole, defaultOption, id }: Props = $props();
+let {
+  value = $bindable(),
+  symbols,
+  symbolRole,
+  defaultOption,
+  id,
+  disabled = false,
+}: Props = $props();
 
 function iconRef(symbol: SkSymbol): string {
   return (
@@ -113,11 +121,13 @@ function closeAndReturnFocus(): void {
 }
 
 function select(v: string): void {
+  if (disabled) return;
   value = v;
   closeAndReturnFocus();
 }
 
 function openAndFocus(): void {
+  if (disabled) return;
   // Drop stale element refs so a now-shorter option list cannot focus a removed node on reopen.
   optionEls.length = 0;
   isOpen = true;
@@ -128,6 +138,7 @@ function openAndFocus(): void {
 }
 
 function handleTriggerKey(e: KeyboardEvent): void {
+  if (disabled) return;
   if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
     e.preventDefault();
     openAndFocus();
@@ -158,6 +169,10 @@ function handleOptionKey(e: KeyboardEvent, i: number): void {
 
 // Offset into options[] where POI categories start (0 or 1 depending on defaultOption).
 const poiStart = $derived(defaultOption ? 1 : 0);
+
+$effect(() => {
+  if (disabled) isOpen = false;
+});
 </script>
 
 {#snippet iconGlyph(opt: IconOption)}
@@ -186,6 +201,7 @@ const poiStart = $derived(defaultOption ? 1 : 0);
     bind:this={triggerEl}
     aria-expanded={isOpen}
     aria-haspopup="listbox"
+    {disabled}
     onclick={() => {
       if (isOpen) isOpen = false;
       else openAndFocus();

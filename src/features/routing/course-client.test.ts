@@ -5,6 +5,7 @@ import {
   advancePoint,
   clearCourse,
   hydrateCourse,
+  refreshActiveRoute,
   setDestination,
 } from './course-client';
 
@@ -43,6 +44,20 @@ it('advancePoint PUTs a signed increment', async () => {
   expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({ value: 1 });
 });
 
+it('advancePoint rejects zero and non-integer increments without a request', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await advancePoint('http://pi', 'tok', 0)).toBe(false);
+  expect(await advancePoint('http://pi', 'tok', 1.5)).toBe(false);
+  expect(f).not.toHaveBeenCalled();
+});
+
+it('refreshActiveRoute PUTs to the Course API refresh endpoint', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await refreshActiveRoute('http://pi', 'tok')).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/activeRoute/refresh`);
+  expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({});
+});
+
 it('clearCourse DELETEs the course', async () => {
   const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
   await clearCourse('http://pi', 'tok');
@@ -55,6 +70,11 @@ describe('activationFromCourse', () => {
     expect(activationFromCourse({ activeRoute: { href: '/resources/routes/abc%20def' } })).toEqual({
       routeId: 'abc def',
     });
+  });
+
+  it('ignores unrelated and malformed route hrefs without throwing', () => {
+    expect(activationFromCourse({ activeRoute: { href: '/resources/waypoints/abc' } })).toEqual({});
+    expect(activationFromCourse({ activeRoute: { href: '/resources/routes/%GG' } })).toEqual({});
   });
 
   it('reports a goto for a bare destination with no route', () => {

@@ -67,7 +67,7 @@ describe('ProfileStore load guard', () => {
     });
     const store = new ProfileStore(adapter);
     expect(store.profiles).toEqual([]);
-    expect(store.activeId).toBe('p1');
+    expect(store.activeId).toBeUndefined();
   });
 });
 

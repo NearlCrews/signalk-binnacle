@@ -1,4 +1,4 @@
-import { computeStats, type TrackPoint, toLonLat } from '$entities/track';
+import { computeStats, splitAtGaps, type TrackPoint, toLonLat } from '$entities/track';
 import { isLonLat } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
 import { featureCollection } from '$shared/map';
@@ -41,6 +41,8 @@ export function savedTracksToFeatures(
 
 const V2 = '/signalk/v2/api/resources/tracks';
 const V1 = '/signalk/v1/api/resources/tracks';
+const MAX_SAVED_TRACKS = 500;
+const MAX_POINTS_PER_TRACK = 100_000;
 
 interface RawGeometry {
   type?: unknown;
@@ -60,10 +62,11 @@ function extractGeometry(value: unknown): RawGeometry | undefined {
   return undefined;
 }
 
-function lineToPoints(line: unknown): TrackPoint[] {
+function lineToPoints(line: unknown, remaining: number): TrackPoint[] {
   if (!Array.isArray(line)) return [];
   const points: TrackPoint[] = [];
   for (const coord of line) {
+    if (points.length >= remaining) break;
     if (isLonLat(coord)) points.push({ lat: coord[1], lon: coord[0], t: 0, sog: 0 });
   }
   return points;
@@ -73,10 +76,18 @@ function geometryToSegments(geom: RawGeometry): TrackPoint[][] {
   // A line needs two positions; drop degenerate single-coordinate segments so a SavedTrack
   // never carries a point that cannot draw and would be silently dropped downstream.
   if (geom.type === 'MultiLineString' && Array.isArray(geom.coordinates)) {
-    return geom.coordinates.map(lineToPoints).filter((segment) => segment.length >= 2);
+    const segments: TrackPoint[][] = [];
+    let remaining = MAX_POINTS_PER_TRACK;
+    for (const line of geom.coordinates) {
+      const segment = lineToPoints(line, remaining);
+      remaining -= segment.length;
+      if (segment.length >= 2) segments.push(segment);
+      if (remaining === 0) break;
+    }
+    return segments;
   }
   if (geom.type === 'LineString') {
-    const segment = lineToPoints(geom.coordinates);
+    const segment = lineToPoints(geom.coordinates, MAX_POINTS_PER_TRACK);
     return segment.length >= 2 ? [segment] : [];
   }
   return [];
@@ -85,8 +96,14 @@ function geometryToSegments(geom: RawGeometry): TrackPoint[][] {
 function trackName(value: unknown, id: string): string {
   if (value && typeof value === 'object') {
     const v = value as { name?: unknown; properties?: { name?: unknown } };
-    if (typeof v.properties?.name === 'string' && v.properties.name) return v.properties.name;
-    if (typeof v.name === 'string' && v.name) return v.name;
+    const name =
+      typeof v.properties?.name === 'string'
+        ? v.properties.name
+        : typeof v.name === 'string'
+          ? v.name
+          : '';
+    const trimmed = name.trim();
+    if (trimmed) return trimmed.slice(0, 256);
   }
   return id;
 }
@@ -99,7 +116,7 @@ function trackMetric(value: unknown, key: 'distance' | 'timespan'): number | und
     feature?: { properties?: Record<string, unknown> };
   };
   const raw = v.properties?.[key] ?? v.feature?.properties?.[key];
-  return isFiniteNumber(raw) ? raw : undefined;
+  return isFiniteNumber(raw) && raw >= 0 ? raw : undefined;
 }
 
 // Map one keyed track record to a SavedTrack, or undefined when it carries no drawable line.
@@ -123,9 +140,25 @@ export async function fetchSavedTracks(
   base: string,
   token?: string,
 ): Promise<SavedTrack[] | undefined> {
-  return fetchKeyedResource(base, [V2, V1], token, toSavedTrack, (url, status) =>
+  const tracks = await fetchKeyedResource(base, [V2, V1], token, toSavedTrack, (url, status) =>
     console.warn(`[tracks] ${url} returned ${status}`),
   );
+  return tracks?.slice(0, MAX_SAVED_TRACKS);
+}
+
+export function savedTrackFromPoints(
+  id: string,
+  name: string,
+  points: readonly TrackPoint[],
+): SavedTrack {
+  const stats = computeStats(points);
+  return {
+    id,
+    name: name.trim() || id,
+    points: splitAtGaps(points).filter((segment) => segment.length >= 2),
+    distanceMeters: stats.distanceMeters,
+    durationSeconds: stats.durationSeconds,
+  };
 }
 
 // Splits the points into a MultiLineString at gaps; distance (meters) and timespan (seconds)

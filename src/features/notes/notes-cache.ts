@@ -47,4 +47,8 @@ export class NotesCache {
     this.#entries.push({ bbox, notes, expires: nowMs + TTL_MS });
     this.#entries = this.#entries.filter((entry) => entry.expires > nowMs).slice(-MAX_ENTRIES);
   }
+
+  clear(): void {
+    this.#entries = [];
+  }
 }

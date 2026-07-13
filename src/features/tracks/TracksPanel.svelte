@@ -1,6 +1,11 @@
 <script lang="ts">
 import { Download, Eraser, Pause, Play, Route, Save, Trash2, Undo2 } from '@lucide/svelte';
-import type { TrackRecorder } from '$entities/track';
+import {
+  hasDrawableTrack,
+  hasTrackGaps,
+  latestTrackSegment,
+  type TrackRecorder,
+} from '$entities/track';
 import { formatDuration, formatKnots, formatNm, PLACEHOLDER } from '$shared/lib';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
@@ -14,6 +19,7 @@ import {
   SlideOver,
   VisibilityToggle,
 } from '$shared/ui';
+import type { TrackLoadState } from './track-controller.svelte';
 import type { SavedTrack } from './tracks-client';
 
 interface Props {
@@ -22,6 +28,10 @@ interface Props {
   settings: PersistedValue<TrackSettings>;
   saved: SavedTrack[];
   shown: ReadonlySet<string>;
+  loadState: TrackLoadState;
+  busy: boolean;
+  routeBusy: boolean;
+  persistenceDegraded: boolean;
   onSave: (name: string) => void;
   // Save the current track as a reusable route, and navigate back along it (retrace home).
   onSaveAsRoute: (name: string) => void;
@@ -39,6 +49,10 @@ const {
   settings,
   saved,
   shown,
+  loadState,
+  busy,
+  routeBusy,
+  persistenceDegraded,
   onSave,
   onSaveAsRoute,
   onTrackHome,
@@ -53,6 +67,11 @@ const stats = $derived(recorder.stats);
 const colorMode = $derived(settings.value.colorMode);
 // Until the track has captured a point, its stats are absent, not zero, so show the placeholder.
 const hasTrack = $derived(recorder.points.length > 0);
+const canSaveTrack = $derived(hasDrawableTrack(recorder.points));
+const canMakeRoute = $derived(latestTrackSegment(recorder.points).length >= 2);
+const trackHasGaps = $derived(hasTrackGaps(recorder.points));
+const writesDisabled = $derived(auth.writeBlocked || busy);
+const routeActionsDisabled = $derived(auth.writeBlocked || busy || routeBusy || !canMakeRoute);
 
 // Each saved track's distance and duration, formatted once per change. They ride on the SavedTrack as
 // SI metadata saved with the geometry, so the card reads them without re-walking the points; a track
@@ -80,6 +99,7 @@ function confirmName(value: string): void {
 // Discarding the live recording is destructive, so it arms the same inline confirm as the
 // saved-track delete rather than a blocking window.confirm.
 let confirmingClear = $state(false);
+let confirmingRetrace = $state(false);
 function confirmClear(): void {
   confirmingClear = false;
   recorder.clear();
@@ -96,8 +116,14 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 
 <SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack}>
   {#if auth.writeBlocked}
-    <p class="muted-note">
+    <p class="muted-note" role="alert">
       A write token is needed to save or delete tracks. Request a read/write token to continue.
+    </p>
+  {/if}
+  {#if persistenceDegraded}
+    <p class="muted-note" role="alert">
+      Track storage is memory-only. The current track will be lost on reload. Save it to the server
+      before leaving.
     </p>
   {/if}
   <p class="muted-note">
@@ -123,7 +149,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       type="button"
       class="btn btn-primary"
       onclick={() => (naming = 'track')}
-      disabled={recorder.points.length < 2}
+      disabled={!canSaveTrack || writesDisabled}
     >
       <Save size={16} aria-hidden="true" />
       Save
@@ -132,7 +158,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       type="button"
       class="btn btn-danger"
       onclick={() => (confirmingClear = true)}
-      disabled={recorder.points.length === 0}
+      disabled={recorder.points.length === 0 || busy}
     >
       <Eraser size={16} aria-hidden="true" />
       Discard
@@ -184,12 +210,17 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       type="button"
       class="btn"
       onclick={() => (naming = 'route')}
-      disabled={recorder.points.length < 2}
+      disabled={routeActionsDisabled}
     >
       <Route size={16} aria-hidden="true" />
       Save as route
     </button>
-    <button type="button" class="btn" onclick={onTrackHome} disabled={recorder.points.length < 2}>
+    <button
+      type="button"
+      class="btn"
+      onclick={() => (confirmingRetrace = true)}
+      disabled={routeActionsDisabled}
+    >
       <Undo2 size={16} aria-hidden="true" />
       Retrace track
     </button>
@@ -202,13 +233,35 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       onCancel={() => (naming = null)}
     />
   {/if}
+  {#if confirmingRetrace}
+    <InlineConfirm
+      question="Start navigation back along the latest continuous track segment? Check the route before relying on it."
+      confirmLabel="Start retrace"
+      onConfirm={() => {
+        confirmingRetrace = false;
+        onTrackHome();
+      }}
+      onCancel={() => (confirmingRetrace = false)}
+    />
+  {/if}
   <p class="muted-note">
     Save keeps the track. Save as route makes a reusable route you can follow again. Retrace track
     navigates back the way you came.
   </p>
+  {#if trackHasGaps}
+    <p class="muted-note">
+      GPS gaps split this track. Route actions use only the latest continuous segment. Saving the
+      track keeps all segments.
+    </p>
+  {:else if hasTrack && !canMakeRoute}
+    <p class="muted-note">Record at least two connected points to save or retrace a route.</p>
+  {/if}
 
   <section class="panel-section" aria-label="Current track">
     <h3 class="caps-label">Current track</h3>
+    <p class="muted-note">
+      {recorder.points.length} {recorder.points.length === 1 ? 'point' : 'points'}
+    </p>
     <dl class="stat-grid">
       <dt>Distance</dt>
       <dd>
@@ -233,10 +286,23 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     </dl>
   </section>
 
+  {#if loadState === 'error'}
+    <p class="muted-note" role="alert">
+      {saved.length > 0
+        ? 'Could not refresh saved tracks. Showing the last loaded tracks.'
+        : 'Could not load saved tracks. Check the connection, then reopen this panel.'}
+    </p>
+  {:else if loadState === 'loading' && saved.length > 0}
+    <p class="muted-note" role="status">Refreshing saved tracks…</p>
+  {/if}
   <SavedList
     heading="Saved tracks"
     items={savedCards}
-    empty="No saved tracks yet. Record a track, then tap Save to keep it."
+    empty={loadState === 'loading'
+      ? 'Loading saved tracks…'
+      : loadState === 'error'
+        ? 'Saved tracks are unavailable.'
+        : 'No saved tracks yet. Record a track, then tap Save to keep it.'}
     key={({ track }) => track.id}
   >
     {#snippet card({ track, distanceNm, durationText })}
@@ -279,6 +345,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
             aria-label="Delete track"
             title="Delete"
             onclick={() => armedDelete.arm(track.id)}
+            disabled={writesDisabled}
           >
             <Trash2 size={18} aria-hidden="true" />
           </button>

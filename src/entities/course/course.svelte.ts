@@ -154,19 +154,39 @@ export class CourseGuidance {
   // True when the active point is the last in the route, so the arrival advance does not step past
   // the end. Conservative: false when the route extent is unknown.
   get isLastPoint(): boolean {
-    const route = this.#info.activeRoute;
-    if (route?.pointIndex == null || route.pointTotal == null) return false;
-    return route.pointIndex >= route.pointTotal - 1;
+    const index = this.activePointIndex;
+    const total = this.activePointTotal;
+    return index !== undefined && total !== undefined && index >= total - 1;
   }
 
   // The active route's destination index and total point count, when a route (not a single "go to")
   // is active, so a consumer can sum the legs still ahead for a whole-route distance and ETA.
   get activePointIndex(): number | undefined {
-    return this.#info.activeRoute?.pointIndex ?? undefined;
+    const index = this.#info.activeRoute?.pointIndex;
+    const total = this.activePointTotal;
+    return Number.isInteger(index) &&
+      index !== undefined &&
+      index >= 0 &&
+      total !== undefined &&
+      index < total
+      ? index
+      : undefined;
   }
 
   get activePointTotal(): number | undefined {
-    return this.#info.activeRoute?.pointTotal ?? undefined;
+    const total = this.#info.activeRoute?.pointTotal;
+    return Number.isInteger(total) && total !== undefined && total > 0 ? total : undefined;
+  }
+
+  get canAdvanceRoute(): boolean {
+    const index = this.activePointIndex;
+    const total = this.activePointTotal;
+    return index !== undefined && total !== undefined && index < total - 1;
+  }
+
+  get canRetreatRoute(): boolean {
+    const index = this.activePointIndex;
+    return index !== undefined && index > 0;
   }
 
   // 'server' when the provider supplied any populated calcValue, otherwise 'computed'. A single-mark
@@ -176,17 +196,20 @@ export class CourseGuidance {
   get source(): CourseSource {
     const c = this.#calc;
     if (!c) return 'computed';
+    const finite = (value: number | null | undefined): value is number =>
+      typeof value === 'number' && Number.isFinite(value);
     const populated =
-      c.crossTrackError != null ||
-      c.distance != null ||
-      c.bearingTrue != null ||
-      c.velocityMadeGood != null ||
-      c.timeToGo != null;
+      finite(c.crossTrackError) ||
+      (finite(c.distance) && c.distance >= 0) ||
+      (finite(c.bearingTrue) && c.bearingTrue >= 0 && c.bearingTrue < 2 * Math.PI) ||
+      finite(c.velocityMadeGood) ||
+      (finite(c.timeToGo) && c.timeToGo >= 0);
     return populated ? 'server' : 'computed';
   }
 
   get nextPointName(): string | undefined {
-    return this.#info.nextPoint?.name;
+    const name = this.#info.nextPoint?.name;
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined;
   }
 
   // The active destination position (the next point of the course or single-mark "go to"), for the
@@ -201,7 +224,8 @@ export class CourseGuidance {
   // values are computed client-side it is undefined and the consumer falls back to now plus its own
   // time-to-go.
   get estimatedTimeOfArrivalIso(): string | undefined {
-    return this.#calc?.estimatedTimeOfArrival ?? undefined;
+    const value = this.#calc?.estimatedTimeOfArrival;
+    return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
   }
 
   get #next(): LatLon | undefined {
@@ -222,7 +246,13 @@ export class CourseGuidance {
   // The leg origin: the server's previousPoint when present, else the vessel's own position so a
   // single-mark "go to" with no leg origin still yields a sensible cross-track baseline.
   get #prev(): LatLon | undefined {
-    return this.#info.previousPoint?.position ?? this.#freshPos;
+    const previous = this.#info.previousPoint?.position;
+    return isLatLon(previous) ? previous : this.#freshPos;
+  }
+
+  #finiteCalc(field: keyof CourseCalculations): number | undefined {
+    const value = this.#calc?.[field];
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 
   // The active-leg readouts are $derived so each leg's geodesy is computed once per dependency
@@ -231,19 +261,22 @@ export class CourseGuidance {
   // reads arrived which reads distance), so without memoization the same rhumb distance and
   // cross-track ran two or three times per render in the computed-fallback path.
   distanceToNextMeters: number | undefined = $derived.by(() => {
-    if (this.#calc?.distance != null) return this.#calc.distance;
+    const supplied = this.#finiteCalc('distance');
+    if (supplied !== undefined && supplied >= 0) return supplied;
     const pos = this.#freshPos;
     return pos && this.#next ? rhumbDistanceMeters(pos, this.#next) : undefined;
   });
 
   bearingToNextRad: number | undefined = $derived.by(() => {
-    if (this.#calc?.bearingTrue != null) return this.#calc.bearingTrue;
+    const supplied = this.#finiteCalc('bearingTrue');
+    if (supplied !== undefined && supplied >= 0 && supplied < 2 * Math.PI) return supplied;
     const pos = this.#freshPos;
     return pos && this.#next ? rhumbBearingRad(pos, this.#next) : undefined;
   });
 
   crossTrackErrorMeters: number | undefined = $derived.by(() => {
-    if (this.#calc?.crossTrackError != null) return this.#calc.crossTrackError;
+    const supplied = this.#finiteCalc('crossTrackError');
+    if (supplied !== undefined) return supplied;
     const pos = this.#freshPos;
     return pos && this.#prev && this.#next
       ? rhumbCrossTrackErrorMeters(this.#prev, this.#next, pos)
@@ -251,7 +284,8 @@ export class CourseGuidance {
   });
 
   velocityMadeGoodMps: number | undefined = $derived.by(() => {
-    if (this.#calc?.velocityMadeGood != null) return this.#calc.velocityMadeGood;
+    const supplied = this.#finiteCalc('velocityMadeGood');
+    if (supplied !== undefined) return supplied;
     const pos = this.#freshPos;
     const sog = this.#vessel.sogMps;
     const cog = this.#vessel.cogRad;
@@ -261,7 +295,8 @@ export class CourseGuidance {
   });
 
   timeToGoSeconds: number | undefined = $derived.by(() => {
-    if (this.#calc?.timeToGo != null) return this.#calc.timeToGo;
+    const supplied = this.#finiteCalc('timeToGo');
+    if (supplied !== undefined && supplied >= 0) return supplied;
     const d = this.distanceToNextMeters;
     const sog = this.#vessel.sogMps;
     return d != null && sog != null ? etaSeconds(d, sog) : undefined;
@@ -285,7 +320,13 @@ export class CourseGuidance {
       this.#arrivedLatched = false;
       return false;
     }
-    const circle = this.#info.arrivalCircle ?? DEFAULT_ARRIVAL_CIRCLE_METERS;
+    const configuredCircle = this.#info.arrivalCircle;
+    const circle =
+      typeof configuredCircle === 'number' &&
+      Number.isFinite(configuredCircle) &&
+      configuredCircle > 0
+        ? configuredCircle
+        : DEFAULT_ARRIVAL_CIRCLE_METERS;
     if (this.#arrivedLatched) {
       // Latched: only a clear move past the exit margin releases it, so jitter at the circle
       // boundary cannot re-fire the arrival alarm.

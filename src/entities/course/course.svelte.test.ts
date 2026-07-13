@@ -42,6 +42,49 @@ describe('CourseGuidance', () => {
     expect(g.distanceToNextMeters).toBe(1852);
   });
 
+  it('rejects malformed server calculations and route extents', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+      'navigation.course.previousPoint': { position: { latitude: 95, longitude: 0 } },
+      'navigation.course.activeRoute': {
+        href: '/resources/routes/r',
+        pointIndex: 4,
+        pointTotal: 2,
+      },
+      'navigation.course.arrivalCircle': -20,
+      'navigation.course.calcValues.distance': Number.NaN,
+      'navigation.course.calcValues.bearingTrue': Number.POSITIVE_INFINITY,
+      'navigation.course.calcValues.estimatedTimeOfArrival': 'not-a-date',
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.source).toBe('computed');
+    expect(g.activePointIndex).toBeUndefined();
+    expect(g.canAdvanceRoute).toBe(false);
+    expect(g.canRetreatRoute).toBe(false);
+    expect(g.distanceToNextMeters).toBeGreaterThan(0);
+    expect(g.bearingToNextRad).toBeTypeOf('number');
+    expect(g.estimatedTimeOfArrivalIso).toBeUndefined();
+  });
+
+  it('only enables route stepping when the server supplies a valid extent', () => {
+    const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    g.seed(
+      { activeRoute: { href: '/resources/routes/r', pointIndex: 1, pointTotal: 3 } },
+      undefined,
+    );
+    expect(g.canRetreatRoute).toBe(true);
+    expect(g.canAdvanceRoute).toBe(true);
+    expect(g.isLastPoint).toBe(false);
+    g.seed(
+      { activeRoute: { href: '/resources/routes/r', pointIndex: 2, pointTotal: 3 } },
+      undefined,
+    );
+    expect(g.canAdvanceRoute).toBe(false);
+    expect(g.isLastPoint).toBe(true);
+  });
+
   it('keeps calcValues live from streamed leaf deltas, not just the REST seed', () => {
     const store = storeWith({
       'navigation.position': { latitude: 0, longitude: 0 },

@@ -31,6 +31,10 @@ export class RadarFrameCore {
   // ~30 MB/s of garbage otherwise). Two is the natural depth: one in flight, one being written.
   #pool: ArrayBuffer[] = [];
 
+  get hasPendingSpokes(): boolean {
+    return this.#spokesSinceFlush > 0;
+  }
+
   // initialRange seeds the display range from discovery (RadarInfo.range) so the echo quad and rings
   // have a sane extent from the first frame, before any spoke reports a range, and survive a spoke that
   // reports 0 (proto3 default when the field is absent).

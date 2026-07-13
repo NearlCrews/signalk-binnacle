@@ -73,4 +73,22 @@ describe('featureToWaypoint', () => {
       featureToWaypoint('id', { feature: { geometry: { type: 'Point', coordinates: ['x', 2] } } }),
     ).toBeUndefined();
   });
+
+  it('rejects unsafe ids and bounds provider-controlled text', () => {
+    expect(featureToWaypoint('', waypointToFeature(WAYPOINT))).toBeUndefined();
+    expect(featureToWaypoint('bad\u0000id', waypointToFeature(WAYPOINT))).toBeUndefined();
+
+    const waypoint = featureToWaypoint('  safe-id  ', {
+      name: `  ${'n'.repeat(300)}  `,
+      description: 'd'.repeat(10_100),
+      feature: {
+        geometry: { type: 'Point', coordinates: [1, 2] },
+        properties: { skIcon: 'i'.repeat(300) },
+      },
+    });
+    expect(waypoint?.id).toBe('safe-id');
+    expect(waypoint?.name).toHaveLength(256);
+    expect(waypoint?.description).toHaveLength(10_000);
+    expect(waypoint?.icon).toHaveLength(256);
+  });
 });

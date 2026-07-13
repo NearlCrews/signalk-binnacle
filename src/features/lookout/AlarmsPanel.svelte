@@ -1,6 +1,11 @@
 <script lang="ts">
 import { Bell, BellOff } from '@lucide/svelte';
-import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
+import { untrack } from 'svelte';
+import {
+  type ActiveNotification,
+  MAX_ACTIVE_NOTIFICATIONS,
+  type NotificationsStore,
+} from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
 import {
   feetToMeters,
@@ -10,8 +15,15 @@ import {
   metersToNauticalMiles,
   nauticalMilesToMeters,
 } from '$shared/lib';
-import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
-import type { AuthController } from '$shared/signalk';
+import {
+  DEFAULT_THRESHOLDS,
+  MAX_COLLISION_CPA_METERS,
+  MAX_COLLISION_TCPA_SECONDS,
+  MAX_SHALLOW_DEPTH_METERS,
+  type PersistedValue,
+  type Thresholds,
+} from '$shared/settings';
+import type { AuthController, ConnectionPhase } from '$shared/signalk';
 import { Disclosure, SlideOver, UnitField } from '$shared/ui';
 import { thresholdsCaution } from './thresholds-caution';
 
@@ -26,6 +38,7 @@ const stateLabel = (state: string): string => STATE_LABELS[state] ?? state;
 
 interface Props {
   auth: AuthController;
+  connectionPhase: ConnectionPhase;
   notifications: NotificationsStore;
   // A transient silence or acknowledge failure, surfaced because a refused action is otherwise
   // indistinguishable from a slow stream echo while the alarm keeps sounding.
@@ -45,6 +58,7 @@ interface Props {
 
 const {
   auth,
+  connectionPhase,
   notifications,
   error,
   onSilence,
@@ -62,6 +76,7 @@ const {
 
 const t = $derived(thresholds.value);
 const alerts = $derived(notifications.list());
+let pendingAction = $state<string | undefined>();
 
 // The path tail identifies an alert that arrived without a message.
 const alertLabel = (n: ActiveNotification): string =>
@@ -88,13 +103,15 @@ const canAcknowledge = (n: ActiveNotification): boolean =>
 // converts at this edge. UnitField commits on blur, so typing is not reformatted mid-keystroke,
 // and snaps its text back to the value prop, so a rejected negative entry never looks accepted.
 function setMeters(key: 'dangerCpaMeters' | 'warningCpaMeters', nm: number): void {
-  if (!Number.isFinite(nm) || nm < 0) return;
-  thresholds.set({ ...thresholds.value, [key]: nauticalMilesToMeters(nm) });
+  const meters = nauticalMilesToMeters(nm);
+  if (!Number.isFinite(meters) || meters < 0 || meters > MAX_COLLISION_CPA_METERS) return;
+  thresholds.set({ ...thresholds.value, [key]: meters });
 }
 
 function setSeconds(key: 'dangerTcpaSeconds' | 'warningTcpaSeconds', minutes: number): void {
-  if (!Number.isFinite(minutes) || minutes < 0) return;
-  thresholds.set({ ...thresholds.value, [key]: minutes * 60 });
+  const seconds = minutes * 60;
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_COLLISION_TCPA_SECONDS) return;
+  thresholds.set({ ...thresholds.value, [key]: seconds });
 }
 
 const cpaNm = (meters: number): number => metersToNauticalMiles(meters) ?? 0;
@@ -109,10 +126,43 @@ const shallowDepthDisplay = $derived(
 function setShallowDepth(value: number): void {
   if (!Number.isFinite(value) || value < 0) return;
   const meters = units.mode === 'imperial' ? feetToMeters(value) : value;
+  if (!Number.isFinite(meters) || meters > MAX_SHALLOW_DEPTH_METERS) return;
   thresholds.set({ ...thresholds.value, shallowDepthMeters: meters });
 }
 
 const caution = $derived(thresholdsCaution(t));
+const maxCpaNm = cpaNm(MAX_COLLISION_CPA_METERS);
+const maxTcpaMin = MAX_COLLISION_TCPA_SECONDS / 60;
+const maxShallowDepth = $derived(
+  units.mode === 'imperial'
+    ? (metersToFeet(MAX_SHALLOW_DEPTH_METERS) ?? MAX_SHALLOW_DEPTH_METERS)
+    : MAX_SHALLOW_DEPTH_METERS,
+);
+
+function runAction(kind: 'silence' | 'acknowledge', notification: ActiveNotification): void {
+  if (auth.writeBlocked || pendingAction) return;
+  pendingAction = `${kind}:${notification.path}`;
+  if (kind === 'silence') onSilence?.(notification);
+  else onAcknowledge?.(notification);
+}
+
+$effect(() => {
+  const pending = pendingAction;
+  const currentError = error;
+  const currentAlerts = alerts;
+  if (!pending) return;
+  const separator = pending.indexOf(':');
+  const kind = pending.slice(0, separator);
+  const path = pending.slice(separator + 1);
+  const notification = currentAlerts.find((candidate) => candidate.path === path);
+  if (
+    currentError ||
+    !notification ||
+    (kind === 'silence' ? !canSilence(notification) : !canAcknowledge(notification))
+  ) {
+    untrack(() => (pendingAction = undefined));
+  }
+});
 </script>
 
 <SlideOver title="Alarms" closeLabel="Close alarms panel" {onClose} {onBack} bodyFlex>
@@ -120,9 +170,14 @@ const caution = $derived(thresholdsCaution(t));
     <p class="alert-note" role="alert">{error}</p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note">
+    <p class="muted-note" role="alert">
       A write token is needed to silence or acknowledge alarms. Request a read/write token to
       continue.
+    </p>
+  {/if}
+  {#if connectionPhase === 'reconnecting' || connectionPhase === 'closed'}
+    <p class="muted-note" role="alert">
+      Signal K is disconnected. Active alarm status may be stale until the stream reconnects.
     </p>
   {/if}
   <p class="muted-note">
@@ -149,7 +204,8 @@ const caution = $derived(thresholdsCaution(t));
               type="button"
               class="btn btn-ghost"
               title="Stop the sound now"
-              onclick={() => onSilence(n)}
+              onclick={() => runAction('silence', n)}
+              disabled={auth.writeBlocked || pendingAction !== undefined}
             >
               Silence
             </button>
@@ -161,7 +217,8 @@ const caution = $derived(thresholdsCaution(t));
               type="button"
               class="btn btn-ghost"
               title="Mark as seen and clear it"
-              onclick={() => onAcknowledge(n)}
+              onclick={() => runAction('acknowledge', n)}
+              disabled={auth.writeBlocked || pendingAction !== undefined}
             >
               Acknowledge
             </button>
@@ -169,8 +226,20 @@ const caution = $derived(thresholdsCaution(t));
         </div>
       </div>
     {:else}
-      <p class="muted-note">No active alerts. Alarms appear here when one triggers.</p>
+      <p class="muted-note">
+        {connectionPhase === 'open'
+          ? 'No active alerts. Alarms appear here when one triggers.'
+          : 'No cached active alerts. Signal K is not connected.'}
+      </p>
     {/each}
+    {#if alerts.length >= MAX_ACTIVE_NOTIFICATIONS}
+      <p class="muted-note" role="status">
+        Showing up to {MAX_ACTIVE_NOTIFICATIONS} highest-severity alerts.
+      </p>
+    {/if}
+    {#if pendingAction}
+      <p class="muted-note" role="status">Updating alarm status…</p>
+    {/if}
   </section>
   <section class="panel-section" aria-label="Mutes">
     <h3 class="caps-label">Mutes</h3>
@@ -219,6 +288,7 @@ const caution = $derived(thresholdsCaution(t));
           label="Closest pass (CPA)"
           unit="nm"
           min={0}
+          max={maxCpaNm}
           step={0.05}
           ariaLabel="Danger closest pass distance"
           value={cpaNm(t.dangerCpaMeters)}
@@ -228,6 +298,7 @@ const caution = $derived(thresholdsCaution(t));
           label="Time to closest (TCPA)"
           unit="min"
           min={0}
+          max={maxTcpaMin}
           step={1}
           ariaLabel="Danger time to closest pass"
           value={tcpaMin(t.dangerTcpaSeconds)}
@@ -240,6 +311,7 @@ const caution = $derived(thresholdsCaution(t));
           label="Closest pass (CPA)"
           unit="nm"
           min={0}
+          max={maxCpaNm}
           step={0.05}
           ariaLabel="Warning closest pass distance"
           value={cpaNm(t.warningCpaMeters)}
@@ -249,6 +321,7 @@ const caution = $derived(thresholdsCaution(t));
           label="Time to closest (TCPA)"
           unit="min"
           min={0}
+          max={maxTcpaMin}
           step={1}
           ariaLabel="Warning time to closest pass"
           value={tcpaMin(t.warningTcpaSeconds)}
@@ -274,6 +347,7 @@ const caution = $derived(thresholdsCaution(t));
       label="Shallow depth"
       unit={lengthUnit(units.mode)}
       min={0}
+      max={maxShallowDepth}
       step={units.mode === 'imperial' ? 1 : 0.5}
       ariaLabel="Shallow water depth threshold"
       value={shallowDepthDisplay}

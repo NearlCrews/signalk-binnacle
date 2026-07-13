@@ -1,20 +1,24 @@
-import { type AisTargetView, vesselLabel } from '$entities/ais';
+import { type AisTargetView, shortVesselId, vesselLabel } from '$entities/ais';
 import type { DangerContact, Severity } from '$entities/collision';
 import type { LatLon } from '$shared/geo';
 import { compareOptionalNumber } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
 
 export type AisSort = 'range' | 'cpa' | 'name';
+export const MAX_AIS_LIST_ROWS = 500;
 
 export interface AisListRow {
   id: string;
+  identifier: string;
   // The display name: the vessel's reported name, or its MMSI from the context id.
   label: string;
   position: LatLon;
   rangeMeters?: number;
   bearingRad?: number;
   sogMps?: number;
+  cogRad?: number;
   headingRad?: number;
+  shipTypeId?: number;
   cpaMeters?: number;
   tcpaSeconds?: number;
   // Signal K's navigation.state enum (underway, anchored, moored, and similar); undefined when the
@@ -38,6 +42,7 @@ export function buildAisRows(
     const risk = risks.get(target.id);
     return {
       id: target.id,
+      identifier: shortVesselId(target.id),
       label: vesselLabel(target.name, target.id),
       position: target.position,
       rangeMeters: own
@@ -50,7 +55,9 @@ export function buildAisRows(
         : undefined,
       bearingRad: own ? rhumbBearingRad(own, target.position) : undefined,
       sogMps: target.sogMps,
+      cogRad: target.cogRad,
       headingRad: target.headingRad,
+      shipTypeId: target.shipTypeId,
       cpaMeters: target.cpaMeters ?? risk?.cpaMeters,
       tcpaSeconds: target.tcpaSeconds ?? risk?.tcpaSeconds,
       navigationState: target.navigationState,
@@ -60,5 +67,5 @@ export function buildAisRows(
   if (sort === 'name') rows.sort((a, b) => a.label.localeCompare(b.label));
   else if (sort === 'cpa') rows.sort((a, b) => compareOptionalNumber(a.cpaMeters, b.cpaMeters));
   else rows.sort((a, b) => compareOptionalNumber(a.rangeMeters, b.rangeMeters));
-  return rows;
+  return rows.slice(0, MAX_AIS_LIST_ROWS);
 }

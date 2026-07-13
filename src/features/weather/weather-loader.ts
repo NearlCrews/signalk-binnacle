@@ -32,6 +32,7 @@ export interface WeatherLoader {
     bbox: Bbox,
     opts: ForecastOptions,
     want: WeatherLayersWanted,
+    force?: boolean,
   ): Promise<void>;
 }
 
@@ -141,7 +142,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
   }
 
   return {
-    async load(store, bbox, opts, want) {
+    async load(store, bbox, opts, want, force = false) {
       const seq = ++loadSeq;
       active?.abort();
       const controller = new AbortController();
@@ -162,7 +163,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
         fromNetwork: boolean;
         stale: boolean;
       }> => {
-        const mem = gridCache.get(key, t);
+        const mem = force ? undefined : gridCache.get(key, t);
         if (mem && gridCoversViewport(mem, viewport)) {
           return { grid: mem, partial: false, fromNetwork: false, stale: false };
         }
@@ -174,7 +175,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
             ? stored.value
             : undefined;
         const fetchedAt = retained?.fetchedAt;
-        if (retained && fetchedAt !== undefined && t - fetchedAt < GRID_FRESH_MS) {
+        if (!force && retained && fetchedAt !== undefined && t - fetchedAt < GRID_FRESH_MS) {
           // Promote the L2 hit into L1 with the persisted absolute expiry, so the in-memory copy
           // expires exactly when the persisted entry would, rather than restarting the TTL from now.
           gridCache.putAt(key, retained, fetchedAt + GRID_FRESH_MS, t);
@@ -183,7 +184,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
           void deps.persist.prune(t);
           return { grid: retained, partial: false, fromNetwork: false, stale: false };
         }
-        if (t < gridCooldownUntil) {
+        if (!force && t < gridCooldownUntil) {
           return { grid: retained, partial: false, fromNetwork: false, stale: !!retained };
         }
         const fetched = await fetchMerged(coverage, opts, want.waves, t, signal);
@@ -194,7 +195,7 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
       };
 
       let radarPromise: Promise<RadarData | undefined>;
-      const cachedRadar = want.radar ? radarCache.get(RADAR_KEY, t) : undefined;
+      const cachedRadar = want.radar && !force ? radarCache.get(RADAR_KEY, t) : undefined;
       if (!want.radar) radarPromise = Promise.resolve(undefined);
       else if (cachedRadar) radarPromise = Promise.resolve(cachedRadar);
       // Stamp the TTL only on a real fetch: re-stamping on cache hits would slide the expiry
@@ -209,9 +210,11 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
       let radar: RadarData | undefined;
       try {
         [resolved, radar] = await Promise.all([resolveGrid(), radarPromise]);
-      } catch (error) {
+      } catch {
         if (signal.aborted) return;
-        throw error;
+        if (seq === loadSeq) store.setStatus(store.grid ? 'stale' : 'error');
+        if (active === controller) active = undefined;
+        return;
       }
       const { grid, partial, fromNetwork, stale } = resolved;
       // Re-read at each store write (not once): the persist await below is another window in which

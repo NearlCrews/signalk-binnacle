@@ -18,6 +18,9 @@ export const EMPTY_INSTANCES: InstrumentInstances = {
 };
 
 export const BATTERY_BRANCH_KEYS = ['voltage', 'capacity', 'current'] as const;
+const MAX_INSTANCES_PER_FAMILY = 100;
+const INSTANCE_ID_RE = /^[A-Za-z0-9_-]+$/;
+const TANK_INSTANCE_ID_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;
 const PROPULSION_BRANCH_KEYS = [
   'revolutions',
   'temperature',
@@ -37,8 +40,9 @@ function hasAnyBranch(value: unknown, keys: readonly string[]): boolean {
 function sortedInstances(body: unknown, keys: readonly string[]): string[] {
   if (!isRecord(body)) return [];
   return Object.keys(body)
-    .filter((id) => hasAnyBranch(body[id], keys))
-    .sort();
+    .filter((id) => INSTANCE_ID_RE.test(id) && hasAnyBranch(body[id], keys))
+    .sort()
+    .slice(0, MAX_INSTANCES_PER_FAMILY);
 }
 
 function sortedTankInstances(body: unknown): string[] {
@@ -46,15 +50,16 @@ function sortedTankInstances(body: unknown): string[] {
   const ids = new Set<string>();
   for (const [key, value] of Object.entries(body)) {
     if (hasAnyBranch(value, TANK_BRANCH_KEYS)) {
-      ids.add(key);
+      if (TANK_INSTANCE_ID_RE.test(key)) ids.add(key);
       continue;
     }
     if (!isRecord(value)) continue;
     for (const [instanceId, branch] of Object.entries(value)) {
-      if (hasAnyBranch(branch, TANK_BRANCH_KEYS)) ids.add(`${key}.${instanceId}`);
+      const id = `${key}.${instanceId}`;
+      if (TANK_INSTANCE_ID_RE.test(id) && hasAnyBranch(branch, TANK_BRANCH_KEYS)) ids.add(id);
     }
   }
-  return [...ids].sort();
+  return [...ids].sort().slice(0, MAX_INSTANCES_PER_FAMILY);
 }
 
 async function discoverBranch(

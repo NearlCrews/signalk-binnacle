@@ -4,10 +4,8 @@
 
 We actively support the following versions with security updates:
 
-| Version | Supported |
-| ------- | --------- |
-| 0.10.x  | Yes       |
-| < 0.10  | No        |
+Only the latest published version receives security fixes. Upgrade before reporting or validating a
+security issue so the result reflects the supported code.
 
 ## Reporting a Vulnerability
 
@@ -45,7 +43,7 @@ When using this webapp:
 
 1. **Keep Updated**: always use the latest version.
 2. **Network Security**: ensure your Signal K server is properly secured, and
-   prefer HTTPS (see the README's offline operation and SSL section).
+   prefer HTTPS (see the README's Offline charts, Chart Locker, and SSL section).
 3. **Access Control**: approve Binnacle's access request deliberately in the
    Signal K admin UI, and limit access to the admin interface.
 4. **Trust Stores**: when using a self-signed certificate, install its root
@@ -69,21 +67,39 @@ npm audit
 
 Binnacle runs entirely in the browser and is served by your Signal K server.
 It authenticates to that server with an access token you approve, stored in
-the browser's local storage for that origin only; routes, tracks, charts, and
-profiles you save go to your own server or stay in the browser (IndexedDB).
+the browser's local storage for that origin only. Saved routes, tracks, waypoints, and profiles go to
+your own Signal K server. The active, unsaved track stays in IndexedDB for that browser origin until it
+is saved or discarded. If IndexedDB is unavailable, it remains only in memory, and the Tracks panel
+warns that a reload will lose it. A saved track contains the trail geometry, name, distance, and
+timespan, which can reveal vessel movement and location history to anyone with access to that resource.
+Waypoint names, descriptions, and coordinates can likewise reveal sensitive locations to anyone with
+access to the waypoint collection. Measure points remain only in page memory and are cleared when the
+tool ends or the page reloads.
+Saved offline-area rectangles, automatic cache settings, and installed chart overrides go only to
+your own Signal K server and its Chart Locker plugin.
 
-For map and weather data it calls free public services (OpenFreeMap,
-Open-Meteo, RainViewer, NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, and the
-VLIZ Marine Regions service). Those requests carry only map coordinates: tile
-areas for the layers you have turned on, and an approximate vessel position
-for the local forecast, conditions, and nearest tide station. No personal
-data, credentials, or identifiers are sent to any third party. Note that a
-position query is inherent to fetching local conditions; if that is a
-concern, leave the weather and tide features closed.
+For map and weather data it calls public services including OpenFreeMap, Open-Meteo, RainViewer,
+NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, Open Water Software's Seascape, and the VLIZ Marine
+Regions service. Enabled online layers disclose the viewed tile area to their providers. Weather
+and tide requests disclose the viewed, selected, or vessel coordinates needed for the requested
+conditions. Providers also receive ordinary network metadata such as the public IP address and user
+agent. Binnacle does not intentionally send a Signal K access token to a cross-origin provider. If
+position disclosure is a concern, leave external weather, tide, and map layers closed.
 
-External links in point-of-interest details are scheme-checked (`http:` and
-`https:` only), and structured note content renders as text, never injected
-HTML.
+Marine radar discovery and controls use the Signal K server origin. A provider-reported spoke-stream
+URL is resolved relative to that origin, and the Signal K token is appended only when the resolved
+stream remains same-origin. A cross-origin radar stream receives ordinary connection metadata and the
+radar data request, but never the Signal K token. Prefer HTTPS with `wss:` radar streams. Browsers block
+an insecure `ws:` radar stream from an HTTPS Binnacle page as mixed content.
+
+Saving an offline area asks Chart Locker to download tiles from the selected public chart providers,
+so those providers receive the selected area and requested zoom levels through ordinary tile requests.
+
+External links in point-of-interest details are length-bounded and scheme-checked (`http:` and
+`https:` only), and structured note content renders as text, never injected HTML. Provider note and
+waypoint collections, fields, coordinates, and detail arrays are validated and bounded before they
+reach the chart or UI. Valid note viewport results may be cached in IndexedDB for offline reuse.
+Changing credentials invalidates the session cache and pending provider work.
 
 ## Signal K Security
 

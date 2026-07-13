@@ -4,7 +4,8 @@ import {
   type TideReading,
   type TideStation,
 } from '$entities/tides';
-import { HOUR_MS } from '$shared/lib';
+import { isLatitude, isLongitude } from '$shared/geo';
+import { HOUR_MS, hasControlCharacters } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { fetchAuthedJson } from '$shared/signalk';
 
@@ -21,6 +22,16 @@ const RESOURCE_PATH = '/signalk/v2/api/resources/tides';
 // day plus 48 hours) so the panel's curve and next-event readouts read the same whichever source
 // served them.
 const SYNTHETIC_STATION = 'Local tides (signalk-tides)';
+const MAX_EVENTS = 200;
+const MAX_STATION_ID_LENGTH = 128;
+const MAX_STATION_NAME_LENGTH = 256;
+
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
+  return trimmed;
+}
 
 export interface SignalkTidesOptions {
   origin?: string;
@@ -60,8 +71,16 @@ function parseExtremes(raw: unknown): TideEvent[] {
     const kind = eventKind(record);
     const heightMeters = toFiniteNumber(record.value ?? record.level);
     const timeMs = typeof record.time === 'string' ? Date.parse(record.time) : Number.NaN;
-    if (!kind || heightMeters === undefined || !Number.isFinite(timeMs)) continue;
+    if (
+      !kind ||
+      heightMeters === undefined ||
+      Math.abs(heightMeters) > 100 ||
+      !Number.isFinite(timeMs)
+    ) {
+      continue;
+    }
     events.push({ timeMs, heightMeters, kind });
+    if (events.length >= MAX_EVENTS) break;
   }
   return events.sort((a, b) => a.timeMs - b.timeMs);
 }
@@ -72,12 +91,13 @@ function parseStation(raw: unknown, lat: number, lon: number): TideStation {
     record.position && typeof record.position === 'object'
       ? (record.position as Record<string, unknown>)
       : undefined;
-  const latitude = toFiniteNumber(record.latitude ?? position?.latitude);
-  const longitude = toFiniteNumber(record.longitude ?? position?.longitude);
+  const rawLatitude = toFiniteNumber(record.latitude ?? position?.latitude);
+  const rawLongitude = toFiniteNumber(record.longitude ?? position?.longitude);
+  const latitude = isLatitude(rawLatitude) ? rawLatitude : undefined;
+  const longitude = isLongitude(rawLongitude) ? rawLongitude : undefined;
   return {
-    id: typeof record.id === 'string' && record.id.length > 0 ? record.id : SIGNALK_TIDES_PLUGIN_ID,
-    name:
-      typeof record.name === 'string' && record.name.length > 0 ? record.name : SYNTHETIC_STATION,
+    id: cleanText(record.id, MAX_STATION_ID_LENGTH) ?? SIGNALK_TIDES_PLUGIN_ID,
+    name: cleanText(record.name, MAX_STATION_NAME_LENGTH) ?? SYNTHETIC_STATION,
     latitude: latitude ?? lat,
     longitude: longitude ?? lon,
   };

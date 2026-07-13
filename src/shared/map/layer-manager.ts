@@ -141,10 +141,22 @@ export class LayerManager {
       }
     }
     this.#state.set(module.id, state);
-    await module.add(this.#ctx);
-    module.setVisible(this.#ctx, state.visible);
-    module.setOpacity?.(this.#ctx, state.opacity);
-    if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);
+    try {
+      await module.add(this.#ctx);
+      module.setVisible(this.#ctx, state.visible);
+      module.setOpacity?.(this.#ctx, state.opacity);
+      if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);
+    } catch (error) {
+      try {
+        module.remove(this.#ctx);
+      } catch {
+        // Best-effort rollback: an add that failed before creating map resources may have nothing
+        // to remove. The original add error is the useful failure for the caller.
+      }
+      this.#modules.delete(module.id);
+      this.#state.delete(module.id);
+      throw error;
+    }
   }
 
   unregister(id: string): void {

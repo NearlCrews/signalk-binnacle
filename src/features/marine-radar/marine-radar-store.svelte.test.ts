@@ -41,7 +41,7 @@ describe('MarineRadarStore', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([autoRadar]);
     expect(store.controlAuto.gain).toBe(true);
-    expect(store.controlAuto.sea).toBeUndefined();
+    expect(store.controlAuto.sea).toBe(false);
   });
 
   it('records control auto state by id', () => {
@@ -90,7 +90,7 @@ describe('MarineRadarStore', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     store.reconcile(
-      { status: 'transmit', controls: { gain: { value: 80, auto: true }, sea: { value: 30 } } },
+      { power: { value: 'transmit' }, gain: { value: 80, auto: true }, sea: { value: 30 } },
       new Set(),
     );
     expect(store.operationalStatus).toBe('transmit');
@@ -103,7 +103,7 @@ describe('MarineRadarStore', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     store.setControlValue('gain', 99);
-    store.reconcile({ controls: { gain: { value: 50 } } }, new Set(['gain']));
+    store.reconcile({ gain: { value: 50 } }, new Set(['gain']));
     expect(store.controlValues.gain).toBe(99);
   });
 });

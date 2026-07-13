@@ -11,4 +11,16 @@ export class WaypointsStore {
     this.waypoints = waypoints;
     this.version += 1;
   }
+
+  upsertWaypoint(waypoint: Waypoint): void {
+    this.waypoints = [waypoint, ...this.waypoints.filter((item) => item.id !== waypoint.id)];
+    this.version += 1;
+  }
+
+  removeWaypoint(id: string): void {
+    const next = this.waypoints.filter((waypoint) => waypoint.id !== id);
+    if (next.length === this.waypoints.length) return;
+    this.waypoints = next;
+    this.version += 1;
+  }
 }

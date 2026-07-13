@@ -42,6 +42,10 @@ const { row, units, onClose, onLocate }: Props = $props();
   </button>
   <dl class="detail-list">
     <div class="item">
+      <dt>Identifier</dt>
+      <dd>{row.identifier}</dd>
+    </div>
+    <div class="item">
       <dt>Position</dt>
       <dd>
         {formatLatitude(row.position.latitude)}
@@ -60,10 +64,22 @@ const { row, units, onClose, onLocate }: Props = $props();
       <dt>Speed</dt>
       <dd>{formatKnotsOr(row.sogMps)} kn</dd>
     </div>
+    {#if row.cogRad !== undefined}
+      <div class="item">
+        <dt>Course</dt>
+        <dd>{formatBearingOr(row.cogRad)}&deg;T</dd>
+      </div>
+    {/if}
     {#if row.headingRad !== undefined}
       <div class="item">
         <dt>Heading</dt>
         <dd>{formatBearingOr(row.headingRad)}&deg;T</dd>
+      </div>
+    {/if}
+    {#if row.shipTypeId !== undefined}
+      <div class="item">
+        <dt>AIS ship type</dt>
+        <dd>{row.shipTypeId}</dd>
       </div>
     {/if}
     {#if row.cpaMeters !== undefined}

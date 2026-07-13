@@ -1,5 +1,7 @@
-import type { LatLon } from '$shared/geo';
+import { isLatLon, type LatLon } from '$shared/geo';
 import { rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
+
+export const MAX_MEASURE_POINTS = 1_000;
 
 export interface MeasureLeg {
   from: LatLon;
@@ -25,6 +27,10 @@ export class MeasureStore {
 
   get isEmpty(): boolean {
     return this.#points.length === 0;
+  }
+
+  get atLimit(): boolean {
+    return this.#points.length >= MAX_MEASURE_POINTS;
   }
 
   legs = $derived.by<MeasureLeg[]>(() => {
@@ -69,9 +75,14 @@ export class MeasureStore {
     this.#points = [];
   }
 
-  add(point: LatLon): void {
-    if (!this.#active) return;
-    this.#points.push(point);
+  add(point: LatLon): boolean {
+    if (!this.#active || this.atLimit || !isLatLon(point)) return false;
+    const last = this.#points.at(-1);
+    if (last?.latitude === point.latitude && last.longitude === point.longitude) return false;
+    // Replace the array instead of mutating it. The overlay uses reference identity as its cheap
+    // dirty check, so every accepted point must produce a new reference.
+    this.#points = [...this.#points, { ...point }];
+    return true;
   }
 
   undo(): void {

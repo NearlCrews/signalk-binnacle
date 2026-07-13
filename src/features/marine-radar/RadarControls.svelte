@@ -1,6 +1,14 @@
 <script lang="ts">
 import { Radar } from '@lucide/svelte';
-import { PLACEHOLDER } from '$shared/lib';
+import {
+  feetToMeters,
+  formatDuration,
+  formatLengthOr,
+  lengthUnit,
+  PLACEHOLDER,
+  RAD_TO_DEG,
+  type UnitsMode,
+} from '$shared/lib';
 import { Disclosure, ShowOnChartToggle } from '$shared/ui';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
 import { isPowerControl, isPrimaryControl, widgetKind } from './radar-controls-model';
@@ -14,17 +22,26 @@ let {
   onSetPower,
   echoShown,
   onToggleEcho,
+  unitsMode,
 }: {
   store: MarineRadarStore;
-  onSetControl: (controlId: string, value: number) => void;
+  onSetControl: (controlId: string, value: number | string | boolean) => void;
   onSetAuto: (controlId: string, auto: boolean) => void;
   onSelectRadar?: (id: string) => void;
   onSetPower: (status: RadarStatus) => void;
   echoShown: boolean;
   onToggleEcho: (shown: boolean) => void;
+  unitsMode: UnitsMode;
 } = $props();
 
-const controls = $derived(store.capabilities);
+const controls = $derived(
+  [...store.capabilities].sort(
+    (a, b) =>
+      (a.category ?? '').localeCompare(b.category ?? '') ||
+      (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) ||
+      a.name.localeCompare(b.name),
+  ),
+);
 // The everyday controls lead in their own section; everything else falls under Advanced. The power
 // control is pulled out entirely: it drives the dedicated TX/Standby section below, never a generic
 // widget. When the radar reports none of the primary ids the primary list is empty and the advanced
@@ -38,10 +55,16 @@ const statusLabel = $derived.by(() => {
   switch (store.status) {
     case 'connecting':
       return 'Connecting to the radar';
+    case 'waiting':
+      return 'Connected, waiting for spokes';
     case 'live':
       return 'Connected';
     case 'error':
-      return 'No signal from the radar';
+      return 'Radar stream error';
+    case 'stale':
+      return 'Radar picture is stale';
+    case 'paused':
+      return operational === 'transmit' ? 'Radar picture paused' : 'Stream paused in standby';
     default:
       return '';
   }
@@ -66,17 +89,56 @@ const operationalLabel = $derived.by(() => {
 });
 // Power buttons need write access and a present radar. Standby stays available during warm-up so the
 // navigator can abort a warm-up; only Transmit waits out the transitional warming state.
-const powerBusy = $derived(!store.hasRadar || store.controlsForbidden);
+const powerBusy = $derived(
+  !store.hasRadar || store.controlsForbidden || store.pendingControls.power === true,
+);
 const transmitDisabled = $derived(powerBusy || operational === 'warming');
 const isTransmitting = $derived(operational === 'transmit');
 
 // The slider readout: the live value with its unit when the radar reports one, the shared placeholder
-// until a value arrives. Capability ranges arrive in the provider's display units over the v2 API, so
-// the value is rendered as given, never SI-converted.
+// until a value arrives. Radar API controls stay in SI and convert at this display boundary.
+function displayNumber(def: ControlDefinition, value: number): number {
+  if (def.range?.unit === 'rad') return value * RAD_TO_DEG;
+  if (def.range?.unit === 'm' && unitsMode === 'imperial') return value / 0.3048;
+  return value;
+}
+
+function siNumber(def: ControlDefinition, value: number): number {
+  if (def.range?.unit === 'rad') return value / RAD_TO_DEG;
+  if (def.range?.unit === 'm' && unitsMode === 'imperial') return feetToMeters(value);
+  return value;
+}
+
+function displayUnit(def: ControlDefinition): string | undefined {
+  if (def.range?.unit === 'rad') return '°';
+  if (def.range?.unit === 'm') return lengthUnit(unitsMode);
+  return def.range?.unit;
+}
+
+function displayBound(def: ControlDefinition, value: number): number {
+  return displayNumber(def, value);
+}
+
 function readout(def: ControlDefinition): string {
   const value = store.controlValues[def.id];
   if (value === undefined) return PLACEHOLDER;
-  return def.range?.unit ? `${value} ${def.range.unit}` : String(value);
+  if (typeof value !== 'number') return String(value);
+  if (def.range?.unit === 's') return formatDuration(value);
+  const unit = displayUnit(def);
+  const shown =
+    def.range?.unit === 'm'
+      ? formatLengthOr(value, unitsMode)
+      : Number(displayNumber(def, value).toFixed(def.range?.step && def.range.step < 1 ? 2 : 1));
+  return unit ? `${shown} ${unit}` : String(shown);
+}
+
+function structuredReadout(def: ControlDefinition): string {
+  const entry = store.controlEntries[def.id];
+  if (!entry) return PLACEHOLDER;
+  return Object.entries(entry)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(', ');
 }
 
 // Whether a control reports an auto/manual capability, so it gets an Auto toggle, and whether that
@@ -94,7 +156,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
   {@const labelId = `rc-${def.id}`}
   {@const value = store.controlValues[def.id]}
   <div class="radar-field">
-    <div class="field-head">
+    <div class="field-head" title={def.description}>
       <span class="field-name" id={labelId}>{def.name}</span>
       <div class="field-head-end">
         {#if kind === 'slider' || def.readOnly || (kind === 'toggle' && value === undefined)}
@@ -109,7 +171,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
             class:is-on={isAuto(def)}
             aria-pressed={isAuto(def)}
             aria-label={`Auto ${def.name}`}
-            disabled={def.readOnly || store.controlsForbidden}
+            disabled={def.readOnly || store.controlsForbidden || store.pendingControls[def.id]}
             onclick={() => onSetAuto(def.id, !isAuto(def))}
           >
             Auto
@@ -117,21 +179,21 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
         {/if}
       </div>
     </div>
-    {#if def.readOnly}
+    {#if def.readOnly && kind !== 'structured'}
     <!-- Nothing more: the readout above is the whole control. -->
     {:else if kind === 'slider'}
       <input
         type="range"
         class="range"
         class:is-unset={value === undefined}
-        min={def.range?.min ?? 0}
-        max={def.range?.max ?? 100}
-        step={def.range?.step ?? 1}
-        disabled={isAuto(def) || store.controlsForbidden}
-        value={value ?? def.range?.min ?? 0}
+        min={displayBound(def, def.range?.min ?? 0)}
+        max={displayBound(def, def.range?.max ?? 100)}
+        step={displayBound(def, def.range?.step ?? 1)}
+        disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+        value={typeof value === 'number' ? displayNumber(def, value) : displayBound(def, def.range?.min ?? 0)}
         aria-labelledby={labelId}
-        onchange={(e) => onSetControl(def.id, Number(e.currentTarget.value))}
-        oninput={(e) => store.setControlValue(def.id, Number(e.currentTarget.value))}
+        onchange={(e) => onSetControl(def.id, siNumber(def, Number(e.currentTarget.value)))}
+        oninput={(e) => store.setControlValue(def.id, siNumber(def, Number(e.currentTarget.value)))}
       >
     {:else if kind === 'toggle'}
       <div class="segmented" role="group" aria-labelledby={labelId}>
@@ -140,8 +202,8 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class="btn"
           class:is-on={value !== undefined && !value}
           aria-pressed={value !== undefined && !value}
-          disabled={isAuto(def) || store.controlsForbidden}
-          onclick={() => onSetControl(def.id, 0)}
+          disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+          onclick={() => onSetControl(def.id, false)}
         >
           Off
         </button>
@@ -150,8 +212,8 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class="btn"
           class:is-on={Boolean(value)}
           aria-pressed={Boolean(value)}
-          disabled={isAuto(def) || store.controlsForbidden}
-          onclick={() => onSetControl(def.id, 1)}
+          disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+          onclick={() => onSetControl(def.id, true)}
         >
           On
         </button>
@@ -160,14 +222,49 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       <select
         class="input"
         aria-labelledby={labelId}
-        disabled={isAuto(def) || store.controlsForbidden}
+        disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
         value={String(value ?? '')}
-        onchange={(e) => onSetControl(def.id, Number(e.currentTarget.value))}
+        onchange={(e) => {
+          const raw = e.currentTarget.value;
+          const option = def.values?.find((entry) => String(entry.value) === raw);
+          if (option) onSetControl(def.id, option.value);
+        }}
       >
         {#each def.values ?? [] as opt (opt.value)}
           <option value={String(opt.value)}>{opt.label}</option>
         {/each}
       </select>
+    {:else if kind === 'text'}
+      <input
+        class="input"
+        type="text"
+        aria-labelledby={labelId}
+        value={typeof value === 'string' ? value : ''}
+        disabled={store.controlsForbidden || store.pendingControls[def.id]}
+        onchange={(e) => onSetControl(def.id, e.currentTarget.value)}
+      >
+    {:else if kind === 'button'}
+      <button
+        type="button"
+        class="btn"
+        disabled={store.controlsForbidden || store.pendingControls[def.id] || def.allowed === false}
+        onclick={() => onSetControl(def.id, true)}
+      >
+        {def.name}
+      </button>
+    {:else if kind === 'structured'}
+      <p class="muted-note">
+        {structuredReadout(def)}. Adjust this area control on the radar display.
+      </p>
+    {/if}
+    {#if def.description}
+      <p class="control-description">{def.description}</p>
+    {/if}
+    {#if store.pendingControls[def.id]}
+      <p class="control-state" role="status">Applying…</p>
+    {/if}
+    {#if store.controlErrors[def.id]}
+      <p class="control-error" role="alert">{store.controlErrors[def.id]}</p>
     {/if}
   </div>
 {/snippet}
@@ -175,6 +272,11 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
 <p class="muted-note">Control your radar's power and tuning, and show its echo on the chart.</p>
 <section class="panel-section" aria-label="Radar status">
   <h3 class="caps-label">Radar</h3>
+  {#if store.selected}
+    <p class="radar-identity">
+      {store.selected.name}{store.selected.brand ? ` · ${store.selected.brand}` : ''}
+    </p>
+  {/if}
   {#if statusLabel}
     <p class="radar-head">
       <Radar size={18} aria-hidden="true" />
@@ -187,10 +289,16 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
         {statusLabel}
       </span>
     </p>
+    {#if store.statusDetail}
+      <p class="muted-note">{store.statusDetail}</p>
+    {/if}
+    {#if store.status === 'live'}
+      <p class="muted-note">Latest spoke received now.</p>
+    {/if}
   {/if}
   {#if store.radars.length === 0}
     <p class="muted-note">
-      No radar connected. Connect a radar to the Signal K server to see its controls.
+      {store.unavailableHint}
     </p>
   {/if}
   {#if store.radars.length > 1}
@@ -211,6 +319,11 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
   <p class="muted-note" role="status">
     Radar needs read-write access. Approve Binnacle for read and write in the Signal K server's
     access requests, then reconnect.
+  </p>
+{/if}
+{#if store.rendererStatus === 'error' || store.rendererStatus === 'context-lost' || store.rendererStatus === 'blocked'}
+  <p class="control-error" role="alert">
+    Radar rendering is unavailable. {store.rendererDetail ?? 'Reload the chart to try again.'}
   </p>
 {/if}
 
@@ -258,7 +371,10 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       description="The radar echo: the returns it paints from boats, land, and rain around you"
       onToggle={onToggleEcho}
     />
-    <p class="muted-note">Opacity and stacking are in Layers.</p>
+    {#if store.controlErrors.power}
+      <p class="control-error" role="alert">{store.controlErrors.power}</p>
+    {/if}
+    <p class="muted-note">Opacity and stacking are in Overlays.</p>
   </section>
 {/if}
 
@@ -301,6 +417,21 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+.control-description,
+.control-state,
+.control-error,
+.radar-identity {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+.control-description,
+.control-state,
+.radar-identity {
+  color: var(--text-muted);
+}
+.control-error {
+  color: var(--alarm);
 }
 .field-head {
   display: flex;

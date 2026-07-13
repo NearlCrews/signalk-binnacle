@@ -26,13 +26,13 @@ serves, and any implementation ideas you have.
 
 1. Fork the repository and create a feature branch from `main`.
 2. Follow the [Development section of the README](../README.md#development)
-   for setup, build, and test commands. Lint and format use the Biome binary,
-   which must be installed and on your `PATH`.
+   for setup, build, and test commands. `npm install` provides the repository-local Biome binary
+   used by every lint and format script.
 3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
-6. Run `npm run lint`, `npm run check`, `npm run cruise`, `npm test`, and
-   `npm run build` before pushing.
+6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, `npm run build`, and
+   `npm run test:e2e` before pushing when browser behavior is affected.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 
@@ -43,8 +43,10 @@ serves, and any implementation ideas you have.
 - Lint and format with Biome (`npm run lint`, `npm run format`), and type-check
   with svelte-check (`npm run check`).
 - Do not edit `public/`; it is generated build output.
-- Keep everything SI internally (radians, meters, m/s, Kelvin) and convert
-  only at the display edge.
+- Keep values SI internally (radians, meters, m/s, Kelvin) and convert only at the display edge.
+  The two sanctioned exceptions are `navigation.position` in decimal degrees and Open-Meteo's
+  preceding-hour precipitation in millimeters. Signal K provider precipitation is converted from
+  meters to millimeters at ingestion.
 - American English everywhere (color, behavior, center, gray).
 - Default to no comments. Add one only when the WHY is non-obvious (a hidden
   constraint, a subtle invariant, or a workaround).

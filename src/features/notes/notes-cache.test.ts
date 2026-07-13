@@ -87,4 +87,11 @@ describe('NotesCache', () => {
     cache.put(fetchArea, [note('a')], 0);
     expect(cache.get([50, 50, 51, 51], 10 * 60_000, true)).toBeUndefined();
   });
+
+  it('clears every session entry on invalidation', () => {
+    const cache = new NotesCache();
+    cache.put(fetchArea, [note('a')], 1000);
+    cache.clear();
+    expect(cache.get(viewport, 1000)).toBeUndefined();
+  });
 });

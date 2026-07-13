@@ -1,16 +1,22 @@
 <script lang="ts">
 import { Link2 } from '@lucide/svelte';
-import type { DraftChart, UserCharts } from '$entities/user-charts';
+import {
+  type DraftChart,
+  MAX_USER_CHART_NAME_LENGTH,
+  MAX_USER_CHART_URL_LENGTH,
+  type UserCharts,
+} from '$entities/user-charts';
 import { TextField } from '$shared/ui';
 import ChartSpecList from './ChartSpecList.svelte';
 import { chartSpecRows } from './chart-spec';
 
 interface Props {
   userCharts: UserCharts;
+  writeBlocked?: boolean;
   onDone: () => void;
 }
 
-const { userCharts, onDone }: Props = $props();
+const { userCharts, writeBlocked = false, onDone }: Props = $props();
 
 let url = $state('');
 let busy = $state(false);
@@ -47,6 +53,7 @@ async function withBusy(action: () => Promise<void>, fallbackError: string): Pro
 
 // Stage an import by reading its metadata, without saving, so the review step can rename it first.
 function stageUrl(): void {
+  if (busy || writeBlocked) return;
   const trimmed = url.trim();
   if (!trimmed) return;
   void withBusy(async () => {
@@ -62,6 +69,7 @@ function resetDraft(): void {
 }
 
 function saveDraft(): void {
+  if (busy || writeBlocked) return;
   const stagedDraft = draft;
   if (!stagedDraft) return;
   void withBusy(async () => {
@@ -85,7 +93,8 @@ function cancelDraft(): void {
         variant="stacked"
         label="Name"
         value={draftName}
-        disabled={busy}
+        disabled={busy || writeBlocked}
+        maxLength={MAX_USER_CHART_NAME_LENGTH}
         focusOnOpen
         onInput={(value) => (draftName = value)}
         onCommit={(value) => (draftName = value)}
@@ -96,7 +105,7 @@ function cancelDraft(): void {
           type="button"
           class="btn btn-primary"
           onclick={saveDraft}
-          disabled={busy || !draftName.trim()}
+          disabled={busy || writeBlocked || !draftName.trim()}
         >
           Save chart
         </button>
@@ -124,13 +133,14 @@ function cancelDraft(): void {
           placeholder="https://.../chart.pmtiles"
           aria-labelledby="add-chart-url-label"
           bind:value={url}
-          disabled={busy}
+          maxlength={MAX_USER_CHART_URL_LENGTH}
+          disabled={busy || writeBlocked}
         >
         <button
           type="button"
           class="btn btn-ghost"
           onclick={stageUrl}
-          disabled={busy || !url.trim()}
+          disabled={busy || writeBlocked || !url.trim()}
         >
           Add
         </button>

@@ -7,7 +7,7 @@ import type { CourseGuidance } from '$entities/course';
 import type { MeasureStore } from '$entities/measure';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
-import type { NotePoint } from '$entities/poi';
+import type { NotePoint, PoiViewState } from '$entities/poi';
 import type { RouteStore } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
@@ -115,6 +115,7 @@ interface Props {
   trackSettings: import('$shared/settings').PersistedValue<
     import('$shared/settings').TrackSettings
   >;
+  trackPersistenceDegraded: boolean;
   categoriesOpen: import('$shared/settings').PersistedValue<Record<string, boolean>>;
 
   // Panel state
@@ -123,6 +124,7 @@ interface Props {
   layersView: LayersView | undefined;
   noteLoader: NoteDetailLoader | undefined;
   selectedNote: NoteSelection | undefined;
+  onBackFromNote?: () => void;
   weatherPanelOpen: boolean;
   radarControlsOpen: boolean;
   radarOpenedFrom: 'menu' | 'layers';
@@ -132,6 +134,7 @@ interface Props {
   toastMessage: string | undefined;
   hoveredPoi: Poi | undefined;
   poiInView: Poi[];
+  poiViewState: PoiViewState;
   historyProviders: HistoryProviders | undefined;
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
@@ -155,15 +158,19 @@ interface Props {
   onUserPan: () => void;
   onNoteSelect: (selection: NoteSelection | undefined) => void;
   onNotes: (notes: NotePoint[]) => void;
+  onPoiStatus: (state: PoiViewState) => void;
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => void;
 
   // Panel actions
   closePanel: () => void;
   backToMenu: () => void;
+  openInstalledCharts: () => void;
+  backToOfflineCharts: () => void;
   setLayerVisible: (id: string, visible: boolean) => void;
+  onRetryTides: () => void;
   // Arms the measure tool (shows the layer and resets prior points); owned by the shell so the
   // menu tile and the chart's context action share one meaning.
-  armMeasure: () => void;
+  armMeasure: (reset?: boolean) => void;
   toggleCollisionMute: () => void;
   onSilenceNotification: (notification: ActiveNotification) => void;
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
@@ -180,6 +187,7 @@ interface Props {
   onStartRouteHere: (position: LatLon) => void;
   closeNote: () => void;
   closePoiSearch: () => void;
+  backFromPoiSearch: () => void;
   onSetRadarPower: (status: import('$features/marine-radar').RadarStatus) => void;
 }
 
@@ -225,12 +233,14 @@ let {
   layerOrder,
   weatherLayerSettings,
   trackSettings,
+  trackPersistenceDegraded,
   categoriesOpen,
   activePanel,
   menuOpen = $bindable(),
   layersView,
   noteLoader,
   selectedNote = $bindable(),
+  onBackFromNote,
   weatherPanelOpen = $bindable(),
   radarControlsOpen = $bindable(),
   radarOpenedFrom = $bindable(),
@@ -240,6 +250,7 @@ let {
   toastMessage,
   hoveredPoi = $bindable(),
   poiInView,
+  poiViewState,
   historyProviders,
   serverFeatures,
   notificationsApi,
@@ -261,10 +272,14 @@ let {
   onUserPan,
   onNoteSelect,
   onNotes,
+  onPoiStatus,
   onWeatherLayersReady,
   closePanel,
   backToMenu,
+  openInstalledCharts,
+  backToOfflineCharts,
   setLayerVisible,
+  onRetryTides,
   armMeasure,
   toggleCollisionMute,
   onSilenceNotification,
@@ -282,10 +297,13 @@ let {
   onStartRouteHere,
   closeNote,
   closePoiSearch,
+  backFromPoiSearch,
   onSetRadarPower,
 }: Props = $props();
 
 let mapCommands = $state<MapCommands | undefined>();
+let serverChartsStatus = $state<'loading' | 'ready' | 'partial' | 'error'>('loading');
+let retryServerCharts = $state<(() => void) | undefined>();
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
@@ -344,14 +362,17 @@ $effect(() => {
     {onMapReady}
     onCommandsReady={(commands) => (mapCommands = commands)}
     {onUserChartsReady}
+    onServerChartsReady={(retry) => (retryServerCharts = retry)}
+    onServerChartsStatus={(status) => (serverChartsStatus = status)}
     {onViewChange}
     {onNoteSelect}
     {onNotes}
+    {onPoiStatus}
     {onUserPan}
     onGoToHere={(position) => void routeController.onGoToHere(position)}
     onStartRoute={onStartRouteHere}
     onMeasureFrom={(position) => {
-      armMeasure();
+      armMeasure(true);
       measure.add(position);
     }}
     onRouteEditorError={() => routeController.flagEditorLoadFailed()}
@@ -390,6 +411,7 @@ $effect(() => {
         selection={selectedNote}
         load={noteLoader.load}
         onClose={closeNote}
+        onBack={onBackFromNote}
         onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
       />
     </div>
@@ -399,6 +421,9 @@ $effect(() => {
       {#if activePanel === 'layers' && layersView}
         <LayersPanel
           view={layersView}
+          {auth}
+          chartsLoadState={serverChartsStatus}
+          onRetryCharts={retryServerCharts}
           {userCharts}
           {categoriesOpen}
           onClose={closePanel}
@@ -418,6 +443,9 @@ $effect(() => {
           shownIds={routeStore.shownIds}
           working={routeStore.working}
           activeId={routeStore.activeId}
+          refreshing={routeController.refreshing}
+          loadState={routeController.loadState}
+          busy={routeController.busy}
           highlight={routeStore.highlight}
           {onHighlightLeg}
           error={routeController.routeError}
@@ -428,7 +456,7 @@ $effect(() => {
           onSave={routeController.onSaveRoute}
           onCancelEdit={routeController.onCancelRouteEdit}
           onToggleShown={routeController.onToggleRouteShown}
-          onLocate={routeController.flyToRouteStart}
+          onLocate={routeController.showRoute}
           onActivate={routeController.onActivateRoute}
           onStop={routeController.onStopCourse}
           onReverse={routeController.onReverseRoute}
@@ -446,6 +474,10 @@ $effect(() => {
           settings={trackSettings}
           saved={trackController.savedTracks}
           shown={trackController.shownSaved}
+          loadState={trackController.loadState}
+          busy={trackController.busy}
+          routeBusy={routeController.busy}
+          persistenceDegraded={trackPersistenceDegraded}
           onSave={trackController.onSaveTrack}
           onSaveAsRoute={routeController.onSaveTrackAsRoute}
           onTrackHome={routeController.onTrackHome}
@@ -459,6 +491,9 @@ $effect(() => {
         <WaypointsPanel
           {auth}
           waypoints={waypointsStore.waypoints}
+          loadState={waypointsController.loadState}
+          busy={waypointsController.busy}
+          routeBusy={routeController.busy}
           onLocate={(waypoint) => flyToPosition(waypoint.position)}
           onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
           onEdit={waypointsController.onOpenEditWaypoint}
@@ -472,6 +507,7 @@ $effect(() => {
           {units}
           stationsShown={layerSettings.tides?.visible ?? false}
           onToggleStations={(shown) => setLayerVisible('tides', shown)}
+          onRetry={onRetryTides}
           onClose={closePanel}
           onBack={backToMenu}
         />
@@ -492,6 +528,7 @@ $effect(() => {
           {aisTargets}
           {vessel}
           {collision}
+          connectionPhase={store.connection.phase}
           onLocate={flyToPosition}
           onClose={closePanel}
           onBack={backToMenu}
@@ -501,10 +538,12 @@ $effect(() => {
           pois={poiInView}
           {vessel}
           {units}
+          viewState={poiViewState}
+          selectedId={selectedNote?.id}
           onSelect={selectPoi}
           onHover={(poi) => (hoveredPoi = poi)}
           onClose={closePoiSearch}
-          onBack={backToMenu}
+          onBack={backFromPoiSearch}
         />
       {:else if activePanel === 'anchor'}
         <AnchorPanel
@@ -513,6 +552,7 @@ $effect(() => {
           {anchor}
           {vessel}
           error={anchorController.anchorError}
+          busy={anchorController.busy}
           onDrop={() => void anchorController.onDrop()}
           onRaise={() => void anchorController.onRaise()}
           onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
@@ -522,6 +562,7 @@ $effect(() => {
       {:else if activePanel === 'alarms'}
         <AlarmsPanel
           {auth}
+          connectionPhase={store.connection.phase}
           {thresholds}
           {units}
           collisionMuted={collisionMute.active}
@@ -544,9 +585,15 @@ $effect(() => {
           {companionBase}
           onClose={closePanel}
           onBack={backToMenu}
+          onOpenCharts={openInstalledCharts}
         />
       {:else if activePanel === 'charts-management' && companionBase !== null}
-        <ChartsManagementPanel {auth} {companionBase} onClose={closePanel} onBack={backToMenu} />
+        <ChartsManagementPanel
+          {auth}
+          {companionBase}
+          onClose={closePanel}
+          onBack={backToOfflineCharts}
+        />
       {/if}
     </div>
   {/if}
@@ -566,6 +613,7 @@ $effect(() => {
       >
         <RadarControls
           store={marineRadar.store}
+          unitsMode={units.mode}
           onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
           onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
           onSelectRadar={(id) => marineRadar.selectRadar(id)}
@@ -579,6 +627,7 @@ $effect(() => {
   {#if weatherPanelOpen}
     <WeatherMap
       store={weather}
+      {origin}
       {units}
       loader={weatherLoader}
       theme={theme.theme}
@@ -589,6 +638,7 @@ $effect(() => {
       token={chartsToken}
       {weatherProvider}
       position={vessel.position}
+      positionStale={vessel.positionStale}
       pointLoader={pointConditionsLoader}
       online={net.online}
       onClose={() => (weatherPanelOpen = false)}

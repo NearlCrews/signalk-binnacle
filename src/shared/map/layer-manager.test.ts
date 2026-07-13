@@ -123,6 +123,17 @@ describe('LayerManager', () => {
     await expect(manager.register(fakeOverlay('ais'))).rejects.toThrow();
   });
 
+  it('rolls back a failed registration so the id can be retried', async () => {
+    const manager = new LayerManager(fakeCtx());
+    const broken = fakeOverlay('chart');
+    broken.add = () => {
+      throw new Error('bad source');
+    };
+    await expect(manager.register(broken)).rejects.toThrow('bad source');
+    expect(manager.layers()).toEqual([]);
+    await expect(manager.register(fakeOverlay('chart'))).resolves.toBeUndefined();
+  });
+
   it('registerAll registers every module and yields the same band order as sequential register', async () => {
     const manager = new LayerManager(fakeCtx());
     const chart = fakeOverlay('chart', 'basemap');

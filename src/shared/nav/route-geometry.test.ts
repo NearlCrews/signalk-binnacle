@@ -29,6 +29,12 @@ describe('rhumbDistanceMeters', () => {
     );
     expect(d).toBeLessThan(3 * NM);
   });
+
+  it('stays finite at the geographic poles', () => {
+    expect(
+      rhumbDistanceMeters({ latitude: 90, longitude: 0 }, { latitude: 89.9, longitude: 1 }),
+    ).toSatisfy(Number.isFinite);
+  });
 });
 
 describe('rhumbBearingRad', () => {
@@ -134,5 +140,11 @@ describe('etaSeconds', () => {
 
   it('is undefined for a non-positive speed', () => {
     expect(etaSeconds(1852, 0)).toBeUndefined();
+  });
+
+  it('is undefined for non-finite or negative inputs', () => {
+    expect(etaSeconds(-1, 2)).toBeUndefined();
+    expect(etaSeconds(Number.NaN, 2)).toBeUndefined();
+    expect(etaSeconds(10, Number.POSITIVE_INFINITY)).toBeUndefined();
   });
 });

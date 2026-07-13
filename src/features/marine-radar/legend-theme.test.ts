@@ -50,10 +50,9 @@ describe('themedColorTable', () => {
       expect(Array.from(table.slice(2 * 4, 2 * 4 + 4))).toEqual([0xff, 0x00, 0x00, 0xff]);
     });
 
-    it('preserves a history/trail accent entry without modification', () => {
+    it('keeps a history/trail accent distinguishable without blue', () => {
       const table = themedColorTable(legend, 'night-red');
-      // Index 3: history trail #0000ff must remain [0, 0, 255, 255] (accent keeps original color)
-      expect(Array.from(table.slice(3 * 4, 3 * 4 + 4))).toEqual([0x00, 0x00, 0xff, 0xff]);
+      expect(Array.from(table.slice(3 * 4, 3 * 4 + 4))).toEqual([191, 0, 0, 255]);
     });
   });
 
@@ -80,8 +79,7 @@ describe('themedColorTable', () => {
         { color: '#00ff00ff', label: 'approach target' },
       ];
       const table = themedColorTable(accentLegend, 'night-red');
-      // Accent: original green must survive night-red untouched
-      expect(Array.from(table.slice(1 * 4, 1 * 4 + 4))).toEqual([0x00, 0xff, 0x00, 0xff]);
+      expect(Array.from(table.slice(1 * 4, 1 * 4 + 4))).toEqual([191, 0, 0, 255]);
     });
 
     it('treats a label containing "reced" as an accent', () => {
@@ -90,7 +88,15 @@ describe('themedColorTable', () => {
         { color: '#0000ffff', label: 'receding' },
       ];
       const table = themedColorTable(recedLegend, 'night-red');
-      expect(Array.from(table.slice(1 * 4, 1 * 4 + 4))).toEqual([0x00, 0x00, 0xff, 0xff]);
+      expect(Array.from(table.slice(1 * 4, 1 * 4 + 4))).toEqual([191, 0, 0, 255]);
     });
+  });
+
+  it('has no green or blue pixels anywhere in the night-red table', () => {
+    const table = themedColorTable(legend, 'night-red');
+    for (let value = 0; value < 256; value += 1) {
+      expect(table[value * 4 + 1]).toBe(0);
+      expect(table[value * 4 + 2]).toBe(0);
+    }
   });
 });

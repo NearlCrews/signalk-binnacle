@@ -3,7 +3,7 @@
 // not read that file" instead of silently doing nothing, which matters for flaky USB media on a boat.
 export type PickedTextResult =
   | { ok: true; text: string }
-  | { ok: false; reason: 'cancel' | 'read-error' };
+  | { ok: false; reason: 'cancel' | 'read-error' | 'too-large' };
 
 const CANCEL: PickedTextResult = { ok: false, reason: 'cancel' };
 
@@ -11,7 +11,10 @@ const CANCEL: PickedTextResult = { ok: false, reason: 'cancel' };
 // not keep a hidden input element or re-implement the pick-the-same-file-twice reset. Shared by the
 // Routes GPX import and the Profiles JSON import. The promise never rejects, so a caller that only
 // guards the cancel path never sees an unhandled rejection; a failed read resolves ok:false instead.
-export function pickTextFile(accept: string): Promise<PickedTextResult> {
+export function pickTextFile(
+  accept: string,
+  maxBytes = 5 * 1024 * 1024,
+): Promise<PickedTextResult> {
   if (typeof document === 'undefined') return Promise.resolve(CANCEL);
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -24,6 +27,10 @@ export function pickTextFile(accept: string): Promise<PickedTextResult> {
         const file = input.files?.[0];
         if (!file) {
           resolve(CANCEL);
+          return;
+        }
+        if (file.size > maxBytes) {
+          resolve({ ok: false, reason: 'too-large' });
           return;
         }
         try {
@@ -42,5 +49,8 @@ export function pickTextFile(accept: string): Promise<PickedTextResult> {
 // read, or a deliberate cancel). Colocated here so the copy and the cancel-is-silent policy live once
 // rather than being re-spelled in every import panel.
 export function readErrorMessage(result: PickedTextResult): string | undefined {
-  return !result.ok && result.reason === 'read-error' ? 'Could not read that file.' : undefined;
+  if (result.ok || result.reason === 'cancel') return undefined;
+  return result.reason === 'too-large'
+    ? 'That file is too large to import.'
+    : 'Could not read that file.';
 }

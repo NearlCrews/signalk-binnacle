@@ -52,6 +52,7 @@ export type {
   CourseInfo,
   CoursePoint,
   NotificationState,
+  Path,
   RaisedNotificationState,
   SKFrame,
   SubscribeEntry,

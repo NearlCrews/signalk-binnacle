@@ -12,11 +12,19 @@ interface Props {
   // The initial text, typically a seeded default name. Starts selected for type-over.
   value?: string;
   confirmLabel?: string;
+  maxLength?: number;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
 
-const { label, value = '', confirmLabel = 'Save', onConfirm, onCancel }: Props = $props();
+const {
+  label,
+  value = '',
+  confirmLabel = 'Save',
+  maxLength = 256,
+  onConfirm,
+  onCancel,
+}: Props = $props();
 
 // Seed the editable text from the prop once: the form is freshly mounted per use, so it takes a
 // snapshot of the default name rather than tracking the prop. untrack makes that one-time read
@@ -35,6 +43,7 @@ function submit(event: SubmitEvent): void {
     <input
       class="input"
       type="text"
+      maxlength={maxLength}
       bind:value={text}
       use:focusSelectOnMount
       onkeydown={(event) => {

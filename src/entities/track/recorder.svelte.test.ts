@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTrackSettings } from '$shared/settings';
 import { createTrackStore } from '$shared/storage';
 import { createFakeStorage } from '$shared/testing/fake-storage';
@@ -48,6 +48,17 @@ describe('decideRecord', () => {
       append: true,
       gap: true,
     });
+  });
+
+  it('starts a break after an implausible GPS jump', () => {
+    const last: TrackPoint = { lat: 36.8, lon: -121.7, t: 0, sog: 1 };
+    expect(
+      decideRecord(last, 0, 37.8, -121.7, 1000, defaults, {
+        lat: 36.8,
+        lon: -121.7,
+        t: 0,
+      }),
+    ).toEqual({ append: true, gap: true });
   });
 
   it('does not gap a stationary boat whose fix stream is continuous', () => {
@@ -127,6 +138,68 @@ describe('TrackRecorder', () => {
     expect(r.points).toEqual([]);
   });
 
+  it('rejects invalid fixes and normalizes negative SOG', () => {
+    const r = recorder();
+    r.consider(91, 0, 1, 1);
+    r.consider(0, 181, 1, 2);
+    r.consider(0, 0, Number.NaN, 3);
+    r.consider(0, 0, -2, 4);
+    expect(r.points).toHaveLength(1);
+    expect(r.points[0].sog).toBe(0);
+  });
+
+  it('keeps clear authoritative when restore resolves later', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.clear();
+    resolveAll([{ lat: 1, lon: 1, t: 1, sog: 1 }]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(r.points).toEqual([]);
+  });
+
+  it('serializes append before clear in persistent storage', async () => {
+    const operations: string[] = [];
+    const store = {
+      all: async () => [],
+      append: async () => {
+        operations.push('append');
+      },
+      clear: async () => {
+        operations.push('clear');
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 1, 1);
+    r.clear();
+    await vi.waitFor(() => expect(operations).toEqual(['append', 'clear']));
+  });
+
+  it('keeps fixes captured after the saved prefix and rewrites persistence', async () => {
+    const persisted: TrackPoint[] = [];
+    const store = {
+      all: async () => [],
+      append: async (point: TrackPoint) => {
+        persisted.push(point);
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 1, 1);
+    r.consider(1.001, 1, 1, 12_000);
+    r.consider(1.002, 1, 1, 24_000);
+    r.clearThrough(12_000);
+    expect(r.points.map((point) => point.t)).toEqual([24_000]);
+    await vi.waitFor(() => expect(persisted.map((point) => point.t)).toEqual([24_000]));
+  });
+
   it('restores persisted points from the store on construction', async () => {
     const seeded: TrackPoint[] = [
       { lat: 36.8, lon: -121.7, t: 0, sog: 1 },
@@ -158,6 +231,21 @@ describe('TrackRecorder', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(r.points[0].sog).toBe(0);
+  });
+
+  it('drops corrupt restored coordinates and normalizes invalid SOG', async () => {
+    const store = {
+      all: async () => [
+        { lat: 100, lon: 1, t: 0, sog: 1 },
+        { lat: 1, lon: 1, t: 1, sog: -5 },
+      ],
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(r.points).toEqual([{ lat: 1, lon: 1, t: 1, sog: 0 }]);
   });
 
   it('keeps fixes recorded before the restore resolves', async () => {

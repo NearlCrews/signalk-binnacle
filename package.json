@@ -1,6 +1,6 @@
 {
   "name": "signalk-binnacle",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "description": "WebGL chartplotter for Signal K",
   "type": "module",
   "license": "Apache-2.0",
@@ -36,10 +36,10 @@
     "displayName": "Binnacle Chartplotter",
     "screenshots": [
       "./screenshots/01-chart.png",
-      "./screenshots/02-points-of-interest.png",
-      "./screenshots/03-layers.png",
+      "./screenshots/02-instruments.png",
+      "./screenshots/03-charts-overlays.png",
       "./screenshots/04-weather.png",
-      "./screenshots/05-profiles.png"
+      "./screenshots/05-routes.png"
     ],
     "recommends": [
       "signalk-chart-locker",

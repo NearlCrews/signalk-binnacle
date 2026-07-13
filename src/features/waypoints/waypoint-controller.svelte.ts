@@ -1,11 +1,17 @@
-import type { Waypoint, WaypointsStore } from '$entities/waypoint';
-import type { LatLon } from '$shared/geo';
+import {
+  cleanWaypointIcon,
+  cleanWaypointName,
+  type Waypoint,
+  type WaypointsStore,
+} from '$entities/waypoint';
+import { isLatLon, type LatLon } from '$shared/geo';
 import { type Toast, uuidv4 } from '$shared/lib';
 import { deleteWaypoint, fetchWaypoints, saveWaypoint } from './waypoints-client';
 
 export interface WaypointControllerDeps {
   origin: string;
   getToken: () => string | undefined;
+  writeBlocked: () => boolean;
   waypointsStore: WaypointsStore;
   // A load, save, or delete failure surfaces here instead of a panel-local error, so it is visible
   // even when the panel that triggered the action (or no panel at all, for a chart-dropped
@@ -13,75 +19,140 @@ export interface WaypointControllerDeps {
   toast: Toast;
 }
 
+export type WaypointLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
 export function createWaypointsController(deps: WaypointControllerDeps) {
   const { origin, waypointsStore } = deps;
 
   let addWaypointAt = $state<LatLon | undefined>();
   let editingWaypoint = $state<Waypoint | undefined>();
+  let loadState = $state<WaypointLoadState>('idle');
+  let busy = $state(false);
+  let refreshGeneration = 0;
 
   async function refreshWaypoints(): Promise<void> {
+    const generation = ++refreshGeneration;
+    loadState = 'loading';
     const fetched = await fetchWaypoints(origin, deps.getToken());
+    if (generation !== refreshGeneration) return;
     if (fetched) {
       waypointsStore.setWaypoints(fetched);
+      loadState = 'ready';
       return;
     }
-    if (waypointsStore.waypoints.length === 0) {
-      deps.toast.show('Could not load waypoints. Check the connection.');
-    }
+    loadState = 'error';
+    deps.toast.show(
+      waypointsStore.waypoints.length === 0
+        ? 'Could not load waypoints. Check the connection.'
+        : 'Could not refresh waypoints. Showing the current list.',
+    );
   }
 
   function onDropWaypoint(position: LatLon): void {
+    if (busy || !isLatLon(position)) return;
+    if (deps.writeBlocked()) {
+      deps.toast.show('A write token is needed to add a waypoint.');
+      return;
+    }
     addWaypointAt = position;
   }
 
   async function confirmAddWaypoint(result: { name: string; icon?: string }): Promise<void> {
-    const position = addWaypointAt;
-    addWaypointAt = undefined;
-    if (!position) return;
-    const waypoint: Waypoint = {
-      id: uuidv4(),
-      name: result.name,
-      position,
-      ...(result.icon ? { icon: result.icon } : {}),
-    };
-    if (!(await saveWaypoint(origin, deps.getToken(), waypoint))) {
-      deps.toast.show('Could not save the waypoint. Check the connection and write access.');
+    if (busy) return;
+    if (deps.writeBlocked()) {
+      deps.toast.show('A write token is needed to add a waypoint.');
       return;
     }
-    await refreshWaypoints();
+    const position = addWaypointAt;
+    if (!position || !isLatLon(position)) return;
+    const icon = cleanWaypointIcon(result.icon);
+    const waypoint: Waypoint = {
+      id: uuidv4(),
+      name: cleanWaypointName(result.name, 'Waypoint'),
+      position,
+      ...(icon ? { icon } : {}),
+    };
+    busy = true;
+    refreshGeneration += 1;
+    try {
+      if (!(await saveWaypoint(origin, deps.getToken(), waypoint))) {
+        deps.toast.show('Could not save the waypoint. Check the connection and write access.');
+        return;
+      }
+      waypointsStore.upsertWaypoint(waypoint);
+      loadState = 'ready';
+      addWaypointAt = undefined;
+      await refreshWaypoints();
+    } finally {
+      busy = false;
+    }
   }
 
   function onOpenEditWaypoint(waypoint: Waypoint): void {
+    if (busy || deps.writeBlocked()) return;
     editingWaypoint = waypoint;
   }
 
   async function onSaveWaypointEdit(result: { name: string; icon?: string }): Promise<void> {
-    const existing = editingWaypoint;
-    editingWaypoint = undefined;
-    if (!existing) return;
-    const updated: Waypoint = { ...existing, name: result.name, icon: result.icon };
-    if (!(await saveWaypoint(origin, deps.getToken(), updated))) {
-      deps.toast.show('Could not save the waypoint. Check the connection and write access.');
+    if (busy) return;
+    if (deps.writeBlocked()) {
+      deps.toast.show('A write token is needed to edit a waypoint.');
       return;
     }
-    await refreshWaypoints();
+    const existing = editingWaypoint;
+    if (!existing) return;
+    const icon = cleanWaypointIcon(result.icon);
+    const updated: Waypoint = {
+      ...existing,
+      name: cleanWaypointName(result.name, existing.name),
+      ...(icon ? { icon } : { icon: undefined }),
+    };
+    busy = true;
+    refreshGeneration += 1;
+    try {
+      if (!(await saveWaypoint(origin, deps.getToken(), updated))) {
+        deps.toast.show('Could not save the waypoint. Check the connection and write access.');
+        return;
+      }
+      waypointsStore.upsertWaypoint(updated);
+      loadState = 'ready';
+      editingWaypoint = undefined;
+      await refreshWaypoints();
+    } finally {
+      busy = false;
+    }
   }
 
   async function onDeleteWaypoint(id: string): Promise<void> {
-    if (!(await deleteWaypoint(origin, deps.getToken(), id))) {
-      deps.toast.show('Could not delete the waypoint.');
+    if (busy) return;
+    if (deps.writeBlocked()) {
+      deps.toast.show('A write token is needed to delete a waypoint.');
       return;
     }
-    await refreshWaypoints();
+    busy = true;
+    refreshGeneration += 1;
+    try {
+      if (!(await deleteWaypoint(origin, deps.getToken(), id))) {
+        deps.toast.show('Could not delete the waypoint. Check the connection and write access.');
+        return;
+      }
+      waypointsStore.removeWaypoint(id);
+      loadState = 'ready';
+      await refreshWaypoints();
+    } finally {
+      busy = false;
+    }
   }
 
   // The dialogs render while these states are set, so Cancel must clear them here: the
   // composition root has no other way to dismiss them.
   function cancelAddWaypoint(): void {
+    if (busy) return;
     addWaypointAt = undefined;
   }
 
   function cancelEditWaypoint(): void {
+    if (busy) return;
     editingWaypoint = undefined;
   }
 
@@ -99,6 +170,12 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     },
     get editingWaypoint() {
       return editingWaypoint;
+    },
+    get loadState() {
+      return loadState;
+    },
+    get busy() {
+      return busy;
     },
   };
 }

@@ -14,8 +14,11 @@ This file is the source of truth for project-scoped AI assistant rules. User-glo
 does not always load reliably across worktrees or fresh clones, so rules that came at the cost
 of redoing work live here.
 
-The authoritative design is `docs/superpowers/specs/2026-05-31-binnacle-foundation-design.md`.
-Read it before doing architectural work.
+`AGENTS.md` is the tracked operational authority. For UI architecture, the tracked
+`docs/design-system.md`, `docs/building-menu-items.md`, and `docs/menu-items.md` are authoritative.
+The menu reference records shipped behavior and recovery states for every action. Local design notes under
+`docs/superpowers/` are optional working material and must not be required to understand a fresh
+clone.
 
 The committed `docs/design-system.md` is the authoritative design and front-end build standard: the
 tokens, themes, modular CSS, global utility classes, shared UI primitives, panel anatomy and field
@@ -106,15 +109,16 @@ hooks in `.githooks/`, wired via `npm run hooks` (a non-lifecycle script, never 
 per the SignalK pack-banner caveat above):
 
 - `pre-commit` runs `biome ci .` and `npm run cruise`.
-- `pre-push` runs the full chain: `biome ci`, `cruise`, `check`, `test`, and a production `build`.
+- `pre-push` runs the full chain: `biome ci`, `cruise`, `check`, `test`, a production `build`, and
+  Playwright end-to-end smoke tests.
   A failure blocks the push.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
   rediscovered later with unknown provenance. When it fires, commit, discard, or stash the
   changes and delete merged branches before moving on; do not let the tree drift.
 
-Always commit and push to `main` once the gate is green after any significant change or cleanup:
-do not leave significant work uncommitted in the tree. The work is not done until it is on `main`.
+Follow `AGENTS.md` for commit and publishing authority. Keep significant work verified and
+review-ready, but do not push, publish, tag, or release without the authorization that guide requires.
 
 ## Working-tree hygiene and the scratch directory
 
@@ -222,6 +226,59 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   placed explicitly in the shell grid by App), so `App.svelte` holds construction, controllers, and
   shell chrome; the stream and notifications controllers remain the documented next extractions.
 
+### Find places contract
+
+Find places and the Points of interest overlay consume the same merged Signal K notes resource and
+must describe the same current viewport. Opening Find places reveals the notes overlay. The overlay
+reports `idle`, `hidden`, `zoomed-out`, `loading`, `ready`, and `error` through a `PoiViewState` owned
+by `$entities/poi`; do not infer provider health from an empty array. Offline cache is explicit.
+
+Search covers name, category, source, and attribution, ignoring case and accents. Sorting uses stable
+name and resource-id tie-breakers. Distance and true bearing use only a fresh vessel fix. Selecting a
+row rings it and opens note detail without moving the chart, and closing or backing out clears both
+selection and hover. Keep this behavior aligned with `docs/find-places.md`.
+
+### Waypoints contract
+
+Waypoints are standard Signal K resources. Read v2 first with a v1 read-only fallback, write and
+delete through v2, validate and bound every provider-controlled field, and load the collection when
+access resolves rather than depending on the live WebSocket. A collection response accepts at most
+5,000 valid marks.
+
+The controller is latest-result-wins and serializes mutations. Keep accepted adds, edits, and deletes
+visible before the follow-up refresh. Failed add and edit writes leave the dialog and entered values in
+place. The panel distinguishes loading, retained-data refresh, real empty, and failure. Disable writes
+without access or while a mutation is pending. Starting Course API navigation from a waypoint requires
+an inline confirmation that names the destination. Keep this aligned with `docs/waypoints.md`.
+
+### Measure contract
+
+Measure is transient session state and never persists or writes to Signal K. Use rhumb distance and
+rhumb bearing for each leg, keep values in meters and radians, and convert through the shared unit
+helpers at display time. Accept only valid coordinates, ignore consecutive duplicates, cap a
+measurement at 1,000 points, and replace the point array on every accepted tap so overlay identity
+checks cannot miss updates.
+
+The overlay must draw the short antimeridian leg. The active strip guides the next tap and owns Undo,
+Clear, Done, and Escape. The chart shows a crosshair while Measure owns taps. Selecting the active menu
+item preserves current points, while Measure from here explicitly starts fresh. Keep this aligned with
+`docs/measure.md`.
+
+### Marine radar contract
+
+Marine radar consumes the standard Signal K v2 Radar API at
+`/signalk/v2/api/vessels/self/radars`. Discovery returns the current radar list, `/controls` hydrates
+control state, and live values arrive on the existing Signal K stream as
+`radars.{radarId}.controls.{controlId}`. The provider's `streamUrl`, resolved against the Signal K
+origin when relative, carries protobuf spokes. Only same-origin spoke streams receive the Signal K
+token.
+
+The controller owns refresh, selection generations, latest-write-wins control generations, Web Worker
+lifecycle, reconnect backoff, document and overlay visibility, transmit-state gating, and stale-picture
+clearing. The worker flushes only when new spokes exist. The PPI renderer owns WebGL health separately
+from stream health, uses spoke heading or the vessel's true heading, and renders nothing when neither is
+available. See `docs/marine-radar.md` for provider, UI, safety, and test details.
+
 This is a hard rule. Architectural feedback that came at the cost of redoing significant work
 must not be repeatable.
 
@@ -245,9 +302,10 @@ must not be repeatable.
   subscriptions: own vessel at high rate (`policy: instant`, heading near 200 ms, others near
   1000 ms), and AIS at a controlled rate (`vessels.*`, `policy: fixed`, period near 5000 ms,
   rendered paths only). Read `self` from `hello` and filter self out of `vessels.*`.
-- All values are SI in the store (radians, meters, m/s, Kelvin). The one exception is
-  `navigation.position`, which is decimal degrees. Convert only at the display edge in a
-  separate pure module.
+- All values are SI in the store (radians, meters, m/s, Kelvin). The two sanctioned exceptions are
+  `navigation.position` in decimal degrees and Open-Meteo's preceding-hour precipitation in
+  millimeters. Signal K provider precipitation is converted from meters to millimeters at ingestion.
+  Convert all other values only at the display edge in a separate pure module.
 - CPA and TCPA are not computed by the server core. Read `navigation.closestApproach` when a
   provider populates it, degrade gracefully when absent.
 - Charts: discover at `GET /signalk/v2/api/resources/charts` (fall back to v1), branch on
@@ -268,11 +326,11 @@ must not be repeatable.
   `navigation.closestApproach` degrade pattern). Autopilot (v2) is still a later spec.
 - Bundle the app's own assets locally (fonts, icons, worker): no CDN for code. The MAP base is
   the deliberate exception: it is an online vector tile source (OpenFreeMap), because shipping a
-  world basemap inline is not feasible. Offline operation is achieved by CACHING that source (a
-  service-worker runtime cache plus an optional pre-downloaded PMTiles region), not by removing
-  it. Do not replace the base map with a flat inline style to satisfy "offline": that yields a
-  blank map. Verify reachability before assuming a host is unreachable; OpenFreeMap resolves and
-  returns 200 from the boat network.
+  world basemap inline is not feasible. Offline operation is achieved by CACHING that source through
+  the browser service worker and, when Chart Locker is installed, through server-managed saved areas
+  and automatic caching. Do not replace the base map with a flat inline style to satisfy "offline":
+  that yields a blank map. Verify reachability before assuming a host is unreachable; OpenFreeMap
+  resolves and returns 200 from the boat network.
 - The offline/PWA caching (vite-plugin-pwa service worker) only activates in a SECURE CONTEXT:
   HTTPS or http://localhost. The Signal K server serves Binnacle over plain http on the LAN by
   default, where the browser disables the entire serviceWorker and CacheStorage APIs, so offline
@@ -280,6 +338,10 @@ must not be repeatable.
   to navigator.onLine, zero errors), which it does. To activate offline, enable SSL in the Signal K
   server (Server > Settings > SSL). Do not chase "the service worker is not registering" as a code
   bug without first checking `window.isSecureContext`.
+- Chart Locker saved areas and automatic caching are server-side offline chart preparation, separate
+  from the browser service worker. They work over the boat's ordinary Signal K connection and do not
+  require HTTPS. HTTPS and a trusted certificate are still required for the browser's runtime cache.
+  Keep these two cache layers distinct in UI copy, health checks, and troubleshooting.
 - A SECURE CONTEXT alone is NOT enough: the browser must also TRUST the server's certificate. A
   self-signed certificate (including one the signalk-ssl plugin generates, issued by a local
   "SignalK Local CA") is not trusted by default, and browsers refuse to register a service worker
@@ -309,6 +371,19 @@ must not be repeatable.
 - Every release must hold 100% Signal K compliance, and project files must be written per the
   Signal K spec to achieve it.
 
+## Tracks contract
+
+- Feed the recorder only fresh, valid vessel positions. Track points and settings remain SI.
+- Treat pauses, fix outages, and implausible jumps as segment boundaries. Distance, rendering, route
+  conversion, and retrace must never bridge a boundary.
+- Save tracks as Signal K resource `MultiLineString` Features. IndexedDB is only the active-recording
+  persistence layer, and memory-only degradation must be visible in the Tracks panel.
+- Saved-resource loading is independent of the live WebSocket. Keep confirmed writes visible through
+  refresh failures, reject stale refresh results, serialize server mutations, and preserve fixes that
+  arrive while a save is pending.
+- Retrace is a navigation action. Require confirmation, use only the latest continuous segment, and
+  keep all navigation output advisory. See `docs/tracks.md`.
+
 ## Leverage mature plugins before building features
 
 Binnacle does not need to build every capability itself. When a mature Signal K plugin already
@@ -328,6 +403,13 @@ last year, and a stable API surface.
   upstream API is still a proposal (the Anchor API) or pre-1.0 (symbol-manager), build against
   the current shape anyway; the weekly Signal K watch routine flags changes and the code gets
   updated then.
+- A user-relevant optional capability may remain discoverable while unavailable. Offline charts is
+  the canonical contract: expose one menu entry and one landing page, detect Chart Locker, and explain
+  how to install, start, or authenticate to it instead of hiding the feature. Saved areas, automatic
+  caching, installed charts, and storage stay grouped under that landing page.
+- Provider health is not passage readiness. A compact status may report cached bytes, access state,
+  reachability, or errors, but only a saved area's coverage, included charts, completion state, and
+  update time support a readiness decision.
 - Caching is a first-class product goal: the gold standard is "it just works" with nothing extra
   to install, including when charts and tiles are served by another plugin. Repeat visits and
   offline-degraded operation must be seamless for every tile and data source Binnacle renders
@@ -338,14 +420,11 @@ last year, and a stable API surface.
   conventions (detect-and-degrade clients in the slice, SI store, display-edge conversion). A
   feature that looks or behaves differently from its siblings is not done.
 
-## Release policy: patches only, minor bumps are the owner's call (user rule, 2026-06-12, until revoked)
+## Release policy: version changes are the owner's call
 
-Binnacle is in beta and the owner is not concerned about breaking changes yet. Every release is
-a PATCH against the current minor (0.10.5, 0.10.6, ...) until the owner explicitly says otherwise,
-regardless of how large the changes are or whether they remove features. Do not bump the minor
-or major on semver instinct; the version line is the owner's call (the owner called 0.6.0
-explicitly on 2026-06-12). The pre-push release checklist in the global rules still applies in
-full to every release.
+Do not change the package version, publish to npm, create a release, or tag a commit without explicit
+owner approval. The owner chooses whether a release is a patch, minor, or major version. The full
+release verification checklist applies regardless of version size.
 
 ## Build policy (every major step)
 

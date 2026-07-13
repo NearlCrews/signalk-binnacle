@@ -88,6 +88,15 @@ vi.mock('terra-draw', () => {
       this.#emit();
     }
     finishLine(): void {
+      for (const feature of this.features) {
+        if (feature.geometry.type !== 'LineString') continue;
+        const coordinates = feature.geometry.coordinates as number[][];
+        const last = coordinates.at(-1);
+        const previous = coordinates.at(-2);
+        if (last && previous && last[0] === previous[0] && last[1] === previous[1]) {
+          feature.geometry.coordinates = coordinates.slice(0, -1);
+        }
+      }
       for (const cb of [...this.#finishListeners]) cb();
     }
     #emit(): void {
@@ -131,7 +140,11 @@ function startEditor(waypoints: RouteWaypoint[]): { draw: FakeDraw; emitted: Rou
 }
 
 // Start with no route, which puts the editor in linestring drawing mode (drawing = true).
-function startDrawing(): { draw: FakeDraw; emitted: RouteWaypoint[][] } {
+function startDrawing(): {
+  draw: FakeDraw;
+  editor: ReturnType<typeof createRouteEditor>;
+  emitted: RouteWaypoint[][];
+} {
   const emitted: RouteWaypoint[][] = [];
   const editor = createRouteEditor({
     map: {} as MapLibreMap,
@@ -139,7 +152,7 @@ function startDrawing(): { draw: FakeDraw; emitted: RouteWaypoint[][] } {
     onChange: (next) => emitted.push(next),
   });
   editor.start();
-  return { draw: lastInstance(), emitted };
+  return { draw: lastInstance(), editor, emitted };
 }
 
 describe('route-edit converters', () => {
@@ -354,16 +367,29 @@ describe('createRouteEditor drawing-mode reads', () => {
       [1, 1],
     ]);
     expect(emitted.at(-1)).toHaveLength(2);
-    // Finishing removes the ghost; the editor stops dropping a coordinate.
+    // Finishing removes the ghost and emits the final geometry without waiting for another change.
     draw.finishLine();
-    draw.mutateLine([
-      [0, 0],
-      [1, 1],
-    ]);
     expect(emitted.at(-1)).toEqual([
       { position: { latitude: 0, longitude: 0 } },
       { position: { latitude: 1, longitude: 1 } },
     ]);
+  });
+
+  it('does not prune queued stale lines after the editor stops', async () => {
+    const { draw, editor } = startDrawing();
+    draw.addLine([
+      [0, 0],
+      [1, 1],
+    ]);
+    draw.addLine([
+      [2, 2],
+      [3, 3],
+    ]);
+    editor.stop();
+    await Promise.resolve();
+    expect(draw.features.filter((feature) => feature.geometry.type === 'LineString')).toHaveLength(
+      2,
+    );
   });
 
   it('seeds the first waypoint by dispatching an opening tap at the projected pixel', async () => {
@@ -401,6 +427,27 @@ describe('createRouteEditor drawing-mode reads', () => {
         { type: 'pointerdown', x: 112, y: 58 },
         { type: 'pointerup', x: 112, y: 58 },
       ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not dispatch a queued opening tap after the editor stops', async () => {
+    vi.stubGlobal('PointerEvent', class {});
+    try {
+      const dispatchEvent = vi.fn();
+      const map = {
+        getCanvas: () => ({
+          getBoundingClientRect: () => ({ left: 0, top: 0 }),
+          dispatchEvent,
+        }),
+        project: () => ({ x: 0, y: 0 }),
+      } as unknown as MapLibreMap;
+      const editor = createRouteEditor({ map, theme: 'day', onChange: () => {} });
+      editor.start(undefined, { latitude: 1, longitude: 2 });
+      editor.stop();
+      await Promise.resolve();
+      expect(dispatchEvent).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }

@@ -37,8 +37,8 @@ export const isChartTile = ({ url, sameOrigin }: MatchContext): boolean =>
   sameOrigin && /^\/charts\/[^/]+\/\d+\/\d+\/\d+(?:@2x)?(?:\.\w+)?$/.test(url.pathname);
 
 // The cross-origin overlay tile and WMS hosts Binnacle renders (NOAA ENC and MPA, GEBCO, the two
-// EMODnet services, BlueTopo via nowcoast, Marine Regions boundaries, OpenSeaMap seamarks, and NASA
-// GIBS). The host list is inlined, not a shared const, so the serialized worker matcher stays
+// EMODnet services, BlueTopo via nowcoast, Marine Regions boundaries, OpenSeaMap seamarks, NASA
+// GIBS, and Seascape). The host list is inlined, not a shared const, so the serialized worker matcher stays
 // self-contained (file header). One shared cache with a 7 day TTL bounds chart-edition staleness.
 export const isOverlayTile = ({ url }: MatchContext): boolean =>
   url.hostname === 'gis.charttools.noaa.gov' ||
@@ -48,7 +48,8 @@ export const isOverlayTile = ({ url }: MatchContext): boolean =>
   url.hostname === 'ows.emodnet-humanactivities.eu' ||
   url.hostname === 'geo.vliz.be' ||
   url.hostname === 'tiles.openseamap.org' ||
-  url.hostname === 'gibs.earthdata.nasa.gov';
+  url.hostname === 'gibs.earthdata.nasa.gov' ||
+  url.hostname === 'tiles.openwaters.io';
 
 export const isCoopsRequest = ({ url }: MatchContext): boolean =>
   url.hostname === 'api.tidesandcurrents.noaa.gov';

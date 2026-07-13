@@ -58,8 +58,8 @@ const xte = $derived(
 // Skip is only possible within the route's extent: no previous at the first point, no next at the
 // last. The control reflects what the route allows, so a tap at an end is disabled rather than firing
 // a best-effort request the server will reject.
-const canSkipBack = $derived(guidance.activePointIndex != null && guidance.activePointIndex > 0);
-const canSkipForward = $derived(!guidance.isLastPoint);
+const canSkipBack = $derived(guidance.canRetreatRoute);
+const canSkipForward = $derived(guidance.canAdvanceRoute);
 
 const vmg = $derived(formatKnotsOr(guidance.velocityMadeGoodMps));
 const ttg = $derived(

@@ -11,6 +11,23 @@ test('app shell renders the brand and a connection status', async ({ page }) => 
   await expect(page.getByText('SOG')).toBeVisible();
 });
 
+test('center and follow explain when no GPS fix is available', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  const menu = page.locator('#app-menu-launcher');
+  const center = menu.getByRole('button', { name: /Center/ });
+  const follow = menu.getByRole('button', { name: /Follow/ });
+  await expect(center).toHaveAttribute('aria-disabled', 'true');
+  await expect(follow).toHaveAttribute('aria-disabled', 'true');
+  await expect(center).toHaveAttribute('title', /GPS position/);
+  await center.click({ force: true });
+  await expect(menu.locator('.blocked-note')).toContainText('GPS position');
+});
+
 test('menu prioritizes safety and customizes toolbar order without shifting blocked feedback', async ({
   page,
 }) => {
@@ -52,6 +69,92 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
   expect(mapAfter.y).toBe(mapBefore.y);
 });
 
+test('radar discovery opens a hydrated provider-driven controls panel', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route(/\/signalk\/v2\/features/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ apis: ['radar'], plugins: [] }),
+    });
+  });
+  await page.route(/\/signalk\/v2\/api\/vessels\/self\/radars/, async (route) => {
+    const url = route.request().url();
+    if (url.endsWith('/capabilities')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          controls: [
+            {
+              id: 'gain',
+              name: 'Gain',
+              description: 'Receiver sensitivity',
+              type: 'number',
+              range: { min: 0, max: 100, step: 1 },
+              modes: ['auto', 'manual'],
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (url.endsWith('/controls')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ gain: { value: 42, auto: false }, power: { value: 'standby' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 'halo',
+          name: 'Cabin Halo',
+          brand: 'Navico',
+          status: 'standby',
+          spokesPerRevolution: 2048,
+          maxSpokeLen: 1024,
+          range: 1852,
+          controls: { gain: { value: 40, auto: false }, power: { value: 'standby' } },
+        },
+      ]),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  const radar = page.getByRole('button', { name: /Radar$/ });
+  await expect(radar).toBeEnabled({ timeout: 10_000 });
+  await radar.click();
+
+  const panel = page.getByRole('complementary', { name: 'Radar controls' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText('Cabin Halo · Navico')).toBeVisible();
+  await expect(panel.locator('.power-status')).toHaveText('Standby');
+  await expect(panel.getByText('42', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('slider', { name: 'Gain' })).toHaveValue('42');
+});
+
+test('offline charts stays discoverable when Chart Locker is not installed', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+
+  const menu = page.locator('#app-menu-launcher');
+  const offline = menu.getByRole('button', { name: /Offline charts/ });
+  await expect(offline).toBeVisible();
+  await expect(offline).toHaveAttribute('aria-disabled', 'true');
+  await offline.click({ force: true });
+  await expect(menu.locator('.blocked-note')).toContainText('signalk-chart-locker');
+});
+
 test('layers and charts opens chart sources before overlay stack controls', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
@@ -78,6 +181,31 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
     'aria-pressed',
     'true',
   );
+});
+
+test('route editing confirms before discarding plotted changes', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Routes' }).click();
+
+  const panel = page.getByRole('complementary', { name: 'Routes' });
+  await panel.getByRole('button', { name: 'New route' }).click();
+  const canvas = page.locator('.maplibregl-canvas');
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('map canvas did not lay out');
+  await page.waitForTimeout(500);
+  await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.4);
+  await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.55);
+  await expect(panel.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+
+  await panel.getByRole('button', { name: 'Close routes panel' }).click();
+  const discard = panel.getByRole('group', { name: 'Discard unsaved route changes?' });
+  await expect(discard).toBeVisible();
+  await expect(discard.getByRole('button', { name: 'Discard' })).toBeVisible();
+  await discard.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeVisible();
 });
 
 test('instrument dock opens beside a still-present chart and closes from its header', async ({
@@ -196,7 +324,7 @@ test('weather remains usable without horizontal overflow on a narrow phone', asy
 
   const panel = page.locator('#weather-panel');
   await expect(panel).toBeVisible();
-  await expect.poll(() => forecastRequests).toBeGreaterThan(0);
+  await expect.poll(() => forecastRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(panel.getByRole('slider')).toBeVisible();
   await expect
     .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))

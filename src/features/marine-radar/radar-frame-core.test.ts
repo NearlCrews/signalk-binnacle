@@ -60,12 +60,15 @@ describe('RadarFrameCore', () => {
 
   it('ingest returns the count of decoded spokes, and flush reports the count since the last flush', () => {
     const core = new RadarFrameCore(16, 8);
+    expect(core.hasPendingSpokes).toBe(false);
     let total = 0;
     for (const frame of syntheticFrames({ spokesPerRev: 16, maxSpokeLen: 8 })) {
       total += core.ingest(new Uint8Array(frame));
     }
     expect(total).toBe(16);
+    expect(core.hasPendingSpokes).toBe(true);
     expect(core.flush().spokeCount).toBe(16);
+    expect(core.hasPendingSpokes).toBe(false);
     // The count resets each flush.
     expect(core.flush().spokeCount).toBe(0);
   });

@@ -1,70 +1,19 @@
-import type { Profile, ProfileSettings } from '$entities/profile';
-import { downloadText, isFiniteNumber, isRecord } from '$shared/lib';
-import { THEMES } from '$shared/ui';
+import {
+  cleanProfileName,
+  isProfileSettings,
+  MAX_PROFILES,
+  type Profile,
+  type ProfileSettings,
+} from '$entities/profile';
+import { downloadText, isRecord } from '$shared/lib';
+
+export { isProfileSettings } from '$entities/profile';
 
 // A validated import: the settings to recreate plus the name to recreate them under. The importer
 // calls store.save(name, settings), so an id and timestamps are deliberately not carried over.
 export interface ImportedProfile {
   name: string;
   settings: ProfileSettings;
-}
-
-function isThresholds(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isFiniteNumber(value.dangerCpaMeters) &&
-    isFiniteNumber(value.dangerTcpaSeconds) &&
-    isFiniteNumber(value.warningCpaMeters) &&
-    isFiniteNumber(value.warningTcpaSeconds)
-  );
-}
-
-function isTrackSettings(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isFiniteNumber(value.intervalSeconds) &&
-    isFiniteNumber(value.minMeters) &&
-    (value.colorMode === 'speed' || value.colorMode === 'solid')
-  );
-}
-
-// A strict structural guard: every field must be present and well-typed, so a malformed or partial
-// import is rejected outright rather than producing a corrupt profile. The reserved `mode` is the one
-// optional field, accepted only when it is a string.
-export function isProfileSettings(value: unknown): value is ProfileSettings {
-  if (!isRecord(value)) return false;
-  if (!(THEMES as readonly unknown[]).includes(value.theme)) return false;
-  if (!isRecord(value.layers)) return false;
-  if (!isRecord(value.layerCategories)) return false;
-  if (!isRecord(value.weatherLayers)) return false;
-  if (!Array.isArray(value.layerOrder) || !value.layerOrder.every((id) => typeof id === 'string')) {
-    return false;
-  }
-  if (!isThresholds(value.thresholds)) return false;
-  if (!isTrackSettings(value.trackSettings)) return false;
-  if (!isFiniteNumber(value.planningSpeedKn)) return false;
-  // arrivalMuted is required. An older export may also carry alarmMuted (now dropped from the
-  // schema and session-only); that extra field is simply ignored, but arrivalMuted must be present.
-  if (typeof value.arrivalMuted !== 'boolean') return false;
-  if (value.units !== undefined && value.units !== 'metric' && value.units !== 'imperial') {
-    return false;
-  }
-  if (
-    value.pinnedActionIds !== undefined &&
-    (!Array.isArray(value.pinnedActionIds) ||
-      !value.pinnedActionIds.every((id) => typeof id === 'string'))
-  ) {
-    return false;
-  }
-  if (
-    value.instrumentTiles !== undefined &&
-    (!Array.isArray(value.instrumentTiles) ||
-      !value.instrumentTiles.every((id) => typeof id === 'string'))
-  ) {
-    return false;
-  }
-  if (value.mode !== undefined && typeof value.mode !== 'string') return false;
-  return true;
 }
 
 // Pull the candidate settings out of one parsed item: a full exported Profile carries `.settings`, a
@@ -74,7 +23,7 @@ function toImported(item: unknown): ImportedProfile | undefined {
   if (!isRecord(item)) return undefined;
   if (isRecord(item.settings)) {
     if (!isProfileSettings(item.settings)) return undefined;
-    const name = typeof item.name === 'string' && item.name ? item.name : 'Imported profile';
+    const name = cleanProfileName(item.name) ?? 'Imported profile';
     return { name, settings: item.settings };
   }
   if (isProfileSettings(item)) {
@@ -106,6 +55,7 @@ export function parseProfilesJson(text: string): ImportedProfile[] {
   for (const item of items) {
     const result = toImported(item);
     if (result) imported.push(result);
+    if (imported.length >= MAX_PROFILES) break;
   }
   return imported;
 }

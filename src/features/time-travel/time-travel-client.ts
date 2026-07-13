@@ -41,11 +41,15 @@ export async function loadTimeTravelHistory(
   });
   if (!got) return undefined;
   const samples = toSamples(got.values);
-  const from = Date.parse(got.values.from);
-  const to = Date.parse(got.values.to);
+  const parsedFrom = Date.parse(got.values.from);
+  const parsedTo = Date.parse(got.values.to);
+  const first = samples[0]?.t ?? 0;
+  const last = samples[samples.length - 1]?.t ?? first;
+  const from = Number.isFinite(parsedFrom) ? parsedFrom : first;
+  const to = Number.isFinite(parsedTo) && parsedTo >= from ? parsedTo : Math.max(from, last);
   return {
     samples,
-    from: Number.isFinite(from) ? from : (samples[0]?.t ?? 0),
-    to: Number.isFinite(to) ? to : (samples[samples.length - 1]?.t ?? 0),
+    from,
+    to,
   };
 }

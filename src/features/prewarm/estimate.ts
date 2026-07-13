@@ -63,6 +63,31 @@ export function exceedsRegionsFree(estimate: number, stats: CacheStats): boolean
   return estimate > regionsFreeBytes(stats);
 }
 
+export type DownloadGateReason =
+  | 'write-access'
+  | 'draw-area'
+  | 'storage-loading'
+  | 'choose-charts'
+  | 'insufficient-space';
+
+/** The one reason the region builder cannot proceed, in the same order the navigator encounters the
+ * workflow. Keeping this decision pure prevents a disabled Download button from drifting away from
+ * its explanation as new gates are added. */
+export function downloadGateReason(opts: {
+  bbox: Bbox | null;
+  sources: string[];
+  writeBlocked: boolean;
+  stats: CacheStats | null;
+  estimate: number;
+}): DownloadGateReason | null {
+  if (opts.writeBlocked) return 'write-access';
+  if (opts.bbox === null) return 'draw-area';
+  if (opts.stats === null) return 'storage-loading';
+  if (opts.sources.length === 0) return 'choose-charts';
+  if (exceedsRegionsFree(opts.estimate, opts.stats)) return 'insufficient-space';
+  return null;
+}
+
 /** The [minLng, minLat, maxLng, maxLat] of a drawn rectangle ring of [lng, lat] points. A manual
  * scan, not a spread into Math.min/max (unbounded in arg count), matching tides-display. */
 export function bboxFromRectangle(ring: Array<[number, number]>): Bbox {

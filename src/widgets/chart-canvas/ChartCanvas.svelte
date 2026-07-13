@@ -22,7 +22,12 @@ import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
 import { MOB_OVERLAY_ID } from '$features/mob';
 import { createMpaOverlay, MPA_SOURCES } from '$features/mpa-overlays';
-import { createNotesOverlay, type NotePoint, type NoteSelection } from '$features/notes';
+import {
+  createNotesOverlay,
+  type NotePoint,
+  type NoteSelection,
+  type PoiViewState,
+} from '$features/notes';
 import { buildOceanSources, createOceanOverlay } from '$features/ocean-conditions';
 import type { RouteEditor } from '$features/route-edit';
 import { createWorkingRouteOverlay, type WorkingRouteOverlay } from '$features/route-layer';
@@ -100,10 +105,13 @@ interface Props {
   onMapReady?: (recolor: (theme: Theme) => void) => void;
   onCommandsReady?: (commands: MapCommands) => void;
   onUserChartsReady?: (registrar: UserChartRegistrar) => void;
+  onServerChartsReady?: (retry: () => void) => void;
+  onServerChartsStatus?: (status: 'loading' | 'ready' | 'partial' | 'error') => void;
   onViewChange?: (view: MapView) => void;
   onNoteSelect?: (selection: NoteSelection | undefined) => void;
   // The on-screen POI set, forwarded from the notes overlay to the POI search.
   onNotes?: (notes: NotePoint[]) => void;
+  onPoiStatus?: (state: PoiViewState) => void;
   // Fired when the user pans the map by hand (a drag), so a follow lock can release.
   onUserPan?: () => void;
   // Set a single "go to here" destination at a chart point the user long-pressed or right-clicked.
@@ -169,9 +177,12 @@ const {
   onMapReady,
   onCommandsReady,
   onUserChartsReady,
+  onServerChartsReady,
+  onServerChartsStatus,
   onViewChange,
   onNoteSelect,
   onNotes,
+  onPoiStatus,
   onUserPan,
   onGoToHere,
   onStartRoute,
@@ -232,6 +243,19 @@ $effect(() => {
   const map = mapRef;
   if (!map) return;
   map.setGlobalStateProperty('unit', lengthUnit(units.mode));
+});
+
+// A crosshair makes the chart's temporary tap mode visible before the first point exists. Restore
+// MapLibre's prior cursor on exit, and let route editing keep ownership when the two states overlap.
+$effect(() => {
+  const map = mapRef;
+  if (!map || !measure.active || routeStore.working) return;
+  const canvas = map.getCanvas();
+  const prior = canvas.style.cursor;
+  canvas.style.cursor = 'crosshair';
+  return () => {
+    if (canvas.style.cursor === 'crosshair') canvas.style.cursor = prior;
+  };
 });
 
 // The live vessel dims to this opacity during time-travel review so the scrub marker stands out.
@@ -327,12 +351,10 @@ onMount(async () => {
       // from the local descriptor (the manageable version); other devices, with no local descriptor,
       // still see it as a server chart.
       const localChartIds = new Set((userCharts?.sources ?? []).map((source) => source.id));
-      // undefined is a transient failure; there are no server charts registered yet to keep, so this
-      // session shows none (a reachable-empty server is the same []). Charts are registered once at
-      // load, so a reconnect does not currently re-fetch them.
-      const charts = ((await fetchCharts(origin, chartsToken)) ?? []).filter(
-        (chart) => !localChartIds.has(chart.identifier),
-      );
+      onServerChartsStatus?.('loading');
+      const fetchedCharts = await fetchCharts(origin, chartsToken);
+      const charts = (fetchedCharts ?? []).filter((chart) => !localChartIds.has(chart.identifier));
+      onServerChartsStatus?.(fetchedCharts === undefined ? 'error' : 'ready');
       if (isDestroyed()) return;
 
       // Build every overlay, then register the whole stack in one batch so the layer order is
@@ -343,6 +365,7 @@ onMount(async () => {
       const notesOverlay = createNotesOverlay(origin, () => chartsToken, onNoteSelect, symbols, {
         isOnline: isOnline ?? (() => true),
         onNotes,
+        onStatus: onPoiStatus,
       });
       // One list feeds both registration and the per-frame tick, so the two cannot drift. The order
       // sets z within each band (tides under the safety overlays, the own vessel on top).
@@ -379,8 +402,20 @@ onMount(async () => {
       // The bathymetry band (Seascape's DEM pair, the existing STREAMING_CHART_SOURCES rasters, and
       // Seascape's vector pair, in that registration order) is built by buildBathymetryOverlays; see
       // its own comment for why that relative order is load-bearing.
+      let chartRegistrationFailed = false;
+      const serverChartIds = new Set<string>();
+      for (const chart of charts) {
+        try {
+          await mgr.register(createChartOverlay(chart, origin, 'basemap', () => chartsToken));
+          serverChartIds.add(chart.identifier);
+        } catch (error) {
+          chartRegistrationFailed = true;
+          console.warn(`Could not register server chart "${chart.identifier}".`, error);
+        }
+      }
+      if (chartRegistrationFailed) onServerChartsStatus?.('partial');
+
       await mgr.registerAll([
-        ...charts.map((chart) => createChartOverlay(chart, origin, 'basemap', () => chartsToken)),
         ...buildBathymetryOverlays({ companionBase }),
         ...buildOceanSources().map((source) => createOceanOverlay(source)),
         // Within the safety band, registration order is z, so the seamark navigation aids draw over
@@ -435,6 +470,34 @@ onMount(async () => {
       const view = new LayersView(mgr);
       view.refresh();
       onReady?.(view);
+
+      async function retryServerCharts(): Promise<void> {
+        onServerChartsStatus?.('loading');
+        const next = await fetchCharts(origin, chartsToken);
+        if (isDestroyed()) return;
+        if (next === undefined) {
+          onServerChartsStatus?.('error');
+          return;
+        }
+        const localIds = new Set((userCharts?.sources ?? []).map((source) => source.id));
+        const wanted = next.filter((chart) => !localIds.has(chart.identifier));
+        for (const id of serverChartIds) mgr.unregister(chartSourceId(id));
+        serverChartIds.clear();
+        let failed = false;
+        for (const chart of wanted) {
+          try {
+            await mgr.register(createChartOverlay(chart, origin, 'basemap', () => chartsToken));
+            serverChartIds.add(chart.identifier);
+          } catch (error) {
+            failed = true;
+            console.warn(`Could not register server chart "${chart.identifier}".`, error);
+          }
+        }
+        view.refresh();
+        onServerChartsStatus?.(failed ? 'partial' : 'ready');
+      }
+
+      onServerChartsReady?.(() => void retryServerCharts());
 
       const userChartRegistrar: UserChartRegistrar = {
         register: async (chart) => {

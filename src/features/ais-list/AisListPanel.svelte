@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from 'svelte';
 import type { AisTargets } from '$entities/ais';
 import type { CollisionAssessment } from '$entities/collision';
 import type { UnitsStore } from '$entities/units';
@@ -12,22 +13,25 @@ import {
   formatNm,
   formatTcpaMin,
 } from '$shared/lib';
+import type { ConnectionPhase } from '$shared/signalk';
 import { SlideOver } from '$shared/ui';
 import AisTargetDetail from './AisTargetDetail.svelte';
-import { type AisSort, buildAisRows } from './ais-rows';
+import { type AisSort, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
 
 interface Props {
   aisTargets: AisTargets;
   vessel: OwnVessel;
   collision: CollisionAssessment;
   units: UnitsStore;
+  connectionPhase: ConnectionPhase;
   // Fly the chart to a tapped target.
   onLocate: (position: LatLon) => void;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const { aisTargets, vessel, collision, units, onLocate, onClose, onBack }: Props = $props();
+const { aisTargets, vessel, collision, units, connectionPhase, onLocate, onClose, onBack }: Props =
+  $props();
 
 // The row is recomputed live from rows below on every rebuild, so the detail panel stays live
 // while a target moves instead of freezing at the moment it was opened.
@@ -45,7 +49,9 @@ const SORTS: { id: AisSort; label: string }[] = [
 // not recompute the range and bearing of every target on every tick; the list does not need finer.
 // The key is a string so the derived halts when the rounded cell is unchanged, then parsedOwn (and
 // the rows below) only recompute when the cell, the traffic, the risks, or the sort actually change.
-const ownCellKey = $derived(vessel.position ? quantizeLatLonKey(vessel.position) : '');
+const ownCellKey = $derived(
+  vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
+);
 const parsedOwn = $derived<LatLon | undefined>(
   ownCellKey
     ? (() => {
@@ -55,15 +61,20 @@ const parsedOwn = $derived<LatLon | undefined>(
     : undefined,
 );
 // list() reads aisVersion, so the rows re-derive as traffic moves; the own cell re-sorts by range.
+const targetCount = $derived(aisTargets.list().length);
 const rows = $derived(
   buildAisRows(aisTargets.list(), parsedOwn, collision.assessment.contacts, sort),
 );
 const selectedRow = $derived(rows.find((r) => r.id === selectedId));
+
+$effect(() => {
+  if (!parsedOwn && sort === 'range') untrack(() => (sort = 'name'));
+});
 </script>
 
 <SlideOver
   title="Nearby vessels (AIS)"
-  subtitle="{rows.length} nearby"
+  subtitle="{targetCount} {targetCount === 1 ? 'target' : 'targets'}"
   closeLabel="Close nearby vessels"
   {onClose}
   {onBack}
@@ -72,6 +83,15 @@ const selectedRow = $derived(rows.find((r) => r.id === selectedId));
   <p class="muted-note">
     Other boats and navigation aids broadcasting their position over AIS. The nearest show first.
   </p>
+  {#if vessel.positionStale}
+    <p class="muted-note" role="alert">
+      Own GPS fix is stale. Distance and bearing are unavailable until a fresh fix arrives.
+    </p>
+  {:else if !vessel.position}
+    <p class="muted-note" role="status">
+      Waiting for own GPS position. Distance and bearing are unavailable.
+    </p>
+  {/if}
   <div class="nav-sort">
     <span class="caps-label">Sort by</span>
     <div class="segmented" role="group" aria-label="Sort vessels by">
@@ -81,6 +101,7 @@ const selectedRow = $derived(rows.find((r) => r.id === selectedId));
           class="btn"
           class:is-on={sort === option.id}
           aria-pressed={sort === option.id}
+          disabled={option.id === 'range' && !parsedOwn}
           onclick={() => (sort = option.id)}
         >
           {option.label}
@@ -90,9 +111,18 @@ const selectedRow = $derived(rows.find((r) => r.id === selectedId));
   </div>
   {#if rows.length === 0}
     <p class="muted-note" role="status">
-      No vessels are broadcasting nearby right now. This list fills as AIS traffic comes into range.
+      {connectionPhase === 'open'
+        ? 'No AIS targets are available right now. This list fills as traffic is received.'
+        : connectionPhase === 'connecting'
+          ? 'Connecting to Signal K. AIS targets will appear when the stream opens.'
+          : 'Signal K is disconnected. AIS targets may be unavailable or stale.'}
     </p>
   {:else}
+    {#if targetCount > MAX_AIS_LIST_ROWS}
+      <p class="muted-note" role="status">
+        Showing the first {MAX_AIS_LIST_ROWS} targets in the selected order.
+      </p>
+    {/if}
     <ul class="nav-list bare-list" aria-label="Nearby vessels">
       {#each rows as row (row.id)}
         <li>

@@ -120,6 +120,59 @@ describe('featureToRoute', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('rejects the entire resource when any coordinate is invalid', () => {
+    expect(
+      featureToRoute('id', {
+        feature: {
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [181, 0],
+              [1, 0],
+            ],
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('trims resource and waypoint names', () => {
+    const parsed = featureToRoute('id', {
+      name: '  Passage  ',
+      feature: {
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 0],
+          ],
+        },
+        properties: { coordinatesMeta: [{ name: '  Start  ' }, { name: '   ' }] },
+      },
+    });
+    expect(parsed?.name).toBe('Passage');
+    expect(parsed?.waypoints[0].name).toBe('Start');
+    expect(parsed?.waypoints[1].name).toBeUndefined();
+  });
+
+  it('rejects unsafe ids and bounds provider-controlled names', () => {
+    const body = routeToFeature(ROUTE);
+    expect(featureToRoute('', body)).toBeUndefined();
+    expect(featureToRoute('bad\u0000id', body)).toBeUndefined();
+    const parsed = featureToRoute('  safe-id  ', {
+      ...body,
+      name: 'r'.repeat(300),
+      feature: {
+        ...body.feature,
+        properties: { coordinatesMeta: [{ name: 'w'.repeat(300) }, { name: 'End' }] },
+      },
+    });
+    expect(parsed?.id).toBe('safe-id');
+    expect(parsed?.name).toHaveLength(256);
+    expect(parsed?.waypoints[0].name).toHaveLength(256);
+  });
 });
 
 describe('routeDistanceMeters', () => {

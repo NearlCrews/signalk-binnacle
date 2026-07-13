@@ -6,13 +6,11 @@ export interface LatLon {
 }
 
 export function isLatLon(value: unknown): value is LatLon {
-  // Finite, not just number: JSON.parse turns an extreme literal into Infinity, and a non-finite
-  // coordinate is never valid for any caller.
   return (
     typeof value === 'object' &&
     value !== null &&
-    Number.isFinite((value as LatLon).latitude) &&
-    Number.isFinite((value as LatLon).longitude)
+    isLatitude((value as LatLon).latitude) &&
+    isLongitude((value as LatLon).longitude)
   );
 }
 
@@ -38,12 +36,7 @@ export function isLonLat(value: unknown): value is LonLat {
   // and a non-finite coordinate poisons every distance, bounds, and rendered line downstream. The
   // length guard rejects empty and single-element arrays; a GeoJSON position may legitimately carry
   // a third elevation element, so the upper bound is open and only indices 0 and 1 are read.
-  return (
-    Array.isArray(value) &&
-    value.length >= 2 &&
-    Number.isFinite(value[0]) &&
-    Number.isFinite(value[1])
-  );
+  return Array.isArray(value) && value.length >= 2 && isLongitude(value[0]) && isLatitude(value[1]);
 }
 
 export function lonLatToLatLon([longitude, latitude]: LonLat): LatLon {

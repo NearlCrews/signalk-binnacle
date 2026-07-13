@@ -31,6 +31,7 @@ describe('service worker route matchers', () => {
   it('matches the overlay hosts and nothing else', () => {
     expect(isOverlayTile(ctx('https://gis.charttools.noaa.gov/arcgis/anything'))).toBe(true);
     expect(isOverlayTile(ctx('https://tiles.openseamap.org/seamark/10/1/1.png'))).toBe(true);
+    expect(isOverlayTile(ctx('https://tiles.openwaters.io/seascape/10/1/1.webp'))).toBe(true);
     expect(isOverlayTile(ctx('https://gibs.earthdata.nasa.gov/wmts/2026-06-01/1/1/1.png'))).toBe(
       true,
     );

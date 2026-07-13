@@ -1,8 +1,16 @@
-import { featureToRoute, type Route, routeToFeature } from '$entities/route';
+import {
+  cleanRouteId,
+  featureToRoute,
+  MAX_ROUTE_WAYPOINTS,
+  type Route,
+  routeToFeature,
+} from '$entities/route';
+import { isLatLon } from '$shared/geo';
 import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
 
 const V2 = '/signalk/v2/api/resources/routes';
 const V1 = '/signalk/v1/api/resources/routes';
+export const MAX_ROUTES = 1_000;
 
 // Returns the routes, or undefined when both the v2 and v1 endpoints are unreachable (a transient
 // failure), so a caller can keep the current list rather than blanking it. A reachable but empty
@@ -11,8 +19,18 @@ const V1 = '/signalk/v1/api/resources/routes';
 // list-but-not-edit behavior rather than writes against a legacy API the rest of the app does not
 // speak.
 export function fetchRoutes(base: string, token?: string): Promise<Route[] | undefined> {
-  return fetchKeyedResource(base, [V2, V1], token, featureToRoute, (url, status) =>
-    console.warn(`[routes] ${url} returned ${status}`),
+  let accepted = 0;
+  return fetchKeyedResource(
+    base,
+    [V2, V1],
+    token,
+    (id, raw) => {
+      if (accepted >= MAX_ROUTES) return undefined;
+      const route = featureToRoute(id, raw);
+      if (route) accepted += 1;
+      return route;
+    },
+    (url, status) => console.warn(`[routes] ${url} returned ${status}`),
   );
 }
 
@@ -25,9 +43,20 @@ export function routeHref(id: string): string {
 
 // PUT the route to its client-chosen id. Returns whether the write succeeded.
 export function saveRoute(base: string, token: string | undefined, route: Route): Promise<boolean> {
-  return putResource(`${base}${V2}/${encodeURIComponent(route.id)}`, token, routeToFeature(route));
+  const id = cleanRouteId(route.id);
+  if (
+    !id ||
+    route.waypoints.length < 2 ||
+    route.waypoints.length > MAX_ROUTE_WAYPOINTS ||
+    route.waypoints.some((waypoint) => !isLatLon(waypoint.position))
+  ) {
+    return Promise.resolve(false);
+  }
+  return putResource(`${base}${V2}/${encodeURIComponent(id)}`, token, routeToFeature(route));
 }
 
 export function deleteRoute(base: string, token: string | undefined, id: string): Promise<boolean> {
-  return deleteResource(`${base}${V2}/${encodeURIComponent(id)}`, token);
+  const safeId = cleanRouteId(id);
+  if (!safeId) return Promise.resolve(false);
+  return deleteResource(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
 }

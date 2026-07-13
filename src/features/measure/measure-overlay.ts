@@ -17,6 +17,7 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
+import { normalizeLonDeltaDeg } from '$shared/nav';
 
 const SRC = 'binnacle-measure';
 const LINE_LAYER = 'binnacle-measure-line';
@@ -27,7 +28,17 @@ const LAYERS = [LINE_LAYER, VERTEX_LAYER, LABEL_LAYER];
 function features(measure: MeasureStore, mode: UnitsMode): GeoJSON.FeatureCollection {
   const points = measure.points;
   if (points.length === 0) return emptyFeatureCollection();
-  const coordinates = points.map<[number, number]>((point) => latLonToLonLat(point));
+  const coordinates: [number, number][] = [];
+  for (const point of points) {
+    const [longitude, latitude] = latLonToLonLat(point);
+    const priorLongitude = coordinates.at(-1)?.[0];
+    coordinates.push([
+      priorLongitude === undefined
+        ? longitude
+        : priorLongitude + normalizeLonDeltaDeg(longitude - priorLongitude),
+      latitude,
+    ]);
+  }
   const out: GeoJSON.Feature[] = coordinates.map((position, index) => ({
     type: 'Feature',
     geometry: { type: 'Point', coordinates: position },

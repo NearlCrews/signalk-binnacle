@@ -10,7 +10,6 @@ import {
   History,
   Layers,
   LocateFixed,
-  Map as MapIcon,
   MapPin,
   Navigation,
   Radar,
@@ -32,7 +31,12 @@ import { CourseGuidance } from '$entities/course';
 import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
 import { type ActiveNotification, NotificationsStore } from '$entities/notifications';
-import { type ProfileSettings, ProfileStore, SignalKProfileAdapter } from '$entities/profile';
+import {
+  MAX_PROFILES,
+  type ProfileSettings,
+  ProfileStore,
+  SignalKProfileAdapter,
+} from '$entities/profile';
 import { RouteStore, remainingRouteDistanceMeters } from '$entities/route';
 import { SymbolsStore } from '$entities/symbols';
 import { TidesStore } from '$entities/tides';
@@ -53,11 +57,7 @@ import {
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
 import { CollisionMute, CollisionNotifier, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
-import {
-  createMarineRadarController,
-  RADAR_UNAVAILABLE_HINT,
-  type RadarStatus,
-} from '$features/marine-radar';
+import { createMarineRadarController, type RadarStatus } from '$features/marine-radar';
 import {
   AppMenu,
   DEFAULT_PINNED,
@@ -73,6 +73,7 @@ import {
   type NoteDetailLoader,
   type NotePoint,
   type NoteSelection,
+  type PoiViewState,
 } from '$features/notes';
 import type { Poi } from '$features/poi-search';
 import { CompanionStatus } from '$features/prewarm';
@@ -126,7 +127,7 @@ import {
   type MapView,
   PersistedValue,
 } from '$shared/settings';
-import type { ConnectionPhase, HistoryProviders } from '$shared/signalk';
+import type { ConnectionPhase, HistoryProviders, Path } from '$shared/signalk';
 import {
   ALL_VESSELS_CONTEXT,
   AuthController,
@@ -254,6 +255,11 @@ function toggleCollisionMute(): void {
   if (collisionMute.active && collisionAlertId) {
     // A refused boat-wide silence surfaces in the Alarms panel; the local mute itself stands.
     alarmActionError = undefined;
+    if (auth.writeBlocked) {
+      alarmActionError =
+        'Collision alarm muted on this device. Server write access is needed to silence other stations.';
+      return;
+    }
     void silenceNotification(origin, chartsToken, collisionAlertId).then((ok) => {
       if (!ok) {
         alarmActionError = 'Could not silence the alert boat-wide. Other stations may still sound.';
@@ -278,6 +284,10 @@ function runNotificationAction(
 ): void {
   if (!notification.id) return;
   alarmActionError = undefined;
+  if (auth.writeBlocked) {
+    alarmActionError = 'Server write access is needed for this alarm action.';
+    return;
+  }
   void action(origin, chartsToken, notification.id).then((ok) => {
     if (!ok) alarmActionError = failMessage;
   });
@@ -337,7 +347,13 @@ const measure = new MeasureStore();
 
 // Track recording: client-side from navigation.position, persisted whole-voyage in IndexedDB.
 const trackSettings = createTrackSettings();
-const recorder = new TrackRecorder(trackSettings, createTrackStore<TrackPoint>());
+let trackPersistenceDegraded = $state(false);
+const recorder = new TrackRecorder(
+  trackSettings,
+  createTrackStore<TrackPoint>(globalThis.indexedDB, () => {
+    trackPersistenceDegraded = true;
+  }),
+);
 
 // Routes: planned and stored as Signal K resources, drawn by the route overlay, edited on the chart.
 const routeStore = new RouteStore();
@@ -347,7 +363,13 @@ const courseGuidance = new CourseGuidance(store, vessel);
 const arrivalAlarm = new GatedAlarm(ARRIVAL_TONE);
 const arrivalMuted = new PersistedValue<boolean>('binnacle:arrival-muted', false);
 // The speed, in knots, used to turn a planned route's distance into per-waypoint passage times.
-const planningSpeedKn = new PersistedValue<number>('binnacle:planning-speed-kn', 5);
+const planningSpeedKn = new PersistedValue<number>(
+  'binnacle:planning-speed-kn',
+  5,
+  undefined,
+  (value): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100,
+);
 
 // Whole-route distance still to run across the legs ahead, for the passage arrival readout. Only when
 // a multi-leg route is active and more than the current leg remains, so a single "go to" or the final
@@ -362,7 +384,7 @@ const routeDistanceToGoMeters = $derived.by<number | undefined>(() => {
     return undefined;
   }
   const route = routeStore.routeById(id);
-  if (!route) return undefined;
+  if (!route || total !== route.waypoints.length || idx >= route.waypoints.length) return undefined;
   return toNext + remainingRouteDistanceMeters(route.waypoints, idx);
 });
 
@@ -432,6 +454,8 @@ const backToMenu = (): void => {
   activePanel = null;
   menuOpen = true;
 };
+const openInstalledCharts = (): void => openPanel('charts-management');
+const backToOfflineCharts = (): void => openPanel('regions');
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
@@ -455,11 +479,13 @@ let chartsToken = $state<string | undefined>();
 
 // The selected POI and a cache-owning detail loader, both set once auth resolves.
 let selectedNote = $state<NoteSelection | undefined>();
+let noteReturnsToPlaces = $state(false);
 let noteLoader = $state<NoteDetailLoader | undefined>();
 let mapView = $state<MapView | undefined>();
 // The on-screen POIs reported by the notes overlay, clipped to the live viewport for the POI search.
 // Replace-only (reassigned wholesale from onNotes), so raw state skips the wasted deep proxy.
 let poiNotes = $state.raw<NotePoint[]>([]);
+let poiViewState = $state<PoiViewState>({ phase: 'idle', offline: false });
 // Reading mapView ties this to every map move, so the in-view clip recomputes on pan and zoom; the
 // live bounds come from the map. The clip is gated behind the panel being open so it does not
 // recompute on every pan frame while the POI search panel is hidden.
@@ -553,6 +579,7 @@ let mapInstance = $state<MapLibreMap | undefined>();
 // Companion feature-detect. Both the regions and chart-management panels receive the resolved
 // base URL as a prop, so they mount ready without their own probe RTT.
 let companionBase = $state<string | null>(null);
+let companionProbeComplete = $state(false);
 
 // Probed at mount (unauthenticated, so map init is never blocked on auth resolving) and retried
 // wherever a stale credential could have been the reason it came back null: once real auth
@@ -560,6 +587,7 @@ let companionBase = $state<string | null>(null);
 function probeCompanion(): void {
   void detectCompanion(origin, authToken).then((base) => {
     companionBase = base;
+    companionProbeComplete = true;
   });
 }
 
@@ -703,6 +731,10 @@ $effect(() => {
 });
 
 function onSaveNewProfile(name: string): void {
+  if (profileStore.profiles.length >= MAX_PROFILES) {
+    toast.show('Profile limit reached. Delete a profile before saving another.');
+    return;
+  }
   const profile = profileStore.save(name, captureProfileSettings());
   profileStore.setActive(profile.id);
 }
@@ -714,10 +746,17 @@ function onExportProfile(id: string): void {
 
 // Save each imported profile as a new one (a fresh id, so an import never overwrites an existing
 // profile); the panel already parsed and validated the picked file.
-function onImportProfiles(profiles: ImportedProfile[]): void {
+function onImportProfiles(profiles: ImportedProfile[]): number {
+  let importedCount = 0;
   for (const imported of profiles) {
+    if (profileStore.profiles.length >= MAX_PROFILES) {
+      toast.show('Profile limit reached. Some profiles were not imported.');
+      break;
+    }
     profileStore.save(imported.name, imported.settings);
+    importedCount += 1;
   }
+  return importedCount;
 }
 
 // User-imported charts: URL descriptors only, persisted locally and synced to the server as chart
@@ -762,8 +801,8 @@ function onViewChange(view: MapView): void {
 }
 
 // Load tides for the current view, so opening the Tides panel shows data without a pan first.
-function loadTides(): void {
-  if (currentView) void tidesLoader.load(tidesStore, currentView.lat, currentView.lon);
+function loadTides(force = false): void {
+  if (currentView) void tidesLoader.load(tidesStore, currentView.lat, currentView.lon, force);
 }
 
 // Toggling the tide layer on (or opening the panel) loads tides for the current view, covering the
@@ -792,12 +831,22 @@ function setLayerVisible(id: string, visible: boolean): void {
   mapCommands?.applyLayers(next, layerOrder.value);
 }
 
+// A menu action can reveal a layer before ChartCanvas finishes its asynchronous map setup. Persisted
+// state already records that action; replay the latest full snapshot when commands arrive so the live
+// manager cannot remain on the older construction-time props for the rest of the session.
+function captureMapCommands(commands: MapCommands): void {
+  mapCommands = commands;
+  // PlotterView forwards readiness from an effect. Keep this snapshot read out of that effect's
+  // dependency set, or applyLayers persists the same state and recursively re-triggers readiness.
+  untrack(() => commands.applyLayers(layerSettings.value, layerOrder.value));
+}
+
 // Arming always reveals the measure layer first: an armed tool drawing into an invisible layer
-// would read as broken. Arming also resets any prior points; both the menu tile and the chart's
-// "Measure from here" mean "start a fresh measurement".
-function armMeasure(): void {
+// would read as broken. Selecting the active menu item keeps the current measurement. The chart's
+// "Measure from here" action explicitly requests a fresh measurement at that position.
+function armMeasure(reset = false): void {
   setLayerVisible('measure', true);
-  measure.start();
+  if (!measure.active || reset) measure.start();
 }
 
 // The marine radar controller owns the spokes worker and the echo layer. Detection runs once server
@@ -807,6 +856,7 @@ const marineRadar = createMarineRadarController({
   origin,
   getToken: () => chartsToken,
   getCenter: () => vessel.position ?? undefined,
+  getHeading: () => vessel.headingRad,
   radarAvailable: () => serverFeatures !== undefined,
 });
 // The radar controls slide-over opens from the radar menu tile or the radar layer row's gear;
@@ -824,8 +874,8 @@ $effect(() => {
   setLayerVisible('marine-radar', true);
 });
 
-// The /state poll only feeds the radar panel (operational status and control values), so run it only
-// while the panel is open; the echo render is driven by the spoke stream, not this poll.
+// The controls hydration poll only feeds the radar panel, so run it only while the panel is open. Live
+// control changes and the radar picture arrive over their respective streams.
 $effect(() => {
   marineRadar.setPolling(radarControlsOpen);
 });
@@ -847,8 +897,12 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Center',
     icon: LocateFixed,
     group: 'Map',
-    disabled: !mapCommands,
-    disabledLabel: 'Center (chart is loading)',
+    disabled: !mapCommands || !vessel.position || vessel.positionStale,
+    disabledLabel: !mapCommands
+      ? 'Center (chart is loading)'
+      : vessel.positionStale
+        ? 'Center needs a fresh GPS fix.'
+        : 'Center needs a GPS position.',
     onSelect: () => mapCommands?.centerOnVessel(),
   },
   {
@@ -856,6 +910,12 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Follow',
     icon: Navigation,
     group: 'Map',
+    disabled: !mapCommands || !vessel.position || vessel.positionStale,
+    disabledLabel: !mapCommands
+      ? 'Follow (chart is loading)'
+      : vessel.positionStale
+        ? 'Follow needs a fresh GPS fix.'
+        : 'Follow needs a GPS position.',
     pressed: following,
     onSelect: () => (following = !following),
   },
@@ -891,9 +951,18 @@ const menuItems = $derived<MenuItem[]>([
     icon: Search,
     group: 'Navigate',
     pressed: activePanel === 'poi-search',
-    onSelect: () => togglePanel('poi-search'),
+    // Find places and its chart markers share the notes overlay. Opening the search therefore
+    // reveals that layer instead of presenting an empty list controlled by a hidden setting.
+    onSelect: () => {
+      if (activePanel === 'poi-search') {
+        closePoiSearch();
+      } else {
+        openPanel('poi-search');
+        setLayerVisible('notes', true);
+      }
+    },
   },
-  // measure re-arms on every tap rather than toggling; pressed reflects the active state.
+  // Measure remains armed when selected again; pressed reflects the active state.
   {
     id: 'measure',
     label: 'Measure',
@@ -932,7 +1001,7 @@ const menuItems = $derived<MenuItem[]>([
     icon: Radar,
     group: 'Safety',
     available: marineRadar.store.hasRadar,
-    unavailableHint: RADAR_UNAVAILABLE_HINT,
+    unavailableHint: marineRadar.store.unavailableHint,
     pressed: radarControlsOpen,
     onSelect: () => {
       radarOpenedFrom = 'menu';
@@ -1002,7 +1071,8 @@ const menuItems = $derived<MenuItem[]>([
         ? 'Checking whether the KIP webapp is installed on the Signal K server.'
         : 'Open KIP needs the KIP webapp installed on the Signal K server.',
     onSelect: () => {
-      window.open(KIP_URL, '_blank', 'noopener,noreferrer');
+      const opened = window.open(KIP_URL, '_blank', 'noopener,noreferrer');
+      if (!opened) toast.show('The browser blocked the KIP window. Allow pop-ups, then try again.');
     },
   },
   // Time travel is not a LeftPanel; it has its own active flag and enter and exit API. It grays like
@@ -1019,34 +1089,26 @@ const menuItems = $derived<MenuItem[]>([
     pressed: timeTravel.active,
     onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
   },
-  // Offline charts (companion-gated) comes before Settings so the Settings group stays last whether
-  // or not the companion plugin is installed.
-  ...(companionBase !== null
-    ? [
-        {
-          id: 'regions',
-          label: 'Offline areas',
-          shortLabel: 'Areas',
-          icon: DownloadCloud,
-          group: 'Offline charts',
-          pressed: activePanel === 'regions',
-          // The panel mounts only once the map instance is up (it draws the area box on the chart),
-          // so gray the tile until then rather than letting a tap open nothing.
-          disabled: mapInstance === undefined,
-          disabledLabel: 'Loading the chart...',
-          onSelect: () => togglePanel('regions'),
-        } satisfies MenuItem,
-        {
-          id: 'charts-management',
-          label: 'Chart files',
-          shortLabel: 'Files',
-          icon: MapIcon,
-          group: 'Offline charts',
-          pressed: activePanel === 'charts-management',
-          onSelect: () => togglePanel('charts-management'),
-        } satisfies MenuItem,
-      ]
-    : []),
+  // Keep this safety-relevant capability discoverable even when its optional provider is absent. The
+  // tile explains the exact requirement instead of disappearing, then becomes the single landing
+  // place for saved areas, automatic caching, installed charts, and storage when Chart Locker appears.
+  {
+    id: 'regions',
+    label: 'Offline charts',
+    shortLabel: 'Offline',
+    icon: DownloadCloud,
+    group: 'Offline charts',
+    available: companionBase !== null,
+    unavailableHint: companionProbeComplete
+      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or sign in if the server is secured.'
+      : 'Checking whether Chart Locker is available on the Signal K server.',
+    pressed: activePanel === 'regions' || activePanel === 'charts-management',
+    // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
+    // exists. An absent provider uses available rather than disabled so tapping explains the setup.
+    disabled: companionBase !== null && mapInstance === undefined,
+    disabledLabel: 'Offline charts (chart is loading)',
+    onSelect: () => togglePanel('regions'),
+  },
   {
     id: 'profiles',
     label: 'Profiles',
@@ -1164,6 +1226,7 @@ const anchorController = createAnchorController({
   vessel,
   anchorAlarm,
   serverHasAnchorApi: () => serverFeatures?.apis.has('anchor') ?? false,
+  writeBlocked: () => auth.writeBlocked,
 });
 
 // A transient action failure (a failed save, activate, delete, and similar) from the route,
@@ -1175,13 +1238,17 @@ const toast = new Toast();
 const routeController = createRouteController({
   origin,
   getToken: () => chartsToken,
+  writeBlocked: () => auth.writeBlocked,
   routeStore,
   courseGuidance,
   flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),
   fitBounds: (bounds) => mapCommands?.fitBounds(bounds),
-  startRouteEdit: (route, initialPoint) => mapCommands?.startRouteEdit(route, initialPoint),
+  startRouteEdit: (route, initialPoint) => {
+    if (!mapCommands) return false;
+    mapCommands.startRouteEdit(route, initialPoint);
+    return true;
+  },
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
-  getBounds: () => mapCommands?.getBounds(),
   getTrackPoints: () => recorder.points,
   toast,
 });
@@ -1190,6 +1257,7 @@ const routeController = createRouteController({
 const waypointsController = createWaypointsController({
   origin,
   getToken: () => chartsToken,
+  writeBlocked: () => auth.writeBlocked,
   waypointsStore,
   toast,
 });
@@ -1199,7 +1267,7 @@ const trackController = createTrackController({
   origin,
   getToken: () => chartsToken,
   getRecorderPoints: () => recorder.points,
-  clearRecorder: () => recorder.clear(),
+  clearRecorderThrough: (savedThroughT) => recorder.clearThrough(savedThroughT),
   toast,
 });
 
@@ -1207,6 +1275,9 @@ const trackController = createTrackController({
 const userChartsController = createUserChartsController({
   origin,
   getToken: () => chartsToken,
+  canWrite: () =>
+    (auth.status === 'unsecured' || auth.status === 'authenticated') && !auth.writeBlocked,
+  onSyncError: (message) => toast.show(message),
   userCharts,
   recolorMap: (t) => recolorMap?.(t),
   getTheme: () => theme.theme,
@@ -1226,7 +1297,9 @@ $effect(() => {
 // configured interval and min-distance. SOG is stored raw in m/s (SI).
 $effect(() => {
   const position = vessel.position;
-  if (position) recorder.consider(position.latitude, position.longitude, vessel.sogMps ?? 0);
+  if (position && !vessel.positionStale) {
+    recorder.consider(position.latitude, position.longitude, vessel.sogMps ?? 0);
+  }
 });
 
 // While following, keep the map centered on the boat. Enabling it recenters immediately, and
@@ -1234,6 +1307,11 @@ $effect(() => {
 $effect(() => {
   const commands = mapCommands;
   const position = vessel.position;
+  const positionStale = vessel.positionStale;
+  if (following && positionStale) {
+    following = false;
+    return;
+  }
   if (following && position) commands?.recenterOnVessel(position.latitude, position.longitude);
 });
 
@@ -1246,7 +1324,7 @@ let flownToFirstFix = false;
 $effect(() => {
   const commands = mapCommands;
   const position = vessel.position;
-  if (savedView || flownToFirstFix || !commands || !position) return;
+  if (savedView || flownToFirstFix || !commands || !position || vessel.positionStale) return;
   flownToFirstFix = true;
   commands.flyTo(position.latitude, position.longitude);
 });
@@ -1259,14 +1337,17 @@ function flyToPosition(position: LatLon): void {
 function selectPoi(poi: Poi): void {
   // Same as tapping the marker on the chart: ring it in place (the highlight effect above) and open
   // its detail in the standard note popup, without moving the map.
-  selectNote({
-    id: poi.id,
-    name: poi.name,
-    category: poi.category,
-    position: poi.position,
-    attribution: poi.attribution,
-    url: poi.url,
-  });
+  selectNote(
+    {
+      id: poi.id,
+      name: poi.name,
+      category: poi.category,
+      position: poi.position,
+      attribution: poi.attribution,
+      url: poi.url,
+    },
+    true,
+  );
 }
 
 // Leg-fit pad fraction: the chart eases to show a highlighted leg with a margin around it.
@@ -1292,14 +1373,12 @@ function onHighlightLeg(index: number): void {
   if (box) mapCommands?.fitBounds(padBbox(box, LEG_FIT_PAD_FRACTION));
 }
 
-// The routes panel's close and back both cancel the in-progress edit and clear any error first.
+// The panel confirms and cancels an in-progress edit before invoking these navigation callbacks.
 function closeRoutesPanel(): void {
-  routeController.onCancelRouteEdit();
   routeController.clearRouteError();
   closePanel();
 }
 function backFromRoutesPanel(): void {
-  routeController.onCancelRouteEdit();
   routeController.clearRouteError();
   backToMenu();
 }
@@ -1351,7 +1430,7 @@ $effect(() => {
       arrivalBanner = undefined;
     }, ARRIVAL_BANNER_MS);
     // Auto-advance only along a route; a single "go to here" destination has no next point to step to.
-    if (routeStore.activeId !== undefined && !courseGuidance.isLastPoint) {
+    if (routeStore.activeId !== undefined && courseGuidance.canAdvanceRoute) {
       // The streamed activeRoute.pointIndex stays authoritative, so a server that also auto-advances
       // and this request converge on the same active point. A failed advance is surfaced.
       routeController.onSkipPoint(1);
@@ -1363,18 +1442,34 @@ $effect(() => {
 function closeNote(): void {
   // The highlight effect clears the chart ring once selectedNote is undefined.
   selectedNote = undefined;
+  noteReturnsToPlaces = false;
 }
-const selectNote = (selection: NoteSelection | undefined): void => {
+const selectNote = (selection: NoteSelection | undefined, fromPlaces = false): void => {
   selectedNote = selection;
+  noteReturnsToPlaces = Boolean(selection && fromPlaces && narrow);
   // Only yield a leading panel when actually opening a note, not when the selection clears.
   if (narrow && selection) activePanel = null;
 };
+function backFromNote(): void {
+  selectedNote = undefined;
+  noteReturnsToPlaces = false;
+  openPanel('poi-search');
+  setLayerVisible('notes', true);
+}
 // Close the POI search: clear the hovered POI and any open note so the highlight effect drops the
 // chart ring and the trailing-edge detail closes with the list, then close the pane.
 function closePoiSearch(): void {
   hoveredPoi = undefined;
   selectedNote = undefined;
+  noteReturnsToPlaces = false;
   closePanel();
+}
+
+function backFromPoiSearch(): void {
+  hoveredPoi = undefined;
+  selectedNote = undefined;
+  noteReturnsToPlaces = false;
+  backToMenu();
 }
 
 // Browsers block audio until a user gesture; prime the audio contexts on the first one so the
@@ -1469,7 +1564,7 @@ $effect(() => {
     void marineRadar.start();
   });
   void detectKip(origin, authToken).then((present) => {
-    kipPresent = present;
+    if (present !== undefined) kipPresent = present;
   });
   void fetchHistoryProviders(origin, authToken).then((providers) => {
     if (providers) historyProviders = providers;
@@ -1489,8 +1584,12 @@ $effect(() => {
 async function connectStream(token: string | undefined): Promise<void> {
   chartsToken = token;
   noteLoader = createNoteDetailLoader(origin, () => chartsToken);
-  await client.connect(streamUrl(token), (frame) => store.applyFrame(frame));
+  await client.connect(streamUrl(token), (frame) => {
+    store.applyFrame(frame);
+    for (const [path, value] of frame.self) marineRadar.applyControlDelta(path, value);
+  });
   await client.raw.subscribe([
+    { path: 'radars.*.controls.*' as Path, policy: 'instant', minPeriod: 200 },
     { path: SK_PATHS.headingTrue, policy: 'instant', minPeriod: 200 },
     { path: SK_PATHS.position, policy: 'instant', minPeriod: 1000 },
     { path: SK_PATHS.courseOverGroundTrue, policy: 'instant', minPeriod: 1000 },
@@ -1527,17 +1626,11 @@ async function connectStream(token: string | undefined): Promise<void> {
       period: 5000,
     },
   ]);
-  // The reads run in parallel. The course hydration restores an in-progress course after a reload: the
-  // v2 course paths send
+  // Course hydration restores an in-progress course after a reload: the v2 course paths send
   // nothing under subscribe=none until the next change, and the local activation flags are
   // session state, so without it a mid-passage reload leaves the nav strip, arrival alarm, and
   // auto-advance dead while the server is still navigating.
-  await Promise.all([
-    trackController.refreshSavedTracks(),
-    routeController.refreshRoutes(),
-    waypointsController.refreshWaypoints(),
-    routeController.hydrateAndSeedCourse(),
-  ]);
+  await routeController.hydrateAndSeedCourse();
 }
 
 // Detect a configured Signal K weather provider so the panel can prefer it over the free sources.
@@ -1557,6 +1650,12 @@ $effect(() => {
   // seeds only at first connect, so mirror it here or every REST write keeps using the stale
   // read-only token and 401s.
   chartsToken = authToken;
+  // Saved tracks are HTTP resources, so load them even when the live WebSocket cannot connect.
+  void trackController.refreshSavedTracks();
+  // Routes are HTTP resources too. Course hydration remains tied to the stream lifecycle.
+  void routeController.refreshRoutes();
+  // Waypoints are HTTP resources too, so do not make their first load depend on the live stream.
+  void waypointsController.refreshWaypoints();
   void refreshWeatherProvider(authToken);
   // Resolve the server's unit preferences with the same trigger: per-user resolution rides on the
   // session credentials that exist once access has resolved.
@@ -1568,7 +1667,7 @@ $effect(() => {
     void marineRadar.start();
   });
   void detectKip(origin, authToken).then((present) => {
-    kipPresent = present;
+    if (present !== undefined) kipPresent = present;
   });
   // The onMount probe runs before this token is available, so an auth-gated companion (Chart
   // Locker) 401s once and is never retried; redo it here once real credentials exist. Untracked:
@@ -1747,12 +1846,14 @@ onDestroy(() => {
     layerOrder={layerOrder.value}
     weatherLayerSettings={weatherLayerSettings.value}
     {trackSettings}
+    {trackPersistenceDegraded}
     categoriesOpen={layerCategoriesOpen}
     {activePanel}
     bind:menuOpen
     {layersView}
     {noteLoader}
     bind:selectedNote
+    onBackFromNote={noteReturnsToPlaces ? backFromNote : undefined}
     bind:weatherPanelOpen
     bind:radarControlsOpen
     bind:radarOpenedFrom
@@ -1762,6 +1863,7 @@ onDestroy(() => {
     toastMessage={toast.message}
     bind:hoveredPoi
     {poiInView}
+    {poiViewState}
     {historyProviders}
     {serverFeatures}
     {notificationsApi}
@@ -1779,19 +1881,23 @@ onDestroy(() => {
       recolorMap = recolor;
       recolor(theme.theme);
     }}
-    onCommandsReady={(commands) => (mapCommands = commands)}
+    onCommandsReady={captureMapCommands}
     onUserChartsReady={userChartsController.onUserChartsReady}
     onMapInstance={(m) => (mapInstance = m)}
     onMapDestroyed={() => (mapInstance = undefined)}
     onUserPan={() => (following = false)}
-    onNoteSelect={(selection) => (selectedNote = selection)}
+    onNoteSelect={selectNote}
     onNotes={(notes) => (poiNotes = notes)}
+    onPoiStatus={(state) => (poiViewState = state)}
     onWeatherLayersReady={(apply) => (applyWeatherLayers = apply)}
     {onSilenceNotification}
     {onAcknowledgeNotification}
     {closePanel}
     {backToMenu}
+    {openInstalledCharts}
+    {backToOfflineCharts}
     {setLayerVisible}
+    onRetryTides={() => loadTides(true)}
     {armMeasure}
     {toggleCollisionMute}
     {selectPoi}
@@ -1807,6 +1913,7 @@ onDestroy(() => {
     {onStartRouteHere}
     {closeNote}
     {closePoiSearch}
+    {backFromPoiSearch}
     {onSetRadarPower}
   />
 
@@ -1864,6 +1971,7 @@ onDestroy(() => {
   <WaypointDialog
     defaultName={defaultSaveName('Waypoint')}
     symbols={symbolsStore}
+    busy={waypointsController.busy}
     onSave={(result) => void confirmDroppedWaypoint(result)}
     onCancel={waypointsController.cancelAddWaypoint}
   />
@@ -1876,6 +1984,7 @@ onDestroy(() => {
       defaultName={waypointsController.editingWaypoint.name}
       waypoint={waypointsController.editingWaypoint}
       symbols={symbolsStore}
+      busy={waypointsController.busy}
       onSave={(result) => void waypointsController.onSaveWaypointEdit(result)}
       onCancel={waypointsController.cancelEditWaypoint}
     />

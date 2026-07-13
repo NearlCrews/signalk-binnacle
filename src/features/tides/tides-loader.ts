@@ -42,7 +42,7 @@ interface LoaderDeps {
 }
 
 export interface TidesLoader {
-  load(store: TidesStore, lat: number, lon: number): Promise<void>;
+  load(store: TidesStore, lat: number, lon: number, force?: boolean): Promise<void>;
 }
 
 // A tide station up to 100 km away is still a useful approximation; a tidal-current station is a
@@ -233,11 +233,17 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
   }
 
   return {
-    async load(store, lat, lon) {
+    async load(store, lat, lon, force = false) {
       const nowMs = deps.now();
-      if (inFlight || nowMs < cooldownUntil) return;
+      if (inFlight || (!force && nowMs < cooldownUntil)) return;
       const settled = store.status === 'ready' || store.status === 'no-coverage';
-      if (settled && lastLat !== undefined && lastLon !== undefined && dayKey(nowMs) === lastDay) {
+      if (
+        !force &&
+        settled &&
+        lastLat !== undefined &&
+        lastLon !== undefined &&
+        dayKey(nowMs) === lastDay
+      ) {
         if (haversineMeters(lastLat, lastLon, lat, lon) < SKIP_RADIUS_M) return;
       }
       inFlight = true;

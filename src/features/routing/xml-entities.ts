@@ -18,8 +18,19 @@ const XML_UNESCAPES: Record<string, string> = {
 };
 
 export function escapeXml(value: string): string {
+  const xmlSafe = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint === 0x9 ||
+      codePoint === 0xa ||
+      codePoint === 0xd ||
+      (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+      (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+      (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+      ? character
+      : '';
+  }).join('');
   // The character class matches exactly the XML_ESCAPES keys, so the lookup always hits.
-  return value.replace(/[<>&'"]/g, (c) => XML_ESCAPES[c]);
+  return xmlSafe.replace(/[<>&'"]/g, (c) => XML_ESCAPES[c]);
 }
 
 export function unescapeXml(value: string): string {
@@ -30,7 +41,14 @@ export function unescapeXml(value: string): string {
       // Guard the Unicode range: String.fromCodePoint throws RangeError for a code point above
       // U+10FFFF or below 0, so an out-of-range numeric entity in an imported GPX file stays literal
       // rather than throwing an uncaught error that aborts the whole import.
-      return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : match;
+      const xmlCodePoint =
+        cp === 0x9 ||
+        cp === 0xa ||
+        cp === 0xd ||
+        (cp >= 0x20 && cp <= 0xd7ff) ||
+        (cp >= 0xe000 && cp <= 0xfffd) ||
+        (cp >= 0x10000 && cp <= 0x10ffff);
+      return xmlCodePoint ? String.fromCodePoint(cp) : match;
     }
     // The named alternation matches exactly the XML_UNESCAPES keys, so the lookup always hits.
     return XML_UNESCAPES[code];

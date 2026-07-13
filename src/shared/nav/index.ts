@@ -6,6 +6,7 @@ export {
   geodesicDestination,
   haversineMeters,
   METERS_PER_DEG,
+  normalizeLonDeltaDeg,
 } from './distance';
 export {
   etaSeconds,

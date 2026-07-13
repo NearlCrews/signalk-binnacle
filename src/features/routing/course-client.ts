@@ -30,7 +30,12 @@ export function advancePoint(
   token: string | undefined,
   value: number,
 ): Promise<boolean> {
+  if (!Number.isInteger(value) || value === 0) return Promise.resolve(false);
   return putResource(`${base}${COURSE}/activeRoute/nextPoint`, token, { value });
+}
+
+export function refreshActiveRoute(base: string, token: string | undefined): Promise<boolean> {
+  return putResource(`${base}${COURSE}/activeRoute/refresh`, token, {});
 }
 
 export function clearCourse(base: string, token: string | undefined): Promise<boolean> {
@@ -45,8 +50,15 @@ export function activationFromCourse(
   info: CourseInfo | undefined,
 ): { routeId?: string; goto?: boolean } | undefined {
   if (!info) return undefined;
-  const rawId = info.activeRoute?.href?.split('/').pop();
-  if (rawId) return { routeId: decodeURIComponent(rawId) };
+  const href = info.activeRoute?.href;
+  const rawId = href?.match(/\/resources\/routes\/([^/?#]+)(?:[?#].*)?$/)?.[1];
+  if (rawId) {
+    try {
+      return { routeId: decodeURIComponent(rawId) };
+    } catch {
+      return {};
+    }
+  }
   if (info.nextPoint?.position) return { goto: true };
   return {};
 }

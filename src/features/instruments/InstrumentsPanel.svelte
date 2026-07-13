@@ -104,6 +104,9 @@ $effect(() => {
     <InstrumentsCustomize {controller} {deps} />
   {:else}
     <div class="tiles">
+      {#if tiles.length === 0}
+        <p class="muted-note empty">No instruments shown. Use Customize to add one.</p>
+      {/if}
       {#each tiles as def (def.id)}
         {@const reading = def.read(deps)}
         {@const zone = controller.zoneState(def, reading.siValue)}
@@ -157,6 +160,10 @@ $effect(() => {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3);
+}
+.empty {
+  grid-column: 1 / -1;
+  align-self: start;
 }
 
 .customize-instruction {

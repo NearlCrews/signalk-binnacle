@@ -8,14 +8,35 @@ export type DetailKey = 'overview' | 'coastal' | 'harbor';
 export interface DetailPreset {
   key: DetailKey;
   label: string;
+  description: string;
+  recommended?: boolean;
   minzoom: number;
   maxzoom: number;
 }
 
 export const DETAIL_PRESETS: DetailPreset[] = [
-  { key: 'overview', label: 'Overview', minzoom: 5, maxzoom: 9 },
-  { key: 'coastal', label: 'Coastal', minzoom: 6, maxzoom: 12 },
-  { key: 'harbor', label: 'Harbor', minzoom: 6, maxzoom: 15 },
+  {
+    key: 'overview',
+    label: 'Overview',
+    description: 'Smallest download for broad passage planning, with limited close-in detail.',
+    minzoom: 5,
+    maxzoom: 9,
+  },
+  {
+    key: 'coastal',
+    label: 'Coastal',
+    description: 'Recommended for most coastal passages and approaches.',
+    recommended: true,
+    minzoom: 6,
+    maxzoom: 12,
+  },
+  {
+    key: 'harbor',
+    label: 'Harbor',
+    description: 'Largest download, with close-in detail for harbors and confined waters.',
+    minzoom: 6,
+    maxzoom: 15,
+  },
 ];
 
 // The preset a new area starts on and the fallback when a key matches no preset.

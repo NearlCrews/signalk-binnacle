@@ -1,4 +1,5 @@
 <script lang="ts">
+import { RefreshCw } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import type { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
@@ -23,16 +24,28 @@ interface Props {
   // host wires onToggleStations, so the panel works without the layer.
   stationsShown?: boolean;
   onToggleStations?: (shown: boolean) => void;
+  onRetry?: () => void;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const { store, units, stationsShown = false, onToggleStations, onClose, onBack }: Props = $props();
+const {
+  store,
+  units,
+  stationsShown = false,
+  onToggleStations,
+  onRetry,
+  onClose,
+  onBack,
+}: Props = $props();
 
 const tide = $derived(store.tide);
 const current = $derived(store.current);
 const stationDistanceText = $derived(
   tide ? formatStationDistance(tide.distanceMeters, units.mode) : '',
+);
+const currentStationDistanceText = $derived(
+  current ? formatStationDistance(current.distanceMeters, units.mode) : '',
 );
 // A live clock so "next" events and the now-marker stay current while the panel is open, not frozen
 // at the last refresh (a stationary boat may not trigger a reload for hours). Ticks once a minute,
@@ -153,9 +166,16 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
     {#if current}
       <div class="current">
         <span class="caps-label">Tidal current</span>
-        <span class="name" title={current.station.name}>{current.station.name}</span>
+        <div class="station">
+          <span class="name" title={current.station.name}>{current.station.name}</span>
+          <span class="dist caps-label">{currentStationDistanceText} away</span>
+        </div>
         <dl class="stat-grid">
-          <dt>Next {nextCurrent?.kind === 'ebb' ? 'ebb' : 'flood'}</dt>
+          <dt>
+            {nextCurrent
+              ? `Next ${nextCurrent.kind === 'ebb' ? 'ebb' : nextCurrent.kind === 'flood' ? 'flood' : 'slack'}`
+              : 'Next current'}
+          </dt>
           <dd>
             {#if nextCurrent}
               <span class="num">{formatClockTime(nextCurrent.timeMs)}, {currentRate}</span>
@@ -170,9 +190,19 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
     {/if}
 
     {#if store.status === 'error'}
-      <p class="muted-note sev-warning" role="status">
-        Showing the last update; the latest refresh did not reach NOAA.
-      </p>
+      <div class="refresh-note" role="alert">
+        <p class="muted-note sev-warning">
+          Showing the last update; the latest refresh did not reach the tide source.
+        </p>
+        {#if onRetry}
+          <button type="button" class="btn" onclick={onRetry}>
+            <RefreshCw size={16} aria-hidden="true" />
+            Retry
+          </button>
+        {/if}
+      </div>
+    {:else if store.status === 'loading'}
+      <p class="muted-note" role="status">Refreshing tide predictions…</p>
     {/if}
 
     {#if sourceNote}
@@ -183,9 +213,15 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
       local time.
     </p>
   {:else if store.status === 'error'}
-    <p class="muted-note sev-warning" role="status">
-      Could not load tide predictions. Check the connection.
-    </p>
+    <div class="refresh-note" role="alert">
+      <p class="muted-note sev-warning">Could not load tide predictions. Check the connection.</p>
+      {#if onRetry}
+        <button type="button" class="btn" onclick={onRetry}>
+          <RefreshCw size={16} aria-hidden="true" />
+          Retry
+        </button>
+      {/if}
+    </div>
   {:else}
     <p class="muted-note" role="status">Pan to a US coast to see tide predictions.</p>
   {/if}
@@ -233,6 +269,16 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
   gap: var(--space-1);
   padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--border);
+}
+.refresh-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.refresh-note .muted-note {
+  flex: 1 1 14rem;
 }
 /* The provenance note sits with the footnote, so it drops to the same fine-print scale. */
 .source-note {
