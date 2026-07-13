@@ -33,7 +33,7 @@ export class CompanionStatus {
   // credential still equals it the poller stays backed off, so a secured server is not re-hit with the
   // same refused credential every interval. This tracks a null credential too: a secured server that
   // refuses the anonymous viewer backs off instead of 401-spamming, yet the moment a real token arrives
-  // (token !== the refused null) it polls again. A fresh sign-in or a refreshed token likewise clears it.
+  // (token !== the refused null) it polls again. Fresh or refreshed access likewise clears it.
   #refusedCred: string | null | undefined = undefined;
 
   constructor(
@@ -122,7 +122,7 @@ export class CompanionStatus {
       this.#failStreak = 0;
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
-        // The credential (which may be null on a secured server) is refused: prompt sign-in and back
+        // The credential (which may be null on a secured server) is refused: report access needed and back
         // off on this exact credential until a different one arrives. Auth is a definite answer, not a
         // transient fault, so apply it at once and reset the fault streak.
         this.#state = 'needs-auth';

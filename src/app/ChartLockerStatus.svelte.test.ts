@@ -29,7 +29,7 @@ describe('ChartLockerStatus', () => {
   it('shows every state as visible text plus a distinct glyph', () => {
     for (const [state, glyph, value] of [
       ['serving', 'lucide-check', 'cache ready'],
-      ['needs-auth', 'lucide-key-round', 'sign in'],
+      ['needs-auth', 'lucide-key-round', 'access needed'],
       ['offline', 'lucide-unplug', 'unavailable'],
       ['error', 'lucide-triangle-alert', 'error'],
     ] as const) {
@@ -63,7 +63,7 @@ describe('ChartLockerStatus', () => {
     expect(serving).toContain('>4.0 KB</span>');
     // needs-auth cannot read the size, so no byte figure appears at all.
     const needsAuth = body({ present: true, state: 'needs-auth', cacheBytes: 4096, onOpen: noop });
-    expect(needsAuth).toContain('sign in to see cache size');
+    expect(needsAuth).toContain('cache details require Signal K access');
     expect(needsAuth).not.toContain('4.0 KB');
   });
 

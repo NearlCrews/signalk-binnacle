@@ -33,6 +33,8 @@ vi.mock('maplibre-gl', () => {
     canvas = new FakeCanvas();
     options: Record<string, unknown>;
     controls: { control: unknown; position?: string }[] = [];
+    keyboard = { disableRotation: vi.fn() };
+    touchZoomRotate = { disableRotation: vi.fn() };
     // A stand-in for the real maplibregl-ctrl-attrib <details> element, so a test can assert
     // createThemedMap's collapse call actually reaches it, not just that the no-op path
     // (selector finds nothing) is safe.
@@ -119,6 +121,8 @@ interface FakeMapInstance {
   fire(event: string, e?: unknown): void;
   options: Record<string, unknown>;
   controls: { control: { options: Record<string, unknown> }; position?: string }[];
+  keyboard: { disableRotation: ReturnType<typeof vi.fn> };
+  touchZoomRotate: { disableRotation: ReturnType<typeof vi.fn> };
   attribElement: { classList: { remove: ReturnType<typeof vi.fn> } };
 }
 
@@ -285,12 +289,15 @@ describe('createThemedMap long-press', () => {
 });
 
 describe('createThemedMap navigation controls', () => {
-  it('installs north-reset, zoom, and nautical scale controls', async () => {
+  it('locks rotation and installs zoom and nautical scale controls', async () => {
     createThemedMap({ container, onLoad: () => {} });
     const map = await lastMap();
+    expect(map.options.dragRotate).toBe(false);
+    expect(map.touchZoomRotate.disableRotation).toHaveBeenCalledOnce();
+    expect(map.keyboard.disableRotation).toHaveBeenCalledOnce();
     expect(map.controls).toEqual([
       {
-        control: { options: { showCompass: true, showZoom: true, visualizePitch: false } },
+        control: { options: { showCompass: false, showZoom: true, visualizePitch: false } },
         position: 'top-right',
       },
       {

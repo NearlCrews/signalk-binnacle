@@ -92,6 +92,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       zoom: Math.min(wanted, opts.maxZoom ?? Number.POSITIVE_INFINITY),
       minZoom: opts.minZoom,
       maxZoom: opts.maxZoom,
+      dragRotate: false,
       touchPitch: false,
       pitchWithRotate: false,
       maxPitch: 0,
@@ -128,6 +129,10 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     return { destroy: () => {} };
   }
 
+  // Keep pinch zoom, arrow-key pan, and keyboard zoom available while disabling only rotation.
+  map.touchZoomRotate.disableRotation();
+  map.keyboard.disableRotation();
+
   // MapLibre's compact attribution control auto-expands itself: AttributionControl's
   // _updateAttributions calls _updateCompact on every 'styledata' | 'sourcedata' | 'terrain'
   // event, and the first time that runs with a non-empty attribution string it adds the
@@ -152,7 +157,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
 
   const mapInstance = map;
   mapInstance.addControl(
-    new maplibregl.NavigationControl({ showCompass: true, showZoom: true, visualizePitch: false }),
+    new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }),
     'top-right',
   );
   mapInstance.addControl(

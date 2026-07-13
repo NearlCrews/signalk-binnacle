@@ -54,7 +54,6 @@
   filter: none;
 }
 .maplibregl-ctrl-scale {
-  position: relative;
   border-color: var(--text-muted);
   background: var(--surface-overlay);
   color: var(--text);
@@ -62,12 +61,11 @@
   font-size: var(--text-xs);
 }
 .maplibregl-ctrl-scale::before {
-  position: absolute;
-  inset-block-end: 100%;
-  inset-inline-start: -2px;
-  padding: 0 var(--space-1);
-  background: var(--surface-overlay);
+  margin-inline-end: var(--space-1);
   color: var(--text-muted);
   content: "Scale";
-  line-height: 1.4;
+}
+/* Keep the enlarged attribution target and its focus ring above the persistent helm toolbar. */
+.maplibregl-ctrl-bottom-right {
+  inset-block-end: var(--space-3);
 }

@@ -21,7 +21,7 @@ let {
 // Offline charts panel where it can be verified against coverage and update time.
 const STATE_META: Record<CompanionState, { label: string; icon: typeof Check }> = {
   serving: { label: 'cached', icon: Check },
-  'needs-auth': { label: 'sign in', icon: KeyRound },
+  'needs-auth': { label: 'access needed', icon: KeyRound },
   offline: { label: 'unavailable', icon: Unplug },
   error: { label: 'error', icon: TriangleAlert },
 };
@@ -37,7 +37,9 @@ const title = $derived.by(() => {
     const bytes = formatBytes(cacheBytes ?? 0);
     return `Offline charts: online, cache ${bytes.value} ${bytes.unit}`;
   }
-  if (state === 'needs-auth') return 'Offline charts: online, sign in to see cache size';
+  if (state === 'needs-auth') {
+    return 'Offline charts: online, cache details require Signal K access';
+  }
   if (state === 'offline') return 'Offline charts: not responding';
   return 'Offline charts: server error';
 });

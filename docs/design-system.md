@@ -351,7 +351,7 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   unavailable, such as a chart still loading.)
 - A user-relevant optional feature never disappears merely because its provider is missing. Offline
   charts is the canonical case: its one menu entry remains visible with `available: false`, and its
-  `unavailableHint` explains how to install, start, or authenticate to Chart Locker. When available,
+  `unavailableHint` explains how to install, start, or grant Binnacle Signal K access. When available,
   that entry opens one landing page for saved areas, automatic caching, installed charts, and storage,
   rather than exposing provider internals as separate menu tiles.
 - A compact subsystem status reports only what it knows. The Offline header control may report cached

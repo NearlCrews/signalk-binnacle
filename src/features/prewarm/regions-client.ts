@@ -176,7 +176,7 @@ export function createRegionsClient(
 ): RegionsClient {
   const url = (path: string): string => companionApiUrl(origin, path);
   // Without an r.ok check a 401 or a 500 would parse an error body into garbage data (or vanish
-  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to a sign-in
+  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to an access-needed
   // prompt and any other fault to a not-responding state.
   const ensureOk = (r: Response): Response => {
     if (!r.ok) throw new HttpStatusError(r.status);

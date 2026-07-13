@@ -44,6 +44,15 @@ test('keeps chart controls legible and the instrument title on one line', async 
         .evaluate((scale) => getComputedStyle(scale, '::before').content),
     )
     .toBe('"Scale"');
+  await expect
+    .poll(() =>
+      page
+        .locator('.maplibregl-ctrl-scale')
+        .evaluate((scale) => getComputedStyle(scale, '::before').position),
+    )
+    .toBe('static');
+  await expect(page.locator('.maplibregl-ctrl-top-right button')).toHaveCount(2);
+  await expect(page.locator('.maplibregl-ctrl-bottom-right')).toHaveCSS('bottom', '12px');
 
   await page.getByRole('button', { name: 'Instruments' }).first().click();
   const dock = page.getByRole('complementary', { name: 'Instruments' });

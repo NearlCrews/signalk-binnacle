@@ -69,7 +69,7 @@ two leaves a tile that opens nothing, or a panel with no way in.
    user-relevant optional provider is absent, keep the item visible with `available: false` plus an
    actionable `unavailableHint`; do not hide it with a conditional spread. Offline charts is the
    canonical example: one entry is always present, and its hint explains how to install, start, or
-   authenticate to Chart Locker. Radar, Time travel, and Open KIP follow the same availability rule.
+   grant Binnacle Signal K access. Radar, Time travel, and Open KIP follow the same availability rule.
    When discovery has multiple failure states, derive the hint from current state so absence, an access
    refusal, malformed provider data, and a transport failure do not collapse into the same message.
 2. Add the panel id to the `LeftPanel` union type.

@@ -227,7 +227,7 @@ For behavior, availability, recovery states, and safety rules for every menu act
 Chart Locker is optional, but it is the recommended way to prepare a passage rather than depending
 only on charts viewed previously in one browser. Install `signalk-chart-locker` from the Signal K App
 Store, then open **Offline charts** in Binnacle. If the plugin cannot be reached, that menu item stays
-visible but unavailable and explains whether to install, start, or authenticate to it.
+visible but unavailable and explains whether to install, start, or grant Binnacle Signal K access.
 
 The Offline charts landing page has four jobs:
 

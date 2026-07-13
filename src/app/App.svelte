@@ -1130,7 +1130,7 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Offline charts',
     available: companionBase !== null,
     unavailableHint: companionProbeComplete
-      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or sign in if the server is secured.'
+      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or grant Binnacle access on a secured Signal K server.'
       : 'Checking whether Chart Locker is available on the Signal K server.',
     pressed: activePanel === 'regions' || activePanel === 'charts-management',
     // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
