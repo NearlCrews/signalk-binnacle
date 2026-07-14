@@ -6,6 +6,9 @@ export interface SignalKClient {
   publish(delta: Delta): Promise<void>;
   reconnect(): Promise<void>;
   disconnect(): Promise<void>;
+  // Recreate the worker after an initial script or Comlink failure. The caller reconnects and
+  // resubscribes afterward, so a transient chunk-load fault does not require a full page reload.
+  restart(): void;
   // Release the Comlink proxy and terminate the worker. The worker is page-lifetime in production,
   // so this is teardown hygiene: without it an HMR reload or a test remount leaks the worker and the
   // MessagePort the wrapped proxy holds.
@@ -14,7 +17,8 @@ export interface SignalKClient {
 }
 
 export function createSignalKClient(): SignalKClient {
-  const worker = new Worker(new URL('./sk.worker.ts', import.meta.url), { type: 'module' });
+  let worker: Worker;
+  let raw: Comlink.Remote<SignalKClientApi>;
   // A worker that fails to load (the "Class extends value undefined" trap, a chunk miss) otherwise
   // dies silently: the Comlink call to connect() never resolves or rejects, so the UI looks
   // identical to "still connecting". Capture the first load error and reject any in-flight connect()
@@ -25,27 +29,43 @@ export function createSignalKClient(): SignalKClient {
   // the connection badge keeps reading its last live phase while data silently stops. Emitting a
   // closed-connection frame here flips the badge to disconnected so the failure is visible.
   let onFrameRef: ((frame: SKFrame) => void) | undefined;
-  worker.onerror = (event) => {
-    const error = new Error(
-      `Signal K worker failed to load or threw: ${event.message ?? 'unknown'}`,
-    );
-    console.error(error.message, event);
-    if (rejectPendingConnect) {
-      rejectPendingConnect(error);
-      return;
-    }
-    onFrameRef?.({
-      self: new Map(),
-      connection: { phase: 'closed', attempt: 0 },
-      epoch: Date.now(),
-    });
+  const spawn = (): void => {
+    const nextWorker = new Worker(new URL('./sk.worker.ts', import.meta.url), { type: 'module' });
+    worker = nextWorker;
+    nextWorker.onerror = (event) => {
+      if (worker !== nextWorker) return;
+      const error = new Error(
+        `Signal K worker failed to load or threw: ${event.message ?? 'unknown'}`,
+      );
+      console.error(error.message, event);
+      if (rejectPendingConnect) {
+        rejectPendingConnect(error);
+        return;
+      }
+      onFrameRef?.({
+        self: new Map(),
+        connection: { phase: 'closed', attempt: 0 },
+        epoch: Date.now(),
+      });
+    };
+    nextWorker.onmessageerror = (event) => {
+      if (worker === nextWorker) {
+        console.error('Signal K worker message could not be deserialized', event);
+      }
+    };
+    raw = Comlink.wrap<SignalKClientApi>(nextWorker);
   };
-  worker.onmessageerror = (event) => {
-    console.error('Signal K worker message could not be deserialized', event);
+
+  const releaseWorker = (): void => {
+    raw[Comlink.releaseProxy]();
+    worker.terminate();
   };
-  const raw = Comlink.wrap<SignalKClientApi>(worker);
+
+  spawn();
   return {
-    raw,
+    get raw() {
+      return raw;
+    },
     async connect(url, onFrame) {
       onFrameRef = onFrame;
       // The worker side releases the previous call's callback proxy before replacing it (see
@@ -69,9 +89,13 @@ export function createSignalKClient(): SignalKClient {
     async disconnect() {
       await raw.disconnect();
     },
+    restart() {
+      rejectPendingConnect = undefined;
+      releaseWorker();
+      spawn();
+    },
     dispose() {
-      raw[Comlink.releaseProxy]();
-      worker.terminate();
+      releaseWorker();
     },
   };
 }

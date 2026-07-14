@@ -14,7 +14,6 @@ import {
   pickProviderEntry,
   providerDisplayName,
   providerReadoutContribution,
-  readoutFromSignalK,
   type SignalKWeatherData,
 } from './signalk-weather';
 
@@ -214,17 +213,6 @@ describe('Signal K adapter', () => {
     expect(normalizePressureTendency(-2)).toBe('falling');
     expect(normalizePressureTendency('not available')).toBeUndefined();
     expect(normalizePressureTendency('N/A')).toBeUndefined();
-  });
-
-  it('lets a pressure-only provider contribute over grid wind', () => {
-    const grid = { speedMs: 8, fromRad: 1, pressurePa: 100_000 };
-    expect(readoutFromSignalK({ date: 'now', outside: { pressure: 101_000 } }, grid)).toMatchObject(
-      {
-        speedMs: 8,
-        fromRad: 1,
-        pressurePa: 101_000,
-      },
-    );
   });
 });
 

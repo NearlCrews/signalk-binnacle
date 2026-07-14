@@ -1,6 +1,5 @@
 export type {
   Bbox,
-  MarineAlignmentMetadata,
   RadarData,
   RadarFrame,
   TimeBracket,

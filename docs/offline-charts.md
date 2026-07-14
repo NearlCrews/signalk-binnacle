@@ -38,12 +38,15 @@ The access states mean different things:
   Select the status or the panel action to retry. If it persists, restart Chart Locker and confirm
   that the installed version registers its chart read routes with Signal K's `readonly` access scope.
 - **Unavailable:** Chart Locker did not respond after repeated attempts.
-- **Error:** Chart Locker returned a server failure.
+- **Error:** Chart Locker returned a server failure or malformed status data.
 
 Binnacle checks `/skServer/loginStatus` before choosing an access message. It sends the browser's
 administrator session to Chart Locker management routes with credentials included and does not attach
 the Binnacle device bearer token because that token can mask a valid administrator cookie on secured
-servers.
+servers. The lightweight installation probe also tries the administrator session first, then falls
+back to an approved Binnacle token only when the server refuses the cookie request. A not-ready
+response still identifies Chart Locker as installed, while the status remains explicit about service
+readiness.
 
 ## Save an area
 
@@ -62,7 +65,9 @@ Automatic caching keeps selected charts near the moving boat. It is a rolling co
 a substitute for a saved and verified passage area.
 
 The Storage view separates saved-area, recently viewed, and automatic-caching use. Clearing recently
-viewed charts does not delete saved areas.
+viewed charts does not delete saved areas. Setting changes show saving and saved feedback. If a save
+fails, the panel keeps the latest choice visible and offers Retry. Rapid changes are serialized so an
+older response cannot replace the newest setting.
 
 ## Status meanings
 
@@ -71,7 +76,7 @@ viewed charts does not delete saved areas.
 - **Admin needed:** The current Signal K user is not an administrator.
 - **Access error:** Signal K reports an administrator session, but Chart Locker refused it.
 - **Unavailable:** Chart Locker did not respond after repeated attempts.
-- **Error:** Chart Locker returned a server failure.
+- **Error:** Chart Locker returned a server failure or malformed status data.
 
 The header reports service and cache state only. It never certifies that a particular passage is
 complete.

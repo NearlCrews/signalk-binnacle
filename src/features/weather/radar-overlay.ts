@@ -42,7 +42,7 @@ export function radarScrubbedAway(selectedTimeMs: number, nowMs: number): boolea
   return selectedTimeMs !== 0 && Math.abs(selectedTimeMs - nowMs) > HOUR_MS;
 }
 
-export type RadarFrameKind = 'observed' | 'nowcast';
+type RadarFrameKind = 'observed' | 'nowcast';
 
 export interface RadarFrameTiming {
   kind: RadarFrameKind;

@@ -1,2 +1,2 @@
-export { BlockCachedSource, type BlockCacheOptions } from './block-cached-source';
-export { type BlockStore, type BlockStoreOptions, createBlockStore } from './block-store';
+export { BlockCachedSource } from './block-cached-source';
+export { type BlockStore, createBlockStore } from './block-store';

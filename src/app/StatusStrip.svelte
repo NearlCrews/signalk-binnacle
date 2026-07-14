@@ -1,17 +1,8 @@
 <script lang="ts">
-import { Ellipsis } from '@lucide/svelte';
-import { onDestroy, onMount } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
-import {
-  blockedReason,
-  itemBlocked,
-  MAX_BAR_PILLS,
-  type MenuItem,
-  MenuItemIcon,
-  splitBarActions,
-} from '$features/menu';
+import { type MenuItem, PinnedActions } from '$features/menu';
 import {
   formatBearingOr,
   formatClockTime,
@@ -21,10 +12,8 @@ import {
   formatLongitude,
   lengthUnit,
   type ReactiveClock,
-  Toast,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
-import { AnchoredMenu, UnavailableHint } from '$shared/ui';
 
 let {
   connectionLabel,
@@ -62,43 +51,6 @@ let {
 const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
-let compactPhone = $state(false);
-const split = $derived(splitBarActions(pinnedActions, compactPhone ? 2 : MAX_BAR_PILLS));
-const moreActive = $derived(split.overflow.some((a) => a.pressed === true));
-let moreOpen = $state(false);
-const closeMore = (): void => {
-  moreOpen = false;
-};
-
-// A blocked pill's reason is otherwise only reachable via its hover-only title tooltip, which
-// never fires on a tap; this explains itself the same way the app menu's blocked tiles do.
-const PILL_NOTE_MS = 5000;
-const blockedPillNote = new Toast();
-onDestroy(() => blockedPillNote.dispose());
-
-onMount(() => {
-  const query = window.matchMedia('(max-width: 600px)');
-  const sync = (): void => {
-    compactPhone = query.matches;
-  };
-  sync();
-  query.addEventListener('change', sync);
-  return () => query.removeEventListener('change', sync);
-});
-
-// Shared by both the visible pills and the overflow rows: `after` runs once the action fires, so
-// only the overflow row needs to close the popover afterward.
-function runPillAction(action: MenuItem, after?: () => void): void {
-  if (itemBlocked(action)) {
-    blockedPillNote.show(blockedReason(action) ?? action.label, PILL_NOTE_MS);
-    return;
-  }
-  try {
-    action.onSelect();
-  } finally {
-    after?.();
-  }
-}
 </script>
 
 <footer class="status-strip" class:editing>
@@ -115,7 +67,8 @@ function runPillAction(action: MenuItem, after?: () => void): void {
     </span>
     {#if streamError}
       <span class="readout fix-lost" role="alert" aria-live="assertive">
-        Data link failed, reload
+        Data link failed
+        <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>
     {:else if connectionDown}
       <span class="readout fix-lost" role="status" aria-live="polite">
@@ -190,81 +143,7 @@ function runPillAction(action: MenuItem, after?: () => void): void {
       {lengthUnit(units.mode)}</span
     >
   </div>
-  <div class="strip-center">
-    <!-- Reserved via absolute positioning above the pill row, so it never shifts the strip's
-         height under a mid-tap thumb; hidden until a blocked pill is tapped. -->
-    {#if blockedPillNote.message}
-      <p class="blocked-pill-note popover-card" role="status" aria-live="polite">
-        {blockedPillNote.message}
-      </p>
-    {/if}
-    {#each split.visible as action (action.id)}
-      <button
-        type="button"
-        class="btn btn-pill"
-        class:is-on={action.pressed === true}
-        aria-pressed={action.pressed === undefined ? undefined : action.pressed}
-        disabled={action.disabled === true}
-        aria-disabled={action.available === false ? true : undefined}
-        title={blockedReason(action) ?? action.label}
-        onclick={() => runPillAction(action)}
-      >
-        <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
-        <MenuItemIcon item={action} size={16} />
-        {action.shortLabel ?? action.label}
-      </button>
-    {/each}
-    {#if split.overflow.length > 0}
-      <div class="more-wrap">
-        <button
-          type="button"
-          class="btn btn-pill"
-          class:is-on={moreActive || moreOpen}
-          aria-haspopup="true"
-          aria-expanded={moreOpen}
-          aria-controls={moreOpen ? 'bar-more-menu' : undefined}
-          aria-label={`More actions (${split.overflow.length})`}
-          title="More actions"
-          onclick={() => (moreOpen = !moreOpen)}
-        >
-          <Ellipsis size={16} aria-hidden="true" />
-          More
-          {#if split.overflow.length > 1}
-            <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
-          {/if}
-        </button>
-        <AnchoredMenu
-          open={moreOpen}
-          onClose={closeMore}
-          backdropLabel="Close more actions"
-          surfaceClass="popover-card bar-more"
-          ariaLabel="More actions"
-          id="bar-more-menu"
-        >
-          {#snippet children()}
-            {#each split.overflow as action (action.id)}
-              <button
-                type="button"
-                class="menu-item"
-                class:is-on={action.pressed === true}
-                aria-pressed={action.pressed === undefined ? undefined : action.pressed}
-                disabled={action.disabled === true}
-                aria-disabled={action.available === false ? true : undefined}
-                title={blockedReason(action) ?? action.label}
-                onclick={() => runPillAction(action, closeMore)}
-              >
-                <UnavailableHint
-                  hint={action.available === false ? action.unavailableHint : undefined}
-                />
-                <MenuItemIcon item={action} size={16} />
-                {action.label}
-              </button>
-            {/each}
-          {/snippet}
-        </AnchoredMenu>
-      </div>
-    {/if}
-  </div>
+  <PinnedActions actions={pinnedActions} />
   <div class="center-cluster">
     <span class="readout" title="Vessel position">Vessel</span>
     <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
@@ -312,32 +191,6 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   align-items: center;
   gap: var(--space-3);
   min-inline-size: 0;
-}
-/* The pinned action pills read as one row of matching labeled pills in the flexible middle.
-   They wrap rather than overflow when a narrow phone leaves too little width. Positioned, so the
-   blocked-pill note can anchor above it. */
-.strip-center {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-}
-/* A pinned action whose provider is absent grays out but stays focusable and hoverable
-   (aria-disabled, not the disabled attribute) so its tooltip shows and a screen reader reaches the
-   reason, matching the menu tiles and the layer rows. The click is guarded in script. The hover
-   resets undo the shared .btn and .menu-item hover affordance so a grayed control does not light up. */
-.btn-pill[aria-disabled="true"],
-.menu-item[aria-disabled="true"] {
-  opacity: var(--disabled-opacity);
-  cursor: default;
-}
-.btn-pill[aria-disabled="true"]:hover {
-  border-color: var(--border);
-  background: var(--surface-raised);
-}
-.menu-item[aria-disabled="true"]:hover {
-  background: transparent;
 }
 /* The vessel position reads as one group at the trailing edge; the Position instrument tile
    covers the same value on demand, so this is the first thing dropped once space is tight.
@@ -391,10 +244,6 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   .hdg-readout,
   .lookout {
     display: none;
-  }
-  .strip-center {
-    flex-wrap: nowrap;
-    gap: var(--space-1);
   }
 }
 .offline {
@@ -451,45 +300,6 @@ function runPillAction(action: MenuItem, after?: () => void): void {
 }
 .depth-alarm b {
   color: var(--alarm);
-}
-.more-wrap {
-  position: relative;
-}
-/* Sets expectations for how many actions are behind the overflow tap, rather than an unqualified
-   "More"; only shown past a single overflow action, where the count is actually informative. */
-.pill-count {
-  font-size: var(--text-xs);
-  background: var(--accent-tint);
-  border-radius: var(--radius-pill);
-  padding: 0 0.3rem;
-  color: var(--accent);
-}
-/* Floats above the pinned pill row so a tap on a grayed pill explains itself, mirroring the app
-   menu's own blocked-note pattern; the frame comes from the shared .popover-card composition. */
-.blocked-pill-note {
-  position: absolute;
-  inset-block-end: calc(100% + var(--space-1));
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-menu);
-  max-inline-size: 16rem;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-  text-align: center;
-}
-/* Positions and lays out the More popover; the frame (border, surface, radius, and shadow) comes
-   from the shared .popover-card it is composed with, so it cannot drift from the other menus. */
-:global(.bar-more) {
-  position: absolute;
-  inset-block-end: calc(100% + var(--space-1));
-  inset-inline-end: 0;
-  transform-origin: bottom right;
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-inline-size: 12rem;
-  padding: var(--space-1);
 }
 /* Keep each readout on one line, so "SOG -- kn" does not wrap to two lines when the strip is tight. */
 .readout {

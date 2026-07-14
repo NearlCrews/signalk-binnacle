@@ -16,8 +16,8 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ## What's new in 0.15.0
 
-Safer, clearer menu workflows across navigation, chart management, safety, weather, instruments,
-offline charts, and profiles.
+Safer, clearer, and more resilient helm workflows across navigation, chart management, safety,
+weather, instruments, offline charts, and profiles.
 
 - **Complete menu refresh.** Every action now distinguishes loading, stale data, missing providers,
   read-only access, empty results, and recoverable failures. Destructive and navigation actions use
@@ -27,6 +27,9 @@ offline charts, and profiles.
   tracks, waypoints, Find places, Measure, weather, tides, trends, and profiles have richer workflows.
 - **Hardened boundaries.** Server resources, imported files, provider responses, persisted settings,
   geometry, names, URLs, and collection sizes are validated and bounded before entering UI state.
+- **Resilient operation.** Failed Signal K streams can rebuild their worker and subscriptions, Chart
+  Locker detection handles administrator sessions and real cache statistics correctly, rapid server
+  settings cannot restore stale values, and installed Android PWAs keep controls above system bars.
 
 See the [changelog](CHANGELOG.md#v0150) for the full list.
 
@@ -144,7 +147,8 @@ Binnacle is built on a current web stack and engineered to run on modest helm ha
 - **Off-main-thread real-time pipeline.** A dedicated Web Worker hosts the Signal K WebSocket client;
   deltas are coalesced into frame-rate batches on a worker timer and fed into a path-keyed reactive
   store, so a busy AIS anchorage updates the readouts without stalling the chart render, and data and
-  alarms keep flowing while the tab is in the background.
+  alarms keep flowing while the tab is in the background. A failed stream can recreate the worker,
+  reconnect, and replay subscriptions without reloading the chartplotter.
 - **Minimal network and render work.** Binnacle subscribes to exactly what it draws, keeps everything
   in SI internally, and converts only at the display edge.
 - **Offline caching.** Self-hosted fonts and assets (no CDN for app code). PMTiles chart areas are
@@ -319,6 +323,7 @@ npm run lint       # Biome lint
 npm run format     # Biome format (write)
 npm run ci:biome   # format, lint, and import-order verification
 npm run cruise     # dependency-cruiser boundary check
+npm run deadcode   # unused files, dependencies, and public exports
 npm test           # Vitest unit tests
 npm run build      # production build into public/
 npm run test:e2e   # Chromium browser, mobile, keyboard, and accessibility checks
@@ -328,6 +333,9 @@ npm run test:e2e:cross-browser # Chromium and WebKit UI checks; CI runs this gat
 After `npm run hooks`, git runs a fast format, lint, and boundary check before each commit, and the
 full type-check, test, and build gate before each push. The hooks live in `.githooks/` and are opt-in
 via `core.hooksPath`, never a package lifecycle script.
+
+Maintainers preparing a version should follow the [release checklist](docs/releasing.md). Preparation
+does not authorize a tag, GitHub release, or npm publication.
 
 To run a local build inside your own Signal K server, link it into the server's module directory and
 add it to the server config so it loads:

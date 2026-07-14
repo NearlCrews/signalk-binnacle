@@ -21,6 +21,7 @@ jobs:
       - run: npm run check
       - run: npm run ci:biome
       - run: npm run cruise
+      - run: npm run deadcode
       - run: npm test
       - run: npm run build
         env:

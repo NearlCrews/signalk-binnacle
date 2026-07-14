@@ -1,7 +1,5 @@
-export type { CpaResult, Kinematics } from './cpa';
 export { computeCpa } from './cpa';
 export {
-  EARTH_RADIUS_M,
   geodesicCircleRing,
   geodesicDestination,
   haversineMeters,

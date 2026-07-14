@@ -60,6 +60,7 @@ Dependency-cruiser enforces the rule.
 - Format: `npm run format`
 - Lint: `npm run lint`
 - Boundary check: `npm run cruise`
+- Dead-code check: `npm run deadcode`
 - Type check: `npm run check`
 - Unit tests: `npm test`
 - Build: `npm run build`
@@ -69,10 +70,12 @@ Dependency-cruiser enforces the rule.
 
 For substantial changes, run the full gate before claiming done:
 
-`npm run lint`, `npm run cruise`, `npm run check`, `npm test`, `npm run build`
+`npm run lint`, `npm run cruise`, `npm run deadcode`, `npm run check`, `npm test`, `npm run build`
 
 Run `npm run test:e2e` when the app shell, layout, instruments, chart lifecycle, or browser behavior
 is touched. The preview server may require approval to bind localhost in sandboxed Codex sessions.
+For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
+publishing.
 
 ## Git Hygiene
 
@@ -81,4 +84,3 @@ is touched. The preview server may require approval to bind localhost in sandbox
 - Keep scratch files in `tmp/`.
 - After significant green work, commit and push to `main` only when the user has asked for that flow or
   the active task clearly includes publishing the local changes.
-

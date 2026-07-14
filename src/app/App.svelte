@@ -24,13 +24,13 @@ import {
 } from '@lucide/svelte';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { onDestroy, onMount, tick, untrack } from 'svelte';
-import { AisTargets, vesselLabel } from '$entities/ais';
+import { AisTargets } from '$entities/ais';
 import { AnchorWatch } from '$entities/anchor';
 import { CollisionAssessment } from '$entities/collision';
 import { CourseGuidance } from '$entities/course';
 import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
-import { type ActiveNotification, NotificationsStore } from '$entities/notifications';
+import { NotificationsStore } from '$entities/notifications';
 import {
   MAX_PROFILES,
   type ProfileSettings,
@@ -56,7 +56,7 @@ import {
   KIP_URL,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
-import { CollisionMute, CollisionNotifier, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
+import { CollisionMute, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
 import { createMarineRadarController, type RadarStatus } from '$features/marine-radar';
 import {
   AppMenu,
@@ -105,8 +105,8 @@ import {
   type WeatherProvider,
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
-import { bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, formatLengthOr, lengthUnit, MINUTE_MS, Toast } from '$shared/lib';
+import { type Bbox4, bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
+import { Clock, formatLengthOr, lengthUnit, Toast } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import { detectCompanion } from '$shared/map/companion';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
@@ -119,27 +119,19 @@ import {
   type MapView,
   PersistedValue,
 } from '$shared/settings';
-import type { ConnectionPhase, HistoryProviders, Path } from '$shared/signalk';
+import type { ConnectionPhase, HistoryProviders } from '$shared/signalk';
 import {
-  ALL_VESSELS_CONTEXT,
   AuthController,
-  acknowledgeNotification,
   adminLoginUrl,
   createSignalKClient,
   fetchHistoryProviders,
   fetchServerFeatures,
   fetchSymbols,
-  postNotification,
-  resolveNotification,
   SELF_CONTEXT,
   type ServerFeatures,
   SignalKStore,
-  SK_PATHS,
   serverOrigin,
   setWriteOutcomeListener,
-  silenceNotification,
-  streamUrl,
-  updateNotification,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
 import { createThemeController, defaultSaveName, type Theme } from '$shared/ui';
@@ -147,7 +139,9 @@ import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 import LiveRegions from './LiveRegions.svelte';
+import { createNotificationsController } from './notifications-controller.svelte';
 import StatusStrip from './StatusStrip.svelte';
+import { createStreamController } from './stream-controller.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
 const origin = serverOrigin();
@@ -207,120 +201,9 @@ async function probeHistoryProviders(retrying = false): Promise<void> {
     providers === undefined ? 'failed' : providers.ids.length > 0 ? 'available' : 'absent';
 }
 
-function publishDelta(path: string, value: unknown): void {
-  void client.publish({ context: SELF_CONTEXT, updates: [{ values: [{ path, value }] }] });
-}
-
-// So other Signal K clients and devices see the same collision alert. On a 2.28 server it rides
-// the v2 Notifications API (server-managed id, silence and acknowledge work boat-wide): one id is
-// raised, updated in place as the contact develops, and resolved on all-clear. Older servers get
-// the v1 delta publish unchanged.
-let collisionAlertId: string | undefined;
-const collisionNotifier = new CollisionNotifier({
-  publish: async (path, value) => {
-    // Capture the derived flag once so an await mid-publish cannot see it flip when features
-    // resolve, which would mix a v1 delta and a v2 raise on the same assessment change.
-    const apiAvailable = notificationsApi;
-    if (!apiAvailable) {
-      publishDelta(path, value);
-      return;
-    }
-    if (value.state === 'normal') {
-      if (collisionAlertId) {
-        const cleared = await resolveNotification(origin, chartsToken, collisionAlertId);
-        collisionAlertId = undefined;
-        // A failed clear would strand a raised alarm on every other station (the server only
-        // reaps normal-state entries); the v1 delta still announces the all-clear.
-        if (!cleared) publishDelta(path, value);
-      }
-      return;
-    }
-    if (collisionAlertId) {
-      const updated = await updateNotification(origin, chartsToken, collisionAlertId, {
-        state: value.state,
-        message: value.message,
-      });
-      if (updated === 'updated') return;
-      if (updated === 'failed') {
-        // Transport failure: a fresh raise would also fail and could orphan a duplicate once the
-        // link returns. Keep the id for the next change and let the v1 delta carry this one.
-        publishDelta(path, value);
-        return;
-      }
-      // The server reaped or lost the id (a restart): raise afresh.
-      collisionAlertId = undefined;
-    }
-    collisionAlertId = await postNotification(origin, chartsToken, {
-      state: value.state,
-      message: value.message,
-      path: 'navigation.collision',
-      includePosition: true,
-      includeCreatedAt: true,
-    });
-    // This alarm fires unattended: when even the raise fails, the v1 delta keeps the rest of the
-    // boat informed, and the next bucket change retries the v2 path.
-    if (!collisionAlertId) publishDelta(path, value);
-  },
-});
-
-// Muting locally also silences the boat-wide v2 alert, so another station sees a silenced alarm
-// rather than one still sounding that this helm has already quieted.
-function toggleCollisionMute(): void {
-  collisionMute.toggle();
-  if (collisionMute.active && collisionAlertId) {
-    // A refused boat-wide silence surfaces in the Alarms panel; the local mute itself stands.
-    alarmActionError = undefined;
-    if (auth.writeBlocked) {
-      alarmActionError =
-        'Collision alarm muted on this device. Server write access is needed to silence other stations.';
-      return;
-    }
-    void silenceNotification(origin, chartsToken, collisionAlertId).then((ok) => {
-      if (!ok) {
-        alarmActionError = 'Could not silence the alert boat-wide. Other stations may still sound.';
-      }
-    });
-  }
-}
-
 // Every notifications.* path on the stream, mirrored for the Alarms panel's active-alert list:
 // engine, NMEA2000, autopilot, and plugin alarms all surface without Binnacle knowing any of them.
 const notificationsStore = new NotificationsStore(store);
-
-// Silence and acknowledge act on the server's notification id, so the action propagates to every
-// station; rows without an id (a v1-only producer) simply do not offer the buttons. A refusal
-// (auth, transport) surfaces in the panel, since the alarm keeping on sounding looks identical
-// to a slow stream echo otherwise.
-let alarmActionError = $state<string | undefined>();
-function runNotificationAction(
-  notification: ActiveNotification,
-  action: (base: string, token: string | undefined, id: string) => Promise<boolean>,
-  failMessage: string,
-): void {
-  if (!notification.id) return;
-  alarmActionError = undefined;
-  if (auth.writeBlocked) {
-    alarmActionError = 'Server write access is needed for this alarm action.';
-    return;
-  }
-  void action(origin, chartsToken, notification.id).then((ok) => {
-    if (!ok) alarmActionError = failMessage;
-  });
-}
-function onSilenceNotification(notification: ActiveNotification): void {
-  runNotificationAction(
-    notification,
-    silenceNotification,
-    'Could not silence the alert. Check the connection and access.',
-  );
-}
-function onAcknowledgeNotification(notification: ActiveNotification): void {
-  runNotificationAction(
-    notification,
-    acknowledgeNotification,
-    'Could not acknowledge the alert. Check the connection and access.',
-  );
-}
 
 // The anchor watch: server-driven when the anchoralarm plugin answers, client-side otherwise. The
 // drag alarm mirrors the collision split: an audible tone here, the strip and live region below.
@@ -598,12 +481,15 @@ let mapInstance = $state<MapLibreMap | undefined>();
 // base URL as a prop, so they mount ready without their own probe RTT.
 let companionBase = $state<string | null>(null);
 let companionProbeComplete = $state(false);
+let companionProbeGeneration = 0;
 
 // Probed at mount (unauthenticated, so map init is never blocked on auth resolving) and retried
 // wherever a stale credential could have been the reason it came back null: once real auth
 // arrives, and again on a reconnect that could catch a companion started while the link was down.
 function probeCompanion(): void {
+  const generation = ++companionProbeGeneration;
   void detectCompanion(origin, authToken).then((base) => {
+    if (generation !== companionProbeGeneration) return;
     companionBase = base;
     companionProbeComplete = true;
     void companionStatus.refresh();
@@ -1156,105 +1042,37 @@ const menuItems = $derived<MenuItem[]>([
 // registry, for the bottom bar to render.
 const resolvedPinned = $derived(resolvePinned(menuItems, pinnedActions.value));
 
-// Sound the collision alarm whenever the assessment, acknowledgement, mute, or escalation changes.
-// Escalation past the inner ring overrides both acknowledge and mute, so a close, imminent contact
-// always sounds. A stale acknowledge expires inside the assessment itself once the situation goes
-// all-clear, so the same vessel re-approaching later alarms afresh.
-$effect(() => {
-  lookoutAlarm.update(
-    collision.assessment.worst,
-    collision.suppressed,
-    collisionMute.active,
-    collision.escalating,
-    anchor.watching,
-  );
-});
-
 // AIS staleness pruning, tied to the app lifecycle; the entity owns the TTL and cadence policy.
 $effect(() => aisTargets.startPruning());
 
-// A concise spoken summary of the active collision danger, written into a persistent assertive live
-// region so a new threat is announced for a screen-reader or hard-of-hearing operator, not only
-// sounded. It mirrors the danger strip's own visibility (contacts present and not acknowledged),
-// and contacts[0] is the worst since the list is severity-then-time sorted.
-const collisionAlert = $derived.by(() => {
-  const { contacts } = collision.assessment;
-  // Mirror the danger strip's own visibility: it un-dims and re-arms on an inner-ring escalation
-  // (acknowledged = suppressed and not escalating), so the assertive announcement must return on
-  // escalation too, not stay silenced. Suppressed-and-not-escalating, or no contacts, says nothing.
-  if ((collision.suppressed && !collision.escalating) || contacts.length === 0) return '';
-  const nearest = contacts[0];
-  const who = vesselLabel(nearest.name, nearest.id);
-  // Lead with the worst contact's grade (contacts[0] is severity-then-time sorted), so a
-  // warning-only situation is not announced as full danger.
-  const lead = nearest.severity === 'warning' ? 'Collision warning' : 'Collision danger';
-  return `${lead}: ${who}. Open Nearby vessels for closest-pass details.`;
+const notificationsController = createNotificationsController({
+  origin,
+  token: () => chartsToken,
+  notificationsApi: () => notificationsApi,
+  writeBlocked: () => auth.writeBlocked,
+  client,
+  collision,
+  collisionMute,
+  lookoutAlarm,
+  anchor,
+  notificationsStore,
+  companionStatus,
+  timeTravel,
+  mob,
 });
+const collisionAlert = $derived(notificationsController.collisionAlert);
+const genericNotificationAlert = $derived(notificationsController.notificationAlert);
+const muteAlert = $derived(notificationsController.muteAlert);
+const muteRemainingMin = $derived(notificationsController.muteRemainingMin);
+const companionAnnounce = $derived(notificationsController.companionAnnounce);
+const alarmActionError = $derived(notificationsController.alarmActionError);
+const toggleCollisionMute = notificationsController.toggleCollisionMute;
+const onSilenceNotification = notificationsController.onSilenceNotification;
+const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
 
-const genericNotifications = $derived(
-  notificationsStore
-    .list()
-    .filter(
-      (notification) =>
-        !notification.acknowledged &&
-        !notification.path.startsWith(SK_PATHS.mobNotification) &&
-        notification.path !== SK_PATHS.anchorNotification &&
-        notification.path !== 'notifications.navigation.collision',
-    ),
-);
-let genericNotificationAlert = $state('');
-let lastGenericNotificationKey = '';
-$effect(() => {
-  const notification = genericNotifications[0];
-  if (!notification) {
-    lastGenericNotificationKey = '';
-    genericNotificationAlert = '';
-    return;
-  }
-  const key = `${notification.path}:${notification.state}:${notification.message}`;
-  if (key === lastGenericNotificationKey) return;
-  lastGenericNotificationKey = key;
-  const label = notification.message || notification.path.replace(/^notifications\./, '');
-  genericNotificationAlert = `${notification.state}: ${label}. Open Alarms for details.`;
-});
-// A muted collision alarm is a safety state, so announce it politely; clearing it on expiry or unmute
-// is silent. The mute auto-expires, so the badge shows the minutes left to make the bounded window
-// and the coming re-arm obvious.
-const muteAlert = $derived(collisionMute.active ? 'Collision alarm muted.' : '');
-const muteRemainingMin = $derived(Math.max(1, Math.ceil(collisionMute.remainingMs / MINUTE_MS)));
-
-// Announce a single crossing of the reachable-to-not-responding boundary through the polite live region,
-// never the ticking byte count. Edge detection needs the previous value, so it uses a non-reactive
-// latch in an effect rather than a derived, which would re-fire on every poll. offline and error are
-// both not-responding states, but each gets its own words so the operator hears which one it is.
-let companionAnnounce = $state('');
-let companionWasDown = false;
-$effect(() => {
-  const state = companionStatus.state;
-  const down = companionStatus.down;
-  if (down === companionWasDown) return;
-  companionWasDown = down;
-  companionAnnounce = down
-    ? state === 'error'
-      ? 'Chart Locker reported a server error.'
-      : 'Chart Locker is not responding.'
-    : 'Chart Locker is responding again.';
-});
-
-// Publish the collision notification to Signal K as the assessment changes.
-$effect(() => {
-  collisionNotifier.update(collision.assessment);
-});
-
-// Exit time-travel review the instant a safety alarm fires: a MOB or a danger-grade collision must
-// take the chart back to now. Only danger, not warning, interrupts, matching where the alarm sounds.
-$effect(() => {
-  if (!timeTravel.active) return;
-  const dangerNow = !collision.suppressed && collision.assessment.worst === 'danger';
-  // untrack the exit so writing timeTravel.active does not re-trigger this effect (it terminates
-  // either way via the guard, but untrack keeps it a single clean run).
-  if (mob.active || dangerNow) untrack(() => timeTravel.exit());
-});
+function publishDelta(path: string, value: unknown): void {
+  void client.publish({ context: SELF_CONTEXT, updates: [{ values: [{ path, value }] }] });
+}
 
 // The man-overboard orchestration: the alarm effect, the MOB live-region string, and the trigger,
 // cancel, and steer handlers (the v2 postMobNotification route with its v1 delta fallback and the
@@ -1549,144 +1367,52 @@ const CONNECTION_LABELS: Record<ConnectionPhase, string> = {
 };
 
 const connectionLabel = $derived(CONNECTION_LABELS[store.connection.phase]);
-// The stream is down (not merely connecting at startup) when it is reconnecting or closed. The badge
-// is colored to match, so a mid-passage drop is visible at a glance rather than reading "Connected".
-const connectionDown = $derived(
-  store.connection.phase === 'reconnecting' || store.connection.phase === 'closed',
-);
 // The own fix has aged out: the footer dashes SOG and COG and shows a calm "No GPS fix" note rather
 // than presenting a frozen speed and course as if they were live.
 const fixStale = $derived(vessel.positionStale);
-
-// When the OS reports the network is back, reconnect the stream at once rather than waiting out the
-// remaining backoff (up to 30 s). Only on the rising edge of online, and only while the stream is
-// actually down, so a healthy connection is never dropped and reopened needlessly.
-let wasOnline = net.online;
-$effect(() => {
-  const online = net.online;
-  const down = connectionDown;
-  if (online && !wasOnline && down) void client.reconnect();
-  wasOnline = online;
-});
 
 // The count of AIS targets the lookout is tracking, so a quiet footer chip confirms the watch is live
 // and receiving traffic, rather than leaving the navigator to wonder whether an empty danger strip
 // means "all clear" or "not working". list() reads aisVersion, so the derived stays reactive.
 const aisCount = $derived(aisTargets.list().length);
 
-// Connect the stream the moment access resolves (an approved token, or an unsecured server),
-// not as a one-shot blocking step. A token that arrives after a tab refocus, or from another
-// tab, then connects without a reload.
-let streamConnected = false;
-let streamError = $state(false);
-$effect(() => {
-  if (streamConnected) return;
-  if (!accessResolved) return;
-  streamConnected = true;
-  // A rejected connect (the worker failed to load, a Comlink call threw) would otherwise leave
-  // streamConnected latched true with no live data and no signal, indistinguishable from
-  // connecting. Surface it; recovery is a reload, so we do not re-enter the effect (that would
-  // spin against a dead worker).
-  connectStream(authToken).catch((error) => {
-    console.error('Signal K stream failed to connect', error);
-    streamError = true;
-  });
-});
-
-// On a stream reconnect, re-hydrate what the resubscribe cannot redeliver. The v2 navigation.course
-// paths are not in the v1 full model, so under subscribe=none the server sends no cached course
-// value on resubscribe, only the next change: without this an active course would freeze on its
-// pre-drop geometry (and the arrival alarm and auto-advance would run on stale values) until the
-// course next changed. Self-vessel paths are in the v1 model and recover on their own; routes are
-// REST resources, so refresh them too. The first open is handled by connectStream (including the
-// course hydration); only a later open (a genuine reconnect) re-hydrates here.
-let everOpen = false;
-let lastConnectionPhase: ConnectionPhase | undefined;
-$effect(() => {
-  const phase = store.connection.phase;
-  const reconnected = phase === 'open' && lastConnectionPhase !== 'open' && everOpen;
-  lastConnectionPhase = phase;
-  if (phase === 'open') everOpen = true;
-  if (!reconnected) return;
+// Refresh state that a resubscribed stream cannot replay. The stream controller owns the connection
+// edge detection and invokes this composition callback only for a genuine reopen after the first one.
+function refreshAfterStreamReconnect(token: string | undefined): void {
   void routeController.refreshRoutes();
   void waypointsController.refreshWaypoints();
-  // A provider plugin enabled while the link was down would otherwise stay undetected.
-  void refreshWeatherProvider(authToken);
-  // A symbol-manager plugin installed or updated while the link was down would otherwise leave the
-  // waypoint and note icons stale until a reload.
+  void refreshWeatherProvider(token);
   void refreshSymbols();
-  // A notifications, anchor, or other capability plugin enabled while the link was down (with no
-  // token change, so the token-keyed effect above does not re-run) would otherwise stay undetected
-  // until a reload, leaving the alarm path stuck on the v1 fallback. Re-probe both here.
-  void fetchServerFeatures(origin, authToken).then((features) => {
+  void fetchServerFeatures(origin, token).then((features) => {
     if (features) serverFeatures = features;
     void marineRadar.start();
   });
   void probeKip(true);
   void probeHistoryProviders(true);
-  // A companion (Chart Locker) started while the link was down would otherwise stay undetected
-  // until a reload, same as the capability probes above. Untracked so the base this call resolves
-  // does not turn companionBase into a dependency of this effect.
   if (untrack(() => companionBase === null)) probeCompanion();
-  // A unit preset changed on the server while the link was down would otherwise hold until the
-  // token changes or the page reloads.
   void units.syncFromServer(origin);
-  // Unconditional: a course activated from another station while the link was down would otherwise
-  // stay unknown here until its next change; the hydration also reconciles the activation flags.
   void routeController.hydrateAndSeedCourse();
-});
+}
 
-async function connectStream(token: string | undefined): Promise<void> {
-  chartsToken = token;
-  noteLoader = createNoteDetailLoader(origin, () => chartsToken);
-  await client.connect(streamUrl(token), (frame) => {
+const streamController = createStreamController({
+  client,
+  store,
+  net,
+  accessResolved: () => accessResolved,
+  token: () => authToken,
+  onToken: (token) => {
+    chartsToken = token;
+    noteLoader = createNoteDetailLoader(origin, () => chartsToken);
+  },
+  onFrame: (frame) => {
     store.applyFrame(frame);
     for (const [path, value] of frame.self) marineRadar.applyControlDelta(path, value);
-  });
-  await client.raw.subscribe([
-    { path: 'radars.*.controls.*' as Path, policy: 'instant', minPeriod: 200 },
-    { path: SK_PATHS.headingTrue, policy: 'instant', minPeriod: 200 },
-    { path: SK_PATHS.position, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.courseOverGroundTrue, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.speedOverGround, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.courseNextPoint, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.coursePreviousPoint, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.courseActiveRoute, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.courseArrivalCircle, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.courseCalcValuesAll, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.depthBelowTransducer, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.windSpeedApparent, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.outsidePressure, policy: 'instant', minPeriod: 5000 },
-    { path: SK_PATHS.anchorPosition, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.anchorMaxRadius, policy: 'instant', minPeriod: 1000 },
-    // One wildcard row covers every notifications.* path including anchor and MOB; a specific
-    // row beside it would have the server deliver those deltas twice.
-    { path: SK_PATHS.allNotifications, policy: 'instant', minPeriod: 1000 },
-    { path: SK_PATHS.position, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    {
-      path: SK_PATHS.courseOverGroundTrue,
-      context: ALL_VESSELS_CONTEXT,
-      policy: 'fixed',
-      period: 5000,
-    },
-    { path: SK_PATHS.speedOverGround, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    { path: SK_PATHS.headingTrue, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    { path: SK_PATHS.name, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    { path: SK_PATHS.aisShipType, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    { path: SK_PATHS.closestApproach, context: ALL_VESSELS_CONTEXT, policy: 'fixed', period: 5000 },
-    {
-      path: SK_PATHS.navigationState,
-      context: ALL_VESSELS_CONTEXT,
-      policy: 'fixed',
-      period: 5000,
-    },
-  ]);
-  // Course hydration restores an in-progress course after a reload: the v2 course paths send
-  // nothing under subscribe=none until the next change, and the local activation flags are
-  // session state, so without it a mid-passage reload leaves the nav strip, arrival alarm, and
-  // auto-advance dead while the server is still navigating.
-  await routeController.hydrateAndSeedCourse();
-}
+  },
+  onInitialSubscription: () => routeController.hydrateAndSeedCourse(),
+  onReconnect: refreshAfterStreamReconnect,
+  onWorkerRestart: () => instruments.resubscribe(),
+});
+const streamError = $derived(streamController.error);
 
 // Detect a configured Signal K weather provider so the panel can prefer it over the free sources.
 // undefined means the TRANSPORT failed (a 401 before the token landed, a slow server): keep the
@@ -1770,6 +1496,7 @@ onMount(() => {
 
 onDestroy(() => {
   companionStatus.stop();
+  streamController.dispose();
   trendRecorder.stop();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
@@ -1793,6 +1520,102 @@ onDestroy(() => {
   // leak it; disconnect above closes the socket first.
   client.dispose();
 });
+const plotterServices = {
+  origin,
+  store,
+  vessel,
+  aisTargets,
+  units,
+  auth,
+  net,
+  theme,
+  trendRecorder,
+  weatherLoader,
+  pointConditionsLoader,
+  planningSpeedKn,
+  thresholds,
+  trackSettings,
+  categoriesOpen: layerCategoriesOpen,
+  arrivalMuted,
+};
+
+const plotterControllers = {
+  anchorController,
+  mobController,
+  routeController,
+  waypointsController,
+  trackController,
+  marineRadar,
+};
+
+const plotterEntities = {
+  anchor,
+  mob,
+  measure,
+  collision,
+  courseGuidance,
+  recorder,
+  routeStore,
+  tidesStore,
+  waypointsStore,
+  symbolsStore,
+  userCharts,
+  weather,
+  timeTravel,
+  notificationsStore,
+};
+
+const plotterActions = {
+  onViewChange,
+  onLayersChange: (settings: LayerSettings) => layerSettings.set(settings),
+  onOrderChange: (order: string[]) => layerOrder.set(order),
+  onWeatherLayersChange: (settings: LayerSettings) => weatherLayerSettings.set(settings),
+  onLayersReady: (view: LayersView) => (layersView = view),
+  onMapReady: (recolor: (theme: Theme) => void) => {
+    recolorMap = recolor;
+    recolor(theme.theme);
+  },
+  onCommandsReady: captureMapCommands,
+  onUserChartsReady: userChartsController.onUserChartsReady,
+  onMapInstance: (map: MapLibreMap) => (mapInstance = map),
+  onMapDestroyed: () => (mapInstance = undefined),
+  onUserPan: () => (following = false),
+  onNoteSelect: selectNote,
+  onNotes: (notes: NotePoint[]) => (poiNotes = notes),
+  onPoiStatus: (state: PoiViewState) => (poiViewState = state),
+  onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => (applyWeatherLayers = apply),
+  onSilenceNotification,
+  onAcknowledgeNotification,
+  closePanel,
+  backToMenu,
+  openInstalledCharts,
+  backToOfflineCharts,
+  openLayersPanel: (mode: 'charts' | 'overlays') => {
+    layersInitialMode = mode;
+    openPanel('layers');
+  },
+  setLayerVisible,
+  onRetryTides: () => loadTides(true),
+  onRetryHistoryProviders: () => void probeHistoryProviders(true),
+  onRetryChartLocker: () => void companionStatus.refresh(),
+  armMeasure,
+  toggleCollisionMute,
+  selectPoi,
+  flyToPosition: (position: LatLon) => mapCommands?.flyTo(position.latitude, position.longitude),
+  onShowChartBounds: (bounds: Bbox4) => mapCommands?.fitBounds(bounds),
+  onHighlightLeg,
+  closeRoutesPanel,
+  backFromRoutesPanel,
+  closeTracksPanel,
+  backFromTracksPanel,
+  closeWaypointsPanel,
+  backFromWaypointsPanel,
+  onStartRouteHere,
+  closeNote,
+  closePoiSearch,
+  backFromPoiSearch,
+  onSetRadarPower,
+};
 </script>
 
 <main class="binnacle-shell">
@@ -1859,39 +1682,10 @@ onDestroy(() => {
     </span>
   </header>
   <PlotterView
-    {origin}
-    {store}
-    {vessel}
-    {aisTargets}
-    {units}
-    {auth}
-    {net}
-    {theme}
-    {anchorController}
-    {mobController}
-    {routeController}
-    {waypointsController}
-    {trackController}
-    {marineRadar}
-    {anchor}
-    {mob}
-    {measure}
-    {collision}
-    {courseGuidance}
-    {recorder}
-    {routeStore}
-    {tidesStore}
-    {waypointsStore}
-    {symbolsStore}
-    {userCharts}
-    {weather}
-    {timeTravel}
-    {notificationsStore}
-    {trendRecorder}
-    {weatherLoader}
-    {pointConditionsLoader}
-    {planningSpeedKn}
-    {thresholds}
+    services={plotterServices}
+    controllers={plotterControllers}
+    entities={plotterEntities}
+    actions={plotterActions}
     {routeDistanceToGoMeters}
     {chartsToken}
     {savedView}
@@ -1900,9 +1694,7 @@ onDestroy(() => {
     layerOrder={layerOrder.value}
     {layersInitialMode}
     weatherLayerSettings={weatherLayerSettings.value}
-    {trackSettings}
     {trackPersistenceDegraded}
-    categoriesOpen={layerCategoriesOpen}
     {activePanel}
     bind:menuOpen
     {layersView}
@@ -1930,56 +1722,6 @@ onDestroy(() => {
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
     {alarmActionError}
-    {arrivalMuted}
-    {onViewChange}
-    onLayersChange={(settings) => layerSettings.set(settings)}
-    onOrderChange={(order) => layerOrder.set(order)}
-    onWeatherLayersChange={(settings) => weatherLayerSettings.set(settings)}
-    onLayersReady={(view) => (layersView = view)}
-    onMapReady={(recolor) => {
-      recolorMap = recolor;
-      recolor(theme.theme);
-    }}
-    onCommandsReady={captureMapCommands}
-    onUserChartsReady={userChartsController.onUserChartsReady}
-    onMapInstance={(m) => (mapInstance = m)}
-    onMapDestroyed={() => (mapInstance = undefined)}
-    onUserPan={() => (following = false)}
-    onNoteSelect={selectNote}
-    onNotes={(notes) => (poiNotes = notes)}
-    onPoiStatus={(state) => (poiViewState = state)}
-    onWeatherLayersReady={(apply) => (applyWeatherLayers = apply)}
-    {onSilenceNotification}
-    {onAcknowledgeNotification}
-    {closePanel}
-    {backToMenu}
-    {openInstalledCharts}
-    {backToOfflineCharts}
-    openLayersPanel={(mode) => {
-      layersInitialMode = mode;
-      openPanel('layers');
-    }}
-    {setLayerVisible}
-    onRetryTides={() => loadTides(true)}
-    onRetryHistoryProviders={() => void probeHistoryProviders(true)}
-    onRetryChartLocker={() => void companionStatus.refresh()}
-    {armMeasure}
-    {toggleCollisionMute}
-    {selectPoi}
-    flyToPosition={(position) => mapCommands?.flyTo(position.latitude, position.longitude)}
-    onShowChartBounds={(bounds) => mapCommands?.fitBounds(bounds)}
-    {onHighlightLeg}
-    {closeRoutesPanel}
-    {backFromRoutesPanel}
-    {closeTracksPanel}
-    {backFromTracksPanel}
-    {closeWaypointsPanel}
-    {backFromWaypointsPanel}
-    {onStartRouteHere}
-    {closeNote}
-    {closePoiSearch}
-    {backFromPoiSearch}
-    {onSetRadarPower}
   />
 
   {#if activePanel === 'profiles'}
@@ -2030,7 +1772,7 @@ onDestroy(() => {
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}
-    onReconnect={() => void client.reconnect()}
+    onReconnect={() => streamController.reconnect()}
   />
 </main>
 

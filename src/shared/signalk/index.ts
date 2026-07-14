@@ -1,7 +1,7 @@
-export type { AdminSessionState } from './admin-session';
 export { adminLoginUrl, fetchAdminSessionState } from './admin-session';
 export { AuthController } from './auth.svelte';
 export { fullJitterDelay } from './backoff';
+export type { SignalKClient } from './client';
 export { createSignalKClient } from './client';
 export type { ServerFeatures } from './features-client';
 export { fetchServerFeatures } from './features-client';
@@ -12,7 +12,6 @@ export type {
 export {
   columnIndex,
   fetchHistoryProviders,
-  fetchHistoryValues,
   fetchHistoryValuesAcrossProviders,
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
@@ -42,7 +41,6 @@ export {
   sendJson,
   setWriteOutcomeListener,
   str,
-  strArray,
 } from './resource';
 export { SignalKStore } from './store.svelte';
 export type { SkSymbol } from './symbols-client';
@@ -50,11 +48,9 @@ export { fetchSymbols } from './symbols-client';
 export type {
   ActiveRoute,
   ConnectionPhase,
-  Context,
   CourseCalculations,
   CourseInfo,
   CoursePoint,
-  NotificationState,
   Path,
   RaisedNotificationState,
   SKFrame,

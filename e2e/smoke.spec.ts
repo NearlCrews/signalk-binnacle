@@ -194,7 +194,7 @@ test('offline area review shows a planning estimate and conservative chart defau
           bytes: 0,
           cap: 1_000_000_000,
           regionsFreeBytes: 500_000_000,
-          perSourceAvgBytes: {},
+          perSourceAvgBytes: { seamark: 565.7692307692307 },
         }),
       });
       return;
@@ -211,6 +211,9 @@ test('offline area review shows a planning estimate and conservative chart defau
   });
 
   await page.goto('/');
+  await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
+    timeout: 10_000,
+  });
   await page.getByRole('button', { name: 'Menu' }).click();
   const offline = page.locator('#app-menu-launcher').getByRole('button', {
     name: 'Offline charts',

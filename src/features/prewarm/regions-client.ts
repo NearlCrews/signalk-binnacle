@@ -18,6 +18,13 @@ export class HttpStatusError extends Error {
   }
 }
 
+export class InvalidCacheStatsError extends TypeError {
+  constructor() {
+    super('invalid cache stats');
+    this.name = 'InvalidCacheStatsError';
+  }
+}
+
 export interface WarmStatus {
   total: number;
   done: number;
@@ -50,26 +57,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonNegativeSafeInteger = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 
-const isPositiveSafeInteger = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && (value as number) > 0;
+const isPositiveFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 /** Validate the cache statistics before strict estimate code consumes them. Invalid server or stale
  * cache data fails as a load error instead of throwing during Svelte rendering. */
-export function parseCacheStats(value: unknown): CacheStats {
-  if (!isRecord(value)) throw new TypeError('invalid cache stats');
+function parseCacheStats(value: unknown): CacheStats {
+  if (!isRecord(value)) throw new InvalidCacheStatsError();
   if (
     !isNonNegativeSafeInteger(value.rows) ||
     !isNonNegativeSafeInteger(value.bytes) ||
     !isNonNegativeSafeInteger(value.cap) ||
     !isRecord(value.perSourceAvgBytes)
   ) {
-    throw new TypeError('invalid cache stats');
+    throw new InvalidCacheStatsError();
   }
 
   const perSourceAvgBytes: Record<string, number> = {};
   for (const [source, bytes] of Object.entries(value.perSourceAvgBytes)) {
-    if (source.length === 0 || !isPositiveSafeInteger(bytes)) {
-      throw new TypeError('invalid cache stats');
+    // Chart Locker reports measured averages, so fractional positive values are expected. Totals
+    // remain integers, but rounding an average here would distort planning estimates.
+    if (source.length === 0 || !isPositiveFiniteNumber(bytes)) {
+      throw new InvalidCacheStatsError();
     }
     perSourceAvgBytes[source] = bytes;
   }
@@ -84,16 +93,16 @@ export function parseCacheStats(value: unknown): CacheStats {
   ] as const;
   for (const field of optionalByteFields) {
     if (value[field] !== undefined && !isNonNegativeSafeInteger(value[field])) {
-      throw new TypeError('invalid cache stats');
+      throw new InvalidCacheStatsError();
     }
   }
   if (value.ttlDays !== undefined && !isNonNegativeSafeInteger(value.ttlDays)) {
-    throw new TypeError('invalid cache stats');
+    throw new InvalidCacheStatsError();
   }
 
   let bySource: CacheStats['bySource'];
   if (value.bySource !== undefined) {
-    if (!Array.isArray(value.bySource)) throw new TypeError('invalid cache stats');
+    if (!Array.isArray(value.bySource)) throw new InvalidCacheStatsError();
     bySource = value.bySource.map((row) => {
       if (
         !isRecord(row) ||
@@ -102,7 +111,7 @@ export function parseCacheStats(value: unknown): CacheStats {
         !isNonNegativeSafeInteger(row.bytes) ||
         !isNonNegativeSafeInteger(row.rows)
       ) {
-        throw new TypeError('invalid cache stats');
+        throw new InvalidCacheStatsError();
       }
       return { source: row.source, bytes: row.bytes, rows: row.rows };
     });

@@ -39,4 +39,4 @@ export {
   createThemedMap,
   type ThemedMapHandle,
 } from './themed-map';
-export type { ChartLayerInfo, OverlayContext, OverlayModule } from './types';
+export type { OverlayContext, OverlayModule } from './types';

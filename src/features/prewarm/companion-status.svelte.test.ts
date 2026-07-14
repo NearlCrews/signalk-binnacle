@@ -114,6 +114,18 @@ describe('CompanionStatus', () => {
     expect(status.state).toBe('access-error');
   });
 
+  it('reports malformed reachable statistics as a server error, not unavailable', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ rows: 1, bytes: 10, cap: 1000, perSourceAvgBytes: { seamark: 0 } }),
+    );
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
+
+    await status.refresh();
+
+    expect(status.state).toBe('error');
+    expect(status.down).toBe(true);
+  });
+
   it('keeps retrying cookie authentication without keying backoff to a device token', async () => {
     let signedIn = false;
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {

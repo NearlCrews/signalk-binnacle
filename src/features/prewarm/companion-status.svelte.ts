@@ -4,7 +4,7 @@
  * signed out merely because Chart Locker returned 401 or 403. */
 
 import { fetchAdminSessionState } from '$shared/signalk';
-import { createRegionsClient, HttpStatusError } from './regions-client.js';
+import { createRegionsClient, HttpStatusError, InvalidCacheStatsError } from './regions-client.js';
 
 export const COMPANION_POLL_MS = 30_000;
 
@@ -113,6 +113,10 @@ export class CompanionStatus {
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
         await this.#classifyAccessRefusal(base);
+        this.#failStreak = 0;
+      } else if (error instanceof InvalidCacheStatsError) {
+        // A reachable companion with malformed data is a server error, not an unavailable service.
+        this.#state = 'error';
         this.#failStreak = 0;
       } else {
         this.#failStreak += 1;

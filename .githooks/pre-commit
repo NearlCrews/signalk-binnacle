@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fast gate on every commit: format and lint check, plus the module-boundary check.
+# Fast gate on every commit: format, lint, module-boundary, and dead-code checks.
 # Heavier gates (type-check, tests, build, e2e) run in pre-push.
 set -e
 
@@ -8,5 +8,8 @@ npm run --silent ci:biome
 
 echo "[pre-commit] dependency-cruiser"
 npm run --silent cruise
+
+echo "[pre-commit] dead code"
+npm run --silent deadcode
 
 echo "[pre-commit] ok"

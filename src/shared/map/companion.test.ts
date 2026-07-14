@@ -28,12 +28,21 @@ describe('detectCompanion', () => {
     expect(base).toBe('http://boat.local/plugins/signalk-chart-locker');
   });
 
-  it('returns null on a non-ok response (including a 401 from a security-enabled server)', async () => {
+  it('returns the plugin base when a 503 proves the plugin is installed but not ready', async () => {
+    const base = await detectCompanion(
+      'http://boat.local',
+      undefined,
+      async () => ({ ok: false, status: 503 }) as Response,
+    );
+    expect(base).toBe('http://boat.local/plugins/signalk-chart-locker');
+  });
+
+  it('returns null when the route is absent', async () => {
     expect(
       await detectCompanion(
         'http://boat.local',
         undefined,
-        async () => ({ ok: false }) as Response,
+        async () => ({ ok: false, status: 404 }) as Response,
       ),
     ).toBeNull();
   });
@@ -46,20 +55,25 @@ describe('detectCompanion', () => {
     ).toBeNull();
   });
 
-  it('sends the bearer token when present, so a security-enabled server does not 401 the probe', async () => {
-    let sentHeaders: HeadersInit | undefined;
+  it('tries the administrator cookie before falling back to the bearer token', async () => {
+    const sent: RequestInit[] = [];
     await detectCompanion('http://boat.local', 'tok123', async (_url, init) => {
-      sentHeaders = init?.headers;
-      return { ok: true } as Response;
+      sent.push(init ?? {});
+      return sent.length === 1
+        ? ({ ok: false, status: 401 } as Response)
+        : ({ ok: true, status: 200 } as Response);
     });
-    expect(sentHeaders).toEqual({ Authorization: 'Bearer tok123' });
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual(expect.objectContaining({ credentials: 'include', cache: 'no-store' }));
+    expect(sent[0]?.headers).toBeUndefined();
+    expect(sent[1]?.headers).toEqual({ Authorization: 'Bearer tok123' });
   });
 
   it('sends no Authorization header when no token is available', async () => {
     let sentHeaders: HeadersInit | undefined;
     await detectCompanion('http://boat.local', undefined, async (_url, init) => {
       sentHeaders = init?.headers;
-      return { ok: true } as Response;
+      return { ok: true, status: 200 } as Response;
     });
     expect(sentHeaders).toBeUndefined();
   });

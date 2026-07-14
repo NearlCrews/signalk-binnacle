@@ -4,9 +4,9 @@ import { str } from '$shared/signalk';
 import type { Waypoint } from './waypoint-types';
 
 export const MAX_WAYPOINT_NAME_LENGTH = 256;
-export const MAX_WAYPOINT_DESCRIPTION_LENGTH = 10_000;
-export const MAX_WAYPOINT_ICON_LENGTH = 256;
-export const MAX_WAYPOINT_ID_LENGTH = 512;
+const MAX_WAYPOINT_DESCRIPTION_LENGTH = 10_000;
+const MAX_WAYPOINT_ICON_LENGTH = 256;
+const MAX_WAYPOINT_ID_LENGTH = 512;
 
 function cleanText(value: unknown, maxLength: number): string | undefined {
   const valueString = str(value)?.trim();

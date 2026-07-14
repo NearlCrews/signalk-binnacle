@@ -37,6 +37,7 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     reorderTile: () => {},
     refreshCatalog: () => {},
     zoneState: () => 'normal',
+    resubscribe: () => {},
     dispose: () => {},
     ...overrides,
   };

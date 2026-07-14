@@ -9,8 +9,6 @@ export { dialog, registerDismiss } from './dialog';
 export { pickTextFile, readErrorMessage } from './file-pick';
 export {
   focusOnMount,
-  focusOnMountIf,
-  focusSelectOnMount,
   isTabKey,
   rovingFocus,
   trapFocus,
@@ -20,14 +18,12 @@ export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as OverflowActions } from './OverflowActions.svelte';
 export { default as PanelHeader } from './PanelHeader.svelte';
-export {
-  createPanelMinimize,
-  type PanelMinimizeController,
-} from './panel-minimize.svelte';
+export { createPanelMinimize } from './panel-minimize.svelte';
 export { defaultSaveName, resolveSaveName } from './prompt';
 export type { Reorder } from './reorder.svelte';
 export { createReorder } from './reorder.svelte';
 export { default as SavedList } from './SavedList.svelte';
+export { default as SaveStatus } from './SaveStatus.svelte';
 export { default as ShowOnChartToggle } from './ShowOnChartToggle.svelte';
 export { default as SlideOver } from './SlideOver.svelte';
 export { default as SubViewHeader } from './SubViewHeader.svelte';
@@ -38,4 +34,3 @@ export { PANEL_TRANSITION_MS } from './transitions';
 export { default as UnavailableHint } from './UnavailableHint.svelte';
 export { default as UnitField } from './UnitField.svelte';
 export { default as VisibilityToggle } from './VisibilityToggle.svelte';
-export type { VisibilityToggleProps } from './visibility-toggle';

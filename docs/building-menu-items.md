@@ -26,10 +26,11 @@ During edits, the fast per-file loop:
 2. `npm run check` (svelte-check)
 3. `npx @biomejs/biome ci <files>` (no-write verify, the same engine the commit hook runs)
 
-Then commit. The pre-commit hook runs `biome ci .` and `npm run cruise` (dependency-cruiser). The
-heavier gates (`npm test`, `npm run build`) run at pre-push. Run them yourself before a release or a
-large change. When app-shell, layout, map, interaction, or browser behavior changes, also run
-`npm run test:e2e`. CI runs `npm run test:e2e:cross-browser` for Chromium and WebKit coverage.
+Then commit. The pre-commit hook runs `biome ci .`, `npm run cruise` (dependency-cruiser), and
+`npm run deadcode` (Knip). The heavier gates (`npm test`, `npm run build`) run at pre-push. Run them
+yourself before a release or a large change. When app-shell, layout, map, interaction, or browser
+behavior changes, also run `npm run test:e2e`. CI runs `npm run test:e2e:cross-browser` for Chromium
+and WebKit coverage.
 
 Tooling traps, each of which has bitten us:
 
@@ -82,6 +83,11 @@ two leaves a tile that opens nothing, or a panel with no way in.
    mirror the menu gating.
 4. Construct the feature's controller and services in `App.svelte` and pass them down as props.
    Services are never global singletons; they are built here so they are swappable in tests.
+
+Large optional panels should expose a cached dynamic-import loader from the slice's `index.ts` and
+mount through an `{#await}` block with loading, failure, and Retry states. Keep the import behind the
+public API. A rejected loader must clear its cached promise so Retry performs a new import. Core chart
+and safety chrome stays eagerly loaded.
 
 When a menu destination depends on a matching chart layer, opening the destination must establish the
 visible state it needs. Use `togglePanel('<id>', () => setLayerVisible('<layer-id>', true))`, as Find
@@ -196,7 +202,9 @@ Three established shapes. Pick by what the second screen IS, not by size.
    parent, a `$derived` `subViewTitle` fed to `SlideOver`, and a cleanup-aware `backToOfflineHome`
    callback that returns to the landing first and clears any active map drawing. Installed charts can
    open as a sibling panel, whose back action returns to this landing. Landing rows are a
-   `.subview-link row-interactive` button with a label, a current value, and a trailing chevron.
+   `.subview-link row-interactive` button with a label, a current value, and a trailing chevron. Keep
+   orchestration and navigation in the parent, and extract substantial sibling screens into focused
+   view components, as RegionsPanel does for storage and automatic caching.
 3. Detail drill-in (LayersPanel opening SourceDetail). Selecting one record from a list opens that
    record's detail or editor in the SAME SlideOver. The detail renders `<SubViewHeader title=...
    backLabel="Back to <list>" {onBack} />`, and the parent suppresses its own panel-level back while
@@ -433,8 +441,8 @@ Tick all of these before you commit a new menu item.
 - [ ] Every text size comes from the type-role table in the design system; no new token-role
       pairing without a design-system edit.
 - [ ] The gate is green: `npx @biomejs/biome check --write .`, `npm run check`, `npm run ci:biome`,
-      `npm run cruise`, `npm test`, and `npm run build` pass. Run `npm run test:e2e` when app-shell,
-      layout, map, interaction, or browser behavior changes.
+      `npm run cruise`, `npm run deadcode`, `npm test`, and `npm run build` pass. Run
+      `npm run test:e2e` when app-shell, layout, map, interaction, or browser behavior changes.
 
 ---
 

@@ -425,6 +425,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   that owns the feature's runes and returns the handlers and getters the panels and chart read. Services
   (the Signal K client, the map, the stores) are constructed in `app/App.svelte` and passed down as
   props, not global singletons, so they are swappable in tests.
+- `SaveStatus` renders the shared saving, saved, and retryable-error feedback for persisted controls.
+  Pair it with `$shared/lib` `createLatestWriter` when several controls update one server document.
+  The writer serializes requests and coalesces pending snapshots so stale responses cannot restore an
+  older setting.
 - Units: all values are SI in the store (radians, meters, m/s, Kelvin). The two sanctioned
   exceptions are `navigation.position` (decimal degrees) and Open-Meteo's preceding-hour
   precipitation in millimeters, read only at the display edge and labeled as an hourly rate. Signal
@@ -470,8 +474,8 @@ short version:
    the SlideOver in the panel slot, and add a `MenuItem` to open it. If a user-relevant provider is
    optional, keep the item visible with `available` and an actionable `unavailableHint`; do not hide
    it conditionally.
-6. Run the gate: `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, and
-   `npm run build`, all green. Run `npm run test:e2e` when app-shell, layout, map, interaction, or
-   browser behavior changes. CI adds desktop and phone WebKit coverage through
+6. Run the gate: `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm run deadcode`,
+   `npm test`, and `npm run build`, all green. Run `npm run test:e2e` when app-shell, layout, map,
+   interaction, or browser behavior changes. CI adds desktop and phone WebKit coverage through
    `npm run test:e2e:cross-browser`. See `docs/building-menu-items.md` section 0 for the per-file loop
    and the tooling traps.

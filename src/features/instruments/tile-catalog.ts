@@ -45,7 +45,7 @@ export interface TileReading {
   angleRad?: number;
 }
 
-export type TileCategory =
+type TileCategory =
   | 'navigation'
   | 'wind'
   | 'depth'
@@ -729,7 +729,7 @@ export function propulsionTemperatureTileDef(instanceId: string): TileDef {
   };
 }
 
-export function propulsionCoolantTileDef(instanceId: string): TileDef {
+function propulsionCoolantTileDef(instanceId: string): TileDef {
   const path = `propulsion.${instanceId}.coolantTemperature`;
   const name = titledSource(instanceId, 'engine');
   return {
@@ -747,7 +747,7 @@ export function propulsionCoolantTileDef(instanceId: string): TileDef {
   };
 }
 
-export function propulsionOilPressureTileDef(instanceId: string): TileDef {
+function propulsionOilPressureTileDef(instanceId: string): TileDef {
   const path = `propulsion.${instanceId}.oilPressure`;
   const name = titledSource(instanceId, 'engine');
   return {
@@ -821,7 +821,7 @@ export function tankLevelTileDef(instanceId: string): TileDef {
   };
 }
 
-export function tankVolumeTileDef(instanceId: string): TileDef {
+function tankVolumeTileDef(instanceId: string): TileDef {
   const path = `tanks.${instanceId}.currentVolume`;
   const name = titledSource(instanceId, 'tank');
   return {
@@ -871,7 +871,7 @@ export function solarPowerTileDef(instanceId: string): TileDef {
   };
 }
 
-export function solarCurrentTileDef(instanceId: string): TileDef {
+function solarCurrentTileDef(instanceId: string): TileDef {
   const path = `electrical.solar.${instanceId}.panelCurrent`;
   const name = titledSource(instanceId, 'solar');
   return {
@@ -894,7 +894,7 @@ export function solarCurrentTileDef(instanceId: string): TileDef {
   };
 }
 
-export function solarYieldTileDef(instanceId: string): TileDef {
+function solarYieldTileDef(instanceId: string): TileDef {
   const path = `electrical.solar.${instanceId}.yieldToday`;
   const name = titledSource(instanceId, 'solar');
   return {
@@ -960,7 +960,7 @@ export function insideHumidityTileDef(instanceId: string): TileDef {
   };
 }
 
-export function insidePressureTileDef(instanceId: string): TileDef {
+function insidePressureTileDef(instanceId: string): TileDef {
   const path = `environment.inside.${instanceId}.pressure`;
   const name = titleId(instanceId);
   return {

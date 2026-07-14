@@ -31,9 +31,9 @@ serves, and any implementation ideas you have.
 3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
-6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm test`, and `npm run build`.
-   Run `npm run test:e2e` when browser behavior is affected. CI runs the Chromium and WebKit suite
-   through `npm run test:e2e:cross-browser`.
+6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm run deadcode`, `npm test`, and
+   `npm run build`. Run `npm run test:e2e` when browser behavior is affected. CI runs the Chromium
+   and WebKit suite through `npm run test:e2e:cross-browser`.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 
@@ -89,3 +89,9 @@ and each chart, weather, and overlay source (NOAA, EMODnet, GEBCO, NASA GIBS,
 OpenSeaMap, VLIZ Marine Regions, Open-Meteo, and RainViewer) carries its own
 attribution string in the map's attribution control. Keep those attributions
 in place on every layer that shows the data.
+
+## Releases
+
+Maintainers use the [release checklist](../docs/releasing.md). Preparing a release and publishing it
+are separate actions. A version tag, GitHub release, or npm publication requires explicit owner
+approval.

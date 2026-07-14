@@ -1,6 +1,6 @@
 export type GL = WebGLRenderingContext | WebGL2RenderingContext;
 
-export function createShader(gl: GL, type: number, source: string): WebGLShader {
+function createShader(gl: GL, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
   if (!shader) throw new Error('createShader failed');
   gl.shaderSource(shader, source);

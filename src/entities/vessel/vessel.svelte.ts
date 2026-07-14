@@ -6,7 +6,7 @@ import { type SignalKStore, SK_PATHS } from '$shared/signalk';
 // position is subscribed near 1 Hz, so a gap this long is a real dropout, not stream jitter. Holding
 // a frozen fix out as if it were live is the worst lie to tell a navigator, so the readouts, the nav
 // guidance, and the collision math all degrade once the fix ages past this.
-export const VESSEL_DATA_STALE_MS = 10_000;
+const VESSEL_DATA_STALE_MS = 10_000;
 
 export class OwnVessel {
   #store: SignalKStore;

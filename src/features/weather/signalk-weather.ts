@@ -287,19 +287,7 @@ export async function fetchPointForecasts(
   return result.status === 'success' ? result.value : undefined;
 }
 
-export async function fetchWeatherWarnings(
-  origin: string,
-  providerId: string,
-  lat: number,
-  lon: number,
-  token?: string,
-  fetchFn: Fetch = defaultFetch,
-): Promise<WeatherWarning[] | undefined> {
-  const result = await fetchWeatherWarningsResult(origin, providerId, lat, lon, token, fetchFn);
-  return result.status === 'success' ? result.value : result.status === 'empty' ? [] : undefined;
-}
-
-export type ConditionsProvenance = 'provider' | 'Open-Meteo' | 'mixed';
+type ConditionsProvenance = 'provider' | 'Open-Meteo' | 'mixed';
 
 export interface PointConditions {
   timeMs: number;
@@ -436,38 +424,7 @@ export function providerReadoutContribution(d: SignalKWeatherData): Partial<Weat
   };
 }
 
-export function readoutFromSignalK(
-  d: SignalKWeatherData,
-  fallback?: WeatherReadout,
-): WeatherReadout | undefined {
-  const provider = providerReadoutContribution(d);
-  const speedMs = provider.speedMs ?? fallback?.speedMs;
-  const fromRad = provider.fromRad ?? fallback?.fromRad;
-  if (speedMs === undefined || fromRad === undefined) return undefined;
-  return {
-    speedMs,
-    fromRad,
-    gustMs: provider.gustMs ?? fallback?.gustMs,
-    pressurePa: provider.pressurePa ?? fallback?.pressurePa,
-    waveHeightM: provider.waveHeightM ?? fallback?.waveHeightM,
-    wavePeriodS: provider.wavePeriodS ?? fallback?.wavePeriodS,
-    waveFromRad: provider.waveFromRad ?? fallback?.waveFromRad,
-    windWaveHeightM: fallback?.windWaveHeightM,
-    windWavePeriodS: fallback?.windWavePeriodS,
-    windWaveFromRad: fallback?.windWaveFromRad,
-    swellHeightM: provider.swellHeightM ?? fallback?.swellHeightM,
-    swellPeriodS: provider.swellPeriodS ?? fallback?.swellPeriodS,
-    swellFromRad: provider.swellFromRad ?? fallback?.swellFromRad,
-    currentSpeedMs: provider.currentSpeedMs ?? fallback?.currentSpeedMs,
-    currentDirectionRad: provider.currentDirectionRad ?? fallback?.currentDirectionRad,
-    waterTempK: provider.waterTempK ?? fallback?.waterTempK,
-    precipitationMm: provider.precipitationMm ?? fallback?.precipitationMm,
-    precipIsRate: provider.precipIsRate ?? fallback?.precipIsRate,
-    cloudCoverFraction: provider.cloudCoverFraction ?? fallback?.cloudCoverFraction,
-  };
-}
-
-export function nearestInTime(
+function nearestInTime(
   series: SignalKWeatherData[],
   targetMs: number,
 ): SignalKWeatherData | undefined {

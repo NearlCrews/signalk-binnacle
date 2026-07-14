@@ -10,7 +10,7 @@ import {
   type WeatherWarning,
 } from './signalk-weather';
 
-export interface EndpointState {
+interface EndpointState {
   status: EndpointStatus;
   fetchedAt?: number;
   stale: boolean;
@@ -34,7 +34,7 @@ export interface ProviderPoint {
   warningsFetchedAt?: number;
 }
 
-export type WarningPoint = Pick<
+type WarningPoint = Pick<
   ProviderPoint,
   'requestKey' | 'warnings' | 'warningAvailability' | 'warningsFetchedAt'
 >;

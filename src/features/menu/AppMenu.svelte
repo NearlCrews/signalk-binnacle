@@ -1,11 +1,12 @@
 <script lang="ts">
-import { GripVertical, Menu, RotateCcw } from '@lucide/svelte';
+import { Menu } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
-import { AnchoredMenu, CustomizeToggle, createReorder, UnavailableHint } from '$shared/ui';
+import { AnchoredMenu, CustomizeToggle, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import { resolvePinned } from './pinned-actions';
+import ToolbarEditor from './ToolbarEditor.svelte';
 
 interface Props {
   items?: MenuItem[];
@@ -41,7 +42,6 @@ const pinnedItems = $derived(resolvePinned(items, pinnedIds));
 
 let trigger = $state<HTMLButtonElement>();
 let card = $state<HTMLElement>();
-let toolbarList: HTMLElement | undefined = $state(undefined);
 
 // A tap or click on a blocked tile explains itself via Toast's timed-message primitive instead of
 // silently doing nothing, since the title tooltip it also carries is mouse-hover-only. Sized
@@ -61,15 +61,6 @@ const groups = $derived.by(() => {
     else out.push({ label, items: [item] });
   }
   return out;
-});
-
-const toolbarReorder = createReorder({
-  getItems: () => pinnedItems.map((item) => ({ id: item.id, title: item.label })),
-  getListEl: () => toolbarList,
-  commit: (id, slot) => onReorderPinned?.(id, slot),
-  rowAttribute: 'data-toolbar-row',
-  handleSelector: '.toolbar-handle',
-  itemNoun: 'Action',
 });
 
 function closeMenu(restoreFocus = false): void {
@@ -98,13 +89,6 @@ function select(item: MenuItem): void {
   if ('vibrate' in navigator) navigator.vibrate(10);
   item.onSelect();
   closeMenu(true);
-}
-
-function handleToolbarKeydown(id: string, event: KeyboardEvent): void {
-  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-    event.stopPropagation();
-  }
-  toolbarReorder.handleKeydown(id, event);
 }
 
 // On open, move focus to the first actionable tile via a $effect (not inside the transition) so a
@@ -183,56 +167,7 @@ function onCardFocusOut(event: FocusEvent): void {
         <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
              "panel open", which is invisible to a screen reader without this. -->
         <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
-        <section class="toolbar-editor" aria-label="Toolbar">
-          <div class="toolbar-editor-head">
-            <h3 class="caps-label toolbar-title">Toolbar</h3>
-            <button
-              type="button"
-              class="btn btn-ghost reset-toolbar"
-              onclick={() => onResetPinned?.()}
-            >
-              <RotateCcw size={16} aria-hidden="true" />
-              Reset toolbar
-            </button>
-          </div>
-          {#if pinnedItems.length === 0}
-            <p class="muted-note">No toolbar actions pinned.</p>
-          {:else}
-            <ol class="toolbar-list bare-list" bind:this={toolbarList}>
-              {#each pinnedItems as item, i (item.id)}
-                {@const indicator = toolbarReorder.indicatorFor(item.id)}
-                <li
-                  data-toolbar-row={item.id}
-                  class="toolbar-row reorder-row"
-                  class:unavailable={item.available === false}
-                  class:dragging={toolbarReorder.dragId === item.id}
-                  class:drop-before={indicator.before}
-                  class:drop-after={indicator.after}
-                  title={blockedReason(item)}
-                >
-                  <span class="toolbar-row-main">
-                    <UnavailableHint
-                      hint={item.available === false ? item.unavailableHint : undefined}
-                    />
-                    <MenuItemIcon {item} size={18} />
-                    <span>{item.shortLabel ?? item.label}</span>
-                  </span>
-                  <button
-                    type="button"
-                    class="icon-btn handle toolbar-handle"
-                    aria-label={`Move ${item.label}, position ${i + 1} of ${pinnedItems.length}`}
-                    aria-keyshortcuts="ArrowUp ArrowDown"
-                    onpointerdown={(e) => toolbarReorder.handlePointerDown(item.id, e)}
-                    onkeydown={(e) => handleToolbarKeydown(item.id, e)}
-                  >
-                    <GripVertical size={18} aria-hidden="true" />
-                  </button>
-                </li>
-              {/each}
-            </ol>
-          {/if}
-          <span class="visually-hidden" role="status">{toolbarReorder.reorderAnnouncement}</span>
-        </section>
+        <ToolbarEditor items={pinnedItems} onReorder={onReorderPinned} onReset={onResetPinned} />
       {/if}
       {#each groups as group, gi (gi)}
         <!-- Every menu item carries a group label, so role="group" always has an accessible name
@@ -365,54 +300,6 @@ function onCardFocusOut(event: FocusEvent): void {
 .menu-head {
   display: flex;
   justify-content: flex-end;
-}
-.toolbar-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding-block: var(--space-1) var(--space-2);
-  border-block-end: 1px solid var(--border);
-}
-.toolbar-editor-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.toolbar-title {
-  margin: 0;
-  padding-inline: var(--space-1);
-}
-.reset-toolbar {
-  min-block-size: var(--row-size);
-  white-space: nowrap;
-}
-.toolbar-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.toolbar-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-block-size: var(--row-size);
-  padding: 0 0 0 var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-}
-.toolbar-row-main {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex: 1;
-  min-inline-size: 0;
-  font-size: var(--text-sm);
-}
-.toolbar-row-main span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .blocked-note-slot {
   position: absolute;

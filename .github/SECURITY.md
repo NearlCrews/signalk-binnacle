@@ -60,7 +60,7 @@ This project uses:
 Run a security audit:
 
 ```bash
-npm audit
+npm audit --omit=dev
 ```
 
 ## Data Handling

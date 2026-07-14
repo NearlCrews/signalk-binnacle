@@ -20,16 +20,16 @@ import type { WeatherStore } from '$entities/weather';
 import { AisListPanel } from '$features/ais-list';
 import { AnchorPanel, AnchorStrip } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
-import { ChartsManagementPanel } from '$features/charts-management';
+import { loadChartsManagementPanel } from '$features/charts-management';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
 import { AlarmsPanel, DangerStrip } from '$features/lookout';
-import { RadarControls } from '$features/marine-radar';
+import { loadRadarControls } from '$features/marine-radar';
 import { MeasureStrip } from '$features/measure';
 import { MobStrip } from '$features/mob';
 import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
 import { type Poi, PoiSearchPanel } from '$features/poi-search';
-import { RegionsPanel } from '$features/prewarm';
+import { loadRegionsPanel } from '$features/prewarm';
 import { RoutesPanel } from '$features/routing';
 import { TidesPanel } from '$features/tides';
 import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
@@ -49,7 +49,7 @@ import type {
 } from '$shared/signalk';
 import { SlideOver, type Theme, type ThemeController } from '$shared/ui';
 import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
-import { WeatherMap } from '$widgets/weather-map';
+import { loadWeatherMap } from '$widgets/weather-map';
 
 type AnchorController = ReturnType<typeof import('$features/anchor-watch').createAnchorController>;
 type MobController = ReturnType<typeof import('$features/mob').createMobController>;
@@ -62,7 +62,7 @@ type RadarController = ReturnType<
   typeof import('$features/marine-radar').createMarineRadarController
 >;
 
-interface Props {
+interface FlatProps {
   // Core services
   origin: string;
   store: SignalKStore;
@@ -199,40 +199,101 @@ interface Props {
   onSetRadarPower: (status: import('$features/marine-radar').RadarStatus) => void;
 }
 
+type ServiceKey =
+  | 'origin'
+  | 'store'
+  | 'vessel'
+  | 'aisTargets'
+  | 'units'
+  | 'auth'
+  | 'net'
+  | 'theme'
+  | 'trendRecorder'
+  | 'weatherLoader'
+  | 'pointConditionsLoader'
+  | 'planningSpeedKn'
+  | 'thresholds'
+  | 'trackSettings'
+  | 'categoriesOpen'
+  | 'arrivalMuted';
+type ControllerKey =
+  | 'anchorController'
+  | 'mobController'
+  | 'routeController'
+  | 'waypointsController'
+  | 'trackController'
+  | 'marineRadar';
+type EntityKey =
+  | 'anchor'
+  | 'mob'
+  | 'measure'
+  | 'collision'
+  | 'courseGuidance'
+  | 'recorder'
+  | 'routeStore'
+  | 'tidesStore'
+  | 'waypointsStore'
+  | 'symbolsStore'
+  | 'userCharts'
+  | 'weather'
+  | 'timeTravel'
+  | 'notificationsStore';
+type ActionKey =
+  | 'onViewChange'
+  | 'onLayersChange'
+  | 'onOrderChange'
+  | 'onWeatherLayersChange'
+  | 'onLayersReady'
+  | 'onMapReady'
+  | 'onCommandsReady'
+  | 'onUserChartsReady'
+  | 'onMapInstance'
+  | 'onMapDestroyed'
+  | 'onUserPan'
+  | 'onNoteSelect'
+  | 'onNotes'
+  | 'onPoiStatus'
+  | 'onWeatherLayersReady'
+  | 'closePanel'
+  | 'backToMenu'
+  | 'openInstalledCharts'
+  | 'backToOfflineCharts'
+  | 'openLayersPanel'
+  | 'setLayerVisible'
+  | 'onRetryTides'
+  | 'onRetryHistoryProviders'
+  | 'onRetryChartLocker'
+  | 'armMeasure'
+  | 'toggleCollisionMute'
+  | 'onSilenceNotification'
+  | 'onAcknowledgeNotification'
+  | 'selectPoi'
+  | 'flyToPosition'
+  | 'onShowChartBounds'
+  | 'onHighlightLeg'
+  | 'closeRoutesPanel'
+  | 'backFromRoutesPanel'
+  | 'closeTracksPanel'
+  | 'backFromTracksPanel'
+  | 'closeWaypointsPanel'
+  | 'backFromWaypointsPanel'
+  | 'onStartRouteHere'
+  | 'closeNote'
+  | 'closePoiSearch'
+  | 'backFromPoiSearch'
+  | 'onSetRadarPower';
+
+interface Props extends Omit<FlatProps, ServiceKey | ControllerKey | EntityKey | ActionKey> {
+  services: Pick<FlatProps, ServiceKey>;
+  controllers: Pick<FlatProps, ControllerKey>;
+  entities: Pick<FlatProps, EntityKey>;
+  actions: Pick<FlatProps, ActionKey>;
+}
+
 let {
-  origin,
-  store,
-  vessel,
-  aisTargets,
-  units,
-  auth,
-  net,
-  theme,
-  anchorController,
-  mobController,
-  routeController,
-  waypointsController,
-  trackController,
-  marineRadar,
-  anchor,
-  mob,
-  measure,
-  collision,
-  courseGuidance,
-  recorder,
-  routeStore,
-  tidesStore,
-  waypointsStore,
-  symbolsStore,
-  userCharts,
-  weather,
-  timeTravel,
-  notificationsStore,
-  trendRecorder,
-  weatherLoader,
-  pointConditionsLoader,
-  planningSpeedKn,
-  thresholds,
+  services,
+  controllers,
+  entities,
   routeDistanceToGoMeters,
   chartsToken,
   savedView,
@@ -241,9 +302,7 @@ let {
   layerOrder,
   layersInitialMode,
   weatherLayerSettings,
-  trackSettings,
   trackPersistenceDegraded,
-  categoriesOpen,
   activePanel,
   menuOpen = $bindable(),
   layersView,
@@ -271,7 +330,52 @@ let {
   collisionMute,
   collisionMuteRemainingMin,
   alarmActionError,
+  actions,
+}: Props = $props();
+
+const {
+  origin,
+  store,
+  vessel,
+  aisTargets,
+  units,
+  auth,
+  net,
+  theme,
+  trendRecorder,
+  weatherLoader,
+  pointConditionsLoader,
+  planningSpeedKn,
+  thresholds,
+  trackSettings,
+  categoriesOpen,
   arrivalMuted,
+} = $derived(services);
+const {
+  anchorController,
+  mobController,
+  routeController,
+  waypointsController,
+  trackController,
+  marineRadar,
+} = $derived(controllers);
+const {
+  anchor,
+  mob,
+  measure,
+  collision,
+  courseGuidance,
+  recorder,
+  routeStore,
+  tidesStore,
+  waypointsStore,
+  symbolsStore,
+  userCharts,
+  weather,
+  timeTravel,
+  notificationsStore,
+} = $derived(entities);
+const {
   onViewChange,
   onLayersChange,
   onOrderChange,
@@ -315,11 +419,36 @@ let {
   closePoiSearch,
   backFromPoiSearch,
   onSetRadarPower,
-}: Props = $props();
+} = $derived(actions);
 
 let mapCommands = $state<MapCommands | undefined>();
 let serverChartsStatus = $state<'loading' | 'ready' | 'partial' | 'error'>('loading');
 let retryServerCharts = $state<(() => void) | undefined>();
+let lazyPanelAttempt = $state(0);
+
+function retryLazyPanel(): void {
+  lazyPanelAttempt += 1;
+}
+
+function regionsPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadRegionsPanel();
+}
+
+function chartsPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadChartsManagementPanel();
+}
+
+function radarControlsForAttempt() {
+  void lazyPanelAttempt;
+  return loadRadarControls();
+}
+
+function weatherMapForAttempt() {
+  void lazyPanelAttempt;
+  return loadWeatherMap();
+}
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
@@ -606,28 +735,46 @@ $effect(() => {
           onBack={backToMenu}
         />
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
-        <RegionsPanel
-          adminAccess={chartLockerAdminAccess}
-          accessUrl={chartLockerAccessUrl}
-          accessState={chartLockerState}
-          map={mapInstance}
-          {units}
-          {companionBase}
-          onClose={closePanel}
-          onBack={backToMenu}
-          onOpenCharts={openInstalledCharts}
-          onRetryAccess={onRetryChartLocker}
-        />
+        {#await regionsPanelForAttempt()}
+          <div class="panel-loading" role="status">Loading offline charts…</div>
+        {:then module}
+          <module.default
+            adminAccess={chartLockerAdminAccess}
+            accessUrl={chartLockerAccessUrl}
+            accessState={chartLockerState}
+            map={mapInstance}
+            {units}
+            {companionBase}
+            onClose={closePanel}
+            onBack={backToMenu}
+            onOpenCharts={openInstalledCharts}
+            onRetryAccess={onRetryChartLocker}
+          />
+        {:catch}
+          <div class="panel-load-error" role="alert">
+            Offline charts could not load.
+            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       {:else if activePanel === 'charts-management' && companionBase !== null}
-        <ChartsManagementPanel
-          adminAccess={chartLockerAdminAccess}
-          accessUrl={chartLockerAccessUrl}
-          accessState={chartLockerState}
-          {companionBase}
-          onClose={closePanel}
-          onBack={backToOfflineCharts}
-          onRetryAccess={onRetryChartLocker}
-        />
+        {#await chartsPanelForAttempt()}
+          <div class="panel-loading" role="status">Loading installed charts…</div>
+        {:then module}
+          <module.default
+            adminAccess={chartLockerAdminAccess}
+            accessUrl={chartLockerAccessUrl}
+            accessState={chartLockerState}
+            {companionBase}
+            onClose={closePanel}
+            onBack={backToOfflineCharts}
+            onRetryAccess={onRetryChartLocker}
+          />
+        {:catch}
+          <div class="panel-load-error" role="alert">
+            Installed charts could not load.
+            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       {/if}
     </div>
   {/if}
@@ -645,46 +792,67 @@ $effect(() => {
             }
           : undefined}
       >
-        <RadarControls
-          store={marineRadar.store}
-          unitsMode={units.mode}
-          onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
-          onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-          onSelectRadar={(id) => marineRadar.selectRadar(id)}
-          onSetPower={onSetRadarPower}
-          echoShown={radarEchoShown}
-          onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
-          onOpenOverlaySettings={() => {
-            radarControlsOpen = false;
-            openLayersPanel('overlays');
-          }}
-        />
+        {#await radarControlsForAttempt()}
+          <div class="panel-loading" role="status">Loading radar controls…</div>
+        {:then module}
+          <module.default
+            store={marineRadar.store}
+            unitsMode={units.mode}
+            onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
+            onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
+            onSelectRadar={(id) => marineRadar.selectRadar(id)}
+            onSetPower={onSetRadarPower}
+            echoShown={radarEchoShown}
+            onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
+            onOpenOverlaySettings={() => {
+              radarControlsOpen = false;
+              openLayersPanel('overlays');
+            }}
+          />
+        {:catch}
+          <div class="panel-load-error" role="alert">
+            Radar controls could not load.
+            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       </SlideOver>
     </div>
   {/if}
   {#if weatherPanelOpen}
-    <WeatherMap
-      store={weather}
-      {origin}
-      {units}
-      loader={weatherLoader}
-      theme={theme.theme}
-      initialView={currentView}
-      savedLayers={weatherLayerSettings}
-      onLayersChange={onWeatherLayersChange}
-      onLayersReady={onWeatherLayersReady}
-      token={chartsToken}
-      {weatherProvider}
-      position={vessel.position}
-      positionStale={vessel.positionStale}
-      pointLoader={pointConditionsLoader}
-      online={net.online}
-      onClose={() => (weatherPanelOpen = false)}
-      onBack={() => {
-        weatherPanelOpen = false;
-        menuOpen = true;
-      }}
-    />
+    {#await weatherMapForAttempt()}
+      <div class="weather-loading" role="status">Loading weather…</div>
+    {:then module}
+      <module.default
+        store={weather}
+        {origin}
+        {units}
+        loader={weatherLoader}
+        theme={theme.theme}
+        initialView={currentView}
+        savedLayers={weatherLayerSettings}
+        onLayersChange={onWeatherLayersChange}
+        onLayersReady={onWeatherLayersReady}
+        token={chartsToken}
+        {weatherProvider}
+        position={vessel.position}
+        positionStale={vessel.positionStale}
+        pointLoader={pointConditionsLoader}
+        online={net.online}
+        onClose={() => (weatherPanelOpen = false)}
+        onBack={() => {
+          weatherPanelOpen = false;
+          menuOpen = true;
+        }}
+      />
+    {:catch}
+      <div class="weather-load-error" role="alert">
+        Weather view could not load.
+        <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+        <button type="button" class="btn btn-secondary" onclick={() => (weatherPanelOpen = false)}>
+          Close
+        </button>
+      </div>
+    {/await}
   {/if}
 </section>
 
@@ -698,6 +866,27 @@ $effect(() => {
   inset-block-start: 0;
   inset-inline: 0;
   z-index: var(--z-overlay);
+}
+.panel-loading,
+.panel-load-error,
+.weather-loading,
+.weather-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-block-size: 8rem;
+  padding: var(--space-4);
+  color: var(--danger);
+  text-align: center;
+}
+.weather-loading,
+.weather-load-error {
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  z-index: var(--z-panel);
 }
 /* Positions the arrival banner and the toast in the same top-center slot, stacked when both are
    showing at once. The wrapper spans the full width so it can center either child, but stays

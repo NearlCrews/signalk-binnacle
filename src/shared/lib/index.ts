@@ -7,6 +7,10 @@ export { fetchJsonOrUndefined } from './fetch-json';
 export { withTimeout } from './fetch-timeout';
 export { portableFilename } from './filename';
 export { uuidv4 } from './id';
+export {
+  createLatestWriter,
+  type LatestWriterState,
+} from './latest-writer.svelte';
 export { clampInt, compareOptionalNumber, isFiniteNumber, lerp, nearestBy } from './math';
 export { prefersReducedMotion } from './motion';
 export { isRecord } from './object';
@@ -37,7 +41,6 @@ export {
   formatTemperatureOr,
   HOUR_MS,
   headingDegrees,
-  kelvinToCelsius,
   knotsToMetersPerSecond,
   landDistanceUnit,
   lengthUnit,

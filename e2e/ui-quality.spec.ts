@@ -58,9 +58,17 @@ test('keeps chart controls legible and the instrument title on one line', async 
   await expect(page.locator('.maplibregl-ctrl-top-right button')).toHaveCount(2);
   await expect(page.locator('.maplibregl-ctrl-bottom-right')).toHaveCSS('bottom', '12px');
 
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
-  const dock = page.getByRole('complementary', { name: 'Instruments' });
-  const heading = dock.getByRole('heading', { name: 'Instruments' });
+  const pinnedInstruments = page.getByRole('button', { name: 'Instruments', exact: true }).first();
+  if (await pinnedInstruments.isVisible()) {
+    await pinnedInstruments.click();
+  } else {
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page
+      .locator('#app-menu-launcher')
+      .getByRole('button', { name: 'Instruments', exact: true })
+      .click();
+  }
+  const heading = page.getByRole('heading', { name: 'Instruments', exact: true });
   await expect(heading).toBeVisible();
   await expect
     .poll(() =>
@@ -71,7 +79,7 @@ test('keeps chart controls legible and the instrument title on one line', async 
       }),
     )
     .toBe(1);
-  await expect(dock.getByRole('button', { name: 'Customize instruments' })).toHaveText('Customize');
+  await expect(page.getByRole('button', { name: 'Customize instruments' })).toHaveText('Customize');
   await expect
     .poll(async () => {
       const [mapBox, scaleBox] = await Promise.all([

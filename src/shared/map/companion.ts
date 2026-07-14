@@ -4,16 +4,16 @@
 // URL, so a standalone install is unchanged.
 
 import { proxyTileTemplate } from 'signalk-chart-sources';
-import { authInit } from '$shared/signalk';
+import { adminSessionInit, authInit } from '$shared/signalk';
 
 const COMPANION_PATH = '/plugins/signalk-chart-locker';
 
 /**
- * Probe whether the companion tile proxy is installed and ready. Returns its plugin base URL on a 200,
- * or null on a 404, a 401 or 403 (a security-enabled server with no token yet, or a read-only one), or
- * any network error (the standalone case). Sent authenticated, like every other same-origin request in
- * this app (see themed-map.ts's transformRequest and resource.ts's authInit): a security-enabled server
- * 401s an unauthenticated probe, which otherwise reads identically to Chart Locker being absent.
+ * Probe whether the companion tile proxy is installed. A 503 from this route means Chart Locker is
+ * installed but its container is not ready, so it still proves presence. Try the browser administrator
+ * session first because a device bearer token can mask a valid cookie, then fall back to that token for
+ * ordinary approved Binnacle sessions. A 404 proves absence; 401 and 403 prove neither because Signal K
+ * can reject requests before route matching.
  */
 export async function detectCompanion(
   origin: string,
@@ -22,13 +22,16 @@ export async function detectCompanion(
 ): Promise<string | null> {
   const base = `${origin}${COMPANION_PATH}`;
   try {
-    // The map cannot build until this resolves (baseStyleUrl is read synchronously at construction), so
-    // bound the wait: a server that accepts the connection but never answers must not hang map init.
-    const response = await fetchImpl(`${base}/tiles/ready`, {
-      ...authInit(token),
-      signal: AbortSignal.timeout(2000),
-    });
-    return response.ok ? base : null;
+    const probe = (init: RequestInit): Promise<Response> =>
+      fetchImpl(`${base}/tiles/ready`, {
+        ...init,
+        signal: AbortSignal.timeout(2000),
+      });
+    let response = await probe(adminSessionInit());
+    if ((response.status === 401 || response.status === 403) && token) {
+      response = await probe({ ...adminSessionInit(), ...authInit(token) });
+    }
+    return response.ok || response.status === 503 ? base : null;
   } catch {
     return null;
   }

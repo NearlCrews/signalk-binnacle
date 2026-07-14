@@ -17,6 +17,7 @@ import type { UnitsStore } from '$entities/units';
 import { bboxCenter, formatBounds, normalizeBounds } from '$shared/geo';
 import {
   clampInt,
+  createLatestWriter,
   feetToMeters,
   formatBytes,
   lengthUnit,
@@ -31,11 +32,11 @@ import {
   InlineConfirm,
   LayerToggle,
   SavedList,
-  ShowOnChartToggle,
   SlideOver,
   TextField,
   UnitField,
 } from '$shared/ui';
+import AutoCacheView from './AutoCacheView.svelte';
 import { defaultSelection } from './area-defaults.js';
 import { DETAIL_PRESETS, presetForRange, rangeForPreset } from './detail-level.js';
 import {
@@ -43,7 +44,6 @@ import {
   downloadGateReason,
   estimateRegionBytes,
   exceedsRegionsFree,
-  formatBySource,
   isTerminal,
   positionWarmSources,
   regionsFreeBytes,
@@ -52,7 +52,12 @@ import type { CacheStats, SavedRegionDto, WarmStatus } from './regions-client.js
 import { createRegionsClient } from './regions-client.js';
 import type { RegionRectangle } from './regions-draw.js';
 import { createRegionRectangle } from './regions-draw.js';
-import { buildConfigPayload, extractPositionWarm } from './settings-payload.js';
+import StorageView from './StorageView.svelte';
+import {
+  buildConfigPayload,
+  extractPositionWarm,
+  type PositionWarmSettings,
+} from './settings-payload.js';
 import { coveringGroups, includedSummary, sourceDescription } from './source-summary.js';
 
 interface Props {
@@ -129,6 +134,7 @@ let pendingRegion = $state<Record<string, boolean>>({});
 
 // The scroll cache TTL in days, seeded from stats.ttlDays on load. Zero means the age sweep is off.
 let ttlDays = $state(30);
+let ttlEdited = false;
 // Clearing the scroll cache arms an inline confirm first, like every destructive action in the app.
 let confirmingClear = $state(false);
 let clearNote = $state<string | null>(null);
@@ -161,6 +167,13 @@ let positionMoveThresholdMeters = $state(nauticalMilesToMeters(1));
 let positionIntervalSecs = $state(60); // server-side floor is 60 s
 let positionBaseZoom = $state(12);
 let positionSources = $state<string[]>([]);
+let positionLoadError = $state<string | null>(null);
+let positionLoadGeneration = 0;
+
+const positionWriter = createLatestWriter<{ positionWarm: PositionWarmSettings }>((payload) =>
+  client.postConfig(payload),
+);
+const ttlWriter = createLatestWriter<number>((days) => client.setCacheConfig(days));
 
 // Length display unit follows the server unit preference, same as the anchor watch panel.
 const mode = $derived(units.mode);
@@ -281,63 +294,71 @@ $effect(() => {
 onDestroy(() => {
   for (const timer of pollTimers.values()) clearInterval(timer);
   pollTimers.clear();
+  positionWriter.dispose();
+  ttlWriter.dispose();
 });
 
-// Load the persisted position-warm settings on mount.
-$effect(() => {
-  let stale = false;
-  void client
-    .getConfig()
-    .then((cfg) => {
-      if (stale) return;
-      const pw = extractPositionWarm(cfg);
-      if (pw !== null) {
-        positionEnabled = pw.enabled;
-        positionRadiusMeters = pw.radiusMeters;
-        positionMoveThresholdMeters = pw.moveThresholdMeters;
-        positionIntervalSecs = pw.intervalSecs;
-        positionBaseZoom = pw.baseZoom;
-        positionSources = pw.sources;
-      }
-    })
-    .catch(() => {});
-  return () => {
-    stale = true;
-  };
-});
-
-async function savePositionWarm(): Promise<void> {
-  if (!adminAccess) return;
+async function loadPositionWarm(): Promise<void> {
+  const generation = ++positionLoadGeneration;
+  positionLoadError = null;
   try {
-    await client.postConfig(
-      buildConfigPayload({
-        enabled: positionEnabled,
-        radiusMeters: positionRadiusMeters,
-        moveThresholdMeters: positionMoveThresholdMeters,
-        intervalSecs: positionIntervalSecs,
-        baseZoom: positionBaseZoom,
-        sources: positionSources,
-      }),
-    );
+    const pw = extractPositionWarm(await client.getConfig());
+    if (generation !== positionLoadGeneration) return;
+    if (pw === null) {
+      positionLoadError = 'Chart Locker returned invalid automatic-caching settings.';
+      return;
+    }
+    positionEnabled = pw.enabled;
+    positionRadiusMeters = pw.radiusMeters;
+    positionMoveThresholdMeters = pw.moveThresholdMeters;
+    positionIntervalSecs = pw.intervalSecs;
+    positionBaseZoom = pw.baseZoom;
+    positionSources = pw.sources;
   } catch {
-    // Save is best-effort; the server enforces its own floor values.
+    if (generation === positionLoadGeneration) {
+      positionLoadError = 'Could not load automatic-caching settings.';
+    }
   }
+}
+
+// Load the persisted position-warm settings on mount. A failed read remains retryable in its subview
+// instead of silently presenting the defaults as though they came from Chart Locker.
+$effect(() => {
+  void loadPositionWarm();
+});
+
+function savePositionWarm(): void {
+  if (!adminAccess) return;
+  // A local edit wins over an older initial read that is still in flight.
+  positionLoadGeneration += 1;
+  positionLoadError = null;
+  positionWriter.submit(
+    buildConfigPayload({
+      enabled: positionEnabled,
+      radiusMeters: positionRadiusMeters,
+      moveThresholdMeters: positionMoveThresholdMeters,
+      intervalSecs: positionIntervalSecs,
+      baseZoom: positionBaseZoom,
+      sources: positionSources,
+    }),
+  );
 }
 
 function commitPositionRadius(entered: number): void {
   positionRadiusMeters = Math.max(1, fromDisplayLength(entered));
-  void savePositionWarm();
+  savePositionWarm();
 }
 
 function commitMoveThreshold(entered: number): void {
   positionMoveThresholdMeters = Math.max(1, fromDisplayLength(entered));
-  void savePositionWarm();
+  savePositionWarm();
 }
 
 function commitTtlDays(entered: number): void {
   if (!adminAccess) return;
+  ttlEdited = true;
   ttlDays = clampInt(entered, 0, 365);
-  void client.setCacheConfig(ttlDays).catch(() => {});
+  ttlWriter.submit(ttlDays);
 }
 
 async function clearScrollCache(): Promise<void> {
@@ -385,7 +406,7 @@ async function loadStats(): Promise<void> {
     const s = await client.getCacheStats();
     if (gen !== statsGen) return;
     stats = s;
-    if (typeof s.ttlDays === 'number') ttlDays = s.ttlDays;
+    if (!ttlEdited && typeof s.ttlDays === 'number') ttlDays = s.ttlDays;
     statsError = null;
   } catch {
     if (gen !== statsGen) return;
@@ -1008,185 +1029,61 @@ function chartLabel(id: string): string {
       {/if}
     </section>
   {:else if subView === 'storage'}
-    <section class="panel-section" aria-label="Storage">
-      {#if stats !== null}
-        <div
-          class="storage-track"
-          role="progressbar"
-          aria-label="Offline chart storage used"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          aria-valuenow={usedPercent}
-          aria-valuetext={`${usedPercent}% used`}
-        >
-          <div class="storage-fill" style:inline-size="{usedPercent}%"></div>
-        </div>
-        <p class="muted-note">{usedPercent}% of offline chart storage is in use.</p>
-        <dl class="stat-grid">
-          <dt>Storage used</dt>
-          <dd>
-            <span class="num">{usedFmt?.value ?? '--'}</span>
-            <span class="unit"
-              >{usedFmt?.unit ?? ''}
-              of {capFmt?.value ?? '--'} {capFmt?.unit ?? ''}</span
-            >
-          </dd>
-          <dt>Saved areas</dt>
-          <dd>
-            <span class="num">{pinnedFmt?.value ?? '--'}</span>
-            <span class="unit">{pinnedFmt?.unit ?? ''}</span>
-          </dd>
-          <dt>Recently viewed</dt>
-          <dd>
-            <span class="num">{scrollFmt?.value ?? '--'}</span>
-            <span class="unit">{scrollFmt?.unit ?? ''}</span>
-          </dd>
-          <dt>Automatic caching</dt>
-          <dd>
-            <span class="num">{autoCacheFmt?.value ?? '--'}</span>
-            <span class="unit">{autoCacheFmt?.unit ?? ''}</span>
-          </dd>
-        </dl>
-        <p class="muted-note">
-          Saved areas are kept until you delete them. Recently viewed charts follow the auto-clear
-          setting. Automatic caching follows the boat as it moves.
-        </p>
-        <Disclosure label="Recently viewed, by chart">
-          <dl class="stat-grid">
-            {#each formatBySource(stats) as row (row.source)}
-              <dt>{chartLabel(row.source)}</dt>
-              <dd><span class="num">{row.value}</span> <span class="unit">{row.unit}</span></dd>
-            {/each}
-          </dl>
-        </Disclosure>
-      {:else}
-        <p class="muted-note" role="status">Loading storage…</p>
-      {/if}
-      <UnitField
-        label="Auto-clear after"
-        unit="days"
-        value={ttlDays}
-        min={0}
-        max={365}
-        step={1}
-        onCommit={commitTtlDays}
-      />
-      <p class="muted-note">
-        Set this to 0 to keep recently viewed charts until storage pressure clears them.
-      </p>
-      {#if confirmingClear}
-        <InlineConfirm
-          question="Clear recently viewed charts? Your saved areas are kept."
-          onConfirm={() => void clearScrollCache()}
-          onCancel={() => (confirmingClear = false)}
-        />
-      {:else}
-        <div class="panel-controls">
-          <button
-            type="button"
-            class="btn btn-danger"
-            disabled={!adminAccess}
-            onclick={() => (confirmingClear = true)}
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            Clear recently viewed
-          </button>
-        </div>
-      {/if}
-      {#if clearNote !== null}
-        <p class="muted-note">{clearNote}</p>
-      {/if}
-    </section>
+    <StorageView
+      {stats}
+      {usedPercent}
+      used={usedFmt}
+      cap={capFmt}
+      pinned={pinnedFmt}
+      scroll={scrollFmt}
+      automatic={autoCacheFmt}
+      {ttlDays}
+      writerState={ttlWriter.state}
+      {adminAccess}
+      {confirmingClear}
+      {clearNote}
+      {chartLabel}
+      onCommitTtl={commitTtlDays}
+      onRetryTtl={() => ttlWriter.retry()}
+      onRequestClear={() => (confirmingClear = true)}
+      onConfirmClear={() => void clearScrollCache()}
+      onCancelClear={() => (confirmingClear = false)}
+    />
   {:else if subView === 'auto'}
-    <section class="panel-section" aria-label="Automatic caching">
-      <p class="muted-note">
-        Caches the chart around the boat as it moves, so the area ahead is ready offline without
-        downloading an area yourself.
-      </p>
-      <ShowOnChartToggle
-        visible={positionEnabled}
-        label="Enable automatic caching"
-        description="Caches chart tiles around the boat as it moves, so the water ahead is ready offline."
-        disabled={!adminAccess}
-        onToggle={(on) => {
-          positionEnabled = on;
-          void savePositionWarm();
-        }}
-      />
-      {#if positionEnabled}
-        <h4 class="caps-label">Charts to cache automatically</h4>
-        <!-- Auto-cache with no chart picked saves nothing, so when it is on and the list is empty
-             the user is prompted to choose at least one rather than leaving it silently doing
-             nothing. -->
-        {#if positionSources.length === 0 && positionWarmSourceList.length > 0}
-          <p class="muted-note sev-warning" role="status">
-            Automatic caching is on but no charts are picked, so nothing is being saved. Choose at
-            least one chart below.
-          </p>
-        {/if}
-        {#each positionWarmSourceList as source (source.id)}
-          <div class="list-row">
-            <LayerToggle
-              title={source.title}
-              description={sourceDescription(source.id)}
-              visible={positionSet.has(source.id)}
-              disabled={!adminAccess}
-              onToggle={(on) => {
-                positionSources = toggleId(positionSources, source.id, on);
-                void savePositionWarm();
-              }}
-            />
-          </div>
-        {/each}
-        {#if positionWarmSourceList.length === 0}
-          <p class="muted-note">No charts are available for automatic caching.</p>
-        {/if}
-      {/if}
-      <Disclosure label="Advanced">
-        <UnitField
-          label="How far around the boat"
-          {unit}
-          value={positionRadiusDisplay}
-          min={1}
-          step={1}
-          disabled={!positionEnabled || !adminAccess}
-          onCommit={commitPositionRadius}
-        />
-        <UnitField
-          label="Re-cache after moving"
-          {unit}
-          value={positionMoveDisplay}
-          min={1}
-          step={1}
-          disabled={!positionEnabled || !adminAccess}
-          onCommit={commitMoveThreshold}
-        />
-        <UnitField
-          label="Check every"
-          unit="s"
-          value={positionIntervalSecs}
-          min={60}
-          step={1}
-          disabled={!positionEnabled || !adminAccess}
-          onCommit={(v) => {
-            positionIntervalSecs = Math.max(60, Math.round(v));
-            void savePositionWarm();
-          }}
-        />
-        <UnitField
-          label="Zoom detail"
-          value={positionBaseZoom}
-          min={0}
-          max={22}
-          step={1}
-          disabled={!positionEnabled || !adminAccess}
-          onCommit={(v) => {
-            positionBaseZoom = clampInt(v, 0, 22);
-            void savePositionWarm();
-          }}
-        />
-      </Disclosure>
-    </section>
+    <AutoCacheView
+      enabled={positionEnabled}
+      {adminAccess}
+      loadError={positionLoadError}
+      writerState={positionWriter.state}
+      sources={positionWarmSourceList}
+      selectedSources={positionSet}
+      {unit}
+      radius={positionRadiusDisplay}
+      moveThreshold={positionMoveDisplay}
+      intervalSeconds={positionIntervalSecs}
+      baseZoom={positionBaseZoom}
+      {sourceDescription}
+      onRetryLoad={() => void loadPositionWarm()}
+      onRetrySave={() => positionWriter.retry()}
+      onToggleEnabled={(enabled) => {
+        positionEnabled = enabled;
+        savePositionWarm();
+      }}
+      onToggleSource={(id, enabled) => {
+        positionSources = toggleId(positionSources, id, enabled);
+        savePositionWarm();
+      }}
+      onCommitRadius={commitPositionRadius}
+      onCommitMoveThreshold={commitMoveThreshold}
+      onCommitInterval={(value) => {
+        positionIntervalSecs = Math.max(60, Math.round(value));
+        savePositionWarm();
+      }}
+      onCommitBaseZoom={(value) => {
+        positionBaseZoom = clampInt(value, 0, 22);
+        savePositionWarm();
+      }}
+    />
   {/if}
 </SlideOver>
 
@@ -1258,15 +1155,13 @@ function chartLabel(id: string): string {
 /* The determinate download progress bar on a downloading region card: a token-driven track with an
    accent fill, mirroring the themed range track so it reads as one instrument across all three
    themes. Local because this is the only place a determinate bar appears. */
-.warm-track,
-.storage-track {
+.warm-track {
   block-size: var(--range-track-h);
   border-radius: var(--radius-pill);
   background: var(--border);
   overflow: hidden;
 }
-.warm-fill,
-.storage-fill {
+.warm-fill {
   block-size: 100%;
   background: var(--accent);
   transition: inline-size var(--transition-fast);

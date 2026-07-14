@@ -1,3 +1,15 @@
-export { default as ChartsManagementPanel } from './ChartsManagementPanel.svelte';
-export type { ManagedChart, ManagedChartsResponse } from './charts-management-client';
-export { fetchManagedCharts, putChartOverride } from './charts-management-client';
+let chartsManagementPanelModule:
+  | Promise<typeof import('./ChartsManagementPanel.svelte')>
+  | undefined;
+
+export function loadChartsManagementPanel(): Promise<
+  typeof import('./ChartsManagementPanel.svelte')
+> {
+  chartsManagementPanelModule ??= import('./ChartsManagementPanel.svelte').catch(
+    (error: unknown) => {
+      chartsManagementPanelModule = undefined;
+      throw error;
+    },
+  );
+  return chartsManagementPanelModule;
+}

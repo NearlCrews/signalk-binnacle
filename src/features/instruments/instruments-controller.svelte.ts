@@ -50,6 +50,7 @@ export interface InstrumentsController {
   reorderTile(id: string, slot: number): void;
   refreshCatalog(): void;
   zoneState(def: TileDef, value: number | undefined): ZoneState;
+  resubscribe(): void;
   dispose(): void;
 }
 
@@ -248,6 +249,13 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
+  // A Signal K worker recreated after an initial chunk failure has a fresh subscription registry.
+  // Forget the old worker's bookkeeping and replay the current dock demand into the new registry.
+  function resubscribe(): void {
+    subscribedPaths.clear();
+    syncSubscriptions();
+  }
+
   // Pre-create cells for the persisted selection too: it can hold dynamic battery ids that
   // ALL_CATALOG_PATHS does not cover, and their first read must find a tracked cell.
   deps.store.ensureCells(resolveTiles().flatMap((def) => def.paths));
@@ -301,6 +309,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     reorderTile,
     refreshCatalog,
     zoneState,
+    resubscribe,
     dispose,
   };
 }

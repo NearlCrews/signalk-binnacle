@@ -13,7 +13,7 @@ export interface WeatherSourceMetadata {
   times: number[];
 }
 
-export interface MarineAlignmentMetadata {
+interface MarineAlignmentMetadata {
   maxDisplacementM: number;
   maxTimeMismatchMs: number;
 }

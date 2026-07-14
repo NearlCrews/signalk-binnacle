@@ -19,6 +19,7 @@
 - [ ] `npm run check` passes
 - [ ] `npm run lint` passes
 - [ ] `npm run cruise` passes
+- [ ] `npm run deadcode` passes
 - [ ] `npm run build` passes
 - [ ] `npm run test:e2e` passes when app-shell, layout, map, or browser behavior changes
 - [ ] Cross-browser CI passes when app-shell, layout, map, or browser behavior changes

@@ -13,7 +13,7 @@ const MAX_GPX_CHARACTERS = 5 * 1024 * 1024;
 const MAX_GPX_ROUTES = 100;
 const MAX_GPX_WAYPOINTS = 10_000;
 
-export type GpxParseError = 'file-too-large' | 'too-many-routes' | 'too-many-waypoints';
+type GpxParseError = 'file-too-large' | 'too-many-routes' | 'too-many-waypoints';
 
 export interface GpxParseResult {
   routes: Route[];

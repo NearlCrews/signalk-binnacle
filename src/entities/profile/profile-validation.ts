@@ -5,8 +5,8 @@ import { THEMES } from '$shared/ui';
 import type { Profile, ProfileSettings } from './profile-types';
 
 export const MAX_PROFILES = 1_000;
-export const MAX_PROFILE_NAME_LENGTH = 256;
-export const MAX_PROFILE_ID_LENGTH = 512;
+const MAX_PROFILE_NAME_LENGTH = 256;
+const MAX_PROFILE_ID_LENGTH = 512;
 const MAX_LAYER_ENTRIES = 1_000;
 const MAX_LIST_ENTRIES = 1_000;
 const MAX_TILE_ENTRIES = 100;

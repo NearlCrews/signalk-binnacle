@@ -6,72 +6,27 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0150"></a>
+
+## [0.15.0] - 2026-07-14
+
 ### Added
 
-- The chart now has 44 px north-reset and zoom controls, plus a nautical scale. Chart actions also
-  open from the keyboard Context Menu key or Shift+F10 at the chart center.
+- A reusable latest-write-wins persistence queue serializes whole-document settings updates, exposes
+  saving and failure states, and supports retry without allowing an older response to overwrite a
+  newer choice.
+- Dead-code validation now runs through `npm run deadcode` and checks unused files, dependencies, and
+  public exports in local, CI, and release gates.
+- The chart now has 44 px zoom controls plus a nautical scale. Chart actions also open from the
+  keyboard Context Menu key or Shift+F10 at the chart center.
 - Phone chart workflows can collapse Routes, Tracks, Waypoints, Find places, Tides, Layers and
   charts, and Anchor watch to their headers. A one-time touch hint teaches the chart action gesture.
 - Browser coverage now includes desktop and phone WebKit, reduced motion, night-red restoration,
   touch target sizing, keyboard focus, and automated accessibility checks.
-
-### Changed
-
-- Updated `signalk-chart-sources` to 0.3.1, adopted its readonly catalog metadata for NOAA ENC
-  rendering, and describe offline download size as a planning estimate.
-- The phone shell keeps full-size header controls, condenses secondary status readouts and actions,
-  places Safety near the top of the menu, and keeps emergency strips pinned above secondary strips.
-- Route and profile cards keep their primary action visible and move secondary actions into a labeled
-  keyboard-accessible overflow menu. Progress copy consistently uses an ellipsis, and actionable
-  failures use the shared alert treatment.
-- Starter profiles now configure distinct helm actions and instruments for coastal day, night
-  passage, and anchor use. Profile sync reports Local, Syncing, Synced, and Failed states with Retry.
-
-### Fixed
-
-- Installed touch PWAs now keep the bottom status strip above Android and Samsung system bars, even
-  when the browser reports no safe-area inset, and landscape chrome clears side insets.
-- Offline chart planning now validates cache statistics, reports retryable estimate failures, uses
-  source-specific byte estimates, and keeps actual storage enforcement in the downloader.
-- Offline areas now preserve antimeridian-crossing rectangles when drawing, naming, fitting, and
-  reusing saved settings, and the area tool now accepts the drag gesture described in the UI.
-- NOAA ENC remains available across its service envelope but is selected automatically only for
-  conservative United States coverage areas, including Alaska across the antimeridian.
-- Depth, heading, course, and speed freshness are evaluated independently. Stale depth can no longer
-  trigger or suppress the shallow-water alarm, and the status strip identifies the unavailable feed.
-- MOB, collision, anchor, and shallow-water announcements no longer repeat changing metrics on every
-  update. Generic Signal K alarms now have a deduplicated assistive alert channel.
-- Routes, Tracks, and Waypoints expose real Retry actions without raising background-load toasts.
-  Find places has a direct chart-layer toggle, and Radar links directly to overlay settings.
-- Radar transmit now requires an inline confirmation. Instrument tiles expose their value, unit,
-  freshness, and alarm state to assistive technology, with visible Warning, Alarm, and Stale labels.
-- Saved night-red restores before the first paint and updates browser theme color. Icon pickers flip
-  and clamp to available viewport space, and full-screen instruments contain and restore focus.
-- KIP and history discovery distinguish checking, available, absent, failed, and retrying states.
-- The Instruments dock keeps its title on one line, and the enlarged attribution target renders one
-  full-size information glyph instead of a tiled group.
-- The chart scale stacks its label and distance inside its measured box, bottom controls clear the
-  helm toolbar, and the inert north-reset icon is removed by locking chart rotation north-up.
-- Chart Locker management requests use the signed-in Signal K administrator session instead of a
-  Binnacle device token that could mask valid access. Binnacle checks Signal K's live login status,
-  distinguishes signed-out, non-administrator, and rejected-administrator sessions, and never asks an
-  authenticated administrator to sign in again without evidence.
-- Chart Locker sign-in stays in the installed PWA window and redirects back to the current Binnacle
-  route. Management requests include the browser session and bypass cached authentication failures.
-- The Offline charts guide documents administrator-session setup, same-origin cookie requirements,
-  access recovery, passage downloads, automatic caching, storage, and status meanings.
-
-<a id="v0150"></a>
-
-## [0.15.0] - 2026-07-13
-
-### Added
-
 - Every chartplotter menu action now has one operational reference covering availability, loading,
   recovery, write access, stale sensors, provider fallback, and safety behavior.
 - Layers and charts, Forecast, Tides, Data trends, and Time travel now expose explicit recovery for
   failed provider or module loads while preserving accepted data where available.
-
 - Waypoints now reports loading, retained-data refresh, real empty results, and failures. Navigation
   requires a destination-specific confirmation, and browser coverage verifies HTTP-only loading,
   confirmation, and narrow-screen layout.
@@ -102,6 +57,25 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
+- App Store screenshots now use a controlled Boston-area demo view with no own-vessel coordinates or
+  embedded location metadata.
+- Stream lifecycle, reconnect behavior, and notification orchestration now live in focused app
+  controllers. Plotter dependencies are grouped by services, controllers, entity stores, and actions,
+  and optional offline-chart, installed-chart, radar, and weather panels load only when opened.
+- Offline-chart storage and automatic-caching screens are separate view components, while the parent
+  retains area selection, download orchestration, and sub-view navigation.
+- Updated `signalk-chart-sources` to 0.3.1, adopted its readonly catalog metadata for NOAA ENC
+  rendering, and describe offline download size as a planning estimate.
+- The phone shell keeps full-size header controls, condenses secondary status readouts and actions,
+  places Safety near the top of the menu, and keeps emergency strips pinned above secondary strips.
+- Route and profile cards keep their primary action visible and move secondary actions into a labeled
+  keyboard-accessible overflow menu. Progress copy consistently uses an ellipsis, and actionable
+  failures use the shared alert treatment.
+- Starter profiles now configure distinct helm actions and instruments for coastal day, night
+  passage, and anchor use. Profile sync reports Local, Syncing, Synced, and Failed states with Retry.
+- Release automation now waits for an intentionally published GitHub release and rejects a release
+  tag whose version disagrees with the package or whose commit is outside `main`. A maintainer
+  checklist separates preparation from the owner-approved tag and publication steps.
 - Center, Follow, Nearby vessels, and Anchor watch no longer derive actions, distances, or bearings
   from stale GPS. AIS and alarm panels now identify disconnected stream state instead of presenting
   cached state as current.
@@ -111,7 +85,6 @@ All notable changes to Binnacle are documented here. The format follows
 - Profiles now confirm before replacing unsaved active settings, report completed imports, and explain
   local-only deletion when server write access is unavailable. Time travel's Now action moves to the
   newest loaded sample without issuing a hidden refresh.
-
 - Waypoint reads load when access resolves without waiting for the WebSocket, reject stale refreshes,
   serialize writes, disable conflicting controls, and update accepted adds, edits, and deletes before
   the follow-up refresh. Failed saves retain the dialog and entered values.
@@ -165,12 +138,55 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Chart Locker cache statistics accept the fractional per-source averages returned by the live
+  service instead of misclassifying a healthy response as unavailable. Detection now tries the
+  administrator session before a device token, treats the plugin's not-ready response as installed,
+  and prevents an older probe from overwriting a newer successful result.
+- The npm package now includes the feature and operational guides linked from the README, so those
+  links work in the registry and Signal K Webapps view instead of pointing outside the tarball.
+- Failed Signal K streams can be retried without reloading the app, including a fresh worker and
+  replayed instrument subscriptions. Stream startup failures are no longer left as passive status.
+- Rapid offline-chart setting changes and overlapping installed-chart name or description edits can
+  no longer arrive out of order and restore stale values. Save and initial-load failures are visible
+  and retryable.
+- Installed-chart responses are runtime-validated and bounded before entering UI state, including
+  identifiers, zooms, bounds, formats, invalid entries, and collection size.
+- Installed touch PWAs now keep the bottom status strip above Android and Samsung system bars, even
+  when the browser reports no safe-area inset, and landscape chrome clears side insets.
+- Offline chart planning now validates cache statistics, reports retryable estimate failures, uses
+  source-specific byte estimates, and keeps actual storage enforcement in the downloader.
+- Offline areas now preserve antimeridian-crossing rectangles when drawing, naming, fitting, and
+  reusing saved settings, and the area tool now accepts the drag gesture described in the UI.
+- NOAA ENC remains available across its service envelope but is selected automatically only for
+  conservative United States coverage areas, including Alaska across the antimeridian.
+- Depth, heading, course, and speed freshness are evaluated independently. Stale depth can no longer
+  trigger or suppress the shallow-water alarm, and the status strip identifies the unavailable feed.
+- MOB, collision, anchor, and shallow-water announcements no longer repeat changing metrics on every
+  update. Generic Signal K alarms now have a deduplicated assistive alert channel.
+- Routes, Tracks, and Waypoints expose real Retry actions without raising background-load toasts.
+  Find places has a direct chart-layer toggle, and Radar links directly to overlay settings.
+- Radar transmit now requires an inline confirmation. Instrument tiles expose their value, unit,
+  freshness, and alarm state to assistive technology, with visible Warning, Alarm, and Stale labels.
+- Saved night-red restores before the first paint and updates browser theme color. Icon pickers flip
+  and clamp to available viewport space, and full-screen instruments contain and restore focus.
+- KIP and history discovery distinguish checking, available, absent, failed, and retrying states.
+- The Instruments dock keeps its title on one line, and the enlarged attribution target renders one
+  full-size information glyph instead of a tiled group.
+- The chart scale stacks its label and distance inside its measured box, bottom controls clear the
+  helm toolbar, and the inert north-reset icon is removed by locking chart rotation north-up.
+- Chart Locker management requests use the signed-in Signal K administrator session instead of a
+  Binnacle device token that could mask valid access. Binnacle checks Signal K's live login status,
+  distinguishes signed-out, non-administrator, and rejected-administrator sessions, and never asks an
+  authenticated administrator to sign in again without evidence.
+- Chart Locker sign-in stays in the installed PWA window and redirects back to the current Binnacle
+  route. Management requests include the browser session and bypass cached authentication failures.
+- The Offline charts guide documents administrator-session setup, same-origin cookie requirements,
+  access recovery, passage downloads, automatic caching, storage, and status meanings.
 - URL-backed charts now sync on unsecured Signal K servers, restored charts resync after access
   changes, and sync failures are visible. A malformed server chart can no longer abort chart startup.
 - Anchor actions are serialized, browser-only fallback remains usable without server writes, alarm
   server actions cannot double-submit, and weather or time-travel loader exceptions no longer leave
   their UI stuck loading.
-
 - Measure points now replace the store array instead of mutating it in place, so the overlay's
   identity-based dirty check redraws every accepted tap instead of stopping after the first render.
 - Find places skips provider requests when offline without cache, refreshes immediately on reconnect,

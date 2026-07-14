@@ -74,7 +74,12 @@ describe('regions client', () => {
   });
 
   it('getCacheStats parses the body on 200', async () => {
-    const stats = { rows: 3, bytes: 4096, cap: 1000, perSourceAvgBytes: { seamark: 50 } };
+    const stats = {
+      rows: 3,
+      bytes: 4096,
+      cap: 1000,
+      perSourceAvgBytes: { seamark: 565.7692307692307 },
+    };
     const fetchImpl = vi.fn(async () => ok(stats));
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',

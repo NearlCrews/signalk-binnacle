@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchManagedCharts, putChartOverride } from './charts-management-client';
+import {
+  fetchManagedCharts,
+  parseManagedChartsResponse,
+  putChartOverride,
+} from './charts-management-client';
 
 const ORIGIN = 'http://pi.local';
 const BASE = `${ORIGIN}/plugins/signalk-chart-locker`;
@@ -42,6 +46,47 @@ describe('charts-management-client', () => {
   it('returns undefined on a non-ok response', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('nope', { status: 403 }));
     expect(await fetchManagedCharts(BASE, fetchImpl)).toBeUndefined();
+  });
+
+  it('rejects malformed and unbounded companion payloads', () => {
+    expect(parseManagedChartsResponse({ charts: {}, invalid: [] })).toBeUndefined();
+    expect(
+      parseManagedChartsResponse({
+        charts: [
+          {
+            identifier: 'bad',
+            fileName: 'bad.pmtiles',
+            name: 'Bad',
+            description: '',
+            scale: 1,
+            minzoom: 14,
+            maxzoom: 2,
+            format: 'mvt',
+            override: {},
+          },
+        ],
+        invalid: [],
+      }),
+    ).toBeUndefined();
+    expect(
+      parseManagedChartsResponse({
+        charts: [
+          {
+            identifier: 'inverted',
+            fileName: 'inverted.pmtiles',
+            name: 'Inverted',
+            description: '',
+            scale: 10_000,
+            minzoom: 0,
+            maxzoom: 12,
+            format: 'mvt',
+            bounds: [-80, 45, -70, 40],
+            override: {},
+          },
+        ],
+        invalid: [],
+      }),
+    ).toBeUndefined();
   });
 
   it('posts an override with the administrator session and reports success', async () => {

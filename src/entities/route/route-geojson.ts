@@ -5,9 +5,9 @@ import { str } from '$shared/signalk';
 import type { Route, RouteWaypoint } from './route-types';
 
 export const MAX_ROUTE_WAYPOINTS = 10_000;
-export const MAX_ROUTE_ID_LENGTH = 512;
-export const MAX_ROUTE_NAME_LENGTH = 256;
-export const MAX_ROUTE_WAYPOINT_NAME_LENGTH = 256;
+const MAX_ROUTE_ID_LENGTH = 512;
+const MAX_ROUTE_NAME_LENGTH = 256;
+const MAX_ROUTE_WAYPOINT_NAME_LENGTH = 256;
 
 function cleanText(value: unknown, maxLength: number): string | undefined {
   const text = str(value)?.trim();

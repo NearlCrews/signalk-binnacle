@@ -88,7 +88,7 @@ function parseLegend(raw: unknown): LegendEntry[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
-export function toRadarInfo(raw: unknown): RadarInfo | undefined {
+function toRadarInfo(raw: unknown): RadarInfo | undefined {
   if (!isRecord(raw) || typeof raw.id !== 'string') return undefined;
   const id = raw.id;
   if (

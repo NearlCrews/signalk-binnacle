@@ -108,9 +108,9 @@ has actually run and passed. This was violated repeatedly early on, so it is now
 hooks in `.githooks/`, wired via `npm run hooks` (a non-lifecycle script, never a `prepare` hook,
 per the SignalK pack-banner caveat above):
 
-- `pre-commit` runs `biome ci .` and `npm run cruise`.
-- `pre-push` runs the full chain: `biome ci`, `cruise`, `check`, `test`, a production `build`, and
-  Playwright end-to-end smoke tests.
+- `pre-commit` runs `biome ci .`, `npm run cruise`, and `npm run deadcode`.
+- `pre-push` runs the full chain: `biome ci`, `cruise`, `deadcode`, `check`, `test`, a production
+  `build`, and Playwright end-to-end smoke tests.
   A failure blocks the push.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
@@ -156,9 +156,10 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
 - Every slice exposes a public API via `index.ts`. Named re-exports only, never `export *`.
   Nothing outside a slice imports its internal files.
 - Features are self-contained slices under `features/<name>`, each exposing a public API via its
-  `index.ts`. They are composed in `app/App.svelte` by static import, so adding a feature is a new
-  slice plus its wiring in `App.svelte`. A `FeatureManifest`/registry that auto-collects features
-  is a future option, not yet built.
+  `index.ts`. Core destinations are composed through normal public imports. Large optional panels
+  expose cached dynamic-import loaders from that same public API and load only when opened. Adding a
+  feature is a new slice plus its wiring in `App.svelte` and `PlotterView.svelte`. A
+  `FeatureManifest`/registry that auto-collects features is a future option, not yet built.
 - Services (the Signal K client, the map instance, the stores) are constructed in `app/App.svelte`
   and passed down as props, not global singletons, so they are swappable in tests.
 - Boundaries are machine-enforced and fail the build: path aliases plus a dependency-cruiser gate
@@ -221,10 +222,17 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   this). The existing ones: `createMobController`, `createAnchorController`,
   `createMarineRadarController` (the first to own a Web Worker, the radar spokes stream),
   `createInstrumentsController`, `createRouteController`, `createWaypointsController`,
-  `createTrackController`, and `createUserChartsController`. The panel layer lives in
+  `createTrackController`, and `createUserChartsController`. App-wide stream connection and
+  notification effects live in `createStreamController` and `createNotificationsController`, which
+  keep worker recovery and safety announcements out of the composition root. The panel layer lives in
   `src/views/plotter/PlotterView.svelte` behind the `$views` index (one root `section.chart-host`,
-  placed explicitly in the shell grid by App), so `App.svelte` holds construction, controllers, and
-  shell chrome; the stream and notifications controllers remain the documented next extractions.
+  placed explicitly in the shell grid by App). App passes Plotter four stable dependency groups,
+  services, controllers, entity stores, and actions, alongside reactive view state and bindable panel
+  state. This keeps `App.svelte` focused on construction and shell chrome without adding a singleton.
+- Whole-document settings that can be changed again while a request is in flight use
+  `createLatestWriter`. It serializes requests, coalesces queued snapshots to the newest value, and
+  exposes idle, saving, saved, and error states with retry. Do not fire independent writes for two
+  controls that update the same server document.
 
 ### Find places contract
 
@@ -425,6 +433,10 @@ last year, and a stable API surface.
 Do not change the package version, publish to npm, create a release, or tag a commit without explicit
 owner approval. The owner chooses whether a release is a patch, minor, or major version. The full
 release verification checklist applies regardless of version size.
+
+`docs/releasing.md` is the operational checklist. Release preparation may update metadata, notes,
+documentation, tests, and workflows, but it never authorizes the final tag, published GitHub release,
+or npm publication. The npm workflow runs only when a GitHub release is intentionally published.
 
 ## Build policy (every major step)
 

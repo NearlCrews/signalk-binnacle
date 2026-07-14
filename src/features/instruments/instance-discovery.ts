@@ -17,7 +17,7 @@ export const EMPTY_INSTANCES: InstrumentInstances = {
   inside: [],
 };
 
-export const BATTERY_BRANCH_KEYS = ['voltage', 'capacity', 'current'] as const;
+const BATTERY_BRANCH_KEYS = ['voltage', 'capacity', 'current'] as const;
 const MAX_INSTANCES_PER_FAMILY = 100;
 const INSTANCE_ID_RE = /^[A-Za-z0-9_-]+$/;
 const TANK_INSTANCE_ID_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;

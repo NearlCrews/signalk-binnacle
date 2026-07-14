@@ -9,6 +9,7 @@ import {
   SlideOver,
   TextField,
 } from '$shared/ui';
+import { createChartOverridesController } from './chart-overrides-controller.svelte.js';
 import type { ManagedChart, ManagedChartsResponse } from './charts-management-client.js';
 import { fetchManagedCharts, putChartOverride } from './charts-management-client.js';
 
@@ -36,15 +37,21 @@ let data = $state<ManagedChartsResponse | null>(null);
 let loadError = $state<string | null>(null);
 let refreshing = $state(false);
 let loadGeneration = 0;
-type SaveState = 'saving' | 'saved' | 'error';
-// Per-field save state keyed as "<identifier>:<field>", so each field tracks independently. A field
-// with no feedback is simply absent; there is no empty-string sentinel state.
-let saveStates = $state<Record<string, SaveState>>({});
-// Tracks pending clear-indicator timer ids so they can be canceled if the panel unmounts.
-const timerIds: ReturnType<typeof setTimeout>[] = [];
-onDestroy(() => {
-  for (const id of timerIds) clearTimeout(id);
+const overrideController = createChartOverridesController({
+  getChart: (id) => data?.charts.find((chart) => chart.identifier === id),
+  updateOverride: (id, override) => {
+    if (data === null) return;
+    data = {
+      ...data,
+      charts: data.charts.map((chart) =>
+        chart.identifier === id ? { ...chart, override } : chart,
+      ),
+    };
+  },
+  write: (id, override) => putChartOverride(companionBase, id, override),
 });
+const saveStates = $derived(overrideController.states);
+onDestroy(() => overrideController.dispose());
 
 async function loadCharts(manual = false): Promise<void> {
   const generation = ++loadGeneration;
@@ -69,41 +76,22 @@ $effect(() => {
   void loadCharts();
 });
 
-async function saveOverride(
-  chart: ManagedChart,
-  field: 'name' | 'description',
-  value: string,
-): Promise<void> {
+function saveOverride(chart: ManagedChart, field: 'name' | 'description', value: string): void {
   if (!adminAccess || data === null) return;
-  const key = `${chart.identifier}:${field}`;
-  const override = { ...chart.override, [field]: value };
-  saveStates[key] = 'saving';
-  const ok = await putChartOverride(companionBase, chart.identifier, override);
-  saveStates[key] = ok ? 'saved' : 'error';
-  if (ok) {
-    // Optimistically update the local override so a subsequent save on the same chart
-    // carries the latest merged override rather than the stale original.
-    data = {
-      ...data,
-      charts: data.charts.map((c) => (c.identifier === chart.identifier ? { ...c, override } : c)),
-    };
-    // Clear the saved indicator after a short pause; errors stay until the next action.
-    timerIds.push(
-      setTimeout(() => {
-        delete saveStates[key];
-      }, 2000),
-    );
-  }
+  overrideController.save(chart, field, value);
 }
 </script>
 
-{#snippet saveIndicator(key: string, errorMessage: string)}
+{#snippet saveIndicator(key: string, errorMessage: string, onRetry: () => void)}
   {#if saveStates[key] === 'saving'}
     <p class="muted-note save-note" role="status">Saving…</p>
   {:else if saveStates[key] === 'saved'}
     <p class="muted-note save-note" role="status">Saved.</p>
   {:else if saveStates[key] === 'error'}
-    <p class="alert-note save-note" role="alert">{errorMessage}</p>
+    <div class="save-error" role="alert">
+      <p class="alert-note save-note">{errorMessage}</p>
+      <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
+    </div>
   {/if}
 {/snippet}
 
@@ -187,18 +175,20 @@ async function saveOverride(
             value={chart.override.name ?? chart.name}
             disabled={!adminAccess}
             ariaLabel="Display name for {chart.fileName}"
-            onCommit={(value) => void saveOverride(chart, 'name', value)}
+            onCommit={(value) => saveOverride(chart, 'name', value)}
           />
-          {@render saveIndicator(nameKey, 'Could not save the name. Check access.')}
+          {@render saveIndicator(nameKey, 'Could not save the name. Check access.', () =>
+            overrideController.retry(chart.identifier, 'name'))}
           <TextField
             variant="stacked"
             label="Description"
             value={chart.override.description ?? chart.description}
             disabled={!adminAccess}
             ariaLabel="Description for {chart.fileName}"
-            onCommit={(value) => void saveOverride(chart, 'description', value)}
+            onCommit={(value) => saveOverride(chart, 'description', value)}
           />
-          {@render saveIndicator(descKey, 'Could not save the description. Check access.')}
+          {@render saveIndicator(descKey, 'Could not save the description. Check access.', () =>
+            overrideController.retry(chart.identifier, 'description'))}
         </div>
       {/each}
     {/if}
@@ -248,6 +238,12 @@ async function saveOverride(
 .refresh-button {
   min-block-size: var(--row-size);
   white-space: nowrap;
+}
+.save-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .invalid-card {

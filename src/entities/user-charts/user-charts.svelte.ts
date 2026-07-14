@@ -2,12 +2,12 @@ import { type Bbox4, isBbox4 } from '$shared/geo';
 import { hasControlCharacters, isRecord, uuidv4 } from '$shared/lib';
 import { readPmtilesMeta, type SignalKChart } from '$shared/map';
 
-export const MAX_USER_CHARTS = 1_000;
-export const MAX_USER_CHART_ID_LENGTH = 512;
+const MAX_USER_CHARTS = 1_000;
+const MAX_USER_CHART_ID_LENGTH = 512;
 export const MAX_USER_CHART_NAME_LENGTH = 256;
 export const MAX_USER_CHART_URL_LENGTH = 4_096;
-export const MAX_USER_CHART_LAYERS = 512;
-export const MAX_USER_CHART_LAYER_ID_LENGTH = 256;
+const MAX_USER_CHART_LAYERS = 512;
+const MAX_USER_CHART_LAYER_ID_LENGTH = 256;
 const MAX_CHART_ZOOM = 30;
 
 function cleanText(value: unknown, maxLength: number): string | undefined {
@@ -17,7 +17,7 @@ function cleanText(value: unknown, maxLength: number): string | undefined {
   return trimmed;
 }
 
-export function normalizeUserChartUrl(value: string): string | undefined {
+function normalizeUserChartUrl(value: string): string | undefined {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > MAX_USER_CHART_URL_LENGTH || hasControlCharacters(trimmed)) {
     return undefined;
