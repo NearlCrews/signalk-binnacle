@@ -73,8 +73,9 @@ two leaves a tile that opens nothing, or a panel with no way in.
    availability rule. When discovery has multiple failure states, derive the hint from current state
    so absence, an access refusal, malformed provider data, and a transport failure do not collapse
    into the same message.
-   Chart Locker management requests use the same-origin Signal K administrator session. Do not attach
-   Binnacle's device bearer token to its administrator-gated `/api` routes.
+   Chart Locker management requests use the browser's Signal K administrator session. Do not attach
+   Binnacle's device bearer token to its administrator-gated `/api` routes. Classify 401 and 403
+   responses against `/skServer/loginStatus` instead of assuming the browser is signed out.
 2. Add the panel id to the `LeftPanel` union type.
 3. Add the mount block: `{#if activePanel === '<id>' && <guards>}` wrapping `<div
    class="panel-slot"><YourPanel ... onClose={closePanel} onBack={backToMenu} /></div>`. The guards

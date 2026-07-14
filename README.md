@@ -186,6 +186,8 @@ Signal K App Store, then start the plugin. Binnacle detects it automatically. A 
 require you to sign in to Signal K as an administrator before downloads and chart-name edits are
 enabled. This is separate from approving Binnacle's ordinary read/write access request. Chart Locker
 management calls use the browser's Signal K administrator session, not Binnacle's device token.
+Binnacle checks Signal K's live login status before suggesting sign-in, so a Chart Locker permission
+failure does not mislabel an authenticated administrator as signed out.
 
 **Optional marine radar.** Run or configure a provider that exposes the standard Signal K Radar API at
 `/signalk/v2/api/vessels/self/radars`. Mayara is the reference provider. Binnacle discovers radars,
@@ -235,7 +237,9 @@ only on charts viewed previously in one browser. Install `signalk-chart-locker` 
 Store, then open **Offline charts** in Binnacle. If the plugin cannot be reached, that menu item stays
 visible but unavailable and explains whether to install, start, or sign in to Signal K as an
 administrator. When administrator access is required, the header status opens that sign-in directly.
-Return to Binnacle afterward; it retries Chart Locker automatically.
+The sign-in flow stays in the PWA window and redirects back to the current Binnacle route. If Signal K
+already reports an administrator session but Chart Locker refuses it, Binnacle reports an access
+error and offers a retry instead of asking the administrator to sign in again.
 
 For the full setup, access, troubleshooting, download, and storage workflow, see
 [Offline charts](docs/offline-charts.md).

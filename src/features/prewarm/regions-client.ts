@@ -1,6 +1,6 @@
 /** The webapp client for the companion regions and config routes. The panel never calls the container
  * directly; it always goes through the admin-gated plugin routes, so the container port stays private.
- * Auth uses the browser's same-origin Signal K administrator session because every route is protected
+ * Auth uses the browser's Signal K administrator session because every route is protected
  * by the server's administrator middleware. The Binnacle device token must not be attached. */
 
 import type { Bbox } from 'signalk-chart-sources';

@@ -1,5 +1,5 @@
 /** Talks to the companion chart-management routes. They use Signal K's administrator middleware, so
- * requests carry the browser's same-origin admin session and never Binnacle's device bearer token.
+ * requests carry the browser's admin session and never Binnacle's device bearer token.
  * Never throws: a failed read returns undefined so the panel keeps its last list. */
 
 import { companionApiUrl } from '$shared/companion';

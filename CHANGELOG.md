@@ -53,8 +53,11 @@ All notable changes to Binnacle are documented here. The format follows
 - The chart scale stacks its label and distance inside its measured box, bottom controls clear the
   helm toolbar, and the inert north-reset icon is removed by locking chart rotation north-up.
 - Chart Locker management requests use the signed-in Signal K administrator session instead of a
-  Binnacle device token that could mask valid access. The access status opens administrator sign-in
-  directly and retries the service when the navigator returns.
+  Binnacle device token that could mask valid access. Binnacle checks Signal K's live login status,
+  distinguishes signed-out, non-administrator, and rejected-administrator sessions, and never asks an
+  authenticated administrator to sign in again without evidence.
+- Chart Locker sign-in stays in the installed PWA window and redirects back to the current Binnacle
+  route. Management requests include the browser session and bypass cached authentication failures.
 - The Offline charts guide documents administrator-session setup, same-origin cookie requirements,
   access recovery, passage downloads, automatic caching, storage, and status meanings.
 

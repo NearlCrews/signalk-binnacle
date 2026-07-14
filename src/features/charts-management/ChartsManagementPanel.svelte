@@ -2,19 +2,35 @@
 import { RefreshCw } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 import { formatBounds } from '$shared/geo';
-import { Disclosure, SlideOver, TextField } from '$shared/ui';
+import {
+  AccessRecoveryNote,
+  type AccessRecoveryState,
+  Disclosure,
+  SlideOver,
+  TextField,
+} from '$shared/ui';
 import type { ManagedChart, ManagedChartsResponse } from './charts-management-client.js';
 import { fetchManagedCharts, putChartOverride } from './charts-management-client.js';
 
 interface Props {
   adminAccess: boolean;
   accessUrl: string;
+  accessState: AccessRecoveryState;
   companionBase: string;
   onClose: () => void;
   onBack?: () => void;
+  onRetryAccess: () => void;
 }
 
-const { adminAccess, accessUrl, companionBase, onClose, onBack }: Props = $props();
+const {
+  adminAccess,
+  accessUrl,
+  accessState,
+  companionBase,
+  onClose,
+  onBack,
+  onRetryAccess,
+}: Props = $props();
 
 let data = $state<ManagedChartsResponse | null>(null);
 let loadError = $state<string | null>(null);
@@ -47,7 +63,7 @@ async function loadCharts(manual = false): Promise<void> {
   }
 }
 
-// Load on mount. The browser supplies the current same-origin administrator session on every call.
+// Load on mount. The browser supplies the current administrator session on every call.
 // The generation guard drops a stale response if a manual refresh overtakes it.
 $effect(() => {
   void loadCharts();
@@ -104,11 +120,12 @@ async function saveOverride(
     file. Text changes save when you leave the field or press Enter.
   </p>
   {#if !adminAccess}
-    <p class="muted-note">
-      Signal K administrator sign-in is needed to edit chart names and descriptions.
-      <a href={accessUrl} target="_blank" rel="noopener noreferrer">Sign in to Signal K</a>, then
-      return here and refresh the list.
-    </p>
+    <AccessRecoveryNote
+      state={accessState}
+      capability="edit installed chart details"
+      {accessUrl}
+      onRetry={onRetryAccess}
+    />
   {/if}
 
   <section class="panel-section" aria-label="Charts">

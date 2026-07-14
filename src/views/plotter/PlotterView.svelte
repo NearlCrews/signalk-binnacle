@@ -131,6 +131,8 @@ interface Props {
   radarOpenedFrom: 'menu' | 'layers';
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
+  chartLockerAccessUrl: string;
+  chartLockerState: import('$features/prewarm').CompanionState;
   chartLockerAdminAccess: boolean;
   arrivalBanner: string | undefined;
   toastMessage: string | undefined;
@@ -173,6 +175,7 @@ interface Props {
   setLayerVisible: (id: string, visible: boolean) => void;
   onRetryTides: () => void;
   onRetryHistoryProviders: () => void;
+  onRetryChartLocker: () => void;
   // Arms the measure tool (shows the layer and resets prior points); owned by the shell so the
   // menu tile and the chart's context action share one meaning.
   armMeasure: (reset?: boolean) => void;
@@ -252,6 +255,8 @@ let {
   radarOpenedFrom = $bindable(),
   mapInstance = $bindable(),
   companionBase,
+  chartLockerAccessUrl,
+  chartLockerState,
   chartLockerAdminAccess,
   arrivalBanner,
   toastMessage,
@@ -290,6 +295,7 @@ let {
   setLayerVisible,
   onRetryTides,
   onRetryHistoryProviders,
+  onRetryChartLocker,
   armMeasure,
   toggleCollisionMute,
   onSilenceNotification,
@@ -602,21 +608,25 @@ $effect(() => {
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         <RegionsPanel
           adminAccess={chartLockerAdminAccess}
-          accessUrl={`${origin}/admin/#/login`}
+          accessUrl={chartLockerAccessUrl}
+          accessState={chartLockerState}
           map={mapInstance}
           {units}
           {companionBase}
           onClose={closePanel}
           onBack={backToMenu}
           onOpenCharts={openInstalledCharts}
+          onRetryAccess={onRetryChartLocker}
         />
       {:else if activePanel === 'charts-management' && companionBase !== null}
         <ChartsManagementPanel
           adminAccess={chartLockerAdminAccess}
-          accessUrl={`${origin}/admin/#/login`}
+          accessUrl={chartLockerAccessUrl}
+          accessState={chartLockerState}
           {companionBase}
           onClose={closePanel}
           onBack={backToOfflineCharts}
+          onRetryAccess={onRetryChartLocker}
         />
       {/if}
     </div>

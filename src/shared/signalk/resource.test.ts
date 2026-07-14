@@ -35,13 +35,14 @@ describe('authInit', () => {
 });
 
 describe('adminSessionInit', () => {
-  it('uses the same-origin administrator session without a bearer header', () => {
-    expect(adminSessionInit()).toEqual({ credentials: 'same-origin' });
+  it('uses the shared administrator session without a bearer header or cached refusal', () => {
+    expect(adminSessionInit()).toEqual({ credentials: 'include', cache: 'no-store' });
     expect(
       adminSessionInit({ method: 'POST', headers: { 'Content-Type': 'application/json' } }),
     ).toEqual({
       method: 'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
     });
   });

@@ -3,88 +3,82 @@ import { describe, expect, it } from 'vitest';
 import type { CompanionState } from '$features/prewarm';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 
-// Renders the pill to an SSR HTML string (the suite runs in the node environment, no DOM), enough to
-// pin its presence, the per-state glyph and text, the warning modifier classes, the cache figure, and
-// the state-appropriate action target.
+const noop = (): void => {};
+
 function body(props: {
   present: boolean;
   state: CompanionState;
   cacheBytes: number | null;
-  onOpen: () => void;
 }): string {
   return render(ChartLockerStatus, {
-    props: { ...props, accessUrl: 'http://localhost/admin/#/login' },
+    props: {
+      ...props,
+      accessUrl: 'http://localhost/admin/#/login?redirect=%2Fsignalk-binnacle%2F',
+      onOpen: noop,
+      onRetry: noop,
+    },
   }).body;
 }
 
-const noop = (): void => {};
-
 describe('ChartLockerStatus', () => {
-  it('renders nothing when the companion is not present', () => {
-    const html = body({ present: false, state: 'serving', cacheBytes: 4096, onOpen: noop });
-    expect(html).not.toContain('Offline:');
+  it('renders nothing when Chart Locker is absent', () => {
+    const html = body({ present: false, state: 'serving', cacheBytes: 4096 });
+    expect(html).not.toContain('Charts:');
     expect(html).not.toContain('<button');
+    expect(html).not.toContain('<a');
   });
 
-  it('shows every state as visible text plus a distinct glyph', () => {
-    for (const [state, glyph, value] of [
-      ['serving', 'lucide-check', 'cache ready'],
-      ['needs-auth', 'lucide-key-round', 'admin sign-in'],
-      ['offline', 'lucide-unplug', 'unavailable'],
-      ['error', 'lucide-triangle-alert', 'error'],
+  it('shows every state with truthful text and a distinct glyph', () => {
+    for (const [state, glyph, value, action] of [
+      ['checking', 'lucide-loader-circle', 'checking', 'retry Chart Locker access'],
+      ['serving', 'lucide-check', 'cache ready', 'open offline charts'],
+      ['needs-login', 'lucide-key-round', 'sign in', 'open Signal K administrator sign-in'],
+      ['needs-admin', 'lucide-shield-alert', 'admin needed', 'open Signal K administrator sign-in'],
+      ['access-error', 'lucide-shield-x', 'access error', 'retry Chart Locker access'],
+      ['offline', 'lucide-unplug', 'unavailable', 'open offline charts'],
+      ['error', 'lucide-triangle-alert', 'error', 'open offline charts'],
     ] as const) {
-      const html = body({ present: true, state, cacheBytes: null, onOpen: noop });
-      expect(html).toContain('Offline:');
+      const html = body({ present: true, state, cacheBytes: null });
+      expect(html).toContain('Charts:');
       expect(html).toContain(glyph);
       expect(html).toContain(`>${value}</span>`);
-      const action =
-        state === 'needs-auth' ? 'open Signal K administrator sign-in' : 'open offline charts';
       expect(html).toContain(`aria-label="Offline charts, ${value}, ${action}"`);
     }
   });
 
-  it('applies the offline and error modifier class only in those states', () => {
-    const offline = body({ present: true, state: 'offline', cacheBytes: null, onOpen: noop });
-    expect(offline).toContain('cl--offline');
-    expect(offline).not.toContain('cl--error');
-
-    const error = body({ present: true, state: 'error', cacheBytes: null, onOpen: noop });
-    expect(error).toContain('cl--error');
-    expect(error).not.toContain('cl--offline');
-
-    for (const state of ['serving', 'needs-auth'] as const) {
-      const html = body({ present: true, state, cacheBytes: 4096, onOpen: noop });
-      expect(html).not.toContain('cl--offline');
-      expect(html).not.toContain('cl--error');
+  it('applies warning and error modifiers to the matching states', () => {
+    for (const state of ['needs-login', 'needs-admin', 'access-error'] as const) {
+      expect(body({ present: true, state, cacheBytes: null })).toContain('cl--access');
     }
+
+    expect(body({ present: true, state: 'offline', cacheBytes: null })).toContain('cl--offline');
+    expect(body({ present: true, state: 'error', cacheBytes: null })).toContain('cl--error');
+    expect(body({ present: true, state: 'serving', cacheBytes: null })).not.toContain('cl--access');
   });
 
-  it('shows the cache figure visibly instead of hiding it in a pointer-only tooltip', () => {
-    const serving = body({ present: true, state: 'serving', cacheBytes: 4096, onOpen: noop });
+  it('shows the cache figure only after a successful Chart Locker response', () => {
+    const serving = body({ present: true, state: 'serving', cacheBytes: 4096 });
     expect(serving).toContain('title="Offline charts: online, cache 4.0 KB"');
     expect(serving).toContain('>4.0 KB</span>');
-    // needs-auth cannot read the size, so no byte figure appears at all.
-    const needsAuth = body({ present: true, state: 'needs-auth', cacheBytes: 4096, onOpen: noop });
-    expect(needsAuth).toContain('sign in to Signal K as an administrator, then return to Binnacle');
-    expect(needsAuth).not.toContain('4.0 KB');
+
+    const refused = body({ present: true, state: 'access-error', cacheBytes: 4096 });
+    expect(refused).toContain('Signal K reports an administrator session');
+    expect(refused).not.toContain('4.0 KB');
   });
 
-  it('opens the panel for ordinary states and Signal K sign-in for access-needed', () => {
-    const present = body({ present: true, state: 'serving', cacheBytes: null, onOpen: noop });
-    expect(present).toContain('<button');
-    expect(present).toContain('aria-label="Offline charts, cache ready, open offline charts"');
+  it('uses same-window Signal K login only for signed-out or non-admin sessions', () => {
+    for (const state of ['needs-login', 'needs-admin'] as const) {
+      const html = body({ present: true, state, cacheBytes: null });
+      expect(html).toContain('<a');
+      expect(html).toContain(
+        'href="http://localhost/admin/#/login?redirect=%2Fsignalk-binnacle%2F"',
+      );
+      expect(html).not.toContain('target="_blank"');
+    }
 
-    const needsAuth = body({ present: true, state: 'needs-auth', cacheBytes: null, onOpen: noop });
-    expect(needsAuth).not.toContain('<button');
-    expect(needsAuth).toContain('cl--access');
-    expect(needsAuth).toContain('href="http://localhost/admin/#/login"');
-    expect(needsAuth).toContain('target="_blank"');
-    expect(needsAuth).toContain(
-      'aria-label="Offline charts, admin sign-in, open Signal K administrator sign-in"',
-    );
-
-    const absent = body({ present: false, state: 'serving', cacheBytes: null, onOpen: noop });
-    expect(absent).not.toContain('<button');
-    expect(absent).not.toContain('<a');
+    const refused = body({ present: true, state: 'access-error', cacheBytes: null });
+    expect(refused).toContain('<button');
+    expect(refused).not.toContain('<a');
+    expect(refused).toContain('retry Chart Locker access');
   });
 });

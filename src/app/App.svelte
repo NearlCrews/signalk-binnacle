@@ -124,6 +124,7 @@ import {
   ALL_VESSELS_CONTEXT,
   AuthController,
   acknowledgeNotification,
+  adminLoginUrl,
   createSignalKClient,
   fetchHistoryProviders,
   fetchServerFeatures,
@@ -150,7 +151,10 @@ import StatusStrip from './StatusStrip.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
 const origin = serverOrigin();
-const chartLockerAccessUrl = `${origin}/admin/#/login`;
+const chartLockerAccessUrl = adminLoginUrl(
+  origin,
+  `${location.pathname}${location.search}${location.hash}`,
+);
 
 const store = new SignalKStore();
 // A one-second reactive clock drives every staleness check (a frozen GPS fix, a dropped feed), so
@@ -606,13 +610,10 @@ function probeCompanion(): void {
   });
 }
 
-// The single owner of Chart Locker health, polled for the status strip's offline-charts chip. The base
-// and token are getters so it reads them live: the base resolves after detectCompanion, and the token
-// arrives after admin approval and can rotate mid-session.
-const companionStatus = new CompanionStatus(
-  () => companionBase,
-  () => auth.token ?? null,
-);
+// The single owner of Chart Locker health, polled for the status strip's offline-charts chip. The
+// base resolves after detectCompanion. Management access uses the browser's Signal K administrator
+// session rather than Binnacle's device token.
+const companionStatus = new CompanionStatus(() => companionBase);
 
 // Samples the live instruments from app start so the Trends panel has an honest in-session
 // series on servers with no history provider. Stopped on destroy.
@@ -1132,7 +1133,7 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Offline charts',
     available: companionBase !== null,
     unavailableHint: companionProbeComplete
-      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, or sign in to Signal K as an administrator on a secured server.'
+      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, and approve Binnacle read access on a secured server.'
       : 'Checking whether Chart Locker is available on the Signal K server.',
     pressed: activePanel === 'regions' || activePanel === 'charts-management',
     // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
@@ -1847,6 +1848,7 @@ onDestroy(() => {
         cacheBytes={companionStatus.cacheBytes}
         accessUrl={chartLockerAccessUrl}
         onOpen={() => openPanel('regions')}
+        onRetry={() => void companionStatus.refresh()}
       />
       <ProfileSwitcher
         active={profileStore.active}
@@ -1912,6 +1914,8 @@ onDestroy(() => {
     bind:radarOpenedFrom
     bind:mapInstance
     {companionBase}
+    {chartLockerAccessUrl}
+    chartLockerState={companionStatus.state}
     chartLockerAdminAccess={companionStatus.state === 'serving'}
     {arrivalBanner}
     toastMessage={toast.message}
@@ -1958,6 +1962,7 @@ onDestroy(() => {
     {setLayerVisible}
     onRetryTides={() => loadTides(true)}
     onRetryHistoryProviders={() => void probeHistoryProviders(true)}
+    onRetryChartLocker={() => void companionStatus.refresh()}
     {armMeasure}
     {toggleCollisionMute}
     {selectPoi}

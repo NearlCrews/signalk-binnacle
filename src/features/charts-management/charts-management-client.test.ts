@@ -31,7 +31,8 @@ describe('charts-management-client', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       `${API}/charts`,
       expect.objectContaining({
-        credentials: 'same-origin',
+        credentials: 'include',
+        cache: 'no-store',
       }),
     );
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
@@ -51,7 +52,8 @@ describe('charts-management-client', () => {
       `${API}/charts/sf-pmtiles/override`,
       expect.objectContaining({
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
+        cache: 'no-store',
       }),
     );
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];

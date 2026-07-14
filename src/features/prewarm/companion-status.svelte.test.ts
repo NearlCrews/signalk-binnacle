@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COMPANION_POLL_MS, CompanionStatus } from './companion-status.svelte.js';
 
-// A stub Document with just the visibility surface the poller reads, so the class can run under the
-// node test environment (no DOM). fire() invokes the registered visibilitychange listeners.
 function makeDoc(): {
   hidden: boolean;
   addEventListener: (type: string, cb: () => void) => void;
@@ -29,16 +27,17 @@ function makeDoc(): {
 }
 
 const BASE = 'http://h/plugins/signalk-chart-locker';
+const STATS = `${BASE}/api/cache/stats`;
+const LOGIN = 'http://h/skServer/loginStatus';
 
-const okResponse = (bytes: number, status = 200): Response =>
-  ({
-    ok: status < 400,
+const jsonResponse = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), {
     status,
-    json: async () => ({ rows: 1, bytes, cap: 1000, perSourceAvgBytes: {} }),
-  }) as unknown as Response;
+    headers: { 'Content-Type': 'application/json' },
+  });
 
-const errorResponse = (status: number): Response =>
-  ({ ok: false, status, json: async () => ({ error: status }) }) as unknown as Response;
+const statsResponse = (bytes: number): Response =>
+  jsonResponse({ rows: 1, bytes, cap: 1000, perSourceAvgBytes: {} });
 
 let doc: ReturnType<typeof makeDoc>;
 
@@ -53,285 +52,157 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function statusWith(fetchImpl: typeof fetch, getBase: () => string | null = () => BASE) {
+  return new CompanionStatus(getBase, fetchImpl);
+}
+
 describe('CompanionStatus', () => {
-  it('present derives from the base getter', () => {
+  it('derives presence from the base and starts in a truthful checking state', () => {
     let base: string | null = null;
-    const status = new CompanionStatus(
-      () => base,
-      () => 'tok',
-      vi.fn(),
-    );
+    const status = statusWith(vi.fn(), () => base);
     expect(status.present).toBe(false);
+    expect(status.state).toBe('checking');
     base = BASE;
     expect(status.present).toBe(true);
   });
 
-  it('can poll immediately when feature detection resolves after start', async () => {
+  it('polls immediately when feature detection resolves after start', async () => {
     let base: string | null = null;
-    const fetchImpl = vi.fn(async () => okResponse(16));
-    const status = new CompanionStatus(
-      () => base,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
+    const fetchImpl = vi.fn(async () => statsResponse(16));
+    const status = statusWith(fetchImpl as unknown as typeof fetch, () => base);
     status.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchImpl).not.toHaveBeenCalled();
 
     base = BASE;
     await status.refresh();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      STATS,
+      expect.objectContaining({ credentials: 'include', cache: 'no-store' }),
+    );
     expect(status.state).toBe('serving');
     expect(status.cacheBytes).toBe(16);
     status.stop();
   });
 
-  it('polls the companion base, not the bare origin, so the /plugins prefix is present', async () => {
-    const urls: string[] = [];
-    const fetchImpl = (async (url: string) => {
-      urls.push(String(url));
-      return okResponse(1);
-    }) as unknown as typeof fetch;
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    // The URL must carry the companion base (BASE ends in /plugins/signalk-chart-locker), not the bare
-    // origin, or the poll hits /api/cache/stats and 404s.
-    expect(urls[0]).toBe(`${BASE}/api/cache/stats`);
-    status.stop();
+  it('classifies a rejected request against the current Signal K session', async () => {
+    for (const [loginBody, expected] of [
+      [{ status: 'notLoggedIn' }, 'needs-login'],
+      [{ status: 'loggedIn', userLevel: 'readwrite' }, 'needs-admin'],
+      [{ status: 'loggedIn', userLevel: 'admin' }, 'access-error'],
+    ] as const) {
+      const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === STATS) return jsonResponse({ error: 'denied' }, 403);
+        if (url === LOGIN) return jsonResponse(loginBody);
+        throw new Error(`unexpected URL ${url}`);
+      });
+      const status = statusWith(fetchImpl as unknown as typeof fetch);
+      await status.refresh();
+      expect(status.state).toBe(expected);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    }
   });
 
-  it('a successful poll sets serving and cacheBytes', async () => {
-    const fetchImpl = vi.fn(async () => okResponse(4096));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('serving');
-    expect(status.cacheBytes).toBe(4096);
-    status.stop();
+  it('reports an access error when the login status cannot be verified', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === STATS) return jsonResponse({}, 401);
+      throw new TypeError('offline');
+    });
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
+    await status.refresh();
+    expect(status.state).toBe('access-error');
   });
 
-  it('an unsecured server with no token still polls and reaches serving', async () => {
-    // The root-cause fix: on an unsecured server the stats route answers 200 to everyone, so a
-    // tokenless viewer must poll and reach serving, not sit pinned to needs-auth.
-    const fetchImpl = vi.fn(async () => okResponse(2048));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => null,
-      fetchImpl as unknown as typeof fetch,
-    );
+  it('keeps retrying cookie authentication without keying backoff to a device token', async () => {
+    let signedIn = false;
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === LOGIN) return jsonResponse({ status: 'notLoggedIn' });
+      return signedIn ? statsResponse(12) : jsonResponse({}, 401);
+    });
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fetchImpl).toHaveBeenCalled();
-    expect(status.state).toBe('serving');
-    expect(status.cacheBytes).toBe(2048);
-    status.stop();
-  });
+    expect(status.state).toBe('needs-login');
 
-  it('a secured server with no token shows needs-auth, backs off, and resumes when a token arrives', async () => {
-    let token: string | null = null;
-    const fetchImpl = vi.fn(async () => (token === 'good' ? okResponse(8) : errorResponse(401)));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => token,
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('needs-auth');
-    const afterAuthFail = fetchImpl.mock.calls.length;
-
-    // Still the same refused null credential: no further network hits.
+    signedIn = true;
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterAuthFail);
-
-    // A real token arrives (different from the refused null): polling resumes.
-    token = 'good';
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterAuthFail + 1);
-    expect(status.state).toBe('serving');
-    status.stop();
-  });
-
-  it('a 401 backs off on the same credential and resumes when the token changes', async () => {
-    let token = 'stale';
-    const fetchImpl = vi.fn(async () => (token === 'fresh' ? okResponse(9) : errorResponse(403)));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => token,
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('needs-auth');
-    const afterAuthFail = fetchImpl.mock.calls.length;
-
-    // Same refused token: backed off, no hit.
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterAuthFail);
-
-    // The token is refreshed to a new value: polling resumes.
-    token = 'fresh';
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterAuthFail + 1);
-    expect(status.state).toBe('serving');
-    status.stop();
-  });
-
-  it('retries a refused credential after returning from administrator sign-in', async () => {
-    let adminSession = false;
-    const fetchImpl = vi.fn(async () => (adminSession ? okResponse(12) : errorResponse(403)));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'same-device-token',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('needs-auth');
-
-    adminSession = true;
-    doc.fire();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(status.state).toBe('serving');
     expect(status.cacheBytes).toBe(12);
     status.stop();
   });
 
-  it('a 5xx sets error only after two consecutive failures, and keeps polling', async () => {
-    const fetchImpl = vi.fn(async () => errorResponse(500));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
+  it('retries immediately when the PWA resumes after sign-in', async () => {
+    let signedIn = false;
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === LOGIN) return jsonResponse({ status: 'notLoggedIn' });
+      return signedIn ? statsResponse(24) : jsonResponse({}, 401);
+    });
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).not.toBe('error'); // debounced: one failure does not flip
+    expect(status.state).toBe('needs-login');
+
+    signedIn = true;
+    doc.fire();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('serving');
+    expect(status.cacheBytes).toBe(24);
+    status.stop();
+  });
+
+  it('debounces server and transport failures, then keeps polling to recover', async () => {
+    let mode: 'server' | 'offline' | 'ok' = 'server';
+    const fetchImpl = vi.fn(async () => {
+      if (mode === 'server') return jsonResponse({}, 500);
+      if (mode === 'offline') throw new TypeError('offline');
+      return statsResponse(10);
+    });
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
+    status.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(status.state).toBe('checking');
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(status.state).toBe('error');
-    const afterTwo = fetchImpl.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterTwo);
-    status.stop();
-  });
 
-  it('a network reject sets offline only after two consecutive failures, and keeps polling', async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error('offline');
-    });
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).not.toBe('offline'); // debounced
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(status.state).toBe('offline');
-    const afterTwo = fetchImpl.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThan(afterTwo);
-    status.stop();
-  });
-
-  it('a single dropped poll does not flip a serving pill, and recovery is immediate', async () => {
-    let fail = false;
-    const fetchImpl = vi.fn(async () => {
-      if (fail) throw new Error('blip');
-      return okResponse(10);
-    });
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(status.state).toBe('serving');
-    expect(status.down).toBe(false);
-
-    // One dropped poll: the pill holds serving rather than flickering to offline.
-    fail = true;
+    mode = 'ok';
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
     expect(status.state).toBe('serving');
 
-    // A second consecutive failure crosses the threshold and shows offline.
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    mode = 'offline';
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS * 2);
     expect(status.state).toBe('offline');
     expect(status.down).toBe(true);
-
-    // The next success recovers immediately, no debounce on the way back up.
-    fail = false;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(status.state).toBe('serving');
     status.stop();
   });
 
-  it('a hidden tab pauses polling and a resume refetches', async () => {
-    const fetchImpl = vi.fn(async () => okResponse(2));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
+  it('pauses while hidden and removes its listener and timer on stop', async () => {
+    const fetchImpl = vi.fn(async () => statsResponse(2));
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
     status.start();
     await vi.advanceTimersByTimeAsync(0);
     const afterMount = fetchImpl.mock.calls.length;
 
     doc.hidden = true;
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    expect(fetchImpl.mock.calls.length).toBe(afterMount);
+    expect(fetchImpl).toHaveBeenCalledTimes(afterMount);
 
-    doc.hidden = false;
-    doc.fire();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(fetchImpl.mock.calls.length).toBe(afterMount + 1);
-    status.stop();
-  });
-
-  it('stop clears the timer and removes the visibilitychange listener', async () => {
-    const fetchImpl = vi.fn(async () => okResponse(3));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
-    status.start();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(doc.listenerCount()).toBe(1);
     status.stop();
     expect(doc.listenerCount()).toBe(0);
-    const afterStop = fetchImpl.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS * 2);
-    expect(fetchImpl.mock.calls.length).toBe(afterStop);
+    doc.hidden = false;
+    await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(afterMount);
   });
 
-  it('start is idempotent: a second call does not stack a timer or listener', async () => {
-    const fetchImpl = vi.fn(async () => okResponse(5));
-    const status = new CompanionStatus(
-      () => BASE,
-      () => 'tok',
-      fetchImpl as unknown as typeof fetch,
-    );
+  it('starts idempotently', async () => {
+    const fetchImpl = vi.fn(async () => statsResponse(5));
+    const status = statusWith(fetchImpl as unknown as typeof fetch);
     status.start();
     status.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(doc.listenerCount()).toBe(1);
     const afterStart = fetchImpl.mock.calls.length;
     await vi.advanceTimersByTimeAsync(COMPANION_POLL_MS);
-    // One interval elapsed fires exactly one poll, not two.
-    expect(fetchImpl.mock.calls.length).toBe(afterStart + 1);
+    expect(fetchImpl).toHaveBeenCalledTimes(afterStart + 1);
     status.stop();
   });
 });

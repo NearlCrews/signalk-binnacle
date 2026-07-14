@@ -1,9 +1,9 @@
 /** The single owner of Chart Locker companion health, polled for the header's offline-charts status
- * pill. It rebuilds the regions client with the live token every tick, so a token that arrives after
- * admin approval or rotates mid-session is always current, and it never captures a stale one. It lives
- * in the offline-charts feature because it drives that feature's cache-stats client; the app composes
- * one instance and reads its getters into the presenter pill. */
+ * pill. Management requests authenticate with the browser's administrator cookie. A rejected request
+ * is classified against Signal K's live login status so the UI never guesses that an administrator is
+ * signed out merely because Chart Locker returned 401 or 403. */
 
+import { fetchAdminSessionState } from '$shared/signalk';
 import { createRegionsClient, HttpStatusError } from './regions-client.js';
 
 export const COMPANION_POLL_MS = 30_000;
@@ -13,42 +13,32 @@ export const COMPANION_POLL_MS = 30_000;
 // is immediate on the next success.
 const COMPANION_FAIL_THRESHOLD = 2;
 
-export type CompanionState = 'serving' | 'needs-auth' | 'offline' | 'error';
+export type CompanionState =
+  | 'checking'
+  | 'serving'
+  | 'needs-login'
+  | 'needs-admin'
+  | 'access-error'
+  | 'offline'
+  | 'error';
 
 export class CompanionStatus {
   #getBase: () => string | null;
-  #getToken: () => string | null;
   #fetchImpl: typeof fetch | undefined;
 
-  #state = $state<CompanionState>('needs-auth');
+  #state = $state<CompanionState>('checking');
   #cacheBytes = $state<number | null>(null);
 
   #timer: ReturnType<typeof setInterval> | null = null;
   #onResume: (() => void) | null = null;
   #inFlight = false;
-  // Consecutive 5xx or transport failures, so a single dropped poll does not flicker the pill to
-  // offline. Reset on any success or auth answer.
   #failStreak = 0;
-  // The exact credential a 401 or 403 refused, undefined when nothing is refused. While the live
-  // credential still equals it the poller stays backed off, so a secured server is not re-hit with the
-  // same refused credential every interval. This tracks a null credential too: a secured server that
-  // refuses the anonymous viewer backs off instead of 401-spamming, yet the moment a real token arrives
-  // (token !== the refused null) it polls again. Resuming after administrator sign-in also retries once
-  // because the same-origin session cookie can change without the device token changing.
-  #refusedCred: string | null | undefined = undefined;
 
-  constructor(
-    getBase: () => string | null,
-    getToken: () => string | null,
-    fetchImpl?: typeof fetch,
-  ) {
+  constructor(getBase: () => string | null, fetchImpl?: typeof fetch) {
     this.#getBase = getBase;
-    this.#getToken = getToken;
     this.#fetchImpl = fetchImpl;
   }
 
-  // Present is derived from the base, not stored, so a late detectCompanion resolution flips the chip
-  // on without the poller having run.
   get present(): boolean {
     return this.#getBase() !== null;
   }
@@ -57,8 +47,6 @@ export class CompanionStatus {
     return this.#state;
   }
 
-  // The not-responding projection of the state machine. The announce boundary and any health consumer
-  // read this rather than re-partitioning the enum, so a new state is classified here, once.
   get down(): boolean {
     return this.#state === 'offline' || this.#state === 'error';
   }
@@ -67,22 +55,14 @@ export class CompanionStatus {
     return this.#cacheBytes;
   }
 
-  // Feature detection resolves asynchronously after start() performs its first tick. Let the owner
-  // request a poll as soon as the base becomes available instead of showing the default state until
-  // the next interval.
   refresh(): Promise<void> {
     return this.#tick();
   }
 
   start(): void {
-    // Idempotent: a visibility resume or a double mount must not stack a second interval or listener.
     if (this.#timer !== null) return;
     this.#onResume = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      // The administrator session is a same-origin cookie, not the Binnacle device token. Returning
-      // from the Signal K sign-in tab can therefore make the same token valid for this admin-gated
-      // route. Clear only the auth backoff and retry once on resume.
-      if (this.#state === 'needs-auth') this.#refusedCred = undefined;
       void this.#tick();
     };
     if (typeof document !== 'undefined') {
@@ -90,8 +70,6 @@ export class CompanionStatus {
     }
     if (typeof window !== 'undefined') window.addEventListener('focus', this.#onResume);
     this.#timer = setInterval(() => void this.#tick(), COMPANION_POLL_MS);
-    // An immediate first poll resolves serving versus not-reachable within a tick rather than after the
-    // full interval.
     void this.#tick();
   }
 
@@ -109,43 +87,34 @@ export class CompanionStatus {
     this.#onResume = null;
   }
 
+  async #classifyAccessRefusal(base: string): Promise<void> {
+    const origin = new URL(base).origin;
+    const session = await fetchAdminSessionState(origin, this.#fetchImpl);
+    this.#state =
+      session === 'signed-out'
+        ? 'needs-login'
+        : session === 'non-admin'
+          ? 'needs-admin'
+          : 'access-error';
+  }
+
   async #tick(): Promise<void> {
-    // Requests self-abort under the client's withTimeout well inside the interval, so a single
-    // in-flight guard is enough to keep polls from piling up; no own AbortController.
     if (this.#inFlight) return;
     const base = this.#getBase();
     if (base === null) return;
     if (typeof document !== 'undefined' && document.hidden) return;
-
-    // Read the live credential but do NOT early-return on a null token: an unsecured server answers the
-    // stats route 200 to everyone, so a tokenless viewer there must poll and reach serving. Only a
-    // credential that was actually refused (recorded in #refusedCred) backs the poller off.
-    const token = this.#getToken();
-
-    // Stay backed off while the live credential is still the exact one a 401 or 403 refused (a null
-    // token included); any other credential clears the block and polls again.
-    if (this.#refusedCred !== undefined && this.#refusedCred === token) return;
 
     this.#inFlight = true;
     try {
       const stats = await createRegionsClient(base, this.#fetchImpl).getCacheStats();
       this.#state = 'serving';
       this.#cacheBytes = stats.bytes;
-      this.#refusedCred = undefined;
       this.#failStreak = 0;
     } catch (error) {
       if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
-        // The credential (which may be null on a secured server) is refused: report access needed and back
-        // off on this exact credential until a different one arrives. Auth is a definite answer, not a
-        // transient fault, so apply it at once and reset the fault streak.
-        this.#state = 'needs-auth';
-        this.#refusedCred = token;
+        await this.#classifyAccessRefusal(base);
         this.#failStreak = 0;
       } else {
-        // A 5xx (reachable but faulting) or a transport fault (unreachable) can be a single blip on a
-        // boat link. Debounce: only surface offline or error after COMPANION_FAIL_THRESHOLD consecutive
-        // failures, keeping the last state through one dropped poll. Both keep polling so the pill
-        // recovers on its own, and neither backs off a credential, since this is not an auth refusal.
         this.#failStreak += 1;
         if (this.#failStreak >= COMPANION_FAIL_THRESHOLD) {
           this.#state =

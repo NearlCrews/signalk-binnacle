@@ -364,11 +364,12 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   bytes, required access, an unreachable service, or an error. It must never turn provider health into
   a claim that a passage is ready. Coverage, included charts, completion state, and update time belong
   on the saved-area card where the navigator can verify them together. Its access-needed state links
-  directly to Signal K administrator sign-in and explains that returning to Binnacle retries the
-  service; the other states open the Offline charts landing page.
-- Chart Locker management clients authenticate with the browser's same-origin Signal K administrator
-  session. They must not attach Binnacle's device bearer token because it can mask a valid
-  administrator cookie.
+  directly to Signal K administrator sign-in in the current PWA window, with a redirect back to the
+  current Binnacle route. A non-administrator session and an administrator session refused by Chart
+  Locker are separate states. The latter offers retry instead of another sign-in prompt.
+- Chart Locker management clients authenticate with the browser's Signal K administrator session.
+  They must not attach Binnacle's device bearer token because it can mask a valid administrator
+  cookie. Use `/skServer/loginStatus` to classify a management-route 401 or 403.
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.

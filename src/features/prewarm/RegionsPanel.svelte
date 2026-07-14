@@ -24,6 +24,8 @@ import {
   nauticalMilesToMeters,
 } from '$shared/lib';
 import {
+  AccessRecoveryNote,
+  type AccessRecoveryState,
   ArmedRow,
   Disclosure,
   InlineConfirm,
@@ -56,16 +58,28 @@ import { coveringGroups, includedSummary, sourceDescription } from './source-sum
 interface Props {
   adminAccess: boolean;
   accessUrl: string;
+  accessState: AccessRecoveryState;
   companionBase: string;
   map: MapLibreMap;
   units: UnitsStore;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
+  onRetryAccess: () => void;
 }
 
-const { adminAccess, accessUrl, companionBase, map, units, onClose, onBack, onOpenCharts }: Props =
-  $props();
+const {
+  adminAccess,
+  accessUrl,
+  accessState,
+  companionBase,
+  map,
+  units,
+  onClose,
+  onBack,
+  onOpenCharts,
+  onRetryAccess,
+}: Props = $props();
 
 // The whole-world box stands in for "no box drawn" when enumerating covering sources.
 const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
@@ -135,7 +149,7 @@ const POLL_FAIL_CAP = 5;
 const positionWarmSourceList = positionWarmSources();
 
 // Chart Locker management uses the browser's Signal K administrator session, not Binnacle's device
-// token. The browser supplies the current same-origin cookie whenever the companion base changes.
+// token. The browser supplies the current Signal K cookie whenever the companion base changes.
 const client = $derived(createRegionsClient(companionBase));
 
 // Position-warm settings, loaded from getConfig on open, which seeds them from the server default
@@ -626,11 +640,12 @@ function chartLabel(id: string): string {
     <p class="alert-note" role="alert">{error}</p>
   {/if}
   {#if !adminAccess}
-    <p class="muted-note">
-      Signal K administrator sign-in is needed to manage offline charts.
-      <a href={accessUrl} target="_blank" rel="noopener noreferrer">Sign in to Signal K</a>, then
-      return to Binnacle. Chart Locker retries automatically.
-    </p>
+    <AccessRecoveryNote
+      state={accessState}
+      capability="manage offline charts"
+      {accessUrl}
+      onRetry={onRetryAccess}
+    />
   {/if}
 
   {#if subView === 'home'}
@@ -976,7 +991,7 @@ function chartLabel(id: string): string {
             </button>
           {:else if gateReason === 'administrator-access'}
             <p class="muted-note" role="status">
-              Signal K administrator sign-in is required to download.
+              Signal K administrator access is required to download.
             </p>
           {/if}
         {/if}

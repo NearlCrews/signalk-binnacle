@@ -19,27 +19,31 @@ session.
 Chart Locker protects its management API with Signal K's administrator session. This is separate from
 Binnacle's ordinary device access request and its read/write token.
 
-When the header says **Offline: admin sign-in**:
+When the header says **Charts: sign in**:
 
-1. Select the status. Binnacle opens the Signal K administrator sign-in page.
-2. Sign in as a Signal K administrator in the same browser profile.
-3. Return to the Binnacle tab. Binnacle retries Chart Locker immediately.
+1. Select the status. Binnacle opens the Signal K administrator sign-in page in the current window.
+2. Sign in as a Signal K administrator.
+3. Signal K redirects back to the current Binnacle route, which retries Chart Locker.
 
-The Signal K page and Binnacle must use the same origin, including protocol, hostname, and port. For
-example, signing in at `http://boat.local:3000` does not provide a cookie to Binnacle opened at
-`http://192.168.1.20:3000`. Private browsing profiles and separate browser profiles also keep their
-cookies separate.
+Keeping login in the same window is important for installed PWA sessions. The Signal K page and
+Binnacle must also use the same origin, including protocol, hostname, and port. For example, signing
+in at `http://boat.local:3000` does not provide a cookie to Binnacle opened at
+`http://192.168.1.20:3000`.
 
-If **admin sign-in** remains after returning:
+The access states mean different things:
 
-- Confirm the Signal K administrator page shows an authenticated session.
-- Open Binnacle from that same Signal K server address instead of another hostname or IP address.
-- Confirm Chart Locker is running, then select the status link and return again.
-- Reload Binnacle after correcting the server address or browser profile.
+- **Sign in:** Signal K reports that this browser session is signed out.
+- **Admin needed:** Signal K reports a signed-in user without administrator rights.
+- **Access error:** Signal K reports an administrator session, but Chart Locker refused the request.
+  Select the status or the panel action to retry. If it persists, restart Chart Locker and confirm
+  that the installed version registers its chart read routes with Signal K's `readonly` access scope.
+- **Unavailable:** Chart Locker did not respond after repeated attempts.
+- **Error:** Chart Locker returned a server failure.
 
-Binnacle sends the browser's same-origin administrator session to Chart Locker management routes. It
-does not attach the Binnacle device bearer token because that token can mask a valid administrator
-cookie on secured servers.
+Binnacle checks `/skServer/loginStatus` before choosing an access message. It sends the browser's
+administrator session to Chart Locker management routes with credentials included and does not attach
+the Binnacle device bearer token because that token can mask a valid administrator cookie on secured
+servers.
 
 ## Save an area
 
@@ -63,7 +67,9 @@ viewed charts does not delete saved areas.
 ## Status meanings
 
 - **Cached amount:** Chart Locker is responding, and the header reports current cache use.
-- **Admin sign-in:** Signal K administrator authentication is required for management operations.
+- **Sign in:** The browser is signed out of Signal K.
+- **Admin needed:** The current Signal K user is not an administrator.
+- **Access error:** Signal K reports an administrator session, but Chart Locker refused it.
 - **Unavailable:** Chart Locker did not respond after repeated attempts.
 - **Error:** Chart Locker returned a server failure.
 
