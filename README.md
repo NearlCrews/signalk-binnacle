@@ -221,7 +221,8 @@ For caching behavior, storage, and HTTPS requirements, see
 For behavior, availability, recovery states, and safety rules for every menu action, see
 [Menu items](docs/menu-items.md). Detailed guides also cover [Tracks](docs/tracks.md),
 [Waypoints](docs/waypoints.md), [Find places](docs/find-places.md), [Measure](docs/measure.md), and
-[Marine radar](docs/marine-radar.md).
+[Marine radar](docs/marine-radar.md). Offline preparation and administrator-session troubleshooting
+are covered in [Offline charts](docs/offline-charts.md).
 
 ## Offline charts, Chart Locker, and SSL (optional)
 
@@ -231,6 +232,9 @@ Store, then open **Offline charts** in Binnacle. If the plugin cannot be reached
 visible but unavailable and explains whether to install, start, or sign in to Signal K as an
 administrator. When administrator access is required, the header status opens that sign-in directly.
 Return to Binnacle afterward; it retries Chart Locker automatically.
+
+For the full setup, access, troubleshooting, download, and storage workflow, see
+[Offline charts](docs/offline-charts.md).
 
 The Offline charts landing page has four jobs:
 

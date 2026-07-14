@@ -53,6 +53,8 @@ All notable changes to Binnacle are documented here. The format follows
 - Chart Locker management requests use the signed-in Signal K administrator session instead of a
   Binnacle device token that could mask valid access. The access status opens administrator sign-in
   directly and retries the service when the navigator returns.
+- The Offline charts guide documents administrator-session setup, same-origin cookie requirements,
+  access recovery, passage downloads, automatic caching, storage, and status meanings.
 
 <a id="v0150"></a>
 
