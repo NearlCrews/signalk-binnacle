@@ -499,7 +499,7 @@ describe('batteryTileDef', () => {
   it('generates correct id, label, and path for an instance', () => {
     const def = batteryTileDef('house');
     expect(def.id).toBe('battery:house');
-    expect(def.label).toBe('House battery');
+    expect(def.label).toBe('Voltage · House battery');
     expect(def.abbr).toBe('VOLT');
     expect(def.description).toBe('Battery house voltage.');
     expect(def.paths).toEqual(['electrical.batteries.house.voltage']);
@@ -656,7 +656,7 @@ describe('batterySocTileDef', () => {
   it('generates the SOC id, path, abbr, and battery viz', () => {
     const def = batterySocTileDef('house');
     expect(def.id).toBe('battery-soc:house');
-    expect(def.label).toBe('House battery');
+    expect(def.label).toBe('State of charge · House battery');
     expect(def.abbr).toBe('SOC');
     expect(def.viz).toBe('battery');
     expect(def.paths).toEqual(['electrical.batteries.house.capacity.stateOfCharge']);
@@ -697,7 +697,7 @@ describe('batteryTimeTileDef', () => {
     expect(reading.state).toBe('live');
     expect(reading.value).toBe('12h 40m');
     expect(reading.unit).toBe('');
-    expect(def.label).toBe('House battery');
+    expect(def.label).toBe('Time remaining · House battery');
     expect(def.abbr).toBe('TIME');
     expect(def.viz).toBeUndefined();
   });
@@ -744,7 +744,7 @@ describe('batteryCurrentTileDef', () => {
     expect(reading.value).toBe('-12.3');
     expect(reading.unit).toBe('A');
     expect(reading.siValue).toBeCloseTo(-12.34);
-    expect(def.label).toBe('House battery');
+    expect(def.label).toBe('Current · House battery');
     expect(def.abbr).toBe('AMPS');
     expect(def.viz).toBe('spark');
   });

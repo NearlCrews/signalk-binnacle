@@ -81,9 +81,14 @@ source, and surrounding traffic before relying on it.
   session's recorder. History and chart-module failures have separate retry actions. Provider
   discovery checking, available, absent, failed, and retrying states are labeled separately.
 - **Instruments** opens the live instrument dock. Customize can show, hide, and reorder tiles,
-  including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. An
-  intentionally empty selection explains how to add a tile. Duplicate, invalid, and oversized saved
-  selections are normalized.
+  including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. A
+  Rescan checks the live Signal K model first. When a registered history provider is available, it
+  also checks the preceding year for concrete paths that populated under `vessels.self`, so seasonal
+  equipment can be configured while stopped. Previously recorded readings stay selectable and
+  visibly marked until live data arrives. Binnacle never presents a stored sample as a current
+  reading. An absent or failed provider leaves live discovery working and reports the reduced scan.
+  An intentionally empty selection explains how to add a tile. Duplicate, invalid, and oversized
+  saved selections are normalized.
 - **Open KIP** opens the installed KIP webapp in a new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.

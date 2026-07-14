@@ -31,15 +31,19 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     // needing a real controller. Tests that check battery discovery pass their own catalog override.
     catalog: [...TILE_CATALOG],
     discovering: false,
+    historyStatus: 'unavailable',
     toggleOpen: () => {},
     setOpen: () => {},
     toggleTile: () => {},
     reorderTile: () => {},
     refreshCatalog: () => {},
+    refreshLiveCatalog: () => {},
     zoneState: () => 'normal',
     resubscribe: () => {},
     dispose: () => {},
     ...overrides,
+    isHistoricalOnly: overrides.isHistoricalOnly ?? (() => false),
+    isLiveDiscovered: overrides.isLiveDiscovered ?? (() => false),
   };
 }
 
@@ -118,6 +122,61 @@ describe('InstrumentsPanel', () => {
     expect(body).toContain('No data received from this sensor yet');
     // LayerToggle's checkbox must never carry the disabled attribute (checkbox stays enabled).
     expect(body).not.toContain('disabled');
+  });
+
+  it('identifies a history-only reading without presenting it as current', () => {
+    const historicalDef = tileById('prop-rpm:port');
+    if (!historicalDef) throw new Error('Missing historical test definition');
+    const controller = makeController({
+      catalog: [historicalDef],
+      isHistoricalOnly: (id) => id === historicalDef.id,
+    });
+    const deps = makeDeps(() => 0);
+    const { body } = render(InstrumentsCustomize, { props: { controller, deps } });
+    expect(body).toContain('Seen in history, but not reporting live now');
+    expect(body).toContain('Previously seen, no live data');
+    expect(body).toContain('aria-describedby="instrument-history-prop-rpm%3Aport"');
+
+    const selectedBody = render(InstrumentsCustomize, {
+      props: {
+        controller: makeController({
+          selectedIds: [historicalDef.id],
+          catalog: [historicalDef],
+          isHistoricalOnly: (id) => id === historicalDef.id,
+        }),
+        deps,
+      },
+    }).body;
+    expect(selectedBody).toContain('Previously seen, no live data');
+    expect(selectedBody).toContain('aria-describedby="instrument-history-prop-rpm%3Aport"');
+  });
+
+  it('announces a history scan and marks Rescan busy', () => {
+    const controller = makeController({ discovering: true, historyStatus: 'scanning' });
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps: makeDeps() },
+    });
+    expect(body).toContain('Scanning recorded instruments.');
+    expect(body).toContain('aria-busy="true"');
+  });
+
+  it.each([
+    ['failed', 'Recorded instruments could not be scanned. Live instruments are still available.'],
+    ['unavailable', 'No history provider is available. Showing live instruments.'],
+    ['partial', 'Some recorded instruments could not be scanned. Accepted results were retained.'],
+  ] as const)('explains the %s history state', (historyStatus, message) => {
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller: makeController({ historyStatus }), deps: makeDeps() },
+    });
+    expect(body).toContain(message);
+  });
+
+  it('keeps successful history-scan completion quiet but available to the status region', () => {
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller: makeController({ historyStatus: 'complete' }), deps: makeDeps() },
+    });
+    expect(body).toMatch(/class="[^"]*scan-status[^"]*visually-hidden[^"]*"/);
+    expect(body).toContain('Recorded instruments scanned.');
   });
 
   it('course tile (paths=[]) is never shown as unavailable even when all epochs are 0', () => {

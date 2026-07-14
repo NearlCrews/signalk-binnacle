@@ -7,7 +7,7 @@ interface Props extends VisibilityToggleProps {
 
 // disabled: a sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled
 // without the chart it annotates. description falls back to the visible title.
-const { title, visible, onToggle, disabled = false, description }: Props = $props();
+const { title, visible, onToggle, disabled = false, description, describedBy }: Props = $props();
 </script>
 
 <label class="layer-toggle" class:disabled>
@@ -17,6 +17,7 @@ const { title, visible, onToggle, disabled = false, description }: Props = $prop
     type="checkbox"
     checked={visible}
     {disabled}
+    aria-describedby={describedBy}
     onchange={(e) => onToggle(e.currentTarget.checked)}
   >
   <span class="title" title={description ?? title}>{title}</span>

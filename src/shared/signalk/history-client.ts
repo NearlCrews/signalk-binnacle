@@ -7,6 +7,10 @@ import { asKeyedObject, authInit } from './resource';
 // [timestamp, ...one value per requested path], nulls filling gaps. Stock servers have the
 // routes but no provider; /values then answers 501, and _providers answers {}.
 const HISTORY_API = '/signalk/v2/api/history';
+export const MAX_HISTORY_PROVIDERS = 8;
+export const MAX_HISTORY_CATALOG_PATHS = 2_000;
+const MAX_HISTORY_PATH_LENGTH = 512;
+const HISTORY_VALIDATION_BATCH_SIZE = 25;
 
 // The default review window and bucket resolution, shared by the history-track overlay and the
 // time-travel scrub so their geometry lines up. 24 hours at 60 seconds is about 1440 buckets.
@@ -14,7 +18,7 @@ export const HISTORY_WINDOW_SECONDS = 24 * 60 * 60;
 export const HISTORY_RESOLUTION_SECONDS = 60;
 
 export interface HistoryProviders {
-  // Every registered provider id, the default first.
+  // The accepted bounded provider ids, with the server's default first.
   ids: readonly string[];
 }
 
@@ -36,6 +40,13 @@ export interface HistoryQuery {
   durationSeconds: number;
   resolutionSeconds?: number;
   provider?: string;
+  signal?: AbortSignal;
+}
+
+export interface HistoryPathsQuery {
+  durationSeconds: number;
+  provider?: string;
+  signal?: AbortSignal;
 }
 
 // The column index for a path, method-aware. When a method is given, prefer the exact
@@ -62,7 +73,10 @@ export async function fetchHistoryProviders(
     const entry = keyed[id];
     return isRecord(entry) && entry.isDefault === true;
   };
-  const ids = Object.keys(keyed).sort((a, b) => Number(isDefault(b)) - Number(isDefault(a)));
+  const ids = Object.keys(keyed)
+    .filter((id) => id.length > 0 && id.length <= 128)
+    .sort((a, b) => Number(isDefault(b)) - Number(isDefault(a)))
+    .slice(0, MAX_HISTORY_PROVIDERS);
   return { ids };
 }
 
@@ -83,7 +97,10 @@ export async function fetchHistoryValues(
     range?: { from?: unknown; to?: unknown };
     values?: unknown;
     data?: unknown;
-  }>(`${base}${HISTORY_API}/values?${params}`, authInit(token));
+  }>(
+    `${base}${HISTORY_API}/values?${params}`,
+    authInit(token, query.signal ? { signal: query.signal } : undefined),
+  );
   // A non-ok or malformed body is undefined (unreachable); a 2xx with columns but missing or empty
   // data is a real empty result (provider present, no samples in the window), kept distinct so the
   // panel can say "no data" rather than treating it as a transport failure.
@@ -105,6 +122,109 @@ export async function fetchHistoryValues(
     columns,
     rows,
   };
+}
+
+// Lists paths recorded by one history provider during a bounded time window. This is useful for
+// catalog discovery, but it does not imply that any listed path is reporting live data now.
+export async function fetchHistoryPaths(
+  base: string,
+  token: string | undefined,
+  query: HistoryPathsQuery,
+): Promise<readonly string[] | undefined> {
+  const params = new URLSearchParams({ duration: String(query.durationSeconds) });
+  if (query.provider) params.set('provider', query.provider);
+  const body = await fetchJsonOrUndefined<unknown>(
+    `${base}${HISTORY_API}/paths?${params}`,
+    authInit(token, query.signal ? { signal: query.signal } : undefined),
+  );
+  if (!Array.isArray(body)) return undefined;
+  const bounded = body.slice(0, MAX_HISTORY_CATALOG_PATHS);
+  if (bounded.some((path) => typeof path !== 'string')) return undefined;
+  return [
+    ...new Set(bounded.filter((path) => path.length > 0 && path.length <= MAX_HISTORY_PATH_LENGTH)),
+  ].sort();
+}
+
+export interface HistoryProviderPathCatalogs {
+  catalogs: ReadonlyArray<{ provider: string; paths: readonly string[] }>;
+  complete: boolean;
+}
+
+// Preserve which provider owns each catalog so context validation never sprays every path across
+// every database. Sequential requests cap concurrency at one during this infrequent setup scan.
+export async function fetchHistoryProviderPathCatalogs(
+  base: string,
+  token: string | undefined,
+  providers: HistoryProviders,
+  query: Omit<HistoryPathsQuery, 'provider'>,
+): Promise<HistoryProviderPathCatalogs> {
+  const catalogs: Array<{ provider: string; paths: readonly string[] }> = [];
+  let complete = true;
+  for (const provider of providers.ids.slice(0, MAX_HISTORY_PROVIDERS)) {
+    if (query.signal?.aborted) {
+      complete = false;
+      break;
+    }
+    const paths = await fetchHistoryPaths(base, token, { ...query, provider });
+    if (paths) catalogs.push({ provider, paths });
+    else complete = false;
+  }
+  return { catalogs, complete };
+}
+
+// The paths endpoint is intentionally context-free. Confirm candidate instrument paths through
+// context-scoped values queries before treating them as belonging to vessels.self. A one-window
+// resolution asks only whether each path populated at least once, not for its stored samples.
+export async function fetchPopulatedHistoryPathsForProvider(
+  base: string,
+  token: string | undefined,
+  provider: string,
+  paths: readonly string[],
+  durationSeconds: number,
+  signal?: AbortSignal,
+): Promise<{ paths: readonly string[]; complete: boolean; answered: boolean }> {
+  const candidates = [...new Set(paths)]
+    .filter((path) => path.length > 0 && path.length <= MAX_HISTORY_PATH_LENGTH)
+    .slice(0, MAX_HISTORY_CATALOG_PATHS);
+  const populated = new Set<string>();
+  let complete = true;
+  let answered = false;
+  for (let offset = 0; offset < candidates.length; offset += HISTORY_VALIDATION_BATCH_SIZE) {
+    if (signal?.aborted) {
+      complete = false;
+      break;
+    }
+    const batch = candidates.slice(offset, offset + HISTORY_VALIDATION_BATCH_SIZE);
+    const values = await fetchHistoryValues(base, token, {
+      paths: batch,
+      durationSeconds,
+      resolutionSeconds: durationSeconds,
+      provider,
+      signal,
+    });
+    if (!values) {
+      complete = false;
+      continue;
+    }
+    answered = true;
+    const columnsByPath = new Map<string, number[]>();
+    for (let column = 0; column < values.columns.length; column += 1) {
+      const path = values.columns[column].path;
+      const columns = columnsByPath.get(path) ?? [];
+      columns.push(column);
+      columnsByPath.set(path, columns);
+    }
+    for (const path of batch) {
+      const columns = columnsByPath.get(path) ?? [];
+      if (columns.length !== 1) {
+        complete = false;
+        continue;
+      }
+      const column = columns[0];
+      if (values.rows.some((row) => row[column + 1] != null)) populated.add(path);
+    }
+  }
+  return { paths: [...populated].sort(), complete, answered };
 }
 
 // One query that survives a default provider with no data: providers register independently

@@ -11,8 +11,10 @@ export type {
 } from './history-client';
 export {
   columnIndex,
+  fetchHistoryProviderPathCatalogs,
   fetchHistoryProviders,
   fetchHistoryValuesAcrossProviders,
+  fetchPopulatedHistoryPathsForProvider,
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
 } from './history-client';
@@ -34,6 +36,7 @@ export {
   authInit,
   deleteResource,
   fetchAuthedJson,
+  fetchAuthedJsonOutcome,
   fetchAuthedText,
   fetchKeyedResource,
   postResource,

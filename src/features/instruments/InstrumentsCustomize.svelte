@@ -49,6 +49,26 @@ const reorder = createReorder({
 function neverReported(paths: string[]): boolean {
   return paths.length > 0 && paths.every((p) => deps.store.cell(p).epoch === 0);
 }
+
+function historyHintId(id: string): string {
+  return `instrument-history-${encodeURIComponent(id).replace(/\./g, '%2E')}`;
+}
+
+const historyStatusMessage = $derived(
+  controller.historyStatus === 'checking'
+    ? 'Checking for recorded instruments.'
+    : controller.historyStatus === 'scanning'
+      ? 'Scanning recorded instruments.'
+      : controller.historyStatus === 'complete'
+        ? 'Recorded instruments scanned.'
+        : controller.historyStatus === 'partial'
+          ? 'Some recorded instruments could not be scanned. Accepted results were retained.'
+          : controller.historyStatus === 'failed'
+            ? 'Recorded instruments could not be scanned. Live instruments are still available.'
+            : controller.historyStatus === 'unavailable'
+              ? 'No history provider is available. Showing live instruments.'
+              : '',
+);
 </script>
 
 <!-- The reorder controller measures rows and listens for scroll on this element, so it is the one
@@ -58,6 +78,8 @@ function neverReported(paths: string[]): boolean {
   <ul class="tile-list bare-list">
     {#each shown as def, i (def.id)}
       {@const indicator = reorder.indicatorFor(def.id)}
+      {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
+      {@const hintId = historicalOnly ? historyHintId(def.id) : undefined}
       <li
         data-tile-row={def.id}
         class="row-interactive reorder-row is-on"
@@ -70,7 +92,11 @@ function neverReported(paths: string[]): boolean {
           description={def.description}
           visible={true}
           onToggle={() => controller.toggleTile(def.id)}
+          describedBy={hintId}
         />
+        {#if historicalOnly}
+          <span id={hintId} class="history-note">Previously seen, no live data</span>
+        {/if}
         <button
           type="button"
           class="icon-btn handle"
@@ -90,31 +116,51 @@ function neverReported(paths: string[]): boolean {
       type="button"
       class="btn btn-ghost rescan"
       disabled={controller.discovering}
+      aria-busy={controller.discovering}
       onclick={() => controller.refreshCatalog()}
     >
       <RotateCw size={16} aria-hidden="true" />
       {controller.discovering ? 'Scanning' : 'Rescan'}
     </button>
   </div>
+  {#if historyStatusMessage}
+    <p
+      class="scan-status"
+      class:visually-hidden={controller.historyStatus === 'complete'}
+      role="status"
+    >
+      {historyStatusMessage}
+    </p>
+  {/if}
   {#if availableGroups.length > 0}
     {#each availableGroups as group (group.id)}
       <h4 class="caps-label group-label">{group.title}</h4>
       <ul class="tile-list bare-list">
         {#each group.rows as def (def.id)}
-          {@const unavailable = neverReported(def.paths)}
+          {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
+          {@const unavailable = neverReported(def.paths) &&
+            !controller.isLiveDiscovered(def.id) &&
+            !historicalOnly}
+          {@const unavailableHint = historicalOnly
+            ? 'Seen in history, but not reporting live now'
+            : 'No data received from this sensor yet'}
+          {@const hintId = historicalOnly || unavailable ? historyHintId(def.id) : undefined}
           <li
             class="row-interactive"
             class:unavailable
-            title={unavailable ? 'No data received from this sensor yet' : undefined}
+            title={historicalOnly || unavailable ? unavailableHint : undefined}
           >
             <LayerToggle
               title={def.label}
               description={def.description}
               visible={false}
               onToggle={() => controller.toggleTile(def.id)}
+              describedBy={hintId}
             />
-            {#if unavailable}
-              <UnavailableHint hint="No data received from this sensor yet" />
+            {#if historicalOnly}
+              <span id={hintId} class="history-note">Previously seen, no live data</span>
+            {:else if unavailable}
+              <UnavailableHint id={hintId} hint={unavailableHint} />
             {/if}
           </li>
         {/each}
@@ -153,6 +199,18 @@ function neverReported(paths: string[]): boolean {
 }
 .empty-note {
   padding: 0 var(--space-3) var(--space-2);
+}
+.scan-status {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.history-note {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 /* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
    block-flow row wraps the grip onto its own line and every selected row doubles in height. */

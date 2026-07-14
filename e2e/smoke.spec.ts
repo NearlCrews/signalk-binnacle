@@ -366,6 +366,63 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   await expect(dock).not.toBeVisible();
 });
 
+test('history-only engine readings stay identifiable through selection and detail', async ({
+  page,
+}) => {
+  let pathRequests = 0;
+  let valueRequests = 0;
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ 'signalk-questdb': { isDefault: true } }),
+    }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/paths/, async (route) => {
+    pathRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(['propulsion.port.revolutions']),
+    });
+  });
+  await page.route(/\/signalk\/v2\/api\/history\/values/, async (route) => {
+    valueRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        range: {},
+        values: [{ path: 'propulsion.port.revolutions', method: 'average' }],
+        data: [['2026-07-01T00:00:00Z', 20]],
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  await dock.getByRole('button', { name: 'Customize instruments' }).click();
+  await expect.poll(() => pathRequests).toBeGreaterThan(0);
+  await expect.poll(() => valueRequests).toBeGreaterThan(0);
+  const portEngine = dock.getByRole('checkbox', { name: 'Port engine' });
+  await expect(portEngine).toHaveAttribute(
+    'aria-describedby',
+    'instrument-history-prop-rpm%3Aport',
+    { timeout: 15_000 },
+  );
+  await expect(dock.getByText('Previously seen, no live data')).toBeVisible();
+  await portEngine.check();
+  await expect(dock.getByText('Previously seen, no live data')).toBeVisible();
+  await dock.getByRole('button', { name: 'Done' }).click();
+  await dock.getByRole('button', { name: /Port engine.*Open details/ }).click();
+  await expect(dock.getByText('Previously recorded, but not reporting live now.')).toBeVisible();
+});
+
 test('a touch drag on a customize grip reorders the shown instruments', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Instruments' }).first().click();

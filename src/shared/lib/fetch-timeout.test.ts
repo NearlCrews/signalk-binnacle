@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FETCH_TIMEOUT_MS, withTimeout } from './fetch-timeout';
 
 describe('withTimeout', () => {
@@ -14,10 +14,34 @@ describe('withTimeout', () => {
     expect(out.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('leaves an init that already owns a signal untouched', () => {
+  it('composes caller cancellation with the timeout', () => {
     const controller = new AbortController();
     const init: RequestInit = { signal: controller.signal };
-    expect(withTimeout(init)).toBe(init);
+    const out = withTimeout(init);
+    const { signal } = out;
+    if (!signal) throw new Error('missing composed signal');
+    expect(out).not.toBe(init);
+    expect(signal.aborted).toBe(false);
+    controller.abort(new Error('superseded'));
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error).message).toBe('superseded');
+  });
+
+  it('cleans up fallback listeners after either signal aborts', async () => {
+    const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    if (!anyDescriptor) throw new Error('AbortSignal.any descriptor is unavailable');
+    Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+    try {
+      const { signal } = withTimeout({ signal: controller.signal }, 1);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(signal?.aborted).toBe(true);
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    } finally {
+      Object.defineProperty(AbortSignal, 'any', anyDescriptor);
+    }
   });
 
   it('defaults to an eight second timeout', () => {

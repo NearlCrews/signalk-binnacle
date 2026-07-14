@@ -1,6 +1,7 @@
 import type { PersistedValue } from '$shared/settings/persisted.svelte';
 import {
   fetchPathMeta,
+  type HistoryProviders,
   type PathMeta,
   type SignalKStore,
   type SubscribeEntry,
@@ -8,10 +9,20 @@ import {
   zoneStateFor,
 } from '$shared/signalk';
 import {
+  discoverHistoricalInstrumentInstances,
   discoverInstrumentInstances,
-  EMPTY_INSTANCES,
   type InstrumentInstances,
 } from './instance-discovery';
+
+type InstrumentHistoryStatus =
+  | 'idle'
+  | 'checking'
+  | 'scanning'
+  | 'complete'
+  | 'partial'
+  | 'unavailable'
+  | 'failed';
+
 import {
   ALL_CATALOG_PATHS,
   batteryDefsFor,
@@ -31,6 +42,8 @@ export interface InstrumentsDeps {
   store: SignalKStore;
   origin: string;
   getToken: () => string | undefined;
+  getHistoryProviders: () => HistoryProviders | undefined;
+  getHistoryProviderState: () => 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
   subscribe: (entries: SubscribeEntry[]) => void;
   unsubscribe: (paths: string[]) => void;
   tilesStore: PersistedValue<string[]>;
@@ -44,11 +57,15 @@ export interface InstrumentsController {
   // The full catalog available in Customize mode: static tiles plus discovered Signal K instances.
   readonly catalog: TileDef[];
   readonly discovering: boolean;
+  readonly historyStatus: InstrumentHistoryStatus;
+  isHistoricalOnly(id: string): boolean;
+  isLiveDiscovered(id: string): boolean;
   toggleOpen(): void;
   setOpen(open: boolean): void;
   toggleTile(id: string): void;
   reorderTile(id: string, slot: number): void;
   refreshCatalog(): void;
+  refreshLiveCatalog(): void;
   zoneState(def: TileDef, value: number | undefined): ZoneState;
   resubscribe(): void;
   dispose(): void;
@@ -64,11 +81,21 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
   let metaVersion = $state(0);
 
-  // Discovered Signal K instance ids; populated on first open and user-refreshable from Customize.
+  // Dynamic definitions discovered from the live model and the optional history path catalog.
   // Replace-only (assigned wholesale, never mutated in place), so raw state skips deep proxy wrapping.
-  let instances = $state.raw<InstrumentInstances>(EMPTY_INSTANCES);
+  let liveCatalog = $state.raw<TileDef[]>([]);
+  let historicalCatalog = $state.raw<TileDef[]>([]);
+  let dynamicCatalog = $state.raw<TileDef[]>([]);
+  let historicalOnlyIds = $state.raw<Set<string>>(new Set());
+  let liveDiscoveredIds = $state.raw<Set<string>>(new Set());
+  let historyStatus = $state<InstrumentHistoryStatus>('idle');
   let discoveryDone = false;
-  let discovering = $state(false);
+  let liveDiscovering = $state(false);
+  let historyDiscovering = $state(false);
+  let liveDiscoveryGeneration = 0;
+  let historyDiscoveryGeneration = 0;
+  let historyDiscoveryAbort: AbortController | undefined;
+  let disposed = false;
 
   // Tracks which paths are currently subscribed via deps.subscribe, so syncSubscriptions can
   // diff desired against live and issue only the delta.
@@ -149,39 +176,134 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
-  // Runs once per controller construction when the dock is first opened. Discovery is fire-and-
-  // forget; a failure leaves dynamic instances empty, which is a safe degrade.
-  function ensureDynamicCells(next: InstrumentInstances): void {
-    deps.store.ensureCells([
-      ...next.batteries.flatMap((id) => batteryDefsFor(id).flatMap((def) => def.paths)),
-      ...next.propulsion.flatMap((id) => propulsionDefsFor(id).flatMap((def) => def.paths)),
-      ...next.tanks.flatMap((id) => tankDefsFor(id).flatMap((def) => def.paths)),
-      ...next.solar.flatMap((id) => solarDefsFor(id).flatMap((def) => def.paths)),
-      ...next.inside.flatMap((id) => insideDefsFor(id).flatMap((def) => def.paths)),
-    ]);
+  // Runs once per controller construction when the dock is first opened and remains user-refreshable.
+  function cachedDefs(family: string, id: string, create: () => TileDef[]): TileDef[] {
+    const key = `${family}:${id}`;
+    let defs = dynamicDefCache.get(key);
+    if (!defs) {
+      defs = create();
+      dynamicDefCache.set(key, defs);
+    }
+    return defs;
   }
 
-  function discover(refresh = false): void {
+  function defsForInstances(instances: InstrumentInstances): TileDef[] {
+    return [
+      ...instances.batteries.flatMap((id) => cachedDefs('battery', id, () => batteryDefsFor(id))),
+      ...instances.propulsion.flatMap((id) =>
+        cachedDefs('propulsion', id, () => propulsionDefsFor(id)),
+      ),
+      ...instances.tanks.flatMap((id) => cachedDefs('tank', id, () => tankDefsFor(id))),
+      ...instances.solar.flatMap((id) => cachedDefs('solar', id, () => solarDefsFor(id))),
+      ...instances.inside.flatMap((id) => cachedDefs('inside', id, () => insideDefsFor(id))),
+    ];
+  }
+
+  function defsForObservedPaths(instances: InstrumentInstances): TileDef[] {
+    const paths = new Set(instances.paths);
+    return defsForInstances(instances).filter((def) => def.paths.some((path) => paths.has(path)));
+  }
+
+  function rebuildDynamicCatalog(): void {
+    const liveIds = new Set(liveCatalog.map((def) => def.id));
+    const historicalOnly = historicalCatalog.filter((def) => !liveIds.has(def.id));
+    dynamicCatalog = [...liveCatalog, ...historicalOnly];
+    historicalOnlyIds = new Set(historicalOnly.map((def) => def.id));
+    liveDiscoveredIds = liveIds;
+    deps.store.ensureCells(dynamicCatalog.flatMap((def) => def.paths));
+  }
+
+  function familyForDef(def: TileDef): keyof Omit<InstrumentInstances, 'paths'> | undefined {
+    if (def.id.startsWith('battery')) return 'batteries';
+    if (def.id.startsWith('prop-')) return 'propulsion';
+    if (def.id.startsWith('tank-')) return 'tanks';
+    if (def.id.startsWith('solar-')) return 'solar';
+    if (def.id.startsWith('inside-')) return 'inside';
+    return undefined;
+  }
+
+  function discover(refresh = false, includeHistory = true): void {
     if (discoveryDone && !refresh) return;
     discoveryDone = true;
-    discovering = true;
-    void discoverInstrumentInstances(deps.origin, deps.getToken())
-      .then((next) => {
-        instances = next;
-        ensureDynamicCells(next);
+    const token = deps.getToken();
+    const liveGeneration = ++liveDiscoveryGeneration;
+    liveDiscovering = true;
+    void discoverInstrumentInstances(deps.origin, token)
+      .then((live) => {
+        if (disposed || liveGeneration !== liveDiscoveryGeneration) return;
+        const failed = new Set(live.failedFamilies);
+        const retained = liveCatalog.filter((def) => {
+          const family = familyForDef(def);
+          return family !== undefined && failed.has(family);
+        });
+        liveCatalog = [...retained, ...defsForObservedPaths(live)];
+        rebuildDynamicCatalog();
         syncSubscriptions();
         if (deps.openStore.value === true) fetchMetaForSelected();
       })
-      .catch(() => {
-        instances = EMPTY_INSTANCES;
-      })
       .finally(() => {
-        discovering = false;
+        if (!disposed && liveGeneration === liveDiscoveryGeneration) liveDiscovering = false;
       });
+
+    if (includeHistory) {
+      const historyGeneration = ++historyDiscoveryGeneration;
+      historyDiscoveryAbort?.abort();
+      historyDiscoveryAbort = undefined;
+      const providerState = deps.getHistoryProviderState();
+      const providers = deps.getHistoryProviders();
+      if (providerState === 'checking' || providerState === 'retrying') {
+        historyStatus = 'checking';
+        historyDiscovering = false;
+      } else if (providerState !== 'available' || !providers || providers.ids.length === 0) {
+        historyStatus = providerState === 'failed' ? 'failed' : 'unavailable';
+        historyDiscovering = false;
+        if (providerState === 'absent') {
+          historicalCatalog = [];
+          rebuildDynamicCatalog();
+        }
+      } else {
+        const abort = new AbortController();
+        historyDiscoveryAbort = abort;
+        historyStatus = 'scanning';
+        historyDiscovering = true;
+        void discoverHistoricalInstrumentInstances(deps.origin, token, providers, abort.signal)
+          .then(
+            (result) => {
+              if (disposed || historyGeneration !== historyDiscoveryGeneration) return;
+              historyStatus = result.state;
+              const next = defsForObservedPaths(result.instances);
+              historicalCatalog =
+                result.state === 'complete'
+                  ? next
+                  : [
+                      ...new Map(
+                        [...historicalCatalog, ...next].map((def) => [def.id, def]),
+                      ).values(),
+                    ];
+              rebuildDynamicCatalog();
+            },
+            () => {
+              if (!disposed && historyGeneration === historyDiscoveryGeneration) {
+                historyStatus = 'failed';
+              }
+            },
+          )
+          .finally(() => {
+            if (!disposed && historyGeneration === historyDiscoveryGeneration) {
+              historyDiscovering = false;
+              if (historyDiscoveryAbort === abort) historyDiscoveryAbort = undefined;
+            }
+          });
+      }
+    }
   }
 
   function refreshCatalog(): void {
     discover(true);
+  }
+
+  function refreshLiveCatalog(): void {
+    discover(true, false);
   }
 
   function setOpen(open: boolean): void {
@@ -243,6 +365,11 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   }
 
   function dispose(): void {
+    disposed = true;
+    liveDiscoveryGeneration += 1;
+    historyDiscoveryGeneration += 1;
+    historyDiscoveryAbort?.abort();
+    historyDiscoveryAbort = undefined;
     if (subscribedPaths.size > 0) {
       deps.unsubscribe([...subscribedPaths]);
       subscribedPaths.clear();
@@ -278,36 +405,26 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return selectedIds;
     },
     get catalog(): TileDef[] {
-      // Static catalog first, then discovered instance defs, memoized per family and id so a reactive
-      // read does not allocate fresh defs every pass.
-      const cached = (family: string, id: string, create: () => TileDef[]) => {
-        const key = `${family}:${id}`;
-        let defs = dynamicDefCache.get(key);
-        if (!defs) {
-          defs = create();
-          dynamicDefCache.set(key, defs);
-        }
-        return defs;
-      };
-      return [
-        ...TILE_CATALOG,
-        ...instances.batteries.flatMap((id) => cached('battery', id, () => batteryDefsFor(id))),
-        ...instances.propulsion.flatMap((id) =>
-          cached('propulsion', id, () => propulsionDefsFor(id)),
-        ),
-        ...instances.tanks.flatMap((id) => cached('tank', id, () => tankDefsFor(id))),
-        ...instances.solar.flatMap((id) => cached('solar', id, () => solarDefsFor(id))),
-        ...instances.inside.flatMap((id) => cached('inside', id, () => insideDefsFor(id))),
-      ];
+      return [...TILE_CATALOG, ...dynamicCatalog];
     },
     get discovering() {
-      return discovering;
+      return liveDiscovering || historyDiscovering;
+    },
+    get historyStatus() {
+      return historyStatus;
+    },
+    isHistoricalOnly(id: string): boolean {
+      return historicalOnlyIds.has(id);
+    },
+    isLiveDiscovered(id: string): boolean {
+      return liveDiscoveredIds.has(id);
     },
     toggleOpen,
     setOpen,
     toggleTile,
     reorderTile,
     refreshCatalog,
+    refreshLiveCatalog,
     zoneState,
     resubscribe,
     dispose,

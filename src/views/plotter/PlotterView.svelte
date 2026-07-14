@@ -804,10 +804,12 @@ $effect(() => {
             onSetPower={onSetRadarPower}
             echoShown={radarEchoShown}
             onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
-            onOpenOverlaySettings={() => {
-              radarControlsOpen = false;
-              openLayersPanel('overlays');
-            }}
+            onOpenOverlaySettings={layersView
+              ? () => {
+                  radarControlsOpen = false;
+                  openLayersPanel('overlays');
+                }
+              : undefined}
           />
         {:catch}
           <div class="panel-load-error" role="alert">

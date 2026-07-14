@@ -97,6 +97,8 @@ $effect(() => {
       {deps}
       {reading}
       {zone}
+      historicalOnly={controller.isHistoricalOnly(detailDef.id) &&
+        detailDef.paths.every((path) => deps.store.cell(path).epoch === 0)}
       onBack={() => (detailId = undefined)}
     />
   {:else if customizing}

@@ -7,4 +7,5 @@ export interface VisibilityToggleProps {
   disabled?: boolean;
   // An optional plain-language hover and focus tooltip. Falls back to the control's own label.
   description?: string;
+  describedBy?: string;
 }

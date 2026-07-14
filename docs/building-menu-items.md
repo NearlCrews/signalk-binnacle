@@ -227,8 +227,14 @@ resize the map every frame). Under its 900px breakpoint the same panel goes full
 chart"). Its tile grid fills the dock: rows share the full height, dense flow backfills holes,
 and an empty tile is never full width (the layout rules live in the design system's instruments
 module entry). Selecting a tile opens an in-dock detail view, and Customize groups available
-instruments by category with a Rescan action for dynamic Signal K instances. Do not add further split
-panels without a matching product case; overlays stay the default.
+instruments by category with a Rescan action for dynamic Signal K instances. That scan unions live
+instances with concrete paths from the preceding year of registered history providers within a
+bounded scan.
+Validate those context-free catalog paths with a `vessels.self` values query before displaying them.
+Previously seen readings remain selectable, visibly marked in Available and Shown, and identified in
+detail until live data arrives. Provider absence or failure must preserve live discovery and explain
+the reduced catalog. Never copy a stored sample into a current instrument tile. Do not add further
+split panels without a matching product case; overlays stay the default.
 
 Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive from `$shared/ui`,
 one per surface, trailing in the header row, and open the mode with one `.muted-note` line

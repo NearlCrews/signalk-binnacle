@@ -552,7 +552,7 @@ export function batteryTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery:${instanceId}`,
-    label: name,
+    label: `Voltage · ${name}`,
     abbr: 'VOLT',
     description: `Battery ${instanceId} voltage.`,
     sensorGloss: 'No battery data',
@@ -581,7 +581,7 @@ export function batterySocTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-soc:${instanceId}`,
-    label: name,
+    label: `State of charge · ${name}`,
     abbr: 'SOC',
     description: `Battery ${instanceId} state of charge.`,
     sensorGloss: 'No charge data',
@@ -605,7 +605,7 @@ export function batteryTimeTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-time:${instanceId}`,
-    label: name,
+    label: `Time remaining · ${name}`,
     abbr: 'TIME',
     description: `Battery ${instanceId} time remaining at the present load.`,
     sensorGloss: 'No time estimate',
@@ -632,7 +632,7 @@ export function batteryCurrentTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-current:${instanceId}`,
-    label: name,
+    label: `Current · ${name}`,
     abbr: 'AMPS',
     description: `Battery ${instanceId} current, negative when discharging.`,
     sensorGloss: 'No current data',

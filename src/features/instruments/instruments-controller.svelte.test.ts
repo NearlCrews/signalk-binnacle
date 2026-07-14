@@ -37,6 +37,8 @@ function makeDeps(opts: { tiles?: string[] } = {}) {
     store,
     origin: 'http://sk',
     getToken: (): string | undefined => undefined,
+    getHistoryProviders: () => undefined,
+    getHistoryProviderState: () => 'absent' as const,
     subscribe,
     unsubscribe,
     tilesStore,
@@ -274,6 +276,8 @@ describe('createInstrumentsController', () => {
       store: new SignalKStore(),
       origin: 'http://sk',
       getToken: () => undefined,
+      getHistoryProviders: () => undefined,
+      getHistoryProviderState: () => 'absent',
       subscribe: vi.fn(),
       unsubscribe: vi.fn(),
       tilesStore,
@@ -375,12 +379,12 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
 
-    // After discovery: four defs per instance (voltage, SOC, time, current) for two instances.
-    expect(ctrl.catalog.length).toBe(staticCount + 2 * 4);
+    // Only concrete live paths are offered, not every possible reading for the instance.
+    expect(ctrl.catalog.length).toBe(staticCount + 2);
     expect(ctrl.catalog.some((d) => d.id === 'battery:house')).toBe(true);
-    expect(ctrl.catalog.some((d) => d.id === 'battery-soc:house')).toBe(true);
-    expect(ctrl.catalog.some((d) => d.id === 'battery-time:house')).toBe(true);
-    expect(ctrl.catalog.some((d) => d.id === 'battery-current:house')).toBe(true);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-soc:house')).toBe(false);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-time:house')).toBe(false);
+    expect(ctrl.catalog.some((d) => d.id === 'battery-current:house')).toBe(false);
     expect(ctrl.catalog.some((d) => d.id === 'battery:starter')).toBe(true);
 
     ctrl.dispose();
@@ -409,6 +413,61 @@ describe('createInstrumentsController', () => {
     ).length;
     expect(batteryCalls).toBe(1);
 
+    ctrl.dispose();
+  });
+
+  it('retains accepted live instances when a rescan has transport failures', async () => {
+    let failing = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (failing) throw new TypeError('network down');
+        if (url.includes('electrical/batteries')) {
+          return jsonResponse(200, { house: { voltage: {} } });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+    const deps = makeDeps();
+    const ctrl = createInstrumentsController(deps);
+    ctrl.setOpen(true);
+    await flushPromises();
+    expect(ctrl.catalog.some((def) => def.id === 'battery:house')).toBe(true);
+
+    failing = true;
+    ctrl.refreshCatalog();
+    await flushPromises();
+    expect(ctrl.catalog.some((def) => def.id === 'battery:house')).toBe(true);
+    ctrl.dispose();
+  });
+
+  it('updates successful live families while retaining a failed family', async () => {
+    let secondScan = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('electrical/batteries')) {
+          return jsonResponse(200, {
+            [secondScan ? 'starter' : 'house']: { voltage: {} },
+          });
+        }
+        if (url.endsWith('/propulsion')) {
+          if (secondScan) throw new TypeError('engine branch offline');
+          return jsonResponse(200, { port: { revolutions: {} } });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+    const ctrl = createInstrumentsController(makeDeps());
+    ctrl.setOpen(true);
+    await flushPromises();
+    secondScan = true;
+    ctrl.refreshLiveCatalog();
+    await flushPromises();
+
+    expect(ctrl.catalog.some((def) => def.id === 'battery:starter')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'battery:house')).toBe(false);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:port')).toBe(true);
     ctrl.dispose();
   });
 
@@ -451,6 +510,151 @@ describe('createInstrumentsController', () => {
     expect(ctrl.catalog.some((def) => def.id === 'solar-power:arch')).toBe(true);
     expect(ctrl.catalog.some((def) => def.id === 'inside-temp:cabin')).toBe(true);
 
+    ctrl.dispose();
+  });
+
+  it('offers historically seen readings without treating them as live', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/history/paths?')) {
+          return jsonResponse(200, ['propulsion.port.revolutions', 'propulsion.port.engineLoad']);
+        }
+        if (url.includes('/history/values?')) {
+          return jsonResponse(200, {
+            range: {},
+            values: [
+              { path: 'propulsion.port.revolutions' },
+              { path: 'propulsion.port.engineLoad' },
+            ],
+            data: [['2026-07-01T00:00:00Z', 20, 0.4]],
+          });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+
+    const deps = {
+      ...makeDeps(),
+      getHistoryProviders: () => ({ ids: ['signalk-questdb'] }),
+      getHistoryProviderState: () => 'available' as const,
+    };
+    const ctrl = createInstrumentsController(deps);
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:port')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-load:port')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-temp:port')).toBe(false);
+    expect(ctrl.isHistoricalOnly('prop-rpm:port')).toBe(true);
+    expect(deps.store.cell('propulsion.port.revolutions').epoch).toBe(0);
+
+    ctrl.dispose();
+  });
+
+  it('keeps the newest catalog when an older anonymous history scan finishes later', async () => {
+    let token: string | undefined;
+    let anonymousSignal: AbortSignal | undefined;
+    let resolveAnonymousPaths: (() => void) | undefined;
+    const anonymousPathsReady = new Promise<void>((resolve) => {
+      resolveAnonymousPaths = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('/history/paths?')) {
+          const authorization = (init?.headers as Record<string, string> | undefined)
+            ?.Authorization;
+          if (!authorization) {
+            anonymousSignal = init?.signal ?? undefined;
+            await anonymousPathsReady;
+            return jsonResponse(200, ['propulsion.old.revolutions']);
+          }
+          return jsonResponse(200, ['propulsion.current.revolutions']);
+        }
+        if (url.includes('/history/values?')) {
+          const authorization = (init?.headers as Record<string, string> | undefined)
+            ?.Authorization;
+          const path = authorization
+            ? 'propulsion.current.revolutions'
+            : 'propulsion.old.revolutions';
+          return jsonResponse(200, {
+            range: {},
+            values: [{ path }],
+            data: [['2026-07-01T00:00:00Z', 20]],
+          });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+
+    const deps = {
+      ...makeDeps(),
+      getToken: () => token,
+      getHistoryProviders: () => ({ ids: ['signalk-questdb'] }),
+      getHistoryProviderState: () => 'available' as const,
+    };
+    const ctrl = createInstrumentsController(deps);
+    ctrl.setOpen(true);
+    token = 'approved';
+    ctrl.refreshCatalog();
+    await flushPromises();
+
+    expect(anonymousSignal?.aborted).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:current')).toBe(true);
+    resolveAnonymousPaths?.();
+    await flushPromises();
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:current')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:old')).toBe(false);
+
+    ctrl.dispose();
+  });
+
+  it('merges new paths into accepted history when another provider fails', async () => {
+    let secondScan = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/history/paths?') && url.includes('provider=kip')) {
+          return jsonResponse(501, {});
+        }
+        if (url.includes('/history/paths?')) {
+          return jsonResponse(200, [
+            secondScan ? 'propulsion.starboard.revolutions' : 'propulsion.port.revolutions',
+          ]);
+        }
+        if (url.includes('/history/values?')) {
+          const path = secondScan
+            ? 'propulsion.starboard.revolutions'
+            : 'propulsion.port.revolutions';
+          return jsonResponse(200, {
+            range: {},
+            values: [{ path }],
+            data: [['2026-07-01T00:00:00Z', 20]],
+          });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+    const providers = () => ({
+      ids: secondScan ? ['signalk-questdb', 'kip'] : ['signalk-questdb'],
+    });
+    const deps = {
+      ...makeDeps(),
+      getHistoryProviders: providers,
+      getHistoryProviderState: () => 'available' as const,
+    };
+    const ctrl = createInstrumentsController(deps);
+    ctrl.setOpen(true);
+    await flushPromises();
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:port')).toBe(true);
+
+    secondScan = true;
+    ctrl.refreshCatalog();
+    await flushPromises();
+    expect(ctrl.historyStatus).toBe('partial');
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:port')).toBe(true);
+    expect(ctrl.catalog.some((def) => def.id === 'prop-rpm:starboard')).toBe(true);
     ctrl.dispose();
   });
 

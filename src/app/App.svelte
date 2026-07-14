@@ -184,6 +184,7 @@ let kipPresent = $state<boolean | undefined>();
 let kipProbeState = $state<ProviderProbeState>('checking');
 let historyProviders = $state<HistoryProviders | undefined>();
 let historyProviderState = $state<ProviderProbeState>('checking');
+let historyProbeGeneration = 0;
 const notificationsApi = $derived(serverFeatures?.apis.has('notifications') ?? false);
 
 async function probeKip(retrying = false): Promise<void> {
@@ -193,12 +194,26 @@ async function probeKip(retrying = false): Promise<void> {
   kipProbeState = present === undefined ? 'failed' : present ? 'available' : 'absent';
 }
 
-async function probeHistoryProviders(retrying = false): Promise<void> {
+async function probeHistoryProviders(
+  retrying = false,
+  refreshOpenInstruments = false,
+): Promise<void> {
+  const generation = ++historyProbeGeneration;
   historyProviderState = retrying ? 'retrying' : 'checking';
+  // This helper runs synchronously inside the auth effect. Keep the state it updates out of that
+  // effect's dependency set, or assigning a fresh provider result retriggers the probe forever.
+  const previousIds = untrack(() => historyProviders?.ids.join('\u0000') ?? '');
   const providers = await fetchHistoryProviders(origin, authToken);
+  if (generation !== historyProbeGeneration) return;
   historyProviders = providers;
   historyProviderState =
     providers === undefined ? 'failed' : providers.ids.length > 0 ? 'available' : 'absent';
+  const providerIdsChanged = (providers?.ids.join('\u0000') ?? '') !== previousIds;
+  if ((refreshOpenInstruments || providerIdsChanged) && untrack(() => instruments.open)) {
+    // The refresh reads the provider state we just assigned. Keep those controller reads out of
+    // any effect that initiated this async probe, or the probe becomes its own dependency.
+    untrack(() => instruments.refreshCatalog());
+  }
 }
 
 // Every notifications.* path on the stream, mirrored for the Alarms panel's active-alert list:
@@ -447,6 +462,8 @@ const instruments = createInstrumentsController({
   store,
   origin,
   getToken: () => authToken,
+  getHistoryProviders: () => historyProviders,
+  getHistoryProviderState: () => historyProviderState,
   subscribe: (entries) => void client.raw.subscribe(entries),
   unsubscribe: (paths) => void client.raw.unsubscribe(paths),
   tilesStore: instrumentTiles,
@@ -1388,7 +1405,13 @@ function refreshAfterStreamReconnect(token: string | undefined): void {
     void marineRadar.start();
   });
   void probeKip(true);
-  void probeHistoryProviders(true);
+  void probeHistoryProviders(
+    true,
+    untrack(
+      () => instruments.historyStatus === 'failed' || instruments.historyStatus === 'partial',
+    ),
+  );
+  if (instruments.open) instruments.refreshLiveCatalog();
   if (untrack(() => companionBase === null)) probeCompanion();
   void units.syncFromServer(origin);
   void routeController.hydrateAndSeedCourse();
@@ -1455,7 +1478,9 @@ $effect(() => {
   if (untrack(() => companionBase === null)) probeCompanion();
   // History provider discovery: the v2 features list reports the history API even with no
   // provider registered, so the providers route is the real signal.
-  void probeHistoryProviders();
+  // The probe reads and updates provider state internally. The auth token is already an explicit
+  // dependency above, so keep those internal reads from feeding the effect back into itself.
+  untrack(() => void probeHistoryProviders(false, true));
   symbolsStore.setAuth(authToken);
   void refreshSymbols();
 });
@@ -1596,7 +1621,7 @@ const plotterActions = {
   },
   setLayerVisible,
   onRetryTides: () => loadTides(true),
-  onRetryHistoryProviders: () => void probeHistoryProviders(true),
+  onRetryHistoryProviders: () => void probeHistoryProviders(true, true),
   onRetryChartLocker: () => void companionStatus.refresh(),
   armMeasure,
   toggleCollisionMute,

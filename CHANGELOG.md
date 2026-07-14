@@ -6,6 +6,27 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0151"></a>
+
+## [0.15.1] - 2026-07-14
+
+### Added
+
+- Instrument discovery merges the live Signal K model with the preceding year of paths from
+  registered history providers within a bounded scan, including QuestDB, so seasonal engines and
+  sensors remain available to configure while stopped. Previously seen readings are labeled as not
+  reporting live and never replace current values with stored samples.
+
+### Fixed
+
+- Battery instruments include voltage, state of charge, time remaining, or current in their visible
+  labels, so multiple values from the same battery remain distinguishable in Customize and on tiles.
+- Instrument scans validate provider ownership and own-vessel population, bound provider, path, and
+  identifier input, retain accepted results through partial failures, cancel superseded history
+  queries, and reject malformed or incomplete provider responses.
+- Radar controls offer overlay settings only after the layer panel is ready, preventing an action
+  that could not open its destination during startup.
+
 <a id="v0150"></a>
 
 ## [0.15.0] - 2026-07-14

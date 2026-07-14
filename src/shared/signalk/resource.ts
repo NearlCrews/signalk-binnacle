@@ -25,6 +25,27 @@ export function fetchAuthedJson<T>(url: string, token: string | undefined): Prom
   return fetchJsonOrUndefined<T>(url, authInit(token));
 }
 
+export interface FetchJsonOutcome<T> {
+  state: 'ok' | 'not-found' | 'failed';
+  value?: T;
+}
+
+// Discovery scans need to distinguish a real absent branch from a transport or access failure so
+// accepted catalog data is not erased by a transient outage.
+export async function fetchAuthedJsonOutcome<T>(
+  url: string,
+  token: string | undefined,
+): Promise<FetchJsonOutcome<T>> {
+  try {
+    const response = await fetch(url, withTimeout(authInit(token)));
+    if (response.status === 404) return { state: 'not-found' };
+    if (!response.ok) return { state: 'failed' };
+    return { state: 'ok', value: (await response.json()) as T };
+  } catch {
+    return { state: 'failed' };
+  }
+}
+
 // Best-effort authenticated GET returning the response text, or undefined on any non-OK status,
 // network failure, or timeout. The text sibling of fetchAuthedJson, for SVG symbol bodies.
 export async function fetchAuthedText(

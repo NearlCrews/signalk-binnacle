@@ -8,10 +8,11 @@ interface Props {
   deps: TileDeps;
   reading: TileReading;
   zone: ZoneState;
+  historicalOnly?: boolean;
   onBack: () => void;
 }
 
-const { def, deps, reading, zone, onBack }: Props = $props();
+const { def, deps, reading, zone, historicalOnly = false, onBack }: Props = $props();
 
 const valueLine = $derived(
   `${reading.value}${reading.unit ? ` ${reading.unit}` : ''}${
@@ -52,6 +53,9 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
   <SubViewHeader title={def.label} backLabel="Back to instruments" {onBack} />
 
   <p class="muted-note">{def.description}</p>
+  {#if historicalOnly}
+    <p class="muted-note">Previously recorded, but not reporting live now.</p>
+  {/if}
 
   <dl class="stat-grid">
     <dt>Value</dt>

@@ -92,6 +92,57 @@ test('keeps chart controls legible and the instrument title on one line', async 
     .toBe(true);
 });
 
+test('keeps long battery readings distinguishable in a night-red tablet dock', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:theme', 'night-red');
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self\/electrical\/batteries$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        veryLongHouseBatteryBank: {
+          voltage: { value: 12.7 },
+          capacity: { stateOfCharge: { value: 0.8 }, timeRemaining: { value: 7200 } },
+          current: { value: -4.2 },
+        },
+      }),
+    }),
+  );
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
+  await dock.getByRole('button', { name: 'Customize instruments' }).click();
+  const labels = [
+    'Voltage · Very Long House Battery Bank',
+    'State of charge · Very Long House Battery Bank',
+    'Time remaining · Very Long House Battery Bank',
+    'Current · Very Long House Battery Bank',
+  ];
+  for (const label of labels) {
+    const checkbox = dock.getByRole('checkbox', { name: label, exact: true });
+    await expect(checkbox).toBeVisible();
+    await checkbox.check();
+  }
+  await dock.getByRole('button', { name: 'Done' }).click();
+  for (const label of labels) {
+    await expect(dock.getByRole('button', { name: new RegExp(`^${label},`) })).toBeVisible();
+  }
+  await expect
+    .poll(async () => {
+      const [bodyFits, dockFits] = await Promise.all([
+        page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1),
+        dock.evaluate((panel) => panel.scrollWidth <= panel.clientWidth + 1),
+      ]);
+      return bodyFits && dockFits;
+    })
+    .toBe(true);
+});
+
 test('honors reduced motion and keeps menu keyboard focus contained', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => localStorage.clear());

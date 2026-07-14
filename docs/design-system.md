@@ -182,7 +182,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   behind the reading. The button's accessible name includes the value, unit, freshness, alarm zone,
   and action. Warning, Alarm, and Stale also render as visible text badges, never color alone.
   Customize groups available instruments by category, and its Rescan action reruns instance discovery
-  for batteries, engines, tanks, solar, and cabin sensors.
+  for batteries, engines, tanks, solar, and cabin sensors. Discovery unions the live Signal K model
+  with concrete paths recorded during the preceding year by registered history providers within a
+  bounded scan. A previously seen reading remains enabled for configuration and carries the visible
+  "Previously seen, no live data" status.
+  The status remains in Shown and instrument detail until a live sample arrives. Scan progress and
+  provider failures use a status message while retaining live and previously accepted results.
+  Context-scoped value checks prevent another vessel's catalog paths from appearing. Stored samples
+  never populate a live instrument tile.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
