@@ -47,6 +47,12 @@
      for list rows (menu items, layer toggles), still a comfortable tap target, keeps lists compact
      without shrinking the primary actions. */
   --control-size: 2.75rem;
+  /* Space kept below helm controls when an installed touch PWA reaches into Android system chrome.
+     Browsers that report a real safe-area inset supply it automatically. Some Samsung PWA shells
+     report zero while their navigation bar still overlays the viewport, so the standalone coarse-
+     pointer fallback reserves one control target plus one spacing step (48px at the default root). */
+  --system-bar-fallback: calc(var(--control-size) + var(--space-1));
+  --system-bar-clearance: env(safe-area-inset-bottom, 0px);
   /* WCAG 2.5.5 sets 44px as the touch-target minimum, so list rows meet the same floor as the
      primary controls even though they read visually denser; kept equal to --control-size rather
      than its own value so the two cannot drift apart. */
@@ -113,6 +119,12 @@
   /* The modal scrim: light by day so the chart stays readable behind an emergency dialog, darker
      in the dark themes where removing light helps rather than hurts. */
   --scrim: rgb(11 34 51 / 0.3);
+}
+
+@media (display-mode: standalone) and (pointer: coarse) {
+  :root {
+    --system-bar-clearance: max(env(safe-area-inset-bottom, 0px), var(--system-bar-fallback));
+  }
 }
 
 @supports (height: 100dvh) {

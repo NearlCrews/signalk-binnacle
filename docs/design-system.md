@@ -41,6 +41,12 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
 - Targets: `--control-size` 2.75rem is the action tap target (buttons, pills, icon buttons);
   `--row-size` 2.5rem is the denser list-row height (menu items, layer toggles). Lists use the denser
   size, primary actions use the full size.
+- System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
+  with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
+  because some Android and Samsung shells report zero while the system bar still overlays the app.
+  Bottom controls add the clearance in normal layout flow so the chart shrinks above them. They do
+  not use device detection, fixed positioning, or a second viewport-height calculation. Bottom and
+  landscape-edge chrome must also include the appropriate `safe-area-inset-*` value.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`

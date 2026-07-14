@@ -291,6 +291,9 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
+  padding-block-end: calc(var(--space-2) + var(--system-bar-clearance));
+  padding-inline-start: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+  padding-inline-end: calc(var(--space-4) + env(safe-area-inset-right, 0px));
   /* Tall enough for a full control-size touch target, so it is not clipped at the bottom by the
      overflow-hidden viewport. */
   min-block-size: calc(var(--control-size) + var(--space-2));
@@ -377,6 +380,9 @@ function runPillAction(action: MenuItem, after?: () => void): void {
   .status-strip {
     gap: var(--space-1);
     padding: var(--space-1) var(--space-2);
+    padding-block-end: calc(var(--space-1) + var(--system-bar-clearance));
+    padding-inline-start: calc(var(--space-2) + env(safe-area-inset-left, 0px));
+    padding-inline-end: calc(var(--space-2) + env(safe-area-inset-right, 0px));
   }
   .strip-start {
     gap: var(--space-2);

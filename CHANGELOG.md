@@ -29,6 +29,8 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Installed touch PWAs now keep the bottom status strip above Android and Samsung system bars, even
+  when the browser reports no safe-area inset, and landscape chrome clears side insets.
 - Offline chart planning now validates cache statistics, reports retryable estimate failures, uses
   source-specific byte estimates, and keeps actual storage enforcement in the downloader.
 - Offline areas now preserve antimeridian-crossing rectangles when drawing, naming, fitting, and
