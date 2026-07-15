@@ -3,7 +3,7 @@ import type { SKFrame } from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
 import { AisTargets, parseIso8601DurationSeconds } from './ais-targets.svelte';
 
-function frame(ais: Record<string, Record<string, unknown>>, epoch = 1): SKFrame {
+function frame(ais: Record<string, Record<string, unknown>>, epoch = Date.now()): SKFrame {
   return {
     self: new Map(),
     ais: new Map(Object.entries(ais).map(([ctx, vals]) => [ctx, new Map(Object.entries(vals))])),
@@ -91,6 +91,53 @@ describe('AisTargets', () => {
     const list = ais.list();
     expect(list.find((t) => t.id === 'vessels.anchored')?.navigationState).toBe('anchored');
     expect(list.find((t) => t.id === 'vessels.silent')?.navigationState).toBeUndefined();
+  });
+
+  it('expires CPA and TCPA together while retaining the target position', () => {
+    let now = 1000;
+    const store = new SignalKStore();
+    const ais = new AisTargets(store, () => now);
+    store.applyFrame(
+      frame(
+        {
+          'vessels.risk': {
+            'navigation.position': { latitude: 0, longitude: 0 },
+            'navigation.closestApproach': { distance: 100, timeTo: 60 },
+          },
+        },
+        now,
+      ),
+    );
+    expect(ais.list()[0]).toMatchObject({ cpaMeters: 100, tcpaSeconds: 60 });
+    now += 30_001;
+    expect(ais.list()).toHaveLength(1);
+    expect(ais.list()[0].cpaMeters).toBeUndefined();
+    expect(ais.list()[0].tcpaSeconds).toBeUndefined();
+  });
+
+  it('hides telemetry from a previous connection generation', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame({
+      ...frame({ 'vessels.old': { 'navigation.position': { latitude: 0, longitude: 0 } } }),
+      generation: 1,
+    });
+    expect(ais.list()).toHaveLength(1);
+    store.applyFrame({ ...frame({}), generation: 2 });
+    expect(ais.list()).toHaveLength(0);
+  });
+
+  it('does not keep an old position alive when an unrelated target field updates', () => {
+    let now = 1000;
+    const store = new SignalKStore();
+    const ais = new AisTargets(store, () => now);
+    store.applyFrame(
+      frame({ 'vessels.old-fix': { 'navigation.position': { latitude: 0, longitude: 0 } } }, now),
+    );
+    expect(ais.list()).toHaveLength(1);
+    now += 7 * 60_000 + 1;
+    store.applyFrame(frame({ 'vessels.old-fix': { name: 'Still transmitting' } }, now));
+    expect(ais.list()).toHaveLength(0);
   });
 });
 

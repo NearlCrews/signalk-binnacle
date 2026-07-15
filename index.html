@@ -5,19 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/binnacle-icon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; form-action 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http: https:; connect-src 'self' http: https: ws: wss:; manifest-src 'self';"
+    >
     <meta name="theme-color" content="#cfe0ec">
-    <script>
-    try {
-      const theme = localStorage.getItem('binnacle:theme');
-      const colors = { day: '#cfe0ec', dusk: '#0f1a24', 'night-red': '#000000' };
-      if (theme && Object.hasOwn(colors, theme)) {
-        document.documentElement.dataset.theme = theme;
-        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors[theme]);
-      }
-    } catch {
-      // Storage can be unavailable in private browsing. The day theme remains the safe default.
-    }
-    </script>
+    <script src="/theme-bootstrap.js"></script>
     <meta name="description" content="A WebGL chartplotter for Signal K.">
     <title>Binnacle Chartplotter</title>
   </head>

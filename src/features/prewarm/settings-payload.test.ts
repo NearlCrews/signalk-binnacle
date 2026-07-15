@@ -39,6 +39,26 @@ describe('extractPositionWarm', () => {
       sources: ['seamark'],
     });
   });
+
+  it.each([
+    { radiusMeters: Number.NaN },
+    { radiusMeters: Number.POSITIVE_INFINITY },
+    { radiusMeters: 0 },
+    { moveThresholdMeters: -1 },
+    { intervalSecs: 59 },
+    { intervalSecs: 60.5 },
+    { baseZoom: -1 },
+    { baseZoom: 22.5 },
+    { baseZoom: 23 },
+  ])('rejects unsafe numeric settings: %o', (override) => {
+    expect(extractPositionWarm({ ...bareBlock, ...override })).toBeNull();
+  });
+
+  it('normalizes duplicate and empty source ids', () => {
+    expect(
+      extractPositionWarm({ ...bareBlock, sources: ['seamark', '', 'seamark', 'depth'] })?.sources,
+    ).toEqual(['seamark', 'depth']);
+  });
 });
 
 describe('buildConfigPayload', () => {

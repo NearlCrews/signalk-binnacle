@@ -74,6 +74,10 @@ export interface LayerManagerOptions {
   exclusive?: string[][];
 }
 
+type LayerRegistrationResult =
+  | { id: string; status: 'registered' }
+  | { id: string; status: 'failed'; error: unknown };
+
 export class LayerManager {
   #ctx: OverlayContext;
   #modules = new Map<string, OverlayModule>();
@@ -110,10 +114,34 @@ export class LayerManager {
   // batch turns a quadratic load-time cost into one restack. The final order is identical to
   // registering the same modules in the same sequence one at a time.
   async registerAll(modules: OverlayModule[]): Promise<void> {
+    const results = await this.registerBatch(modules);
+    const failures = results.filter(
+      (result): result is Extract<LayerRegistrationResult, { status: 'failed' }> =>
+        result.status === 'failed',
+    );
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map((failure) => failure.error),
+        `Could not register ${failures.length} overlay${failures.length === 1 ? '' : 's'}.`,
+      );
+    }
+  }
+
+  // Register independent overlay modules without allowing one optional provider failure to prevent
+  // the remaining modules from mounting. Each failed add is rolled back by #addModule, registration
+  // order is preserved, and the map is restacked exactly once after the batch settles.
+  async registerBatch(modules: OverlayModule[]): Promise<LayerRegistrationResult[]> {
+    const results: LayerRegistrationResult[] = [];
     for (const module of modules) {
-      await this.#addModule(module);
+      try {
+        await this.#addModule(module);
+        results.push({ id: module.id, status: 'registered' });
+      } catch (error) {
+        results.push({ id: module.id, status: 'failed', error });
+      }
     }
     this.#applyOrder();
+    return results;
   }
 
   // Add a single module (state restore, exclusion enforcement, add, visibility, and opacity)

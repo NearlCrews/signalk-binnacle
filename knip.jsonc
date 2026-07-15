@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["static/theme-bootstrap.js"],
   "includeEntryExports": true,
   "treatConfigHintsAsErrors": true,
   "cycles": {

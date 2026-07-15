@@ -6,6 +6,15 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Profiles now includes device-privacy actions to forget the local Signal K device token or erase
+  Binnacle settings, browser caches, IndexedDB data, profiles, and credentials. Erasure is blocked
+  during active MOB, anchor, navigation, route-edit, measurement, or unsaved-track work, is limited
+  to explicitly owned Binnacle storage, and reports partial failures.
+- Signal K resource requests now have an injectable transport with live credential lookup, bounded
+  timeouts, and instance-scoped write outcomes while existing clients retain their compatibility API.
+
 ### Changed
 
 - The development toolchain now uses one shared verification hierarchy across local hooks, CI, and
@@ -13,12 +22,32 @@ All notable changes to Binnacle are documented here. The format follows
   spelling checks, coverage floors, bundle budgets, package-content validation, exact local tool
   versions, and pinned GitHub Actions. Browser tests reuse the verified production build, and npm
   publication uses the exact tarball that passed the release gate.
+- Offline-chart discovery distinguishes an absent Chart Locker installation, refused access, and an
+  unreachable service. Saved-area orchestration now lives in a focused controller, and optional map
+  overlays register independently so a slow or broken server chart catalog cannot delay safety layers.
+  Chart Locker readiness checks use only the browser administrator session, preserving a refused
+  plugin base for recovery without allowing a device bearer token to mask a valid administrator.
+- Persisted settings now use bounded codecs with migration and repair reporting. Invalid stored
+  navigation, alarm, chart, instrument, layer, unit, profile-support, and authentication values are
+  replaced safely before they enter reactive state.
 
 ### Fixed
 
 - Async overlay, MapLibre event, and file-picker paths now declare or handle their promises
   explicitly, forecast risk cues use stable keys, and Svelte menu children use the native snippet
   path expected by the component API.
+- Stream reconnect generations now prevent values from a prior connection from becoming current.
+  AIS freshness is tracked per path, paired CPA and TCPA expire together, course calculations expire,
+  MOB alarms re-arm, anchor watch reports lost fixes, and radar rendering rejects stale center or
+  heading data.
+- Route arrival advancement now reconciles with the current server snapshot before writing an
+  absolute point index, preventing duplicate waypoint skips when the server has already advanced.
+- PMTiles range reads now verify status, `Content-Range`, length, and archive identity before caching.
+  Concurrent tide requests use the latest result, and track simplification preserves short
+  antimeridian crossings.
+- Server-provided chart symbols now require same-origin SVG paths, bounded metadata and bodies,
+  correct media types, and passive SVG content. The application entry point also applies a content
+  security policy and no longer needs an inline theme script.
 
 <a id="v0151"></a>
 

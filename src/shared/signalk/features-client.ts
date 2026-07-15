@@ -1,5 +1,4 @@
-import { fetchJsonOrUndefined } from '$shared/lib';
-import { authInit } from './resource';
+import { SignalKResourceClient } from './resource';
 
 // The server's v2 feature-discovery endpoint: GET /signalk/v2/features answers with the
 // available API ids and the installed plugins, so a client can detect (for example) the
@@ -14,10 +13,10 @@ export async function fetchServerFeatures(
   base: string,
   token?: string,
 ): Promise<ServerFeatures | undefined> {
-  const body = await fetchJsonOrUndefined<{ apis?: unknown; plugins?: unknown }>(
-    `${base}/signalk/v2/features?enabled=1`,
-    authInit(token),
-  );
+  const body = await new SignalKResourceClient({ getToken: () => token }).fetchJson<{
+    apis?: unknown;
+    plugins?: unknown;
+  }>(`${base}/signalk/v2/features?enabled=1`);
   if (!body || typeof body !== 'object') return undefined;
   const apis = new Set<string>();
   if (Array.isArray(body.apis)) {

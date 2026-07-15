@@ -100,7 +100,11 @@ describe('waypoint overlay', () => {
   it('renders a waypoint as a provided symbol once its image registers', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, text: async () => '<svg/>' } as unknown as Response),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } }),
+        ),
     );
     // No explicit icon: the binnacle:waypoint symbol is the host built-in for 'waypoint'.
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(waypointSymbol()));

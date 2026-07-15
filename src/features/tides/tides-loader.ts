@@ -112,7 +112,18 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     MAX_EVENT_ENTRIES,
   );
   let cooldownUntil = 0;
-  let inFlight = false;
+  let requestGeneration = 0;
+  let running = false;
+  let queued:
+    | {
+        store: TidesStore;
+        lat: number;
+        lon: number;
+        force: boolean;
+        generation: number;
+        waiters: Array<() => void>;
+      }
+    | undefined;
   let lastLat: number | undefined;
   let lastLon: number | undefined;
   // The day of the last load, so an anchored boat still refetches after midnight when the
@@ -232,99 +243,143 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     }
   }
 
-  return {
-    async load(store, lat, lon, force = false) {
-      const nowMs = deps.now();
-      if (inFlight || (!force && nowMs < cooldownUntil)) return;
-      const settled = store.status === 'ready' || store.status === 'no-coverage';
-      if (
-        !force &&
-        settled &&
-        lastLat !== undefined &&
-        lastLon !== undefined &&
-        dayKey(nowMs) === lastDay
-      ) {
-        if (haversineMeters(lastLat, lastLon, lat, lon) < SKIP_RADIUS_M) return;
-      }
-      inFlight = true;
-      store.setLoading();
-      try {
-        const day = dayKey(nowMs);
-        // Prefer the signalk-tides plugin when the server has it; anything it cannot answer
-        // (mid-start, no position fix, outside its sources' coverage) falls through to CO-OPS,
-        // including a rejection from an injected pluginTides. The plugin answers for the vessel's
-        // position, so when the viewed point is beyond the same usefulness radius CO-OPS stations
-        // get, fall through too: a pan to a far coast should show that coast, not the boat's tides.
-        if (deps.pluginAvailable()) {
-          const pluginKey = `plugin:${quantizeCellDeg(lat)},${quantizeCellDeg(lon)}:${day}`;
-          let pluginTide = await deps.pluginTides(lat, lon).catch(() => undefined);
-          const fromNetwork = pluginTide !== undefined;
-          if (!pluginTide) {
-            // A plugin hiccup (mid-start, offline) replays the day's persisted reading for this
-            // spot before conceding to CO-OPS, which is just as unreachable with the network down.
-            const stored = await deps.persist.get(pluginKey);
-            if (stored && stored.expires > nowMs) {
-              // The key quantizes to a 0.1 degree cell, so the stored distance was measured from
-              // a point up to several km away; remeasure from here before the radius gate.
-              const replayed = stored.value as TideReading;
-              pluginTide = {
-                ...replayed,
-                distanceMeters: haversineMeters(
-                  lat,
-                  lon,
-                  replayed.station.latitude,
-                  replayed.station.longitude,
-                ),
-              };
-              void deps.persist.prune(nowMs);
-            }
-          }
-          if (pluginTide && pluginTide.distanceMeters <= TIDE_RADIUS_M) {
-            lastLat = lat;
-            lastLon = lon;
-            lastDay = day;
-            if (fromNetwork) {
-              await deps.persist.put(pluginKey, pluginTide, eventsExpiresAt(nowMs));
-              void deps.persist.prune(nowMs);
-            }
-            const current = await nearestCurrentOrUndefined(lat, lon, nowMs, day);
-            store.setReadings(pluginTide, current, 'signalk-tides');
-            return;
+  async function performLoad(
+    store: TidesStore,
+    lat: number,
+    lon: number,
+    force: boolean,
+    generation: number,
+  ): Promise<void> {
+    const nowMs = deps.now();
+    if (!force && nowMs < cooldownUntil) return;
+    const settled = store.status === 'ready' || store.status === 'no-coverage';
+    if (
+      !force &&
+      settled &&
+      lastLat !== undefined &&
+      lastLon !== undefined &&
+      dayKey(nowMs) === lastDay
+    ) {
+      if (haversineMeters(lastLat, lastLon, lat, lon) < SKIP_RADIUS_M) return;
+    }
+    const isCurrent = (): boolean => generation === requestGeneration;
+    store.setLoading();
+    try {
+      const day = dayKey(nowMs);
+      // Prefer the signalk-tides plugin when the server has it; anything it cannot answer
+      // (mid-start, no position fix, outside its sources' coverage) falls through to CO-OPS,
+      // including a rejection from an injected pluginTides. The plugin answers for the vessel's
+      // position, so when the viewed point is beyond the same usefulness radius CO-OPS stations
+      // get, fall through too: a pan to a far coast should show that coast, not the boat's tides.
+      if (deps.pluginAvailable()) {
+        const pluginKey = `plugin:${quantizeCellDeg(lat)},${quantizeCellDeg(lon)}:${day}`;
+        let pluginTide = await deps.pluginTides(lat, lon).catch(() => undefined);
+        const fromNetwork = pluginTide !== undefined;
+        if (!pluginTide) {
+          // A plugin hiccup (mid-start, offline) replays the day's persisted reading for this
+          // spot before conceding to CO-OPS, which is just as unreachable with the network down.
+          const stored = await deps.persist.get(pluginKey);
+          if (stored && stored.expires > nowMs) {
+            // The key quantizes to a 0.1 degree cell, so the stored distance was measured from
+            // a point up to several km away; remeasure from here before the radius gate.
+            const replayed = stored.value as TideReading;
+            pluginTide = {
+              ...replayed,
+              distanceMeters: haversineMeters(
+                lat,
+                lon,
+                replayed.station.latitude,
+                replayed.station.longitude,
+              ),
+            };
+            void deps.persist.prune(nowMs);
           }
         }
-        await ensureLists(nowMs);
-        lastLat = lat;
-        lastLon = lon;
-        lastDay = day;
-        const nearTide = nearestStations(tideList ?? [], lat, lon, 1, TIDE_RADIUS_M)[0];
-        if (!nearTide) {
-          store.setNoCoverage();
+        if (pluginTide && pluginTide.distanceMeters <= TIDE_RADIUS_M) {
+          if (!isCurrent()) return;
+          lastLat = lat;
+          lastLon = lon;
+          lastDay = day;
+          if (fromNetwork) {
+            await deps.persist.put(pluginKey, pluginTide, eventsExpiresAt(nowMs));
+            void deps.persist.prune(nowMs);
+          }
+          const current = await nearestCurrentOrUndefined(lat, lon, nowMs, day);
+          if (!isCurrent()) return;
+          store.setReadings(pluginTide, current, 'signalk-tides');
           return;
         }
-        // The tide events and the current-station lookup are independent round trips; running
-        // them concurrently halves the cold-start wait on a slow boat link.
-        const [events, current] = await Promise.all([
-          eventsFor(tideEventCache, 'tide', deps.tideEvents, nearTide.station.id, nowMs, day),
-          // Per-station isolation: a current-station fetch (a reference-only station the loop skips,
-          // a CO-OPS hiccup) must degrade to no current, not reject the whole load and discard the
-          // tide events already fetched alongside it.
-          nearestCurrentOrUndefined(lat, lon, nowMs, day),
-        ]);
-        const tide: TideReading = {
-          station: nearTide.station,
-          distanceMeters: nearTide.distanceMeters,
-          events,
-        };
-        store.setReadings(tide, current, 'noaa-coops');
-      } catch (error) {
-        cooldownUntil = deps.now() + COOLDOWN_MS;
-        // Leave a breadcrumb: a persistent tides failure (provider down, network, parse) is
-        // otherwise undiagnosable behind the generic error state and the cooldown.
-        console.warn('[tides] load failed', error);
-        store.setError();
-      } finally {
-        inFlight = false;
       }
+      await ensureLists(nowMs);
+      if (!isCurrent()) return;
+      lastLat = lat;
+      lastLon = lon;
+      lastDay = day;
+      const nearTide = nearestStations(tideList ?? [], lat, lon, 1, TIDE_RADIUS_M)[0];
+      if (!nearTide) {
+        store.setNoCoverage();
+        return;
+      }
+      // The tide events and the current-station lookup are independent round trips; running
+      // them concurrently halves the cold-start wait on a slow boat link.
+      const [events, current] = await Promise.all([
+        eventsFor(tideEventCache, 'tide', deps.tideEvents, nearTide.station.id, nowMs, day),
+        // Per-station isolation: a current-station fetch (a reference-only station the loop skips,
+        // a CO-OPS hiccup) must degrade to no current, not reject the whole load and discard the
+        // tide events already fetched alongside it.
+        nearestCurrentOrUndefined(lat, lon, nowMs, day),
+      ]);
+      const tide: TideReading = {
+        station: nearTide.station,
+        distanceMeters: nearTide.distanceMeters,
+        events,
+      };
+      if (!isCurrent()) return;
+      store.setReadings(tide, current, 'noaa-coops');
+    } catch (error) {
+      if (!isCurrent()) return;
+      cooldownUntil = deps.now() + COOLDOWN_MS;
+      // Leave a breadcrumb: a persistent tides failure (provider down, network, parse) is
+      // otherwise undiagnosable behind the generic error state and the cooldown.
+      console.warn('[tides] load failed', error);
+      store.setError();
+    }
+  }
+
+  async function drain(first: NonNullable<typeof queued>): Promise<void> {
+    let request: NonNullable<typeof queued> | undefined = first;
+    while (request) {
+      try {
+        await performLoad(
+          request.store,
+          request.lat,
+          request.lon,
+          request.force,
+          request.generation,
+        );
+      } finally {
+        for (const resolve of request.waiters) resolve();
+      }
+      request = queued;
+      queued = undefined;
+    }
+    running = false;
+  }
+
+  return {
+    load(store, lat, lon, force = false) {
+      const generation = ++requestGeneration;
+      return new Promise<void>((resolve) => {
+        const request = { store, lat, lon, force, generation, waiters: [resolve] };
+        if (!running) {
+          running = true;
+          void drain(request);
+          return;
+        }
+        // Keep only the latest queued position. Earlier callers settle with that latest request,
+        // bounding provider traffic to one active request and one pending request during rapid pans.
+        queued = queued ? { ...request, waiters: [...queued.waiters, resolve] } : request;
+      });
     },
   };
 }

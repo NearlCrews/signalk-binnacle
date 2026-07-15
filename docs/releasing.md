@@ -63,3 +63,9 @@ Only after the owner explicitly approves publication:
    install from the registry.
 
 The workflow rejects a tag that disagrees with `package.json` or points to a commit outside `main`.
+
+The publish job requests `id-token: write` and adds npm provenance. Keep `NPM_TOKEN` configured until
+the npm package has a verified trusted-publisher binding for this repository and workflow. Migrating
+to token-free publishing requires an owner to configure that external npm setting, run a successful
+approved release, verify provenance and package ownership, and only then remove the repository
+secret. Repository code alone cannot prove or create the npm-side binding.

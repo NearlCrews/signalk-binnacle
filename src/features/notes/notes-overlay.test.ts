@@ -148,7 +148,11 @@ describe('notes overlay', () => {
   it('swaps a note to its provided symbol once registered, with the anchor offset', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, text: async () => '<svg/>' } as unknown as Response),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } }),
+        ),
     );
     const rasterize = vi.fn().mockResolvedValue({
       image: { width: 48, height: 48, data: new Uint8ClampedArray(4) } as never,

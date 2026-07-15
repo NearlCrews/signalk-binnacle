@@ -67,32 +67,54 @@ export interface UserChartSource {
 // fitBounds). A descriptor that fails the guard is dropped at load rather than trusted. Rejecting
 // non-url origins here also silently drops the browser-local file charts of older builds, whose
 // blobs no longer have a store.
-export function isUserChartSource(value: unknown): value is UserChartSource {
-  if (!isRecord(value)) return false;
-  if (!cleanText(value.id, MAX_USER_CHART_ID_LENGTH)) return false;
-  if (!cleanText(value.name, MAX_USER_CHART_NAME_LENGTH)) return false;
-  if (value.kind !== 'vector' && value.kind !== 'raster') return false;
+export function cleanUserChartSource(value: unknown): UserChartSource | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = cleanText(value.id, MAX_USER_CHART_ID_LENGTH);
+  const name = cleanText(value.name, MAX_USER_CHART_NAME_LENGTH);
+  if (!id || !name) return undefined;
+  if (value.kind !== 'vector' && value.kind !== 'raster') return undefined;
   const origin = value.origin;
-  if (!isRecord(origin)) return false;
-  if (origin.type !== 'url' || typeof origin.url !== 'string') return false;
-  if (!normalizeUserChartUrl(origin.url)) return false;
-  if (value.bounds !== undefined && !validBounds(value.bounds)) return false;
-  if (value.minzoom !== undefined && !validZoom(value.minzoom)) return false;
-  if (value.maxzoom !== undefined && !validZoom(value.maxzoom)) return false;
+  if (!isRecord(origin)) return undefined;
+  if (origin.type !== 'url' || typeof origin.url !== 'string') return undefined;
+  const url = normalizeUserChartUrl(origin.url);
+  if (!url) return undefined;
+  if (value.bounds !== undefined && !validBounds(value.bounds)) return undefined;
+  if (value.minzoom !== undefined && !validZoom(value.minzoom)) return undefined;
+  if (value.maxzoom !== undefined && !validZoom(value.maxzoom)) return undefined;
   if (
     value.minzoom !== undefined &&
     value.maxzoom !== undefined &&
     (value.minzoom as number) > (value.maxzoom as number)
   ) {
-    return false;
+    return undefined;
   }
+  let layers: string[] | undefined;
   if (value.layers !== undefined) {
-    if (!Array.isArray(value.layers) || value.layers.length > MAX_USER_CHART_LAYERS) return false;
-    if (!value.layers.every((layer) => cleanText(layer, MAX_USER_CHART_LAYER_ID_LENGTH))) {
-      return false;
+    if (!Array.isArray(value.layers) || value.layers.length > MAX_USER_CHART_LAYERS)
+      return undefined;
+    const seen = new Set<string>();
+    layers = [];
+    for (const layer of value.layers) {
+      const cleaned = cleanText(layer, MAX_USER_CHART_LAYER_ID_LENGTH);
+      if (!cleaned) return undefined;
+      if (!seen.has(cleaned)) layers.push(cleaned);
+      seen.add(cleaned);
     }
   }
-  return true;
+  return {
+    id,
+    name,
+    kind: value.kind,
+    origin: { type: 'url', url },
+    ...(value.bounds === undefined ? {} : { bounds: [...value.bounds] as Bbox4 }),
+    ...(value.minzoom === undefined ? {} : { minzoom: value.minzoom }),
+    ...(value.maxzoom === undefined ? {} : { maxzoom: value.maxzoom }),
+    ...(layers === undefined ? {} : { layers }),
+  };
+}
+
+export function isUserChartSource(value: unknown): value is UserChartSource {
+  return cleanUserChartSource(value) !== undefined;
 }
 
 // A staged import: the resolved descriptor, not yet saved. Staging reads the PMTiles metadata so

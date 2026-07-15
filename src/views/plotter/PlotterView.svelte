@@ -47,7 +47,7 @@ import type {
   ServerFeatures,
   SignalKStore,
 } from '$shared/signalk';
-import { SlideOver, type Theme, type ThemeController } from '$shared/ui';
+import { type PanelId, SlideOver, type Theme, type ThemeController } from '$shared/ui';
 import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
 import { loadWeatherMap } from '$widgets/weather-map';
 
@@ -120,7 +120,7 @@ interface FlatProps {
   categoriesOpen: import('$shared/settings').PersistedValue<Record<string, boolean>>;
 
   // Panel state
-  activePanel: string | null;
+  activePanel: PanelId | null;
   menuOpen: boolean;
   layersView: LayersView | undefined;
   noteLoader: NoteDetailLoader | undefined;
@@ -424,6 +424,7 @@ const {
 let mapCommands = $state<MapCommands | undefined>();
 let serverChartsStatus = $state<'loading' | 'ready' | 'partial' | 'error'>('loading');
 let retryServerCharts = $state<(() => void) | undefined>();
+let criticalOverlayError = $state<string | undefined>();
 let lazyPanelAttempt = $state(0);
 
 function retryLazyPanel(): void {
@@ -455,7 +456,7 @@ const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false)
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
   const distanceToGoMeters = routeDistanceToGoMeters;
   if (distanceToGoMeters == null) return undefined;
-  const sog = vessel.sogMps;
+  const sog = vessel.sogStale ? undefined : vessel.sogMps;
   return {
     distanceToGoMeters,
     timeToGoSeconds: sog == null ? undefined : etaSeconds(distanceToGoMeters, sog),
@@ -509,6 +510,12 @@ $effect(() => {
     {onUserChartsReady}
     onServerChartsReady={(retry) => (retryServerCharts = retry)}
     onServerChartsStatus={(status) => (serverChartsStatus = status)}
+    onCriticalOverlayError={(ids) => {
+      criticalOverlayError =
+        ids.length === 0
+          ? undefined
+          : `Navigation overlays failed to load (${ids.join(', ')}). Reload Binnacle before navigating.`;
+    }}
     {onViewChange}
     {onNoteSelect}
     {onNotes}
@@ -530,6 +537,11 @@ $effect(() => {
     <AuthBanner {auth} requestsUrl={accessRequestsUrl} />
   </div>
   <div class="top-banner-stack">
+    {#if criticalOverlayError}
+      <div class="alert-note alert-note--filled toast-banner" role="alert">
+        {criticalOverlayError}
+      </div>
+    {/if}
     {#if arrivalBanner}
       <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
     {/if}

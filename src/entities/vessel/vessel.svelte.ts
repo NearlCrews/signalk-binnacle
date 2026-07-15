@@ -70,7 +70,6 @@ export class OwnVessel {
   // when no clock is wired (tests, and any caller that does not need staleness). Reads the ticking
   // clock, so it flips on its own the moment the feed stops, without a fresh frame to trigger it.
   #stale = $derived.by<boolean>(() => {
-    if (!this.#clock) return false;
     return this.#pathStale(SK_PATHS.position);
   });
 
@@ -94,6 +93,14 @@ export class OwnVessel {
     return this.#pathStale(SK_PATHS.depthBelowTransducer);
   }
 
+  get windStale(): boolean {
+    return this.#pathStale(SK_PATHS.windSpeedApparent);
+  }
+
+  get pressureStale(): boolean {
+    return this.#pathStale(SK_PATHS.outsidePressure);
+  }
+
   #raw(path: string): unknown {
     return this.#store.cell(path).value;
   }
@@ -105,8 +112,10 @@ export class OwnVessel {
   }
 
   #pathStale(path: string): boolean {
+    const cell = this.#store.cell(path);
+    if (cell.epoch > 0 && cell.generation !== this.#store.generation) return true;
     if (!this.#clock) return false;
-    const epoch = this.#store.cell(path).epoch;
+    const epoch = cell.epoch;
     return epoch > 0 && this.#clock.now - epoch > VESSEL_DATA_STALE_MS;
   }
 }

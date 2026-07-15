@@ -10,3 +10,8 @@ export const AIS_STALE_TTL_MS = 7 * MINUTE_MS;
 // than the render path: rendering pauses in a hidden tab while the collision math keeps consuming
 // the store, so an expiry tied to rendering would feed it stale targets.
 export const AIS_PRUNE_INTERVAL_MS = 5_000;
+
+// A provider's CPA and TCPA are one safety assertion and expire together. They are derived from
+// both vessels' motion, so keeping them for the full slow-target TTL would present obsolete risk
+// long after either vessel changed course.
+export const AIS_APPROACH_STALE_TTL_MS = 30_000;

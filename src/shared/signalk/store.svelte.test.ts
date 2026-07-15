@@ -84,6 +84,50 @@ describe('SignalKStore', () => {
     expect(store.cell('navigation.position').epoch).toBe(1234);
   });
 
+  it('uses per-path receipt times and stamps the active connection generation', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      self: new Map([['navigation.position', { latitude: 0, longitude: 0 }]]),
+      selfEpochs: new Map([['navigation.position', 900]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+      generation: 2,
+    });
+    expect(store.generation).toBe(2);
+    expect(store.cell('navigation.position').epoch).toBe(900);
+    expect(store.cell('navigation.position').generation).toBe(2);
+  });
+
+  it('ignores a late frame from an older connection generation', () => {
+    const store = new SignalKStore();
+    store.applyFrame({ ...frame({ 'navigation.speedOverGround': 5 }), generation: 2 });
+    expect(
+      store.applyFrame({
+        ...frame({ 'navigation.speedOverGround': 99 }),
+        generation: 1,
+        connection: { phase: 'closed', attempt: 9 },
+      }),
+    ).toBe(false);
+
+    expect(store.generation).toBe(2);
+    expect(store.cell('navigation.speedOverGround').value).toBe(5);
+    expect(store.connection.phase).not.toBe('closed');
+  });
+
+  it('tracks notification clear and re-raise activations without clearing the latch on reconnect', () => {
+    const store = new SignalKStore();
+    const emergency = { state: 'emergency', message: 'MOB' };
+    store.applyFrame({ ...frame({ 'notifications.mob': emergency }), generation: 1 });
+    expect(store.cell('notifications.mob').activation).toBe(1);
+    store.applyFrame({ ...frame({}), generation: 2 });
+    expect(store.cell('notifications.mob').activation).toBe(1);
+    store.applyFrame({ ...frame({ 'notifications.mob': emergency }), generation: 2 });
+    expect(store.cell('notifications.mob').activation).toBe(1);
+    store.applyFrame({ ...frame({ 'notifications.mob': null }), generation: 2 });
+    store.applyFrame({ ...frame({ 'notifications.mob': emergency }), generation: 2 });
+    expect(store.cell('notifications.mob').activation).toBe(2);
+  });
+
   it('reacts only for the changed cell, not unrelated cells', () => {
     const store = new SignalKStore();
     const cleanup = $effect.root(() => {

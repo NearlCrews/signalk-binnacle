@@ -85,6 +85,39 @@ describe('CourseGuidance', () => {
     expect(g.isLastPoint).toBe(true);
   });
 
+  it('uses route direction for stepping and final-point state', () => {
+    const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    g.seed(
+      {
+        activeRoute: {
+          href: '/resources/routes/r',
+          pointIndex: 2,
+          pointTotal: 3,
+          reverse: true,
+        },
+      },
+      undefined,
+    );
+    expect(g.canAdvanceRoute).toBe(true);
+    expect(g.canRetreatRoute).toBe(false);
+    expect(g.isLastPoint).toBe(false);
+    g.seed(
+      {
+        activeRoute: {
+          href: '/resources/routes/r',
+          pointIndex: 0,
+          pointTotal: 3,
+          reverse: true,
+        },
+      },
+      undefined,
+    );
+    expect(g.canAdvanceRoute).toBe(false);
+    expect(g.canRetreatRoute).toBe(true);
+    expect(g.isLastPoint).toBe(true);
+  });
+
   it('keeps calcValues live from streamed leaf deltas, not just the REST seed', () => {
     const store = storeWith({
       'navigation.position': { latitude: 0, longitude: 0 },
@@ -188,6 +221,26 @@ describe('CourseGuidance', () => {
     expect(g.arrived).toBe(true);
     // 25 percent outside, past the exit margin: a real departure clears the latch.
     applySelf(store, { 'navigation.course.calcValues.distance': 125 }, 3);
+    expect(g.arrived).toBe(false);
+  });
+
+  it('expires frozen provider calculations so stale distance cannot trigger arrival', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    applySelf(
+      store,
+      {
+        'navigation.position': { latitude: 0, longitude: 0 },
+        'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+        'navigation.course.calcValues.distance': 50,
+      },
+      clock.now,
+    );
+    const g = new CourseGuidance(store, new OwnVessel(store, clock), clock);
+    expect(g.arrived).toBe(true);
+    clock.now += 30_001;
+    expect(g.source).toBe('computed');
+    expect(g.distanceToNextMeters).toBeUndefined();
     expect(g.arrived).toBe(false);
   });
 

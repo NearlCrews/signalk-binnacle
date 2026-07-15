@@ -11,8 +11,8 @@ area, included charts, completion state, and update date.
 3. Open Binnacle and choose **Offline charts**.
 
 Binnacle keeps Offline charts visible when Chart Locker is absent or unavailable. The menu item
-explains whether the plugin needs to be installed, started, or accessed through an administrator
-session.
+distinguishes a missing plugin, refused access, and an unreachable service so it can explain whether
+Chart Locker needs to be installed, started, or accessed through an administrator session.
 
 ## Administrator access
 
@@ -43,10 +43,17 @@ The access states mean different things:
 Binnacle checks `/skServer/loginStatus` before choosing an access message. It sends the browser's
 administrator session to Chart Locker management routes with credentials included and does not attach
 the Binnacle device bearer token because that token can mask a valid administrator cookie on secured
-servers. The lightweight installation probe also tries the administrator session first, then falls
-back to an approved Binnacle token only when the server refuses the cookie request. A not-ready
-response still identifies Chart Locker as installed, while the status remains explicit about service
-readiness.
+servers. The lightweight installation probe uses the same administrator session and never attaches
+the Binnacle device bearer token. A not-ready response still identifies Chart Locker as installed,
+while the status remains explicit about service readiness.
+
+Browser PMTiles reads are accepted only when the server honors the requested byte range and returns a
+matching `Content-Range` and body length. A short response is accepted only at the declared end of the
+archive. A strong ETag, or a `Last-Modified` value paired with the declared archive size, also verifies
+that cached blocks belong to the same archive version. Without either validator, Binnacle still checks
+the range bounds but cannot enforce version identity across requests. The service worker does not
+cache Signal K API responses or PMTiles range responses; PMTiles blocks use their dedicated IndexedDB
+store.
 
 ## Save an area
 

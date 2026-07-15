@@ -102,9 +102,14 @@ export interface SubscribeEntry {
 export interface SKFrame {
   self: Map<string, Value>;
   selfSources?: Map<string, PathSource>;
+  selfEpochs?: Map<string, number>;
   ais?: Map<string, Map<string, Value>>;
+  aisEpochs?: Map<string, Map<string, number>>;
   connection: ConnectionState;
   epoch: number;
+  // Changes on every successful WebSocket open. Consumers retain safety latches across a
+  // reconnect, but reject ordinary telemetry stamped by an older connection generation.
+  generation?: number;
   // The server-assigned own-vessel context from hello (vessels.urn:...), once known, so the main
   // thread can exclude self from context-keyed REST responses (the AIS trails).
   selfContext?: string;
@@ -114,6 +119,8 @@ export interface SKFrame {
 // the most recent update for staleness pruning.
 export interface AisTargetState {
   values: Map<string, Value>;
+  epochs: Map<string, number>;
+  generations: Map<string, number>;
   lastUpdate: number;
 }
 

@@ -55,7 +55,7 @@ describe('ais overlay', () => {
     expect(fc.features).toHaveLength(1);
   });
 
-  it('renders stale targets untouched: expiry belongs to the app timer', () => {
+  it('retains stale targets for pruning but does not render a stale position', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
@@ -69,13 +69,14 @@ describe('ais overlay', () => {
         ],
       ]),
       connection: { phase: 'open', attempt: 0 },
-      // Hours past any staleness TTL; the overlay must still draw it rather than prune it.
+      // Hours past the position TTL. The entity retains it until the prune timer runs, but the
+      // overlay must not present the old position as current traffic.
       epoch: Date.now() - 10_000_000,
     });
     overlay.sync(ctxFor(map));
     const source = [...map.sources.values()][0];
     const fc = source.data as { features: unknown[] };
-    expect(fc.features).toHaveLength(1);
+    expect(fc.features).toHaveLength(0);
     expect(store.aisTargets.size).toBe(1);
   });
 

@@ -2,7 +2,7 @@ import type { OwnVessel } from '$entities/vessel';
 import { isLatLon, type LatLon } from '$shared/geo';
 import { isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
-import { PersistedValue, type StorageLike } from '$shared/settings';
+import { type PersistedCodec, PersistedValue, type StorageLike } from '$shared/settings';
 import { isSoundingNotification, type SignalKStore, SK_PATHS } from '$shared/signalk';
 
 // The mark this station made: where and when the person went in. Persisted so a reload during a
@@ -13,9 +13,9 @@ export interface MobMark {
   epochMs: number;
 }
 
-function validMark(value: MobMark | null): MobMark | null {
+function validMark(value: unknown): MobMark | null {
   if (!isRecord(value)) return null;
-  if (!isFiniteNumber(value.epochMs)) return null;
+  if (!isFiniteNumber(value.epochMs) || value.epochMs < 0 || value.epochMs > 8.64e15) return null;
   if (value.position !== undefined && !isLatLon(value.position)) return null;
   // Rebuilt as a clean literal: returning the raw localStorage object would re-persist any unknown
   // extra properties forever (the same hazard anchor's validLocal guards against).
@@ -28,6 +28,22 @@ function validMark(value: MobMark | null): MobMark | null {
   };
 }
 
+const mobMarkCodec: PersistedCodec<MobMark | null> = {
+  decode(value) {
+    if (value === null) return { state: 'valid', value: null };
+    const clean = validMark(value);
+    if (!clean || !isRecord(value)) return { state: 'invalid' };
+    const positionExact =
+      value.position === undefined ||
+      (isRecord(value.position) && Object.keys(value.position).length === 2);
+    const expectedKeys = value.position === undefined ? 1 : 2;
+    return {
+      state: Object.keys(value).length === expectedKeys && positionExact ? 'valid' : 'migrated',
+      value: clean,
+    };
+  },
+};
+
 // Man-overboard state. A local trigger marks the vessel position and persists it; the stream's
 // notifications.mob is also reflected, so an MOB raised by another station (a crew phone) raises
 // the strip here, with its mark when the notification carries a position. Cancel clears only the
@@ -38,7 +54,8 @@ export class MobStore {
   #clock: ReactiveClock | undefined;
   #persisted: PersistedValue<MobMark | null>;
   #local = $state<MobMark | null>(null);
-  #acknowledged = $state(false);
+  #localAcknowledged = $state(false);
+  #remoteAcknowledgedActivation = $state<number | undefined>(undefined);
 
   constructor(
     store: SignalKStore,
@@ -49,7 +66,12 @@ export class MobStore {
     this.#store = store;
     this.#vessel = vessel;
     this.#clock = clock;
-    this.#persisted = new PersistedValue<MobMark | null>('binnacle:mob', null, storage);
+    this.#persisted = new PersistedValue<MobMark | null>(
+      'binnacle:mob',
+      null,
+      storage,
+      mobMarkCodec,
+    );
     this.#local = validMark(this.#persisted.value);
     // Pre-create the cell so the first reactive read finds a tracked cell (the OwnVessel pitfall).
     store.ensureCells([SK_PATHS.mobNotification]);
@@ -126,7 +148,11 @@ export class MobStore {
   }
 
   get acknowledged(): boolean {
-    return this.#acknowledged;
+    if (this.#local) return this.#localAcknowledged;
+    if (!this.#remoteActive) return false;
+    return (
+      this.#remoteAcknowledgedActivation === this.#store.cell(SK_PATHS.mobNotification).activation
+    );
   }
 
   // Snapshot the boat position and time WITHOUT committing anything: the press-time capture that
@@ -136,7 +162,7 @@ export class MobStore {
   // throws DataCloneError and the boat-wide alarm silently never goes out).
   capture(): MobMark | undefined {
     const boat = this.#vessel.position;
-    if (!boat) return undefined;
+    if (!boat || this.#vessel.positionStale) return undefined;
     return {
       position: { latitude: boat.latitude, longitude: boat.longitude },
       epochMs: this.#clock?.now ?? 0,
@@ -155,20 +181,24 @@ export class MobStore {
   // since), the alarm still raises, position-less.
   trigger(mark?: MobMark): MobMark {
     const committed = mark ?? this.capture() ?? { epochMs: this.#clock?.now ?? 0 };
-    this.#acknowledged = false;
+    this.#localAcknowledged = false;
     this.#setLocal(committed);
     return committed;
   }
 
   // Clear the local mark (recovery complete, or an accidental tap).
   cancel(): void {
-    this.#acknowledged = false;
+    this.#localAcknowledged = false;
     this.#setLocal(null);
   }
 
   // Silence the tone; the strip and mark stay until canceled.
   acknowledge(): void {
-    this.#acknowledged = true;
+    if (this.#local) {
+      this.#localAcknowledged = true;
+    } else if (this.#remoteActive) {
+      this.#remoteAcknowledgedActivation = this.#store.cell(SK_PATHS.mobNotification).activation;
+    }
   }
 
   #setLocal(next: MobMark | null): void {

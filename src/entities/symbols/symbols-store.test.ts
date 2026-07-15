@@ -75,16 +75,26 @@ describe('SymbolsStore resolve', () => {
     // foreign declares 'waypoint' but is not adopted (fsk), so it is not offered.
     expect(store.forRole('waypoint')).toEqual([both]);
   });
+
+  it('keeps the first symbol when a malformed catalog repeats a uuid', () => {
+    const first = sym({ aliases: ['custom:first'], url: '/s/first.svg' });
+    const duplicate = sym({ aliases: ['custom:second'], url: '/s/second.svg' });
+    const store = new SymbolsStore('http://pi', undefined, [first, duplicate]);
+
+    expect(store.symbols).toEqual([first]);
+    expect(store.resolve('custom:first')).toBe(first);
+    expect(store.resolve('custom:second')).toBeUndefined();
+  });
 });
 
 describe('SymbolsStore svgText', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  const svgResponse = (text = '<svg xmlns="http://www.w3.org/2000/svg"/>'): Response =>
+    new Response(text, { headers: { 'Content-Type': 'image/svg+xml' } });
+
   it('fetches the server-relative asset with auth and caches it per uuid', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => '<svg xmlns="http://www.w3.org/2000/svg"/>',
-    } as unknown as Response);
+    const fetchMock = vi.fn().mockResolvedValue(svgResponse());
     vi.stubGlobal('fetch', fetchMock);
     const symbol = sym({});
     const store = new SymbolsStore('http://pi', 'tok', [symbol]);
@@ -94,30 +104,74 @@ describe('SymbolsStore svgText', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://pi/signalk/symbol-manager/symbols/u1.svg');
     expect((init as RequestInit).headers).toEqual({ Authorization: 'Bearer tok' });
+    expect(init).toMatchObject({ credentials: 'omit', cache: 'no-store', redirect: 'error' });
   });
 
   it('returns undefined for a non-OK response, a non-SVG body, or a thrown fetch', async () => {
     const symbol = sym({});
     const freshText = (): Promise<string | undefined> =>
       new SymbolsStore('http://pi', undefined, [symbol]).svgText(symbol);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false } as unknown as Response));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })));
     expect(await freshText()).toBeUndefined();
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, text: async () => '<html>nope</html>' } as never),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('<html>nope</html>', { headers: { 'Content-Type': 'text/html' } }),
+        ),
     );
     expect(await freshText()).toBeUndefined();
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
     expect(await freshText()).toBeUndefined();
   });
 
-  it('passes an absolute asset url through unchanged', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, text: async () => '<svg/>' } as unknown as Response);
+  it('refuses an absolute asset url without making a request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(svgResponse());
     vi.stubGlobal('fetch', fetchMock);
     const symbol = sym({ url: 'https://cdn.example/flag.svg' });
-    await new SymbolsStore('http://pi', undefined, [symbol]).svgText(symbol);
-    expect(fetchMock.mock.calls[0][0]).toBe('https://cdn.example/flag.svg');
+    expect(
+      await new SymbolsStore('http://pi', undefined, [symbol]).svgText(symbol),
+    ).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects active content, external references, and oversized SVG bodies', async () => {
+    const symbol = sym({});
+    const load = async (body: string, headers: HeadersInit = {}): Promise<string | undefined> => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(body, { headers: { 'Content-Type': 'image/svg+xml', ...headers } }),
+          ),
+      );
+      return new SymbolsStore('http://pi', undefined, [symbol]).svgText(symbol);
+    };
+    expect(await load('<svg><script>alert(1)</script></svg>')).toBeUndefined();
+    expect(
+      await load(
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/2000/svg"><x:foreignObject/></svg>',
+      ),
+    ).toBeUndefined();
+    expect(
+      await load(
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/2000/svg"><x:script/></svg>',
+      ),
+    ).toBeUndefined();
+    expect(await load('<svg><use href="https://evil.example/a.svg#x"/></svg>')).toBeUndefined();
+    expect(
+      await load(
+        '<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="https://evil.example/a.svg#x"/></svg>',
+      ),
+    ).toBeUndefined();
+    expect(await load('<svg><use href=https://evil.example/a.svg#x /></svg>')).toBeUndefined();
+    expect(await load('<svg><feImage href="https://evil.example/a.svg"/></svg>')).toBeUndefined();
+    expect(
+      await load('<svg><style>.x{fill:url(https\\3a //evil.example/x)}</style></svg>'),
+    ).toBeUndefined();
+    expect(await load('<svg><path onclick="alert(1)"/></svg>')).toBeUndefined();
+    expect(await load(`<svg>${' '.repeat(256 * 1024)}</svg>`)).toBeUndefined();
   });
 });

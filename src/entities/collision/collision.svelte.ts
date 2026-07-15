@@ -205,9 +205,16 @@ export class CollisionAssessment {
     // left minutes ago would alarm (or fail to alarm) on geometry that no longer exists. Only the
     // locally computed branch stands down for it; provider-sourced contacts keep alarming, since
     // their CPA and TCPA come from the server and need no local fix.
+    const sogMps = this.#vessel.sogMps;
+    const cogRad = this.#vessel.cogRad;
     const own =
-      position && !this.#vessel.positionStale
-        ? { position, sogMps: this.#vessel.sogMps ?? 0, cogRad: this.#vessel.cogRad ?? 0 }
+      position &&
+      !this.#vessel.positionStale &&
+      sogMps !== undefined &&
+      !this.#vessel.sogStale &&
+      cogRad !== undefined &&
+      !this.#vessel.cogStale
+        ? { position, sogMps, cogRad }
         : undefined;
     const next = assessContacts(
       own,

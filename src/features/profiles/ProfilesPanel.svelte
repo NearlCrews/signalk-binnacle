@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
 import type { Profile, ProfileSyncState } from '$entities/profile';
+import type { PrivacyReport } from '$shared/privacy';
 import type { AuthController } from '$shared/signalk';
 import {
   ArmedRow,
@@ -13,6 +14,7 @@ import {
   SavedList,
   SlideOver,
 } from '$shared/ui';
+import DevicePrivacySection from './DevicePrivacySection.svelte';
 import { type ImportedProfile, parseProfilesJson } from './profile-io';
 
 interface Props {
@@ -32,6 +34,8 @@ interface Props {
   // Download a profile as a JSON file, and import profiles from the text of a JSON file.
   onExport: (id: string) => void;
   onImport: (profiles: ImportedProfile[]) => number;
+  onForgetCredentials: () => Promise<PrivacyReport>;
+  onEraseAllLocalData: () => Promise<PrivacyReport>;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -52,6 +56,8 @@ const {
   onSetDefault,
   onExport,
   onImport,
+  onForgetCredentials,
+  onEraseAllLocalData,
   onClose,
   onBack,
 }: Props = $props();
@@ -303,6 +309,7 @@ function useProfile(id: string): void {
       {/if}
     {/snippet}
   </SavedList>
+  <DevicePrivacySection {onForgetCredentials} {onEraseAllLocalData} />
 </SlideOver>
 
 <style>

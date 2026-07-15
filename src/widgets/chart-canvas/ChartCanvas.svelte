@@ -108,6 +108,9 @@ interface Props {
   onUserChartsReady?: (registrar: UserChartRegistrar) => void;
   onServerChartsReady?: (retry: () => void) => void;
   onServerChartsStatus?: (status: 'loading' | 'ready' | 'partial' | 'error') => void;
+  // Critical navigation overlays failed to mount. The host surfaces this instead of leaving a
+  // navigator with an apparently healthy chart that is missing the vessel or a safety mark.
+  onCriticalOverlayError?: (overlayIds: string[]) => void;
   onViewChange?: (view: MapView) => void;
   onNoteSelect?: (selection: NoteSelection | undefined) => void;
   // The on-screen POI set, forwarded from the notes overlay to the POI search.
@@ -180,6 +183,7 @@ const {
   onUserChartsReady,
   onServerChartsReady,
   onServerChartsStatus,
+  onCriticalOverlayError,
   onViewChange,
   onNoteSelect,
   onNotes,
@@ -366,17 +370,6 @@ onMount(async () => {
           else routeStore.clearHighlight();
         }
       });
-      // A URL chart this device synced to the server comes back from the charts API with the same id
-      // as its local user-chart descriptor. Drop those server entries so the chart registers once,
-      // from the local descriptor (the manageable version); other devices, with no local descriptor,
-      // still see it as a server chart.
-      const localChartIds = new Set((userCharts?.sources ?? []).map((source) => source.id));
-      onServerChartsStatus?.('loading');
-      const fetchedCharts = await fetchCharts(origin, chartsToken);
-      const charts = (fetchedCharts ?? []).filter((chart) => !localChartIds.has(chart.identifier));
-      onServerChartsStatus?.(fetchedCharts === undefined ? 'error' : 'ready');
-      if (isDestroyed()) return;
-
       // Build every overlay, then register the whole stack in one batch so the layer order is
       // applied once instead of restacking after each. The inter-band order comes from Z_ORDER (own
       // vessel and collision pinned on top, then the navigator's routes and track, then AIS and the
@@ -415,6 +408,37 @@ onMount(async () => {
         timeTravel,
         marineRadarLayer,
       });
+      const criticalOverlayIds = new Set([
+        OWN_VESSEL_OVERLAY_ID,
+        COLLISION_OVERLAY_ID,
+        MOB_OVERLAY_ID,
+        'anchor-watch',
+        'course',
+        'routes',
+      ]);
+      const criticalOverlays = dynamicOverlays.filter((overlay) =>
+        criticalOverlayIds.has(overlay.id),
+      );
+      const supportingOverlays = dynamicOverlays.filter(
+        (overlay) => !criticalOverlayIds.has(overlay.id),
+      );
+      const dynamicResults = await mgr.registerBatch(criticalOverlays);
+      dynamicResults.push(...(await mgr.registerBatch(supportingOverlays)));
+      const registeredDynamicIds = new Set(
+        dynamicResults
+          .filter((result) => result.status === 'registered')
+          .map((result) => result.id),
+      );
+      const criticalFailures = dynamicResults.filter(
+        (result) => result.status === 'failed' && criticalOverlayIds.has(result.id),
+      );
+      for (const result of dynamicResults) {
+        if (result.status === 'failed') {
+          console.warn(`Could not register overlay "${result.id}".`, result.error);
+        }
+      }
+      onCriticalOverlayError?.(criticalFailures.map((failure) => failure.id));
+
       // Route the remote raster overlays through the Chart Locker tile proxy when it is installed,
       // so the boat shares one cache and works offline. When it is absent, the sources keep their direct
       // upstream URLs (a standalone install is unchanged). The NASA GIBS ocean fields stay direct: they
@@ -422,21 +446,9 @@ onMount(async () => {
       // The bathymetry band (Seascape's DEM pair, the existing STREAMING_CHART_SOURCES rasters, and
       // Seascape's vector pair, in that registration order) is built by buildBathymetryOverlays; see
       // its own comment for why that relative order is load-bearing.
-      let chartRegistrationFailed = false;
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local async accumulator
       const serverChartIds = new Set<string>();
-      for (const chart of charts) {
-        try {
-          await mgr.register(createChartOverlay(chart, origin, 'basemap', () => chartsToken));
-          serverChartIds.add(chart.identifier);
-        } catch (error) {
-          chartRegistrationFailed = true;
-          console.warn(`Could not register server chart "${chart.identifier}".`, error);
-        }
-      }
-      if (chartRegistrationFailed) onServerChartsStatus?.('partial');
-
-      await mgr.registerAll([
+      const providerResults = await mgr.registerBatch([
         ...buildBathymetryOverlays({ companionBase }),
         ...buildOceanSources().map((source) => createOceanOverlay(source)),
         // Within the safety band, registration order is z, so the seamark navigation aids draw over
@@ -448,8 +460,12 @@ onMount(async () => {
         ...proxiedSources(SEAMARK_SOURCES, companionBase).map((source) =>
           createSeamarkOverlay(source),
         ),
-        ...dynamicOverlays,
       ]);
+      for (const result of providerResults) {
+        if (result.status === 'failed') {
+          console.warn(`Could not register overlay "${result.id}".`, result.error);
+        }
+      }
       // Capture the manager so the time-travel review effect can dim the vessel and toggle history.
       manager = mgr;
       mapRef = map;
@@ -492,33 +508,56 @@ onMount(async () => {
       view.refresh();
       onReady?.(view);
 
-      async function retryServerCharts(): Promise<void> {
-        onServerChartsStatus?.('loading');
+      let serverChartsGeneration = 0;
+      let serverChartsQueue = Promise.resolve();
+
+      async function loadServerCharts(generation: number): Promise<void> {
         const next = await fetchCharts(origin, chartsToken);
-        if (isDestroyed()) return;
+        if (isDestroyed() || generation !== serverChartsGeneration) return;
         if (next === undefined) {
           onServerChartsStatus?.('error');
           return;
         }
+        // A URL chart synced by this device can also be returned by the server. Keep the local,
+        // manageable descriptor and omit its duplicate server entry.
         const localIds = new Set((userCharts?.sources ?? []).map((source) => source.id));
         const wanted = next.filter((chart) => !localIds.has(chart.identifier));
         for (const id of serverChartIds) mgr.unregister(chartSourceId(id));
         serverChartIds.clear();
-        let failed = false;
-        for (const chart of wanted) {
-          try {
-            await mgr.register(createChartOverlay(chart, origin, 'basemap', () => chartsToken));
-            serverChartIds.add(chart.identifier);
-          } catch (error) {
-            failed = true;
-            console.warn(`Could not register server chart "${chart.identifier}".`, error);
+        const results = await mgr.registerBatch(
+          wanted.map((chart) => createChartOverlay(chart, origin, 'basemap', () => chartsToken)),
+        );
+        for (const result of results) {
+          const chart = wanted.find(
+            (candidate) => chartSourceId(candidate.identifier) === result.id,
+          );
+          if (result.status === 'registered' && chart) serverChartIds.add(chart.identifier);
+          if (result.status === 'failed') {
+            console.warn(
+              `Could not register server chart "${chart?.identifier ?? result.id}".`,
+              result.error,
+            );
           }
         }
         view.refresh();
-        onServerChartsStatus?.(failed ? 'partial' : 'ready');
+        onServerChartsStatus?.(
+          results.some((result) => result.status === 'failed') ? 'partial' : 'ready',
+        );
+      }
+
+      function retryServerCharts(): Promise<void> {
+        const generation = ++serverChartsGeneration;
+        onServerChartsStatus?.('loading');
+        serverChartsQueue = serverChartsQueue
+          .catch(() => undefined)
+          .then(() => loadServerCharts(generation));
+        return serverChartsQueue;
       }
 
       onServerChartsReady?.(() => void retryServerCharts());
+      // Safety and vessel overlays are already live before optional chart discovery starts. A slow
+      // or unavailable charts endpoint therefore cannot postpone navigation rendering or map tools.
+      void retryServerCharts();
 
       const userChartRegistrar: UserChartRegistrar = {
         register: async (chart) => {
@@ -565,7 +604,10 @@ onMount(async () => {
       // colors it up front so it does not flash the day palette before the theme effect runs.
       workingRouteOverlay = createWorkingRouteOverlay(routeStore, theme);
       workingRouteOverlay.add(ctx);
-      runTick([...dynamicOverlays, workingRouteOverlay]);
+      runTick([
+        ...dynamicOverlays.filter((overlay) => registeredDynamicIds.has(overlay.id)),
+        workingRouteOverlay,
+      ]);
     },
   });
 });

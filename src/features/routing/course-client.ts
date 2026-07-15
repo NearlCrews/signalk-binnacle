@@ -34,6 +34,29 @@ export function advancePoint(
   return putResource(`${base}${COURSE}/activeRoute/nextPoint`, token, { value });
 }
 
+// Set the active route's absolute point index. Unlike nextPoint's signed relative increment,
+// repeating this request is idempotent, so a delayed local arrival reaction cannot skip a second
+// waypoint after another station already advanced the course.
+export function setActiveRoutePointIndex(
+  base: string,
+  token: string | undefined,
+  activeRoute: { href?: string; pointTotal?: number; reverse?: boolean },
+  pointIndex: number,
+): Promise<boolean> {
+  const href = activeRoute.href;
+  const total = activeRoute.pointTotal;
+  if (
+    typeof href !== 'string' ||
+    !href.trim() ||
+    !Number.isInteger(pointIndex) ||
+    pointIndex < 0 ||
+    (Number.isInteger(total) && total !== undefined && pointIndex >= total)
+  ) {
+    return Promise.resolve(false);
+  }
+  return putResource(`${base}${COURSE}/activeRoute/pointIndex`, token, { value: pointIndex });
+}
+
 export function refreshActiveRoute(base: string, token: string | undefined): Promise<boolean> {
   return putResource(`${base}${COURSE}/activeRoute/refresh`, token, {});
 }

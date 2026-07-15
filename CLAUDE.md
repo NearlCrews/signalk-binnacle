@@ -215,7 +215,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   paint property name (casts once through MapLibre's keyed paint types instead of re-spelling `as
   keyof AllPaintProperties` / `as never` at each call site), rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
-  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authed fetchAuthedJson, fetchAuthedText, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
+  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a
   `getSource(...) as { setData }` cast or a `{ type: 'FeatureCollection', features }` literal should use
   setSourceData and featureCollection instead.

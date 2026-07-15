@@ -53,9 +53,11 @@ arrive. If no spoke arrives for five seconds, Binnacle clears the echo and range
 picture as stale. Reconnect attempts use bounded jitter. Hiding the overlay, putting the radar in standby,
 or backgrounding the page closes the stream and clears the cached picture.
 
-The chart renderer requires a valid vessel position and heading. Spoke bearing supplies heading when
-present; otherwise Binnacle falls back to `navigation.headingTrue`. With neither source, it suppresses the
-echo instead of guessing north-up. Stream health and WebGL renderer health are reported separately.
+The chart renderer requires a fresh vessel position and heading. Spoke bearing supplies heading when
+present; otherwise Binnacle falls back to a fresh `navigation.headingTrue`. A reconnect generation and
+receipt-time check prevent pre-reconnect or timed-out center and heading values from positioning a new
+picture. Without fresh inputs, it suppresses the echo instead of guessing north-up. Stream health and
+WebGL renderer health are reported separately.
 
 ## Controls and units
 

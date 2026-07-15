@@ -102,6 +102,8 @@ describe('OwnVessel', () => {
         'navigation.courseOverGroundTrue': 1,
         'navigation.headingTrue': 2,
         'environment.depth.belowTransducer': 8,
+        'environment.wind.speedApparent': 5,
+        'environment.outside.pressure': 101325,
       }),
     );
     clock.now = 20_000;
@@ -109,6 +111,8 @@ describe('OwnVessel', () => {
     expect(vessel.cogStale).toBe(true);
     expect(vessel.headingStale).toBe(true);
     expect(vessel.depthStale).toBe(true);
+    expect(vessel.windStale).toBe(true);
+    expect(vessel.pressureStale).toBe(true);
 
     store.applyFrame({
       self: new Map([['environment.depth.belowTransducer', 7]]) as SKFrame['self'],
@@ -117,6 +121,20 @@ describe('OwnVessel', () => {
     });
     expect(vessel.depthStale).toBe(false);
     expect(vessel.headingStale).toBe(true);
+    expect(vessel.windStale).toBe(true);
+    expect(vessel.pressureStale).toBe(true);
+  });
+
+  it('marks old-generation telemetry stale immediately after reconnect', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame({
+      ...frame({ 'navigation.position': { latitude: 1, longitude: 2 } }),
+      generation: 1,
+    });
+    expect(vessel.positionStale).toBe(false);
+    store.applyFrame({ ...frame({}), generation: 2 });
+    expect(vessel.positionStale).toBe(true);
   });
 
   it('pre-creates its cells at construction so reactive reads track them', () => {

@@ -60,6 +60,25 @@ const isNonNegativeSafeInteger = (value: unknown): value is number =>
 const isPositiveFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
+const MAX_REGION_COUNT = 10_000;
+const MAX_SOURCE_COUNT = 512;
+const MAX_SOURCE_STATS_COUNT = 10_000;
+const MAX_ID_LENGTH = 256;
+const MAX_NAME_LENGTH = 512;
+const MAX_SOURCE_ID_LENGTH = 256;
+
+function safeText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    ![...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 0x1f || code === 0x7f;
+    })
+  );
+}
+
 /** Validate the cache statistics before strict estimate code consumes them. Invalid server or stale
  * cache data fails as a load error instead of throwing during Svelte rendering. */
 function parseCacheStats(value: unknown): CacheStats {
@@ -74,10 +93,12 @@ function parseCacheStats(value: unknown): CacheStats {
   }
 
   const perSourceAvgBytes: Record<string, number> = {};
-  for (const [source, bytes] of Object.entries(value.perSourceAvgBytes)) {
+  const perSourceEntries = Object.entries(value.perSourceAvgBytes);
+  if (perSourceEntries.length > MAX_SOURCE_STATS_COUNT) throw new InvalidCacheStatsError();
+  for (const [source, bytes] of perSourceEntries) {
     // Chart Locker reports measured averages, so fractional positive values are expected. Totals
     // remain integers, but rounding an average here would distort planning estimates.
-    if (source.length === 0 || !isPositiveFiniteNumber(bytes)) {
+    if (!safeText(source, MAX_SOURCE_ID_LENGTH) || !isPositiveFiniteNumber(bytes)) {
       throw new InvalidCacheStatsError();
     }
     perSourceAvgBytes[source] = bytes;
@@ -102,12 +123,13 @@ function parseCacheStats(value: unknown): CacheStats {
 
   let bySource: CacheStats['bySource'];
   if (value.bySource !== undefined) {
-    if (!Array.isArray(value.bySource)) throw new InvalidCacheStatsError();
+    if (!Array.isArray(value.bySource) || value.bySource.length > MAX_SOURCE_STATS_COUNT) {
+      throw new InvalidCacheStatsError();
+    }
     bySource = value.bySource.map((row) => {
       if (
         !isRecord(row) ||
-        typeof row.source !== 'string' ||
-        row.source.length === 0 ||
+        !safeText(row.source, MAX_SOURCE_ID_LENGTH) ||
         !isNonNegativeSafeInteger(row.bytes) ||
         !isNonNegativeSafeInteger(row.rows)
       ) {
@@ -165,17 +187,126 @@ interface RegionRequest {
 }
 
 export interface RegionsClient {
-  getConfig(): Promise<unknown>;
+  getConfig(signal?: AbortSignal): Promise<unknown>;
   postConfig(config: unknown): Promise<void>;
   setCacheConfig(ttlDays: number): Promise<void>;
   clearScrollCache(): Promise<{ freedBytes: number; freedRows: number }>;
-  getCacheStats(): Promise<CacheStats>;
-  getRegions(): Promise<SavedRegionDto[]>;
+  getCacheStats(signal?: AbortSignal): Promise<CacheStats>;
+  getRegions(signal?: AbortSignal): Promise<SavedRegionDto[]>;
   postRegion(body: RegionRequest): Promise<{ region: SavedRegionDto; jobId: string }>;
   deleteRegion(id: string): Promise<void>;
   redownloadRegion(id: string): Promise<{ jobId: string }>;
-  getRegionJobStatus(id: string): Promise<WarmStatus | null>;
-  geocode(lat: number, lon: number): Promise<string | null>;
+  getRegionJobStatus(id: string, signal?: AbortSignal): Promise<WarmStatus | null>;
+  geocode(lat: number, lon: number, signal?: AbortSignal): Promise<string | null>;
+}
+
+function parseBbox(value: unknown): Bbox {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every((part) => typeof part === 'number' && Number.isFinite(part)) ||
+    value[0] < -180 ||
+    value[0] > 180 ||
+    value[2] < -180 ||
+    value[2] > 180 ||
+    value[1] < -90 ||
+    value[1] > 90 ||
+    value[3] < -90 ||
+    value[3] > 90 ||
+    value[1] > value[3]
+  ) {
+    throw new TypeError('invalid saved region');
+  }
+  return value as unknown as Bbox;
+}
+
+function parseSavedRegion(value: unknown): SavedRegionDto {
+  if (!isRecord(value)) throw new TypeError('invalid saved region');
+  const statuses: ReadonlySet<unknown> = new Set([
+    'downloading',
+    'ready',
+    'capped',
+    'error',
+    'needs-redownload',
+  ]);
+  if (
+    !safeText(value.id, MAX_ID_LENGTH) ||
+    !safeText(value.name, MAX_NAME_LENGTH) ||
+    !Array.isArray(value.sourceIds) ||
+    value.sourceIds.length > MAX_SOURCE_COUNT ||
+    !value.sourceIds.every((source) => safeText(source, MAX_SOURCE_ID_LENGTH)) ||
+    !isNonNegativeSafeInteger(value.minzoom) ||
+    !isNonNegativeSafeInteger(value.maxzoom) ||
+    value.minzoom > value.maxzoom ||
+    value.maxzoom > 22 ||
+    !isNonNegativeSafeInteger(value.createdAt) ||
+    !(value.lastDownloadedAt === null || isNonNegativeSafeInteger(value.lastDownloadedAt)) ||
+    !isNonNegativeSafeInteger(value.bytes) ||
+    !isNonNegativeSafeInteger(value.cachedBytes) ||
+    !statuses.has(value.status)
+  ) {
+    throw new TypeError('invalid saved region');
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    bbox: parseBbox(value.bbox),
+    sourceIds: [...new Set(value.sourceIds as string[])],
+    minzoom: value.minzoom,
+    maxzoom: value.maxzoom,
+    createdAt: value.createdAt,
+    lastDownloadedAt: value.lastDownloadedAt as number | null,
+    bytes: value.bytes,
+    status: value.status as SavedRegionDto['status'],
+    cachedBytes: value.cachedBytes,
+  };
+}
+
+function parseSavedRegions(value: unknown): SavedRegionDto[] {
+  if (!Array.isArray(value) || value.length > MAX_REGION_COUNT) {
+    throw new TypeError('invalid saved regions');
+  }
+  return value.map(parseSavedRegion);
+}
+
+function parseJobResponse(value: unknown): { jobId: string } {
+  if (!isRecord(value) || !safeText(value.jobId, MAX_ID_LENGTH)) {
+    throw new TypeError('invalid region job');
+  }
+  return { jobId: value.jobId };
+}
+
+function parsePostRegionResponse(value: unknown): { region: SavedRegionDto; jobId: string } {
+  if (!isRecord(value)) throw new TypeError('invalid region job');
+  return { region: parseSavedRegion(value.region), ...parseJobResponse(value) };
+}
+
+function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRows: number } {
+  if (
+    !isRecord(value) ||
+    !isNonNegativeSafeInteger(value.freedBytes) ||
+    !isNonNegativeSafeInteger(value.freedRows)
+  ) {
+    throw new TypeError('invalid cache clear result');
+  }
+  return { freedBytes: value.freedBytes, freedRows: value.freedRows };
+}
+
+function parseWarmStatus(value: unknown): WarmStatus {
+  if (!isRecord(value)) throw new TypeError('invalid region status');
+  const states: ReadonlySet<unknown> = new Set(['running', 'done', 'cancelled', 'capped', 'error']);
+  if (
+    !isNonNegativeSafeInteger(value.total) ||
+    !isNonNegativeSafeInteger(value.done) ||
+    value.done > value.total ||
+    !isNonNegativeSafeInteger(value.skipped) ||
+    !isNonNegativeSafeInteger(value.bytes) ||
+    !isNonNegativeSafeInteger(value.errors) ||
+    !states.has(value.state)
+  ) {
+    throw new TypeError('invalid region status');
+  }
+  return value as unknown as WarmStatus;
 }
 
 export function createRegionsClient(
@@ -201,8 +332,8 @@ export function createRegionsClient(
       body: JSON.stringify(body),
     });
   return {
-    async getConfig() {
-      return json(await fetchImpl(url('/position-warm/config'), init()));
+    async getConfig(signal) {
+      return json(await fetchImpl(url('/position-warm/config'), init({ signal })));
     },
     async postConfig(config) {
       ensureOk(await fetchImpl(url('/position-warm/config'), jsonPost(config)));
@@ -211,19 +342,23 @@ export function createRegionsClient(
       ensureOk(await fetchImpl(url('/cache/config'), jsonPost({ ttlDays })));
     },
     async clearScrollCache() {
-      return json<{ freedBytes: number; freedRows: number }>(
-        await fetchImpl(url('/cache/clear-scroll'), init({ method: 'POST' })),
+      return parseClearScrollResponse(
+        await json<unknown>(await fetchImpl(url('/cache/clear-scroll'), init({ method: 'POST' }))),
       );
     },
-    async getCacheStats() {
-      return parseCacheStats(await json<unknown>(await fetchImpl(url('/cache/stats'), init())));
+    async getCacheStats(signal) {
+      return parseCacheStats(
+        await json<unknown>(await fetchImpl(url('/cache/stats'), init({ signal }))),
+      );
     },
-    async getRegions() {
-      return json<SavedRegionDto[]>(await fetchImpl(url('/regions'), init()));
+    async getRegions(signal) {
+      return parseSavedRegions(
+        await json<unknown>(await fetchImpl(url('/regions'), init({ signal }))),
+      );
     },
     async postRegion(body) {
-      return json<{ region: SavedRegionDto; jobId: string }>(
-        await fetchImpl(url('/regions'), jsonPost(body)),
+      return parsePostRegionResponse(
+        await json<unknown>(await fetchImpl(url('/regions'), jsonPost(body))),
       );
     },
     async deleteRegion(id) {
@@ -232,31 +367,33 @@ export function createRegionsClient(
       );
     },
     async redownloadRegion(id) {
-      return json<{ jobId: string }>(
-        await fetchImpl(
-          url(`/regions/${encodeURIComponent(id)}/redownload`),
-          init({ method: 'POST' }),
+      return parseJobResponse(
+        await json<unknown>(
+          await fetchImpl(
+            url(`/regions/${encodeURIComponent(id)}/redownload`),
+            init({ method: 'POST' }),
+          ),
         ),
       );
     },
-    async getRegionJobStatus(id) {
-      const r = await fetchImpl(url(`/regions/${encodeURIComponent(id)}/status`), init());
+    async getRegionJobStatus(id, signal) {
+      const r = await fetchImpl(url(`/regions/${encodeURIComponent(id)}/status`), init({ signal }));
       // A 404 means the job is gone (the region reconciled server-side): treat it as terminal, not a
       // failure. Any other non-ok is a real failure, so throw rather than parse an error body as a
       // status snapshot, letting the poller count it and stop after a small cap.
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`region status ${r.status}`);
-      return json<WarmStatus>(r);
+      return parseWarmStatus(await json<unknown>(r));
     },
-    async geocode(lat, lon) {
+    async geocode(lat, lon, signal) {
       try {
         const r = await fetchImpl(
           url(`/geocode?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`),
-          init(),
+          init({ signal }),
         );
         if (!r.ok) return null;
         const data = (await r.json()) as Record<string, unknown>;
-        return typeof data.display_name === 'string' ? data.display_name : null;
+        return safeText(data.display_name, MAX_NAME_LENGTH) ? data.display_name : null;
       } catch {
         return null;
       }

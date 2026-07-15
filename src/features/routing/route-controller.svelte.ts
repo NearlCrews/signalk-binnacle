@@ -5,6 +5,7 @@ import type { TrackPoint } from '$entities/track';
 import { trackToRoute } from '$features/track-layer';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
 import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
+import type { ActiveRoute, CourseInfo } from '$shared/signalk';
 import { defaultSaveName } from '$shared/ui';
 import {
   activateRoute,
@@ -13,6 +14,7 @@ import {
   clearCourse,
   hydrateCourse,
   refreshActiveRoute,
+  setActiveRoutePointIndex,
   setDestination,
 } from './course-client';
 import { parseGpxRoutesDetailed } from './gpx-import';
@@ -36,6 +38,8 @@ export interface RouteControllerDeps {
   // The live recorder's points, read at call time so the save-as-route actions never rebuild
   // closures per GPS fix in the composition root.
   getTrackPoints: () => TrackPoint[];
+  wait?: (ms: number) => Promise<void>;
+  arrivalAdvanceDelayMs?: number;
 }
 
 export type RouteLoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -84,6 +88,15 @@ export function createRouteController(deps: RouteControllerDeps) {
     if (loadState === 'loading') loadState = routeStore.routes.length > 0 ? 'ready' : 'idle';
   }
 
+  function queueWaypointChange(change: () => Promise<void>): void {
+    // A transport or hydration exception must not poison the shared queue. Recover before each
+    // append, then consume this task's rejection so later manual and arrival advances still run.
+    skipQueue = skipQueue.then(change).catch((error) => {
+      console.warn('[routing] waypoint update failed', error);
+      flagRouteError('Could not update the active waypoint. Check the connection.');
+    });
+  }
+
   function withBusy<Args extends unknown[]>(
     action: (...args: Args) => Promise<void>,
   ): (...args: Args) => Promise<void> {
@@ -121,12 +134,12 @@ export function createRouteController(deps: RouteControllerDeps) {
     return true;
   }
 
-  async function hydrateAndSeedCourse(): Promise<void> {
+  async function hydrateAndSeedCourse(): Promise<CourseInfo | undefined> {
     const startedAt = Date.now();
     const { info, calc } = await hydrateCourse(origin, deps.getToken());
     courseGuidance.seed(info, calc, startedAt);
     const activation = activationFromCourse(info);
-    if (!activation) return;
+    if (!activation) return info;
     if (activation.routeId) {
       if (routeStore.activeId !== activation.routeId) {
         routeStore.setActive(activation.routeId);
@@ -137,6 +150,7 @@ export function createRouteController(deps: RouteControllerDeps) {
       routeStore.setActive(undefined);
       gotoActive = true;
     }
+    return info;
   }
 
   function flyToRouteStart(id: string): void {
@@ -296,9 +310,55 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('A write token is needed to change the active waypoint.');
       return;
     }
-    skipQueue = skipQueue.then(async () => {
+    queueWaypointChange(async () => {
       if (!(await advancePoint(origin, deps.getToken(), delta))) {
         flagRouteError('Could not skip the waypoint. Check the connection.');
+        return;
+      }
+      await hydrateAndSeedCourse();
+    });
+  }
+
+  // Arrival auto-advance is intentionally absolute and delayed briefly. Signal K may advance the
+  // course itself at the arrival circle; rehydrating after the grace period lets that update win.
+  // If the same point is still active, writing the captured target index is idempotent and cannot
+  // double-step when another station sends the same target concurrently.
+  function onArrivalAdvance(snapshot: ActiveRoute): void {
+    if (deps.writeBlocked()) {
+      flagRouteError('A write token is needed to advance the active waypoint.');
+      return;
+    }
+    const href = snapshot.href;
+    const pointIndex = snapshot.pointIndex;
+    const pointTotal = snapshot.pointTotal;
+    const reverse = snapshot.reverse === true;
+    if (
+      typeof href !== 'string' ||
+      !Number.isInteger(pointIndex) ||
+      pointIndex === undefined ||
+      !Number.isInteger(pointTotal) ||
+      pointTotal === undefined ||
+      pointIndex < 0 ||
+      pointIndex >= pointTotal ||
+      (reverse ? pointIndex <= 0 : pointIndex >= pointTotal - 1)
+    ) {
+      return;
+    }
+    const target = pointIndex + (reverse ? -1 : 1);
+    const wait =
+      deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    queueWaypointChange(async () => {
+      await wait(deps.arrivalAdvanceDelayMs ?? 750);
+      const current = await hydrateAndSeedCourse();
+      const active = current?.activeRoute;
+      if (active?.href !== href || !Number.isInteger(active.pointIndex)) return;
+      if (
+        reverse ? (active.pointIndex as number) <= target : (active.pointIndex as number) >= target
+      )
+        return;
+      if (active.pointIndex !== pointIndex) return;
+      if (!(await setActiveRoutePointIndex(origin, deps.getToken(), active, target))) {
+        flagRouteError('Could not advance the waypoint. Check the connection.');
         return;
       }
       await hydrateAndSeedCourse();
@@ -448,6 +508,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onActivateRoute: withBusy(onActivateRoute),
     onStopCourse: withBusy(onStopCourse),
     onSkipPoint,
+    onArrivalAdvance,
     onSaveTrackAsRoute: withBusy(onSaveTrackAsRoute),
     onTrackHome: withBusy(onTrackHome),
     onReverseRoute: withBusy(onReverseRoute),

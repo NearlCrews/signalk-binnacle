@@ -6,6 +6,7 @@ import {
   clearCourse,
   hydrateCourse,
   refreshActiveRoute,
+  setActiveRoutePointIndex,
   setDestination,
 } from './course-client';
 
@@ -48,6 +49,34 @@ it('advancePoint rejects zero and non-integer increments without a request', asy
   const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
   expect(await advancePoint('http://pi', 'tok', 0)).toBe(false);
   expect(await advancePoint('http://pi', 'tok', 1.5)).toBe(false);
+  expect(f).not.toHaveBeenCalled();
+});
+
+it('setActiveRoutePointIndex writes an absolute route index idempotently', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(
+    await setActiveRoutePointIndex(
+      'http://pi',
+      'tok',
+      { href: '/resources/routes/abc', pointTotal: 4, reverse: true },
+      2,
+    ),
+  ).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/activeRoute/pointIndex`);
+  expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({ value: 2 });
+});
+
+it('setActiveRoutePointIndex rejects invalid absolute indexes without a request', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setActiveRoutePointIndex('http://pi', 'tok', {}, 1)).toBe(false);
+  expect(
+    await setActiveRoutePointIndex(
+      'http://pi',
+      'tok',
+      { href: '/resources/routes/abc', pointTotal: 2 },
+      2,
+    ),
+  ).toBe(false);
   expect(f).not.toHaveBeenCalled();
 });
 

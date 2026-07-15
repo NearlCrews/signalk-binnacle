@@ -4,7 +4,7 @@ import { BOUNDARY_SOURCES } from '$features/boundaries-overlay';
 import { STREAMING_CHART_SOURCES } from '$features/depth-charts';
 import { MPA_SOURCES } from '$features/mpa-overlays';
 import { SEAMARK_SOURCES } from '$features/seamark-overlay';
-import { detectCompanion, proxiedSources } from './companion';
+import { detectCompanion, probeCompanion, proxiedSources } from './companion';
 import type { RasterOverlaySource } from './raster-overlay';
 
 const SAMPLE: RasterOverlaySource[] = [
@@ -55,18 +55,15 @@ describe('detectCompanion', () => {
     ).toBeNull();
   });
 
-  it('tries the administrator cookie before falling back to the bearer token', async () => {
+  it('uses only the administrator session even when a device token is available', async () => {
     const sent: RequestInit[] = [];
     await detectCompanion('http://boat.local', 'tok123', async (_url, init) => {
       sent.push(init ?? {});
-      return sent.length === 1
-        ? ({ ok: false, status: 401 } as Response)
-        : ({ ok: true, status: 200 } as Response);
+      return { ok: false, status: 401 } as Response;
     });
-    expect(sent).toHaveLength(2);
+    expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual(expect.objectContaining({ credentials: 'include', cache: 'no-store' }));
     expect(sent[0]?.headers).toBeUndefined();
-    expect(sent[1]?.headers).toEqual({ Authorization: 'Bearer tok123' });
   });
 
   it('sends no Authorization header when no token is available', async () => {
@@ -76,6 +73,40 @@ describe('detectCompanion', () => {
       return { ok: true, status: 200 } as Response;
     });
     expect(sentHeaders).toBeUndefined();
+  });
+});
+
+describe('probeCompanion', () => {
+  it.each([
+    [404, { state: 'absent' }],
+    [
+      403,
+      {
+        state: 'access-refused',
+        base: 'http://boat.local/plugins/signalk-chart-locker',
+      },
+    ],
+    [500, { state: 'unreachable' }],
+  ] as const)('keeps HTTP %i distinct as $state', async (status, expected) => {
+    const result = await probeCompanion(
+      'http://boat.local',
+      undefined,
+      async () => ({ ok: false, status }) as Response,
+    );
+    expect(result).toEqual(expected);
+  });
+
+  it('reports an installed but starting companion as present and not ready', async () => {
+    const result = await probeCompanion(
+      'http://boat.local',
+      undefined,
+      async () => ({ ok: false, status: 503 }) as Response,
+    );
+    expect(result).toEqual({
+      state: 'present',
+      base: 'http://boat.local/plugins/signalk-chart-locker',
+      ready: false,
+    });
   });
 });
 

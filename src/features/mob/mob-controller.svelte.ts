@@ -55,17 +55,26 @@ export function createMobController(deps: MobControllerDeps) {
   // Commit the press-time mark, tell the whole boat, and bring the mark into view. Guidance only;
   // the course (and any coupled autopilot) is touched solely by the strip's deliberate Steer to MOB.
   // Without a fix the alarm still raises, position-less, so the crew mobilizes either way.
-  // The in-flight raise, held so a cancel racing it can resolve whatever id it eventually returns
-  // instead of stranding a boat-wide emergency nothing ever clears.
-  let mobAlertPending: Promise<string | undefined> | undefined;
+  // Retain every local v2 raise until a cancel can resolve its eventual id. A position-less MOB can
+  // be triggered again while already active, so a single pending slot can strand an older alert.
+  let localTriggerSequence = 0;
+  let activeLocalTrigger: number | undefined;
+  const pendingMobAlerts = new Map<number, Promise<string | undefined>>();
   function onTrigger(mark: MobMark | undefined): void {
+    const sequence = ++localTriggerSequence;
+    activeLocalTrigger = sequence;
     const committed = mob.trigger(mark);
     if (deps.notificationsApi()) {
       // The v2 route attaches the server's own position and timestamp; if the POST fails, fall
       // back to the v1 delta so the boat-wide alarm is never lost to a transport error.
-      mobAlertPending = postMobNotification(deps.origin, deps.getToken(), 'Man overboard');
-      void mobAlertPending.then((id) => {
-        if (!id) publishMobValue(mobNotification(committed.position));
+      const pending = postMobNotification(deps.origin, deps.getToken(), 'Man overboard');
+      pendingMobAlerts.set(sequence, pending);
+      void pending.then((id) => {
+        // A canceled or superseded trigger must not raise a broad v1 alarm after its v2 request
+        // finishes. The current trigger owns the fallback.
+        if (!id && activeLocalTrigger === sequence) {
+          publishMobValue(mobNotification(committed.position));
+        }
       });
     } else {
       publishMobValue(mobNotification(committed.position));
@@ -76,22 +85,31 @@ export function createMobController(deps: MobControllerDeps) {
   }
 
   function onCancel(): void {
+    const canceledThrough = activeLocalTrigger;
+    activeLocalTrigger = undefined;
     mob.cancel();
-    const pending = mobAlertPending;
-    mobAlertPending = undefined;
-    if (pending) {
-      // Await the raise a fast cancel may be racing, then clear by id; a failed clear falls back
-      // to the v1 delta so no station is left with a raised emergency.
-      void pending.then(async (id) => {
-        // A new mark committed while this clear was in flight must not be silenced: a rapid trigger,
-        // cancel, trigger would otherwise let this deferred clear the second mark's boat-wide alarm.
-        if (mob.active) return;
-        const cleared = id ? await resolveNotification(deps.origin, deps.getToken(), id) : false;
-        if (!cleared) publishMobValue(mobClearNotification());
+    const pending = [...pendingMobAlerts]
+      .filter(([sequence]) => canceledThrough === undefined || sequence <= canceledThrough)
+      .map(([sequence, alert]) => {
+        pendingMobAlerts.delete(sequence);
+        return alert;
       });
-    } else {
+    if (pending.length === 0) {
       publishMobValue(mobClearNotification());
+      return;
     }
+    // Resolve each locally raised v2 notification by its id even when its stream echo still keeps
+    // the aggregate MOB store active. Only the broad v1 fallback is suppressed by a newer trigger.
+    void Promise.all(
+      pending.map(async (alert) => {
+        const id = await alert;
+        return id ? resolveNotification(deps.origin, deps.getToken(), id) : false;
+      }),
+    ).then((cleared) => {
+      if (cleared.some((value) => !value) && activeLocalTrigger === undefined) {
+        publishMobValue(mobClearNotification());
+      }
+    });
   }
 
   // The deliberate second tap: hand the mark to the course system via the existing goto plumbing.

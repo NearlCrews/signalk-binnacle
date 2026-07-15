@@ -146,6 +146,14 @@ level. Inside, in this order:
 14. Switching configurations must confirm before discarding unsaved work. Profiles is the canonical
     example. A button labeled Now changes the current view to the newest loaded data; it must not hide
     a network refresh behind navigation wording.
+15. Every `PersistedValue` carrying production state must receive a bounded validator or codec. A
+    codec owns legacy migration and lets invalid JSON repair to a safe fallback. Record codecs should
+    rebuild a clean literal when unknown fields must not survive. Do not cast parsed browser storage
+    directly into reactive state.
+16. Device-data deletion must register exact Binnacle storage owners. Never call
+    `localStorage.clear()`, delete every origin database or cache, or unregister another Signal K
+    webapp's service worker. Block erasure while safety or unsaved navigation state is active, and
+    explain that local deletion does not revoke server access or delete server resources.
 
 Skeleton:
 

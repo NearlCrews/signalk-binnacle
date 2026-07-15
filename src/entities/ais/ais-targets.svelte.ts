@@ -1,7 +1,11 @@
 import { asNumber, isLatLon, type LatLon } from '$shared/geo';
 import { isFiniteNumber, isRecord } from '$shared/lib';
 import { type SignalKStore, SK_PATHS } from '$shared/signalk';
-import { AIS_PRUNE_INTERVAL_MS, AIS_STALE_TTL_MS } from './ais-staleness';
+import {
+  AIS_APPROACH_STALE_TTL_MS,
+  AIS_PRUNE_INTERVAL_MS,
+  AIS_STALE_TTL_MS,
+} from './ais-staleness';
 
 // The Signal K spec types closestApproach.timeTo as an ISO-8601 duration string (e.g. "PT1M30S"),
 // but some providers publish a raw number of seconds. Parse both: a number passes through, a
@@ -55,18 +59,22 @@ export class AisTargets {
   #store: SignalKStore;
   #cache: AisTargetView[] | undefined;
   #cacheVersion = -1;
+  #cacheExpiresAt = 0;
+  #now: () => number;
 
-  constructor(store: SignalKStore) {
+  constructor(store: SignalKStore, now: () => number = Date.now) {
     this.#store = store;
+    this.#now = now;
   }
 
   // Start the staleness prune timer; returns the disposer. The entity owns the policy (TTL and
   // cadence); the composition root only ties the timer to the app lifecycle.
   startPruning(): () => void {
-    const id = setInterval(
-      () => this.#store.pruneAis(Date.now(), AIS_STALE_TTL_MS),
-      AIS_PRUNE_INTERVAL_MS,
-    );
+    const id = setInterval(() => {
+      const now = this.#now();
+      this.#store.pruneAis(now, AIS_STALE_TTL_MS);
+      this.#store.pruneAisPaths([SK_PATHS.closestApproach], now, AIS_APPROACH_STALE_TTL_MS);
+    }, AIS_PRUNE_INTERVAL_MS);
     return () => clearInterval(id);
   }
 
@@ -81,29 +89,56 @@ export class AisTargets {
     // Rebuild only when AIS data changed. With aisVersion bumped only on real AIS
     // updates, own-vessel motion no longer forces a full list rebuild on consumers.
     const version = this.#store.aisVersion;
-    if (this.#cache && this.#cacheVersion === version) return this.#cache;
+    const now = this.#now();
+    if (this.#cache && this.#cacheVersion === version && now < this.#cacheExpiresAt) {
+      return this.#cache;
+    }
     const out: AisTargetView[] = [];
+    let expiresAt = Number.POSITIVE_INFINITY;
     for (const [id, target] of this.#store.aisTargets) {
-      const position = target.values.get(SK_PATHS.position);
+      const current = (path: string, maxAgeMs?: number): unknown => {
+        if (target.generations.get(path) !== this.#store.generation) return undefined;
+        const epoch = target.epochs.get(path);
+        if (maxAgeMs !== undefined && (epoch === undefined || now - epoch > maxAgeMs)) {
+          return undefined;
+        }
+        if (maxAgeMs !== undefined && epoch !== undefined) {
+          expiresAt = Math.min(expiresAt, epoch + maxAgeMs + 1);
+        }
+        return target.values.get(path);
+      };
+      const position = current(SK_PATHS.position, AIS_STALE_TTL_MS);
       if (!isLatLon(position)) continue;
-      const name = target.values.get(SK_PATHS.name);
-      const approach = target.values.get(SK_PATHS.closestApproach);
-      const navState = target.values.get(SK_PATHS.navigationState);
+      const name = current(SK_PATHS.name);
+      const approachEpoch = target.epochs.get(SK_PATHS.closestApproach);
+      const approachFresh =
+        target.generations.get(SK_PATHS.closestApproach) === this.#store.generation &&
+        approachEpoch !== undefined &&
+        now - approachEpoch <= AIS_APPROACH_STALE_TTL_MS;
+      const rawApproach = approachFresh ? target.values.get(SK_PATHS.closestApproach) : undefined;
+      const cpa = this.#numField(rawApproach, 'distance');
+      const tcpa = this.#timeToSeconds(rawApproach);
+      const approach = cpa !== undefined && tcpa !== undefined ? { cpa, tcpa } : undefined;
+      if (approachFresh && approachEpoch !== undefined) {
+        expiresAt = Math.min(expiresAt, approachEpoch + AIS_APPROACH_STALE_TTL_MS + 1);
+      }
+      const navState = current(SK_PATHS.navigationState);
       out.push({
         id,
         name: typeof name === 'string' ? name : undefined,
         position,
-        cogRad: asNumber(target.values.get(SK_PATHS.courseOverGroundTrue)),
-        headingRad: asNumber(target.values.get(SK_PATHS.headingTrue)),
-        sogMps: asNumber(target.values.get(SK_PATHS.speedOverGround)),
-        shipTypeId: this.#numField(target.values.get(SK_PATHS.aisShipType), 'id'),
-        cpaMeters: this.#numField(approach, 'distance'),
-        tcpaSeconds: this.#timeToSeconds(approach),
+        cogRad: asNumber(current(SK_PATHS.courseOverGroundTrue, AIS_STALE_TTL_MS)),
+        headingRad: asNumber(current(SK_PATHS.headingTrue, AIS_STALE_TTL_MS)),
+        sogMps: asNumber(current(SK_PATHS.speedOverGround, AIS_STALE_TTL_MS)),
+        shipTypeId: this.#numField(current(SK_PATHS.aisShipType), 'id'),
+        cpaMeters: approach?.cpa,
+        tcpaSeconds: approach?.tcpa,
         navigationState: typeof navState === 'string' ? navState : undefined,
       });
     }
     this.#cache = out;
     this.#cacheVersion = version;
+    this.#cacheExpiresAt = expiresAt;
     return out;
   }
 

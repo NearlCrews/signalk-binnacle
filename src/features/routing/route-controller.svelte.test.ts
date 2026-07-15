@@ -13,6 +13,7 @@ vi.mock('./course-client', () => ({
   clearCourse: vi.fn(),
   hydrateCourse: vi.fn(async () => ({})),
   refreshActiveRoute: vi.fn(),
+  setActiveRoutePointIndex: vi.fn(),
   setDestination: vi.fn(),
 }));
 
@@ -53,6 +54,7 @@ function makeController(writeBlocked = false) {
     startRouteEdit: vi.fn(() => true),
     stopRouteEdit: vi.fn(),
     getTrackPoints: () => [],
+    wait: async () => {},
   });
   return { controller, routeStore, toast, guidance, fitBounds };
 }
@@ -63,6 +65,7 @@ describe('createRouteController', () => {
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue([]);
     vi.mocked(routesClient.saveRoute).mockResolvedValue(true);
     vi.mocked(courseClient.refreshActiveRoute).mockResolvedValue(true);
+    vi.mocked(courseClient.setActiveRoutePointIndex).mockResolvedValue(true);
   });
 
   it('keeps a saved route locally when the follow-up refresh fails', async () => {
@@ -128,6 +131,87 @@ describe('createRouteController', () => {
     resolveFirst(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(courseClient.advancePoint).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues processing waypoint skips after an exception', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { controller, toast } = makeController();
+    vi.mocked(courseClient.advancePoint)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(true);
+
+    controller.onSkipPoint(1);
+    controller.onSkipPoint(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(courseClient.advancePoint).toHaveBeenCalledTimes(2);
+    expect(toast.show).toHaveBeenCalledWith(
+      'Could not update the active waypoint. Check the connection.',
+    );
+    warn.mockRestore();
+  });
+
+  it('does not double-advance when the server already advanced on arrival', async () => {
+    const { controller } = makeController();
+    vi.mocked(courseClient.hydrateCourse).mockResolvedValueOnce({
+      info: {
+        activeRoute: { href: '/resources/routes/r1', pointIndex: 1, pointTotal: 3 },
+      },
+    });
+
+    controller.onArrivalAdvance({
+      href: '/resources/routes/r1',
+      pointIndex: 0,
+      pointTotal: 3,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(courseClient.setActiveRoutePointIndex).not.toHaveBeenCalled();
+  });
+
+  it('writes the captured absolute target when the server has not advanced', async () => {
+    const { controller } = makeController();
+    const activeRoute = { href: '/resources/routes/r1', pointIndex: 0, pointTotal: 3 };
+    vi.mocked(courseClient.hydrateCourse)
+      .mockResolvedValueOnce({ info: { activeRoute } })
+      .mockResolvedValueOnce({
+        info: { activeRoute: { ...activeRoute, pointIndex: 1 } },
+      });
+
+    controller.onArrivalAdvance(activeRoute);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(courseClient.setActiveRoutePointIndex).toHaveBeenCalledWith(
+      'http://sk',
+      'token',
+      activeRoute,
+      1,
+    );
+  });
+
+  it('moves toward the preceding absolute index on a reversed route', async () => {
+    const { controller } = makeController();
+    const activeRoute = {
+      href: '/resources/routes/r1',
+      pointIndex: 2,
+      pointTotal: 3,
+      reverse: true,
+    };
+    vi.mocked(courseClient.hydrateCourse)
+      .mockResolvedValueOnce({ info: { activeRoute } })
+      .mockResolvedValueOnce({
+        info: { activeRoute: { ...activeRoute, pointIndex: 1 } },
+      });
+
+    controller.onArrivalAdvance(activeRoute);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(courseClient.setActiveRoutePointIndex).toHaveBeenCalledWith(
+      'http://sk',
+      'token',
+      activeRoute,
+      1,
+    );
   });
 
   it('fits the full route bounds when showing a route', () => {

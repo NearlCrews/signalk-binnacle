@@ -102,6 +102,21 @@ describe('FrameBatcher', () => {
     expect(captured?.get('vessels.b')?.get('navigation.headingTrue')).toBe(0.5);
   });
 
+  it('retains the receipt time of the winning value instead of the later flush time', () => {
+    const batcher = new FrameBatcher();
+    let selfEpochs: Map<string, number> | undefined;
+    let aisEpochs: Map<string, Map<string, number>> | undefined;
+    batcher.onFlush = (_self, _ais, _epoch, _sources, self, ais) => {
+      selfEpochs = self;
+      aisEpochs = ais;
+    };
+    batcher.put('navigation.position', { latitude: 1, longitude: 2 }, undefined, 1234);
+    batcher.putVessel('vessels.a', 'navigation.position', { latitude: 3, longitude: 4 }, 2345);
+    vi.runAllTimers();
+    expect(selfEpochs?.get('navigation.position')).toBe(1234);
+    expect(aisEpochs?.get('vessels.a')?.get('navigation.position')).toBe(2345);
+  });
+
   it('reset() clears the AIS accumulator so a later putVessel only delivers the new frame', () => {
     const batcher = new FrameBatcher();
     const aisFrames: Map<string, Map<string, Value>>[] = [];

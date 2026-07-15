@@ -18,6 +18,7 @@ export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as OverflowActions } from './OverflowActions.svelte';
 export { default as PanelHeader } from './PanelHeader.svelte';
+export type { PanelId } from './panel-id';
 export { createPanelMinimize } from './panel-minimize.svelte';
 export { defaultSaveName, resolveSaveName } from './prompt';
 export type { Reorder } from './reorder.svelte';

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adminSessionInit,
   authInit,
+  SignalKResourceClient,
   sendJson,
   setWriteOutcomeListener,
   str,
@@ -31,6 +32,46 @@ describe('authInit', () => {
       credentials: 'omit',
       headers: {},
     });
+  });
+});
+
+describe('SignalKResourceClient', () => {
+  it('reads the current token for every request and keeps write outcomes instance-local', async () => {
+    let token: string | undefined = 'first';
+    const outcomes: number[] = [];
+    const fetchFn = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }),
+    );
+    const client = new SignalKResourceClient({
+      fetch: fetchFn as unknown as typeof fetch,
+      getToken: () => token,
+      onWriteOutcome: (_ok, status) => outcomes.push(status),
+    });
+
+    await client.fetchJson('http://x/one');
+    token = 'second';
+    expect(await client.put('http://x/two', { value: true })).toBe(true);
+
+    expect(fetchFn.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: 'Bearer first' });
+    expect(fetchFn.mock.calls[1]?.[1]?.headers).toEqual({
+      Authorization: 'Bearer second',
+      'Content-Type': 'application/json',
+    });
+    expect(outcomes).toEqual([200]);
+  });
+
+  it('degrades network and parse failures without notifying a write refusal', async () => {
+    const outcomes: number[] = [];
+    const client = new SignalKResourceClient({
+      fetch: vi.fn(async () => {
+        throw new TypeError('offline');
+      }) as unknown as typeof fetch,
+      onWriteOutcome: (_ok, status) => outcomes.push(status),
+    });
+
+    await expect(client.fetchJson('http://x/read')).resolves.toBeUndefined();
+    await expect(client.delete('http://x/write')).resolves.toBe(false);
+    expect(outcomes).toEqual([]);
   });
 });
 

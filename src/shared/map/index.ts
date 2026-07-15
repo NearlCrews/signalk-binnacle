@@ -2,7 +2,12 @@ export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';
 export { depthShadingStops, shadeColor } from './color-ramp';
-export { detectCompanion, proxiedSources } from './companion';
+export {
+  type CompanionProbeResult,
+  detectCompanion,
+  probeCompanion,
+  proxiedSources,
+} from './companion';
 export { DARK_SCRIM, rgbaCss } from './contrast';
 export { matrixOf } from './custom-layer';
 export { emptyFeatureCollection, featureCollection } from './feature-collection';

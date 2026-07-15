@@ -206,6 +206,42 @@ describe('AuthController', () => {
     expect(store.getItem('binnacle:signalk-auth')).toContain('crosstab');
   });
 
+  it('drops runtime credentials when another tab removes the auth record', () => {
+    const previousWindow = globalThis.window;
+    const events = new EventTarget();
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: events,
+    });
+    try {
+      const store = storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-old', token: 'tok' }),
+      });
+      const auth = new AuthController(BASE, {
+        fetch: (async () => res(true)) as unknown as typeof fetch,
+        storage: store,
+        schedule: noSchedule,
+      });
+      auth.watch();
+      const event = Object.assign(new Event('storage'), {
+        key: 'binnacle:signalk-auth',
+        newValue: null,
+      });
+      events.dispatchEvent(event);
+
+      expect(auth.token).toBeNull();
+      expect(auth.status).toBe('unknown');
+      expect(auth.clientId).not.toBe('binnacle-old');
+      expect(store.getItem('binnacle:signalk-auth')).toContain('binnacle-old');
+      auth.stop();
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: previousWindow,
+      });
+    }
+  });
+
   it('re-requests a fresh access request when the pending one is gone (404)', async () => {
     let n = 0;
     const fetchFn = vi.fn(async (url: string) => {
@@ -381,5 +417,52 @@ describe('AuthController', () => {
       schedule: noSchedule,
     });
     expect(a.clientId).toBe(b.clientId);
+  });
+
+  it('forgets the local device credentials and rotates the client identity', async () => {
+    const store = storage({
+      'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-old', token: 'tok' }),
+    });
+    const auth = new AuthController(BASE, {
+      fetch: (async () => res(true)) as unknown as typeof fetch,
+      storage: store,
+      schedule: noSchedule,
+    });
+    await auth.probe();
+
+    auth.forgetDeviceCredentials();
+
+    expect(auth.token).toBeNull();
+    expect(auth.status).toBe('unknown');
+    expect(auth.clientId).not.toBe('binnacle-old');
+    expect(
+      new AuthController(BASE, {
+        fetch: (async () => res(true)) as unknown as typeof fetch,
+        storage: store,
+        schedule: noSchedule,
+      }).clientId,
+    ).toBe(auth.clientId);
+  });
+
+  it('can reset runtime auth without recreating storage after a privacy erase', () => {
+    const store = storage({
+      'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-old', token: 'tok' }),
+    });
+    const auth = new AuthController(BASE, {
+      fetch: (async () => res(true)) as unknown as typeof fetch,
+      storage: store,
+      schedule: noSchedule,
+    });
+
+    auth.forgetDeviceCredentials(false);
+
+    expect(auth.clientId).not.toBe('binnacle-old');
+    expect(
+      new AuthController(BASE, {
+        fetch: (async () => res(true)) as unknown as typeof fetch,
+        storage: store,
+        schedule: noSchedule,
+      }).clientId,
+    ).toBe('binnacle-old');
   });
 });

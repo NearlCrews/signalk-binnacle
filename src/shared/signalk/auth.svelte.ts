@@ -1,4 +1,5 @@
-import { PersistedValue } from '$shared/settings';
+import { isRecord } from '$shared/lib';
+import { createPersistedCodec, PersistedValue } from '$shared/settings';
 import { jsonOr } from './resource';
 
 export type AuthStatus = 'unknown' | 'unsecured' | 'authenticated' | 'requesting' | 'denied';
@@ -7,6 +8,27 @@ interface AuthIdentity {
   clientId: string;
   token: string | null;
 }
+
+function isSafeStoredText(value: string, maxLength: number): boolean {
+  if (value.length === 0 || value.length > maxLength) return false;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x1f || codePoint === 0x7f) return false;
+  }
+  return true;
+}
+
+function isAuthIdentity(value: unknown): value is AuthIdentity {
+  return (
+    isRecord(value) &&
+    typeof value.clientId === 'string' &&
+    isSafeStoredText(value.clientId, 128) &&
+    (value.token === null ||
+      (typeof value.token === 'string' && isSafeStoredText(value.token, 16_384)))
+  );
+}
+
+const authIdentityCodec = createPersistedCodec(isAuthIdentity);
 
 interface AuthOptions {
   fetch?: typeof fetch;
@@ -138,6 +160,7 @@ export class AuthController {
       STORAGE_KEY,
       { clientId: newClientId(), token: null },
       opts.storage,
+      authIdentityCodec,
     );
     // Persist a first-run identity, and upgrade a legacy bare-UUID clientId to the recognizable
     // binnacle- form (keeping any token), so the access-requests list shows a known name.
@@ -309,6 +332,19 @@ export class AuthController {
     this.status = 'authenticated';
   }
 
+  // Forget only Binnacle's device identity and token. Signal K owns server-side revocation, and the
+  // browser's administrator cookie is a separate session, so neither is implied by this local action.
+  forgetDeviceCredentials(persistReplacement = true): void {
+    const replacement = { clientId: newClientId(), token: null };
+    if (persistReplacement) this.#identity.set(replacement);
+    else this.#identity.value = replacement;
+    this.token = null;
+    this.status = 'unknown';
+    this.writeBlocked = false;
+    this.#accessPoll.href = undefined;
+    this.#endUpgrade();
+  }
+
   // Record a write outcome observed through sendJson. An authenticated session whose write is refused
   // (401/403) holds a read-only token; a 2xx write proves write access and clears the flag (so the
   // banner disappears once an upgraded token takes effect). Reads and an unsecured server never set it.
@@ -375,7 +411,13 @@ export class AuthController {
   };
 
   #onStorage = (event: StorageEvent): void => {
-    if (event.key !== STORAGE_KEY || !event.newValue) return;
+    if (event.key !== STORAGE_KEY) return;
+    // A storage event with a null newValue is the cross-tab fallback for privacy erasure in browsers
+    // without BroadcastChannel. Drop the runtime token without recreating the just-removed record.
+    if (event.newValue === null) {
+      this.forgetDeviceCredentials(false);
+      return;
+    }
     try {
       const token = (JSON.parse(event.newValue) as AuthIdentity).token;
       if (token) this.adoptToken(token);

@@ -161,6 +161,17 @@ describe('WorkerCore', () => {
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
+  it('increments the connection generation on every successful open', () => {
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    FakeWebSocket.instances[0].open();
+    expect(frames.at(-1)?.generation).toBe(1);
+    core.reconnect();
+    FakeWebSocket.instances[1].open();
+    expect(frames.at(-1)?.generation).toBe(2);
+  });
+
   it('routes a self-URN delta to AIS before hello, then to self after hello arrives', () => {
     const frames: SKFrame[] = [];
     const core = new WorkerCore();

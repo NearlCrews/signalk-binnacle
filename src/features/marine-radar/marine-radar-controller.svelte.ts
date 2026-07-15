@@ -22,6 +22,8 @@ export interface MarineRadarDeps {
   getToken: () => string | undefined;
   getCenter: () => LatLon | undefined;
   getHeading?: () => number | undefined;
+  centerFresh?: () => boolean;
+  headingFresh?: () => boolean;
   radarAvailable: () => boolean;
 }
 
@@ -35,10 +37,16 @@ const STALE_MS = 5000;
 export function createMarineRadarController(deps: MarineRadarDeps) {
   const store = new MarineRadarStore();
   let overlayVisible = false;
-  const layer: PpiLayer = createPpiLayer(store, deps.getCenter, deps.getHeading, (visible) => {
-    overlayVisible = visible;
-    void syncStreamLifecycle();
-  });
+  const layer: PpiLayer = createPpiLayer(
+    store,
+    deps.getCenter,
+    deps.getHeading,
+    (visible) => {
+      overlayVisible = visible;
+      void syncStreamLifecycle();
+    },
+    { center: deps.centerFresh, heading: deps.headingFresh },
+  );
   let worker: RadarWorkerClient | undefined;
   let disposed = false;
   let documentVisible = typeof document === 'undefined' || !document.hidden;

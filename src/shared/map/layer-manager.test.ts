@@ -152,6 +152,26 @@ describe('LayerManager', () => {
     await expect(manager.registerAll([fakeOverlay('a'), fakeOverlay('a')])).rejects.toThrow();
   });
 
+  it('registerBatch isolates failures and keeps successful modules', async () => {
+    const manager = new LayerManager(fakeCtx());
+    const broken = fakeOverlay('broken');
+    broken.add = async () => {
+      throw new Error('provider unavailable');
+    };
+    const results = await manager.registerBatch([
+      fakeOverlay('first'),
+      broken,
+      fakeOverlay('last'),
+    ]);
+
+    expect(results.map(({ id, status }) => ({ id, status }))).toEqual([
+      { id: 'first', status: 'registered' },
+      { id: 'broken', status: 'failed' },
+      { id: 'last', status: 'registered' },
+    ]);
+    expect(manager.layers().map((layer) => layer.id)).toEqual(['last', 'first']);
+  });
+
   it('reattachAll re-adds and restores state', async () => {
     const overlay = fakeOverlay('ais');
     const manager = new LayerManager(fakeCtx());

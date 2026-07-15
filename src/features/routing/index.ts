@@ -4,6 +4,7 @@ export {
   advancePoint,
   clearCourse,
   hydrateCourse,
+  setActiveRoutePointIndex,
   setDestination,
 } from './course-client';
 export { parseGpxRoutes } from './gpx-import';

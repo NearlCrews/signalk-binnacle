@@ -1,5 +1,6 @@
 import type { OwnVessel } from '$entities/vessel';
 import { isLatLon, type LatLon } from '$shared/geo';
+import type { ReactiveClock } from '$shared/lib';
 import {
   etaSeconds,
   rhumbBearingRad,
@@ -25,6 +26,10 @@ const DEFAULT_ARRIVAL_CIRCLE_METERS = 100;
 // circle * this factor (or the active point must change) before arrived clears, so GPS jitter at
 // the boundary cannot re-fire the arrival alarm and banner.
 const ARRIVAL_EXIT_FACTOR = 1.2;
+
+// Course-provider calculations depend on live vessel motion. Expire them promptly so a stopped
+// provider cannot leave a frozen distance inside the arrival circle or a stale ETA on screen.
+const COURSE_CALC_STALE_MS = 30_000;
 
 // calcValues does not stream as one object: the course-provider publishes each value as its own leaf
 // delta (navigation.course.calcValues.<field>) and the core never emits the parent, so each field is
@@ -59,10 +64,12 @@ const COURSE_CELL_PATHS: readonly string[] = [
 export class CourseGuidance {
   #store: SignalKStore;
   #vessel: OwnVessel;
+  #clock: ReactiveClock | undefined;
 
-  constructor(store: SignalKStore, vessel: OwnVessel) {
+  constructor(store: SignalKStore, vessel: OwnVessel, clock?: ReactiveClock) {
     this.#store = store;
     this.#vessel = vessel;
+    this.#clock = clock;
     // Pre-create the cells so the first access inside a reactive context finds an existing,
     // tracked cell. A cell created lazily during a reactive read is not tracked, so later
     // updates would not re-render. This mirrors OwnVessel's constructor.
@@ -84,20 +91,19 @@ export class CourseGuidance {
     // (nextPoint, previousPoint, activeRoute, arrivalCircle) that only the REST read can supply
     // under subscribe=none. Each cell is seeded only when no stream write landed at or after the
     // hydrate began, so a fresh streamed value is never clobbered by the slower REST snapshot.
-    const unstreamed = (path: string): boolean => this.#store.cell(path).epoch < asOf;
+    const seedCell = (path: string, value: unknown): void => {
+      const cell = this.#store.cell(path);
+      if (cell.streamed && cell.epoch >= asOf) return;
+      cell.value = value;
+      cell.epoch = asOf;
+      cell.generation = this.#store.generation;
+      cell.streamed = false;
+    };
     if (info) {
-      if (unstreamed(SK_PATHS.courseNextPoint)) {
-        this.#store.cell(SK_PATHS.courseNextPoint).value = info.nextPoint;
-      }
-      if (unstreamed(SK_PATHS.coursePreviousPoint)) {
-        this.#store.cell(SK_PATHS.coursePreviousPoint).value = info.previousPoint;
-      }
-      if (unstreamed(SK_PATHS.courseActiveRoute)) {
-        this.#store.cell(SK_PATHS.courseActiveRoute).value = info.activeRoute;
-      }
-      if (unstreamed(SK_PATHS.courseArrivalCircle)) {
-        this.#store.cell(SK_PATHS.courseArrivalCircle).value = info.arrivalCircle;
-      }
+      seedCell(SK_PATHS.courseNextPoint, info.nextPoint);
+      seedCell(SK_PATHS.coursePreviousPoint, info.previousPoint);
+      seedCell(SK_PATHS.courseActiveRoute, info.activeRoute);
+      seedCell(SK_PATHS.courseArrivalCircle, info.arrivalCircle);
     }
     if (calc) {
       // calcValues streams as leaf deltas, so the snapshot is decomposed into the same per-field
@@ -105,7 +111,7 @@ export class CourseGuidance {
       // the hydrate, matching the per-cell staleness rule used for the info cells above.
       for (const field of CALC_VALUE_FIELDS) {
         const path = calcLeafPath(field);
-        if (unstreamed(path)) this.#store.cell(path).value = calc[field];
+        seedCell(path, calc[field]);
       }
     }
   }
@@ -114,15 +120,19 @@ export class CourseGuidance {
   // lingers to leak into the next activation.
   clear(): void {
     for (const path of COURSE_CELL_PATHS) {
-      this.#store.cell(path).value = undefined;
+      const cell = this.#store.cell(path);
+      cell.value = undefined;
+      cell.epoch = 0;
+      cell.generation = this.#store.generation;
+      cell.streamed = false;
     }
   }
 
   #info = $derived.by<CourseInfo>(() => ({
-    nextPoint: this.#store.cell(SK_PATHS.courseNextPoint).value as CoursePoint | undefined,
-    previousPoint: this.#store.cell(SK_PATHS.coursePreviousPoint).value as CoursePoint | undefined,
-    activeRoute: this.#store.cell(SK_PATHS.courseActiveRoute).value as ActiveRoute | undefined,
-    arrivalCircle: this.#store.cell(SK_PATHS.courseArrivalCircle).value as number | undefined,
+    nextPoint: this.#currentValue(SK_PATHS.courseNextPoint) as CoursePoint | undefined,
+    previousPoint: this.#currentValue(SK_PATHS.coursePreviousPoint) as CoursePoint | undefined,
+    activeRoute: this.#currentValue(SK_PATHS.courseActiveRoute) as ActiveRoute | undefined,
+    arrivalCircle: this.#currentValue(SK_PATHS.courseArrivalCircle) as number | undefined,
   }));
 
   // Assembled from the per-field leaf cells that the stream and the REST seed both write. Undefined
@@ -132,7 +142,7 @@ export class CourseGuidance {
   #calc = $derived.by<CourseCalculations | undefined>(() => {
     let present = false;
     const read = <T>(field: (typeof CALC_VALUE_FIELDS)[number]): T | null | undefined => {
-      const v = this.#store.cell(calcLeafPath(field)).value;
+      const v = this.#currentValue(calcLeafPath(field), COURSE_CALC_STALE_MS);
       if (v != null) present = true;
       return v as T | null | undefined;
     };
@@ -156,7 +166,8 @@ export class CourseGuidance {
   get isLastPoint(): boolean {
     const index = this.activePointIndex;
     const total = this.activePointTotal;
-    return index !== undefined && total !== undefined && index >= total - 1;
+    if (index === undefined || total === undefined) return false;
+    return this.#info.activeRoute?.reverse === true ? index <= 0 : index >= total - 1;
   }
 
   // The active route's destination index and total point count, when a route (not a single "go to")
@@ -178,15 +189,36 @@ export class CourseGuidance {
     return Number.isInteger(total) && total !== undefined && total > 0 ? total : undefined;
   }
 
+  // A validated snapshot for an arrival-edge advance. Returning a copy prevents a consumer from
+  // mutating the streamed object while preserving the route identity and direction the Course API
+  // needs to confirm that the same route is still active after the server auto-advance grace period.
+  get activeRouteSnapshot(): ActiveRoute | undefined {
+    const route = this.#info.activeRoute;
+    const pointIndex = this.activePointIndex;
+    const pointTotal = this.activePointTotal;
+    if (typeof route?.href !== 'string' || !route.href || pointIndex === undefined)
+      return undefined;
+    return {
+      href: route.href,
+      pointIndex,
+      ...(pointTotal !== undefined ? { pointTotal } : {}),
+      ...(route.reverse !== undefined ? { reverse: route.reverse } : {}),
+      ...(route.name !== undefined ? { name: route.name } : {}),
+    };
+  }
+
   get canAdvanceRoute(): boolean {
     const index = this.activePointIndex;
     const total = this.activePointTotal;
-    return index !== undefined && total !== undefined && index < total - 1;
+    if (index === undefined || total === undefined) return false;
+    return this.#info.activeRoute?.reverse === true ? index > 0 : index < total - 1;
   }
 
   get canRetreatRoute(): boolean {
     const index = this.activePointIndex;
-    return index !== undefined && index > 0;
+    const total = this.activePointTotal;
+    if (index === undefined || total === undefined) return false;
+    return this.#info.activeRoute?.reverse === true ? index < total - 1 : index > 0;
   }
 
   // 'server' when the provider supplied any populated calcValue, otherwise 'computed'. A single-mark
@@ -255,6 +287,15 @@ export class CourseGuidance {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 
+  #currentValue(path: string, maxAgeMs?: number): unknown {
+    const cell = this.#store.cell(path);
+    if (cell.epoch > 0 && cell.generation !== this.#store.generation) return undefined;
+    if (maxAgeMs !== undefined && cell.epoch > 0 && this.#clock) {
+      if (this.#clock.now - cell.epoch > maxAgeMs) return undefined;
+    }
+    return cell.value;
+  }
+
   // The active-leg readouts are $derived so each leg's geodesy is computed once per dependency
   // change and shared across readers, not recomputed on every access. Several consumers read more
   // than one (the nav strip reads cross-track twice, time-to-go reads distance, the arrival effect
@@ -287,8 +328,8 @@ export class CourseGuidance {
     const supplied = this.#finiteCalc('velocityMadeGood');
     if (supplied !== undefined) return supplied;
     const pos = this.#freshPos;
-    const sog = this.#vessel.sogMps;
-    const cog = this.#vessel.cogRad;
+    const sog = this.#vessel.sogStale ? undefined : this.#vessel.sogMps;
+    const cog = this.#vessel.cogStale ? undefined : this.#vessel.cogRad;
     return pos && this.#next && sog != null && cog != null
       ? vmgMps(pos, this.#next, sog, cog)
       : undefined;
@@ -298,7 +339,7 @@ export class CourseGuidance {
     const supplied = this.#finiteCalc('timeToGo');
     if (supplied !== undefined && supplied >= 0) return supplied;
     const d = this.distanceToNextMeters;
-    const sog = this.#vessel.sogMps;
+    const sog = this.#vessel.sogStale ? undefined : this.#vessel.sogMps;
     return d != null && sog != null ? etaSeconds(d, sog) : undefined;
   });
 

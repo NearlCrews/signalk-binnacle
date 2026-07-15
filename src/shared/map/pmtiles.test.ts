@@ -2,10 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompanionSource, createArchiveSource, NoStoreSource } from './pmtiles';
 import { BlockCachedSource } from './pmtiles-block-cache';
 
-function response(status: number, bytes = 4): Response {
+function response(status: number, bytes = 4, start = 0): Response {
   return {
     status,
-    headers: new Headers(),
+    headers: new Headers(
+      status === 206
+        ? { 'Content-Range': `bytes ${start}-${start + bytes - 1}/${start + bytes}` }
+        : {},
+    ),
     arrayBuffer: async () => new ArrayBuffer(bytes),
   } as unknown as Response;
 }
@@ -63,7 +67,7 @@ describe('NoStoreSource.getBytes', () => {
   it('strips a weak ETag, which cannot validate range requests', async () => {
     const res = {
       status: 206,
-      headers: new Headers({ ETag: 'W/"v1"' }),
+      headers: new Headers({ ETag: 'W/"v1"', 'Content-Range': 'bytes 0-3/4' }),
       arrayBuffer: async () => new ArrayBuffer(4),
     } as unknown as Response;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res));
@@ -74,12 +78,96 @@ describe('NoStoreSource.getBytes', () => {
   it('passes a strong ETag through for range validation', async () => {
     const res = {
       status: 206,
-      headers: new Headers({ ETag: '"v1"' }),
+      headers: new Headers({ ETag: '"v1"', 'Content-Range': 'bytes 0-3/4' }),
       arrayBuffer: async () => new ArrayBuffer(4),
     } as unknown as Response;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res));
     const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
     expect(out.etag).toBe('"v1"');
+  });
+
+  it('rejects a server that ignores a nonzero range request', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(64));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers({ 'Content-Length': '64' }),
+        arrayBuffer,
+      } as unknown as Response),
+    );
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(64, 4)).rejects.toThrow(
+      'ignored',
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized declared body before reading it', async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(64));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers({ 'Content-Length': '64' }),
+        arrayBuffer,
+      } as unknown as Response),
+    );
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow(
+      'declared',
+    );
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejects a partial response without matching Content-Range bounds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(206, 4, 8)));
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow('outside');
+  });
+
+  it('rejects a short partial response before the archive end', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 206,
+        headers: new Headers({ 'Content-Range': 'bytes 0-3/100' }),
+        arrayBuffer: async () => new ArrayBuffer(4),
+      } as unknown as Response),
+    );
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 8)).rejects.toThrow('outside');
+  });
+
+  it('accepts a short partial response only at the archive end', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(206, 4, 100)));
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(100, 512)).resolves.toMatchObject(
+      { data: expect.any(ArrayBuffer) },
+    );
+  });
+
+  it('rejects a malformed Content-Length header', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 206,
+        headers: new Headers({
+          'Content-Range': 'bytes 0-3/4',
+          'Content-Length': 'not-a-number',
+        }),
+        arrayBuffer: async () => new ArrayBuffer(4),
+      } as unknown as Response),
+    );
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow(
+      'invalid response length',
+    );
+  });
+
+  it('derives an archive validator from Last-Modified and total size', async () => {
+    const res = response(206);
+    res.headers.set('Last-Modified', 'Wed, 15 Jul 2026 12:00:00 GMT');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res));
+    const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
+    expect(out.etag).toBe('binnacle:Wed, 15 Jul 2026 12:00:00 GMT:4');
   });
 });
 
@@ -148,13 +236,7 @@ describe('createArchiveSource provided-path switch', () => {
 describe('CompanionSource.getBytes auth header', () => {
   const COMPANION_URL = 'http://localhost/plugins/signalk-chart-locker/pmtiles/sf.pmtiles';
 
-  function okResponse(): Response {
-    return {
-      status: 206,
-      headers: new Headers(),
-      arrayBuffer: async () => new ArrayBuffer(4),
-    } as unknown as Response;
-  }
+  const okResponse = (start = 0): Response => response(206, 4, start);
 
   afterEach(() => vi.unstubAllGlobals());
 
@@ -164,6 +246,7 @@ describe('CompanionSource.getBytes auth header', () => {
     await new CompanionSource(COMPANION_URL, () => 'test-token').getBytes(0, 4);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer test-token');
+    expect(init).toMatchObject({ credentials: 'omit', redirect: 'error' });
   });
 
   it('reads the token dynamically so a later token change is picked up', async () => {
@@ -189,10 +272,20 @@ describe('CompanionSource.getBytes auth header', () => {
   });
 
   it('always includes the Range header', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse());
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(100));
     vi.stubGlobal('fetch', fetchMock);
     await new CompanionSource(COMPANION_URL, () => 'tok').getBytes(100, 512);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>).Range).toBe('bytes=100-611');
+  });
+
+  it('rejects a response whose final URL crossed origins', async () => {
+    const redirected = okResponse();
+    Object.defineProperty(redirected, 'url', { value: 'http://attacker.test/a.pmtiles' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(redirected));
+
+    await expect(new CompanionSource(COMPANION_URL, () => 'tok').getBytes(0, 4)).rejects.toThrow(
+      'outside',
+    );
   });
 });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  booleanRecordPersistedCodec,
+  createMapView,
+  createPersistedCodec,
   DEFAULT_THRESHOLDS,
   isMapView,
   isThresholds,
   isTrackSettings,
   PersistedValue,
+  stringArrayPersistedCodec,
 } from './persisted.svelte';
 
 function fakeStorage(map: Map<string, string>): Pick<Storage, 'getItem' | 'setItem'> {
@@ -37,10 +41,110 @@ describe('PersistedValue', () => {
     expect(JSON.parse(store.get('k') as string)).toEqual({ a: 2 });
   });
 
+  it('rejects a runtime value that its codec does not accept', () => {
+    const store = new Map<string, string>();
+    const p = new PersistedValue(
+      'k',
+      1,
+      fakeStorage(store),
+      createPersistedCodec(
+        (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value),
+      ),
+    );
+
+    expect(() => p.set(Number.NaN)).toThrow('invalid value');
+    expect(p.value).toBe(1);
+    expect(store.has('k')).toBe(false);
+  });
+
+  it('canonicalizes a migrated runtime value before storing it', () => {
+    const store = new Map<string, string>();
+    const p = new PersistedValue('k', [], fakeStorage(store), stringArrayPersistedCodec());
+
+    p.set(['routes', 'routes', 'tracks']);
+
+    expect(p.value).toEqual(['routes', 'tracks']);
+    expect(JSON.parse(store.get('k') as string)).toEqual(['routes', 'tracks']);
+  });
+
+  it('does not replace a deliberate null encoder result with the raw value', () => {
+    const store = new Map<string, string>();
+    const p = new PersistedValue('k', 'value', fakeStorage(store), {
+      decode: (value) =>
+        typeof value === 'string' ? { state: 'valid', value } : { state: 'invalid' },
+      encode: () => null,
+    });
+
+    p.set('next');
+
+    expect(store.get('k')).toBe('null');
+  });
+
   it('falls back to the default on malformed JSON', () => {
     const store = new Map<string, string>([['k', 'not json']]);
     const p = new PersistedValue('k', { a: 1 }, fakeStorage(store));
     expect(p.value).toEqual({ a: 1 });
+    expect(p.repairStatus).toBe('replaced');
+    expect(JSON.parse(store.get('k') as string)).toEqual({ a: 1 });
+  });
+
+  it('repairs a value rejected by its schema', () => {
+    const store = new Map<string, string>([['k', JSON.stringify('wrong')]]);
+    const p = new PersistedValue(
+      'k',
+      5,
+      fakeStorage(store),
+      (value): value is number => typeof value === 'number',
+    );
+    expect(p.value).toBe(5);
+    expect(p.fromStorage).toBe(false);
+    expect(p.repairStatus).toBe('replaced');
+    expect(JSON.parse(store.get('k') as string)).toBe(5);
+  });
+
+  it('migrates and normalizes a known legacy shape', () => {
+    const store = new Map<string, string>([['k', JSON.stringify({ oldCount: 7 })]]);
+    const codec = createPersistedCodec(
+      (value: unknown): value is { count: number } =>
+        typeof value === 'object' && value !== null && 'count' in value && value.count === 7,
+      (value) =>
+        typeof value === 'object' && value !== null && 'oldCount' in value && value.oldCount === 7
+          ? { count: 7 }
+          : undefined,
+    );
+    const p = new PersistedValue('k', { count: 0 }, fakeStorage(store), codec);
+    expect(p.value).toEqual({ count: 7 });
+    expect(p.fromStorage).toBe(true);
+    expect(p.repairStatus).toBe('migrated');
+    expect(JSON.parse(store.get('k') as string)).toEqual({ count: 7 });
+  });
+
+  it('reports a failed repair without breaking the fallback', () => {
+    const p = new PersistedValue(
+      'k',
+      5,
+      {
+        getItem: () => 'not json',
+        setItem: () => {
+          throw new DOMException('quota exceeded', 'QuotaExceededError');
+        },
+      },
+      (value): value is number => typeof value === 'number',
+    );
+    expect(p.value).toBe(5);
+    expect(p.repairStatus).toBe('failed');
+  });
+
+  it('handles a storage read failure as an unavailable store', () => {
+    const p = new PersistedValue('k', 5, {
+      getItem: () => {
+        throw new DOMException('denied', 'SecurityError');
+      },
+      setItem: () => undefined,
+    });
+    expect(p.value).toBe(5);
+    expect(p.fromStorage).toBe(false);
+    expect(p.repairStatus).toBe('failed');
   });
 
   it('reports fromStorage by key presence, even for a primitive equal to the default', () => {
@@ -68,6 +172,20 @@ describe('PersistedValue', () => {
   });
 });
 
+describe('collection codecs', () => {
+  it('rejects empty and control-character string ids', () => {
+    const codec = stringArrayPersistedCodec();
+    expect(codec.decode([''])).toEqual({ state: 'invalid' });
+    expect(codec.decode(['route\nname'])).toEqual({ state: 'invalid' });
+  });
+
+  it('rejects empty and control-character record keys', () => {
+    const codec = booleanRecordPersistedCodec();
+    expect(codec.decode({ '': true })).toEqual({ state: 'invalid' });
+    expect(codec.decode({ 'layers\u0000hidden': false })).toEqual({ state: 'invalid' });
+  });
+});
+
 describe('isMapView', () => {
   it('accepts a valid view', () => {
     expect(isMapView({ lat: 42.6, lon: -83.5, zoom: 12.5 })).toBe(true);
@@ -80,6 +198,16 @@ describe('isMapView', () => {
     expect(isMapView({ lat: 0, lon: 200, zoom: 5 })).toBe(false);
     expect(isMapView({ lat: 0, lon: 0, zoom: Number.NaN })).toBe(false);
     expect(isMapView({ lat: '42', lon: 0, zoom: 5 })).toBe(false);
+  });
+
+  it('uses the map-view codec at the persistence boundary', () => {
+    const store = new Map<string, string>([
+      ['view', JSON.stringify({ lat: 100, lon: 0, zoom: 5 })],
+    ]);
+    const view = createMapView('view', fakeStorage(store));
+    expect(view.value).toBeNull();
+    expect(view.repairStatus).toBe('replaced');
+    expect(store.get('view')).toBe('null');
   });
 });
 

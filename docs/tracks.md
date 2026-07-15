@@ -90,8 +90,9 @@ speed sample. Use the GeoJSON as a portable trail, not as a raw navigation-data 
 GPS gaps are hard navigation boundaries. Save as route and Retrace track use only the latest continuous
 segment and require at least two connected points. Earlier segments remain in the saved track but never
 become a straight route leg across missing GPS history. The segment is simplified to route turning
-points before it is saved. Retrace reverses those waypoints and starts Signal K course navigation only
-after confirmation.
+points before it is saved. Simplification unwraps longitude while calculating, so a short crossing at
+the antimeridian does not become a nearly world-spanning segment. Retrace reverses those waypoints and
+starts Signal K course navigation only after confirmation.
 
 If the latest segment has fewer than two points, route actions stay disabled even when an earlier
 segment is drawable. Record another connected point, or use the earlier trail only as a saved track.

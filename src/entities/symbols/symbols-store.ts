@@ -1,4 +1,4 @@
-import { fetchAuthedText, type SkSymbol } from '$shared/signalk';
+import type { SkSymbol } from '$shared/signalk';
 import { SymbolIconRegistry } from './icon-registry';
 import { type RasterizeSymbol, rasterizeSymbolSvg } from './symbol-raster';
 
@@ -11,6 +11,104 @@ import { type RasterizeSymbol, rasterizeSymbolSvg } from './symbol-raster';
 const BINNACLE_NS = 'binnacle';
 const CUSTOM_NS = 'custom';
 const DEFAULT_NS = 'default';
+const MAX_SVG_BYTES = 256 * 1024;
+const SVG_TIMEOUT_MS = 5000;
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const FORBIDDEN_ELEMENT_NAMES = new Set([
+  'animate',
+  'animatemotion',
+  'animatetransform',
+  'audio',
+  'discard',
+  'embed',
+  'feimage',
+  'foreignobject',
+  'iframe',
+  'image',
+  'link',
+  'object',
+  'script',
+  'set',
+  'video',
+]);
+
+function safeCss(value: string): boolean {
+  if (/\b(?:javascript|data):/iu.test(value) || /@import/iu.test(value) || value.includes('\\')) {
+    return false;
+  }
+  for (const match of value.matchAll(/url\(\s*["']?([^)'"\s]+)["']?\s*\)/giu)) {
+    if (!match[1].startsWith('#')) return false;
+  }
+  return true;
+}
+
+// Node-based unit tests do not provide DOMParser. Keep a conservative fallback there, while browser
+// execution uses the namespace-aware XML parser below before any decoder sees provider content.
+function safeSvgWithoutDomParser(text: string): boolean {
+  const prefix = '(?:[A-Za-z_][A-Za-z0-9_.-]*:)?';
+  if (!new RegExp(String.raw`<${prefix}svg(?:\s|/?>)`, 'iu').test(text)) return false;
+  const forbidden = [...FORBIDDEN_ELEMENT_NAMES].join('|');
+  if (new RegExp(String.raw`<${prefix}(?:${forbidden})\b`, 'iu').test(text)) return false;
+  if (/\s(?:[A-Za-z_][A-Za-z0-9_.-]*:)?on[a-z]+\s*=/iu.test(text)) return false;
+  if (/\b(?:[A-Za-z_][A-Za-z0-9_.-]*:)?(?:href|src)\s*=\s*(?!["'])/iu.test(text)) return false;
+  if (/\b(?:[A-Za-z_][A-Za-z0-9_.-]*:)?(?:href|src)\s*=\s*["'](?!#)[^"']*["']/iu.test(text)) {
+    return false;
+  }
+  return safeCss(text);
+}
+
+function safeSvg(text: string): boolean {
+  if (/<!DOCTYPE|<!ENTITY|<\?|<!\[CDATA\[/iu.test(text) || !safeCss(text)) return false;
+  if (typeof DOMParser === 'undefined') return safeSvgWithoutDomParser(text);
+
+  const document = new DOMParser().parseFromString(text, 'image/svg+xml');
+  if (document.getElementsByTagName('parsererror').length > 0) return false;
+  const root = document.documentElement;
+  if (root.localName.toLowerCase() !== 'svg' || root.namespaceURI !== SVG_NAMESPACE) return false;
+  for (const element of document.getElementsByTagName('*')) {
+    const localName = element.localName.toLowerCase();
+    if (FORBIDDEN_ELEMENT_NAMES.has(localName)) return false;
+    for (const attribute of element.attributes) {
+      const attributeName = attribute.localName.toLowerCase();
+      const value = attribute.value.trim();
+      if (attributeName.startsWith('on')) return false;
+      if ((attributeName === 'href' || attributeName === 'src') && !value.startsWith('#')) {
+        return false;
+      }
+      if (!safeCss(value)) return false;
+    }
+  }
+  return true;
+}
+
+async function boundedText(response: Response): Promise<string | undefined> {
+  const declared = Number(response.headers.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > MAX_SVG_BYTES) return undefined;
+  if (!response.body) {
+    const text = await response.text();
+    return new TextEncoder().encode(text).byteLength <= MAX_SVG_BYTES ? text : undefined;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_SVG_BYTES) {
+        await reader.cancel();
+        return undefined;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 // The fetched symbol set with alias and role lookup. Constructed only when the symbols
 // resource type answered (fetchSymbols returned a list); on a stock server no store exists and
@@ -49,11 +147,15 @@ export class SymbolsStore {
   // immediately; the symbols fetch needs credentials), then filled when the fetch lands, so the
   // overlays hold one stable store reference and resolve against whatever is known at render time.
   setSymbols(symbols: readonly SkSymbol[]): void {
-    this.#symbols = symbols;
     this.#svgTexts.clear();
     this.#byRef.clear();
     const adopted: SkSymbol[] = [];
+    const unique: SkSymbol[] = [];
+    const seenUuids = new Set<string>();
     for (const symbol of symbols) {
+      if (seenUuids.has(symbol.uuid)) continue;
+      seenUuids.add(symbol.uuid);
+      unique.push(symbol);
       let isAdopted = false;
       for (const alias of symbol.aliases) {
         // Index every alias of every namespace. A reference another app stored (fsk:dive-site, a
@@ -67,6 +169,7 @@ export class SymbolsStore {
       }
       if (isAdopted) adopted.push(symbol);
     }
+    this.#symbols = unique;
     this.#adopted = adopted;
   }
 
@@ -97,12 +200,12 @@ export class SymbolsStore {
   }
 
   // The symbol's SVG text, fetched once per uuid and cached (theme re-rasters reuse it). The
-  // asset url is server-relative per the provider docs, but an absolute url passes through.
+  // The provider contract supplies a server-relative URL. Resolve it against the configured Signal K
+  // origin and refuse any other origin before attaching the device token.
   svgText(symbol: SkSymbol): Promise<string | undefined> {
     const cached = this.#svgTexts.get(symbol.uuid);
     if (cached) return cached;
-    const url = /^https?:/.test(symbol.url) ? symbol.url : `${this.#base}${symbol.url}`;
-    const loading = this.#loadSvgText(url);
+    const loading = this.#loadSvgText(symbol.url);
     this.#svgTexts.set(symbol.uuid, loading);
     // A transient failure (an expired token, a flaky link) must not be negative-cached for the
     // session: dropping the entry lets the next consumer retry, while a success stays cached.
@@ -120,11 +223,31 @@ export class SymbolsStore {
     return loading;
   }
 
-  async #loadSvgText(url: string): Promise<string | undefined> {
-    const text = await fetchAuthedText(url, this.#token);
-    // A 200 that is not SVG (a proxy error page, a misrouted asset) must not reach the rasterizer
-    // as a symbol.
-    return text?.includes('<svg') ? text : undefined;
+  async #loadSvgText(assetPath: string): Promise<string | undefined> {
+    try {
+      const origin = new URL(this.#base).origin;
+      const url = new URL(assetPath, `${origin}/`);
+      if (url.origin !== origin || !assetPath.startsWith('/') || assetPath.startsWith('//')) {
+        return undefined;
+      }
+      const headers = this.#token ? { Authorization: `Bearer ${this.#token}` } : undefined;
+      const response = await fetch(url.href, {
+        headers,
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'error',
+        signal: AbortSignal.timeout(SVG_TIMEOUT_MS),
+      });
+      if (!response.ok) return undefined;
+      const finalUrl = response.url ? new URL(response.url) : url;
+      if (finalUrl.origin !== origin) return undefined;
+      const mediaType = response.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase();
+      if (mediaType !== 'image/svg+xml') return undefined;
+      const text = await boundedText(response);
+      return text && safeSvg(text) ? text : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   #lookup(idOrAlias: string): SkSymbol | undefined {

@@ -42,7 +42,7 @@ import { SymbolsStore } from '$entities/symbols';
 import { TidesStore } from '$entities/tides';
 import { type TrackPoint, TrackRecorder } from '$entities/track';
 import { UnitsStore } from '$entities/units';
-import { type UserChartSource, UserCharts } from '$entities/user-charts';
+import { cleanUserChartSource, type UserChartSource, UserCharts } from '$entities/user-charts';
 import { OwnVessel } from '$entities/vessel';
 import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
@@ -106,18 +106,37 @@ import {
 } from '$features/weather';
 import { GatedAlarm } from '$shared/audio';
 import { type Bbox4, bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, formatLengthOr, lengthUnit, Toast } from '$shared/lib';
-import type { LayerSettings } from '$shared/map';
-import { detectCompanion } from '$shared/map';
+import {
+  Clock,
+  formatLengthOr,
+  hasControlCharacters,
+  isRecord,
+  lengthUnit,
+  Toast,
+} from '$shared/lib';
+import type { CompanionProbeResult, LayerSettings } from '$shared/map';
+import { probeCompanion } from '$shared/map';
+import {
+  BINNACLE_PRIVACY_CHANNEL,
+  createBinnaclePrivacyRegistry,
+  createBroadcastChannelBroadcaster,
+  DevicePrivacyController,
+  type EraseSafetyDecision,
+  type PrivacyReport,
+} from '$shared/privacy';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
 import {
+  booleanPersistedCodec,
+  booleanRecordPersistedCodec,
   createMapView,
   createThresholds,
   createTrackSettings,
   DEFAULT_THRESHOLDS,
   isMapView,
   type MapView,
+  type PersistedCodec,
   PersistedValue,
+  stringArrayPersistedCodec,
 } from '$shared/settings';
 import type { ConnectionPhase, HistoryProviders } from '$shared/signalk';
 import {
@@ -134,7 +153,7 @@ import {
   setWriteOutcomeListener,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
-import { createThemeController, defaultSaveName, type Theme } from '$shared/ui';
+import { createThemeController, defaultSaveName, type PanelId, type Theme } from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
@@ -274,9 +293,14 @@ const recorder = new TrackRecorder(
 const routeStore = new RouteStore();
 // Active-navigation guidance: prefers the server Course API and computes the derived values
 // client-side when the calcValues provider is absent. The arrival alarm sounds at the waypoint.
-const courseGuidance = new CourseGuidance(store, vessel);
+const courseGuidance = new CourseGuidance(store, vessel, clock);
 const arrivalAlarm = new GatedAlarm(ARRIVAL_TONE);
-const arrivalMuted = new PersistedValue<boolean>('binnacle:arrival-muted', false);
+const arrivalMuted = new PersistedValue<boolean>(
+  'binnacle:arrival-muted',
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
 // The speed, in knots, used to turn a planned route's distance into per-waypoint passage times.
 const planningSpeedKn = new PersistedValue<number>(
   'binnacle:planning-speed-kn',
@@ -332,30 +356,51 @@ let weatherProvider = $state<WeatherProvider | undefined>();
 // The panel's own weather-layer visibility, separate from the nav chart. Default wind and
 // waves on so the first open shows something without hunting through toggles. The panel carries no
 // persisted view of its own: it always opens where the nav chart is looking.
-const weatherLayerSettings = new PersistedValue<LayerSettings>('binnacle:weather-layers', {
-  [WEATHER_LAYER_IDS.wind]: { visible: true, opacity: 1 },
-  [WEATHER_LAYER_IDS.waves]: { visible: true, opacity: 0.7 },
-});
+const layerSettingsCodec: PersistedCodec<LayerSettings> = {
+  decode(value) {
+    if (!isRecord(value)) return { state: 'invalid' };
+    const entries = Object.entries(value);
+    if (entries.length > 512) return { state: 'invalid' };
+    const cleaned: LayerSettings = {};
+    let migrated = false;
+    for (const [id, state] of entries) {
+      if (
+        id.length === 0 ||
+        id.length > 256 ||
+        hasControlCharacters(id) ||
+        !isRecord(state) ||
+        typeof state.visible !== 'boolean' ||
+        typeof state.opacity !== 'number' ||
+        !Number.isFinite(state.opacity) ||
+        state.opacity < 0 ||
+        state.opacity > 1
+      ) {
+        return { state: 'invalid' };
+      }
+      cleaned[id] = { visible: state.visible, opacity: state.opacity };
+      migrated ||=
+        Object.keys(state).length !== 2 ||
+        !Object.hasOwn(state, 'visible') ||
+        !Object.hasOwn(state, 'opacity');
+    }
+    return { state: migrated ? 'migrated' : 'valid', value: cleaned };
+  },
+};
+const weatherLayerSettings = new PersistedValue<LayerSettings>(
+  'binnacle:weather-layers',
+  {
+    [WEATHER_LAYER_IDS.wind]: { visible: true, opacity: 1 },
+    [WEATHER_LAYER_IDS.waves]: { visible: true, opacity: 0.7 },
+  },
+  undefined,
+  layerSettingsCodec,
+);
 
 let layersView = $state<LayersView | undefined>();
 // The edge-docked panels (routes, layers, tracks, collision thresholds) are mutually exclusive: one
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
 // opening one closes whatever was open without each opener having to clear the others by hand.
-type LeftPanel =
-  | 'routes'
-  | 'layers'
-  | 'tracks'
-  | 'waypoints'
-  | 'tides'
-  | 'trends'
-  | 'ais'
-  | 'anchor'
-  | 'alarms'
-  | 'poi-search'
-  | 'profiles'
-  | 'regions'
-  | 'charts-management';
-let activePanel = $state<LeftPanel | null>(null);
+let activePanel = $state<PanelId | null>(null);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
@@ -376,13 +421,13 @@ const backToOfflineCharts = (): void => openPanel('regions');
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
 let narrow = $state(false);
-const openPanel = (panel: LeftPanel): void => {
+const openPanel = (panel: PanelId): void => {
   activePanel = panel;
   if (narrow) selectedNote = undefined;
 };
 // Open the panel if it is closed, close it if it is already open, so a bar pill and a menu tile both
 // toggle. Delegates to openPanel/closePanel to keep the narrow-width clear-selectedNote side effect.
-const togglePanel = (panel: LeftPanel, onOpen?: () => void): void => {
+const togglePanel = (panel: PanelId, onOpen?: () => void): void => {
   if (activePanel === panel) {
     closePanel();
   } else {
@@ -439,25 +484,49 @@ const savedView = isMapView(mapViewStore.value) ? mapViewStore.value : undefined
 // The live map view if one has been reported, else the persisted view: the fallback that the tides
 // load and the weather map's initial view share.
 const currentView = $derived(mapView ?? savedView);
-const layerSettings = new PersistedValue<LayerSettings>('binnacle:layers', {});
-const layerOrder = new PersistedValue<string[]>('binnacle:layer-order', []);
+const layerSettings = new PersistedValue<LayerSettings>(
+  'binnacle:layers',
+  {},
+  undefined,
+  layerSettingsCodec,
+);
+const layerOrder = new PersistedValue<string[]>(
+  'binnacle:layer-order',
+  [],
+  undefined,
+  stringArrayPersistedCodec({ maxItems: 512 }),
+);
 // A one-shot, device-local latch: the first time a radar is discovered, the echo layer is turned on so
 // "if they have radar, the radar layer is enabled". Latched so a later explicit toggle-off is never
 // overridden. Not part of a profile: it is local device state, not portable layer configuration.
-const radarAutoEnabled = new PersistedValue<boolean>('binnacle:radar-autoenabled', false);
-const pinnedActions = new PersistedValue<string[]>('binnacle:pinned-actions', [...DEFAULT_PINNED]);
-// PersistedValue parses localStorage without a schema guard, so a corrupt or hand-edited value could
-// be a non-array. Heal it to the default once at startup, so the menu's Set and the pin toggle never
-// receive a non-iterable; resolvePinned defends the bar render separately.
-if (!Array.isArray(pinnedActions.value as unknown)) pinnedActions.set([...DEFAULT_PINNED]);
+const radarAutoEnabled = new PersistedValue<boolean>(
+  'binnacle:radar-autoenabled',
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
+const pinnedActions = new PersistedValue<string[]>(
+  'binnacle:pinned-actions',
+  [...DEFAULT_PINNED],
+  undefined,
+  stringArrayPersistedCodec({ maxItems: 64, maxLength: 128 }),
+);
 
 // The instrument dock: tile selection rides profiles through this PersistedValue (the bindings
 // entry reads and writes it), while the open flag stays local so a casual dock toggle never
 // dirties the active profile and a profile switch never yanks the dock.
-const instrumentTiles = new PersistedValue<string[]>('binnacle:instrument-tiles', [
-  ...DEFAULT_TILES,
-]);
-const instrumentsOpen = new PersistedValue<boolean>('binnacle:instruments-open', false);
+const instrumentTiles = new PersistedValue<string[]>(
+  'binnacle:instrument-tiles',
+  [...DEFAULT_TILES],
+  undefined,
+  stringArrayPersistedCodec({ maxItems: 128, maxLength: 256 }),
+);
+const instrumentsOpen = new PersistedValue<boolean>(
+  'binnacle:instruments-open',
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
 const instruments = createInstrumentsController({
   store,
   origin,
@@ -482,6 +551,8 @@ const onResetPinned = (): void => {
 const layerCategoriesOpen = new PersistedValue<Record<string, boolean>>(
   'binnacle:layer-categories',
   {},
+  undefined,
+  booleanRecordPersistedCodec({ maxEntries: 128 }),
 );
 
 // Profiles: named bundles of the portable settings (theme, layers, opacity, order, weather layers,
@@ -496,19 +567,22 @@ let mapInstance = $state<MapLibreMap | undefined>();
 
 // Companion feature-detect. Both the regions and chart-management panels receive the resolved
 // base URL as a prop, so they mount ready without their own probe RTT.
-let companionBase = $state<string | null>(null);
-let companionProbeComplete = $state(false);
+let companionProbe = $state<CompanionProbeResult | undefined>();
+const companionBase = $derived(
+  companionProbe?.state === 'present' || companionProbe?.state === 'access-refused'
+    ? companionProbe.base
+    : null,
+);
 let companionProbeGeneration = 0;
 
 // Probed at mount (unauthenticated, so map init is never blocked on auth resolving) and retried
 // wherever a stale credential could have been the reason it came back null: once real auth
 // arrives, and again on a reconnect that could catch a companion started while the link was down.
-function probeCompanion(): void {
+function refreshCompanionProbe(): void {
   const generation = ++companionProbeGeneration;
-  void detectCompanion(origin, authToken).then((base) => {
+  void probeCompanion(origin, authToken).then((result) => {
     if (generation !== companionProbeGeneration) return;
-    companionBase = base;
-    companionProbeComplete = true;
+    companionProbe = result;
     void companionStatus.refresh();
   });
 }
@@ -548,6 +622,69 @@ async function refreshSymbols(): Promise<void> {
 }
 
 const profileStore = new ProfileStore();
+
+function localEraseSafety(): EraseSafetyDecision {
+  if (mob.active)
+    return { allowed: false, reason: 'Resolve the active man-overboard alert first.' };
+  if (anchor.watching) return { allowed: false, reason: 'Stop the anchor watch first.' };
+  if (courseGuidance.active) return { allowed: false, reason: 'Stop active navigation first.' };
+  if (routeStore.working) return { allowed: false, reason: 'Save or cancel the route edit first.' };
+  if (measure.active) return { allowed: false, reason: 'Finish or clear the measurement first.' };
+  if (recorder.points.length > 0) {
+    return { allowed: false, reason: 'Save or clear the unsaved recorded track first.' };
+  }
+  return { allowed: true };
+}
+
+const appScope =
+  typeof window === 'undefined' || !import.meta.env.PROD
+    ? ''
+    : new URL(import.meta.env.BASE_URL, window.location.origin).href;
+const privacyRegistry = createBinnaclePrivacyRegistry({
+  localStorage: typeof localStorage === 'undefined' ? undefined : localStorage,
+  indexedDB: globalThis.indexedDB,
+  cacheStorage: globalThis.caches,
+  serviceWorker:
+    typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+      ? navigator.serviceWorker
+      : undefined,
+  serviceWorkerScopes: appScope ? [appScope] : [],
+  cachePrefixes: appScope ? [`workbox-precache-v2-${appScope}`] : [],
+});
+const privacySourceId =
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `binnacle-${Math.random().toString(16).slice(2)}`;
+const privacy = new DevicePrivacyController({
+  registry: privacyRegistry,
+  canErase: localEraseSafety,
+  broadcaster:
+    typeof BroadcastChannel === 'undefined'
+      ? undefined
+      : createBroadcastChannelBroadcaster(BINNACLE_PRIVACY_CHANNEL, privacySourceId),
+});
+
+function reloadAfterPrivacy(report: PrivacyReport): PrivacyReport {
+  if (report.clearedOwnerIds.includes('signalk-credentials')) {
+    // The privacy registry already removed the stored identity. Reset runtime auth without writing a
+    // replacement into localStorage during the short confirmation window before the reload.
+    auth.forgetDeviceCredentials(false);
+  }
+  if (report.clearedOwnerIds.length > 0) {
+    // Reload after any successful deletion, including a partial result. This prevents the live app
+    // from repopulating a store that was cleared while still leaving the report visible briefly.
+    window.setTimeout(() => window.location.reload(), 1200);
+  }
+  return report;
+}
+
+async function forgetDeviceCredentials(): Promise<PrivacyReport> {
+  return reloadAfterPrivacy(await privacy.forgetCredentials());
+}
+
+async function eraseAllLocalData(): Promise<PrivacyReport> {
+  return reloadAfterPrivacy(await privacy.eraseAllLocalData());
+}
 // True only while a profile is being applied, so the dirty-tracking effect below does not flag the
 // active profile as edited by its own apply writes. A plain flag, not reactive, read inside the effect.
 let applying = false;
@@ -687,7 +824,44 @@ function onImportProfiles(profiles: ImportedProfile[]): number {
 // User-imported charts: URL descriptors only, persisted locally and synced to the server as chart
 // resources so every station sees them. Local .pmtiles FILES are the signalk-pmtiles-plugin's job
 // (it serves them as ordinary chart resources Binnacle already renders), not a browser blob store.
-const userChartsStore = new PersistedValue<UserChartSource[]>('binnacle:user-charts', []);
+const userChartsCodec: PersistedCodec<UserChartSource[]> = {
+  decode(value) {
+    if (!Array.isArray(value) || value.length > 1_000) return { state: 'invalid' };
+    const cleaned: UserChartSource[] = [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local decode accumulator
+    const ids = new Set<string>();
+    let migrated = false;
+    for (const item of value) {
+      const chart = cleanUserChartSource(item);
+      if (!chart || ids.has(chart.id)) {
+        migrated = true;
+        continue;
+      }
+      ids.add(chart.id);
+      cleaned.push(chart);
+      migrated ||= JSON.stringify(item) !== JSON.stringify(chart);
+    }
+    return { state: migrated ? 'migrated' : 'valid', value: cleaned };
+  },
+  encode(value) {
+    const cleaned: UserChartSource[] = [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local encode accumulator
+    const ids = new Set<string>();
+    for (const item of value) {
+      const chart = cleanUserChartSource(item);
+      if (!chart || ids.has(chart.id)) continue;
+      ids.add(chart.id);
+      cleaned.push(chart);
+    }
+    return cleaned;
+  },
+};
+const userChartsStore = new PersistedValue<UserChartSource[]>(
+  'binnacle:user-charts',
+  [],
+  undefined,
+  userChartsCodec,
+);
 
 const userCharts = new UserCharts(
   userChartsStore.value,
@@ -782,6 +956,8 @@ const marineRadar = createMarineRadarController({
   getToken: () => chartsToken,
   getCenter: () => vessel.position ?? undefined,
   getHeading: () => vessel.headingRad,
+  centerFresh: () => !vessel.positionStale,
+  headingFresh: () => !vessel.headingStale,
   radarAvailable: () => serverFeatures !== undefined,
 });
 // The radar controls slide-over opens from the radar menu tile or the radar layer row's gear;
@@ -1035,9 +1211,14 @@ const menuItems = $derived<MenuItem[]>([
     icon: DownloadCloud,
     group: 'Offline charts',
     available: companionBase !== null,
-    unavailableHint: companionProbeComplete
-      ? 'Offline charts could not reach Chart Locker. Install and start signalk-chart-locker from the Signal K Appstore, and approve Binnacle read access on a secured server.'
-      : 'Checking whether Chart Locker is available on the Signal K server.',
+    unavailableHint:
+      companionProbe === undefined
+        ? 'Checking whether Chart Locker is available on the Signal K server.'
+        : companionProbe.state === 'access-refused'
+          ? 'Signal K refused access to the Chart Locker route. Sign in to Signal K administration, then approve Binnacle read access on a secured server.'
+          : companionProbe.state === 'absent'
+            ? 'Install and start signalk-chart-locker from the Signal K Appstore to enable offline charts.'
+            : 'Chart Locker could not be reached. Check the Signal K connection and Chart Locker service, then retry.',
     pressed: activePanel === 'regions' || activePanel === 'charts-management',
     // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
     // exists. An absent provider uses available rather than disabled so tapping explains the setup.
@@ -1327,7 +1508,8 @@ $effect(() => {
     if (routeStore.activeId !== undefined && courseGuidance.canAdvanceRoute) {
       // The streamed activeRoute.pointIndex stays authoritative, so a server that also auto-advances
       // and this request converge on the same active point. A failed advance is surfaced.
-      routeController.onSkipPoint(1);
+      const activeRoute = courseGuidance.activeRouteSnapshot;
+      if (activeRoute) routeController.onArrivalAdvance(activeRoute);
     }
   }
   arrivedLast = arrived;
@@ -1412,11 +1594,15 @@ function refreshAfterStreamReconnect(token: string | undefined): void {
     ),
   );
   if (instruments.open) instruments.refreshLiveCatalog();
-  if (untrack(() => companionBase === null)) probeCompanion();
+  if (untrack(() => companionBase === null)) refreshCompanionProbe();
   void units.syncFromServer(origin);
   void routeController.hydrateAndSeedCourse();
 }
 
+// A replacement Web Worker starts its internal connection counter from zero. Offset each worker's
+// frames into one page-lifetime sequence so late callbacks can be rejected without making a restarted
+// worker look older than the worker it replaced.
+let workerGenerationBase = 0;
 const streamController = createStreamController({
   client,
   store,
@@ -1428,12 +1614,21 @@ const streamController = createStreamController({
     noteLoader = createNoteDetailLoader(origin, () => chartsToken);
   },
   onFrame: (frame) => {
-    store.applyFrame(frame);
+    const generation =
+      frame.generation === undefined
+        ? Math.max(store.generation, workerGenerationBase)
+        : workerGenerationBase + frame.generation;
+    if (!store.applyFrame({ ...frame, generation })) return;
     for (const [path, value] of frame.self) marineRadar.applyControlDelta(path, value);
   },
-  onInitialSubscription: () => routeController.hydrateAndSeedCourse(),
+  onInitialSubscription: async () => {
+    await routeController.hydrateAndSeedCourse();
+  },
   onReconnect: refreshAfterStreamReconnect,
-  onWorkerRestart: () => instruments.resubscribe(),
+  onWorkerRestart: () => {
+    workerGenerationBase = store.generation + 1;
+    instruments.resubscribe();
+  },
 });
 const streamError = $derived(streamController.error);
 
@@ -1475,7 +1670,7 @@ $effect(() => {
   // Locker) 401s once and is never retried; redo it here once real credentials exist. Untracked:
   // the base this same call resolves would otherwise become a dependency, re-running this whole
   // effect (and re-firing every probe above) a second time on the first successful detection.
-  if (untrack(() => companionBase === null)) probeCompanion();
+  if (untrack(() => companionBase === null)) refreshCompanionProbe();
   // History provider discovery: the v2 features list reports the history API even with no
   // provider registered, so the providers route is the real signal.
   // The probe reads and updates provider state internally. The auth token is already an explicit
@@ -1492,13 +1687,13 @@ $effect(() => {
 const NARROW_BREAKPOINT_PX = 600;
 
 onMount(() => {
-  probeCompanion();
+  refreshCompanionProbe();
   companionStatus.start();
   trendRecorder.start(() => ({
-    depth: vessel.depthMeters,
-    wind: vessel.windSpeedApparentMps,
-    pressure: vessel.outsidePressurePa,
-    sog: vessel.sogMps,
+    depth: vessel.depthStale ? undefined : vessel.depthMeters,
+    wind: vessel.windStale ? undefined : vessel.windSpeedApparentMps,
+    pressure: vessel.pressureStale ? undefined : vessel.outsidePressurePa,
+    sog: vessel.sogStale ? undefined : vessel.sogMps,
   }));
   window.addEventListener('pointerdown', primeAudio, { once: true });
   // The auth controller owns the focus and cross-tab listeners that pick up an approval.
@@ -1516,7 +1711,31 @@ onMount(() => {
   };
   syncNarrow();
   narrowQuery.addEventListener('change', syncNarrow);
-  return () => narrowQuery.removeEventListener('change', syncNarrow);
+  // Another open Binnacle tab may erase the shared browser storage. Reset this tab's in-memory token
+  // and reload so it cannot keep using credentials or cached state that the navigator just removed.
+  const privacyChannel =
+    typeof BroadcastChannel === 'undefined'
+      ? undefined
+      : new BroadcastChannel(BINNACLE_PRIVACY_CHANNEL);
+  if (privacyChannel) {
+    privacyChannel.onmessage = (event) => {
+      if (!isRecord(event.data)) return;
+      if (
+        event.data.type !== 'credentials-forgotten' &&
+        event.data.type !== 'device-data-erased' &&
+        event.data.type !== 'local-data-erased'
+      ) {
+        return;
+      }
+      if (event.data.sourceId === privacySourceId) return;
+      auth.forgetDeviceCredentials(false);
+      window.location.reload();
+    };
+  }
+  return () => {
+    narrowQuery.removeEventListener('change', syncNarrow);
+    privacyChannel?.close();
+  };
 });
 
 onDestroy(() => {
@@ -1770,6 +1989,8 @@ const plotterActions = {
         onSetDefault={(id) => profileStore.setDefault(id)}
         onExport={onExportProfile}
         onImport={onImportProfiles}
+        onForgetCredentials={forgetDeviceCredentials}
+        onEraseAllLocalData={eraseAllLocalData}
         onClose={closePanel}
         onBack={backToMenu}
       />

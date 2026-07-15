@@ -167,6 +167,30 @@ describe('MobStore', () => {
     expect(mob.acknowledged).toBe(false);
   });
 
+  it('does not capture an old position after the connection generation changes', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    const vessel = new OwnVessel(store, clock);
+    const mob = new MobStore(store, vessel, clock, createFakeStorage());
+    store.applyFrame({ ...frame({ 'navigation.position': BOAT }), generation: 1 });
+    expect(mob.capture()?.position).toEqual(BOAT);
+    store.applyFrame({ ...frame({}), generation: 2 });
+    expect(mob.capture()).toBeUndefined();
+  });
+
+  it('re-arms a remote alarm after it clears and is raised again', () => {
+    const { store, mob } = setup();
+    const emergency = { state: 'emergency', message: 'Man overboard' };
+    store.applyFrame(frame({ 'notifications.mob': emergency }));
+    mob.acknowledge();
+    expect(mob.acknowledged).toBe(true);
+    store.applyFrame(frame({ 'notifications.mob': { state: 'normal' } }));
+    expect(mob.acknowledged).toBe(false);
+    store.applyFrame(frame({ 'notifications.mob': emergency }));
+    expect(mob.active).toBe(true);
+    expect(mob.acknowledged).toBe(false);
+  });
+
   it('reflects a remote MOB notification, with its mark when carried', () => {
     const { store, mob } = setup();
     store.applyFrame(

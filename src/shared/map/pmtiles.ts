@@ -13,6 +13,114 @@ let protocol: Protocol | undefined;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [200, 500];
 
+interface ValidatedRange {
+  data: ArrayBuffer;
+  validator?: string;
+  cacheControl?: string;
+  expires?: string;
+}
+
+async function readBoundedBody(response: Response, maxBytes: number): Promise<ArrayBuffer> {
+  if (!response.body) return response.arrayBuffer();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new Error('PMTiles server returned more bytes than requested.');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const data = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return data.buffer;
+}
+
+function parseContentRange(value: string | null): { start: number; end: number; total?: number } {
+  const match = value?.match(/^bytes (\d+)-(\d+)\/(\d+|\*)$/i);
+  if (!match) throw new Error('PMTiles range response is missing a valid Content-Range header.');
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = match[3] === '*' ? undefined : Number(match[3]);
+  if (end < start || (total !== undefined && (total <= end || total <= 0))) {
+    throw new Error('PMTiles range response has inconsistent bounds.');
+  }
+  return { start, end, total };
+}
+
+async function validateRangeResponse(
+  response: Response,
+  offset: number,
+  length: number,
+): Promise<ValidatedRange> {
+  let declaredLength: number | undefined;
+  let total: number | undefined;
+  if (response.status === 206) {
+    const range = parseContentRange(response.headers.get('Content-Range'));
+    declaredLength = range.end - range.start + 1;
+    const shortBeforeEnd =
+      declaredLength < length && (range.total === undefined || range.end + 1 !== range.total);
+    if (range.start !== offset || declaredLength > length || shortBeforeEnd) {
+      throw new Error('PMTiles server returned bytes outside the requested range.');
+    }
+    total = range.total;
+  } else if (response.status === 200) {
+    // A 200 is only valid when the request started at zero and the complete archive fits inside the
+    // requested span. Accepting a larger body would mean the server ignored Range and could pull an
+    // entire multi-gigabyte archive into memory.
+    if (offset !== 0) {
+      throw new Error('PMTiles server ignored the requested byte range.');
+    }
+  } else {
+    throw new Error(`PMTiles fetch returned unexpected status ${response.status}.`);
+  }
+
+  const contentLengthHeader = response.headers.get('Content-Length');
+  const contentLength = contentLengthHeader === null ? undefined : Number(contentLengthHeader);
+  if (contentLength !== undefined && (!Number.isSafeInteger(contentLength) || contentLength < 0)) {
+    throw new Error('PMTiles server declared an invalid response length.');
+  }
+  if (
+    contentLength !== undefined &&
+    (contentLength > length || (declaredLength !== undefined && contentLength !== declaredLength))
+  ) {
+    throw new Error('PMTiles server declared bytes outside the requested range.');
+  }
+  const data = await readBoundedBody(response, length);
+  if (
+    data.byteLength > length ||
+    (declaredLength !== undefined && data.byteLength !== declaredLength)
+  ) {
+    throw new Error('PMTiles server returned bytes outside the requested range.');
+  }
+  total ??= data.byteLength;
+
+  let validator = response.headers.get('ETag') ?? undefined;
+  if (validator?.startsWith('W/')) validator = undefined;
+  if (!validator) {
+    const modified = response.headers.get('Last-Modified');
+    if (modified && total !== undefined) validator = `binnacle:${modified}:${total}`;
+  }
+  return {
+    data,
+    validator,
+    cacheControl: response.headers.get('Cache-Control') ?? undefined,
+    expires: response.headers.get('Expires') ?? undefined,
+  };
+}
+
 // A PMTiles source that fetches ranges with `cache: 'no-store'`. A large PMTiles
 // archive served with a weak ETag over range requests makes Chrome fail the HTTP
 // disk-cache write (ERR_CACHE_WRITE_FAILURE), which rejects the whole fetch and blanks
@@ -46,16 +154,13 @@ export class NoStoreSource implements Source {
         await this.#backoff(attempt, signal);
         continue;
       }
-      if (response.status < 300) {
-        // A weak ETag cannot validate range requests, so report none rather than one the
-        // library would reject as a mismatch and retry on.
-        let etag = response.headers.get('ETag') ?? undefined;
-        if (etag?.startsWith('W/')) etag = undefined;
+      if (response.status === 200 || response.status === 206) {
+        const validated = await validateRangeResponse(response, offset, length);
         return {
-          data: await response.arrayBuffer(),
-          etag,
-          cacheControl: response.headers.get('Cache-Control') ?? undefined,
-          expires: response.headers.get('Expires') ?? undefined,
+          data: validated.data,
+          etag: validated.validator,
+          cacheControl: validated.cacheControl,
+          expires: validated.expires,
         };
       }
       // 5xx is a transient server condition worth retrying; any other error status will not.
@@ -104,17 +209,24 @@ export class CompanionSource implements Source {
     const headers: Record<string, string> = { Range: `bytes=${offset}-${offset + length - 1}` };
     const token = this.#getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(this.#url, { signal, headers });
-    if (response.status >= 300) {
+    const response = await fetch(this.#url, {
+      signal,
+      headers,
+      credentials: 'omit',
+      redirect: 'error',
+    });
+    if (response.url && new URL(response.url).origin !== new URL(this.#url).origin) {
+      throw new Error('PMTiles companion redirected outside the Signal K origin.');
+    }
+    if (response.status !== 200 && response.status !== 206) {
       throw new Error(`PMTiles fetch failed: ${response.status} for ${this.#url}`);
     }
-    let etag = response.headers.get('ETag') ?? undefined;
-    if (etag?.startsWith('W/')) etag = undefined;
+    const validated = await validateRangeResponse(response, offset, length);
     return {
-      data: await response.arrayBuffer(),
-      etag,
-      cacheControl: response.headers.get('Cache-Control') ?? undefined,
-      expires: response.headers.get('Expires') ?? undefined,
+      data: validated.data,
+      etag: validated.validator,
+      cacheControl: validated.cacheControl,
+      expires: validated.expires,
     };
   }
 }

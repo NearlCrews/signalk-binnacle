@@ -21,6 +21,37 @@ describe('regions client', () => {
     );
   });
 
+  it('forwards caller cancellation to region status requests', async () => {
+    const fetchImpl = vi.fn(async () => ok({}, 404));
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      fetchImpl as unknown as typeof fetch,
+    );
+    const abort = new AbortController();
+    await client.getRegionJobStatus('region-9', abort.signal);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    abort.abort();
+    expect(init.signal?.aborted).toBe(true);
+  });
+
+  it('rejects malformed region and warm-status provider responses', async () => {
+    const malformedRegion = vi.fn(async () => ok([{ id: 'missing-fields' }]));
+    const regions = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      malformedRegion as unknown as typeof fetch,
+    );
+    await expect(regions.getRegions()).rejects.toThrow('invalid saved region');
+
+    const malformedStatus = vi.fn(async () =>
+      ok({ total: 1, done: 2, skipped: 0, bytes: 0, errors: 0, state: 'running' }),
+    );
+    const statuses = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      malformedStatus as unknown as typeof fetch,
+    );
+    await expect(statuses.getRegionJobStatus('region-9')).rejects.toThrow('invalid region status');
+  });
+
   it('encodes lat and lon into the geocode query', async () => {
     const fetchImpl = vi.fn(async () => ok({ display_name: 'Test City' }));
     const client = createRegionsClient(
@@ -156,5 +187,24 @@ describe('regions client', () => {
       'http://h/plugins/signalk-chart-locker/api/cache/clear-scroll',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('rejects malformed mutation responses before they reach controller state', async () => {
+    const malformed = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok({ jobId: '', region: { id: 'incomplete' } })) as unknown as typeof fetch,
+    );
+
+    await expect(malformed.clearScrollCache()).rejects.toThrow('invalid cache clear result');
+    await expect(
+      malformed.postRegion({
+        bbox: [-1, -1, 1, 1],
+        sourceIds: ['basemap'],
+        minzoom: 1,
+        maxzoom: 2,
+        name: 'Area',
+      }),
+    ).rejects.toThrow();
+    await expect(malformed.redownloadRegion('r1')).rejects.toThrow('invalid region job');
   });
 });

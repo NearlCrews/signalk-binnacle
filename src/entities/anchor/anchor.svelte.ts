@@ -2,7 +2,12 @@ import type { OwnVessel } from '$entities/vessel';
 import { asNumber, isLatLon, type LatLon } from '$shared/geo';
 import { isFiniteNumber, isRecord } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
-import { PersistedValue, type StorageLike } from '$shared/settings';
+import {
+  boundedNumberPersistedCodec,
+  type PersistedCodec,
+  PersistedValue,
+  type StorageLike,
+} from '$shared/settings';
 import {
   isSoundingNotification,
   notificationState,
@@ -24,10 +29,18 @@ export interface LocalAnchor {
   dragging: boolean;
 }
 
-function validLocal(value: LocalAnchor | null): LocalAnchor | null {
+const MAX_ANCHOR_RADIUS_M = 1_000_000;
+
+function validLocal(value: unknown): LocalAnchor | null {
   if (!isRecord(value)) return null;
   if (!isLatLon(value.position)) return null;
-  if (!isFiniteNumber(value.radiusMeters) || value.radiusMeters < MIN_RADIUS_M) return null;
+  if (
+    !isFiniteNumber(value.radiusMeters) ||
+    value.radiusMeters < MIN_RADIUS_M ||
+    value.radiusMeters > MAX_ANCHOR_RADIUS_M
+  ) {
+    return null;
+  }
   // Rebuilt as a clean literal: spreading the raw localStorage object would re-persist any
   // unknown extra properties forever.
   return {
@@ -36,6 +49,19 @@ function validLocal(value: LocalAnchor | null): LocalAnchor | null {
     dragging: value.dragging === true,
   };
 }
+
+const localAnchorCodec: PersistedCodec<LocalAnchor | null> = {
+  decode(value) {
+    if (value === null) return { state: 'valid', value: null };
+    const clean = validLocal(value);
+    if (!clean || !isRecord(value) || !isRecord(value.position)) return { state: 'invalid' };
+    const exactShape =
+      Object.keys(value).length === 3 &&
+      Object.keys(value.position).length === 2 &&
+      typeof value.dragging === 'boolean';
+    return { state: exactShape ? 'valid' : 'migrated', value: clean };
+  },
+};
 
 // The anchor watch state machine. Server mode is fully stream-driven: the plugin's
 // navigation.anchor.position and maxRadius cells are the source of truth, and its
@@ -60,11 +86,17 @@ export class AnchorWatch {
   constructor(store: SignalKStore, vessel: OwnVessel, storage?: StorageLike) {
     this.#store = store;
     this.#vessel = vessel;
-    this.#watch = new PersistedValue<LocalAnchor | null>('binnacle:anchor-watch', null, storage);
+    this.#watch = new PersistedValue<LocalAnchor | null>(
+      'binnacle:anchor-watch',
+      null,
+      storage,
+      localAnchorCodec,
+    );
     this.#preferredRadius = new PersistedValue<number>(
       'binnacle:anchor-radius',
       DEFAULT_RADIUS_M,
       storage,
+      boundedNumberPersistedCodec(MIN_RADIUS_M, MAX_ANCHOR_RADIUS_M),
     );
     this.#local = validLocal(this.#watch.value);
     // Pre-create the cells this watch reads, so the first reactive read finds a tracked cell
@@ -77,13 +109,18 @@ export class AnchorWatch {
   }
 
   #serverPosition = $derived.by<LatLon | undefined>(() => {
-    const value = this.#raw(SK_PATHS.anchorPosition);
+    const value = this.#currentRaw(SK_PATHS.anchorPosition);
     return isLatLon(value) ? value : undefined;
   });
 
   #serverRadius = $derived.by<number | undefined>(() =>
-    asNumber(this.#raw(SK_PATHS.anchorMaxRadius)),
+    asNumber(this.#currentRaw(SK_PATHS.anchorMaxRadius)),
   );
+
+  #serverStateStale = $derived.by<boolean>(() => {
+    const cell = this.#store.cell(SK_PATHS.anchorPosition);
+    return isLatLon(cell.value) && cell.epoch > 0 && cell.generation !== this.#store.generation;
+  });
 
   #notificationState = $derived.by<string | undefined>(() =>
     notificationState(this.#raw(SK_PATHS.anchorNotification)),
@@ -94,7 +131,7 @@ export class AnchorWatch {
   );
 
   get mode(): AnchorMode {
-    if (this.#serverPosition) return 'server';
+    if (this.#serverPosition || this.#serverStateStale) return 'server';
     return this.#local ? 'client' : 'off';
   }
 
@@ -104,24 +141,25 @@ export class AnchorWatch {
 
   // The watch has lost its position feed: the distance readout cannot be trusted in any mode.
   get fixLost(): boolean {
-    return this.watching && this.#vessel.positionStale;
+    return this.watching && (!this.#vessel.position || this.#vessel.positionStale);
   }
 
   // Client-mode drag detection counts position fixes, so without them it is silently dead; a
   // server watch keeps alarming on its own feed. Consumers must make this state loud: the watch
   // guards a sleeping crew.
   get degraded(): boolean {
-    return this.fixLost && this.mode !== 'server';
+    return this.#serverStateStale || (this.fixLost && this.mode !== 'server');
   }
 
   get position(): LatLon | undefined {
-    return this.#serverPosition ?? this.#local?.position;
+    if (this.mode === 'server') return this.#serverPosition;
+    return this.#local?.position;
   }
 
   // The active watch radius in meters, or undefined when off (or when a server watch has not
   // published its radius yet, so no circle is drawn for it).
   get radiusMeters(): number | undefined {
-    if (this.#serverPosition) return this.#serverRadius;
+    if (this.mode === 'server') return this.#serverRadius;
     return this.#local?.radiusMeters;
   }
 
@@ -135,7 +173,7 @@ export class AnchorWatch {
   #distance = $derived.by<number | undefined>(() => {
     const anchor = this.position;
     const boat = this.#vessel.position;
-    if (!anchor || !boat) return undefined;
+    if (!anchor || !boat || this.#vessel.positionStale) return undefined;
     return haversineMeters(anchor.latitude, anchor.longitude, boat.latitude, boat.longitude);
   });
 
@@ -162,7 +200,7 @@ export class AnchorWatch {
   // Feed one reactive pass per position fix (and notification change). Client mode runs the drag
   // detection; server mode only reconciles local bookkeeping, since the plugin owns the alarm.
   updateFix(): void {
-    if (this.#serverPosition) {
+    if (this.mode === 'server') {
       // The server watch is the source of truth: a lingering local watch would resurface as a stale
       // client watch after the server anchor is raised, so drop it.
       if (this.#local) this.#setLocal(null);
@@ -239,5 +277,10 @@ export class AnchorWatch {
 
   #raw(path: string): unknown {
     return this.#store.cell(path).value;
+  }
+
+  #currentRaw(path: string): unknown {
+    const cell = this.#store.cell(path);
+    return cell.epoch > 0 && cell.generation !== this.#store.generation ? undefined : cell.value;
   }
 }

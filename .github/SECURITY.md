@@ -78,6 +78,12 @@ tool ends or the page reloads.
 Saved offline-area rectangles, automatic cache settings, and installed chart overrides go only to
 your own Signal K server and its Chart Locker plugin.
 
+The Profiles panel can forget Binnacle's local Signal K token or erase all local Binnacle settings,
+profiles, caches, IndexedDB data, service-worker registration, and credentials from the current
+browser. It clears only an explicit Binnacle ownership inventory, not all storage for the Signal K
+origin. It does not revoke the device in Signal K, sign out an administrator session, or delete any
+server resource. Full erasure is blocked during active safety and unsaved navigation workflows.
+
 For map and weather data it calls public services including OpenFreeMap, Open-Meteo, RainViewer,
 NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, Open Water Software's Seascape, and the VLIZ Marine
 Regions service. Enabled online layers disclose the viewed tile area to their providers. Weather
@@ -100,6 +106,11 @@ External links in point-of-interest details are length-bounded and scheme-checke
 waypoint collections, fields, coordinates, and detail arrays are validated and bounded before they
 reach the chart or UI. Valid note viewport results may be cached in IndexedDB for offline reuse.
 Changing credentials invalidates the session cache and pending provider work.
+
+Server-provided symbol catalogs accept only bounded, same-origin SVG paths. Symbol responses require
+the SVG media type, a bounded body, and passive markup without scripts, embedded active content,
+external references, event handlers, or imported CSS. The production page also applies a content
+security policy that limits scripts, workers, objects, connections, and embedded resources.
 
 ## Signal K Security
 

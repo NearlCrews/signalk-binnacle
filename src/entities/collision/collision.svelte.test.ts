@@ -374,3 +374,42 @@ describe('CollisionAssessment escalating', () => {
     expect(collision.escalating).toBe(false);
   });
 });
+
+describe('CollisionAssessment own-vessel freshness', () => {
+  it('stands down computed CPA when own motion is stale even with a fresh position', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 100_000 });
+    store.applyFrame({
+      self: new Map<string, unknown>([
+        ['navigation.position', { latitude: 0, longitude: 0 }],
+        ['navigation.speedOverGround', knotsToMetersPerSecond(5)],
+        ['navigation.courseOverGroundTrue', 0],
+      ]),
+      ais: new Map([
+        [
+          'vessels.closing',
+          new Map<string, unknown>([
+            ['navigation.position', { latitude: 1852 / 111320, longitude: 0 }],
+            ['navigation.speedOverGround', knotsToMetersPerSecond(10)],
+            ['navigation.courseOverGroundTrue', degreesToRadians(180)],
+          ]),
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 80_000,
+    });
+    // Refresh only the position. SOG and COG remain beyond the 10-second freshness window.
+    store.applyFrame({
+      self: new Map([['navigation.position', { latitude: 0, longitude: 0 }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 99_000,
+    });
+    const collision = new CollisionAssessment(
+      new OwnVessel(store, clock),
+      new AisTargets(store, () => clock.now),
+      createThresholds(),
+    );
+
+    expect(collision.assessment.contacts).toHaveLength(0);
+  });
+});

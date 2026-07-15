@@ -204,6 +204,26 @@ describe('AnchorWatch (server mode)', () => {
     expect(anchor.radiusMeters).toBe(60);
   });
 
+  it('does not present retained server geometry as current after reconnect', () => {
+    const { store, anchor } = setup();
+    store.applyFrame({
+      ...frame({
+        'navigation.anchor.position': ANCHOR,
+        'navigation.anchor.maxRadius': 60,
+        'notifications.navigation.anchor': { state: 'emergency', message: 'dragging' },
+      }),
+      generation: 1,
+    });
+    store.applyFrame({ ...frame({}), generation: 2 });
+
+    expect(anchor.mode).toBe('server');
+    expect(anchor.position).toBeUndefined();
+    expect(anchor.radiusMeters).toBeUndefined();
+    expect(anchor.degraded).toBe(true);
+    // Keep the latched safety alarm visible while waiting for current server state.
+    expect(anchor.dragging).toBe(true);
+  });
+
   it('clears when the plugin raises the anchor (position goes null)', () => {
     const { store, anchor } = setup();
     store.applyFrame(frame({ 'navigation.anchor.position': ANCHOR }));

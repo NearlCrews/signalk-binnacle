@@ -101,10 +101,11 @@ source, and surrounding traffic before relying on it.
 
 - **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
   and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
-  storage. The access-needed header status opens Signal K administrator sign-in directly. Return to
-  Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports an
-  administrator session, a Chart Locker refusal is shown as an access error with retry instead. See the
-  [Offline charts guide](offline-charts.md) and the Offline charts section in the
+  storage. The installation probe distinguishes a missing plugin, refused access, and a service or
+  network failure. The access-needed header status opens Signal K administrator sign-in directly.
+  Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
+  an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
+  See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
   [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 
 ## Settings
@@ -115,4 +116,7 @@ source, and surrounding traffic before relying on it.
   timestamps, list sizes, and server documents are validated before merge. Without server write
   access, edits remain local, and delete confirmation warns that a server copy may remain. The panel
   reports Local, Syncing, Synced, and Failed states, offers Retry after a sync failure, and keeps
-  secondary card actions in a labeled overflow menu.
+  secondary card actions in a labeled overflow menu. Device privacy actions can forget only the local
+  Signal K token or erase Binnacle-owned local settings, caches, IndexedDB data, profiles, and
+  credentials. Full erasure is blocked while safety or unsaved navigation work is active and never
+  deletes or revokes server data.

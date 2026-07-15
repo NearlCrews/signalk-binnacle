@@ -18,6 +18,21 @@ function perpendicular(p: TrackPoint, a: TrackPoint, b: TrackPoint): number {
 function simplifyRun(run: TrackPoint[], tolerance: number): TrackPoint[] {
   const n = run.length;
   if (n <= 2) return run;
+  // Unwrap longitude onto one continuous axis before measuring perpendicular distance. Without
+  // this, a short segment crossing 180 degrees looks almost 360 degrees wide and simplification can
+  // remove or retain the wrong points. Output still uses the original normalized coordinates.
+  const work: TrackPoint[] = [];
+  for (const point of run) {
+    if (work.length === 0) {
+      work.push(point);
+      continue;
+    }
+    const previous = work[work.length - 1].lon;
+    let lon = point.lon;
+    while (lon - previous > 180) lon -= 360;
+    while (lon - previous < -180) lon += 360;
+    work.push({ ...point, lon });
+  }
   // A Uint8Array, not a boolean array: zero-initialized, unboxed, and cache-friendly on the long
   // runs a multi-day track produces.
   const keep = new Uint8Array(n);
@@ -32,7 +47,7 @@ function simplifyRun(run: TrackPoint[], tolerance: number): TrackPoint[] {
     let maxDist = 0;
     let index = -1;
     for (let i = start + 1; i < end; i += 1) {
-      const dist = perpendicular(run[i], run[start], run[end]);
+      const dist = perpendicular(work[i], work[start], work[end]);
       if (dist > maxDist) {
         maxDist = dist;
         index = i;

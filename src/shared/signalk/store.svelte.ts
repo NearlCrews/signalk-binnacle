@@ -1,5 +1,10 @@
 import type { AisTargetState, ConnectionState, PathSource, SKFrame, Value } from './types';
-import { INITIAL_CONNECTION_STATE, NOTIFICATIONS_PREFIX, notificationState } from './types';
+import {
+  INITIAL_CONNECTION_STATE,
+  isSoundingNotification,
+  NOTIFICATIONS_PREFIX,
+  notificationState,
+} from './types';
 
 // The four v2 status flags the alert list renders, so the notification dedup compares them field by
 // field; serializing the status object would allocate per delta for active alarms. canClear is
@@ -25,10 +30,18 @@ export class PathCell {
   // when a fresh value lands. Seeded cells (the course REST hydration writes value directly, not
   // through applyFrame) leave this at zero, which is correct: those are not stream-aged.
   epoch = $state(0);
+  generation = $state(0);
+  // True only when the current value came from the delta stream. REST hydration uses the same cell
+  // but must not make a same-millisecond later hydration look like a competing stream write.
+  streamed = $state(false);
+  // Notification activation sequence. It increments only on quiet-to-sounding transitions, so
+  // acknowledgments survive repeated emergency deltas but reset after a clear and re-raise.
+  activation = $state(0);
 }
 
 export class SignalKStore {
   connection = $state<ConnectionState>(INITIAL_CONNECTION_STATE);
+  generation = $state(0);
   // The own-vessel context from hello (vessels.urn:...), once the stream has connected; plain,
   // not reactive: consumers read it at fetch time, never render from it.
   selfContext: string | undefined;
@@ -74,24 +87,53 @@ export class SignalKStore {
     for (const path of paths) this.cell(path);
   }
 
-  applyFrame(frame: SKFrame): void {
+  applyFrame(frame: SKFrame): boolean {
+    const generation = frame.generation ?? this.generation;
+    // Worker messages are normally ordered, but an old callback can still complete after a client
+    // replacement. Never let an older connection generation restore telemetry or connection state.
+    if (generation < this.generation) return false;
+    if (generation > this.generation) {
+      this.generation = generation;
+      // Retain values and safety latches for continuity, but force AIS consumers to rebuild and
+      // reject path samples whose generation no longer matches.
+      this.aisVersion += 1;
+    }
     if (!this.selfContext && frame.selfContext) this.selfContext = frame.selfContext;
     for (const [path, value] of frame.self) {
       const cell = this.cell(path);
+      if (
+        path.startsWith(NOTIFICATIONS_PREFIX) &&
+        !isSoundingNotification(cell.value) &&
+        isSoundingNotification(value)
+      ) {
+        cell.activation += 1;
+      }
       cell.value = value;
       cell.source = frame.selfSources?.get(path);
-      cell.epoch = frame.epoch;
+      cell.epoch = frame.selfEpochs?.get(path) ?? frame.epoch;
+      cell.generation = generation;
+      cell.streamed = true;
       if (path.startsWith(NOTIFICATIONS_PREFIX)) this.#mirrorNotification(path, value);
     }
     if (frame.ais) {
       for (const [context, incoming] of frame.ais) {
         let target = this.#aisTargets.get(context);
         if (!target) {
-          target = { values: new Map(), lastUpdate: frame.epoch };
+          target = {
+            values: new Map(),
+            epochs: new Map(),
+            generations: new Map(),
+            lastUpdate: frame.epoch,
+          };
           this.#aisTargets.set(context, target);
         }
-        for (const [path, value] of incoming) target.values.set(path, value);
-        target.lastUpdate = frame.epoch;
+        for (const [path, value] of incoming) {
+          const receivedAt = frame.aisEpochs?.get(context)?.get(path) ?? frame.epoch;
+          target.values.set(path, value);
+          target.epochs.set(path, receivedAt);
+          target.generations.set(path, generation);
+          target.lastUpdate = Math.max(target.lastUpdate, receivedAt);
+        }
       }
       // Bump only when a context actually updated. The worker emits an `ais` Map on every frame
       // (empty when only self moved), so guarding on size keeps the version stable when nothing
@@ -104,6 +146,7 @@ export class SignalKStore {
     if (incoming.phase !== this.connection.phase || incoming.attempt !== this.connection.attempt) {
       this.connection = incoming;
     }
+    return true;
   }
 
   // A null value or one without a state string is a cleared notification (raw v1 producers
@@ -144,6 +187,22 @@ export class SignalKStore {
     for (const [context, target] of this.#aisTargets) {
       if (now - target.lastUpdate > ttlMs) {
         this.#aisTargets.delete(context);
+        removed += 1;
+      }
+    }
+    if (removed > 0) this.aisVersion += 1;
+    return removed;
+  }
+
+  pruneAisPaths(paths: readonly string[], now: number, ttlMs: number): number {
+    let removed = 0;
+    for (const target of this.#aisTargets.values()) {
+      for (const path of paths) {
+        const epoch = target.epochs.get(path);
+        if (epoch === undefined || now - epoch <= ttlMs) continue;
+        target.values.delete(path);
+        target.epochs.delete(path);
+        target.generations.delete(path);
         removed += 1;
       }
     }

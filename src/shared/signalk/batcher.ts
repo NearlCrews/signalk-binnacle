@@ -30,11 +30,15 @@ export class FrameBatcher {
     ais: Map<string, Map<string, Value>>,
     epoch: number,
     selfSources?: Map<string, PathSource>,
+    selfEpochs?: Map<string, number>,
+    aisEpochs?: Map<string, Map<string, number>>,
   ) => void;
 
   #self = new Map<string, Value>();
   #selfSources = new Map<string, PathSource>();
+  #selfEpochs = new Map<string, number>();
   #ais = new Map<string, Map<string, Value>>();
+  #aisEpochs = new Map<string, Map<string, number>>();
   #scheduled = false;
   #cancel: (() => void) | undefined;
   #schedule: Schedule;
@@ -43,19 +47,26 @@ export class FrameBatcher {
     this.#schedule = schedule;
   }
 
-  put(path: string, value: Value, source?: PathSource): void {
+  put(path: string, value: Value, source?: PathSource, receivedAt = Date.now()): void {
     this.#self.set(path, value);
+    this.#selfEpochs.set(path, receivedAt);
     if (source) this.#selfSources.set(path, source);
     this.#mark();
   }
 
-  putVessel(context: string, path: string, value: Value): void {
+  putVessel(context: string, path: string, value: Value, receivedAt = Date.now()): void {
     let vessel = this.#ais.get(context);
     if (!vessel) {
       vessel = new Map();
       this.#ais.set(context, vessel);
     }
     vessel.set(path, value);
+    let epochs = this.#aisEpochs.get(context);
+    if (!epochs) {
+      epochs = new Map();
+      this.#aisEpochs.set(context, epochs);
+    }
+    epochs.set(path, receivedAt);
     this.#mark();
   }
 
@@ -67,7 +78,9 @@ export class FrameBatcher {
     this.#scheduled = false;
     this.#self.clear();
     this.#selfSources.clear();
+    this.#selfEpochs.clear();
     this.#ais.clear();
+    this.#aisEpochs.clear();
   }
 
   #mark(): void {
@@ -86,10 +99,14 @@ export class FrameBatcher {
     // ones.
     const self = this.#self;
     const selfSources = this.#selfSources.size > 0 ? this.#selfSources : undefined;
+    const selfEpochs = this.#selfEpochs;
     const ais = this.#ais;
+    const aisEpochs = this.#aisEpochs;
     this.#self = new Map();
     this.#selfSources = new Map();
+    this.#selfEpochs = new Map();
     this.#ais = new Map();
-    this.onFlush?.(self, ais, epoch, selfSources);
+    this.#aisEpochs = new Map();
+    this.onFlush?.(self, ais, epoch, selfSources, selfEpochs, aisEpochs);
   }
 }

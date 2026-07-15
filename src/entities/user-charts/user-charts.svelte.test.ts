@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isUserChartSource, type UserChartSource, UserCharts } from './user-charts.svelte';
+import {
+  cleanUserChartSource,
+  isUserChartSource,
+  type UserChartSource,
+  UserCharts,
+} from './user-charts.svelte';
 
 // The entity reads PMTiles metadata through $shared/map; stub it so the test does not need a real
 // archive. The descriptor's name defaults to this meta name unless the commit overrides it.
@@ -24,6 +29,25 @@ describe('isUserChartSource', () => {
 
   it('accepts a well-formed descriptor', () => {
     expect(isUserChartSource(valid)).toBe(true);
+  });
+
+  it('normalizes text, URLs, layers, and unknown fields into a canonical descriptor', () => {
+    expect(
+      cleanUserChartSource({
+        ...valid,
+        id: ' c1 ',
+        name: ' Chart ',
+        origin: { type: 'url', url: 'https://x/y.pmtiles' },
+        layers: [' water ', 'water'],
+        ignored: true,
+      }),
+    ).toEqual({
+      id: 'c1',
+      name: 'Chart',
+      kind: 'vector',
+      origin: { type: 'url', url: 'https://x/y.pmtiles' },
+      layers: ['water'],
+    });
   });
 
   it('rejects drifted or malformed descriptors', () => {

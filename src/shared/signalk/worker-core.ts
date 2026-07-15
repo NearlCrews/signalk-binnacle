@@ -33,6 +33,8 @@ export class WorkerCore {
   #onFrame?: FrameCallback;
   #connectionState: ConnectionState = INITIAL_CONNECTION_STATE;
   #selfContext?: string;
+  #generation = 0;
+  #receivedAt = 0;
 
   connect(url: string, onFrame: (frame: SKFrame) => void): void {
     // Release the previous connect()'s callback proxy before replacing it, so a page that calls
@@ -42,24 +44,36 @@ export class WorkerCore {
     this.#onFrame = onFrame as FrameCallback;
     this.#connection = new SkConnection(url, {
       onState: (state) => {
+        if (state.phase !== 'open') this.#batcher.reset();
+        if (state.phase === 'open') this.#generation += 1;
         this.#connectionState = state;
         // Push the new phase to the store immediately, not piggybacked on the next data frame. A
         // dropped socket produces no data, so without this the batcher (which only flushes when a
         // value buffered) never delivers the reconnecting or closed phase and the connection badge
         // keeps reading "Connected" through the whole outage. An empty-self frame just updates the
         // connection field; it stamps no cells and bumps no AIS version.
-        this.#onFrame?.({ self: new Map(), connection: state, epoch: Date.now() });
+        this.#onFrame?.({
+          self: new Map(),
+          connection: state,
+          epoch: Date.now(),
+          generation: this.#generation,
+        });
       },
       onDelta: (raw) => this.#ingest(raw),
-      onOpen: () => this.#registry.resubscribeAll(),
+      onOpen: () => {
+        this.#registry.resubscribeAll();
+      },
     });
-    this.#batcher.onFlush = (self, ais, epoch, selfSources) => {
+    this.#batcher.onFlush = (self, ais, epoch, selfSources, selfEpochs, aisEpochs) => {
       this.#onFrame?.({
         self,
         selfSources,
+        selfEpochs,
         ais,
+        aisEpochs,
         connection: this.#connectionState,
         epoch,
+        generation: this.#generation,
         selfContext: this.#selfContext,
       });
     };
@@ -103,13 +117,14 @@ export class WorkerCore {
   // runs on the hottest path, once per incoming delta frame.
   #route = (context: Context, path: Path, value: Value, source?: PathSource): void => {
     if (this.#isSelf(context)) {
-      this.#batcher.put(path, value, source);
+      this.#batcher.put(path, value, source, this.#receivedAt);
     } else {
-      this.#batcher.putVessel(context, path, value);
+      this.#batcher.putVessel(context, path, value, this.#receivedAt);
     }
   };
 
   #ingest(raw: string): void {
+    this.#receivedAt = Date.now();
     let message: DeltaOrHello;
     try {
       message = JSON.parse(raw) as DeltaOrHello;

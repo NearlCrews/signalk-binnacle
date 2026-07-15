@@ -28,4 +28,9 @@ describe('douglasPeucker', () => {
     expect(out.some((x) => x.gap)).toBe(true);
     expect(out).toEqual([p(0, 0), p(0, 0.001), p(1, 1, true), p(1, 1.001)]);
   });
+
+  it('simplifies a short collinear run across the antimeridian', () => {
+    const run = [p(0, 179.9), p(0, -180), p(0, -179.9)];
+    expect(douglasPeucker(run, 0.01)).toEqual([p(0, 179.9), p(0, -179.9)]);
+  });
 });

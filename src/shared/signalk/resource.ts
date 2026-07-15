@@ -1,4 +1,4 @@
-import { fetchJsonOrUndefined, withTimeout } from '$shared/lib';
+import { withTimeout } from '$shared/lib';
 
 // Helpers shared by the resource clients (charts, notes, tracks): the bearer-auth request init
 // and the string guards for parsing untyped resource JSON. A token is sent only when present.
@@ -18,11 +18,97 @@ export function adminSessionInit(extra?: RequestInit): RequestInit {
   return { ...extra, credentials: 'include', cache: 'no-store' };
 }
 
+type WriteOutcomeListener = (ok: boolean, status: number) => void;
+
+interface SignalKResourceClientOptions {
+  fetch?: typeof fetch;
+  getToken?: () => string | undefined;
+  onWriteOutcome?: WriteOutcomeListener;
+  timeoutMs?: number;
+}
+
+// Injectable Signal K REST transport. Feature controllers can own one instance with live token and
+// outcome getters, while the compatibility functions below preserve the current call-site contract
+// during incremental migration.
+export class SignalKResourceClient {
+  #fetch: typeof fetch;
+  #getToken: () => string | undefined;
+  #onWriteOutcome: WriteOutcomeListener | undefined;
+  #timeoutMs: number | undefined;
+
+  constructor(options: SignalKResourceClientOptions = {}) {
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#getToken = options.getToken ?? (() => undefined);
+    this.#onWriteOutcome = options.onWriteOutcome;
+    this.#timeoutMs = options.timeoutMs;
+  }
+
+  async fetchJson<T>(url: string): Promise<T | undefined> {
+    try {
+      const response = await this.#fetch(
+        url,
+        withTimeout(authInit(this.#getToken()), this.#timeoutMs),
+      );
+      if (!response.ok) return undefined;
+      return (await response.json()) as T;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async fetchJsonOutcome<T>(url: string): Promise<FetchJsonOutcome<T>> {
+    try {
+      const response = await this.#fetch(
+        url,
+        withTimeout(authInit(this.#getToken()), this.#timeoutMs),
+      );
+      if (response.status === 404) return { state: 'not-found' };
+      if (!response.ok) return { state: 'failed' };
+      return { state: 'ok', value: (await response.json()) as T };
+    } catch {
+      return { state: 'failed' };
+    }
+  }
+
+  async sendJson(url: string, method: string, body?: unknown): Promise<Response | undefined> {
+    try {
+      const response = await this.#fetch(
+        url,
+        withTimeout(
+          authInit(this.#getToken(), {
+            method,
+            ...(body !== undefined
+              ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+              : {}),
+          }),
+          this.#timeoutMs,
+        ),
+      );
+      this.#onWriteOutcome?.(response.ok, response.status);
+      return response;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async put(url: string, body: unknown): Promise<boolean> {
+    return (await this.sendJson(url, 'PUT', body))?.ok ?? false;
+  }
+
+  async post(url: string, body?: unknown): Promise<boolean> {
+    return (await this.sendJson(url, 'POST', body))?.ok ?? false;
+  }
+
+  async delete(url: string): Promise<boolean> {
+    return (await this.sendJson(url, 'DELETE'))?.ok ?? false;
+  }
+}
+
 // Best-effort authenticated GET returning parsed JSON, or undefined on any non-OK status, network
 // failure, timeout, or parse error. The bearer-auth GET-then-degrade shape recurs across the
 // applicationData, trails, notes-detail, and tides clients; this is its single home.
 export function fetchAuthedJson<T>(url: string, token: string | undefined): Promise<T | undefined> {
-  return fetchJsonOrUndefined<T>(url, authInit(token));
+  return new SignalKResourceClient({ getToken: () => token }).fetchJson<T>(url);
 }
 
 export interface FetchJsonOutcome<T> {
@@ -36,29 +122,7 @@ export async function fetchAuthedJsonOutcome<T>(
   url: string,
   token: string | undefined,
 ): Promise<FetchJsonOutcome<T>> {
-  try {
-    const response = await fetch(url, withTimeout(authInit(token)));
-    if (response.status === 404) return { state: 'not-found' };
-    if (!response.ok) return { state: 'failed' };
-    return { state: 'ok', value: (await response.json()) as T };
-  } catch {
-    return { state: 'failed' };
-  }
-}
-
-// Best-effort authenticated GET returning the response text, or undefined on any non-OK status,
-// network failure, or timeout. The text sibling of fetchAuthedJson, for SVG symbol bodies.
-export async function fetchAuthedText(
-  url: string,
-  token: string | undefined,
-): Promise<string | undefined> {
-  try {
-    const response = await fetch(url, withTimeout(authInit(token)));
-    if (!response.ok) return undefined;
-    return await response.text();
-  } catch {
-    return undefined;
-  }
+  return new SignalKResourceClient({ getToken: () => token }).fetchJsonOutcome<T>(url);
 }
 
 // The Signal K resources API returns a keyed object (id to record). An error envelope
@@ -148,7 +212,6 @@ async function tryKeyedResource<T>(
 // 401/403 has read-only access. The auth controller registers a listener to flip its writeBlocked flag,
 // and a later 2xx write clears it. Kept as a module callback (not a parameter) so the dozens of write
 // call sites need no change.
-type WriteOutcomeListener = (ok: boolean, status: number) => void;
 let writeOutcomeListener: WriteOutcomeListener | undefined;
 export function setWriteOutcomeListener(listener: WriteOutcomeListener | undefined): void {
   writeOutcomeListener = listener;
@@ -163,23 +226,10 @@ export async function sendJson(
   method: string,
   body?: unknown,
 ): Promise<Response | undefined> {
-  try {
-    const response = await fetch(
-      url,
-      withTimeout(
-        authInit(token, {
-          method,
-          ...(body !== undefined
-            ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-            : {}),
-        }),
-      ),
-    );
-    writeOutcomeListener?.(response.ok, response.status);
-    return response;
-  } catch {
-    return undefined;
-  }
+  return new SignalKResourceClient({
+    getToken: () => token,
+    onWriteOutcome: (ok, status) => writeOutcomeListener?.(ok, status),
+  }).sendJson(url, method, body);
 }
 
 // PUT a JSON body to a resource URL, returning whether the write succeeded. Never throws: a network

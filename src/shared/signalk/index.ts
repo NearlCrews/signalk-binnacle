@@ -37,7 +37,6 @@ export {
   deleteResource,
   fetchAuthedJson,
   fetchAuthedJsonOutcome,
-  fetchAuthedText,
   fetchKeyedResource,
   postResource,
   putResource,

@@ -71,6 +71,10 @@ export function createPpiLayer(
   getCenter: () => LatLon | undefined,
   getHeading: () => number | undefined = () => undefined,
   onVisibilityChange: (visible: boolean) => void = () => undefined,
+  freshness: {
+    center?: () => boolean;
+    heading?: () => boolean;
+  } = {},
 ): PpiLayer {
   let gl: RadarGl | undefined;
   let echoMap: MapLibreMap | undefined;
@@ -168,9 +172,17 @@ export function createPpiLayer(
       },
       render(_gc: WebGLRenderingContext | WebGL2RenderingContext, args: unknown) {
         if (!gl || !visible || contextLost) return suppress('not-ready');
-        const center = getCenter();
+        const centerIsFresh = freshness.center?.() !== false;
+        const center = centerIsFresh ? getCenter() : undefined;
+        if (frame && !centerIsFresh) {
+          store.setRendererStatus(
+            'blocked',
+            'The own-vessel position is stale, so the radar echo is suppressed.',
+          );
+        }
         if (!frame || !center) return suppress(frame ? 'no-fix' : 'no-frame');
-        const effectiveHeading = frame.heading ?? getHeading();
+        const effectiveHeading =
+          frame.heading ?? (freshness.heading?.() === false ? undefined : getHeading());
         if (effectiveHeading === undefined) {
           store.setRendererStatus(
             'blocked',
@@ -248,7 +260,7 @@ export function createPpiLayer(
   }
 
   function syncRings(ctx: OverlayContext): void {
-    const center = getCenter();
+    const center = freshness.center?.() === false ? undefined : getCenter();
     const range = effectiveRange();
     if (!center || !frame || range <= 0) {
       if (ringsDrawn) {
@@ -257,7 +269,8 @@ export function createPpiLayer(
       }
       return;
     }
-    const effectiveHeading = frame.heading ?? getHeading();
+    const effectiveHeading =
+      frame.heading ?? (freshness.heading?.() === false ? undefined : getHeading());
     const heading = effectiveHeading ?? Number.NaN;
     // Object.is so the no-heading (NaN) case compares equal to itself and does not rebuild every sync.
     if (

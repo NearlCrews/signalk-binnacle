@@ -1,5 +1,5 @@
 import { fetchJsonOrUndefined, type UnitsMode } from '$shared/lib';
-import { PersistedValue } from '$shared/settings';
+import { enumPersistedCodec, PersistedValue } from '$shared/settings';
 
 // The server's unit preferences API (signalk-server 2.28 and later). The active preset is global;
 // the per-user override the admin UI honors lives in applicationData and is resolved through the
@@ -35,7 +35,14 @@ export class UnitsStore {
   // The origin the resolved preset belongs to, so a switch to a different server clears it.
   #syncedOrigin: string | undefined;
 
-  constructor(local = new PersistedValue<UnitsMode>('binnacle:units', 'metric')) {
+  constructor(
+    local = new PersistedValue<UnitsMode>(
+      'binnacle:units',
+      'metric',
+      undefined,
+      enumPersistedCodec(['metric', 'imperial']),
+    ),
+  ) {
     this.#local = local;
   }
 

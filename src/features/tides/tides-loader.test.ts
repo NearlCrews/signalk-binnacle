@@ -63,6 +63,38 @@ describe('createTidesLoader', () => {
     expect(d.tideEvents).not.toHaveBeenCalled();
   });
 
+  it('keeps at most one active and only the newest queued position', async () => {
+    let resolveFirst: ((value: typeof pluginReading) => void) | undefined;
+    let resolveLatest: ((value: typeof pluginReading) => void) | undefined;
+    const pluginTides = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<typeof pluginReading>((resolve) => (resolveFirst = resolve)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<typeof pluginReading>((resolve) => (resolveLatest = resolve)),
+      );
+    const loader = createTidesLoader(deps({ pluginAvailable: () => true, pluginTides }));
+    const store = new TidesStore();
+    const first = loader.load(store, 27.7, -82.7);
+    const second = loader.load(store, 27.8, -82.8);
+    const third = loader.load(store, 27.9, -82.9);
+    const newest = {
+      ...pluginReading,
+      station: { ...pluginReading.station, id: 'newest', latitude: 27.9, longitude: -82.9 },
+    };
+
+    expect(pluginTides).toHaveBeenCalledTimes(1);
+    resolveFirst?.(pluginReading);
+    await first;
+    await vi.waitFor(() => expect(pluginTides).toHaveBeenCalledTimes(2));
+    expect(pluginTides).toHaveBeenLastCalledWith(27.9, -82.9);
+    resolveLatest?.(newest);
+    await Promise.all([second, third]);
+
+    expect(store.tide?.station.id).toBe('newest');
+  });
+
   it('falls back to CO-OPS when the plugin answers with nothing', async () => {
     const pluginTides = vi.fn(async () => undefined);
     const loader = createTidesLoader(deps({ pluginAvailable: () => true, pluginTides }));

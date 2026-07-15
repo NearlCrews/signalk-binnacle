@@ -1,15 +1,31 @@
 export type { MapView } from '$shared/geo';
-export type { StorageLike, Thresholds, TrackSettings } from './persisted.svelte';
+export type {
+  PersistedCodec,
+  PersistedDecodeResult,
+  PersistedRepairStatus,
+  PersistedValidator,
+  StorageLike,
+  Thresholds,
+  TrackSettings,
+} from './persisted.svelte';
 export {
+  arrayPersistedCodec,
+  booleanPersistedCodec,
+  booleanRecordPersistedCodec,
+  boundedNumberPersistedCodec,
   createMapView,
+  createPersistedCodec,
   createThresholds,
   createTrackSettings,
   DEFAULT_THRESHOLDS,
+  enumPersistedCodec,
   isMapView,
   isThresholds,
   isTrackSettings,
   MAX_COLLISION_CPA_METERS,
   MAX_COLLISION_TCPA_SECONDS,
   MAX_SHALLOW_DEPTH_METERS,
+  nullablePersistedCodec,
   PersistedValue,
+  stringArrayPersistedCodec,
 } from './persisted.svelte';

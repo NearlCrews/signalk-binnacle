@@ -4,37 +4,58 @@
 // URL, so a standalone install is unchanged.
 
 import { proxyTileTemplate } from 'signalk-chart-sources';
-import { adminSessionInit, authInit } from '$shared/signalk';
+import { withTimeout } from '$shared/lib';
+import { adminSessionInit } from '$shared/signalk';
 
 const COMPANION_PATH = '/plugins/signalk-chart-locker';
+
+export type CompanionProbeResult =
+  | { state: 'present'; base: string; ready: boolean }
+  | { state: 'absent' }
+  | { state: 'access-refused'; base: string }
+  | { state: 'unreachable' };
+
+/**
+ * Probe Chart Locker without collapsing every failure into "not installed." A protected plugin route,
+ * a missing route, and a broken network require different recovery steps in the menu.
+ */
+export async function probeCompanion(
+  origin: string,
+  token?: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CompanionProbeResult> {
+  const base = `${origin}${COMPANION_PATH}`;
+  try {
+    // The readiness and management routes share Chart Locker's administrator-session boundary.
+    // Attaching Binnacle's device bearer can mask a valid administrator cookie, so this probe uses
+    // the browser session only. The token parameter remains for source compatibility while callers
+    // migrate away from passing it.
+    void token;
+    const response = await fetchImpl(`${base}/tiles/ready`, withTimeout(adminSessionInit(), 2000));
+    if (response.ok) return { state: 'present', base, ready: true };
+    if (response.status === 503) return { state: 'present', base, ready: false };
+    if (response.status === 404) return { state: 'absent' };
+    if (response.status === 401 || response.status === 403)
+      return { state: 'access-refused', base };
+    return { state: 'unreachable' };
+  } catch {
+    return { state: 'unreachable' };
+  }
+}
 
 /**
  * Probe whether the companion tile proxy is installed. A 503 from this route means Chart Locker is
  * installed but its container is not ready, so it still proves presence. Try the browser administrator
- * session first because a device bearer token can mask a valid cookie, then fall back to that token for
- * ordinary approved Binnacle sessions. A 404 proves absence; 401 and 403 prove neither because Signal K
- * can reject requests before route matching.
+ * administrator session because a device bearer token can mask a valid cookie. A 404 proves absence;
+ * 401 and 403 prove neither because Signal K can reject requests before route matching.
  */
 export async function detectCompanion(
   origin: string,
   token?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
-  const base = `${origin}${COMPANION_PATH}`;
-  try {
-    const probe = (init: RequestInit): Promise<Response> =>
-      fetchImpl(`${base}/tiles/ready`, {
-        ...init,
-        signal: AbortSignal.timeout(2000),
-      });
-    let response = await probe(adminSessionInit());
-    if ((response.status === 401 || response.status === 403) && token) {
-      response = await probe({ ...adminSessionInit(), ...authInit(token) });
-    }
-    return response.ok || response.status === 503 ? base : null;
-  } catch {
-    return null;
-  }
+  const result = await probeCompanion(origin, token, fetchImpl);
+  return result.state === 'present' ? result.base : null;
 }
 
 /**

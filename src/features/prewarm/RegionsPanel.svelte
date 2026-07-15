@@ -3,62 +3,32 @@ import {
   ChevronRight,
   Download,
   DownloadCloud,
-  Eye,
   Files,
-  PencilRuler,
   RefreshCw,
   SquareDashed,
   Trash2,
 } from '@lucide/svelte';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { type Bbox, chartSourceById } from 'signalk-chart-sources';
+import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
-import { bboxCenter, formatBounds, normalizeBounds } from '$shared/geo';
-import {
-  clampInt,
-  createLatestWriter,
-  feetToMeters,
-  formatBytes,
-  lengthUnit,
-  metersToFeet,
-  nauticalMilesToMeters,
-} from '$shared/lib';
 import {
   AccessRecoveryNote,
   type AccessRecoveryState,
-  ArmedRow,
   Disclosure,
-  InlineConfirm,
   LayerToggle,
-  SavedList,
   SlideOver,
   TextField,
   UnitField,
 } from '$shared/ui';
 import AutoCacheView from './AutoCacheView.svelte';
-import { defaultSelection } from './area-defaults.js';
-import { DETAIL_PRESETS, presetForRange, rangeForPreset } from './detail-level.js';
-import {
-  coveringSources,
-  downloadGateReason,
-  estimateRegionBytes,
-  exceedsRegionsFree,
-  isTerminal,
-  positionWarmSources,
-  regionsFreeBytes,
-} from './estimate.js';
-import type { CacheStats, SavedRegionDto, WarmStatus } from './regions-client.js';
+import { DETAIL_PRESETS } from './detail-level.js';
+import type { SavedRegionDto } from './regions-client.js';
 import { createRegionsClient } from './regions-client.js';
-import type { RegionRectangle } from './regions-draw.js';
-import { createRegionRectangle } from './regions-draw.js';
+import { createRegionsController } from './regions-controller.svelte.js';
+import SavedRegionsView from './SavedRegionsView.svelte';
 import StorageView from './StorageView.svelte';
-import {
-  buildConfigPayload,
-  extractPositionWarm,
-  type PositionWarmSettings,
-} from './settings-payload.js';
-import { coveringGroups, includedSummary, sourceDescription } from './source-summary.js';
+import { sourceDescription } from './source-summary.js';
 
 interface Props {
   adminAccess: boolean;
@@ -86,557 +56,87 @@ const {
   onRetryAccess,
 }: Props = $props();
 
-// The whole-world box stands in for "no box drawn" when enumerating covering sources.
-const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
-
-// Region builder state. regions starts null to mean "loading"; loadError surfaces a failed initial
-// load. stats follows the same null-is-loading, statsError-is-failed shape.
-let stats = $state<CacheStats | null>(null);
-let statsError = $state<string | null>(null);
-let regions = $state<SavedRegionDto[] | null>(null);
-let loadError = $state<string | null>(null);
-let bbox = $state<Bbox | null>(null);
-let selectedSources = $state<string[]>([]);
-let minzoom = $state(6);
-let maxzoom = $state(12);
-
-// Which view of the feature is showing: the landing list, the area builder, the storage detail, or
-// the auto-cache settings. Switching keeps all state in this one parent; only the template branches.
-let subView = $state<'home' | 'build' | 'storage' | 'auto'>('home');
-const subViewTitle = $derived(
-  subView === 'build'
-    ? 'Save a chart area'
-    : subView === 'storage'
-      ? 'Storage'
-      : subView === 'auto'
-        ? 'Automatic caching'
-        : 'Offline charts',
-);
-// The builder collapses to its header on a phone while Terra Draw owns the chart gesture. Desktop
-// panels ignore the collapsed body class, so the side-by-side workflow stays visible there.
-let panelCollapsed = $state(false);
-let drawing = $state(false);
-
-// Name prep and submission state.
-let namePrep = $state(false);
-let regionName = $state('');
-let submitting = $state(false);
-let error = $state<string | null>(null);
-
-// The latest warm snapshot per downloading region, for the determinate progress bar.
-let regionStatus = $state<Record<string, WarmStatus>>({});
-// Deleting a region arms an inline confirm first, keyed so only one row is armed at a time, like
-// every other destructive per-row delete in the app.
-const armedDelete = new ArmedRow((id) => void deleteRegion(id));
-// A per-region busy flag so a re-download or delete on one card does not disable the others, and
-// neither action can fire twice.
-let pendingRegion = $state<Record<string, boolean>>({});
-
-// The scroll cache TTL in days, seeded from stats.ttlDays on load. Zero means the age sweep is off.
-let ttlDays = $state(30);
-let ttlEdited = false;
-// Clearing the scroll cache arms an inline confirm first, like every destructive action in the app.
-let confirmingClear = $state(false);
-let clearNote = $state<string | null>(null);
-
-// Internal references not read in the template: the draw controller, the per-region poll timers, and
-// the consecutive poll-failure counts.
-let rect: RegionRectangle | null = null;
-// eslint-disable-next-line svelte/prefer-svelte-reactivity -- timer registry is not rendered
-const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
-// eslint-disable-next-line svelte/prefer-svelte-reactivity -- failure registry is not rendered
-const pollFailures = new Map<string, number>();
-// Generation counters so two in-flight loads cannot resolve out of order and clobber the newer value.
-let regionsGen = 0;
-let statsGen = 0;
-// Stop a region's 2-second poller after this many consecutive failures, surfacing an error.
-const POLL_FAIL_CAP = 5;
-
-// positionWarmSources() is a pure function with no reactive deps, evaluated once. Used by the
-// position-warm section, which is not box-scoped and never warms the basemap.
-const positionWarmSourceList = positionWarmSources();
-
 // Chart Locker management uses the browser's Signal K administrator session, not Binnacle's device
 // token. The browser supplies the current Signal K cookie whenever the companion base changes.
 const client = $derived(createRegionsClient(companionBase));
-
-// Position-warm settings, loaded from getConfig on open, which seeds them from the server default
-// (on, with no charts picked, so the panel prompts the navigator to choose). This false is only the
-// pre-load value before the config arrives, replaced as soon as getConfig resolves.
-let positionEnabled = $state(false);
-let positionRadiusMeters = $state(nauticalMilesToMeters(2));
-let positionMoveThresholdMeters = $state(nauticalMilesToMeters(1));
-let positionIntervalSecs = $state(60); // server-side floor is 60 s
-let positionBaseZoom = $state(12);
-let positionSources = $state<string[]>([]);
-let positionLoadError = $state<string | null>(null);
-let positionLoadGeneration = 0;
-
-const positionWriter = createLatestWriter<{ positionWarm: PositionWarmSettings }>((payload) =>
-  client.postConfig(payload),
-);
-const ttlWriter = createLatestWriter<number>((days) => client.setCacheConfig(days));
-
-// Length display unit follows the server unit preference, same as the anchor watch panel.
-const mode = $derived(units.mode);
-const unit = $derived(lengthUnit(mode));
-// The length fields display feet in imperial and meters otherwise, storing SI meters; these two
-// closures convert each way through the current mode so the radius and move fields share one rule.
-function toDisplayLength(meters: number): number {
-  return Math.round(mode === 'imperial' ? (metersToFeet(meters) ?? 0) : meters);
-}
-function fromDisplayLength(entered: number): number {
-  return mode === 'imperial' ? (feetToMeters(entered) ?? entered) : entered;
-}
-const positionRadiusDisplay = $derived(toDisplayLength(positionRadiusMeters));
-const positionMoveDisplay = $derived(toDisplayLength(positionMoveThresholdMeters));
-
-// Only the sources that cover the current box show; a global source (no bounds) always covers a
-// non-empty box, and the style basemap is already excluded.
-const sourceList = $derived(coveringSources(bbox ?? WORLD_BBOX, [minzoom, maxzoom]));
-// The selected ids as a Set for O(1) membership in the derived filters and the checklist rows.
-const selectedSet = $derived(new Set(selectedSources));
-const positionSet = $derived(new Set(positionSources));
-// The selected ids restricted to what is currently shown, so a zoom change that drops a source from
-// the list never carries a stale id into the estimate or the request.
-const activeSourceIds = $derived(sourceList.filter((s) => selectedSet.has(s.id)).map((s) => s.id));
-// The selected covering sources as objects, for the plain "what is included" sentence.
-const selectedObjects = $derived(sourceList.filter((s) => selectedSet.has(s.id)));
-const includedText = $derived(includedSummary(selectedObjects));
-// The covering sources grouped by plain category for the Customize checklist (facets hidden).
-const sourceGroups = $derived(coveringGroups(sourceList));
-// The detail preset the current zoom range matches, or 'custom'.
-const detailPreset = $derived(presetForRange(minzoom, maxzoom));
-const selectedDetail = $derived(
-  DETAIL_PRESETS.find((preset) => preset.key === detailPreset) ?? null,
-);
-
-function applyDetailPreset(key: 'overview' | 'coastal' | 'harbor'): void {
-  [minzoom, maxzoom] = rangeForPreset(key);
-}
-
-// The planning estimate is computed once and fed to both the size row and the gate. Strict package
-// validation errors become a retryable state instead of escaping from reactive rendering.
-const estimateResult = $derived.by(() => {
-  if (stats === null || bbox === null || activeSourceIds.length === 0) {
-    return { ok: true, bytes: 0 } as const;
-  }
-  return estimateRegionBytes(activeSourceIds, bbox, [minzoom, maxzoom], stats.perSourceAvgBytes);
+const controller = createRegionsController({
+  getAdminAccess: () => adminAccess,
+  getClient: () => client,
+  getMap: () => map,
+  getUnitsMode: () => units.mode,
 });
-const estimateVal = $derived(estimateResult.ok ? estimateResult.bytes : 0);
-const estimateError = $derived(estimateResult.ok ? null : estimateResult.message);
-const estimateFmt = $derived(formatBytes(estimateVal));
+controller.start();
+$effect(() => controller.syncClient());
+$effect(() => controller.syncRectangle());
+onDestroy(() => controller.destroy());
 
-// Download is enabled only with a box drawn, at least one source picked, write access, storage that
-// still holds the estimate, and no name prompt open. Mirrors canDownloadRegion (shared with its
-// test) but reuses estimateVal rather than re-running the estimate.
-const gate = $derived(
-  stats !== null &&
-    !namePrep &&
-    bbox !== null &&
-    activeSourceIds.length > 0 &&
-    adminAccess &&
-    estimateResult.ok &&
-    !exceedsRegionsFree(estimateVal, stats),
-);
-const gateReason = $derived(
-  downloadGateReason({
-    bbox,
-    sources: activeSourceIds,
-    accessBlocked: !adminAccess,
-    stats,
-    estimate: estimateResult.ok ? estimateResult.bytes : null,
-  }),
-);
-const regionsFreeFmt = $derived(stats !== null ? formatBytes(regionsFreeBytes(stats)) : null);
-const pinnedFmt = $derived(stats !== null ? formatBytes(stats.pinnedBytes ?? 0) : null);
-const scrollFmt = $derived(stats !== null ? formatBytes(stats.scrollBytes ?? 0) : null);
-const usedFmt = $derived(stats !== null ? formatBytes(stats.bytes) : null);
-const capFmt = $derived(stats !== null ? formatBytes(stats.cap) : null);
-const usedPercent = $derived(
-  stats !== null && stats.cap > 0 ? Math.min(100, Math.round((stats.bytes / stats.cap) * 100)) : 0,
-);
-const autoCacheFmt = $derived(stats !== null ? formatBytes(stats.positionWarmBytes ?? 0) : null);
+const stats = $derived(controller.stats);
+const statsError = $derived(controller.statsError);
+const regions = $derived(controller.regions);
+const loadError = $derived(controller.loadError);
+const bbox = $derived(controller.bbox);
+const minzoom = $derived(controller.minzoom);
+const maxzoom = $derived(controller.maxzoom);
+const subView = $derived(controller.subView);
+const subViewTitle = $derived(controller.subViewTitle);
+const panelCollapsed = $derived(controller.panelCollapsed);
+const drawing = $derived(controller.drawing);
+const namePrep = $derived(controller.namePrep);
+const regionName = $derived(controller.regionName);
+const submitting = $derived(controller.submitting);
+const error = $derived(controller.error);
+const regionStatus = $derived(controller.regionStatus);
+const armedDelete = controller.armedDelete;
+const pendingRegion = $derived(controller.pendingRegion);
+const ttlDays = $derived(controller.ttlDays);
+const confirmingClear = $derived(controller.confirmingClear);
+const clearNote = $derived(controller.clearNote);
+const positionEnabled = $derived(controller.positionEnabled);
+const positionLoadError = $derived(controller.positionLoadError);
+const positionIntervalSecs = $derived(controller.positionIntervalSecs);
+const positionBaseZoom = $derived(controller.positionBaseZoom);
+const positionWarmSourceList = controller.positionWarmSourceList;
+const providerError = $derived(controller.providerError);
 
-// Load the cache stats on mount. The generation guard inside loadStats drops a slow earlier response;
-// the browser supplies the current administrator session cookie for every request.
-$effect(() => {
-  void loadStats();
-});
+const unit = $derived(controller.unit);
+const positionRadiusDisplay = $derived(controller.positionRadiusDisplay);
+const positionMoveDisplay = $derived(controller.positionMoveDisplay);
+const selectedSet = $derived(controller.selectedSet);
+const positionSet = $derived(controller.positionSet);
+const includedText = $derived(controller.includedText);
+const sourceGroups = $derived(controller.sourceGroups);
+const detailPreset = $derived(controller.detailPreset);
+const selectedDetail = $derived(controller.selectedDetail);
+const estimateError = $derived(controller.estimateError);
+const estimateFmt = $derived(controller.estimateFmt);
+const gate = $derived(controller.gate);
+const gateReason = $derived(controller.gateReason);
+const regionsFreeFmt = $derived(controller.regionsFreeFmt);
+const pinnedFmt = $derived(controller.pinnedFmt);
+const scrollFmt = $derived(controller.scrollFmt);
+const usedFmt = $derived(controller.usedFmt);
+const capFmt = $derived(controller.capFmt);
+const usedPercent = $derived(controller.usedPercent);
+const autoCacheFmt = $derived(controller.autoCacheFmt);
 
-// Load the saved regions on mount, and resume polling any caught mid-download.
-$effect(() => {
-  void loadRegions();
-});
-
-// Wire up the panel-scoped Terra Draw rectangle instance. The prefixId 'chart-locker-region-draw'
-// keeps it separate from the route editor's 'binnacle-route-draw' so the two never collide. A new box
-// gets the smart default: the covering chart, seamarks, and the base map, with facets and specialist
-// layers left off. The base map is on by default so the offline area is not a blank canvas.
-$effect(() => {
-  const r = createRegionRectangle(map);
-  r.onFinish((newBbox) => {
-    bbox = newBbox;
-    selectedSources =
-      newBbox === null
-        ? []
-        : defaultSelection(coveringSources(newBbox, [minzoom, maxzoom]), newBbox);
-    namePrep = false;
-    drawing = false;
-    panelCollapsed = false;
-  });
-  rect = r;
-  return () => {
-    r.destroy();
-    rect = null;
-  };
-});
-
-// Clear every poll timer on unmount.
-onDestroy(() => {
-  for (const timer of pollTimers.values()) clearInterval(timer);
-  pollTimers.clear();
-  positionWriter.dispose();
-  ttlWriter.dispose();
-});
-
-async function loadPositionWarm(): Promise<void> {
-  const generation = ++positionLoadGeneration;
-  positionLoadError = null;
-  try {
-    const pw = extractPositionWarm(await client.getConfig());
-    if (generation !== positionLoadGeneration) return;
-    if (pw === null) {
-      positionLoadError = 'Chart Locker returned invalid automatic-caching settings.';
-      return;
-    }
-    positionEnabled = pw.enabled;
-    positionRadiusMeters = pw.radiusMeters;
-    positionMoveThresholdMeters = pw.moveThresholdMeters;
-    positionIntervalSecs = pw.intervalSecs;
-    positionBaseZoom = pw.baseZoom;
-    positionSources = pw.sources;
-  } catch {
-    if (generation === positionLoadGeneration) {
-      positionLoadError = 'Could not load automatic-caching settings.';
-    }
-  }
-}
-
-// Load the persisted position-warm settings on mount. A failed read remains retryable in its subview
-// instead of silently presenting the defaults as though they came from Chart Locker.
-$effect(() => {
-  void loadPositionWarm();
-});
-
-function savePositionWarm(): void {
-  if (!adminAccess) return;
-  // A local edit wins over an older initial read that is still in flight.
-  positionLoadGeneration += 1;
-  positionLoadError = null;
-  positionWriter.submit(
-    buildConfigPayload({
-      enabled: positionEnabled,
-      radiusMeters: positionRadiusMeters,
-      moveThresholdMeters: positionMoveThresholdMeters,
-      intervalSecs: positionIntervalSecs,
-      baseZoom: positionBaseZoom,
-      sources: positionSources,
-    }),
-  );
-}
-
-function commitPositionRadius(entered: number): void {
-  positionRadiusMeters = Math.max(1, fromDisplayLength(entered));
-  savePositionWarm();
-}
-
-function commitMoveThreshold(entered: number): void {
-  positionMoveThresholdMeters = Math.max(1, fromDisplayLength(entered));
-  savePositionWarm();
-}
-
-function commitTtlDays(entered: number): void {
-  if (!adminAccess) return;
-  ttlEdited = true;
-  ttlDays = clampInt(entered, 0, 365);
-  ttlWriter.submit(ttlDays);
-}
-
-async function clearScrollCache(): Promise<void> {
-  if (!adminAccess) return;
-  confirmingClear = false;
-  clearNote = null;
-  try {
-    const { freedBytes } = await client.clearScrollCache();
-    const f = formatBytes(freedBytes);
-    clearNote =
-      freedBytes > 0
-        ? `Freed ${f.value} ${f.unit} of recently viewed charts.`
-        : 'Nothing to clear.';
-    await loadStats();
-  } catch {
-    error = 'Could not clear the scroll cache.';
-  }
-}
-
-// Load the saved regions with a generation guard so a slow earlier load cannot clobber a newer one.
-// A failed first load (regions still null) surfaces loadError; a failed refresh keeps the list and
-// surfaces a transient action error instead.
-async function loadRegions(): Promise<void> {
-  const gen = ++regionsGen;
-  try {
-    const list = await client.getRegions();
-    if (gen !== regionsGen) return;
-    regions = list;
-    loadError = null;
-    for (const region of list) {
-      if (region.status === 'downloading') pollRegion(region.id);
-    }
-  } catch {
-    if (gen !== regionsGen) return;
-    if (regions === null)
-      loadError = 'Could not load the saved regions. Check the connection and access.';
-    else error = 'Could not refresh the saved regions.';
-  }
-}
-
-// Load the cache stats with the same generation guard and loading-versus-failed split.
-async function loadStats(): Promise<void> {
-  const gen = ++statsGen;
-  try {
-    const s = await client.getCacheStats();
-    if (gen !== statsGen) return;
-    stats = s;
-    if (!ttlEdited && typeof s.ttlDays === 'number') ttlDays = s.ttlDays;
-    statsError = null;
-  } catch {
-    if (gen !== statsGen) return;
-    if (stats === null) statsError = 'Could not load the cache stats.';
-    else error = 'Could not refresh the cache stats.';
-  }
-}
-
-function stopRegionPoll(id: string): void {
-  const timer = pollTimers.get(id);
-  if (timer !== undefined) {
-    clearInterval(timer);
-    pollTimers.delete(id);
-  }
-  pollFailures.delete(id);
-}
-
-// Poll a region's warm job to a terminal result. The plugin status route reconciles the persisted
-// region status on each poll, so a reload after the terminal tick shows ready, capped, or error.
-// A non-ok, non-404 status throws; after POLL_FAIL_CAP consecutive failures the poller stops and
-// surfaces an error rather than spinning silently. The latest snapshot per region drives the bar.
-function pollRegion(id: string): void {
-  stopRegionPoll(id);
-  pollFailures.set(id, 0);
-  // Read the shared client each tick. The browser supplies the current administrator session cookie,
-  // so a session established during a long poll is picked up on the next request.
-  const timer = setInterval(() => {
-    void client
-      .getRegionJobStatus(id)
-      .then((s) => {
-        pollFailures.set(id, 0);
-        if (s !== null) regionStatus = { ...regionStatus, [id]: s };
-        if (isTerminal(s)) {
-          stopRegionPoll(id);
-          void loadRegions();
-          void loadStats();
-        }
-      })
-      .catch(() => {
-        const failures = (pollFailures.get(id) ?? 0) + 1;
-        pollFailures.set(id, failures);
-        if (failures >= POLL_FAIL_CAP) {
-          stopRegionPoll(id);
-          error = 'Lost contact with a region download. Check the connection and try again.';
-        }
-      });
-  }, 2000);
-  pollTimers.set(id, timer);
-}
-
-function coordName(box: Bbox): string {
-  const { latitude, longitude } = bboxCenter(box);
-  return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
-}
-
-// The geocode lookup fires once here, on the Download action, never on rectangle drag, which is the
-// rate control for the Nominatim usage policy. The name falls back to a coordinate string on failure.
-async function prepareDownload(): Promise<void> {
-  if (!gate || bbox === null || submitting) return;
-  error = null;
-  submitting = true;
-  // Capture the box the lookup is for; a Clear or redraw during the await changes bbox, so the
-  // result is stale and must not reopen the prompt or seed a name under the wrong box.
-  const startedFor = bbox;
-  const { latitude, longitude } = bboxCenter(bbox);
-  const fallback = coordName(bbox);
-  try {
-    const name = await client.geocode(latitude, longitude);
-    if (bbox === startedFor) regionName = name ?? fallback;
-  } catch {
-    if (bbox === startedFor) regionName = fallback;
-  } finally {
-    if (bbox === startedFor) namePrep = true;
-    submitting = false;
-  }
-}
-
-async function saveRegion(): Promise<void> {
-  if (bbox === null || activeSourceIds.length === 0 || submitting) return;
-  const name = regionName.trim() || coordName(bbox);
-  error = null;
-  submitting = true;
-  try {
-    const { region } = await client.postRegion({
-      bbox,
-      sourceIds: activeSourceIds,
-      minzoom,
-      maxzoom,
-      name,
-    });
-    namePrep = false;
-    regionName = '';
-    // Return to the landing view so the new area's card and its live download progress are on
-    // screen: the card and bar render only under the home sub-view, so staying on build would hide
-    // the download the user just started.
-    rect?.clear();
-    subView = 'home';
-    await loadRegions();
-    await loadStats();
-    pollRegion(region.id);
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'Region download failed';
-  } finally {
-    submitting = false;
-  }
-}
-
-function cancelNamePrep(): void {
-  namePrep = false;
-  regionName = '';
-}
-
-function setPending(id: string, busy: boolean): void {
-  pendingRegion = { ...pendingRegion, [id]: busy };
-}
-
-async function redownloadRegion(id: string): Promise<void> {
-  if (!adminAccess || submitting || pendingRegion[id]) return;
-  error = null;
-  setPending(id, true);
-  try {
-    await client.redownloadRegion(id);
-    await loadRegions();
-    pollRegion(id);
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'Re-download failed';
-  } finally {
-    setPending(id, false);
-  }
-}
-
-async function deleteRegion(id: string): Promise<void> {
-  if (!adminAccess || submitting || pendingRegion[id]) return;
-  error = null;
-  setPending(id, true);
-  stopRegionPoll(id);
-  try {
-    await client.deleteRegion(id);
-    await loadRegions();
-    await loadStats();
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'Delete failed';
-  } finally {
-    setPending(id, false);
-  }
-}
-
-// Add or remove an id from a selection list, returning a fresh array for the reactive assignment.
-function toggleId(list: string[], id: string, on: boolean): string[] {
-  return on ? [...list, id] : list.filter((x) => x !== id);
-}
-
-function toggleSource(id: string, on: boolean): void {
-  selectedSources = toggleId(selectedSources, id, on);
-}
-
-function startDrawing(): void {
-  drawing = true;
-  panelCollapsed = true;
-  rect?.start();
-}
-
-function startNewRegion(): void {
-  bbox = null;
-  selectedSources = [];
-  [minzoom, maxzoom] = rangeForPreset('coastal');
-  regionName = '';
-  namePrep = false;
-  drawing = false;
-  panelCollapsed = false;
-  rect?.clear();
-  subView = 'build';
-}
-
-function backToOfflineHome(): void {
-  if (subView === 'build') {
-    drawing = false;
-    panelCollapsed = false;
-    rect?.clear();
-  }
-  subView = 'home';
-}
-
-function showRegion(region: SavedRegionDto): void {
-  const bounds = normalizeBounds(region.bbox);
-  if (bounds === null) {
-    error = 'This saved area has invalid bounds and cannot be shown.';
-    return;
-  }
-  map.fitBounds(bounds, { padding: 48, maxZoom: region.maxzoom });
-}
-
-// The current Chart Locker API cannot mutate a saved region safely in place. Reusing its settings
-// opens an adjusted download while keeping the known-good area available until the navigator deletes
-// it, which avoids creating an offline coverage gap during replacement.
-function useRegionAsTemplate(region: SavedRegionDto): void {
-  bbox = [...region.bbox] as Bbox;
-  selectedSources = [...region.sourceIds];
-  minzoom = region.minzoom;
-  maxzoom = region.maxzoom;
-  regionName = `${region.name} updated`;
-  namePrep = false;
-  subView = 'build';
-  rect?.set(region.bbox);
-  showRegion(region);
-}
-
-function progressText(status: WarmStatus, percent: number): string {
-  const saved = formatBytes(status.bytes);
-  const skipped = status.skipped > 0 ? `, ${status.skipped} empty tiles skipped` : '';
-  const errors = status.errors > 0 ? `, ${status.errors} errors` : '';
-  return `${percent}% saved, ${saved.value} ${saved.unit}, ${status.done} of ${status.total} tiles${skipped}${errors}`;
-}
-
-// The plain status label and its severity coloring, keyed by region status. The sev-* classes live
-// in text.css; an empty severity leaves the plain muted caps label, so a failed or capped region
-// reads at a glance while a normal one stays quiet.
-const STATUS_META: Record<SavedRegionDto['status'], { label: string; severity: string }> = {
-  downloading: { label: 'Saving…', severity: '' },
-  ready: { label: 'Saved, works offline', severity: '' },
-  capped: { label: 'Storage full, some left out', severity: 'sev-warning' },
-  error: { label: 'Could not finish', severity: 'sev-danger' },
-  'needs-redownload': { label: 'Out of date, download again', severity: 'sev-warning' },
-};
-
-function updatedLabel(ts: number): string {
-  return new Date(ts * 1000).toLocaleDateString();
-}
+const loadPositionWarm = () => controller.loadPositionWarm();
+const commitPositionRadius = (value: number) => controller.commitPositionRadius(value);
+const commitMoveThreshold = (value: number) => controller.commitMoveThreshold(value);
+const commitTtlDays = (value: number) => controller.commitTtlDays(value);
+const clearScrollCache = () => controller.clearScrollCache();
+const loadStats = () => controller.loadStats();
+const prepareDownload = () => controller.prepareDownload();
+const saveRegion = () => controller.saveRegion();
+const cancelNamePrep = () => controller.cancelNamePrep();
+const redownloadRegion = (id: string) => controller.redownloadRegion(id);
+const toggleSource = (id: string, enabled: boolean) => controller.toggleSource(id, enabled);
+const startDrawing = () => controller.startDrawing();
+const startNewRegion = () => controller.startNewRegion();
+const backToOfflineHome = () => controller.backToOfflineHome();
+const showRegion = (region: SavedRegionDto) => controller.showRegion(region);
+const useRegionAsTemplate = (region: SavedRegionDto) => controller.useRegionAsTemplate(region);
+const applyDetailPreset = (key: 'overview' | 'coastal' | 'harbor') =>
+  controller.applyDetailPreset(key);
 
 // The per-chart storage breakdown is keyed by source id. Resolve it to the plain registry title
 // through the shared catalog lookup, collapse the synthetic base-map sub-source keys, and fall back
@@ -655,7 +155,7 @@ function chartLabel(id: string): string {
   onBack={subView === 'home' ? onBack : backToOfflineHome}
   backLabel={subView === 'home' ? 'Back to menu' : 'Back to offline charts'}
   minimize={subView === 'build'
-    ? { collapsed: panelCollapsed, onToggle: () => (panelCollapsed = !panelCollapsed) }
+    ? { collapsed: panelCollapsed, onToggle: () => controller.toggleCollapsed() }
     : undefined}
   bodyFlex
 >
@@ -687,128 +187,25 @@ function chartLabel(id: string): string {
       </button>
     </div>
 
-    <section class="panel-section" aria-label="My areas">
-      <h3 class="caps-label">My areas</h3>
-      {#if loadError !== null}
-        <p class="alert-note" role="alert">{loadError}</p>
-      {:else if regions === null}
-        <p class="muted-note" role="status">Loading areas…</p>
-      {:else}
-        <SavedList
-          items={regions}
-          empty="No saved areas yet. Save a chart area before leaving internet coverage."
-          key={(region) => region.id}
-        >
-          {#snippet card(region)}
-            {@const live = regionStatus[region.id]}
-            {@const savedBytes =
-              region.status === 'downloading' && live ? live.bytes : region.cachedBytes}
-            {@const cached = formatBytes(savedBytes)}
-            <div class="card-head">
-              <span class="name" title={region.name}>{region.name}</span>
-              <span class="area-status caps-label {STATUS_META[region.status].severity}">
-                {STATUS_META[region.status].label}
-              </span>
-            </div>
-            <dl class="card-stats">
-              <dt class="caps-label">Saved</dt>
-              <dd><span class="num">{cached.value}</span> {cached.unit}</dd>
-              {#if region.lastDownloadedAt !== null}
-                <dt class="caps-label">Updated</dt>
-                <dd><span class="num">{updatedLabel(region.lastDownloadedAt)}</span></dd>
-              {/if}
-            </dl>
-            {#if region.status === 'downloading' && live && live.total > 0}
-              {@const pct = Math.round((live.done / live.total) * 100)}
-              <div
-                class="warm-track"
-                role="progressbar"
-                aria-label="Download progress"
-                aria-valuemin="0"
-                aria-valuemax={live.total}
-                aria-valuenow={live.done}
-                aria-valuetext={progressText(live, pct)}
-              >
-                <div class="warm-fill" style:inline-size="{pct}%"></div>
-              </div>
-              <p class="progress-note muted-note" role="status">{progressText(live, pct)}</p>
-            {:else if region.status === 'downloading'}
-              <p class="progress-note muted-note" role="status">Starting download…</p>
-            {/if}
-            <Disclosure label="Area details">
-              <dl class="detail-list area-details">
-                <div class="item">
-                  <dt>Coverage</dt>
-                  <dd>{formatBounds(region.bbox)}</dd>
-                </div>
-                <div class="item">
-                  <dt>Detail</dt>
-                  <dd>Zoom {region.minzoom} to {region.maxzoom}</dd>
-                </div>
-                <div class="item">
-                  <dt>Charts</dt>
-                  <dd>{region.sourceIds.map(chartLabel).join(', ')}</dd>
-                </div>
-              </dl>
-              <div class="area-detail-actions">
-                <button type="button" class="btn btn-ghost" onclick={() => showRegion(region)}>
-                  <Eye size={16} aria-hidden="true" />
-                  Show on chart
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost"
-                  disabled={!adminAccess || region.status === 'downloading'}
-                  onclick={() => useRegionAsTemplate(region)}
-                >
-                  <PencilRuler size={16} aria-hidden="true" />
-                  Adjust a copy
-                </button>
-              </div>
-              <p class="muted-note">
-                Adjusting keeps this known-good area until the replacement finishes and you delete
-                the old copy.
-              </p>
-            </Disclosure>
-            {#if armedDelete.isArmed(region.id)}
-              <InlineConfirm
-                question="Delete this offline area?"
-                onConfirm={() => armedDelete.confirm(region.id)}
-                onCancel={() => armedDelete.cancel()}
-              />
-            {:else}
-              <div class="actions">
-                <button
-                  type="button"
-                  class="icon-btn"
-                  aria-label="Download this area again"
-                  title="Download again"
-                  disabled={!adminAccess ||
-                    submitting ||
-                    pendingRegion[region.id] ||
-                    region.status === 'downloading'}
-                  onclick={() => void redownloadRegion(region.id)}
-                >
-                  <RefreshCw size={18} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  class="icon-btn icon-btn--danger"
-                  aria-label="Delete this area"
-                  title="Delete"
-                  disabled={!adminAccess || submitting || pendingRegion[region.id]}
-                  onclick={() => armedDelete.arm(region.id)}
-                >
-                  <Trash2 size={18} aria-hidden="true" />
-                </button>
-              </div>
-            {/if}
-          {/snippet}
-        </SavedList>
-      {/if}
-    </section>
+    <SavedRegionsView
+      {regions}
+      {loadError}
+      {regionStatus}
+      {pendingRegion}
+      {submitting}
+      {adminAccess}
+      {armedDelete}
+      {chartLabel}
+      onShow={showRegion}
+      onUseTemplate={useRegionAsTemplate}
+      onRedownload={(id) => void redownloadRegion(id)}
+    />
 
-    <button type="button" class="subview-link row-interactive" onclick={() => (subView = 'auto')}>
+    <button
+      type="button"
+      class="subview-link row-interactive"
+      onclick={() => controller.showSubView('auto')}
+    >
       <span class="subview-link-label">Automatic caching</span>
       <span class="subview-link-value">{positionEnabled ? 'On' : 'Off'}</span>
       <ChevronRight class="subview-link-chevron" size={18} aria-hidden="true" />
@@ -822,7 +219,7 @@ function chartLabel(id: string): string {
     <button
       type="button"
       class="subview-link row-interactive"
-      onclick={() => (subView = 'storage')}
+      onclick={() => controller.showSubView('storage')}
     >
       <span class="subview-link-label">Storage</span>
       <span class="subview-link-value">
@@ -850,7 +247,7 @@ function chartLabel(id: string): string {
           type="button"
           class="btn btn-ghost"
           disabled={bbox === null || !adminAccess}
-          onclick={() => rect?.clear()}
+          onclick={() => controller.clearRectangle()}
         >
           <Trash2 size={16} aria-hidden="true" />
           Clear
@@ -860,6 +257,9 @@ function chartLabel(id: string): string {
         <p class="muted-note">Area set. Draw again to change it.</p>
       {:else}
         <p class="muted-note">Tap Draw on the chart, then drag a box over where you are going.</p>
+      {/if}
+      {#if providerError !== null}
+        <p class="alert-note" role="alert">{providerError}</p>
       {/if}
 
       {#if bbox !== null}
@@ -917,9 +317,7 @@ function chartLabel(id: string): string {
             min={0}
             max={maxzoom}
             step={1}
-            onCommit={(v) => {
-              minzoom = clampInt(v, 0, maxzoom);
-            }}
+            onCommit={(value) => controller.commitMinZoom(value)}
           />
           <UnitField
             label="Maximum zoom"
@@ -927,9 +325,7 @@ function chartLabel(id: string): string {
             min={minzoom}
             max={22}
             step={1}
-            onCommit={(v) => {
-              maxzoom = clampInt(v, minzoom, 22);
-            }}
+            onCommit={(value) => controller.commitMaxZoom(value)}
           />
         </Disclosure>
 
@@ -967,12 +363,16 @@ function chartLabel(id: string): string {
         {/if}
 
         {#if namePrep}
-          <TextField label="Area name" value={regionName} onCommit={(v) => (regionName = v)} />
+          <TextField
+            label="Area name"
+            value={regionName}
+            onCommit={(value) => controller.setRegionName(value)}
+          />
           <div class="panel-controls">
             <button
               type="button"
               class="btn btn-primary btn--grow"
-              disabled={submitting}
+              disabled={submitting || !adminAccess}
               onclick={() => void saveRegion()}
             >
               <Download size={16} aria-hidden="true" />
@@ -1001,7 +401,11 @@ function chartLabel(id: string): string {
               This download is larger than the available saved-area storage. Choose less detail,
               draw a smaller area, or free storage.
             </p>
-            <button type="button" class="btn btn-ghost" onclick={() => (subView = 'storage')}>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => controller.showSubView('storage')}
+            >
               Open storage
             </button>
           {:else if gateReason === 'storage-loading'}
@@ -1040,23 +444,23 @@ function chartLabel(id: string): string {
       scroll={scrollFmt}
       automatic={autoCacheFmt}
       {ttlDays}
-      writerState={ttlWriter.state}
+      writerState={controller.ttlWriterState}
       {adminAccess}
       {confirmingClear}
       {clearNote}
       {chartLabel}
       onCommitTtl={commitTtlDays}
-      onRetryTtl={() => ttlWriter.retry()}
-      onRequestClear={() => (confirmingClear = true)}
+      onRetryTtl={() => controller.retryTtlWrite()}
+      onRequestClear={() => controller.requestClear()}
       onConfirmClear={() => void clearScrollCache()}
-      onCancelClear={() => (confirmingClear = false)}
+      onCancelClear={() => controller.cancelClear()}
     />
   {:else if subView === 'auto'}
     <AutoCacheView
       enabled={positionEnabled}
       {adminAccess}
       loadError={positionLoadError}
-      writerState={positionWriter.state}
+      writerState={controller.positionWriterState}
       sources={positionWarmSourceList}
       selectedSources={positionSet}
       {unit}
@@ -1066,25 +470,13 @@ function chartLabel(id: string): string {
       baseZoom={positionBaseZoom}
       {sourceDescription}
       onRetryLoad={() => void loadPositionWarm()}
-      onRetrySave={() => positionWriter.retry()}
-      onToggleEnabled={(enabled) => {
-        positionEnabled = enabled;
-        savePositionWarm();
-      }}
-      onToggleSource={(id, enabled) => {
-        positionSources = toggleId(positionSources, id, enabled);
-        savePositionWarm();
-      }}
+      onRetrySave={() => controller.retryPositionWrite()}
+      onToggleEnabled={(enabled) => controller.setPositionEnabled(enabled)}
+      onToggleSource={(id, enabled) => controller.togglePositionSource(id, enabled)}
       onCommitRadius={commitPositionRadius}
       onCommitMoveThreshold={commitMoveThreshold}
-      onCommitInterval={(value) => {
-        positionIntervalSecs = Math.max(60, Math.round(value));
-        savePositionWarm();
-      }}
-      onCommitBaseZoom={(value) => {
-        positionBaseZoom = clampInt(value, 0, 22);
-        savePositionWarm();
-      }}
+      onCommitInterval={(value) => controller.commitPositionInterval(value)}
+      onCommitBaseZoom={(value) => controller.commitPositionBaseZoom(value)}
     />
   {/if}
 </SlideOver>
@@ -1092,17 +484,6 @@ function chartLabel(id: string): string {
 <style>
 /* The .panel-section wrapper used by the sections above is the shared class in panels.css. */
 
-/* A saved area's status gets its own line so a long passage name and a safety-relevant state never
-   truncate each other inside the narrow docked panel. */
-.card-head {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-}
-.area-status {
-  min-block-size: 1.25rem;
-}
-.progress-note,
 .detail-explanation {
   margin: 0;
 }
@@ -1113,20 +494,6 @@ function chartLabel(id: string): string {
 .pending-step p {
   margin: 0;
 }
-.area-details dd {
-  max-inline-size: 62%;
-  overflow-wrap: anywhere;
-  text-align: end;
-}
-.area-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.area-detail-actions .btn {
-  flex: 1 1 auto;
-}
-
 /* A landing row that opens a sub-view: a label, its current value, and a trailing chevron, on the
    shared row-interactive base so it reads like the Layers-panel category toggles. Named off the
    global .nav-row (which is an elevated card with a vertical name-over-metrics layout) so the two do
@@ -1152,20 +519,5 @@ function chartLabel(id: string): string {
 .subview-link :global(.subview-link-chevron) {
   flex-shrink: 0;
   color: var(--text-muted);
-}
-
-/* The determinate download progress bar on a downloading region card: a token-driven track with an
-   accent fill, mirroring the themed range track so it reads as one instrument across all three
-   themes. Local because this is the only place a determinate bar appears. */
-.warm-track {
-  block-size: var(--range-track-h);
-  border-radius: var(--radius-pill);
-  background: var(--border);
-  overflow: hidden;
-}
-.warm-fill {
-  block-size: 100%;
-  background: var(--accent);
-  transition: inline-size var(--transition-fast);
 }
 </style>

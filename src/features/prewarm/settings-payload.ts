@@ -2,7 +2,14 @@
  * SI (meters, seconds); the panel converts from the display unit through UnitField before calling
  * this function. */
 
-import { isRecord } from '$shared/lib';
+import { isFiniteNumber, isRecord } from '$shared/lib';
+
+const MAX_DISTANCE_METERS = 1_000_000;
+const MIN_INTERVAL_SECONDS = 60;
+const MAX_INTERVAL_SECONDS = 86_400;
+const MAX_ZOOM = 22;
+const MAX_SOURCES = 256;
+const MAX_SOURCE_ID_LENGTH = 256;
 
 export interface PositionWarmSettings {
   enabled: boolean;
@@ -32,19 +39,37 @@ export function extractPositionWarm(cfg: unknown): PositionWarmSettings | null {
   const pw = isRecord(cfg.positionWarm) ? cfg.positionWarm : cfg;
   if (
     typeof pw.enabled !== 'boolean' ||
-    typeof pw.radiusMeters !== 'number' ||
-    typeof pw.moveThresholdMeters !== 'number' ||
-    typeof pw.intervalSecs !== 'number' ||
-    typeof pw.baseZoom !== 'number' ||
+    !isFiniteNumber(pw.radiusMeters) ||
+    pw.radiusMeters <= 0 ||
+    pw.radiusMeters > MAX_DISTANCE_METERS ||
+    !isFiniteNumber(pw.moveThresholdMeters) ||
+    pw.moveThresholdMeters <= 0 ||
+    pw.moveThresholdMeters > MAX_DISTANCE_METERS ||
+    !isFiniteNumber(pw.intervalSecs) ||
+    !Number.isSafeInteger(pw.intervalSecs) ||
+    pw.intervalSecs < MIN_INTERVAL_SECONDS ||
+    pw.intervalSecs > MAX_INTERVAL_SECONDS ||
+    !isFiniteNumber(pw.baseZoom) ||
+    !Number.isSafeInteger(pw.baseZoom) ||
+    pw.baseZoom < 0 ||
+    pw.baseZoom > MAX_ZOOM ||
     !Array.isArray(pw.sources)
   )
     return null;
+  const sources = [
+    ...new Set(
+      pw.sources.filter(
+        (source): source is string =>
+          typeof source === 'string' && source.length > 0 && source.length <= MAX_SOURCE_ID_LENGTH,
+      ),
+    ),
+  ].slice(0, MAX_SOURCES);
   return {
     enabled: pw.enabled,
     radiusMeters: pw.radiusMeters,
     moveThresholdMeters: pw.moveThresholdMeters,
     intervalSecs: pw.intervalSecs,
     baseZoom: pw.baseZoom,
-    sources: pw.sources.filter((s): s is string => typeof s === 'string'),
+    sources,
   };
 }

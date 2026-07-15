@@ -209,6 +209,12 @@ When installed as a PWA on a touch device, Binnacle automatically reserves botto
 Android navigation and tablet taskbars. The status strip also follows reported bottom and landscape
 side safe areas, so its helm controls remain reachable when system chrome overlays the app window.
 
+The **Profiles** panel includes **Forget credentials** and **Erase all local data** for a shared or
+retired display. These actions affect only Binnacle data in the current browser. They do not delete
+Signal K routes, waypoints, tracks, profiles, Chart Locker data, administrator sessions, or
+server-side device authorization. Full erasure is blocked while MOB, anchor watch, navigation, route
+editing, measurement, or an unsaved recorded track is active.
+
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
   navigate straight to that point, or start a route or measurement.
