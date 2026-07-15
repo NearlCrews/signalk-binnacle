@@ -23,20 +23,18 @@ reuse-or-rebuild decisions, the pitfalls we keep correcting, and the gate. When 
 During edits, the fast per-file loop:
 
 1. `npx @biomejs/biome check --write <files>` (format, lint, and organize imports, with autofix)
-2. `npm run check` (svelte-check)
+2. `npm run check` (svelte-check plus tooling TypeScript)
 3. `npx @biomejs/biome ci <files>` (no-write verify, the same engine the commit hook runs)
 
-Then commit. The pre-commit hook runs `biome ci .`, `npm run cruise` (dependency-cruiser), and
-`npm run deadcode` (Knip). The heavier gates (`npm test`, `npm run build`) run at pre-push. Run them
-yourself before a release or a large change. When app-shell, layout, map, interaction, or browser
-behavior changes, also run `npm run test:e2e`. CI runs `npm run test:e2e:cross-browser` for Chromium
-and WebKit coverage.
+Then run `npm run verify:commit` before committing. The pre-push hook runs
+`npm run verify:browser`, including type checks, coverage, a production build, bundle budgets, and
+Chromium E2E without a duplicate build. CI runs `npm run verify:release` for Chromium, WebKit,
+package, and runtime dependency coverage.
 
 Tooling traps, each of which has bitten us:
 
-1. Biome is a development dependency. Use the npm scripts (`npm run format`, `npm run lint`, and
-   `npm run ci:biome`) or the local binary through `npx @biomejs/biome`. Never run unscoped
-   `npx biome`, which resolves an unrelated package.
+1. All tools are development dependencies. Use the npm scripts or a package-qualified local binary
+   through `npx`. Never depend on a globally installed formatter or linter.
 2. Biome `lineWidth` is 100. Wrap to 100.
 3. dependency-cruiser `no-cross-feature`: a feature may import another feature ONLY through that
    feature's `index.ts` public barrel, never a deep path. The same holds for shared and entities
@@ -254,7 +252,7 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 `$shared/ui` at the SECOND copy; a third copy is a review failure.
 
 | Need | Reach for | Never |
-|---|---|---|
+| --- | --- | --- |
 | Top-level slide-in panel | `SlideOver` | a bespoke `<aside>` shell |
 | In-panel sub-view back header | `SubViewHeader` | a second panel-level back |
 | A list of saved items | `SavedList` (with `empty` and a `card` snippet) | a hand-rolled `<ul>` of cards |
@@ -291,7 +289,7 @@ Reach for a shared class before writing scoped CSS. The full reference is `desig
 5 and 7; this is the decision shortcut.
 
 | You are building | Use | Notes |
-|---|---|---|
+| --- | --- | --- |
 | A clickable row in a popover menu | `.menu-item` | full width, control height, accent-tint on hover |
 | Any interactive row that hover-tints and lights via `.is-on` | `.row-interactive` | compose it, add only your content layout; do NOT set its background or border-color or you defeat the shared hover and lit state |
 | A landing row that opens a sub-view | `.subview-link` on `.row-interactive` | label, value, trailing chevron (RegionsPanel) |
@@ -446,9 +444,8 @@ Tick all of these before you commit a new menu item.
       a placeholder occupies the value slot, it never collapses the box.
 - [ ] Every text size comes from the type-role table in the design system; no new token-role
       pairing without a design-system edit.
-- [ ] The gate is green: `npx @biomejs/biome check --write .`, `npm run check`, `npm run ci:biome`,
-      `npm run cruise`, `npm run deadcode`, `npm test`, and `npm run build` pass. Run
-      `npm run test:e2e` when app-shell, layout, map, interaction, or browser behavior changes.
+- [ ] The gate is green: `npm run verify` passes. Run `npm run verify:browser` when app-shell,
+      layout, map, interaction, or browser behavior changes.
 
 ---
 

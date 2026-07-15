@@ -3,7 +3,7 @@ import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import type { OverlayContext } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
 import { createExpiringStore } from '$shared/storage';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { fetchNotes, type NotePoint } from './notes-client';
 import { createNotesOverlay } from './notes-overlay';
 

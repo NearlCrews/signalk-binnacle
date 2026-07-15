@@ -24,23 +24,20 @@ release, or npm publication. Obtain explicit owner approval immediately before c
 
 ## Run the release gate
 
-Use a clean dependency install when practical, then run:
+Use a clean dependency install when practical, install the Playwright browsers, then run:
 
 ```bash
-npm run ci:biome
-npm run cruise
-npm run deadcode
-npm run check
-npm test
-NODE_ENV=production npm run build
-npm run test:e2e:cross-browser
-npm audit --omit=dev
+npx playwright install chromium webkit
+npm run verify:release
 npm pack --dry-run --ignore-scripts
 ```
 
-Inspect the pack output. It must contain the generated `public/` application, the five App Store
-screenshots, `README.md`, `CHANGELOG.md`, `LICENSE`, and the Markdown guides linked from the README. It
-must not contain source maps, source files, test artifacts, local configuration, or scratch files.
+`verify:release` enforces formatting, lint, prose, architecture, dead code, type checks, coverage,
+the production build, bundle budgets, cross-browser behavior, publint, package contents, and the
+runtime dependency audit. Inspect the final pack output. It must contain the generated `public/`
+application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICENSE`, and the Markdown
+guides linked from the README. It must not contain source maps, source files, test artifacts, local
+configuration, or scratch files.
 
 Before requesting publication approval, also confirm:
 

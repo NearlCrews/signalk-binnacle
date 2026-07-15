@@ -215,6 +215,7 @@ onDestroy(() => onHover(undefined));
             <span class="poi-head">
               <span class="poi-cat" title={categoryLabel(row.poi.category)}>
                 <!-- The category SVG is a static literal from a fixed enum, never external input. -->
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -- fixed local icon markup -->
                 {@html poiInlineIconSvg(row.poi.category)}
                 <span class="visually-hidden">{categoryLabel(row.poi.category)}</span>
               </span>

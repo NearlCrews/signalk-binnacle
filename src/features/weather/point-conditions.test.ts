@@ -139,31 +139,31 @@ describe('createPointConditionsLoader', () => {
     expect(otherProvider.warnings).toBeUndefined();
   });
 
-  it.each([
-    'empty',
-    'unsupported',
-  ] as const)('does not replay cached data for a definitive %s outcome', async (status) => {
-    const nowRef = { ms: 0 };
-    const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
-    await createPointConditionsLoader({ ...makeDeps(nowRef), persist }).load(
-      'http://pi',
-      'provider-id',
-      1,
-      2,
-    );
-    const loader = createPointConditionsLoader({
-      ...makeDeps(nowRef),
-      observations: vi.fn(async () => ({ status }) as const),
-      forecasts: vi.fn(async () => ({ status }) as const),
-      warnings: vi.fn(async () => ({ status }) as const),
-      persist,
-    });
-    const point = await loader.load('http://pi', 'provider-id', 1, 2);
-    expect(point.obs).toBeUndefined();
-    expect(point.series).toBeUndefined();
-    expect(point.warnings).toEqual(status === 'empty' ? [] : undefined);
-    expect(point.warningAvailability).toBe(status === 'empty' ? 'fresh' : 'unavailable');
-  });
+  it.each(['empty', 'unsupported'] as const)(
+    'does not replay cached data for a definitive %s outcome',
+    async (status) => {
+      const nowRef = { ms: 0 };
+      const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
+      await createPointConditionsLoader({ ...makeDeps(nowRef), persist }).load(
+        'http://pi',
+        'provider-id',
+        1,
+        2,
+      );
+      const loader = createPointConditionsLoader({
+        ...makeDeps(nowRef),
+        observations: vi.fn(async () => ({ status }) as const),
+        forecasts: vi.fn(async () => ({ status }) as const),
+        warnings: vi.fn(async () => ({ status }) as const),
+        persist,
+      });
+      const point = await loader.load('http://pi', 'provider-id', 1, 2);
+      expect(point.obs).toBeUndefined();
+      expect(point.series).toBeUndefined();
+      expect(point.warnings).toEqual(status === 'empty' ? [] : undefined);
+      expect(point.warningAvailability).toBe(status === 'empty' ? 'fresh' : 'unavailable');
+    },
+  );
 
   it('does not replay data after the cache age bound', async () => {
     const nowRef = { ms: 0 };

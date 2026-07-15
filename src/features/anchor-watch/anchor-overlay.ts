@@ -213,14 +213,14 @@ export function createAnchorOverlay(
         map.on('mousemove', onPointerMove);
         // No mouse cancel path: MapLibre tracks an in-flight mouse drag at the window level, so
         // mouseup reaches endDrag even when the button is released off the canvas.
-        map.once('mouseup', endDrag);
+        void map.once('mouseup', endDrag);
       };
       const onMarkerTouchStart = (e: MapLayerTouchEvent): void => {
         if (e.points.length !== 1) return;
         e.preventDefault();
         map.on('touchmove', onPointerMove);
-        map.once('touchend', endDrag);
-        map.once('touchcancel', cancelDrag);
+        void map.once('touchend', endDrag);
+        void map.once('touchcancel', cancelDrag);
       };
       const onMarkerEnter = (): void => {
         map.getCanvas().style.cursor = 'move';

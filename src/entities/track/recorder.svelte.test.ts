@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createTrackSettings } from '$shared/settings';
 import { createTrackStore } from '$shared/storage';
-import { createFakeStorage } from '$shared/testing/fake-storage';
+import { createFakeStorage } from '$shared/testing';
 import { computeStats, decideRecord, TrackRecorder } from './recorder.svelte';
 import type { TrackPoint } from './track-types';
 

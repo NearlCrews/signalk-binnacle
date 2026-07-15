@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createCourseOverlay } from './course-overlay';
 
 const LINE_SRC = 'binnacle-course-line-src';

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OwnVessel } from '$entities/vessel';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeStorage } from '$shared/testing/fake-storage';
-import { createFrameFactory } from '$shared/testing/sk-frame';
+import { createFakeStorage, createFrameFactory } from '$shared/testing';
 import { MobStore } from './mob.svelte';
 
 const frame = createFrameFactory();

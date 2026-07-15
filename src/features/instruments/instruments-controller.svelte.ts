@@ -1,4 +1,4 @@
-import type { PersistedValue } from '$shared/settings/persisted.svelte';
+import type { PersistedValue } from '$shared/settings';
 import {
   fetchPathMeta,
   type HistoryProviders,

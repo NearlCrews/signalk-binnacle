@@ -26,14 +26,12 @@ serves, and any implementation ideas you have.
 
 1. Fork the repository and create a feature branch from `main`.
 2. Follow the [Development section of the README](../README.md#development)
-   for setup, build, and test commands. `npm install` provides the repository-local Biome binary
-   used by every lint and format script.
+   for setup, build, and test commands. `npm install` provides every repository-local tool.
 3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
-6. Run `npm run ci:biome`, `npm run check`, `npm run cruise`, `npm run deadcode`, `npm test`, and
-   `npm run build`. Run `npm run test:e2e` when browser behavior is affected. CI runs the Chromium
-   and WebKit suite through `npm run test:e2e:cross-browser`.
+6. Run `npm run verify`. Run `npm run verify:browser` when browser behavior is affected. CI runs
+   `npm run verify:release`, including Chromium, WebKit, package, and runtime audit checks.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 
@@ -41,8 +39,8 @@ serves, and any implementation ideas you have.
 
 - All source is TypeScript and Svelte 5 (runes) under `src/`, built with Vite
   into `public/`.
-- Lint and format with Biome (`npm run lint`, `npm run format`), and type-check
-  with svelte-check (`npm run check`).
+- Format with Biome (`npm run format`), run the aggregate lint gate with `npm run lint`, and
+  type-check application and tooling code with `npm run check`.
 - Do not edit `public/`; it is generated build output.
 - Keep values SI internally (radians, meters, m/s, Kelvin) and convert only at the display edge.
   The two sanctioned exceptions are `navigation.position` in decimal degrees and Open-Meteo's
@@ -70,7 +68,7 @@ in `src/app/App.svelte`, not surgery on the core.
 
 Use conventional-commit prefixes that match the actual diff scope:
 
-```
+```text
 feat: add a tidal-current marker to the tides panel
 fix: keep the anchor drag alarm latched after a reload
 docs: update the offline caching instructions

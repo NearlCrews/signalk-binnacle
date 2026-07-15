@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Bbox4 } from '$shared/geo';
-import { expectBearerAuth, stubFetch } from '$shared/testing/fetch-stub';
+import { expectBearerAuth, stubFetch } from '$shared/testing';
 import { fetchAisTrails } from './ais-trails-client';
 
 const BASE = 'https://boat.example';

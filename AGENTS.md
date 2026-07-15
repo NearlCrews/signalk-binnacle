@@ -63,17 +63,21 @@ Dependency-cruiser enforces the rule.
 - Dead-code check: `npm run deadcode`
 - Type check: `npm run check`
 - Unit tests: `npm test`
+- Coverage: `npm run test:coverage`
 - Build: `npm run build`
+- Full gate: `npm run verify`
 - E2E smoke: `npm run test:e2e`
+- Release gate: `npm run verify:release`
 
 ## Verification
 
 For substantial changes, run the full gate before claiming done:
 
-`npm run lint`, `npm run cruise`, `npm run deadcode`, `npm run check`, `npm test`, `npm run build`
+`npm run verify`
 
-Run `npm run test:e2e` when the app shell, layout, instruments, chart lifecycle, or browser behavior
-is touched. The preview server may require approval to bind localhost in sandboxed Codex sessions.
+Run `npm run verify:browser` when the app shell, layout, instruments, chart lifecycle, or browser
+behavior is touched. The preview server may require approval to bind localhost in sandboxed Codex
+sessions.
 For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
 publishing.
 

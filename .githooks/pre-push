@@ -26,25 +26,7 @@ if [ -n "$STRAY_BRANCHES" ]; then
   echo "$STRAY_BRANCHES" | sed 's/^/    /'
 fi
 
-echo "[pre-push] biome ci"
-biome ci .
-
-echo "[pre-push] dependency-cruiser"
-npm run --silent cruise
-
-echo "[pre-push] dead code"
-npm run --silent deadcode
-
-echo "[pre-push] type-check"
-npm run --silent check
-
-echo "[pre-push] unit tests"
-npm run --silent test
-
-echo "[pre-push] production build"
-NODE_ENV=production npm run --silent build
-
-echo "[pre-push] end-to-end smoke tests"
-npm run --silent test:e2e
+echo "[pre-push] browser verification"
+npm run --silent verify:browser
 
 echo "[pre-push] all gates green"

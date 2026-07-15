@@ -191,6 +191,7 @@ $effect(() => {
     {#if poiOverrides.has(opt.category)}
       <img src={poiOverrides.get(opt.category)} width="20" height="20" alt="">
     {:else}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -- fixed local icon markup -->
       {@html poiInlineIconSvg(opt.category)}
     {/if}
   {:else if opt.kind === 'symbol'}
@@ -199,6 +200,7 @@ $effect(() => {
     {#if defaultSymbol}
       <img src={defaultSymbol.url} width="20" height="20" alt="">
     {:else}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -- caller contract requires fixed local SVG -->
       {@html defaultOption?.fallbackSvg ?? ''}
     {/if}
   {/if}

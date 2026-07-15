@@ -96,26 +96,24 @@ function run(action: MenuItem, after?: () => void): void {
         ariaLabel="More actions"
         id="bar-more-menu"
       >
-        {#snippet children()}
-          {#each split.overflow as action (action.id)}
-            <button
-              type="button"
-              class="menu-item"
-              class:is-on={action.pressed === true}
-              aria-pressed={action.pressed === undefined ? undefined : action.pressed}
-              disabled={action.disabled === true}
-              aria-disabled={action.available === false ? true : undefined}
-              title={blockedReason(action) ?? action.label}
-              onclick={() => run(action, closeMore)}
-            >
-              <UnavailableHint
-                hint={action.available === false ? action.unavailableHint : undefined}
-              />
-              <MenuItemIcon item={action} size={16} />
-              {action.label}
-            </button>
-          {/each}
-        {/snippet}
+        {#each split.overflow as action (action.id)}
+          <button
+            type="button"
+            class="menu-item"
+            class:is-on={action.pressed === true}
+            aria-pressed={action.pressed === undefined ? undefined : action.pressed}
+            disabled={action.disabled === true}
+            aria-disabled={action.available === false ? true : undefined}
+            title={blockedReason(action) ?? action.label}
+            onclick={() => run(action, closeMore)}
+          >
+            <UnavailableHint
+              hint={action.available === false ? action.unavailableHint : undefined}
+            />
+            <MenuItemIcon item={action} size={16} />
+            {action.label}
+          </button>
+        {/each}
       </AnchoredMenu>
     </div>
   {/if}

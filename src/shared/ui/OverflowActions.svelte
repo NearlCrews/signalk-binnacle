@@ -49,9 +49,7 @@ function close(): void {
     role="menu"
     bind:surfaceRef={surface}
   >
-    {#snippet children()}
-      {@render content()}
-    {/snippet}
+    {@render content()}
   </AnchoredMenu>
 </div>
 

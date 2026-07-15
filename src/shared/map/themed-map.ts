@@ -181,7 +181,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // the real style returns on the next load with connectivity.
   let styleArrived = false;
   let triedDirectBase = false;
-  mapInstance.once('styledata', () => {
+  void mapInstance.once('styledata', () => {
     styleArrived = true;
   });
   mapInstance.on('error', () => {

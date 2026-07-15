@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { beforeIdFor, installSentinels, sentinelId } from './sentinels';
 import { Z_ORDER } from './types';
 

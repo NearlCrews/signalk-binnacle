@@ -48,6 +48,7 @@ const detailDef = $derived(detailId ? tiles.find((def) => def.id === detailId) :
 const history = createTileHistory();
 $effect(() => {
   const now = deps.clock.now;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch set, never rendered
   const liveIds = new Set<string>();
   for (const def of tiles) {
     if (def.viz !== 'spark') continue;

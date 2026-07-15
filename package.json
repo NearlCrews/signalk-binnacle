@@ -29,8 +29,21 @@
     "pwa"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11.6",
+      "onFail": "error"
+    }
+  },
+  "packageManager": "npm@11.16.0",
   "signalk": {
     "appIcon": "./binnacle-icon.svg",
     "displayName": "Binnacle Chartplotter",
@@ -72,34 +85,75 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173",
-    "check": "svelte-check --tsconfig ./tsconfig.app.json",
-    "lint": "biome lint .",
-    "lint:fix": "biome lint --write .",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "lint": "npm run lint:code && npm run lint:docs && npm run spellcheck",
+    "lint:code": "biome lint . && eslint . --cache --cache-location .cache/eslint",
+    "lint:docs": "markdownlint-cli2 \"*.md\" \".github/*.md\" \"docs/*.md\"",
+    "lint:fix": "biome lint --write . && eslint . --fix --cache --cache-location .cache/eslint",
+    "spellcheck": "cspell --no-progress --show-suggestions README.md AGENTS.md \".github/**/*.{md,yml,yaml}\" \"docs/*.md\"",
     "ci:biome": "biome ci .",
     "cruise": "depcruise src --config .dependency-cruiser.cjs",
     "deadcode": "knip",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "vite build && playwright test --project=chromium",
-    "test:e2e:cross-browser": "vite build && playwright test",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:cross-browser": "playwright test",
+    "test:e2e:with-build": "npm run build && npm run test:e2e",
+    "test:e2e:cross-browser:with-build": "npm run build && npm run test:e2e:cross-browser",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "hooks": "git config core.hooksPath .githooks"
+    "size": "size-limit",
+    "package:check": "publint --pack npm --strict && node scripts/check-package.mjs",
+    "audit:runtime": "npm audit --omit=dev --audit-level=high",
+    "verify:commit": "npm run ci:biome && npm run lint && npm run cruise && npm run deadcode",
+    "verify:fast": "npm run verify:commit && npm run check",
+    "verify": "npm run verify:fast && npm run test:coverage && npm run build && npm run size",
+    "verify:browser": "npm run verify && npm run test:e2e",
+    "verify:release": "npm run verify && npm run test:e2e:cross-browser && npm run package:check && npm run audit:runtime",
+    "hooks": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push"
   },
+  "size-limit": [
+    {
+      "name": "Main application JavaScript",
+      "path": "public/assets/index-*.js",
+      "limit": "115 kB"
+    },
+    {
+      "name": "MapLibre JavaScript",
+      "path": "public/assets/maplibre-gl-*.js",
+      "limit": "240 kB"
+    },
+    {
+      "name": "Application CSS",
+      "path": "public/assets/index-*.css",
+      "limit": "22 kB"
+    }
+  ],
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@biomejs/biome": "^2.5.3",
+    "@biomejs/biome": "2.5.4",
     "@playwright/test": "^1.61.1",
+    "@size-limit/file": "12.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.10",
+    "cspell": "10.0.1",
     "dependency-cruiser": "^18.0.0",
-    "knip": "^6.26.0",
+    "eslint": "10.7.0",
+    "eslint-plugin-svelte": "3.20.0",
+    "knip": "6.27.0",
+    "markdownlint-cli2": "0.23.0",
+    "publint": "0.3.21",
+    "size-limit": "12.1.0",
     "svelte": "^5.56.4",
     "svelte-check": "^4.7.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "8.64.0",
     "vite": "^8.1.3",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.9",
+    "vitest": "4.1.10",
     "workbox-window": "^7.4.1"
   }
 }

@@ -308,8 +308,8 @@ offline use.
 
 ## Development
 
-This project targets Node 22 or newer. Biome is installed with the development dependencies, and all
-commands use the repository-local binary.
+Development targets Node 22.18 or newer and npm 11.6 or newer. The exact recommended versions are in
+`.node-version`, `packageManager`, and `devEngines`. All tools use repository-local dependencies.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-binnacle.git
@@ -317,21 +317,26 @@ cd signalk-binnacle
 npm install        # install dependencies
 npm run hooks      # install the git pre-commit and pre-push gates (run once)
 npm run dev        # Vite dev server
-npm run check      # type-check (svelte-check)
-npm run lint       # Biome lint
+npm run check      # type-check application, tooling, and browser tests
+npm run lint       # code, Svelte, Markdown, and spelling checks
 npm run format     # Biome format (write)
 npm run ci:biome   # format, lint, and import-order verification
 npm run cruise     # dependency-cruiser boundary check
 npm run deadcode   # unused files, dependencies, and public exports
 npm test           # Vitest unit tests
+npm run test:coverage # unit tests with the enforced coverage floor
 npm run build      # production build into public/
-npm run test:e2e   # Chromium browser, mobile, keyboard, and accessibility checks
+npm run size       # compressed production bundle budgets
+npm run verify     # complete non-browser local and CI gate
+npm run test:e2e   # Chromium browser checks against an existing build
 npm run test:e2e:cross-browser # Chromium and WebKit UI checks; CI runs this gate
+npm run verify:release # full gate, cross-browser E2E, package checks, and runtime audit
 ```
 
-After `npm run hooks`, git runs a fast format, lint, and boundary check before each commit, and the
-full type-check, test, and build gate before each push. The hooks live in `.githooks/` and are opt-in
-via `core.hooksPath`, never a package lifecycle script.
+After `npm run hooks`, git runs `verify:commit` before each commit and `verify:browser` before each
+push. The hooks live in `.githooks/` and are opt-in via `core.hooksPath`, never a package lifecycle
+script. The E2E commands consume the existing `public/` build; use the `:with-build` variants when
+running them directly from a tree without a current build.
 
 Maintainers preparing a version should follow the [release checklist](docs/releasing.md). Preparation
 does not authorize a tag, GitHub release, or npm publication.

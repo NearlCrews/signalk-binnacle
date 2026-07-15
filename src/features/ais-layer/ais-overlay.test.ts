@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AisTargets } from '$entities/ais';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createAisOverlay } from './ais-overlay';
 
 class FakeImageData {

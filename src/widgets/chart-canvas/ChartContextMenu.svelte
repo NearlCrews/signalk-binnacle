@@ -78,49 +78,47 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   role={confirmingGoTo ? 'dialog' : 'menu'}
   surfaceStyle={`left: ${left}px; top: ${top}px; inline-size: ${MENU_WIDTH}px; transform: translate(-50%, ${above ? '-100%' : '0'});`}
 >
-  {#snippet children()}
-    {#if confirmingGoTo}
-      <div class="goto-confirm">
-        <InlineConfirm
-          question="Start navigation to this chart position? Check the destination before relying on it."
-          confirmLabel="Start navigation"
-          onConfirm={onGoToHere}
-          onCancel={() => (confirmingGoTo = false)}
-        />
-      </div>
-    {:else}
-      <!-- rovingFocus lands the keyboard on the first row and moves it with the arrow keys; the
+  {#if confirmingGoTo}
+    <div class="goto-confirm">
+      <InlineConfirm
+        question="Start navigation to this chart position? Check the destination before relying on it."
+        confirmLabel="Start navigation"
+        onConfirm={onGoToHere}
+        onCancel={() => (confirmingGoTo = false)}
+      />
+    </div>
+  {:else}
+    <!-- rovingFocus lands the keyboard on the first row and moves it with the arrow keys; the
            display:contents wrapper carries the action without inserting a box between the menu surface
            and its rows. -->
-      <div class="rows" use:rovingFocus={'[role="menuitem"]'}>
-        <button
-          type="button"
-          role="menuitem"
-          class="menu-item item"
-          onclick={() => (confirmingGoTo = true)}
-        >
-          <Navigation size={16} aria-hidden="true" />
-          Go to here
+    <div class="rows" use:rovingFocus={'[role="menuitem"]'}>
+      <button
+        type="button"
+        role="menuitem"
+        class="menu-item item"
+        onclick={() => (confirmingGoTo = true)}
+      >
+        <Navigation size={16} aria-hidden="true" />
+        Go to here
+      </button>
+      <button type="button" role="menuitem" class="menu-item item" onclick={onStartRoute}>
+        <Route size={16} aria-hidden="true" />
+        Start a route here
+      </button>
+      {#if onDropWaypoint}
+        <button type="button" role="menuitem" class="menu-item item" onclick={onDropWaypoint}>
+          <MapPin size={16} aria-hidden="true" />
+          Drop waypoint
         </button>
-        <button type="button" role="menuitem" class="menu-item item" onclick={onStartRoute}>
-          <Route size={16} aria-hidden="true" />
-          Start a route here
+      {/if}
+      {#if onMeasureFrom}
+        <button type="button" role="menuitem" class="menu-item item" onclick={onMeasureFrom}>
+          <Ruler size={16} aria-hidden="true" />
+          Measure from here
         </button>
-        {#if onDropWaypoint}
-          <button type="button" role="menuitem" class="menu-item item" onclick={onDropWaypoint}>
-            <MapPin size={16} aria-hidden="true" />
-            Drop waypoint
-          </button>
-        {/if}
-        {#if onMeasureFrom}
-          <button type="button" role="menuitem" class="menu-item item" onclick={onMeasureFrom}>
-            <Ruler size={16} aria-hidden="true" />
-            Measure from here
-          </button>
-        {/if}
-      </div>
-    {/if}
-  {/snippet}
+      {/if}
+    </div>
+  {/if}
 </AnchoredMenu>
 
 <style>

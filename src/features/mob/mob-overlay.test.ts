@@ -3,9 +3,12 @@ import { MobStore } from '$entities/mob';
 import { OwnVessel } from '$entities/vessel';
 import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
-import { createFakeStorage } from '$shared/testing/fake-storage';
-import { createFrameFactory } from '$shared/testing/sk-frame';
+import {
+  createFakeMap,
+  createFakeStorage,
+  createFrameFactory,
+  sourceFeatures,
+} from '$shared/testing';
 import { createMobOverlay } from './mob-overlay';
 
 const frame = createFrameFactory();

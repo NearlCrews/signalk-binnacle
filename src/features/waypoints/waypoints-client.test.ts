@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Waypoint } from '$entities/waypoint';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import { deleteWaypoint, fetchWaypoints, MAX_WAYPOINTS, saveWaypoint } from './waypoints-client';
 
 afterEach(() => vi.restoreAllMocks());

@@ -12,20 +12,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   build:
+    if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
-      - uses: biomejs/setup-biome@v2
-        with:
-          version: 2.5.3
+      - run: npm install --global npm@11.16.0
       # Fail fast when the release tag and the package.json version disagree, so a release can never
       # publish a version that does not match its tag. The tag arrives through an env var (not inline
       # interpolation) so it cannot be expanded as shell.
@@ -34,9 +38,9 @@ jobs:
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          TAG="${TAG_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG" ]; then
-            echo "Release tag ($TAG) does not match package.json version ($PKG_VERSION)" >&2
+          EXPECTED_TAG="v${PKG_VERSION}"
+          if [ "$TAG_NAME" != "$EXPECTED_TAG" ]; then
+            echo "Release tag ($TAG_NAME) does not match expected tag ($EXPECTED_TAG)" >&2
             exit 1
           fi
       - name: Verify the release commit is on main
@@ -44,39 +48,39 @@ jobs:
           git fetch origin main --no-tags
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: npm ci
-      - run: npm run check
-      - run: npm run ci:biome
-      - run: npm run cruise
-      - run: npm run deadcode
-      - run: npm test
-      - run: npm run build
-        env:
-          NODE_ENV: production
       - run: npx playwright install --with-deps chromium webkit
-      - run: npm run test:e2e:cross-browser
+      - run: npm run verify:release
+      - name: Pack the verified application
+        run: |
+          mkdir artifacts
+          npm pack --ignore-scripts --pack-destination artifacts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package
+          path: artifacts/*.tgz
+          if-no-files-found: error
+          retention-days: 7
 
   publish-npm:
     needs: build
     runs-on: ubuntu-latest
-    # id-token: write lets npm attach a provenance attestation to the published package;
-    # contents: read is the least privilege the checkout needs.
+    timeout-minutes: 15
+    # id-token: write lets npm attach a provenance attestation to the published package.
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: npm-package
+          path: artifacts
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
-          cache: npm
-      - run: npm ci
-      # Build into public/ before publishing, since files ships public/ and there is no prepack hook.
-      - run: npm run build
-        env:
-          NODE_ENV: production
+      - run: npm install --global npm@11.16.0
       # --access public is required for the first publish of a new package when generating
       # provenance; for later versions it is the default for an unscoped public package.
-      - run: npm publish --provenance --access public
+      - run: npm publish artifacts/*.tgz --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

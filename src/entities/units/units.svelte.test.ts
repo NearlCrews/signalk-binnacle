@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PersistedValue } from '$shared/settings';
-import { createFakeStorage } from '$shared/testing/fake-storage';
+import { createFakeStorage } from '$shared/testing';
 import { modeFromPreset, UnitsStore } from './units.svelte';
 
 const imperialPreset = { categories: { length: { targetUnit: 'foot' } } };

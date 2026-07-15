@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import { fetchPathMeta, type MetaZone, zoneStateFor } from './meta';
 
 const ZONES: MetaZone[] = [

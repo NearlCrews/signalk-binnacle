@@ -3,7 +3,7 @@ import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import { WaypointsStore } from '$entities/waypoint';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createWaypointOverlay } from './waypoint-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

@@ -6,6 +6,20 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The development toolchain now uses one shared verification hierarchy across local hooks, CI, and
+  release publication. It adds Svelte and typed async linting, tooling type checks, Markdown and
+  spelling checks, coverage floors, bundle budgets, package-content validation, exact local tool
+  versions, and pinned GitHub Actions. Browser tests reuse the verified production build, and npm
+  publication uses the exact tarball that passed the release gate.
+
+### Fixed
+
+- Async overlay, MapLibre event, and file-picker paths now declare or handle their promises
+  explicitly, forecast risk cues use stable keys, and Svelte menu children use the native snippet
+  path expected by the component API.
+
 <a id="v0151"></a>
 
 ## [0.15.1] - 2026-07-14
@@ -830,7 +844,7 @@ built across the intervening development versions, and adds a Chart Locker statu
 - A display token is corrected: the default waypoint marker and the disabled course-skip control hold
   their colors under the night-red theme.
 
-### Changed
+### Internal improvements
 
 - Accessibility and packaging: the active saved item (the active profile or route) is now announced to
   assistive technology with aria-current, matching its visual accent, and the browser tab and the

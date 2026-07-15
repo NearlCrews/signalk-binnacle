@@ -30,7 +30,7 @@ const {
 
 let confirming = $state(false);
 // Not `name`: that shadows the global window.name, which the linter flags on reassignment.
-let chartName = $state('');
+let chartName = $derived(userSource?.name ?? item.title);
 
 const chart = $derived(item.chart);
 const canEdit = $derived(userSource !== undefined && userCharts !== undefined);
@@ -56,12 +56,6 @@ const specRows = $derived([
   { label: 'Zoom', value: zoom },
   { label: 'Bounds', value: chartBounds ? formatBounds(chartBounds) : 'Unknown' },
 ]);
-
-// Seed the editable name from the user source when this is an imported chart. Server charts are
-// read-only, but keeping the same value gives the detail one name source for its form state.
-$effect(() => {
-  chartName = userSource?.name ?? item.title;
-});
 
 function saveName(): void {
   if (!canEdit || writeBlocked || !userSource || !userCharts) return;

@@ -3,7 +3,7 @@ import { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import type { UnitsMode } from '$shared/lib';
 import type { OverlayContext } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing';
 import { createTidesOverlay } from './tides-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

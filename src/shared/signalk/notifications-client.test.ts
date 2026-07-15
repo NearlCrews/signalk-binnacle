@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { expectBearerAuth, stubFetch } from '$shared/testing/fetch-stub';
+import { expectBearerAuth, stubFetch } from '$shared/testing';
 import {
   acknowledgeNotification,
   postMobNotification,

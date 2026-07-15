@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RouteStore } from '$entities/route';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createRouteOverlay } from './route-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

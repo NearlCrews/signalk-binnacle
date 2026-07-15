@@ -151,59 +151,55 @@ function onCardFocusOut(event: FocusEvent): void {
   onKeydown={onCardKeydown}
   onFocusOut={onCardFocusOut}
 >
-  {#snippet children()}
-    {#if items.length === 0}
-      <span class="muted-note">No options</span>
-    {:else}
-      <div class="menu-head">
-        <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
+  {#if items.length === 0}
+    <span class="muted-note">No options</span>
+  {:else}
+    <div class="menu-head">
+      <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
+    </div>
+    {#if blockedNote.message}
+      <div class="blocked-note-slot popover-card" role="status" aria-live="polite">
+        <p class="blocked-note muted-note">{blockedNote.message}</p>
       </div>
-      {#if blockedNote.message}
-        <div class="blocked-note-slot popover-card" role="status" aria-live="polite">
-          <p class="blocked-note muted-note">{blockedNote.message}</p>
-        </div>
-      {/if}
-      {#if editing}
-        <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
-             "panel open", which is invisible to a screen reader without this. -->
-        <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
-        <ToolbarEditor items={pinnedItems} onReorder={onReorderPinned} onReset={onResetPinned} />
-      {/if}
-      {#each groups as group, gi (gi)}
-        <!-- Every menu item carries a group label, so role="group" always has an accessible name
-             here; the static role is required by the linter's valid-role rule. -->
-        <section
-          class="group"
-          role="group"
-          aria-label={group.label || undefined}
-          data-group={group.label || undefined}
-        >
-          {#if group.label}
-            <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
-          {/if}
-          <div class="tiles">
-            {#each group.items as item (item.id)}
-              <button
-                type="button"
-                class="tile"
-                class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
-                aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
-                aria-disabled={!editing && itemBlocked(item) ? true : undefined}
-                title={!editing ? blockedReason(item) : undefined}
-                onclick={() => select(item)}
-              >
-                <UnavailableHint
-                  hint={item.available === false ? item.unavailableHint : undefined}
-                />
-                <MenuItemIcon {item} size={28} />
-                <span class="tile-label">{item.label}</span>
-              </button>
-            {/each}
-          </div>
-        </section>
-      {/each}
     {/if}
-  {/snippet}
+    {#if editing}
+      <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
+             "panel open", which is invisible to a screen reader without this. -->
+      <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
+      <ToolbarEditor items={pinnedItems} onReorder={onReorderPinned} onReset={onResetPinned} />
+    {/if}
+    {#each groups as group, gi (gi)}
+      <!-- Every menu item carries a group label, so role="group" always has an accessible name
+             here; the static role is required by the linter's valid-role rule. -->
+      <section
+        class="group"
+        role="group"
+        aria-label={group.label || undefined}
+        data-group={group.label || undefined}
+      >
+        {#if group.label}
+          <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
+        {/if}
+        <div class="tiles">
+          {#each group.items as item (item.id)}
+            <button
+              type="button"
+              class="tile"
+              class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
+              aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
+              aria-disabled={!editing && itemBlocked(item) ? true : undefined}
+              title={!editing ? blockedReason(item) : undefined}
+              onclick={() => select(item)}
+            >
+              <UnavailableHint hint={item.available === false ? item.unavailableHint : undefined} />
+              <MenuItemIcon {item} size={28} />
+              <span class="tile-label">{item.label}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/each}
+  {/if}
 </AnchoredMenu>
 
 <style>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { LayerManager } from './layer-manager';
 import type { OverlayContext, OverlayModule, ZBand } from './types';
 

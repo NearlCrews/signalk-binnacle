@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeWebSocket } from '$shared/testing/fake-websocket';
+import { FakeWebSocket } from '$shared/testing';
 import { SkConnection } from './connection';
 import type { ConnectionState } from './types';
 

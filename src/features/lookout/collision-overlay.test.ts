@@ -5,7 +5,7 @@ import { OwnVessel } from '$entities/vessel';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { createThresholds } from '$shared/settings';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createCollisionOverlay } from './collision-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

@@ -7,7 +7,7 @@ import {
   STREAMING_CHART_SOURCES,
 } from '$features/depth-charts';
 import type { OverlayModule } from '$shared/map';
-import { proxiedSources } from '$shared/map/companion';
+import { proxiedSources } from '$shared/map';
 
 export interface BathymetryOverlaysDeps {
   // The Chart Locker tile proxy base, or null on a standalone install; threaded through

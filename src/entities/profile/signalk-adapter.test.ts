@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import type { ProfilesState } from './profile-types';
 import { SignalKProfileAdapter } from './signalk-adapter';
 

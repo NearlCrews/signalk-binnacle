@@ -39,40 +39,38 @@ const groups = $derived(
   ariaLabel="Weather layers"
   id="weather-layer-menu"
 >
-  {#snippet children()}
-    <!-- Non-modal on purpose: a toolbar dropdown over the map, not a modal. No focus trap, so Tab can
+  <!-- Non-modal on purpose: a toolbar dropdown over the map, not a modal. No focus trap, so Tab can
          leave into the map and footer; do not "correct" this into a focusTrap. rovingFocus lands the
          keyboard on the first row and moves it with the arrow keys. -->
-    <div class="rows" use:rovingFocus={'.menu-row'}>
-      {#each groups as group (group.label)}
-        <p class="caps-label">{group.label}</p>
-        {#each group.items as item (item.id)}
-          <button
-            type="button"
-            class="menu-row row-interactive"
-            class:is-on={item.visible}
-            aria-pressed={item.visible}
-            aria-describedby={item.description ? `${item.id}-weather-description` : undefined}
-            title={item.description ?? item.title}
-            onclick={() => onToggle(item.id, !item.visible)}
-          >
-            <span>{item.title}</span>
-            {#if item.visible}
-              <Check size={16} aria-hidden="true" />
-            {/if}
-          </button>
-          {#if item.description}
-            <span id={`${item.id}-weather-description`} class="visually-hidden"
-              >{item.description}</span
-            >
+  <div class="rows" use:rovingFocus={'.menu-row'}>
+    {#each groups as group (group.label)}
+      <p class="caps-label">{group.label}</p>
+      {#each group.items as item (item.id)}
+        <button
+          type="button"
+          class="menu-row row-interactive"
+          class:is-on={item.visible}
+          aria-pressed={item.visible}
+          aria-describedby={item.description ? `${item.id}-weather-description` : undefined}
+          title={item.description ?? item.title}
+          onclick={() => onToggle(item.id, !item.visible)}
+        >
+          <span>{item.title}</span>
+          {#if item.visible}
+            <Check size={16} aria-hidden="true" />
           {/if}
-        {/each}
+        </button>
+        {#if item.description}
+          <span id={`${item.id}-weather-description`} class="visually-hidden"
+            >{item.description}</span
+          >
+        {/if}
       {/each}
-      {#if provenance}
-        <p class="provenance muted-note">{provenance}</p>
-      {/if}
-    </div>
-  {/snippet}
+    {/each}
+    {#if provenance}
+      <p class="provenance muted-note">{provenance}</p>
+    {/if}
+  </div>
 </AnchoredMenu>
 
 <style>

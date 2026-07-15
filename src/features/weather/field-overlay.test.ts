@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WeatherStore } from '$entities/weather';
 import type { OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createFieldOverlay } from './field-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { jsonResponse, stubFetch } from '$shared/testing/fetch-stub';
+import { jsonResponse, stubFetch } from '$shared/testing';
 import {
   fetchHistoryPaths,
   fetchHistoryProviderPathCatalogs,

@@ -170,17 +170,16 @@ describe('createThemedMap attribution', () => {
     expect(map.attribElement.classList.remove).toHaveBeenCalledWith('maplibregl-compact-show');
   });
 
-  it.each([
-    'styledata',
-    'sourcedata',
-    'terrain',
-  ])('collapses it again on %s, since MapLibre can auto-expand it whenever attribution content changes', async (event) => {
-    createThemedMap({ container, onLoad: () => {} });
-    const map = await lastMap();
-    map.attribElement.classList.remove.mockClear();
-    map.fire(event);
-    expect(map.attribElement.classList.remove).toHaveBeenCalledWith('maplibregl-compact-show');
-  });
+  it.each(['styledata', 'sourcedata', 'terrain'])(
+    'collapses it again on %s, since MapLibre can auto-expand it whenever attribution content changes',
+    async (event) => {
+      createThemedMap({ container, onLoad: () => {} });
+      const map = await lastMap();
+      map.attribElement.classList.remove.mockClear();
+      map.fire(event);
+      expect(map.attribElement.classList.remove).toHaveBeenCalledWith('maplibregl-compact-show');
+    },
+  );
 });
 
 describe('createThemedMap onLoad', () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeWebSocket } from '$shared/testing/fake-websocket';
+import { FakeWebSocket } from '$shared/testing';
 import type { Path, SKFrame } from './types';
 import { WorkerCore } from './worker-core';
 

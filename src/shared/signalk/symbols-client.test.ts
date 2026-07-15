@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import { fetchSymbols } from './symbols-client';
 
 const UUID = 'b3f1c2a0-1e4d-4a6b-9c2f-0a1b2c3d4e5f';

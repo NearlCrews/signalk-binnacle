@@ -49,7 +49,7 @@ export function createWavesOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
     ...field,
     layerIds: [FIELD_LAYER, ARROW_LAYER],
     add(ctx) {
-      field.add(ctx);
+      void field.add(ctx);
       ensureGeoJsonSource(ctx.map, ARROW_SOURCE);
       if (!ctx.map.getLayer(ARROW_LAYER)) {
         // The wave field already encodes height by color, so the direction arrows take one flat

@@ -51,6 +51,7 @@ const pinned = $derived(view.items.filter((item) => item.pinned));
 // and grouped by parent id below.
 const movable = $derived(view.items.filter((item) => !item.pinned && !item.parent));
 const childrenByParent = $derived.by(() => {
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived value is replaced, not mutated
   const map = new Map<string, LayerListItem[]>();
   for (const item of view.items) {
     if (!item.parent) continue;
@@ -66,6 +67,7 @@ const childrenByParent = $derived.by(() => {
 // CATEGORY_ORDER, which matches the map z-order, so the panel order equals the stack and a collapsed
 // category's rows stay in the DOM (hidden) in their movable position.
 const categories = $derived.by(() => {
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local derived accumulator
   const byId = new Map<string, { title: string; rows: { item: LayerListItem; i: number }[] }>();
   movable.forEach((item, i) => {
     const cat = layerCategory(item);
@@ -94,10 +96,7 @@ function toggleCategory(id: string): void {
 
 let addOpen = $state(false);
 let detailId = $state<string | undefined>();
-let mode = $state<'charts' | 'overlays'>('charts');
-$effect(() => {
-  mode = initialMode;
-});
+let mode = $derived<'charts' | 'overlays'>(initialMode);
 const minimize = createPanelMinimize();
 const detailItem = $derived(detailId ? view.items.find((item) => item.id === detailId) : undefined);
 const detailUserSource = $derived(

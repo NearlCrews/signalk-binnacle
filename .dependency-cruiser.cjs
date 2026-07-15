@@ -50,7 +50,7 @@ module.exports = {
       name: 'shared-imports-nothing-above',
       severity: 'error',
       comment: 'shared is the lowest layer and must not import any layer above it.',
-      from: { path: '^src/shared' },
+      from: { path: '^src/shared', pathNot: '\\.(test|spec)\\.' },
       to: { path: '^src/(entities|features|widgets|views|app)' },
     },
     {
@@ -75,10 +75,79 @@ module.exports = {
         pathNot: '^src/entities/[^/]+/index\\.(ts|js)$',
       },
     },
+    {
+      name: 'shared-through-public-api',
+      severity: 'error',
+      comment: 'Consumers must import shared slices through their index public API.',
+      from: { path: '^src/(entities|features|widgets|views|app)' },
+      to: {
+        path: '^src/shared/[^/]+/.+',
+        pathNot: '^src/shared/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'entities-through-public-api',
+      severity: 'error',
+      comment: 'Consumers must import entity slices through their index public API.',
+      from: { path: '^src/(features|widgets|views|app)' },
+      to: {
+        path: '^src/entities/[^/]+/.+',
+        pathNot: '^src/entities/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'features-through-public-api',
+      severity: 'error',
+      comment: 'Consumers must import feature slices through their index public API.',
+      from: { path: '^src/(widgets|views|app)' },
+      to: {
+        path: '^src/features/[^/]+/.+',
+        pathNot: '^src/features/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'widgets-through-public-api',
+      severity: 'error',
+      comment: 'Consumers must import widget slices through their index public API.',
+      from: { path: '^src/(views|app)' },
+      to: {
+        path: '^src/widgets/[^/]+/.+',
+        pathNot: '^src/widgets/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'views-through-public-api',
+      severity: 'error',
+      comment: 'The app must import view slices through their index public API.',
+      from: { path: '^src/app' },
+      to: {
+        path: '^src/views/[^/]+/.+',
+        pathNot: '^src/views/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'no-cross-slice-widgets',
+      severity: 'error',
+      comment: 'Widget slices must import sibling widgets through their index public API.',
+      from: { path: '^src/widgets/([^/]+)/' },
+      to: {
+        path: '^src/widgets/(?!$1/)[^/]+/.+',
+        pathNot: '^src/widgets/[^/]+/index\\.(ts|js)$',
+      },
+    },
+    {
+      name: 'no-cross-slice-views',
+      severity: 'error',
+      comment: 'View slices must import sibling views through their index public API.',
+      from: { path: '^src/views/([^/]+)/' },
+      to: {
+        path: '^src/views/(?!$1/)[^/]+/.+',
+        pathNot: '^src/views/[^/]+/index\\.(ts|js)$',
+      },
+    },
   ],
   options: {
     tsConfig: { fileName: 'tsconfig.json' },
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(\\.test\\.ts$|\\.spec\\.ts$)' },
   },
 };

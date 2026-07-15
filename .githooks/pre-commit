@@ -3,13 +3,7 @@
 # Heavier gates (type-check, tests, build, e2e) run in pre-push.
 set -e
 
-echo "[pre-commit] biome ci"
-npm run --silent ci:biome
-
-echo "[pre-commit] dependency-cruiser"
-npm run --silent cruise
-
-echo "[pre-commit] dead code"
-npm run --silent deadcode
+echo "[pre-commit] commit verification"
+npm run --silent verify:commit
 
 echo "[pre-commit] ok"

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OwnVessel } from '$entities/vessel';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createVesselOverlay } from './vessel-overlay';
 
 // ImageData is a browser global; the overlay builds the vessel icon with it, so the

@@ -6,7 +6,7 @@ import { OwnVessel } from '$entities/vessel';
 import type { ReactiveClock } from '$shared/lib';
 import type { SKFrame } from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeStorage } from '$shared/testing/fake-storage';
+import { createFakeStorage } from '$shared/testing';
 import StatusStrip from './StatusStrip.svelte';
 
 const clock: ReactiveClock = { now: Date.UTC(2026, 0, 1, 12, 0, 0) };

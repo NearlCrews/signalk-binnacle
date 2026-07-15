@@ -142,7 +142,9 @@ let clearNote = $state<string | null>(null);
 // Internal references not read in the template: the draw controller, the per-region poll timers, and
 // the consecutive poll-failure counts.
 let rect: RegionRectangle | null = null;
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- timer registry is not rendered
 const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- failure registry is not rendered
 const pollFailures = new Map<string, number>();
 // Generation counters so two in-flight loads cannot resolve out of order and clobber the newer value.
 let regionsGen = 0;

@@ -3,9 +3,12 @@ import { AnchorWatch } from '$entities/anchor';
 import { OwnVessel } from '$entities/vessel';
 import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
-import { createFakeStorage } from '$shared/testing/fake-storage';
-import { createFrameFactory } from '$shared/testing/sk-frame';
+import {
+  createFakeMap,
+  createFakeStorage,
+  createFrameFactory,
+  sourceFeatures,
+} from '$shared/testing';
 import { createAnchorOverlay } from './anchor-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

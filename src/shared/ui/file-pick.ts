@@ -21,26 +21,23 @@ export function pickTextFile(
     input.type = 'file';
     input.accept = accept;
     input.addEventListener('cancel', () => resolve(CANCEL), { once: true });
-    input.addEventListener(
-      'change',
-      async () => {
-        const file = input.files?.[0];
-        if (!file) {
-          resolve(CANCEL);
-          return;
-        }
-        if (file.size > maxBytes) {
-          resolve({ ok: false, reason: 'too-large' });
-          return;
-        }
-        try {
-          resolve({ ok: true, text: await file.text() });
-        } catch {
-          resolve({ ok: false, reason: 'read-error' });
-        }
-      },
-      { once: true },
-    );
+    const readSelection = async (): Promise<void> => {
+      const file = input.files?.[0];
+      if (!file) {
+        resolve(CANCEL);
+        return;
+      }
+      if (file.size > maxBytes) {
+        resolve({ ok: false, reason: 'too-large' });
+        return;
+      }
+      try {
+        resolve({ ok: true, text: await file.text() });
+      } catch {
+        resolve({ ok: false, reason: 'read-error' });
+      }
+    };
+    input.addEventListener('change', () => void readSelection(), { once: true });
     input.click();
   });
 }

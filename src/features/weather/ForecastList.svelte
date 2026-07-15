@@ -86,7 +86,7 @@ function stepLabel(timeMs: number): string {
           </span>
         {/if}
         {#if step.riskCues}
-          {#each step.riskCues as cue}
+          {#each step.riskCues as cue (cue)}
             <span
               class:sev-danger={cue === 'Storm-force wind'}
               class:sev-warning={cue !== 'Storm-force wind'}

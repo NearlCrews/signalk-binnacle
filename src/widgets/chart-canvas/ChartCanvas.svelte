@@ -41,11 +41,12 @@ import {
   chartSourceId,
   createChartOverlay,
   createThemedMap,
+  detectCompanion,
   type LayerManager,
   type LayerSettings,
+  proxiedSources,
   type ThemedMapHandle,
 } from '$shared/map';
-import { detectCompanion, proxiedSources } from '$shared/map/companion';
 import type { MapView, PersistedValue, TrackSettings } from '$shared/settings';
 import type { HistoryProviders, SignalKStore } from '$shared/signalk';
 import type { Theme } from '$shared/ui';
@@ -422,6 +423,7 @@ onMount(async () => {
       // Seascape's vector pair, in that registration order) is built by buildBathymetryOverlays; see
       // its own comment for why that relative order is load-bearing.
       let chartRegistrationFailed = false;
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local async accumulator
       const serverChartIds = new Set<string>();
       for (const chart of charts) {
         try {

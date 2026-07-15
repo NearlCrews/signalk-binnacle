@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import {
   conditionsFromSignalK,
   defaultProvider,

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
+import packageJson from './package.json' with { type: 'json' };
 import { runtimeCaching } from './src/shared/pwa/sw-caching';
 
 const alias = {
@@ -17,7 +18,7 @@ export default defineConfig({
   // Signal K serves the webapp at /<package-name>/, so production assets resolve under /signalk-binnacle/.
   base: process.env.NODE_ENV === 'production' ? '/signalk-binnacle/' : '/',
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.15.1'),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? packageJson.version),
   },
   plugins: [
     svelte(),
@@ -116,6 +117,24 @@ export default defineConfig({
     // Headroom for oversubscribed CI runners (the v0.6.0 Windows Node 22 machine spent 63 s just
     // importing the suite); a hung test still fails, only slower.
     testTimeout: 15_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      include: ['src/**/*.{ts,svelte}'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/*.{test,spec}.ts',
+        'src/**/index.ts',
+        'src/shared/testing/**',
+        'src/shared/types/**',
+      ],
+      thresholds: {
+        statements: 59,
+        branches: 55,
+        functions: 56,
+        lines: 61,
+      },
+    },
     projects: [
       {
         extends: true,

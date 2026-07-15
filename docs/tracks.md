@@ -129,8 +129,7 @@ IndexedDB completion order from resurrecting discarded points or dropping a post
 
 ## Verification
 
-Run `npm run lint`, `npm run cruise`, `npm run deadcode`, `npm run check`, `npm test`,
-`npm run build`, and `npm run test:e2e`. Unit coverage includes recorder corruption and races,
-persistence degradation, resource parsing, optimistic controller state, portable export names, panel
-states, and gap-safe route conversion. The browser test covers saved-resource loading without a live
-stream and narrow-screen panel layout.
+Run `npm run verify:browser`. Unit coverage includes recorder corruption and races, persistence
+degradation, resource parsing, optimistic controller state, portable export names, panel states, and
+gap-safe route conversion. The browser test covers saved-resource loading without a live stream and
+narrow-screen panel layout.

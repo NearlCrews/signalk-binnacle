@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeAlarmControl } from '$shared/testing/fake-alarm';
+import { createFakeAlarmControl } from '$shared/testing';
 import type { AlarmTone } from './alarm';
 import { GatedAlarm } from './gated-alarm';
 

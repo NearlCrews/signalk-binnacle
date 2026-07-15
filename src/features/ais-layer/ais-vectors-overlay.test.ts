@@ -4,7 +4,7 @@ import type { AisTargetView } from '$entities/ais';
 import type { Assessment, Severity } from '$entities/collision';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { buildFeatures, createAisVectorsOverlay } from './ais-vectors-overlay';
 
 const LAYER_ID = 'binnacle-ais-vectors-line';

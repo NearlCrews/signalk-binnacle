@@ -101,6 +101,11 @@ export function createAisTrailsOverlay(
     setData(ctx, emptyFeatureCollection());
   }
 
+  function recordFailedFetch(ctx: OverlayContext): void {
+    failedFetches += 1;
+    if (failedFetches >= MAX_STALE_FETCHES) clearRendered(ctx);
+  }
+
   return {
     id: 'ais-trails',
     title: 'AIS trails',
@@ -165,7 +170,7 @@ export function createAisTrailsOverlay(
       nextFetchAt = now + REFETCH_MS;
       const fetchBbox = padBbox(viewport, VIEWPORT_FETCH_PAD_FRACTION);
       fetchedBbox = fetchBbox;
-      fetchAisTrails(base, getToken(), fetchBbox)
+      void fetchAisTrails(base, getToken(), fetchBbox)
         .then((trails) => {
           if (trails) {
             failedFetches = 0;
@@ -176,8 +181,10 @@ export function createAisTrailsOverlay(
           // but not forever. Live targets keep advancing while frozen wakes silently age, so
           // after a few consecutive failed cycles (a couple of minutes) the wakes clear rather
           // than presenting hours-old history as recent.
-          failedFetches += 1;
-          if (failedFetches >= MAX_STALE_FETCHES) clearRendered(ctx);
+          recordFailedFetch(ctx);
+        })
+        .catch(() => {
+          recordFailedFetch(ctx);
         })
         .finally(() => {
           fetching = false;

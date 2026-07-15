@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TrackRecorder } from '$entities/track';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createTrackOverlay } from './track-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

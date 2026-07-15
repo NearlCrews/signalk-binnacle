@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Route } from '$entities/route';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import { deleteRoute, fetchRoutes, MAX_ROUTES, saveRoute } from './routes-client';
 
 afterEach(() => vi.restoreAllMocks());

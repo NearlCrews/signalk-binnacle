@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PersistedValue } from '$shared/settings/persisted.svelte';
+import { PersistedValue } from '$shared/settings';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
-import { jsonResponse } from '$shared/testing/fetch-stub';
+import { jsonResponse } from '$shared/testing';
 import { createInstrumentsController } from './instruments-controller.svelte';
 import { ALL_CATALOG_PATHS, DEFAULT_TILES, minPeriodFor, tileById } from './tile-catalog';
 

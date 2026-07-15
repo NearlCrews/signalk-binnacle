@@ -54,12 +54,14 @@ not have to be corrected after the fact.
 
 ## Toolchain (lint, format, build)
 
-- Lint and format: Biome (preferred over ESLint and Prettier). Three installs must stay on the
-  SAME version: the system binary at `/usr/local/bin/biome`, the `@biomejs/biome` devDependency
-  (npm scripts and the git hooks resolve `node_modules/.bin` first), and the `biomejs/setup-biome`
-  version pins in both CI workflows. Bump all three together (currently 2.5.3), and bump the
-  `$schema` version in `biome.json` with them. Config is `biome.json`. `npm run lint` is
-  `biome lint .`, `npm run format` is `biome format --write .`, and CI runs `biome ci .`.
+- Format and general code lint: the exact-pinned repository-local Biome dependency. It is the only
+  formatter. Do not depend on a global binary, a setup action, or Prettier. Bump the dependency and
+  `biome.json` schema together. `npm run format` writes formatting, and `npm run ci:biome` verifies
+  formatting, lint rules, and import organization.
+- Semantic lint: ESLint is deliberately narrow. `eslint-plugin-svelte` owns Svelte-specific rules,
+  and typescript-eslint owns `await-thenable`, `no-floating-promises`, and
+  `no-misused-promises` for non-test TypeScript. Do not add general, stylistic, unused-code, or
+  import-boundary ESLint rules that duplicate Biome, Knip, or dependency-cruiser.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
@@ -78,9 +80,13 @@ not have to be corrected after the fact.
   the template-aware backstop. SVG assets are excluded from Biome (2.5.1 began
   parsing `.svg` and chokes on the XML prolog). Config uses the `linter.rules.preset` form
   (`recommended`), not the deprecated `recommended` boolean.
-- Type-check: `svelte-check --tsconfig ./tsconfig.app.json` (the leaf app config, not the
-  solution-style root `tsconfig.json`, which is for `tsc -b` and dependency-cruiser path
-  resolution only).
+- Type-check: `npm run check` runs svelte-check against `tsconfig.app.json`, then TypeScript against
+  `tsconfig.node.json`. The second pass covers Vite, Playwright, Vitest setup, and E2E code, and it
+  requires the direct `@types/node` development dependency.
+- Other owners: dependency-cruiser enforces Feature-Sliced Design and cycles, Knip owns unused
+  files, exports, and dependencies, markdownlint and cspell own maintained prose, Vitest V8 owns
+  the coverage floor, Size Limit owns built asset budgets, and publint plus
+  `scripts/check-package.mjs` own package integrity.
 - Additional libraries are allowed when they genuinely beat building in-house (user rule,
   2026-06-12), but only after EXTENSIVE research for the best one: compare the real candidates on
   maintenance activity, weekly downloads, bundle cost, API fit, license, and issue health, and
@@ -108,9 +114,10 @@ has actually run and passed. This was violated repeatedly early on, so it is now
 hooks in `.githooks/`, wired via `npm run hooks` (a non-lifecycle script, never a `prepare` hook,
 per the SignalK pack-banner caveat above):
 
-- `pre-commit` runs `biome ci .`, `npm run cruise`, and `npm run deadcode`.
-- `pre-push` runs the full chain: `biome ci`, `cruise`, `deadcode`, `check`, `test`, a production
-  `build`, and Playwright end-to-end smoke tests.
+- `pre-commit` runs `npm run verify:commit`, the shared formatting, lint, prose, architecture, and
+  dead-code gate.
+- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, and Chromium E2E
+  gate without rebuilding the application for Playwright.
   A failure blocks the push.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
@@ -340,7 +347,7 @@ must not be repeatable.
   that yields a blank map. Verify reachability before assuming a host is unreachable; OpenFreeMap
   resolves and returns 200 from the boat network.
 - The offline/PWA caching (vite-plugin-pwa service worker) only activates in a SECURE CONTEXT:
-  HTTPS or http://localhost. The Signal K server serves Binnacle over plain http on the LAN by
+  HTTPS or `http://localhost`. The Signal K server serves Binnacle over plain HTTP on the LAN by
   default, where the browser disables the entire serviceWorker and CacheStorage APIs, so offline
   caching is inert. The app must DEGRADE CLEANLY there (registerSW no-ops, OnlineStatus falls back
   to navigator.onLine, zero errors), which it does. To activate offline, enable SSL in the Signal K

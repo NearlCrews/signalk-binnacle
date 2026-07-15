@@ -5,26 +5,34 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
-      - uses: biomejs/setup-biome@v2
-        with:
-          version: 2.5.3
+      - run: npm install --global npm@11.16.0
       - run: npm ci
-      - run: npm run check
-      - run: npm run ci:biome
-      - run: npm run cruise
-      - run: npm run deadcode
-      - run: npm test
-      - run: npm run build
-        env:
-          NODE_ENV: production
       - run: npx playwright install --with-deps chromium webkit
-      - run: npm run test:e2e:cross-browser
+      - run: npm run verify:release
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-failures
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

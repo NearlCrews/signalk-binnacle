@@ -91,5 +91,5 @@ For provider development, use the current Mayara emulator or a captured binary f
 
 ```bash
 npx vitest run src/features/marine-radar
-npm run test:e2e
+npm run verify:browser
 ```

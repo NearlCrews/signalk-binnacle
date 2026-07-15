@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mapThemePaint, type OverlayContext, rgbaCss } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing';
 import { type AisTrail, fetchAisTrails } from './ais-trails-client';
 import { type AisTrailsOverlay, createAisTrailsOverlay } from './ais-trails-overlay';
 

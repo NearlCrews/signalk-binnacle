@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createSymbolOverlay, type SymbolOverlayConfig } from './symbol-overlay';
 import type { OverlayContext } from './types';
 

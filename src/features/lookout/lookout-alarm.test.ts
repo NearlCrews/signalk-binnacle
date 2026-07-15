@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Severity } from '$entities/collision';
-import { createFakeAlarmControl } from '$shared/testing/fake-alarm';
+import { createFakeAlarmControl } from '$shared/testing';
 import { LookoutAlarm } from './lookout-alarm';
 
 describe('LookoutAlarm', () => {

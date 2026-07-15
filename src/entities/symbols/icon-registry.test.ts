@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mapThemePaint } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { SymbolIconRegistry, symbolIconId } from './icon-registry';
 import type { SymbolRaster } from './symbol-raster';
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MeasureStore } from '$entities/measure';
 import type { UnitsMode } from '$shared/lib';
 import type { OverlayContext } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing/fake-map';
+import { createFakeMap, sourceFeatures } from '$shared/testing';
 import { createMeasureOverlay } from './measure-overlay';
 
 function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {

@@ -108,7 +108,7 @@ import { GatedAlarm } from '$shared/audio';
 import { type Bbox4, bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
 import { Clock, formatLengthOr, lengthUnit, Toast } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
-import { detectCompanion } from '$shared/map/companion';
+import { detectCompanion } from '$shared/map';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
 import {
   createMapView,

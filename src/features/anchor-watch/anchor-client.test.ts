@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { expectBearerAuth } from '$shared/testing/fetch-stub';
+import { expectBearerAuth } from '$shared/testing';
 import {
   dropAnchorOnServer,
   putServerAnchorPosition,

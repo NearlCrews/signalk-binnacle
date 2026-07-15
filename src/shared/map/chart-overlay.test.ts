@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFakeMap } from '$shared/testing/fake-map';
+import { createFakeMap } from '$shared/testing';
 import { createChartOverlay } from './chart-overlay';
 import { registerPmtilesArchive, unregisterPmtilesArchive } from './pmtiles';
 import type { OverlayContext } from './types';
