@@ -55,15 +55,57 @@ describe('detectCompanion', () => {
     ).toBeNull();
   });
 
-  it('uses only the administrator session even when a device token is available', async () => {
+  it('does not send a device token when the administrator session succeeds', async () => {
     const sent: RequestInit[] = [];
     await detectCompanion('http://boat.local', 'tok123', async (_url, init) => {
       sent.push(init ?? {});
-      return { ok: false, status: 401 } as Response;
+      return { ok: true, status: 200 } as Response;
     });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual(expect.objectContaining({ credentials: 'include', cache: 'no-store' }));
     expect(sent[0]?.headers).toBeUndefined();
+  });
+
+  it.each([401, 403])(
+    'retries a refused administrator session (%i) with the device token',
+    async (status) => {
+      const sent: RequestInit[] = [];
+      const result = await probeCompanion('http://boat.local', 'tok123', async (_url, init) => {
+        sent.push(init ?? {});
+        return sent.length === 1
+          ? ({ ok: false, status } as Response)
+          : ({ ok: true, status: 200 } as Response);
+      });
+
+      expect(result).toEqual({
+        state: 'present',
+        base: 'http://boat.local/plugins/signalk-chart-locker',
+        ready: true,
+      });
+      expect(sent).toHaveLength(2);
+      expect(sent[0]).toEqual(expect.objectContaining({ credentials: 'include' }));
+      expect(sent[1]).toEqual(
+        expect.objectContaining({ credentials: 'omit', cache: 'no-store', redirect: 'error' }),
+      );
+      expect(sent[1]?.headers).toEqual({ Authorization: 'Bearer tok123' });
+    },
+  );
+
+  it('keeps a failed device-token fallback distinct as access refused', async () => {
+    const result = await probeCompanion(
+      'http://boat.local',
+      'tok123',
+      async () =>
+        ({
+          ok: false,
+          status: 403,
+        }) as Response,
+    );
+
+    expect(result).toEqual({
+      state: 'access-refused',
+      base: 'http://boat.local/plugins/signalk-chart-locker',
+    });
   });
 
   it('sends no Authorization header when no token is available', async () => {

@@ -5,6 +5,9 @@ type PrivacyReportStatus = 'completed' | 'partial' | 'blocked';
 export interface PrivacyStorageOwner {
   id: string;
   dataClass: PrivacyDataClass;
+  // Lower-priority owners clear first. Producers such as service workers stop before their backing
+  // caches, preventing a late response from repopulating storage after deletion.
+  clearPriority?: number;
   clear(): void | Promise<void>;
 }
 
@@ -38,6 +41,8 @@ export const BINNACLE_PRIVACY_CHANNEL = 'binnacle:privacy';
 export interface EraseSafetyDecision {
   allowed: boolean;
   reason?: string;
+  /** Releases an inter-tab erase lease after registered owners finish. */
+  release?: () => void;
 }
 
 export type EraseSafetyGuard = () => EraseSafetyDecision | Promise<EraseSafetyDecision>;
@@ -125,7 +130,11 @@ export class DevicePrivacyController {
         reason: decision.reason ?? 'The device is not in a safe state for erasure.',
       };
     }
-    return this.#clear(operation, dataClasses, eventType);
+    try {
+      return await this.#clear(operation, dataClasses, eventType);
+    } finally {
+      decision.release?.();
+    }
   }
 
   async #clear(
@@ -134,17 +143,19 @@ export class DevicePrivacyController {
     eventType: PrivacyBroadcastEvent['type'],
   ): Promise<PrivacyReport> {
     const dataClasses = new Set(Array.isArray(dataClass) ? dataClass : [dataClass]);
-    const owners = [...dataClasses].flatMap((value) => this.#registry.owners(value));
-    const settled = await Promise.allSettled(
-      owners.map((owner) => Promise.resolve().then(() => owner.clear())),
-    );
+    const owners = [...dataClasses]
+      .flatMap((value) => this.#registry.owners(value))
+      .sort((left, right) => (left.clearPriority ?? 0) - (right.clearPriority ?? 0));
     const clearedOwnerIds: string[] = [];
     const failures: PrivacyFailure[] = [];
-    settled.forEach((result, index) => {
-      const ownerId = owners[index].id;
-      if (result.status === 'fulfilled') clearedOwnerIds.push(ownerId);
-      else failures.push({ ownerId, message: errorMessage(result.reason) });
-    });
+    for (const owner of owners) {
+      try {
+        await owner.clear();
+        clearedOwnerIds.push(owner.id);
+      } catch (error) {
+        failures.push({ ownerId: owner.id, message: errorMessage(error) });
+      }
+    }
 
     const event: PrivacyBroadcastEvent = {
       type: eventType,
@@ -164,6 +175,87 @@ export class DevicePrivacyController {
       clearedOwnerIds,
       failures,
     };
+  }
+}
+
+const PRIVACY_ACTIVITY_LOCK = 'binnacle:privacy-activity';
+
+type PrivacyLockManager = Pick<LockManager, 'request'>;
+
+/**
+ * Holds a shared browser lock while this tab has unsaved or safety-critical state. An erase first
+ * obtains the exclusive counterpart, so another Binnacle tab cannot clear shared storage while that
+ * state is active. Browsers without Web Locks retain the local safety check.
+ */
+export class PrivacyActivityCoordinator {
+  readonly #locks: PrivacyLockManager | undefined;
+  #generation = 0;
+  #releaseShared: (() => void) | undefined;
+  #unsafe = false;
+
+  constructor(locks?: PrivacyLockManager) {
+    this.#locks = locks;
+  }
+
+  setUnsafe(unsafe: boolean): void {
+    if (unsafe === this.#unsafe) return;
+    this.#unsafe = unsafe;
+    this.#generation += 1;
+    const generation = this.#generation;
+    this.#releaseShared?.();
+    this.#releaseShared = undefined;
+    if (!unsafe || !this.#locks) return;
+
+    void this.#locks
+      .request(PRIVACY_ACTIVITY_LOCK, { mode: 'shared' }, async () => {
+        if (generation !== this.#generation) return;
+        await new Promise<void>((resolve) => {
+          this.#releaseShared = resolve;
+        });
+        if (generation === this.#generation) this.#releaseShared = undefined;
+      })
+      .catch(() => undefined);
+  }
+
+  async guard(localGuard: EraseSafetyGuard): Promise<EraseSafetyDecision> {
+    const local = await localGuard();
+    if (!local.allowed || !this.#locks) return local;
+    // Release this tab's shared activity lock before trying the exclusive lease. The safety state may
+    // have become clear in the same user gesture before Svelte's effect propagated the change.
+    this.setUnsafe(false);
+    await Promise.resolve();
+
+    return new Promise<EraseSafetyDecision>((resolve) => {
+      void this.#locks
+        ?.request(PRIVACY_ACTIVITY_LOCK, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+          if (!lock) {
+            resolve({
+              allowed: false,
+              reason: 'Finish or save active work in another Binnacle tab first.',
+            });
+            return;
+          }
+          const rechecked = await localGuard();
+          if (!rechecked.allowed) {
+            resolve(rechecked);
+            return;
+          }
+          let release = (): void => undefined;
+          const held = new Promise<void>((releaseLock) => {
+            release = releaseLock;
+          });
+          resolve({ ...rechecked, release });
+          await held;
+        })
+        .catch(() => resolve(local));
+    });
+  }
+
+  dispose(): void {
+    this.#unsafe = false;
+    this.#generation += 1;
+    this.#releaseShared?.();
+    this.#releaseShared = undefined;
   }
 }
 
@@ -229,12 +321,19 @@ function createCacheStorageOwner(
   return {
     id,
     dataClass: 'device-data',
+    clearPriority: 100,
     async clear() {
       const existing = await storage.keys();
       const owned = existing.filter(
         (name) => names.includes(name) || prefixes.some((prefix) => name.startsWith(prefix)),
       );
-      await Promise.all(owned.map((name) => storage.delete(name)));
+      const results = await Promise.all(owned.map((name) => storage.delete(name)));
+      const failed = owned.filter((_, index) => !results[index]);
+      if (failed.length > 0) {
+        throw new Error(
+          `Could not delete browser cache${failed.length === 1 ? '' : 's'}: ${failed.join(', ')}.`,
+        );
+      }
     },
   };
 }
@@ -248,6 +347,7 @@ export function createServiceWorkerOwner(
   return {
     id,
     dataClass: 'device-data',
+    clearPriority: -100,
     async clear() {
       const registrations = await container.getRegistrations();
       const owned = registrations.filter((registration) => scopes.has(registration.scope));

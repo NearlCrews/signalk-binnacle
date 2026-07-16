@@ -1,16 +1,26 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const workerMock = vi.hoisted(() => ({
+  open: vi.fn().mockResolvedValue(undefined),
+  close: vi.fn().mockResolvedValue(undefined),
+  recycle: vi.fn(),
+  dispose: vi.fn(),
+}));
 vi.mock('./radar-worker-client', () => ({
-  createRadarWorkerClient: () => ({
-    open: vi.fn().mockResolvedValue(undefined),
-    close: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-  }),
+  createRadarWorkerClient: () => workerMock,
 }));
 
 import { createMarineRadarController } from './marine-radar-controller.svelte';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+beforeEach(() => {
+  vi.clearAllMocks();
+  workerMock.open.mockResolvedValue(undefined);
+  workerMock.close.mockResolvedValue(undefined);
+});
 
 // A minimal valid RadarInfo as the server would return it in the discovery array.
 const fakeRadar = {
@@ -169,5 +179,106 @@ describe('createMarineRadarController', () => {
     expect(controller.store.controlValues.gain).toBe(60);
     expect(controller.store.controlErrors.gain).toBeUndefined();
     await controller.dispose();
+  });
+
+  it('finishes a pending close before reopening the worker', async () => {
+    let finishClose: (() => void) | undefined;
+    const testDocument = new EventTarget();
+    Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
+    vi.stubGlobal('document', testDocument);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([{ ...fakeRadar, status: 'transmit' }]), {
+            status: 200,
+          });
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: 'http://pi',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    workerMock.close.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishClose = resolve)),
+    );
+    const map = {
+      getLayer: () => undefined,
+      triggerRepaint: vi.fn(),
+    };
+    // Keep the lifecycle test independent of discovery-control reconciliation.
+    expect(controller.store.selectedId).toBe('a');
+    controller.store.setOperationalStatus('transmit');
+    controller.layer.setVisible({ map, beforeIdFor: () => undefined } as never, true);
+    await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledOnce());
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => expect(finishClose).toBeTypeOf('function'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    expect(workerMock.open).toHaveBeenCalledOnce();
+    finishClose?.();
+    await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledTimes(2));
+    await controller.dispose();
+  });
+
+  it('serializes a timer-driven reopen with a visibility close', async () => {
+    vi.useFakeTimers();
+    const testDocument = new EventTarget();
+    Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
+    vi.stubGlobal('document', testDocument);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([{ ...fakeRadar, status: 'transmit' }]), {
+            status: 200,
+          });
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: 'http://pi',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    controller.store.setOperationalStatus('transmit');
+    controller.layer.setVisible(
+      { map: { getLayer: () => undefined, triggerRepaint: vi.fn() } } as never,
+      true,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(workerMock.open).toHaveBeenCalledOnce();
+
+    const onWorkerStatus = workerMock.open.mock.calls[0]?.[6] as
+      | ((status: 'open' | 'closed') => void)
+      | undefined;
+    let finishReopen: (() => void) | undefined;
+    workerMock.open.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishReopen = resolve)),
+    );
+    onWorkerStatus?.('closed');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(finishReopen).toBeTypeOf('function');
+
+    const closesBeforeHide = workerMock.close.mock.calls.length;
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(workerMock.close).toHaveBeenCalledTimes(closesBeforeHide);
+
+    finishReopen?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(workerMock.close.mock.calls.length).toBeGreaterThan(closesBeforeHide);
+    await controller.dispose();
+    vi.useRealTimers();
   });
 });

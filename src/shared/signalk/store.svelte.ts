@@ -22,6 +22,19 @@ function sameFlags(a: Flags, b: Flags): boolean {
   );
 }
 
+function samePosition(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+  const left = a as { latitude?: unknown; longitude?: unknown };
+  const right = b as { latitude?: unknown; longitude?: unknown };
+  return (
+    Object.hasOwn(left, 'latitude') === Object.hasOwn(right, 'latitude') &&
+    Object.hasOwn(left, 'longitude') === Object.hasOwn(right, 'longitude') &&
+    left.latitude === right.latitude &&
+    left.longitude === right.longitude
+  );
+}
+
 export class PathCell {
   value = $state<Value | undefined>(undefined);
   source = $state<PathSource | undefined>(undefined);
@@ -161,16 +174,29 @@ export class SignalKStore {
       return;
     }
     // Bump only on a real change: a persistent alarm republished identically every delta cycle
-    // must not rebuild every consumer's list per frame. State, message, id, and the four status
-    // flags carry everything the list renders.
+    // must not rebuild every consumer's list per frame. State, message, id, position, and the four
+    // status flags carry everything the list renders.
     const previous = this.#notifications.get(path);
     if (previous && typeof previous === 'object' && typeof value === 'object' && value) {
-      const a = previous as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
-      const b = value as { state?: unknown; message?: unknown; id?: unknown; status?: Flags };
+      const a = previous as {
+        state?: unknown;
+        message?: unknown;
+        id?: unknown;
+        position?: unknown;
+        status?: Flags;
+      };
+      const b = value as {
+        state?: unknown;
+        message?: unknown;
+        id?: unknown;
+        position?: unknown;
+        status?: Flags;
+      };
       if (
         a.state === b.state &&
         a.message === b.message &&
         a.id === b.id &&
+        samePosition(a.position, b.position) &&
         sameFlags(a.status, b.status)
       ) {
         // Structurally identical to the stored value: leave the mirror untouched. Re-storing the

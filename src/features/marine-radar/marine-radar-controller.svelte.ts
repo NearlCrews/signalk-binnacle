@@ -58,6 +58,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   let discoveryGeneration = 0;
   let selectionGeneration = 0;
   let streamGeneration = 0;
+  let streamLifecycle = Promise.resolve();
   let streamRadarId: string | undefined;
   const pending = new Map<string, number>();
   const writeGenerations = new Map<string, number>();
@@ -112,7 +113,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     reopenTimer = setTimeout(
       () => {
         reopenTimer = undefined;
-        void openSelectedStream();
+        void syncStreamLifecycle();
       },
       fullJitterDelay(reopenAttempt, REOPEN_BASE_MS, REOPEN_MAX_MS),
     );
@@ -211,15 +212,22 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   }
 
   async function syncStreamLifecycle(): Promise<void> {
-    if (shouldStream()) await openSelectedStream();
-    else await closeStream(store.selected ? 'paused' : 'idle');
+    // Serialize close and open transitions. A slow worker.close must finish before a visibility or
+    // control change can reopen the same worker, or its late continuation can close the new socket.
+    streamLifecycle = streamLifecycle
+      .catch(() => undefined)
+      .then(async () => {
+        if (shouldStream()) await openSelectedStream();
+        else await closeStream(store.selected ? 'paused' : 'idle');
+      });
+    await streamLifecycle;
   }
 
   async function loadSelected(): Promise<void> {
     const radar = store.selected;
     const generation = ++selectionGeneration;
     if (!radar) {
-      await closeStream('idle');
+      await syncStreamLifecycle();
       return;
     }
     const [caps] = await Promise.all([
@@ -237,7 +245,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     if (!deps.radarAvailable()) {
       store.setAvailability('absent');
       store.setDiscovered([]);
-      await closeStream('idle');
+      await syncStreamLifecycle();
       return;
     }
     store.setAvailability('probing');
@@ -359,7 +367,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     staleTimer = undefined;
     if (typeof document !== 'undefined')
       document.removeEventListener('visibilitychange', onDocumentVisibility);
-    await worker?.close().catch(() => undefined);
+    await syncStreamLifecycle();
     worker?.dispose();
     worker = undefined;
   }

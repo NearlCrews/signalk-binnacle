@@ -20,7 +20,7 @@ const noSchedule = () => {};
 
 describe('AuthController', () => {
   it('reports an unsecured server and needs no token', async () => {
-    const fetchFn = vi.fn(async () => res(true, {}));
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => res(true, {}));
     const auth = new AuthController(BASE, {
       fetch: fetchFn as unknown as typeof fetch,
       storage: storage(),
@@ -32,7 +32,7 @@ describe('AuthController', () => {
   });
 
   it('probes anonymously with credentials omitted so a session cookie cannot mask a secured server', async () => {
-    const fetchFn = vi.fn(async () => res(true, {}));
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => res(true, {}));
     const auth = new AuthController(BASE, {
       fetch: fetchFn as unknown as typeof fetch,
       storage: storage(),
@@ -43,6 +43,7 @@ describe('AuthController', () => {
       `${BASE}/signalk/v1/api/vessels/self`,
       expect.objectContaining({ credentials: 'omit' }),
     );
+    expect(fetchFn.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('uses a stored token that still works', async () => {
@@ -206,6 +207,197 @@ describe('AuthController', () => {
     expect(store.getItem('binnacle:signalk-auth')).toContain('crosstab');
   });
 
+  it('adopts a complete rotated identity from another tab without writing it back', async () => {
+    const previousWindow = globalThis.window;
+    const events = new EventTarget();
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: events });
+    try {
+      const setItem = vi.fn();
+      const store = {
+        getItem: () => JSON.stringify({ clientId: 'binnacle-old', token: 'old-token' }),
+        setItem,
+      };
+      const auth = new AuthController(BASE, {
+        fetch: (async () => res(true)) as unknown as typeof fetch,
+        storage: store,
+        schedule: noSchedule,
+      });
+      await auth.probe();
+      auth.reportWriteOutcome(false, 403);
+      auth.watch();
+
+      events.dispatchEvent(
+        Object.assign(new Event('storage'), {
+          key: 'binnacle:signalk-auth',
+          newValue: JSON.stringify({ clientId: 'binnacle-new', token: 'rotated-token' }),
+        }),
+      );
+
+      expect(auth.clientId).toBe('binnacle-new');
+      expect(auth.token).toBe('rotated-token');
+      expect(auth.status).toBe('authenticated');
+      expect(auth.writeBlocked).toBe(false);
+      expect(setItem).not.toHaveBeenCalled();
+      auth.stop();
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: previousWindow,
+      });
+    }
+  });
+
+  it('adopts a tokenless replacement identity from another tab', () => {
+    const previousWindow = globalThis.window;
+    const events = new EventTarget();
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: events });
+    try {
+      const setItem = vi.fn();
+      const auth = new AuthController(BASE, {
+        fetch: (async () => res(true)) as unknown as typeof fetch,
+        storage: {
+          getItem: () => JSON.stringify({ clientId: 'binnacle-old', token: 'old-token' }),
+          setItem,
+        },
+        schedule: noSchedule,
+      });
+      auth.watch();
+
+      events.dispatchEvent(
+        Object.assign(new Event('storage'), {
+          key: 'binnacle:signalk-auth',
+          newValue: JSON.stringify({ clientId: 'binnacle-reset', token: null }),
+        }),
+      );
+
+      expect(auth.clientId).toBe('binnacle-reset');
+      expect(auth.token).toBeNull();
+      expect(auth.status).toBe('unknown');
+      expect(setItem).not.toHaveBeenCalled();
+      auth.stop();
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: previousWindow,
+      });
+    }
+  });
+
+  it('rejects malformed approved tokens instead of persisting them', async () => {
+    const store = storage();
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/r1' });
+      return res(true, {
+        state: 'COMPLETED',
+        accessRequest: { permission: 'APPROVED', token: 'bad\ntoken' },
+      });
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: store,
+      schedule: noSchedule,
+    });
+
+    await auth.requestAccess();
+    await auth.checkRequest();
+
+    expect(auth.status).toBe('denied');
+    expect(auth.token).toBeNull();
+    expect(store.getItem('binnacle:signalk-auth')).not.toContain('bad');
+  });
+
+  it('allows a valid token rotation but ignores invalid direct token adoption', async () => {
+    const auth = new AuthController(BASE, {
+      fetch: (async () => res(true)) as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'old' }),
+      }),
+      schedule: noSchedule,
+    });
+    await auth.probe();
+
+    auth.adoptToken('rotated');
+    expect(auth.token).toBe('rotated');
+    auth.adoptToken('bad\u0000token');
+    expect(auth.token).toBe('rotated');
+  });
+
+  it('does not let a stale rejected probe clear a token rotated by another tab', async () => {
+    let finishProbe: ((response: Response) => void) | undefined;
+    const fetchFn = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finishProbe = resolve;
+        }),
+    );
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'old' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    const probing = auth.probe();
+    auth.adoptToken('rotated');
+    finishProbe?.(res(false, {}, 401));
+    await probing;
+
+    expect(auth.token).toBe('rotated');
+    expect(auth.status).toBe('authenticated');
+  });
+
+  it('does not let a stale successful probe resurrect forgotten credentials', async () => {
+    let finishProbe: ((response: Response) => void) | undefined;
+    const auth = new AuthController(BASE, {
+      fetch: (() =>
+        new Promise<Response>((resolve) => {
+          finishProbe = resolve;
+        })) as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'old' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    const probing = auth.probe();
+    auth.forgetDeviceCredentials(false);
+    finishProbe?.(res(true));
+    await probing;
+
+    expect(auth.token).toBeNull();
+    expect(auth.status).toBe('unknown');
+  });
+
+  it('does not adopt an old access approval after the identity is replaced', async () => {
+    let finishPoll: ((response: Response) => void) | undefined;
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/r1' });
+      return new Promise<Response>((resolve) => {
+        finishPoll = resolve;
+      });
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: noSchedule,
+    });
+
+    await auth.requestAccess();
+    const checking = auth.checkRequest();
+    auth.forgetDeviceCredentials(false);
+    finishPoll?.(
+      res(true, {
+        state: 'COMPLETED',
+        accessRequest: { permission: 'APPROVED', token: 'stale-token' },
+      }),
+    );
+    await checking;
+
+    expect(auth.token).toBeNull();
+    expect(auth.status).toBe('unknown');
+  });
+
   it('drops runtime credentials when another tab removes the auth record', () => {
     const previousWindow = globalThis.window;
     const events = new EventTarget();
@@ -345,6 +537,33 @@ describe('AuthController', () => {
     expect(scheduled.length).toBeGreaterThan(1);
   });
 
+  it('cancels scheduled polling and prevents its callback from running after stop', async () => {
+    const scheduled: Array<() => void> = [];
+    const handle = {};
+    const cancelSchedule = vi.fn();
+    const fetchFn = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: (run) => {
+        scheduled.push(run);
+        return handle;
+      },
+      cancelSchedule,
+    });
+    await auth.requestAccess();
+    expect(scheduled).toHaveLength(1);
+
+    auth.stop();
+    expect(cancelSchedule).toHaveBeenCalledWith(handle);
+    scheduled[0]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
   it('flags read-only when an authenticated write is refused, and clears it on a later success', async () => {
     const fetchFn = vi.fn(async () => res(true, {}));
     const auth = new AuthController(BASE, {
@@ -401,6 +620,24 @@ describe('AuthController', () => {
     expect(auth.token).toBe('rwtok');
     expect(auth.status).toBe('authenticated');
     expect(auth.writeBlocked).toBe(false);
+    expect(auth.upgrading).toBe(false);
+  });
+
+  it('clears an in-progress write upgrade when stopped', async () => {
+    const auth = new AuthController(BASE, {
+      fetch: (async () =>
+        res(true, { href: '/signalk/v1/requests/up1' })) as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'old' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    await auth.requestWriteAccess();
+    expect(auth.upgrading).toBe(true);
+
+    auth.stop();
+
     expect(auth.upgrading).toBe(false);
   });
 

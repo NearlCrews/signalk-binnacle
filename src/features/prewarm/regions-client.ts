@@ -7,6 +7,12 @@ import type { Bbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
 import { withTimeout } from '$shared/lib';
 import { adminSessionInit } from '$shared/signalk';
+import {
+  CHART_LOCKER_MAX_REGION_NAME_LENGTH,
+  CHART_LOCKER_MAX_SOURCE_ID_LENGTH,
+  CHART_LOCKER_MAX_SOURCES,
+  CHART_LOCKER_MAX_WARM_ZOOM,
+} from './contract.js';
 
 /** A non-ok HTTP response from a companion route, carrying the status so a caller can branch on it
  * (401 and 403 are a missing or refused token, other codes are a server or transport fault). Thrown
@@ -61,11 +67,10 @@ const isPositiveFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 const MAX_REGION_COUNT = 10_000;
-const MAX_SOURCE_COUNT = 512;
 const MAX_SOURCE_STATS_COUNT = 10_000;
 const MAX_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 512;
-const MAX_SOURCE_ID_LENGTH = 256;
+const MAX_JSON_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 function safeText(value: unknown, maxLength: number): value is string {
   return (
@@ -92,13 +97,19 @@ function parseCacheStats(value: unknown): CacheStats {
     throw new InvalidCacheStatsError();
   }
 
-  const perSourceAvgBytes: Record<string, number> = {};
+  const perSourceAvgBytes = Object.create(null) as Record<string, number>;
   const perSourceEntries = Object.entries(value.perSourceAvgBytes);
   if (perSourceEntries.length > MAX_SOURCE_STATS_COUNT) throw new InvalidCacheStatsError();
   for (const [source, bytes] of perSourceEntries) {
     // Chart Locker reports measured averages, so fractional positive values are expected. Totals
     // remain integers, but rounding an average here would distort planning estimates.
-    if (!safeText(source, MAX_SOURCE_ID_LENGTH) || !isPositiveFiniteNumber(bytes)) {
+    if (
+      !safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH) ||
+      source === '__proto__' ||
+      source === 'prototype' ||
+      source === 'constructor' ||
+      !isPositiveFiniteNumber(bytes)
+    ) {
       throw new InvalidCacheStatsError();
     }
     perSourceAvgBytes[source] = bytes;
@@ -129,7 +140,7 @@ function parseCacheStats(value: unknown): CacheStats {
     bySource = value.bySource.map((row) => {
       if (
         !isRecord(row) ||
-        !safeText(row.source, MAX_SOURCE_ID_LENGTH) ||
+        !safeText(row.source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH) ||
         !isNonNegativeSafeInteger(row.bytes) ||
         !isNonNegativeSafeInteger(row.rows)
       ) {
@@ -231,14 +242,14 @@ function parseSavedRegion(value: unknown): SavedRegionDto {
   ]);
   if (
     !safeText(value.id, MAX_ID_LENGTH) ||
-    !safeText(value.name, MAX_NAME_LENGTH) ||
+    !safeText(value.name, CHART_LOCKER_MAX_REGION_NAME_LENGTH) ||
     !Array.isArray(value.sourceIds) ||
-    value.sourceIds.length > MAX_SOURCE_COUNT ||
-    !value.sourceIds.every((source) => safeText(source, MAX_SOURCE_ID_LENGTH)) ||
+    value.sourceIds.length > CHART_LOCKER_MAX_SOURCES ||
+    !value.sourceIds.every((source) => safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH)) ||
     !isNonNegativeSafeInteger(value.minzoom) ||
     !isNonNegativeSafeInteger(value.maxzoom) ||
     value.minzoom > value.maxzoom ||
-    value.maxzoom > 22 ||
+    value.maxzoom > CHART_LOCKER_MAX_WARM_ZOOM ||
     !isNonNegativeSafeInteger(value.createdAt) ||
     !(value.lastDownloadedAt === null || isNonNegativeSafeInteger(value.lastDownloadedAt)) ||
     !isNonNegativeSafeInteger(value.bytes) ||
@@ -300,6 +311,7 @@ function parseWarmStatus(value: unknown): WarmStatus {
     !isNonNegativeSafeInteger(value.done) ||
     value.done > value.total ||
     !isNonNegativeSafeInteger(value.skipped) ||
+    value.done + value.skipped > value.total ||
     !isNonNegativeSafeInteger(value.bytes) ||
     !isNonNegativeSafeInteger(value.errors) ||
     !states.has(value.state)
@@ -321,7 +333,33 @@ export function createRegionsClient(
     if (!r.ok) throw new HttpStatusError(r.status);
     return r;
   };
-  const json = async <T>(r: Response): Promise<T> => (await ensureOk(r).json()) as T;
+  const json = async <T>(r: Response): Promise<T> => {
+    const response = ensureOk(r);
+    const declaredLength = response.headers.get('Content-Length');
+    if (declaredLength !== null) {
+      const length = Number(declaredLength);
+      if (!Number.isSafeInteger(length) || length < 0 || length > MAX_JSON_RESPONSE_BYTES) {
+        throw new TypeError('companion response is too large');
+      }
+    }
+    if (!response.body) throw new TypeError('companion response has no body');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let total = 0;
+    let text = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_JSON_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new TypeError('companion response is too large');
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return JSON.parse(text) as T;
+  };
   // Every management call carries the administrator session cookie and a request timeout, so a
   // half-open link on a boat bounds the wait without masking the session with a device bearer token.
   const init = (extra?: RequestInit): RequestInit => withTimeout(adminSessionInit(extra));
@@ -392,7 +430,7 @@ export function createRegionsClient(
           init({ signal }),
         );
         if (!r.ok) return null;
-        const data = (await r.json()) as Record<string, unknown>;
+        const data = await json<Record<string, unknown>>(r);
         return safeText(data.display_name, MAX_NAME_LENGTH) ? data.display_name : null;
       } catch {
         return null;

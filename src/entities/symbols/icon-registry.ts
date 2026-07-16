@@ -20,6 +20,7 @@ export interface SymbolIconEntry {
 interface SymbolAssets {
   rasterize: RasterizeSymbol;
   svgText(symbol: SkSymbol): Promise<string | undefined>;
+  readonly revision?: number;
 }
 
 type SymbolIconState =
@@ -34,17 +35,21 @@ export class SymbolIconRegistry {
   readonly #states = new Map<string, SymbolIconState>();
   #paint: MapThemePaint = mapThemePaint('day');
   readonly #assets: SymbolAssets;
+  #revision: number;
 
   constructor(assets: SymbolAssets) {
     this.#assets = assets;
+    this.#revision = assets.revision ?? 0;
   }
 
   entry(uuid: string): SymbolIconEntry | undefined {
+    this.#syncRevision();
     const state = this.#states.get(uuid);
     return state?.status === 'ready' ? state.entry : undefined;
   }
 
   status(uuid: string): SymbolIconStatus | undefined {
+    this.#syncRevision();
     return this.#states.get(uuid)?.status;
   }
 
@@ -53,6 +58,7 @@ export class SymbolIconRegistry {
   // is a no-op. A ready symbol whose image is gone (a base-style swap drops all images) reloads
   // from the cached SVG text.
   ensure(map: MapLibreMap, symbol: SkSymbol, paint: MapThemePaint): Promise<boolean> {
+    this.#syncRevision();
     this.#paint = paint;
     const state = this.#states.get(symbol.uuid);
     if (state?.status === 'failed') return Promise.resolve(false);
@@ -69,6 +75,7 @@ export class SymbolIconRegistry {
   // or lifts here). A refresh that fails keeps the previous image rather than dropping to a
   // missing icon mid-session.
   retheme(map: MapLibreMap, paint: MapThemePaint): void {
+    this.#syncRevision();
     this.#paint = paint;
     for (const state of this.#states.values()) {
       if (state.status === 'ready') void this.#refresh(map, state.symbol);
@@ -78,7 +85,9 @@ export class SymbolIconRegistry {
   #warnedDegrade = false;
 
   async #load(map: MapLibreMap, symbol: SkSymbol): Promise<boolean> {
-    const ok = await this.#refresh(map, symbol);
+    const revision = this.#revision;
+    const ok = await this.#refresh(map, symbol, revision);
+    if (revision !== this.#revision) return false;
     if (!ok) {
       this.#states.set(symbol.uuid, { status: 'failed' });
       // Per-symbol degrade to the built-in icon is by design; a SYSTEMATIC failure (every asset
@@ -93,12 +102,12 @@ export class SymbolIconRegistry {
     return ok;
   }
 
-  async #refresh(map: MapLibreMap, symbol: SkSymbol): Promise<boolean> {
+  async #refresh(map: MapLibreMap, symbol: SkSymbol, revision = this.#revision): Promise<boolean> {
     const svg = await this.#assets.svgText(symbol);
-    if (!svg) return false;
+    if (!svg || revision !== this.#revision) return false;
     const paint = this.#paint;
     const raster = await this.#assets.rasterize(svg, symbol.scale ?? 1, paint);
-    if (!raster) return false;
+    if (!raster || revision !== this.#revision) return false;
     const iconId = symbolIconId(symbol.uuid);
     setMapImage(map, iconId, raster.image, SYMBOL_PIXEL_RATIO);
     this.#states.set(symbol.uuid, {
@@ -111,7 +120,15 @@ export class SymbolIconRegistry {
     });
     // The theme changed while this raster was in flight; redo it so a stale-theme bitmap
     // never sticks until the next theme change.
-    if (paint.theme !== this.#paint.theme) return this.#refresh(map, symbol);
+    if (paint.theme !== this.#paint.theme) return this.#refresh(map, symbol, revision);
     return true;
+  }
+
+  #syncRevision(): void {
+    const revision = this.#assets.revision ?? 0;
+    if (revision === this.#revision) return;
+    this.#revision = revision;
+    this.#states.clear();
+    this.#warnedDegrade = false;
   }
 }

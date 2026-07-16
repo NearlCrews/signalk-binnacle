@@ -1,4 +1,4 @@
-import { withTimeout } from '$shared/lib';
+import { hasControlCharacters, isRecord, withTimeout } from '$shared/lib';
 
 // Helpers shared by the resource clients (charts, notes, tracks): the bearer-auth request init
 // and the string guards for parsing untyped resource JSON. A token is sent only when present.
@@ -129,17 +129,44 @@ export async function fetchAuthedJsonOutcome<T>(
 // ({state, statusCode, message}) or an array arriving with a 200 is not that shape, so reject it:
 // every resource client shares this guard so a malformed body never flows on as bogus records.
 export function asKeyedObject(body: unknown): Record<string, unknown> | undefined {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
-  return body as Record<string, unknown>;
+  if (!isRecord(body)) return undefined;
+  if (
+    Object.hasOwn(body, 'state') &&
+    Object.hasOwn(body, 'statusCode') &&
+    Object.hasOwn(body, 'message')
+  ) {
+    return undefined;
+  }
+  const entries = Object.entries(body);
+  if (entries.length > 10_000) return undefined;
+  const clean = Object.create(null) as Record<string, unknown>;
+  for (const [id, value] of entries) {
+    if (
+      id.length === 0 ||
+      id.length > 512 ||
+      hasControlCharacters(id) ||
+      id === '__proto__' ||
+      id === 'prototype' ||
+      id === 'constructor'
+    ) {
+      continue;
+    }
+    clean[id] = value;
+  }
+  return clean;
 }
 
 export function str(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === 'string' && value.length > 0 && value.length <= 16_384
+    ? value
+    : undefined;
 }
 
 export function strArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const out = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  if (!Array.isArray(value) || value.length > 1_000) return undefined;
+  const out = value.filter(
+    (v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 16_384,
+  );
   return out.length > 0 ? out : undefined;
 }
 

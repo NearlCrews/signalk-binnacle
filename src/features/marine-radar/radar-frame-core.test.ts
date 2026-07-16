@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { RadarFrameCore } from './radar-frame-core';
 import { syntheticFrames } from './synthetic-radar';
 
-function encodeSpoke(angle: number, range: number, data: Uint8Array): Uint8Array {
+function encodeSpoke(angle: number, range: number, data: Uint8Array, bearing?: number): Uint8Array {
   const pbf = new PbfWriter();
   pbf.writeMessage(
     2,
     (_obj, w) => {
       w.writeVarintField(1, angle);
+      if (bearing !== undefined) w.writeVarintField(2, bearing);
       w.writeVarintField(3, range);
       w.writeBytesField(5, data);
     },
@@ -85,6 +86,16 @@ describe('RadarFrameCore', () => {
   it('seeds the initial range from discovery so the first frame has a usable extent', () => {
     const core = new RadarFrameCore(16, 8, 926);
     expect(core.flush().range).toBe(926);
+  });
+
+  it('expires a radar-provided bearing so the renderer can fall back to vessel heading', () => {
+    let now = 1000;
+    const core = new RadarFrameCore(16, 8, 926, () => now);
+    core.ingest(encodeSpoke(2, 926, new Uint8Array(8), 6));
+    expect(core.flush().heading).toBeDefined();
+    now += 5_001;
+    core.ingest(encodeSpoke(3, 926, new Uint8Array(8)));
+    expect(core.flush().heading).toBeUndefined();
   });
 
   it('a truncated frame does not corrupt the accumulator: later valid frames still integrate', () => {

@@ -1,3 +1,4 @@
+import { withTimeout } from '$shared/lib';
 import type { SkSymbol } from '$shared/signalk';
 import { SymbolIconRegistry } from './icon-registry';
 import { type RasterizeSymbol, rasterizeSymbolSvg } from './symbol-raster';
@@ -14,6 +15,7 @@ const DEFAULT_NS = 'default';
 const MAX_SVG_BYTES = 256 * 1024;
 const SVG_TIMEOUT_MS = 5000;
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const FORBIDDEN_ELEMENT_NAMES = new Set([
   'animate',
   'animatemotion',
@@ -36,10 +38,18 @@ function safeCss(value: string): boolean {
   if (/\b(?:javascript|data):/iu.test(value) || /@import/iu.test(value) || value.includes('\\')) {
     return false;
   }
-  for (const match of value.matchAll(/url\(\s*["']?([^)'"\s]+)["']?\s*\)/giu)) {
-    if (!match[1].startsWith('#')) return false;
-  }
-  return true;
+  let unsafeUrl = false;
+  const withoutUrls = value.replace(
+    /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/giu,
+    (_match, doubleQuoted: string | undefined, singleQuoted: string | undefined, bare: string) => {
+      const target = (doubleQuoted ?? singleQuoted ?? bare).trim();
+      if (!target.startsWith('#')) unsafeUrl = true;
+      return '';
+    },
+  );
+  // Any url() left after removing well-formed functions is malformed or uses a form the sanitizer
+  // does not understand. Reject it instead of letting the browser's CSS parser interpret it.
+  return !unsafeUrl && !/url\s*\(/iu.test(withoutUrls);
 }
 
 // Node-based unit tests do not provide DOMParser. Keep a conservative fallback there, while browser
@@ -50,6 +60,7 @@ function safeSvgWithoutDomParser(text: string): boolean {
   const forbidden = [...FORBIDDEN_ELEMENT_NAMES].join('|');
   if (new RegExp(String.raw`<${prefix}(?:${forbidden})\b`, 'iu').test(text)) return false;
   if (/\s(?:[A-Za-z_][A-Za-z0-9_.-]*:)?on[a-z]+\s*=/iu.test(text)) return false;
+  if (/\sxml:base\s*=/iu.test(text)) return false;
   if (/\b(?:[A-Za-z_][A-Za-z0-9_.-]*:)?(?:href|src)\s*=\s*(?!["'])/iu.test(text)) return false;
   if (/\b(?:[A-Za-z_][A-Za-z0-9_.-]*:)?(?:href|src)\s*=\s*["'](?!#)[^"']*["']/iu.test(text)) {
     return false;
@@ -72,6 +83,7 @@ function safeSvg(text: string): boolean {
       const attributeName = attribute.localName.toLowerCase();
       const value = attribute.value.trim();
       if (attributeName.startsWith('on')) return false;
+      if (attribute.namespaceURI === XML_NAMESPACE && attributeName === 'base') return false;
       if ((attributeName === 'href' || attributeName === 'src') && !value.startsWith('#')) {
         return false;
       }
@@ -124,6 +136,7 @@ export class SymbolsStore {
   // Symbols carrying at least one adopted (binnacle/custom) alias, for the role-filtered pickers.
   #adopted: readonly SkSymbol[] = [];
   readonly #svgTexts = new Map<string, Promise<string | undefined>>();
+  #revision = 0;
 
   constructor(
     base: string,
@@ -140,13 +153,17 @@ export class SymbolsStore {
   // The asset fetches authenticate with whatever token is current; set when access resolves,
   // since the store is constructed before auth for the same reason setSymbols exists.
   setAuth(token: string | undefined): void {
+    if (token === this.#token) return;
     this.#token = token;
+    this.#svgTexts.clear();
+    this.#revision += 1;
   }
 
   // Replace the symbol set. The store is constructed empty before auth resolves (the chart mounts
   // immediately; the symbols fetch needs credentials), then filled when the fetch lands, so the
   // overlays hold one stable store reference and resolve against whatever is known at render time.
   setSymbols(symbols: readonly SkSymbol[]): void {
+    this.#revision += 1;
     this.#svgTexts.clear();
     this.#byRef.clear();
     const adopted: SkSymbol[] = [];
@@ -190,6 +207,10 @@ export class SymbolsStore {
     return this.#symbols;
   }
 
+  get revision(): number {
+    return this.#revision;
+  }
+
   // Adopted symbols (binnacle/custom) declaring the given role, for the icon pickers.
   forRole(role: string): SkSymbol[] {
     return this.#adopted.filter((symbol) => symbol.roles.includes(role));
@@ -200,7 +221,7 @@ export class SymbolsStore {
   }
 
   // The symbol's SVG text, fetched once per uuid and cached (theme re-rasters reuse it). The
-  // The provider contract supplies a server-relative URL. Resolve it against the configured Signal K
+  // provider contract supplies a server-relative URL. Resolve it against the configured Signal K
   // origin and refuse any other origin before attaching the device token.
   svgText(symbol: SkSymbol): Promise<string | undefined> {
     const cached = this.#svgTexts.get(symbol.uuid);
@@ -231,13 +252,13 @@ export class SymbolsStore {
         return undefined;
       }
       const headers = this.#token ? { Authorization: `Bearer ${this.#token}` } : undefined;
-      const response = await fetch(url.href, {
-        headers,
-        credentials: 'omit',
-        cache: 'no-store',
-        redirect: 'error',
-        signal: AbortSignal.timeout(SVG_TIMEOUT_MS),
-      });
+      const response = await fetch(
+        url.href,
+        withTimeout(
+          { headers, credentials: 'omit', cache: 'no-store', redirect: 'error' },
+          SVG_TIMEOUT_MS,
+        ),
+      );
       if (!response.ok) return undefined;
       const finalUrl = response.url ? new URL(response.url) : url;
       if (finalUrl.origin !== origin) return undefined;

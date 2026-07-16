@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRegionsClient, HttpStatusError } from './regions-client.js';
 
 const ok = (body: unknown, status = 200): Response =>
-  ({ ok: status < 400, status, json: async () => body }) as unknown as Response;
+  new Response(body === undefined ? undefined : JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 
 describe('regions client', () => {
   it('maps a region status 404 to null (the job is gone)', async () => {
@@ -50,6 +53,16 @@ describe('regions client', () => {
       malformedStatus as unknown as typeof fetch,
     );
     await expect(statuses.getRegionJobStatus('region-9')).rejects.toThrow('invalid region status');
+
+    const impossibleProgress = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({ total: 2, done: 2, skipped: 1, bytes: 0, errors: 0, state: 'running' }),
+      ) as unknown as typeof fetch,
+    );
+    await expect(impossibleProgress.getRegionJobStatus('region-9')).rejects.toThrow(
+      'invalid region status',
+    );
   });
 
   it('encodes lat and lon into the geocode query', async () => {
@@ -139,6 +152,22 @@ describe('regions client', () => {
       fetchImpl as unknown as typeof fetch,
     );
     await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
+  });
+
+  it('rejects a JSON response whose declared size exceeds the client boundary', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response('{}', {
+          status: 200,
+          headers: { 'Content-Length': `${2 * 1024 * 1024 + 1}` },
+        }),
+    );
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    await expect(client.getCacheStats()).rejects.toThrow('response is too large');
   });
 
   it('posts config with the administrator session and no bearer token', async () => {

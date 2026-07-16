@@ -408,36 +408,62 @@ onMount(async () => {
         timeTravel,
         marineRadarLayer,
       });
-      const criticalOverlayIds = new Set([
+      const criticalOverlayIds: readonly string[] = [
         OWN_VESSEL_OVERLAY_ID,
         COLLISION_OVERLAY_ID,
         MOB_OVERLAY_ID,
         'anchor-watch',
         'course',
         'routes',
-      ]);
+      ];
       const criticalOverlays = dynamicOverlays.filter((overlay) =>
-        criticalOverlayIds.has(overlay.id),
+        criticalOverlayIds.includes(overlay.id),
       );
+      let criticalFailureIds: string[] = [];
+      const reportCriticalFailures = (): void => {
+        onCriticalOverlayError?.([...criticalFailureIds]);
+      };
+      const onOverlaySyncStatus = (id: string | undefined, error: unknown | undefined): void => {
+        if (!id || !criticalOverlayIds.includes(id)) return;
+        if (error === undefined)
+          criticalFailureIds = criticalFailureIds.filter((value) => value !== id);
+        else if (!criticalFailureIds.includes(id)) criticalFailureIds.push(id);
+        reportCriticalFailures();
+      };
       const supportingOverlays = dynamicOverlays.filter(
-        (overlay) => !criticalOverlayIds.has(overlay.id),
+        (overlay) => !criticalOverlayIds.includes(overlay.id),
       );
-      const dynamicResults = await mgr.registerBatch(criticalOverlays);
-      dynamicResults.push(...(await mgr.registerBatch(supportingOverlays)));
-      const registeredDynamicIds = new Set(
-        dynamicResults
-          .filter((result) => result.status === 'registered')
-          .map((result) => result.id),
-      );
-      const criticalFailures = dynamicResults.filter(
-        (result) => result.status === 'failed' && criticalOverlayIds.has(result.id),
-      );
-      for (const result of dynamicResults) {
+      const criticalResults = await mgr.registerBatch(criticalOverlays);
+      const criticalFailures = criticalResults.filter((result) => result.status === 'failed');
+      for (const failure of criticalFailures) {
+        if (!criticalFailureIds.includes(failure.id)) criticalFailureIds.push(failure.id);
+      }
+      for (const result of criticalResults) {
         if (result.status === 'failed') {
           console.warn(`Could not register overlay "${result.id}".`, result.error);
         }
       }
-      onCriticalOverlayError?.(criticalFailures.map((failure) => failure.id));
+      reportCriticalFailures();
+      // Start live vessel, course, collision, MOB, anchor, and route synchronization immediately.
+      // Optional overlays and remote providers can take longer to register and must not hold it up.
+      const registeredDynamicIds = criticalResults
+        .filter((result) => result.status === 'registered')
+        .map((result) => result.id);
+      runTick(
+        criticalOverlays.filter((overlay) => registeredDynamicIds.includes(overlay.id)),
+        onOverlaySyncStatus,
+      );
+
+      const supportingResults = await mgr.registerBatch(supportingOverlays);
+      for (const result of supportingResults) {
+        if (result.status === 'registered') registeredDynamicIds.push(result.id);
+        else console.warn(`Could not register overlay "${result.id}".`, result.error);
+      }
+      // Expand the live set before any optional remote provider registration begins.
+      runTick(
+        dynamicOverlays.filter((overlay) => registeredDynamicIds.includes(overlay.id)),
+        onOverlaySyncStatus,
+      );
 
       // Route the remote raster overlays through the Chart Locker tile proxy when it is installed,
       // so the boat shares one cache and works offline. When it is absent, the sources keep their direct
@@ -550,7 +576,13 @@ onMount(async () => {
         onServerChartsStatus?.('loading');
         serverChartsQueue = serverChartsQueue
           .catch(() => undefined)
-          .then(() => loadServerCharts(generation));
+          .then(() => loadServerCharts(generation))
+          .catch((error) => {
+            console.warn('Could not refresh server charts.', error);
+            if (!isDestroyed() && generation === serverChartsGeneration) {
+              onServerChartsStatus?.('error');
+            }
+          });
         return serverChartsQueue;
       }
 
@@ -604,10 +636,13 @@ onMount(async () => {
       // colors it up front so it does not flash the day palette before the theme effect runs.
       workingRouteOverlay = createWorkingRouteOverlay(routeStore, theme);
       workingRouteOverlay.add(ctx);
-      runTick([
-        ...dynamicOverlays.filter((overlay) => registeredDynamicIds.has(overlay.id)),
-        workingRouteOverlay,
-      ]);
+      runTick(
+        [
+          ...dynamicOverlays.filter((overlay) => registeredDynamicIds.includes(overlay.id)),
+          workingRouteOverlay,
+        ],
+        onOverlaySyncStatus,
+      );
     },
   });
 });

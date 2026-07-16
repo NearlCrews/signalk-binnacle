@@ -169,6 +169,16 @@ describe('AnchorWatch (client mode)', () => {
     expect(anchor.radiusMeters).toBe(10);
   });
 
+  it('clamps runtime and preferred radii to the persisted maximum', () => {
+    const { anchor } = setup();
+    expect(() => anchor.dropLocal(ANCHOR, 2_000_000)).not.toThrow();
+    expect(anchor.radiusMeters).toBe(1_000_000);
+    expect(() => anchor.setRadiusLocal(3_000_000)).not.toThrow();
+    expect(anchor.radiusMeters).toBe(1_000_000);
+    expect(() => anchor.rememberRadius(4_000_000)).not.toThrow();
+    expect(anchor.preferredRadiusMeters).toBe(1_000_000);
+  });
+
   it('remembers the preferred radius for the next drop', () => {
     const { anchor } = setup();
     expect(anchor.preferredRadiusMeters).toBe(DEFAULT_RADIUS_M);

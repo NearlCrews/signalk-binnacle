@@ -15,3 +15,8 @@ export const AIS_PRUNE_INTERVAL_MS = 5_000;
 // both vessels' motion, so keeping them for the full slow-target TTL would present obsolete risk
 // long after either vessel changed course.
 export const AIS_APPROACH_STALE_TTL_MS = 30_000;
+
+// Motion drives local CPA projection and must age out much sooner than the target's slow-reporting
+// position. Class B targets can report at 30-second intervals, so leave one interval of margin for
+// delivery jitter without retaining a velocity vector through multiple missed reports.
+export const AIS_MOTION_STALE_TTL_MS = 60_000;

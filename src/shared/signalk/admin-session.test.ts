@@ -42,6 +42,18 @@ describe('fetchAdminSessionState', () => {
     await expect(
       fetchAdminSessionState(
         'https://boat.local',
+        vi.fn(async () => response({ status: 'mystery' })),
+      ),
+    ).resolves.toBe('unknown');
+    await expect(
+      fetchAdminSessionState(
+        'https://boat.local',
+        vi.fn(async () => response({ status: 'loggedIn' })),
+      ),
+    ).resolves.toBe('unknown');
+    await expect(
+      fetchAdminSessionState(
+        'https://boat.local',
         vi.fn(async () => response({}, 500)),
       ),
     ).resolves.toBe('unknown');

@@ -161,6 +161,7 @@ describe('TrackRecorder', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(r.points).toEqual([]);
+    expect(r.restored).toBe(true);
   });
 
   it('serializes append before clear in persistent storage', async () => {
@@ -215,6 +216,7 @@ describe('TrackRecorder', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(r.points).toEqual(seeded);
+    expect(r.restored).toBe(true);
   });
 
   it('coerces a restored point with no sog to zero so every reader sees a number', async () => {

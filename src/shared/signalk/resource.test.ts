@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   adminSessionInit,
+  asKeyedObject,
   authInit,
   SignalKResourceClient,
   sendJson,
@@ -8,6 +9,21 @@ import {
   str,
   strArray,
 } from './resource';
+
+describe('asKeyedObject', () => {
+  it('rejects error envelopes and unsafe collection keys', () => {
+    expect(asKeyedObject({ state: 'FAILURE', statusCode: 500, message: 'nope' })).toBeUndefined();
+    expect(Object.keys(asKeyedObject(JSON.parse('{"__proto__":{}}')) ?? {})).toEqual([]);
+    expect(asKeyedObject({ route: { name: 'Safe' } })).toEqual({ route: { name: 'Safe' } });
+  });
+
+  it('rejects an oversized collection instead of returning a partial snapshot', () => {
+    const body = Object.fromEntries(
+      Array.from({ length: 10_001 }, (_, index) => [`route-${index}`, { name: `${index}` }]),
+    );
+    expect(asKeyedObject(body)).toBeUndefined();
+  });
+});
 
 describe('authInit', () => {
   it('returns undefined with no token and no extra', () => {
@@ -103,6 +119,7 @@ describe('strArray', () => {
     expect(strArray(['a', '', 'b', 1])).toEqual(['a', 'b']);
     expect(strArray([])).toBeUndefined();
     expect(strArray('x')).toBeUndefined();
+    expect(strArray(Array.from({ length: 1_001 }, () => 'x'))).toBeUndefined();
   });
 });
 

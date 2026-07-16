@@ -95,6 +95,26 @@ describe('createTidesLoader', () => {
     expect(store.tide?.station.id).toBe('newest');
   });
 
+  it('preserves a forced retry when a later normal request replaces its coordinates', async () => {
+    let resolveFirst: ((value: typeof pluginReading) => void) | undefined;
+    const pluginTides = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<typeof pluginReading>((resolve) => (resolveFirst = resolve)),
+      )
+      .mockResolvedValue(pluginReading);
+    const loader = createTidesLoader(deps({ pluginAvailable: () => true, pluginTides }));
+    const store = new TidesStore();
+    const first = loader.load(store, 27.7, -82.7);
+    const forced = loader.load(store, 27.8, -82.8, true);
+    const latest = loader.load(store, 27.9, -82.9, false);
+    resolveFirst?.(pluginReading);
+    await Promise.all([first, forced, latest]);
+
+    expect(pluginTides).toHaveBeenCalledTimes(2);
+    expect(pluginTides.mock.calls[1].slice(0, 2)).toEqual([27.9, -82.9]);
+  });
+
   it('falls back to CO-OPS when the plugin answers with nothing', async () => {
     const pluginTides = vi.fn(async () => undefined);
     const loader = createTidesLoader(deps({ pluginAvailable: () => true, pluginTides }));

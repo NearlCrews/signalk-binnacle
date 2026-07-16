@@ -427,6 +427,15 @@ let retryServerCharts = $state<(() => void) | undefined>();
 let criticalOverlayError = $state<string | undefined>();
 let lazyPanelAttempt = $state(0);
 
+const CRITICAL_OVERLAY_LABELS: Record<string, string> = {
+  'own-vessel': 'vessel position',
+  collision: 'collision warnings',
+  mob: 'man-overboard marker',
+  'anchor-watch': 'anchor watch',
+  course: 'active course',
+  routes: 'routes',
+};
+
 function retryLazyPanel(): void {
   lazyPanelAttempt += 1;
 }
@@ -514,7 +523,7 @@ $effect(() => {
       criticalOverlayError =
         ids.length === 0
           ? undefined
-          : `Navigation overlays failed to load (${ids.join(', ')}). Reload Binnacle before navigating.`;
+          : `Navigation overlays failed to load (${ids.map((id) => CRITICAL_OVERLAY_LABELS[id] ?? id).join(', ')}). Reload Binnacle before navigating.`;
     }}
     {onViewChange}
     {onNoteSelect}

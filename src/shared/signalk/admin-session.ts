@@ -43,8 +43,10 @@ export async function fetchAdminSessionState(
     );
     if (!response.ok) return 'unknown';
     const body = (await response.json()) as { status?: unknown; userLevel?: unknown };
-    if (body.status !== 'loggedIn') return 'signed-out';
-    return body.userLevel === 'admin' ? 'admin' : 'non-admin';
+    if (body.status === 'loggedOut' || body.status === 'notLoggedIn') return 'signed-out';
+    if (body.status !== 'loggedIn') return 'unknown';
+    if (body.userLevel === 'admin') return 'admin';
+    return typeof body.userLevel === 'string' ? 'non-admin' : 'unknown';
   } catch {
     return 'unknown';
   }

@@ -37,7 +37,10 @@ import {
   ProfileStore,
   SignalKProfileAdapter,
 } from '$entities/profile';
-import { RouteStore, remainingRouteDistanceMeters } from '$entities/route';
+import {
+  routeDistanceToGoMeters as calculateRouteDistanceToGoMeters,
+  RouteStore,
+} from '$entities/route';
 import { SymbolsStore } from '$entities/symbols';
 import { TidesStore } from '$entities/tides';
 import { type TrackPoint, TrackRecorder } from '$entities/track';
@@ -122,6 +125,7 @@ import {
   createBroadcastChannelBroadcaster,
   DevicePrivacyController,
   type EraseSafetyDecision,
+  PrivacyActivityCoordinator,
   type PrivacyReport,
 } from '$shared/privacy';
 import { OnlineStatus, registerPwa } from '$shared/pwa';
@@ -324,7 +328,12 @@ const routeDistanceToGoMeters = $derived.by<number | undefined>(() => {
   }
   const route = routeStore.routeById(id);
   if (!route || total !== route.waypoints.length || idx >= route.waypoints.length) return undefined;
-  return toNext + remainingRouteDistanceMeters(route.waypoints, idx);
+  return calculateRouteDistanceToGoMeters(
+    route.waypoints,
+    idx,
+    toNext,
+    courseGuidance.routeReversed,
+  );
 });
 
 // Tides and tidal currents from NOAA CO-OPS (US waters). The store feeds the panel and the nearest
@@ -361,12 +370,15 @@ const layerSettingsCodec: PersistedCodec<LayerSettings> = {
     if (!isRecord(value)) return { state: 'invalid' };
     const entries = Object.entries(value);
     if (entries.length > 512) return { state: 'invalid' };
-    const cleaned: LayerSettings = {};
-    let migrated = false;
+    const cleaned = Object.create(null) as LayerSettings;
+    let migrated = Object.getPrototypeOf(value) !== Object.prototype;
     for (const [id, state] of entries) {
       if (
         id.length === 0 ||
         id.length > 256 ||
+        id === '__proto__' ||
+        id === 'prototype' ||
+        id === 'constructor' ||
         hasControlCharacters(id) ||
         !isRecord(state) ||
         typeof state.visible !== 'boolean' ||
@@ -612,18 +624,23 @@ const waypointsStore = new WaypointsStore();
 // immediately and hold one stable reference; filled when the fetch lands after access resolves.
 // On a stock server the resource type 404s and every icon stays built-in.
 const symbolsStore = new SymbolsStore(origin, undefined);
+let symbolsRefreshGeneration = 0;
 
 // Provided chart symbols; absent on a stock server, in which case the built-ins stand. A
 // symbol-manager plugin installed or updated while the link was down would otherwise leave stale
 // icons until the page reloads, so the reconnect path refreshes these alongside the other resources.
 async function refreshSymbols(): Promise<void> {
+  const generation = ++symbolsRefreshGeneration;
   const list = await fetchSymbols(origin, authToken);
-  if (list) symbolsStore.setSymbols(list);
+  if (generation === symbolsRefreshGeneration && list) symbolsStore.setSymbols(list);
 }
 
 const profileStore = new ProfileStore();
 
 function localEraseSafety(): EraseSafetyDecision {
+  if (!recorder.restored) {
+    return { allowed: false, reason: 'Wait for the saved track recording check to finish.' };
+  }
   if (mob.active)
     return { allowed: false, reason: 'Resolve the active man-overboard alert first.' };
   if (anchor.watching) return { allowed: false, reason: 'Stop the anchor watch first.' };
@@ -655,15 +672,23 @@ const privacySourceId =
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `binnacle-${Math.random().toString(16).slice(2)}`;
+const privacyActivity = new PrivacyActivityCoordinator(
+  typeof navigator !== 'undefined' && 'locks' in navigator ? navigator.locks : undefined,
+);
 const privacy = new DevicePrivacyController({
   registry: privacyRegistry,
-  canErase: localEraseSafety,
+  canErase: () => privacyActivity.guard(localEraseSafety),
   broadcaster:
     typeof BroadcastChannel === 'undefined'
       ? undefined
       : createBroadcastChannelBroadcaster(BINNACLE_PRIVACY_CHANNEL, privacySourceId),
 });
 
+$effect(() => {
+  privacyActivity.setUnsafe(!localEraseSafety().allowed);
+});
+
+let privacyReloadTimer: ReturnType<typeof setTimeout> | undefined;
 function reloadAfterPrivacy(report: PrivacyReport): PrivacyReport {
   if (report.clearedOwnerIds.includes('signalk-credentials')) {
     // The privacy registry already removed the stored identity. Reset runtime auth without writing a
@@ -671,9 +696,11 @@ function reloadAfterPrivacy(report: PrivacyReport): PrivacyReport {
     auth.forgetDeviceCredentials(false);
   }
   if (report.clearedOwnerIds.length > 0) {
-    // Reload after any successful deletion, including a partial result. This prevents the live app
-    // from repopulating a store that was cleared while still leaving the report visible briefly.
-    window.setTimeout(() => window.location.reload(), 1200);
+    // Give Svelte time to render the completion or named partial-failure report before reloading.
+    // Partial results remain visible longer so the navigator can read which owner failed.
+    const delayMs = report.status === 'partial' ? 5000 : 750;
+    if (privacyReloadTimer) clearTimeout(privacyReloadTimer);
+    privacyReloadTimer = setTimeout(() => window.location.reload(), delayMs);
   }
   return report;
 }
@@ -1719,7 +1746,7 @@ onMount(() => {
       : new BroadcastChannel(BINNACLE_PRIVACY_CHANNEL);
   if (privacyChannel) {
     privacyChannel.onmessage = (event) => {
-      if (!isRecord(event.data)) return;
+      if (!isRecord(event.data) || !Array.isArray(event.data.clearedOwnerIds)) return;
       if (
         event.data.type !== 'credentials-forgotten' &&
         event.data.type !== 'device-data-erased' &&
@@ -1728,7 +1755,14 @@ onMount(() => {
         return;
       }
       if (event.data.sourceId === privacySourceId) return;
-      auth.forgetDeviceCredentials(false);
+      const clearedOwnerIds = event.data.clearedOwnerIds.filter(
+        (ownerId): ownerId is string => typeof ownerId === 'string',
+      );
+      if (clearedOwnerIds.length !== event.data.clearedOwnerIds.length) return;
+      if (clearedOwnerIds.length === 0) return;
+      if (clearedOwnerIds.includes('signalk-credentials')) {
+        auth.forgetDeviceCredentials(false);
+      }
       window.location.reload();
     };
   }
@@ -1739,11 +1773,13 @@ onMount(() => {
 });
 
 onDestroy(() => {
+  privacyActivity.dispose();
   companionStatus.stop();
   streamController.dispose();
   trendRecorder.stop();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
+  if (privacyReloadTimer) clearTimeout(privacyReloadTimer);
   toast.dispose();
   // Covers the case where the component unmounts before any pointer gesture; once the listener has
   // fired its `once: true` registration has already removed it, so this is a harmless no-op then.

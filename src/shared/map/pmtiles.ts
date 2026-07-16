@@ -2,6 +2,7 @@ import * as maplibregl from 'maplibre-gl';
 import { PMTiles, Protocol, type RangeResponse, type Source } from 'pmtiles';
 import { isAbort } from './abort';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';
+import { requestedRangeEnd } from './pmtiles-range';
 
 let protocol: Protocol | undefined;
 
@@ -54,7 +55,15 @@ function parseContentRange(value: string | null): { start: number; end: number; 
   const start = Number(match[1]);
   const end = Number(match[2]);
   const total = match[3] === '*' ? undefined : Number(match[3]);
-  if (end < start || (total !== undefined && (total <= end || total <= 0))) {
+  const declaredLength = end - start + 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    !Number.isSafeInteger(declaredLength) ||
+    (total !== undefined && !Number.isSafeInteger(total)) ||
+    end < start ||
+    (total !== undefined && (total <= end || total <= 0))
+  ) {
     throw new Error('PMTiles range response has inconsistent bounds.');
   }
   return { start, end, total };
@@ -101,11 +110,14 @@ async function validateRangeResponse(
   const data = await readBoundedBody(response, length);
   if (
     data.byteLength > length ||
-    (declaredLength !== undefined && data.byteLength !== declaredLength)
+    (declaredLength !== undefined && data.byteLength !== declaredLength) ||
+    (contentLength !== undefined && data.byteLength !== contentLength)
   ) {
     throw new Error('PMTiles server returned bytes outside the requested range.');
   }
-  total ??= data.byteLength;
+  // A complete 200 response reveals the archive size. A 206 response with an unknown total does
+  // not, even when it fills the requested span, so Last-Modified alone cannot identify the archive.
+  if (response.status === 200) total = data.byteLength;
 
   let validator = response.headers.get('ETag') ?? undefined;
   if (validator?.startsWith('W/')) validator = undefined;
@@ -143,7 +155,8 @@ export class NoStoreSource implements Source {
   }
 
   async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
-    const headers = { Range: `bytes=${offset}-${offset + length - 1}` };
+    const end = requestedRangeEnd(offset, length);
+    const headers = { Range: `bytes=${offset}-${end}` };
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
@@ -175,15 +188,21 @@ export class NoStoreSource implements Source {
   #backoff(attempt: number, signal?: AbortSignal): Promise<void> {
     const ms = RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, ms);
-      signal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          reject(new DOMException('Aborted', 'AbortError'));
-        },
-        { once: true },
-      );
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const cleanup = () => signal?.removeEventListener('abort', onAbort);
+      const onAbort = () => {
+        clearTimeout(timer);
+        cleanup();
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 }
@@ -206,7 +225,8 @@ export class CompanionSource implements Source {
   }
 
   async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
-    const headers: Record<string, string> = { Range: `bytes=${offset}-${offset + length - 1}` };
+    const end = requestedRangeEnd(offset, length);
+    const headers: Record<string, string> = { Range: `bytes=${offset}-${end}` };
     const token = this.#getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(this.#url, {

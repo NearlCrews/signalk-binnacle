@@ -15,7 +15,10 @@ function response(status: number, bytes = 4, start = 0): Response {
 }
 
 describe('NoStoreSource.getBytes', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('retries a transient network error then resolves', async () => {
     const fetchMock = vi
@@ -26,6 +29,24 @@ describe('NoStoreSource.getBytes', () => {
     const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(out.data.byteLength).toBe(4);
+  });
+
+  it('removes the abort listener after a retry delay completes', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockResolvedValueOnce(response(206));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4, controller.signal);
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(pending).resolves.toMatchObject({ data: expect.any(ArrayBuffer) });
+
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retries a 5xx then resolves', async () => {
@@ -123,6 +144,41 @@ describe('NoStoreSource.getBytes', () => {
     await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow('outside');
   });
 
+  it.each([
+    [-1, 4],
+    [0, 0],
+    [0, 1.5],
+    [1.5, 4],
+    [0, 64 * 1024 * 1024 + 1],
+    [Number.MAX_SAFE_INTEGER, 2],
+  ])('rejects an unsafe requested range (%s, %s) before fetching', async (offset, length) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(offset, length)).rejects.toThrow(
+      RangeError,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['bytes 9007199254740992-9007199254740992/*', 'bytes 0-3/9007199254740992'])(
+    'rejects unsafe integer bounds in Content-Range: %s',
+    async (contentRange) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          status: 206,
+          headers: new Headers({ 'Content-Range': contentRange }),
+          arrayBuffer: async () => new ArrayBuffer(4),
+        } as unknown as Response),
+      );
+
+      await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow(
+        'inconsistent bounds',
+      );
+    },
+  );
+
   it('rejects a short partial response before the archive end', async () => {
     vi.stubGlobal(
       'fetch',
@@ -144,6 +200,19 @@ describe('NoStoreSource.getBytes', () => {
     );
   });
 
+  it('rejects a short partial response when the archive total is unknown', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 206,
+        headers: new Headers({ 'Content-Range': 'bytes 0-3/*' }),
+        arrayBuffer: async () => new ArrayBuffer(4),
+      } as unknown as Response),
+    );
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 8)).rejects.toThrow('outside');
+  });
+
   it('rejects a malformed Content-Length header', async () => {
     vi.stubGlobal(
       'fetch',
@@ -162,12 +231,41 @@ describe('NoStoreSource.getBytes', () => {
     );
   });
 
+  it('rejects a body that disagrees with its declared Content-Length', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers({ 'Content-Length': '2' }),
+        arrayBuffer: async () => new ArrayBuffer(4),
+      } as unknown as Response),
+    );
+
+    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow('outside');
+  });
+
   it('derives an archive validator from Last-Modified and total size', async () => {
     const res = response(206);
     res.headers.set('Last-Modified', 'Wed, 15 Jul 2026 12:00:00 GMT');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res));
     const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
     expect(out.etag).toBe('binnacle:Wed, 15 Jul 2026 12:00:00 GMT:4');
+  });
+
+  it('does not derive an archive validator from a 206 with an unknown total', async () => {
+    const res = {
+      status: 206,
+      headers: new Headers({
+        'Content-Range': 'bytes 0-3/*',
+        'Last-Modified': 'Wed, 15 Jul 2026 12:00:00 GMT',
+      }),
+      arrayBuffer: async () => new ArrayBuffer(4),
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res));
+
+    const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
+
+    expect(out.etag).toBeUndefined();
   });
 });
 
@@ -277,6 +375,16 @@ describe('CompanionSource.getBytes auth header', () => {
     await new CompanionSource(COMPANION_URL, () => 'tok').getBytes(100, 512);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>).Range).toBe('bytes=100-611');
+  });
+
+  it('rejects an unsafe requested range before fetching', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      new CompanionSource(COMPANION_URL, () => 'tok').getBytes(Number.MAX_SAFE_INTEGER, 2),
+    ).rejects.toThrow(RangeError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects a response whose final URL crossed origins', async () => {

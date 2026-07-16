@@ -23,12 +23,12 @@ export function createSignalKClient(): SignalKClient {
   // dies silently: the Comlink call to connect() never resolves or rejects, so the UI looks
   // identical to "still connecting". Capture the first load error and reject any in-flight connect()
   // with it, so the caller (App.svelte) surfaces the failure instead of latching on forever.
-  let rejectPendingConnect: ((error: Error) => void) | undefined;
+  let pendingConnect: { worker: Worker; reject: (error: Error) => void } | undefined;
   // The most recent frame sink, captured at connect. A worker crash AFTER the initial connect would
   // otherwise only log to console: the socket dies with the worker but no frame is ever emitted, so
   // the connection badge keeps reading its last live phase while data silently stops. Emitting a
   // closed-connection frame here flips the badge to disconnected so the failure is visible.
-  let onFrameRef: ((frame: SKFrame) => void) | undefined;
+  let frameSink: { worker: Worker; onFrame: (frame: SKFrame) => void } | undefined;
   const spawn = (): void => {
     const nextWorker = new Worker(new URL('./sk.worker.ts', import.meta.url), { type: 'module' });
     worker = nextWorker;
@@ -38,11 +38,12 @@ export function createSignalKClient(): SignalKClient {
         `Signal K worker failed to load or threw: ${event.message ?? 'unknown'}`,
       );
       console.error(error.message, event);
-      if (rejectPendingConnect) {
-        rejectPendingConnect(error);
+      if (pendingConnect?.worker === nextWorker) {
+        pendingConnect.reject(error);
         return;
       }
-      onFrameRef?.({
+      if (frameSink?.worker !== nextWorker) return;
+      frameSink.onFrame({
         self: new Map(),
         connection: { phase: 'closed', attempt: 0 },
         epoch: Date.now(),
@@ -67,17 +68,24 @@ export function createSignalKClient(): SignalKClient {
       return raw;
     },
     async connect(url, onFrame) {
-      onFrameRef = onFrame;
+      const connectWorker = worker;
+      const connectRaw = raw;
+      frameSink = { worker: connectWorker, onFrame };
+      const guardedOnFrame = (frame: SKFrame): void => {
+        if (worker !== connectWorker || frameSink?.worker !== connectWorker) return;
+        onFrame(frame);
+      };
       // The worker side releases the previous call's callback proxy before replacing it (see
       // WorkerCore.connect), so a reconnect does not leak a MessagePort. Comlink.proxy() only marks
       // this same function object; it carries no releaseProxy of its own to release here.
       const workerFailed = new Promise<never>((_, reject) => {
-        rejectPendingConnect = reject;
+        pendingConnect = { worker: connectWorker, reject };
       });
+      const thisConnect = pendingConnect;
       try {
-        await Promise.race([raw.connect(url, Comlink.proxy(onFrame)), workerFailed]);
+        await Promise.race([connectRaw.connect(url, Comlink.proxy(guardedOnFrame)), workerFailed]);
       } finally {
-        rejectPendingConnect = undefined;
+        if (pendingConnect === thisConnect) pendingConnect = undefined;
       }
     },
     async publish(delta) {
@@ -87,14 +95,21 @@ export function createSignalKClient(): SignalKClient {
       await raw.reconnect();
     },
     async disconnect() {
+      const disconnectWorker = worker;
       await raw.disconnect();
+      if (frameSink?.worker === disconnectWorker) frameSink = undefined;
     },
     restart() {
-      rejectPendingConnect = undefined;
+      pendingConnect?.reject(new Error('Signal K worker restarted while connecting'));
+      pendingConnect = undefined;
+      frameSink = undefined;
       releaseWorker();
       spawn();
     },
     dispose() {
+      pendingConnect?.reject(new Error('Signal K worker disposed while connecting'));
+      pendingConnect = undefined;
+      frameSink = undefined;
       releaseWorker();
     },
   };

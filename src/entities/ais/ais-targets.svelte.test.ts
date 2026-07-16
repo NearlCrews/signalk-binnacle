@@ -115,6 +115,31 @@ describe('AisTargets', () => {
     expect(ais.list()[0].tcpaSeconds).toBeUndefined();
   });
 
+  it('expires target motion before its slow-reporting position', () => {
+    let now = 1000;
+    const store = new SignalKStore();
+    const ais = new AisTargets(store, () => now);
+    store.applyFrame(
+      frame(
+        {
+          'vessels.motion': {
+            'navigation.position': { latitude: 0, longitude: 0 },
+            'navigation.courseOverGroundTrue': 1,
+            'navigation.speedOverGround': 4,
+          },
+        },
+        now,
+      ),
+    );
+    expect(ais.list()[0]).toMatchObject({ cogRad: 1, sogMps: 4 });
+    now += 30_001;
+    expect(ais.list()[0]).toMatchObject({ cogRad: 1, sogMps: 4 });
+    now += 30_000;
+    expect(ais.list()).toHaveLength(1);
+    expect(ais.list()[0].cogRad).toBeUndefined();
+    expect(ais.list()[0].sogMps).toBeUndefined();
+  });
+
   it('hides telemetry from a previous connection generation', () => {
     const store = new SignalKStore();
     const ais = new AisTargets(store);

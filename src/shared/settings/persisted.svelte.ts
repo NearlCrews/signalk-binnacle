@@ -126,20 +126,32 @@ export function booleanRecordPersistedCodec(
 ): PersistedCodec<Record<string, boolean>> {
   const maxEntries = options.maxEntries ?? 1_000;
   const maxKeyLength = options.maxKeyLength ?? 256;
-  return createPersistedCodec((value: unknown): value is Record<string, boolean> => {
-    if (!isRecord(value)) return false;
-    const entries = Object.entries(value);
-    return (
-      entries.length <= maxEntries &&
-      entries.every(
-        ([key, item]) =>
-          key.length > 0 &&
-          key.length <= maxKeyLength &&
-          !containsAsciiControl(key) &&
-          typeof item === 'boolean',
-      )
-    );
-  });
+  return {
+    decode(value) {
+      if (!isRecord(value)) return { state: 'invalid' };
+      const entries = Object.entries(value);
+      if (entries.length > maxEntries) return { state: 'invalid' };
+      const clean = Object.create(null) as Record<string, boolean>;
+      for (const [key, item] of entries) {
+        if (
+          key.length === 0 ||
+          key.length > maxKeyLength ||
+          containsAsciiControl(key) ||
+          key === '__proto__' ||
+          key === 'prototype' ||
+          key === 'constructor' ||
+          typeof item !== 'boolean'
+        ) {
+          return { state: 'invalid' };
+        }
+        clean[key] = item;
+      }
+      return {
+        state: 'valid',
+        value: clean,
+      };
+    },
+  };
 }
 
 function resolveStorage(injected?: StorageLike): StorageLike | undefined {

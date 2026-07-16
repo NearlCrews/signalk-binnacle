@@ -112,6 +112,14 @@ the SVG media type, a bounded body, and passive markup without scripts, embedded
 external references, event handlers, or imported CSS. The production page also applies a content
 security policy that limits scripts, workers, objects, connections, and embedded resources.
 
+The HTML policy cannot enforce `frame-ancestors`, because browsers ignore that directive in a meta
+policy. Deployments exposed beyond a trusted vessel network should send this HTTP response header
+from Signal K or its reverse proxy to prevent other sites from framing Binnacle:
+
+```text
+Content-Security-Policy: frame-ancestors 'none'
+```
+
 ## Signal K Security
 
 This webapp operates within the Signal K server environment. Please also refer

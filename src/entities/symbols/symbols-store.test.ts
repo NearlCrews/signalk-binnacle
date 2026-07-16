@@ -171,7 +171,31 @@ describe('SymbolsStore svgText', () => {
     expect(
       await load('<svg><style>.x{fill:url(https\\3a //evil.example/x)}</style></svg>'),
     ).toBeUndefined();
+    expect(
+      await load('<svg><style>.x{fill:url("https://evil.example/a b")}</style></svg>'),
+    ).toBeUndefined();
     expect(await load('<svg><path onclick="alert(1)"/></svg>')).toBeUndefined();
+    expect(
+      await load(
+        '<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://evil.example/"><use href="#mark"/></svg>',
+      ),
+    ).toBeUndefined();
     expect(await load(`<svg>${' '.repeat(256 * 1024)}</svg>`)).toBeUndefined();
+  });
+
+  it('drops cached SVG text when the authentication token changes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(svgResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const symbol = sym({});
+    const store = new SymbolsStore('http://pi', 'old-token', [symbol]);
+
+    await store.svgText(symbol);
+    store.setAuth('new-token');
+    await store.svgText(symbol);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: { Authorization: 'Bearer new-token' },
+    });
   });
 });

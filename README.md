@@ -260,7 +260,9 @@ The Offline charts landing page has four jobs:
    free space, name it, and start the download. On a phone, the panel collapses while drawing so the
    chart owns the gesture. A saved-area card is ready only when it says **Saved, works offline**.
 2. **Automatic caching.** Optionally keep selected charts cached around the moving boat. This is a
-   rolling nearby cache, not a substitute for saving and verifying the full planned passage.
+   rolling nearby cache, not a substitute for saving and verifying the full planned passage. Settings
+   follow Chart Locker's limits for 64 sources, zoom 0 through 24, distances up to 100 km, and update
+   intervals from one minute through 24 hours.
 3. **Installed charts.** Rename installed PMTiles charts, edit their descriptions, inspect bounds,
    zoom range, and scale, refresh the file list, and see actionable errors for invalid files. Add,
    replace, or remove archives in the Chart Locker chart folder on the Signal K server.

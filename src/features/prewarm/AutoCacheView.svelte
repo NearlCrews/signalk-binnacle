@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { LatestWriterState } from '$shared/lib';
 import { Disclosure, LayerToggle, SaveStatus, ShowOnChartToggle, UnitField } from '$shared/ui';
+import { CHART_LOCKER_MAX_WARM_ZOOM } from './contract.js';
 
 interface AutoCacheSource {
   id: string;
@@ -132,7 +133,7 @@ const {
       label="Zoom detail"
       value={baseZoom}
       min={0}
-      max={22}
+      max={CHART_LOCKER_MAX_WARM_ZOOM}
       step={1}
       disabled={!enabled || !adminAccess}
       onCommit={onCommitBaseZoom}

@@ -1,9 +1,12 @@
 import type { OwnVessel } from '$entities/vessel';
 import { isLatLon, type LatLon } from '$shared/geo';
-import { isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
+import { hasControlCharacters, isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
 import { type PersistedCodec, PersistedValue, type StorageLike } from '$shared/settings';
 import { isSoundingNotification, type SignalKStore, SK_PATHS } from '$shared/signalk';
+
+const MAX_REMOTE_NOTIFICATIONS = 500;
+const MAX_NOTIFICATION_ID_LENGTH = 512;
 
 // The mark this station made: where and when the person went in. Persisted so a reload during a
 // recovery cannot lose the spot. The position is optional: an MOB without a fix is still an MOB
@@ -55,7 +58,7 @@ export class MobStore {
   #persisted: PersistedValue<MobMark | null>;
   #local = $state<MobMark | null>(null);
   #localAcknowledged = $state(false);
-  #remoteAcknowledgedActivation = $state<number | undefined>(undefined);
+  #remoteAcknowledgedActivations = $state<Record<string, number>>({});
 
   constructor(
     store: SignalKStore,
@@ -73,22 +76,43 @@ export class MobStore {
       mobMarkCodec,
     );
     this.#local = validMark(this.#persisted.value);
-    // Pre-create the cell so the first reactive read finds a tracked cell (the OwnVessel pitfall).
+    // Pre-create the legacy broad cell. v2 MOB notifications append their UUID to this path and are
+    // discovered through the store's reactive notification mirror below.
     store.ensureCells([SK_PATHS.mobNotification]);
   }
 
-  #notification = $derived.by<{ state?: unknown; position?: unknown } | undefined>(() => {
-    const value = this.#store.cell(SK_PATHS.mobNotification).value;
-    if (!isRecord(value)) return undefined;
-    return value as { state?: unknown; position?: unknown };
+  #remoteNotifications = $derived.by<
+    Array<{
+      path: string;
+      value: { state?: unknown; position?: unknown; id?: unknown };
+      activation: number;
+    }>
+  >(() => {
+    void this.#store.notificationsVersion;
+    const notifications = [];
+    const prefix = `${SK_PATHS.mobNotification}.`;
+    for (const [path, raw] of this.#store.notifications) {
+      if ((path !== SK_PATHS.mobNotification && !path.startsWith(prefix)) || !isRecord(raw))
+        continue;
+      if (!isSoundingNotification(raw)) continue;
+      notifications.push({
+        path,
+        value: raw as { state?: unknown; position?: unknown; id?: unknown },
+        activation: this.#store.cell(path).activation,
+      });
+      if (notifications.length === MAX_REMOTE_NOTIFICATIONS) break;
+    }
+    return notifications;
   });
 
-  #remoteActive = $derived.by<boolean>(() => isSoundingNotification(this.#notification));
+  #remoteActive = $derived(this.#remoteNotifications.length > 0);
 
   #remotePosition = $derived.by<LatLon | undefined>(() => {
     if (!this.#remoteActive) return undefined;
-    const position = this.#notification?.position;
-    return isLatLon(position) ? position : undefined;
+    for (const notification of this.#remoteNotifications) {
+      if (isLatLon(notification.value.position)) return notification.value.position;
+    }
+    return undefined;
   });
 
   get active(): boolean {
@@ -148,11 +172,32 @@ export class MobStore {
   }
 
   get acknowledged(): boolean {
-    if (this.#local) return this.#localAcknowledged;
-    if (!this.#remoteActive) return false;
-    return (
-      this.#remoteAcknowledgedActivation === this.#store.cell(SK_PATHS.mobNotification).activation
-    );
+    if (!this.#local && !this.#remoteActive) return false;
+    const localAcknowledged = !this.#local || this.#localAcknowledged;
+    const remoteAcknowledged =
+      !this.#remoteActive ||
+      this.#remoteNotifications.every(
+        ({ path, activation }) => this.#remoteAcknowledgedActivations[path] === activation,
+      );
+    return localAcknowledged && remoteAcknowledged;
+  }
+
+  get remoteNotificationIds(): string[] {
+    const ids = new Set<string>();
+    for (const { value } of this.#remoteNotifications) {
+      if (typeof value.id !== 'string') continue;
+      const id = value.id;
+      if (
+        !id ||
+        id.trim() !== id ||
+        id.length > MAX_NOTIFICATION_ID_LENGTH ||
+        hasControlCharacters(id)
+      ) {
+        continue;
+      }
+      ids.add(id);
+    }
+    return [...ids];
   }
 
   // Snapshot the boat position and time WITHOUT committing anything: the press-time capture that
@@ -180,7 +225,9 @@ export class MobStore {
   // confirming cannot carry the mark away from the person; with no capture (no fix at press or
   // since), the alarm still raises, position-less.
   trigger(mark?: MobMark): MobMark {
-    const committed = mark ?? this.capture() ?? { epochMs: this.#clock?.now ?? 0 };
+    const candidate = mark ?? this.capture() ?? { epochMs: this.#clock?.now ?? 0 };
+    const committed = validMark(candidate);
+    if (!committed) throw new TypeError('Invalid man-overboard mark.');
     this.#localAcknowledged = false;
     this.#setLocal(committed);
     return committed;
@@ -194,15 +241,16 @@ export class MobStore {
 
   // Silence the tone; the strip and mark stay until canceled.
   acknowledge(): void {
-    if (this.#local) {
-      this.#localAcknowledged = true;
-    } else if (this.#remoteActive) {
-      this.#remoteAcknowledgedActivation = this.#store.cell(SK_PATHS.mobNotification).activation;
+    if (this.#local) this.#localAcknowledged = true;
+    if (this.#remoteActive) {
+      this.#remoteAcknowledgedActivations = Object.fromEntries(
+        this.#remoteNotifications.map(({ path, activation }) => [path, activation]),
+      );
     }
   }
 
   #setLocal(next: MobMark | null): void {
-    this.#local = next;
     this.#persisted.set(next);
+    this.#local = next;
   }
 }

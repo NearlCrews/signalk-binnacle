@@ -191,6 +191,27 @@ describe('MobStore', () => {
     expect(mob.acknowledged).toBe(false);
   });
 
+  it('re-arms when a remote alert arrives after the local MOB was acknowledged', () => {
+    const { store, mob } = setup();
+    store.applyFrame(frame({ 'navigation.position': BOAT }));
+    mob.trigger();
+    mob.acknowledge();
+    expect(mob.acknowledged).toBe(true);
+
+    store.applyFrame(
+      frame({
+        'notifications.mob.remote': {
+          id: 'remote',
+          state: 'emergency',
+          message: 'Man overboard',
+        },
+      }),
+    );
+    expect(mob.acknowledged).toBe(false);
+    mob.acknowledge();
+    expect(mob.acknowledged).toBe(true);
+  });
+
   it('reflects a remote MOB notification, with its mark when carried', () => {
     const { store, mob } = setup();
     store.applyFrame(
@@ -206,6 +227,98 @@ describe('MobStore', () => {
     expect(mob.position).toEqual({ latitude: 1, longitude: 2 });
     expect(mob.elapsedSeconds).toBeUndefined();
     store.applyFrame(frame({ 'notifications.mob': { state: 'normal', message: 'cleared' } }));
+    expect(mob.active).toBe(false);
+  });
+
+  it('aggregates v2 MOB notification paths and exposes their ids for recovery', () => {
+    const { store, mob } = setup();
+    store.applyFrame(
+      frame({
+        'notifications.mob.mob-1': {
+          id: 'mob-1',
+          state: 'emergency',
+          message: 'Man overboard',
+          position: { latitude: 1, longitude: 2 },
+        },
+      }),
+    );
+    expect(mob.active).toBe(true);
+    expect(mob.position).toEqual({ latitude: 1, longitude: 2 });
+    expect(mob.remoteNotificationIds).toEqual(['mob-1']);
+    store.applyFrame(frame({ 'notifications.mob.mob-1': { state: 'normal' } }));
+    expect(mob.active).toBe(false);
+  });
+
+  it('updates a remote MOB position when the sounding notification changes only its position', () => {
+    const { store, mob } = setup();
+    const notification = {
+      id: 'mob-1',
+      state: 'emergency',
+      message: 'Man overboard',
+    };
+    store.applyFrame(
+      frame({
+        'notifications.mob.mob-1': {
+          ...notification,
+          position: { latitude: 1, longitude: 2 },
+        },
+      }),
+    );
+    expect(mob.position).toEqual({ latitude: 1, longitude: 2 });
+    store.applyFrame(
+      frame({
+        'notifications.mob.mob-1': {
+          ...notification,
+          position: { latitude: 3, longitude: 4 },
+        },
+      }),
+    );
+    expect(mob.position).toEqual({ latitude: 3, longitude: 4 });
+  });
+
+  it('caps remote sounding notifications and rejects unsafe notification ids', () => {
+    const { store, mob } = setup();
+    const notifications = Object.fromEntries(
+      Array.from({ length: 501 }, (_, index) => [
+        `notifications.mob.${index}`,
+        { id: `mob-${index}`, state: 'emergency', message: 'Man overboard' },
+      ]),
+    );
+    store.applyFrame(frame(notifications));
+    expect(mob.remoteNotificationIds).toHaveLength(500);
+    expect(mob.remoteNotificationIds).not.toContain('mob-500');
+
+    const { store: validationStore, mob: validationMob } = setup();
+    validationStore.applyFrame(
+      frame({
+        'notifications.mob.valid': {
+          id: 'a'.repeat(512),
+          state: 'emergency',
+          message: 'Man overboard',
+        },
+        'notifications.mob.long': {
+          id: 'b'.repeat(513),
+          state: 'emergency',
+          message: 'Man overboard',
+        },
+        'notifications.mob.control': {
+          id: '\nbad-value',
+          state: 'emergency',
+          message: 'Man overboard',
+        },
+        'notifications.mob.padded': {
+          id: ' padded ',
+          state: 'emergency',
+          message: 'Man overboard',
+        },
+      }),
+    );
+    expect(validationMob.remoteNotificationIds).toEqual(['a'.repeat(512)]);
+  });
+
+  it('rejects an invalid runtime mark without changing local or persisted state', () => {
+    const { mob } = setup();
+    expect(() => mob.trigger({ epochMs: Number.NaN })).toThrow('Invalid man-overboard mark');
     expect(mob.active).toBe(false);
   });
 

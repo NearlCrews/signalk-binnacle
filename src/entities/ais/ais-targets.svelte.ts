@@ -3,6 +3,7 @@ import { isFiniteNumber, isRecord } from '$shared/lib';
 import { type SignalKStore, SK_PATHS } from '$shared/signalk';
 import {
   AIS_APPROACH_STALE_TTL_MS,
+  AIS_MOTION_STALE_TTL_MS,
   AIS_PRUNE_INTERVAL_MS,
   AIS_STALE_TTL_MS,
 } from './ais-staleness';
@@ -74,6 +75,11 @@ export class AisTargets {
       const now = this.#now();
       this.#store.pruneAis(now, AIS_STALE_TTL_MS);
       this.#store.pruneAisPaths([SK_PATHS.closestApproach], now, AIS_APPROACH_STALE_TTL_MS);
+      this.#store.pruneAisPaths(
+        [SK_PATHS.courseOverGroundTrue, SK_PATHS.headingTrue, SK_PATHS.speedOverGround],
+        now,
+        AIS_MOTION_STALE_TTL_MS,
+      );
     }, AIS_PRUNE_INTERVAL_MS);
     return () => clearInterval(id);
   }
@@ -127,9 +133,9 @@ export class AisTargets {
         id,
         name: typeof name === 'string' ? name : undefined,
         position,
-        cogRad: asNumber(current(SK_PATHS.courseOverGroundTrue, AIS_STALE_TTL_MS)),
-        headingRad: asNumber(current(SK_PATHS.headingTrue, AIS_STALE_TTL_MS)),
-        sogMps: asNumber(current(SK_PATHS.speedOverGround, AIS_STALE_TTL_MS)),
+        cogRad: asNumber(current(SK_PATHS.courseOverGroundTrue, AIS_MOTION_STALE_TTL_MS)),
+        headingRad: asNumber(current(SK_PATHS.headingTrue, AIS_MOTION_STALE_TTL_MS)),
+        sogMps: asNumber(current(SK_PATHS.speedOverGround, AIS_MOTION_STALE_TTL_MS)),
         shipTypeId: this.#numField(current(SK_PATHS.aisShipType), 'id'),
         cpaMeters: approach?.cpa,
         tcpaSeconds: approach?.tcpa,

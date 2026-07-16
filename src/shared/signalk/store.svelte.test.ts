@@ -252,6 +252,22 @@ describe('SignalKStore', () => {
     expect(store.notificationsVersion).toBe(2);
   });
 
+  it('updates the notification mirror when only its position changes', () => {
+    const store = new SignalKStore();
+    const value = {
+      state: 'emergency',
+      message: 'Man overboard',
+      id: 'mob-1',
+      position: { latitude: 1, longitude: 2 },
+    };
+    store.applyFrame(frame({ 'notifications.mob.mob-1': value }));
+    const before = store.notificationsVersion;
+    const moved = { ...value, position: { latitude: 3, longitude: 4 } };
+    store.applyFrame(frame({ 'notifications.mob.mob-1': moved }));
+    expect(store.notificationsVersion).toBe(before + 1);
+    expect(store.notifications.get('notifications.mob.mob-1')).toBe(moved);
+  });
+
   it('captures the self context from the first frame that carries it', () => {
     const store = new SignalKStore();
     expect(store.selfContext).toBeUndefined();

@@ -7,4 +7,5 @@ export {
   createBinnaclePrivacyRegistry,
   createBroadcastChannelBroadcaster,
   DevicePrivacyController,
+  PrivacyActivityCoordinator,
 } from './device-privacy';

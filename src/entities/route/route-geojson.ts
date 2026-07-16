@@ -104,6 +104,26 @@ export function remainingRouteDistanceMeters(
   return total;
 }
 
+export function routeDistanceToGoMeters(
+  waypoints: readonly RouteWaypoint[],
+  activePointIndex: number,
+  distanceToNextMeters: number,
+  reversed: boolean,
+): number | undefined {
+  if (
+    !Number.isSafeInteger(activePointIndex) ||
+    activePointIndex < 0 ||
+    activePointIndex >= waypoints.length ||
+    waypoints.length - activePointIndex <= 1 ||
+    !Number.isFinite(distanceToNextMeters) ||
+    distanceToNextMeters < 0
+  ) {
+    return undefined;
+  }
+  const traversal = reversed ? waypoints.toReversed() : waypoints;
+  return distanceToNextMeters + remainingRouteDistanceMeters(traversal, activePointIndex);
+}
+
 // One leg of a route: its zero-based start-waypoint index, rhumb distance, and rhumb (steered)
 // bearing, for a leg-by-leg readout of a plan the way a navigator reads a passage on paper.
 export interface RouteLeg {

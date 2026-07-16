@@ -5,6 +5,26 @@ import type { UnitsMode } from '$shared/lib';
 import { postMobNotification, resolveNotification, SK_PATHS } from '$shared/signalk';
 import { mobClearNotification, mobNotification } from './mob-notification';
 
+const NOTIFICATION_RESOLVE_CONCURRENCY = 4;
+
+async function resolveMobNotifications(
+  ids: readonly string[],
+  resolve: (id: string) => Promise<boolean>,
+): Promise<boolean[]> {
+  const results = new Array<boolean>(ids.length);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < ids.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await resolve(ids[index]);
+    }
+  }
+  const workerCount = Math.min(NOTIFICATION_RESOLVE_CONCURRENCY, ids.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
 export interface MobControllerDeps {
   // The Signal K server origin, captured once for the page lifetime.
   origin: string;
@@ -87,6 +107,7 @@ export function createMobController(deps: MobControllerDeps) {
   function onCancel(): void {
     const canceledThrough = activeLocalTrigger;
     activeLocalTrigger = undefined;
+    const streamedIds = mob.remoteNotificationIds;
     mob.cancel();
     const pending = [...pendingMobAlerts]
       .filter(([sequence]) => canceledThrough === undefined || sequence <= canceledThrough)
@@ -94,18 +115,18 @@ export function createMobController(deps: MobControllerDeps) {
         pendingMobAlerts.delete(sequence);
         return alert;
       });
-    if (pending.length === 0) {
+    if (pending.length === 0 && streamedIds.length === 0) {
       publishMobValue(mobClearNotification());
       return;
     }
     // Resolve each locally raised v2 notification by its id even when its stream echo still keeps
     // the aggregate MOB store active. Only the broad v1 fallback is suppressed by a newer trigger.
-    void Promise.all(
-      pending.map(async (alert) => {
-        const id = await alert;
-        return id ? resolveNotification(deps.origin, deps.getToken(), id) : false;
-      }),
-    ).then((cleared) => {
+    void Promise.all(pending).then(async (pendingIds) => {
+      const ids = new Set(streamedIds);
+      for (const id of pendingIds) if (id) ids.add(id);
+      const cleared = await resolveMobNotifications([...ids], (id) =>
+        resolveNotification(deps.origin, deps.getToken(), id),
+      );
       if (cleared.some((value) => !value) && activeLocalTrigger === undefined) {
         publishMobValue(mobClearNotification());
       }

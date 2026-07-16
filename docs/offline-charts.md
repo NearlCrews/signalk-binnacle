@@ -44,16 +44,18 @@ Binnacle checks `/skServer/loginStatus` before choosing an access message. It se
 administrator session to Chart Locker management routes with credentials included and does not attach
 the Binnacle device bearer token because that token can mask a valid administrator cookie on secured
 servers. The lightweight installation probe uses the same administrator session and never attaches
-the Binnacle device bearer token. A not-ready response still identifies Chart Locker as installed,
-while the status remains explicit about service readiness.
+the Binnacle device bearer token unless that read-only request receives 401 or 403. In that case it
+retries only the readiness route with the device token. Management routes remain administrator-session
+only. A not-ready response still identifies Chart Locker as installed, while the status remains
+explicit about service readiness.
 
 Browser PMTiles reads are accepted only when the server honors the requested byte range and returns a
 matching `Content-Range` and body length. A short response is accepted only at the declared end of the
 archive. A strong ETag, or a `Last-Modified` value paired with the declared archive size, also verifies
-that cached blocks belong to the same archive version. Without either validator, Binnacle still checks
-the range bounds but cannot enforce version identity across requests. The service worker does not
-cache Signal K API responses or PMTiles range responses; PMTiles blocks use their dedicated IndexedDB
-store.
+that cached blocks belong to the same archive version. When a successful header read has no validator,
+Binnacle purges older blocks before storing the fresh header so bytes from different archive versions
+cannot be mixed. The service worker does not cache Signal K API responses or PMTiles range responses;
+PMTiles blocks use their dedicated IndexedDB store.
 
 ## Save an area
 
@@ -70,6 +72,11 @@ On a phone, the panel collapses while drawing so the chart receives the gesture.
 
 Automatic caching keeps selected charts near the moving boat. It is a rolling convenience cache, not
 a substitute for a saved and verified passage area.
+
+Binnacle validates and clamps settings to Chart Locker's current management contract: up to 64 chart
+sources, zoom levels from 0 through 24, a nearby-cache radius and movement threshold up to 100 km,
+and an update interval from 60 seconds through 24 hours. Stored values remain in meters and seconds;
+the panel converts distance only at the display boundary.
 
 The Storage view separates saved-area, recently viewed, and automatic-caching use. Clearing recently
 viewed charts does not delete saved areas. Setting changes show saving and saved feedback. If a save

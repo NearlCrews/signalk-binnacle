@@ -233,7 +233,7 @@ describe('fetchSymbols', () => {
     expect(await fetchSymbols('http://pi')).toBeUndefined();
   });
 
-  it('caps provider entries inspected even when none are usable', async () => {
+  it('rejects a catalog beyond the entry cap instead of returning a partial snapshot', async () => {
     const body: Record<string, unknown> = Object.fromEntries(
       Array.from({ length: 10_001 }, (_, index) => [`invalid-${index}`, null]),
     );
@@ -244,7 +244,7 @@ describe('fetchSymbols', () => {
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));
 
-    expect(await fetchSymbols('http://pi')).toEqual([]);
+    expect(await fetchSymbols('http://pi')).toBeUndefined();
   });
 
   it('returns an empty list on a 404 so callers keep their built-in icons', async () => {

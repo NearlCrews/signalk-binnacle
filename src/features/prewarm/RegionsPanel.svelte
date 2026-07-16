@@ -22,6 +22,7 @@ import {
   UnitField,
 } from '$shared/ui';
 import AutoCacheView from './AutoCacheView.svelte';
+import { CHART_LOCKER_MAX_REGION_NAME_LENGTH, CHART_LOCKER_MAX_WARM_ZOOM } from './contract.js';
 import { DETAIL_PRESETS } from './detail-level.js';
 import type { SavedRegionDto } from './regions-client.js';
 import { createRegionsClient } from './regions-client.js';
@@ -323,7 +324,7 @@ function chartLabel(id: string): string {
             label="Maximum zoom"
             value={maxzoom}
             min={minzoom}
-            max={22}
+            max={CHART_LOCKER_MAX_WARM_ZOOM}
             step={1}
             onCommit={(value) => controller.commitMaxZoom(value)}
           />
@@ -366,6 +367,7 @@ function chartLabel(id: string): string {
           <TextField
             label="Area name"
             value={regionName}
+            maxLength={CHART_LOCKER_MAX_REGION_NAME_LENGTH}
             onCommit={(value) => controller.setRegionName(value)}
           />
           <div class="panel-controls">

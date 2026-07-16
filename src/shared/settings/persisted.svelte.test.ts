@@ -183,6 +183,15 @@ describe('collection codecs', () => {
     const codec = booleanRecordPersistedCodec();
     expect(codec.decode({ '': true })).toEqual({ state: 'invalid' });
     expect(codec.decode({ 'layers\u0000hidden': false })).toEqual({ state: 'invalid' });
+    expect(codec.decode(JSON.parse('{"__proto__":true}'))).toEqual({ state: 'invalid' });
+  });
+
+  it('accepts an ordinary JSON record without reporting a perpetual migration', () => {
+    const decoded = booleanRecordPersistedCodec().decode(JSON.parse('{"radar":true}'));
+    expect(decoded.state).toBe('valid');
+    if (decoded.state === 'invalid') throw new Error('expected a valid record');
+    expect(decoded.value).toEqual({ radar: true });
+    expect(Object.getPrototypeOf(decoded.value)).toBeNull();
   });
 });
 

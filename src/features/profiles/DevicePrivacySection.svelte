@@ -10,14 +10,16 @@ interface Props {
 
 const { onForgetCredentials, onEraseAllLocalData }: Props = $props();
 let confirming = $state<'credentials' | 'all' | undefined>();
-let working = $state(false);
+let working = $state<'credentials' | 'all' | undefined>();
 let report = $state<PrivacyReport | undefined>();
 let actionError = $state<string | undefined>();
+const reloadPending = $derived((report?.clearedOwnerIds.length ?? 0) > 0);
 
 async function run(action: 'credentials' | 'all'): Promise<void> {
-  if (working) return;
-  working = true;
+  if (working || reloadPending) return;
+  working = action;
   confirming = undefined;
+  report = undefined;
   actionError = undefined;
   try {
     report = action === 'credentials' ? await onForgetCredentials() : await onEraseAllLocalData();
@@ -25,8 +27,21 @@ async function run(action: 'credentials' | 'all'): Promise<void> {
     report = undefined;
     actionError = 'The local privacy action failed before it could finish. Try again.';
   } finally {
-    working = false;
+    working = undefined;
   }
+}
+
+const OWNER_LABELS: Record<string, string> = {
+  'signalk-credentials': 'Signal K credentials',
+  'local-settings': 'settings and profiles',
+  'indexed-db': 'offline browser databases',
+  'cache-storage': 'offline browser caches',
+  'service-worker': 'offline service worker',
+  'cross-tab-broadcast': 'other open Binnacle tabs',
+};
+
+function failureText(ownerId: string, message: string): string {
+  return `${OWNER_LABELS[ownerId] ?? ownerId}: ${message}`;
 }
 
 const reportText = $derived.by(() => {
@@ -34,7 +49,7 @@ const reportText = $derived.by(() => {
   if (!report) return undefined;
   if (report.status === 'blocked') return report.reason ?? 'The action is blocked for safety.';
   if (report.status === 'partial') {
-    return `Some local data could not be removed. ${report.failures.map((failure) => failure.message).join(' ')}`;
+    return `Some local data could not be removed. ${report.failures.map((failure) => failureText(failure.ownerId, failure.message)).join(' ')} Reloading shortly.`;
   }
   return report.operation === 'forget-credentials'
     ? 'Binnacle credentials were removed from this device. Reloading…'
@@ -48,6 +63,11 @@ const reportText = $derived.by(() => {
     These actions affect this device only. Server routes, waypoints, tracks, profiles, Chart Locker
     data, administrator sessions, and server-side device authorization are not deleted or revoked.
   </p>
+  {#if working}
+    <p class="muted-note" role="status">
+      {working === 'credentials' ? 'Removing credentials…' : 'Removing local data…'}
+    </p>
+  {/if}
   {#if reportText}
     <p
       class:alert-note={actionError !== undefined || report?.status !== 'completed'}
@@ -71,12 +91,12 @@ const reportText = $derived.by(() => {
       onConfirm={() => void run('all')}
       onCancel={() => (confirming = undefined)}
     />
-  {:else}
+  {:else if !reloadPending}
     <div class="panel-controls">
       <button
         type="button"
         class="btn"
-        disabled={working}
+        disabled={working !== undefined}
         onclick={() => (confirming = 'credentials')}
       >
         <LogOut size={16} aria-hidden="true" />
@@ -85,7 +105,7 @@ const reportText = $derived.by(() => {
       <button
         type="button"
         class="btn sev-danger"
-        disabled={working}
+        disabled={working !== undefined}
         onclick={() => (confirming = 'all')}
       >
         <Trash2 size={16} aria-hidden="true" />

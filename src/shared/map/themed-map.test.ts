@@ -249,6 +249,64 @@ describe('createThemedMap runTick', () => {
     vi.advanceTimersByTime(250);
     expect(overlay.sync.mock.calls.length).toBe(afterSetup + 1);
   });
+
+  it('isolates a failing overlay so later navigation overlays still synchronize', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let api: ThemedMapApi | undefined;
+    createThemedMap({
+      container,
+      onLoad: (value) => {
+        api = value;
+      },
+    });
+    const map = await lastMap();
+    map.fire('load');
+    const failing = {
+      id: 'weather',
+      sync: vi.fn(() => {
+        // Overlay sync is intentionally a synchronous contract.
+        throw new Error('bad source');
+      }),
+    };
+    const navigation = { id: 'own-vessel', sync: vi.fn() };
+
+    api?.runTick([failing, navigation]);
+    map.fire('render');
+
+    expect(navigation.sync).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'Overlay "weather" failed to synchronize.',
+      expect.any(Error),
+    );
+  });
+
+  it('reports a failed overlay and its later recovery', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let api: ThemedMapApi | undefined;
+    createThemedMap({
+      container,
+      onLoad: (value) => {
+        api = value;
+      },
+    });
+    const map = await lastMap();
+    map.fire('load');
+    let failing = true;
+    const overlay = {
+      id: 'own-vessel',
+      sync: vi.fn(() => {
+        if (failing) throw new Error('bad source');
+      }),
+    };
+    const onStatus = vi.fn();
+
+    api?.runTick([overlay], onStatus);
+    expect(onStatus).toHaveBeenCalledWith('own-vessel', expect.any(Error));
+    failing = false;
+    map.fire('render');
+    expect(onStatus).toHaveBeenLastCalledWith('own-vessel', undefined);
+  });
 });
 
 describe('createThemedMap long-press', () => {

@@ -378,7 +378,13 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
         }
         // Keep only the latest queued position. Earlier callers settle with that latest request,
         // bounding provider traffic to one active request and one pending request during rapid pans.
-        queued = queued ? { ...request, waiters: [...queued.waiters, resolve] } : request;
+        queued = queued
+          ? {
+              ...request,
+              force: queued.force || request.force,
+              waiters: [...queued.waiters, resolve],
+            }
+          : request;
       });
     },
   };

@@ -48,8 +48,8 @@ describe('extractPositionWarm', () => {
     { intervalSecs: 59 },
     { intervalSecs: 60.5 },
     { baseZoom: -1 },
-    { baseZoom: 22.5 },
-    { baseZoom: 23 },
+    { baseZoom: 24.5 },
+    { baseZoom: 25 },
   ])('rejects unsafe numeric settings: %o', (override) => {
     expect(extractPositionWarm({ ...bareBlock, ...override })).toBeNull();
   });
@@ -64,5 +64,24 @@ describe('extractPositionWarm', () => {
 describe('buildConfigPayload', () => {
   it('wraps the settings so POST can merge only the positionWarm key', () => {
     expect(buildConfigPayload(bareBlock)).toEqual({ positionWarm: bareBlock });
+  });
+
+  it('clamps values and source count to the Chart Locker contract', () => {
+    const payload = buildConfigPayload({
+      ...bareBlock,
+      radiusMeters: 200_000,
+      moveThresholdMeters: -5,
+      intervalSecs: 100_000,
+      baseZoom: 30,
+      sources: Array.from({ length: 70 }, (_, index) => `source-${index}`),
+    }).positionWarm;
+
+    expect(payload).toMatchObject({
+      radiusMeters: 100_000,
+      moveThresholdMeters: 0,
+      intervalSecs: 86_400,
+      baseZoom: 24,
+    });
+    expect(payload.sources).toHaveLength(64);
   });
 });

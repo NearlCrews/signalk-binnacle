@@ -4,6 +4,7 @@ import {
   featureToRoute,
   remainingRouteDistanceMeters,
   routeDistanceMeters,
+  routeDistanceToGoMeters,
   routeLegs,
   routeToFeature,
   waypointPointFeatures,
@@ -34,6 +35,26 @@ describe('remainingRouteDistanceMeters', () => {
     );
     // From the last waypoint, nothing remains.
     expect(remainingRouteDistanceMeters(ROUTE.waypoints, 2)).toBe(0);
+  });
+});
+
+describe('routeDistanceToGoMeters', () => {
+  it('walks the reversed traversal from the active traversal index', () => {
+    const uneven: Route['waypoints'] = [
+      { position: { latitude: 0, longitude: 0 } },
+      { position: { latitude: 0, longitude: 1 } },
+      { position: { latitude: 0, longitude: 4 } },
+    ];
+    const toNext = 250;
+
+    expect(routeDistanceToGoMeters(uneven, 1, toNext, false)).toBeCloseTo(
+      toNext + rhumbDistanceMeters(uneven[1].position, uneven[2].position),
+      3,
+    );
+    expect(routeDistanceToGoMeters(uneven, 1, toNext, true)).toBeCloseTo(
+      toNext + rhumbDistanceMeters(uneven[1].position, uneven[0].position),
+      3,
+    );
   });
 });
 

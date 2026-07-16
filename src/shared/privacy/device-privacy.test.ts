@@ -4,6 +4,7 @@ import {
   createIndexedDbOwner,
   createServiceWorkerOwner,
   DevicePrivacyController,
+  PrivacyActivityCoordinator,
   PrivacyStorageRegistry,
 } from './device-privacy';
 
@@ -108,6 +109,20 @@ describe('DevicePrivacyController', () => {
     expect(clear).not.toHaveBeenCalled();
   });
 
+  it('holds and releases an erase safety lease around storage deletion', async () => {
+    const release = vi.fn();
+    const registry = new PrivacyStorageRegistry();
+    registry.register({ id: 'data', dataClass: 'device-data', clear: vi.fn() });
+    const controller = new DevicePrivacyController({
+      registry,
+      canErase: () => ({ allowed: true, release }),
+    });
+
+    await controller.eraseDeviceData();
+
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('reports partial failures while continuing independent owners', async () => {
     const registry = new PrivacyStorageRegistry();
     registry.register({ id: 'ok', dataClass: 'device-data', clear: vi.fn() });
@@ -131,12 +146,68 @@ describe('DevicePrivacyController', () => {
     });
   });
 
+  it('stops producers before clearing ordinary storage and clears caches last', async () => {
+    const order: string[] = [];
+    const registry = new PrivacyStorageRegistry();
+    registry.register({
+      id: 'cache',
+      dataClass: 'device-data',
+      clearPriority: 100,
+      clear: () => {
+        order.push('cache');
+      },
+    });
+    registry.register({
+      id: 'database',
+      dataClass: 'device-data',
+      clear: () => {
+        order.push('database');
+      },
+    });
+    registry.register({
+      id: 'producer',
+      dataClass: 'device-data',
+      clearPriority: -100,
+      clear: () => {
+        order.push('producer');
+      },
+    });
+    const controller = new DevicePrivacyController({
+      registry,
+      canErase: () => ({ allowed: true }),
+    });
+
+    await controller.eraseDeviceData();
+
+    expect(order).toEqual(['producer', 'database', 'cache']);
+  });
+
   it('rejects duplicate storage-owner ids', () => {
     const registry = new PrivacyStorageRegistry();
     registry.register({ id: 'same', dataClass: 'device-data', clear: vi.fn() });
     expect(() =>
       registry.register({ id: 'same', dataClass: 'credentials', clear: vi.fn() }),
     ).toThrow('already registered');
+  });
+});
+
+describe('PrivacyActivityCoordinator', () => {
+  it('blocks an erase when another tab holds the shared activity lock', async () => {
+    const locks = {
+      request: vi.fn(
+        async (
+          _name: string,
+          _options: LockOptions,
+          callback: LockGrantedCallback<unknown>,
+        ): Promise<unknown> => callback(null),
+      ),
+    } as unknown as Pick<LockManager, 'request'>;
+    const coordinator = new PrivacyActivityCoordinator(locks);
+
+    await expect(coordinator.guard(() => ({ allowed: true }))).resolves.toEqual({
+      allowed: false,
+      reason: 'Finish or save active work in another Binnacle tab first.',
+    });
   });
 });
 
@@ -190,5 +261,16 @@ describe('browser privacy owners', () => {
       'binnacle-chart-tiles',
       'workbox-precache-v2-http://pi/signalk-binnacle/',
     ]);
+  });
+
+  it('reports an existing browser cache that the Cache API fails to delete', async () => {
+    const registry = createBinnaclePrivacyRegistry({
+      cacheStorage: {
+        keys: async () => ['binnacle-chart-tiles'],
+        delete: async () => false,
+      },
+    });
+
+    await expect(registry.owners('device-data')[0].clear()).rejects.toThrow('binnacle-chart-tiles');
   });
 });

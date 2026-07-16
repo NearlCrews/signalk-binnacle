@@ -71,6 +71,27 @@ function memStore(): BlockStore {
 }
 
 describe('BlockCachedSource block alignment', () => {
+  it.each([
+    [-1, 4],
+    [0, 0],
+    [0, 1.5],
+    [1.5, 4],
+    [0, 64 * 1024 * 1024 + 1],
+    [Number.MAX_SAFE_INTEGER, 2],
+  ])(
+    'rejects an unsafe requested range (%s, %s) before reading storage',
+    async (offset, length) => {
+      const inner = fakeInner(pattern(64));
+      const store = memStore();
+      const getBlocks = vi.spyOn(store, 'getBlocks');
+
+      await expect(cachedSource(inner, store).getBytes(offset, length)).rejects.toThrow(RangeError);
+
+      expect(getBlocks).not.toHaveBeenCalled();
+      expect(inner.calls).toHaveLength(0);
+    },
+  );
+
   it('serves a single mid-archive block and returns the exact sub-range', async () => {
     const archive = pattern(64);
     const inner = fakeInner(archive);
@@ -254,19 +275,38 @@ describe('BlockCachedSource header revalidation', () => {
     expect(await store.getValidator(URL_A)).toBe('v2');
   });
 
-  it('skips revalidation when the response carries no validator', async () => {
+  it('purges cached blocks when a successful header response carries no validator', async () => {
     const archive = pattern(48);
     const store = memStore();
     const primer = fakeInner(archive, { etag: 'v1' });
     await cachedSource(primer, store).getBytes(0, 32);
 
-    const inner = fakeInner(archive); // no etag
+    const replaced = pattern(48).reverse();
+    const inner = fakeInner(replaced); // no etag
     const source = cachedSource(inner, store);
     await source.getBytes(0, 16);
-    await source.getBytes(16, 16);
+    const out = await source.getBytes(16, 16);
 
-    expect(inner.calls).toEqual([{ offset: 0, length: 16 }]);
-    expect(await store.getValidator(URL_A)).toBe('v1');
+    expect(inner.calls).toEqual([
+      { offset: 0, length: 16 },
+      { offset: 16, length: 16 },
+    ]);
+    expect(bytes(out.data)).toEqual([...replaced.slice(16, 32)]);
+    expect(await store.getValidator(URL_A)).toBeUndefined();
+  });
+
+  it('does not treat a cache purge failure as an offline header fetch', async () => {
+    const archive = pattern(48);
+    const base = memStore();
+    const primer = fakeInner(archive, { etag: 'v1' });
+    await cachedSource(primer, base).getBytes(0, 16);
+    const store: BlockStore = {
+      ...base,
+      purgeArchive: vi.fn().mockRejectedValue(new Error('cache purge failed')),
+    };
+    const inner = fakeInner(archive); // successful response without a validator requires a purge
+
+    await expect(cachedSource(inner, store).getBytes(0, 16)).rejects.toThrow('cache purge failed');
   });
 });
 

@@ -76,6 +76,7 @@ export function computeStats(points: readonly TrackPoint[]): TrackStats {
 export class TrackRecorder {
   points = $state<TrackPoint[]>([]);
   paused = $state(false);
+  restored = $state(false);
 
   // Distance and max SOG are accumulated per kept fix rather than derived from a full scan:
   // computeStats over the whole history is O(n) per read, which a long recording makes a real
@@ -110,7 +111,12 @@ export class TrackRecorder {
 
   async #restore(): Promise<void> {
     const lifecycle = this.#lifecycle;
-    const saved = await this.#store.all();
+    let saved: TrackPoint[];
+    try {
+      saved = await this.#store.all();
+    } finally {
+      this.restored = true;
+    }
     if (lifecycle !== this.#lifecycle || saved.length === 0) return;
     // Coerce sog at the storage boundary: a point persisted by an older build can lack it, but
     // TrackPoint.sog is a number that every reader (the speed-colored line, the stats) trusts.

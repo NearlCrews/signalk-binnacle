@@ -432,16 +432,18 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   that owns the feature's runes and returns the handlers and getters the panels and chart read. Services
   (the Signal K client, the map, the stores) are constructed in `app/App.svelte` and passed down as
   props, not global singletons, so they are swappable in tests.
-- Signal K REST orchestration should receive a `SignalKResourceClient` or a narrower injected client.
-  Read credentials through a getter because tokens can change after construction. Keep write-outcome
-  handling instance-scoped in new code; compatibility functions exist only for incremental migration.
+- Signal K REST orchestration should receive a narrow injected client rather than constructing its own
+  transport. Read credentials through a getter because tokens can change after construction. Keep
+  write-outcome handling instance-scoped in new code; compatibility functions exist only for
+  incremental migration.
 - `SaveStatus` renders the shared saving, saved, and retryable-error feedback for persisted controls.
   Pair it with `$shared/lib` `createLatestWriter` when several controls update one server document.
   The writer serializes requests and coalesces pending snapshots so stale responses cannot restore an
   older setting.
 - Destructive privacy actions use `InlineConfirm`, state exactly which local owners are cleared, and
   state which server resources remain. A blocked safety check is an alert, a partial erase names the
-  failures, and a completed erase is a status before reload.
+  failures, and any successful deletion reloads immediately so live stores cannot repopulate it.
+  Browser Web Locks extend the safety guard across open Binnacle tabs when the browser supports them.
 - Persisted UI state enters through a bounded codec. Invalid stored data repairs to the documented
   fallback, and known legacy shapes migrate to a clean literal. A record codec must rebuild the fields
   it owns when unknown fields should be removed; a predicate-only codec validates the accepted shape

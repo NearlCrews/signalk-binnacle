@@ -1,4 +1,18 @@
+import { hasControlCharacters, isRecord } from '$shared/lib';
 import { SignalKResourceClient } from './resource';
+
+const MAX_FEATURE_ENTRIES = 4_096;
+const MAX_FEATURE_ID_LENGTH = 256;
+const MAX_FEATURE_VERSION_LENGTH = 128;
+
+function safeFeatureText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !hasControlCharacters(value)
+  );
+}
 
 // The server's v2 feature-discovery endpoint: GET /signalk/v2/features answers with the
 // available API ids and the installed plugins, so a client can detect (for example) the
@@ -17,19 +31,25 @@ export async function fetchServerFeatures(
     apis?: unknown;
     plugins?: unknown;
   }>(`${base}/signalk/v2/features?enabled=1`);
-  if (!body || typeof body !== 'object') return undefined;
+  if (!isRecord(body)) return undefined;
+  if (body.apis !== undefined && !Array.isArray(body.apis)) return undefined;
+  if (body.plugins !== undefined && !Array.isArray(body.plugins)) return undefined;
   const apis = new Set<string>();
   if (Array.isArray(body.apis)) {
+    if (body.apis.length > MAX_FEATURE_ENTRIES) return undefined;
     for (const api of body.apis) {
-      if (typeof api === 'string') apis.add(api);
+      if (safeFeatureText(api, MAX_FEATURE_ID_LENGTH)) apis.add(api);
     }
   }
   const plugins = new Map<string, string>();
   if (Array.isArray(body.plugins)) {
+    if (body.plugins.length > MAX_FEATURE_ENTRIES) return undefined;
     for (const plugin of body.plugins) {
-      if (plugin && typeof plugin === 'object') {
+      if (isRecord(plugin)) {
         const { id, version } = plugin as { id?: unknown; version?: unknown };
-        if (typeof id === 'string') plugins.set(id, typeof version === 'string' ? version : '');
+        if (safeFeatureText(id, MAX_FEATURE_ID_LENGTH)) {
+          plugins.set(id, safeFeatureText(version, MAX_FEATURE_VERSION_LENGTH) ? version : '');
+        }
       }
     }
   }

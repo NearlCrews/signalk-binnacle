@@ -167,7 +167,7 @@ export class CourseGuidance {
     const index = this.activePointIndex;
     const total = this.activePointTotal;
     if (index === undefined || total === undefined) return false;
-    return this.#info.activeRoute?.reverse === true ? index <= 0 : index >= total - 1;
+    return index >= total - 1;
   }
 
   // The active route's destination index and total point count, when a route (not a single "go to")
@@ -211,14 +211,20 @@ export class CourseGuidance {
     const index = this.activePointIndex;
     const total = this.activePointTotal;
     if (index === undefined || total === undefined) return false;
-    return this.#info.activeRoute?.reverse === true ? index > 0 : index < total - 1;
+    return index < total - 1;
   }
 
   get canRetreatRoute(): boolean {
     const index = this.activePointIndex;
     const total = this.activePointTotal;
     if (index === undefined || total === undefined) return false;
-    return this.#info.activeRoute?.reverse === true ? index < total - 1 : index > 0;
+    return index > 0;
+  }
+
+  // Signal K pointIndex is an index into traversal order, even for a reversed route. The server maps
+  // that sequential index onto reversed route geometry when it selects nextPoint and previousPoint.
+  get routeReversed(): boolean {
+    return this.#info.activeRoute?.reverse === true;
   }
 
   // 'server' when the provider supplied any populated calcValue, otherwise 'computed'. A single-mark
@@ -356,7 +362,10 @@ export class CourseGuidance {
       this.#arrivalLatchKey = key;
       this.#arrivedLatched = false;
     }
-    const d = this.distanceToNextMeters;
+    // Arrival is safety-sensitive and can mutate the active route. Compute it only from the fresh
+    // own-vessel fix and active point, never from a provider distance that may lag for its display TTL.
+    const ownPosition = this.#freshPos;
+    const d = ownPosition && next ? rhumbDistanceMeters(ownPosition, next) : undefined;
     if (key === undefined || d == null) {
       this.#arrivedLatched = false;
       return false;

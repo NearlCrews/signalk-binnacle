@@ -31,6 +31,10 @@ export interface LocalAnchor {
 
 const MAX_ANCHOR_RADIUS_M = 1_000_000;
 
+function clampRadius(radiusMeters: number): number {
+  return Math.min(MAX_ANCHOR_RADIUS_M, Math.max(MIN_RADIUS_M, radiusMeters));
+}
+
 function validLocal(value: unknown): LocalAnchor | null {
   if (!isRecord(value)) return null;
   if (!isLatLon(value.position)) return null;
@@ -223,10 +227,11 @@ export class AnchorWatch {
   // Start a client-side watch at the given drop point. Server drops go through the plugin instead
   // and arrive back via the stream.
   dropLocal(position: LatLon, radiusMeters: number = this.preferredRadiusMeters): void {
+    if (!isLatLon(position) || !isFiniteNumber(radiusMeters)) return;
     this.#detector.reset();
     this.#setLocal({
       position,
-      radiusMeters: Math.max(MIN_RADIUS_M, radiusMeters),
+      radiusMeters: clampRadius(radiusMeters),
       dragging: false,
     });
   }
@@ -242,10 +247,11 @@ export class AnchorWatch {
     if (!local) return;
     // A radius change restarts the breach window so the new circle gets a fresh judgment.
     this.#detector.reset();
-    this.#setLocal({ ...local, radiusMeters: Math.max(MIN_RADIUS_M, radiusMeters) });
+    this.#setLocal({ ...local, radiusMeters: clampRadius(radiusMeters) });
   }
 
   movePositionLocal(position: LatLon): void {
+    if (!isLatLon(position)) return;
     const local = this.#local;
     if (!local) return;
     this.#detector.reset();
@@ -255,7 +261,7 @@ export class AnchorWatch {
   // Remember the radius the navigator chose, so the next drop starts from it.
   rememberRadius(radiusMeters: number): void {
     if (!isFiniteNumber(radiusMeters)) return;
-    this.#preferredRadius.set(Math.max(MIN_RADIUS_M, radiusMeters));
+    this.#preferredRadius.set(clampRadius(radiusMeters));
   }
 
   // The navigator has seen the drag alarm. Client mode clears the latch (a continued drag re-latches
@@ -271,8 +277,8 @@ export class AnchorWatch {
   }
 
   #setLocal(next: LocalAnchor | null): void {
-    this.#local = next;
     this.#watch.set(next);
+    this.#local = next;
   }
 
   #raw(path: string): unknown {

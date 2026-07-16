@@ -33,7 +33,18 @@ const route = {
   ],
 };
 
-function makeController(writeBlocked = false) {
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function makeController(
+  writeBlocked = false,
+  wait: (ms: number) => Promise<void> = async () => {},
+) {
   const routeStore = new RouteStore();
   const toast = { show: vi.fn() } as unknown as Toast;
   const guidance = {
@@ -54,7 +65,7 @@ function makeController(writeBlocked = false) {
     startRouteEdit: vi.fn(() => true),
     stopRouteEdit: vi.fn(),
     getTrackPoints: () => [],
-    wait: async () => {},
+    wait,
   });
   return { controller, routeStore, toast, guidance, fitBounds };
 }
@@ -62,6 +73,8 @@ function makeController(writeBlocked = false) {
 describe('createRouteController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(courseClient.hydrateCourse).mockResolvedValue({});
+    vi.mocked(courseClient.activationFromCourse).mockReturnValue({});
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue([]);
     vi.mocked(routesClient.saveRoute).mockResolvedValue(true);
     vi.mocked(courseClient.refreshActiveRoute).mockResolvedValue(true);
@@ -151,6 +164,39 @@ describe('createRouteController', () => {
     warn.mockRestore();
   });
 
+  it('discards an older course hydration that resolves after a newer one', async () => {
+    const older = deferred<Awaited<ReturnType<typeof courseClient.hydrateCourse>>>();
+    const newer = deferred<Awaited<ReturnType<typeof courseClient.hydrateCourse>>>();
+    vi.mocked(courseClient.hydrateCourse)
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    vi.mocked(courseClient.activationFromCourse).mockImplementation((info) => ({
+      routeId: info?.activeRoute?.href?.split('/').at(-1),
+    }));
+    const { controller, routeStore, guidance } = makeController();
+
+    const first = controller.hydrateAndSeedCourse();
+    const second = controller.hydrateAndSeedCourse();
+    newer.resolve({
+      info: { activeRoute: { href: '/resources/routes/new', pointIndex: 0, pointTotal: 2 } },
+    });
+    await second;
+    older.resolve({
+      info: { activeRoute: { href: '/resources/routes/old', pointIndex: 0, pointTotal: 2 } },
+    });
+    await first;
+
+    expect(routeStore.activeId).toBe('new');
+    expect(guidance.seed).toHaveBeenCalledTimes(1);
+    expect(guidance.seed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activeRoute: expect.objectContaining({ href: expect.stringMatching(/new$/) }),
+      }),
+      undefined,
+      expect.any(Number),
+    );
+  });
+
   it('does not double-advance when the server already advanced on arrival', async () => {
     const { controller } = makeController();
     vi.mocked(courseClient.hydrateCourse).mockResolvedValueOnce({
@@ -189,11 +235,11 @@ describe('createRouteController', () => {
     );
   });
 
-  it('moves toward the preceding absolute index on a reversed route', async () => {
+  it('increments the traversal index on a reversed route', async () => {
     const { controller } = makeController();
     const activeRoute = {
       href: '/resources/routes/r1',
-      pointIndex: 2,
+      pointIndex: 0,
       pointTotal: 3,
       reverse: true,
     };
@@ -212,6 +258,25 @@ describe('createRouteController', () => {
       activeRoute,
       1,
     );
+  });
+
+  it('cancels pending arrival auto-advance when the navigator skips manually', async () => {
+    const releaseArrival = deferred<void>();
+    const { controller } = makeController(false, () => releaseArrival.promise);
+    vi.mocked(courseClient.advancePoint).mockResolvedValue(true);
+    controller.onArrivalAdvance({
+      href: '/resources/routes/r1',
+      pointIndex: 0,
+      pointTotal: 3,
+    });
+    await Promise.resolve();
+
+    controller.onSkipPoint(1);
+    releaseArrival.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(courseClient.setActiveRoutePointIndex).not.toHaveBeenCalled();
+    expect(courseClient.advancePoint).toHaveBeenCalledOnce();
   });
 
   it('fits the full route bounds when showing a route', () => {

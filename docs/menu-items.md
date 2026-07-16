@@ -119,4 +119,5 @@ source, and surrounding traffic before relying on it.
   secondary card actions in a labeled overflow menu. Device privacy actions can forget only the local
   Signal K token or erase Binnacle-owned local settings, caches, IndexedDB data, profiles, and
   credentials. Full erasure is blocked while safety or unsaved navigation work is active and never
-  deletes or revokes server data.
+  deletes or revokes server data. The guard waits for the saved-track restore check and also blocks
+  when another open Binnacle tab holds safety-critical or unsaved work in browsers with Web Locks.

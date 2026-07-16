@@ -45,6 +45,14 @@ describe('fetchServerFeatures', () => {
     await expect(fetchServerFeatures(BASE)).resolves.toBeUndefined();
   });
 
+  it('rejects present feature collections with the wrong shape', async () => {
+    stubFetch({ ok: true, body: { apis: {}, plugins: [] } });
+    await expect(fetchServerFeatures(BASE)).resolves.toBeUndefined();
+
+    stubFetch({ ok: true, body: { apis: [], plugins: 'not-an-array' } });
+    await expect(fetchServerFeatures(BASE)).resolves.toBeUndefined();
+  });
+
   it('tolerates a malformed body, keeping only the well-formed entries', async () => {
     stubFetch({
       ok: true,
@@ -54,5 +62,25 @@ describe('fetchServerFeatures', () => {
     expect([...(features?.apis ?? [])]).toEqual(['course']);
     expect(features?.plugins.get('ok')).toBe('');
     expect(features?.plugins.size).toBe(1);
+  });
+
+  it('rejects unbounded feature arrays and provider strings', async () => {
+    stubFetch({
+      ok: true,
+      body: { apis: Array.from({ length: 4_097 }, () => 'course'), plugins: [] },
+    });
+    await expect(fetchServerFeatures(BASE)).resolves.toBeUndefined();
+
+    stubFetch({
+      ok: true,
+      body: {
+        apis: ['course\nspoof'],
+        plugins: [{ id: 'x'.repeat(257), version: '1.0.0' }],
+      },
+    });
+    await expect(fetchServerFeatures(BASE)).resolves.toEqual({
+      apis: new Set(),
+      plugins: new Map(),
+    });
   });
 });

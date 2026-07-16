@@ -6,6 +6,7 @@ import {
   createLatestWriter,
   feetToMeters,
   formatBytes,
+  hasControlCharacters,
   isFiniteNumber,
   lengthUnit,
   metersToFeet,
@@ -14,6 +15,14 @@ import {
 } from '$shared/lib';
 import { ArmedRow } from '$shared/ui';
 import { defaultSelection } from './area-defaults.js';
+import {
+  CHART_LOCKER_MAX_DISTANCE_METERS,
+  CHART_LOCKER_MAX_INTERVAL_SECONDS,
+  CHART_LOCKER_MAX_REGION_NAME_LENGTH,
+  CHART_LOCKER_MAX_SOURCES,
+  CHART_LOCKER_MAX_WARM_ZOOM,
+  CHART_LOCKER_MIN_INTERVAL_SECONDS,
+} from './contract.js';
 import { DETAIL_PRESETS, presetForRange, rangeForPreset } from './detail-level.js';
 import {
   coveringSources,
@@ -37,6 +46,14 @@ import { coveringGroups, includedSummary } from './source-summary.js';
 const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
 const POLL_FAIL_CAP = 5;
 const DEFAULT_POLL_MS = 2000;
+
+function validRegionName(value: string): string | undefined {
+  const name = value.trim();
+  if (!name || name.length > CHART_LOCKER_MAX_REGION_NAME_LENGTH || hasControlCharacters(name)) {
+    return undefined;
+  }
+  return name;
+}
 
 export type RegionsSubView = 'home' | 'build' | 'storage' | 'auto';
 
@@ -134,6 +151,8 @@ export class RegionsController {
     this.statsError = null;
     this.regions = null;
     this.loadError = null;
+    this.error = null;
+    this.clearNote = null;
     this.regionStatus = {};
     this.positionLoadError = null;
     void this.loadStats();
@@ -323,30 +342,43 @@ export class RegionsController {
 
   togglePositionSource(id: string, enabled: boolean): void {
     this.positionSources = this.#toggleId(this.positionSources, id, enabled);
+    if (this.positionSources.length > CHART_LOCKER_MAX_SOURCES) {
+      this.positionSources = this.positionSources.slice(0, CHART_LOCKER_MAX_SOURCES);
+    }
     this.savePositionWarm();
   }
 
   commitPositionRadius(entered: number): void {
     if (!isFiniteNumber(entered)) return;
-    this.positionRadiusMeters = Math.max(1, this.#fromDisplayLength(entered));
+    this.positionRadiusMeters = Math.min(
+      CHART_LOCKER_MAX_DISTANCE_METERS,
+      Math.max(1, this.#fromDisplayLength(entered)),
+    );
     this.savePositionWarm();
   }
 
   commitMoveThreshold(entered: number): void {
     if (!isFiniteNumber(entered)) return;
-    this.positionMoveThresholdMeters = Math.max(1, this.#fromDisplayLength(entered));
+    this.positionMoveThresholdMeters = Math.min(
+      CHART_LOCKER_MAX_DISTANCE_METERS,
+      Math.max(0, this.#fromDisplayLength(entered)),
+    );
     this.savePositionWarm();
   }
 
   commitPositionInterval(value: number): void {
     if (!isFiniteNumber(value)) return;
-    this.positionIntervalSecs = Math.max(60, Math.round(value));
+    this.positionIntervalSecs = clampInt(
+      value,
+      CHART_LOCKER_MIN_INTERVAL_SECONDS,
+      CHART_LOCKER_MAX_INTERVAL_SECONDS,
+    );
     this.savePositionWarm();
   }
 
   commitPositionBaseZoom(value: number): void {
     if (!isFiniteNumber(value)) return;
-    this.positionBaseZoom = clampInt(value, 0, 22);
+    this.positionBaseZoom = clampInt(value, 0, CHART_LOCKER_MAX_WARM_ZOOM);
     this.savePositionWarm();
   }
 
@@ -361,6 +393,7 @@ export class RegionsController {
     if (!this.deps.getAdminAccess()) return;
     this.confirmingClear = false;
     this.clearNote = null;
+    this.error = null;
     try {
       const { freedBytes } = await this.deps.getClient().clearScrollCache();
       const freed = formatBytes(freedBytes);
@@ -384,6 +417,7 @@ export class RegionsController {
       if (this.#disposed || abort.signal.aborted || generation !== this.#regionsGeneration) return;
       this.regions = list;
       this.loadError = null;
+      if (this.error === 'Could not refresh the saved regions.') this.error = null;
       const active = new Set(
         list.filter((region) => region.status === 'downloading').map((r) => r.id),
       );
@@ -414,6 +448,7 @@ export class RegionsController {
       this.stats = stats;
       if (!this.#ttlEdited && typeof stats.ttlDays === 'number') this.ttlDays = stats.ttlDays;
       this.statsError = null;
+      if (this.error === 'Could not refresh the cache stats.') this.error = null;
     } catch {
       if (abort.signal.aborted || generation !== this.#statsGeneration) return;
       if (this.stats === null) this.statsError = 'Could not load the cache stats.';
@@ -488,7 +523,9 @@ export class RegionsController {
     const fallback = this.#coordName(this.bbox);
     try {
       const name = await this.deps.getClient().geocode(latitude, longitude, abort.signal);
-      if (!abort.signal.aborted && this.bbox === startedFor) this.regionName = name ?? fallback;
+      if (!abort.signal.aborted && this.bbox === startedFor) {
+        this.regionName = validRegionName(name ?? '') ?? fallback;
+      }
     } catch {
       if (!abort.signal.aborted && this.bbox === startedFor) this.regionName = fallback;
     } finally {
@@ -507,7 +544,13 @@ export class RegionsController {
     ) {
       return;
     }
-    const name = this.regionName.trim() || this.#coordName(this.bbox);
+    const enteredName = this.regionName.trim();
+    const name =
+      validRegionName(enteredName) ?? (enteredName ? undefined : this.#coordName(this.bbox));
+    if (!name) {
+      this.error = `Area name must be ${CHART_LOCKER_MAX_REGION_NAME_LENGTH} characters or fewer and contain no control characters.`;
+      return;
+    }
     this.error = null;
     this.submitting = true;
     try {
@@ -574,7 +617,7 @@ export class RegionsController {
 
   commitMaxZoom(value: number): void {
     if (!isFiniteNumber(value)) return;
-    this.maxzoom = clampInt(value, this.minzoom, 22);
+    this.maxzoom = clampInt(value, this.minzoom, CHART_LOCKER_MAX_WARM_ZOOM);
   }
 
   toggleSource(id: string, enabled: boolean): void {
@@ -626,7 +669,7 @@ export class RegionsController {
     this.selectedSources = [...region.sourceIds];
     this.minzoom = region.minzoom;
     this.maxzoom = region.maxzoom;
-    this.regionName = `${region.name} updated`;
+    this.regionName = `${region.name} updated`.slice(0, CHART_LOCKER_MAX_REGION_NAME_LENGTH);
     this.namePrep = false;
     this.subView = 'build';
     this.#rect?.set(region.bbox);
@@ -642,7 +685,7 @@ export class RegionsController {
   }
 
   setRegionName(value: string): void {
-    this.regionName = value;
+    this.regionName = value.slice(0, CHART_LOCKER_MAX_REGION_NAME_LENGTH);
   }
 
   cancelNamePrep(): void {

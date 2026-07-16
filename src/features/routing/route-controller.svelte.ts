@@ -57,6 +57,8 @@ export function createRouteController(deps: RouteControllerDeps) {
   let loadState = $state<RouteLoadState>('idle');
   let busy = $state(false);
   let refreshSequence = 0;
+  let hydrateSequence = 0;
+  let arrivalAdvanceSequence = 0;
   let skipQueue = Promise.resolve();
 
   const courseActive = $derived(routeStore.activeId !== undefined || gotoActive);
@@ -127,6 +129,8 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   async function stopActiveCourse(): Promise<boolean> {
+    hydrateSequence += 1;
+    arrivalAdvanceSequence += 1;
     if (!(await clearCourse(origin, deps.getToken()))) return false;
     routeStore.setActive(undefined);
     gotoActive = false;
@@ -135,8 +139,10 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   async function hydrateAndSeedCourse(): Promise<CourseInfo | undefined> {
+    const sequence = ++hydrateSequence;
     const startedAt = Date.now();
     const { info, calc } = await hydrateCourse(origin, deps.getToken());
+    if (sequence !== hydrateSequence) return undefined;
     courseGuidance.seed(info, calc, startedAt);
     const activation = activationFromCourse(info);
     if (!activation) return info;
@@ -283,6 +289,8 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('A write token is needed to start navigation.');
       return;
     }
+    hydrateSequence += 1;
+    arrivalAdvanceSequence += 1;
     if (!(await activateRoute(origin, deps.getToken(), routeHref(id)))) {
       flagRouteError('Could not activate the route. Check the connection.');
       return;
@@ -310,6 +318,7 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('A write token is needed to change the active waypoint.');
       return;
     }
+    arrivalAdvanceSequence += 1;
     queueWaypointChange(async () => {
       if (!(await advancePoint(origin, deps.getToken(), delta))) {
         flagRouteError('Could not skip the waypoint. Check the connection.');
@@ -331,7 +340,6 @@ export function createRouteController(deps: RouteControllerDeps) {
     const href = snapshot.href;
     const pointIndex = snapshot.pointIndex;
     const pointTotal = snapshot.pointTotal;
-    const reverse = snapshot.reverse === true;
     if (
       typeof href !== 'string' ||
       !Number.isInteger(pointIndex) ||
@@ -340,22 +348,24 @@ export function createRouteController(deps: RouteControllerDeps) {
       pointTotal === undefined ||
       pointIndex < 0 ||
       pointIndex >= pointTotal ||
-      (reverse ? pointIndex <= 0 : pointIndex >= pointTotal - 1)
+      pointIndex >= pointTotal - 1
     ) {
       return;
     }
-    const target = pointIndex + (reverse ? -1 : 1);
+    // pointIndex always follows traversal order. On a reversed route, Signal K maps index zero to
+    // the route's final geometry point, so advancing still increments the sequential index.
+    const target = pointIndex + 1;
+    const sequence = ++arrivalAdvanceSequence;
     const wait =
       deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     queueWaypointChange(async () => {
       await wait(deps.arrivalAdvanceDelayMs ?? 750);
+      if (sequence !== arrivalAdvanceSequence) return;
       const current = await hydrateAndSeedCourse();
+      if (sequence !== arrivalAdvanceSequence) return;
       const active = current?.activeRoute;
       if (active?.href !== href || !Number.isInteger(active.pointIndex)) return;
-      if (
-        reverse ? (active.pointIndex as number) <= target : (active.pointIndex as number) >= target
-      )
-        return;
+      if ((active.pointIndex as number) >= target) return;
       if (active.pointIndex !== pointIndex) return;
       if (!(await setActiveRoutePointIndex(origin, deps.getToken(), active, target))) {
         flagRouteError('Could not advance the waypoint. Check the connection.');
@@ -407,6 +417,8 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     routeStore.upsertRoute(route);
     await refreshRoutes();
+    hydrateSequence += 1;
+    arrivalAdvanceSequence += 1;
     if (!(await activateRoute(origin, deps.getToken(), routeHref(route.id)))) {
       flagRouteError('Could not start navigating home.');
       return;
@@ -487,6 +499,8 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('A write token is needed to start navigation.');
       return;
     }
+    hydrateSequence += 1;
+    arrivalAdvanceSequence += 1;
     if (!(await setDestination(origin, deps.getToken(), position))) {
       flagRouteError('Could not set the destination. Check the connection.');
       return;

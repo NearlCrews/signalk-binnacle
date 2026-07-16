@@ -85,14 +85,14 @@ describe('CourseGuidance', () => {
     expect(g.isLastPoint).toBe(true);
   });
 
-  it('uses route direction for stepping and final-point state', () => {
+  it('keeps pointIndex in traversal order for a reversed route', () => {
     const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
     const g = new CourseGuidance(store, new OwnVessel(store));
     g.seed(
       {
         activeRoute: {
           href: '/resources/routes/r',
-          pointIndex: 2,
+          pointIndex: 0,
           pointTotal: 3,
           reverse: true,
         },
@@ -102,11 +102,12 @@ describe('CourseGuidance', () => {
     expect(g.canAdvanceRoute).toBe(true);
     expect(g.canRetreatRoute).toBe(false);
     expect(g.isLastPoint).toBe(false);
+    expect(g.routeReversed).toBe(true);
     g.seed(
       {
         activeRoute: {
           href: '/resources/routes/r',
-          pointIndex: 0,
+          pointIndex: 2,
           pointTotal: 3,
           reverse: true,
         },
@@ -208,23 +209,23 @@ describe('CourseGuidance', () => {
 
   it('latches arrival against boundary jitter and clears past the exit margin', () => {
     const store = storeWith({
-      'navigation.position': { latitude: 0, longitude: 0 },
-      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 }, name: 'B' },
+      'navigation.position': { latitude: 0, longitude: 0.000899 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 0 }, name: 'B' },
       'navigation.course.calcValues.crossTrackError': 0,
-      'navigation.course.calcValues.distance': 100,
+      'navigation.course.calcValues.distance': 500,
     });
     const g = new CourseGuidance(store, new OwnVessel(store));
     // At the (default 100 m) circle: arrived.
     expect(g.arrived).toBe(true);
     // Jitter 5 percent outside the circle: still latched.
-    applySelf(store, { 'navigation.course.calcValues.distance': 105 }, 2);
+    applySelf(store, { 'navigation.position': { latitude: 0, longitude: 0.000944 } }, 2);
     expect(g.arrived).toBe(true);
     // 25 percent outside, past the exit margin: a real departure clears the latch.
-    applySelf(store, { 'navigation.course.calcValues.distance': 125 }, 3);
+    applySelf(store, { 'navigation.position': { latitude: 0, longitude: 0.001124 } }, 3);
     expect(g.arrived).toBe(false);
   });
 
-  it('expires frozen provider calculations so stale distance cannot trigger arrival', () => {
+  it('does not use a provider distance to trigger arrival without matching fresh geometry', () => {
     const store = new SignalKStore();
     const clock = $state({ now: 1000 });
     applySelf(
@@ -237,7 +238,8 @@ describe('CourseGuidance', () => {
       clock.now,
     );
     const g = new CourseGuidance(store, new OwnVessel(store, clock), clock);
-    expect(g.arrived).toBe(true);
+    expect(g.distanceToNextMeters).toBe(50);
+    expect(g.arrived).toBe(false);
     clock.now += 30_001;
     expect(g.source).toBe('computed');
     expect(g.distanceToNextMeters).toBeUndefined();
@@ -246,8 +248,8 @@ describe('CourseGuidance', () => {
 
   it('the arrival latch resets when the next point changes', () => {
     const store = storeWith({
-      'navigation.position': { latitude: 0, longitude: 0 },
-      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 }, name: 'B' },
+      'navigation.position': { latitude: 0, longitude: 0.00045 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 0 }, name: 'B' },
       'navigation.course.calcValues.crossTrackError': 0,
       'navigation.course.calcValues.distance': 50,
     });
@@ -258,12 +260,30 @@ describe('CourseGuidance', () => {
     applySelf(
       store,
       {
-        'navigation.course.nextPoint': { position: { latitude: 1, longitude: 1 }, name: 'C' },
+        'navigation.course.nextPoint': { position: { latitude: 1, longitude: 0 }, name: 'C' },
         'navigation.course.calcValues.distance': 110,
       },
       2,
     );
     expect(g.arrived).toBe(false);
+  });
+
+  it('clears arrival immediately when the own-vessel fix becomes stale', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    applySelf(
+      store,
+      {
+        'navigation.position': { latitude: 0, longitude: 0.00045 },
+        'navigation.course.nextPoint': { position: { latitude: 0, longitude: 0 } },
+        'navigation.course.calcValues.distance': 50,
+      },
+      clock.now,
+    );
+    const guidance = new CourseGuidance(store, new OwnVessel(store, clock), clock);
+    expect(guidance.arrived).toBe(true);
+    clock.now += 60_000;
+    expect(guidance.arrived).toBe(false);
   });
 
   it('computes the derived values when calcValues is absent and flags the source computed', () => {

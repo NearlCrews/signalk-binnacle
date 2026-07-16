@@ -16,6 +16,8 @@ export interface RadarFrame {
   spokeCount: number;
 }
 
+const RADAR_HEADING_STALE_MS = 5_000;
+
 export class RadarFrameCore {
   readonly #spokesPerRev: number;
   readonly #maxSpokeLen: number;
@@ -24,12 +26,14 @@ export class RadarFrameCore {
   readonly #accumulator: Uint8Array;
   #range: number;
   #heading: number | undefined;
+  #headingAt: number | undefined;
   #sweep: number | undefined;
   #spokesSinceFlush = 0;
   // Transfer buffers the main thread hands back after uploading a frame, so a steady-state flush
   // copies into a recycled buffer instead of allocating a fresh one per flush (2 MB at 15 Hz is
   // ~30 MB/s of garbage otherwise). Two is the natural depth: one in flight, one being written.
   #pool: ArrayBuffer[] = [];
+  readonly #now: () => number;
 
   get hasPendingSpokes(): boolean {
     return this.#spokesSinceFlush > 0;
@@ -38,11 +42,17 @@ export class RadarFrameCore {
   // initialRange seeds the display range from discovery (RadarInfo.range) so the echo quad and rings
   // have a sane extent from the first frame, before any spoke reports a range, and survive a spoke that
   // reports 0 (proto3 default when the field is absent).
-  constructor(spokesPerRev: number, maxSpokeLen: number, initialRange = 0) {
+  constructor(
+    spokesPerRev: number,
+    maxSpokeLen: number,
+    initialRange = 0,
+    now: () => number = Date.now,
+  ) {
     this.#spokesPerRev = spokesPerRev;
     this.#maxSpokeLen = maxSpokeLen;
     this.#accumulator = new Uint8Array(spokesPerRev * maxSpokeLen);
     this.#range = initialRange > 0 ? initialRange : 0;
+    this.#now = now;
   }
 
   // Decode one stream message into the accumulator and return how many spokes it integrated.
@@ -59,6 +69,7 @@ export class RadarFrameCore {
           headingSpokes(spoke.angle, spoke.bearing, this.#spokesPerRev),
           this.#spokesPerRev,
         );
+        this.#headingAt = this.#now();
       }
     }
     this.#spokesSinceFlush += message.spokes.length;
@@ -85,7 +96,10 @@ export class RadarFrameCore {
       spokesPerRev: this.#spokesPerRev,
       maxSpokeLen: this.#maxSpokeLen,
       range: this.#range,
-      heading: this.#heading,
+      heading:
+        this.#headingAt !== undefined && this.#now() - this.#headingAt <= RADAR_HEADING_STALE_MS
+          ? this.#heading
+          : undefined,
       sweep: this.#sweep,
       spokeCount,
     };

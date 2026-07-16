@@ -202,6 +202,23 @@ describe('RegionsController', () => {
     cleanup();
   });
 
+  it('bounds typed region names and rejects control characters at submission', async () => {
+    const api = client();
+    const { controller, cleanup } = setup(api);
+    controller.bbox = [-1, -1, 1, 1];
+    controller.selectedSources = ['basemap'];
+
+    controller.setRegionName('x'.repeat(121));
+    expect(controller.regionName).toHaveLength(120);
+
+    controller.regionName = 'unsafe\nname';
+    await controller.saveRegion();
+
+    expect(controller.error).toContain('contain no control characters');
+    expect(api.postRegion).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('restarts a download poll when deleting the region fails', async () => {
     const getStatus = vi.fn(async () => null);
     const api = client({

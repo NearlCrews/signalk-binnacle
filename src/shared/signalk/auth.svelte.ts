@@ -1,4 +1,4 @@
-import { isRecord } from '$shared/lib';
+import { isRecord, withTimeout } from '$shared/lib';
 import { createPersistedCodec, PersistedValue } from '$shared/settings';
 import { jsonOr } from './resource';
 
@@ -33,7 +33,8 @@ const authIdentityCodec = createPersistedCodec(isAuthIdentity);
 interface AuthOptions {
   fetch?: typeof fetch;
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
-  schedule?: (run: () => void, ms: number) => void;
+  schedule?: (run: () => void, ms: number) => unknown;
+  cancelSchedule?: (handle: unknown) => void;
   pollMs?: number;
 }
 
@@ -70,18 +71,23 @@ class AccessRequestPoll {
   href?: string;
   #attempts = 0;
   #scheduled = false;
-  #schedule: (run: () => void, ms: number) => void;
+  #generation = 0;
+  #handle: unknown;
+  #schedule: (run: () => void, ms: number) => unknown;
+  #cancelSchedule: (handle: unknown) => void;
   #pollMs: number;
   #isActive: () => boolean;
   #onExhausted: () => void;
 
   constructor(
-    schedule: (run: () => void, ms: number) => void,
+    schedule: (run: () => void, ms: number) => unknown,
+    cancelSchedule: (handle: unknown) => void,
     pollMs: number,
     isActive: () => boolean,
     onExhausted: () => void,
   ) {
     this.#schedule = schedule;
+    this.#cancelSchedule = cancelSchedule;
     this.#pollMs = pollMs;
     this.#isActive = isActive;
     this.#onExhausted = onExhausted;
@@ -93,6 +99,13 @@ class AccessRequestPoll {
     this.#attempts = 0;
   }
 
+  cancel(): void {
+    this.#generation += 1;
+    if (this.#scheduled && this.#handle !== undefined) this.#cancelSchedule(this.#handle);
+    this.#scheduled = false;
+    this.#handle = undefined;
+  }
+
   schedule(task: () => void): void {
     if (this.#scheduled || !this.#isActive()) return;
     if (this.#attempts >= MAX_POLL_ATTEMPTS) {
@@ -101,10 +114,15 @@ class AccessRequestPoll {
     }
     this.#attempts += 1;
     this.#scheduled = true;
-    this.#schedule(() => {
+    const generation = this.#generation;
+    const handle = this.#schedule(() => {
+      if (generation !== this.#generation) return;
       this.#scheduled = false;
+      this.#handle = undefined;
+      if (!this.#isActive()) return;
       task();
     }, this.#pollMs);
+    if (generation === this.#generation && this.#scheduled) this.#handle = handle;
   }
 }
 
@@ -120,9 +138,11 @@ export class AuthController {
 
   #base: string;
   #fetch: typeof fetch;
-  #schedule: (run: () => void, ms: number) => void;
+  #schedule: (run: () => void, ms: number) => unknown;
+  #cancelSchedule: (handle: unknown) => void;
   #pollMs: number;
   #identity: PersistedValue<AuthIdentity>;
+  #identityGeneration = 0;
   #stopped = false;
   #checking = false;
   #watching = false;
@@ -135,13 +155,16 @@ export class AuthController {
   constructor(base: string, opts: AuthOptions = {}) {
     this.#base = base;
     this.#fetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
-    this.#schedule = opts.schedule ?? ((run, ms) => void setTimeout(run, ms));
+    this.#schedule = opts.schedule ?? ((run, ms) => setTimeout(run, ms));
+    this.#cancelSchedule =
+      opts.cancelSchedule ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
     this.#pollMs = opts.pollMs ?? 3000;
     // The initial-access poll stays live until a token is granted; exhausting its budget denies the
     // request. It does not gate on an href, so a POST that failed in transit can retry on the cadence
     // before any href exists.
     this.#accessPoll = new AccessRequestPoll(
       this.#schedule,
+      this.#cancelSchedule,
       this.#pollMs,
       () => !this.#stopped && this.status !== 'authenticated',
       () => {
@@ -152,6 +175,7 @@ export class AuthController {
     // upgrade and leaves the live read token in place.
     this.#upgradePoll = new AccessRequestPoll(
       this.#schedule,
+      this.#cancelSchedule,
       this.#pollMs,
       () => !this.#stopped && this.#upgradePoll.href !== undefined,
       () => this.#endUpgrade(),
@@ -183,6 +207,8 @@ export class AuthController {
   }
 
   async probe(): Promise<void> {
+    if (this.#stopped) return;
+    let identityGeneration = this.#identityGeneration;
     // A stored token is the source of truth: the WebSocket stream needs it, and a
     // working token means the server is secured and we are good. Check it first.
     const stored = this.#identity.value.token;
@@ -193,6 +219,7 @@ export class AuthController {
         headers: { Authorization: `Bearer ${stored}` },
         credentials: 'omit',
       });
+      if (this.#stopped || identityGeneration !== this.#identityGeneration) return;
       if (authed?.ok) {
         this.token = stored;
         this.status = 'authenticated';
@@ -205,13 +232,15 @@ export class AuthController {
       // Likewise a non-auth error (a 500, a proxy hiccup) is not a rejection of the token.
       if (authed.status !== 401 && authed.status !== 403) return;
       // Only a definite rejection invalidates the stored token.
-      this.#store(null);
+      this.#applyIdentity({ ...this.#identity.value, token: null }, true);
+      identityGeneration = this.#identityGeneration;
     }
     // Probe anonymously WITHOUT credentials. A browser session cookie would
     // otherwise make a secured server look unsecured, and the WebSocket stream
     // (which the cookie does not authenticate) would then connect tokenless and
     // receive no data. `credentials: 'omit'` forces a true anonymous check.
     const anon = await this.#safeFetch(`${this.#base}${PROBE_PATH}`, { credentials: 'omit' });
+    if (this.#stopped || identityGeneration !== this.#identityGeneration) return;
     if (anon?.ok) {
       this.status = 'unsecured';
       return;
@@ -251,15 +280,28 @@ export class AuthController {
     const body = await jsonOr<Record<string, unknown>>(res, {});
     if (body.state !== 'COMPLETED') return 'pending';
     const request = (body.accessRequest ?? {}) as { permission?: string; token?: string };
-    if (request.permission === 'APPROVED' && typeof request.token === 'string') {
+    if (
+      request.permission === 'APPROVED' &&
+      typeof request.token === 'string' &&
+      isSafeStoredText(request.token, 16_384)
+    ) {
       return { token: request.token };
     }
     return 'denied';
   }
 
   async requestAccess(): Promise<void> {
+    if (this.#stopped) return;
+    const identityGeneration = this.#identityGeneration;
+    const clientId = this.clientId;
     this.status = 'requesting';
-    const { ok, href } = await this.#postAccessRequest(this.clientId, CLIENT_DESCRIPTION);
+    const { ok, href } = await this.#postAccessRequest(clientId, CLIENT_DESCRIPTION);
+    if (
+      this.#stopped ||
+      identityGeneration !== this.#identityGeneration ||
+      clientId !== this.clientId
+    )
+      return;
     if (!ok) {
       // A failed POST (offline at startup) must not strand the request at 'requesting' forever: re-issue
       // it on the poll cadence, bounded by the attempt counter, which resets once a POST lands.
@@ -279,10 +321,17 @@ export class AuthController {
     // Skip if a check is already in flight: a tab return fires focus and visibilitychange together,
     // and a manual recheck can overlap the scheduled poll, so one guard avoids duplicate fetches.
     const href = this.#accessPoll.href;
-    if (this.#checking || !href || this.status === 'authenticated') return;
+    if (this.#stopped || this.#checking || !href || this.status === 'authenticated') return;
     this.#checking = true;
+    const identityGeneration = this.#identityGeneration;
     try {
       const result = await this.#pollAccessRequest(href);
+      if (
+        this.#stopped ||
+        identityGeneration !== this.#identityGeneration ||
+        href !== this.#accessPoll.href
+      )
+        return;
       // Another tab may have adopted a token (via the storage event) while the poll was in
       // flight; every branch below would clobber the authenticated state, so bail out first.
       // Widened read: the entry guard narrowed this.status, and control-flow analysis cannot
@@ -297,9 +346,7 @@ export class AuthController {
       } else if (result === 'denied') {
         this.status = 'denied';
       } else {
-        this.#store(result.token);
-        this.token = result.token;
-        this.status = 'authenticated';
+        this.#applyIdentity({ ...this.#identity.value, token: result.token }, true);
       }
     } finally {
       this.#checking = false;
@@ -321,28 +368,20 @@ export class AuthController {
   }
 
   recheck(): void {
+    if (this.#stopped) return;
     if (this.status === 'requesting') void this.checkRequest();
     if (this.upgrading) void this.checkUpgrade();
   }
 
   adoptToken(token: string): void {
-    if (!token || this.status === 'authenticated') return;
-    this.#store(token);
-    this.token = token;
-    this.status = 'authenticated';
+    if (this.#stopped || !isSafeStoredText(token, 16_384)) return;
+    this.#applyIdentity({ ...this.#identity.value, token }, true);
   }
 
   // Forget only Binnacle's device identity and token. Signal K owns server-side revocation, and the
   // browser's administrator cookie is a separate session, so neither is implied by this local action.
   forgetDeviceCredentials(persistReplacement = true): void {
-    const replacement = { clientId: newClientId(), token: null };
-    if (persistReplacement) this.#identity.set(replacement);
-    else this.#identity.value = replacement;
-    this.token = null;
-    this.status = 'unknown';
-    this.writeBlocked = false;
-    this.#accessPoll.href = undefined;
-    this.#endUpgrade();
+    this.#applyIdentity({ clientId: newClientId(), token: null }, persistReplacement);
   }
 
   // Record a write outcome observed through sendJson. An authenticated session whose write is refused
@@ -359,18 +398,27 @@ export class AuthController {
   // existing read grant). The current read token stays live until the new one is approved, so the chart
   // keeps updating; on approval the new identity is adopted wholesale.
   async requestWriteAccess(): Promise<void> {
-    if (this.upgrading) return;
+    if (this.#stopped || this.upgrading) return;
     // Set the upgrade client id before the reactive flag so the banner names it on first render.
     this.#upgradePoll.reset();
     this.#upgradeClientId = newClientId();
+    const upgradeClientId = this.#upgradeClientId;
+    const identityGeneration = this.#identityGeneration;
     this.upgrading = true;
     const { href } = await this.#postAccessRequest(
-      this.#upgradeClientId,
+      upgradeClientId,
       `${CLIENT_DESCRIPTION} (read/write)`,
     );
+    if (
+      this.#stopped ||
+      identityGeneration !== this.#identityGeneration ||
+      this.#upgradeClientId !== upgradeClientId ||
+      !this.upgrading
+    )
+      return;
     this.#upgradePoll.href = href;
     if (!href) {
-      this.upgrading = false;
+      this.#endUpgrade();
       return;
     }
     this.#upgradePoll.schedule(() => void this.checkUpgrade());
@@ -378,8 +426,17 @@ export class AuthController {
 
   async checkUpgrade(): Promise<void> {
     const href = this.#upgradePoll.href;
-    if (!href) return;
+    if (this.#stopped || !href) return;
+    const identityGeneration = this.#identityGeneration;
+    const upgradeClientId = this.#upgradeClientId;
     const result = await this.#pollAccessRequest(href);
+    if (
+      this.#stopped ||
+      identityGeneration !== this.#identityGeneration ||
+      href !== this.#upgradePoll.href ||
+      upgradeClientId !== this.#upgradeClientId
+    )
+      return;
     if (result === 'pending') {
       this.#upgradePoll.schedule(() => void this.checkUpgrade());
       return;
@@ -387,16 +444,15 @@ export class AuthController {
     // On approval adopt the new read/write identity wholesale; 'gone' and 'denied' just end the upgrade,
     // leaving the live read token in place so the chart keeps updating.
     if (typeof result === 'object' && this.#upgradeClientId) {
-      this.#identity.set({ clientId: this.#upgradeClientId, token: result.token });
-      this.token = result.token;
-      this.status = 'authenticated';
-      this.writeBlocked = false;
+      this.#applyIdentity({ clientId: this.#upgradeClientId, token: result.token }, true);
     }
     this.#endUpgrade();
   }
 
   stop(): void {
     this.#stopped = true;
+    this.#accessPoll.cancel();
+    this.#endUpgrade();
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', this.#onFocus);
       window.removeEventListener('storage', this.#onStorage);
@@ -419,26 +475,35 @@ export class AuthController {
       return;
     }
     try {
-      const token = (JSON.parse(event.newValue) as AuthIdentity).token;
-      if (token) this.adoptToken(token);
+      const decoded = authIdentityCodec.decode(JSON.parse(event.newValue));
+      if (decoded.state === 'valid') this.#applyIdentity(decoded.value, false);
     } catch {
       // Ignore a malformed storage payload.
     }
   };
 
   #endUpgrade(): void {
+    this.#upgradePoll.cancel();
     this.upgrading = false;
     this.#upgradePoll.href = undefined;
     this.#upgradeClientId = undefined;
   }
 
-  #store(token: string | null): void {
-    this.#identity.set({ ...this.#identity.value, token });
+  #applyIdentity(identity: AuthIdentity, persist: boolean): void {
+    this.#identityGeneration += 1;
+    if (persist) this.#identity.set(identity);
+    else this.#identity.value = identity;
+    this.token = identity.token;
+    this.status = identity.token === null ? 'unknown' : 'authenticated';
+    this.writeBlocked = false;
+    this.#accessPoll.cancel();
+    this.#accessPoll.href = undefined;
+    this.#endUpgrade();
   }
 
   async #safeFetch(url: string, init?: RequestInit): Promise<Response | undefined> {
     try {
-      return await this.#fetch(url, init);
+      return await this.#fetch(url, withTimeout(init));
     } catch {
       return undefined;
     }

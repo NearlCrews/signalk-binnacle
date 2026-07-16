@@ -127,6 +127,8 @@ The saved-track controller uses latest-result-wins refreshes and one mutation at
 writes update local state before reloading the collection, so a slow or failed follow-up read cannot
 erase an accepted save. The recorder serializes local appends, clears, and prefix rewrites to prevent
 IndexedDB completion order from resurrecting discarded points or dropping a post-save tail.
+Device-data erasure remains blocked until the recorder has checked IndexedDB, so a slow startup read
+cannot reveal an unsaved track only after its storage has already been deleted.
 
 ## Verification
 

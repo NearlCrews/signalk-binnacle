@@ -11,13 +11,19 @@ export interface Syncable {
   sync(ctx: OverlayContext): void;
 }
 
+export type OverlaySyncStatus = (overlayId: string | undefined, error: unknown | undefined) => void;
+
+function syncableId(overlay: Syncable): string | undefined {
+  return 'id' in overlay && typeof overlay.id === 'string' ? overlay.id : undefined;
+}
+
 export interface OverlayTick {
   // Start syncing the overlays: on every MapLibre 'render' (so pan and zoom repaints update them)
   // and on a low-frequency interval (so store-driven overlays that change without a camera move,
   // like AIS prune, tides, radar advance, and collision, still tick). Both stop while the document
   // is hidden. The per-overlay dirty-checks still gate real work, so this only changes WHEN sync is
   // invoked, not what it does.
-  runTick: (overlays: ReadonlyArray<Syncable>) => void;
+  runTick: (overlays: ReadonlyArray<Syncable>, onStatus?: OverlaySyncStatus) => void;
   // Teardown for the sync wiring runTick installs (the 'render' listener, the interval, and the
   // visibilitychange listener). A no-op until runTick is called; invoked once on destroy.
   stopTick: () => void;
@@ -33,16 +39,31 @@ export function createOverlayTick(
   // delegates through it rather than capturing a stale value.
   let teardown = () => {};
 
-  const runTick = (overlays: ReadonlyArray<Syncable>) => {
+  const runTick = (overlays: ReadonlyArray<Syncable>, onStatus?: OverlaySyncStatus) => {
     // A second call must not orphan the first 'render' listener, interval, and visibilitychange
     // listener, so tear down any prior wiring first.
     teardown();
     // Calling this once replaces the old unconditional rAF loop, which synced ~60x/sec for the life
     // of the map even at anchor. Now sync runs only when the map actually repaints (pan, zoom) and
     // on a low-frequency interval for the store-driven overlays, and both pause while hidden.
+    const failedOverlays = new WeakSet<Syncable>();
     const syncAll = () => {
       if (isDestroyed()) return;
-      for (const overlay of overlays) overlay.sync(ctx);
+      for (const overlay of overlays) {
+        try {
+          overlay.sync(ctx);
+          if (failedOverlays.delete(overlay)) onStatus?.(syncableId(overlay), undefined);
+        } catch (error) {
+          // A broken optional overlay must never prevent later navigation overlays from updating.
+          // Warn once per continuous failure so the 250 ms safety tick does not flood the console.
+          if (!failedOverlays.has(overlay)) {
+            const id = syncableId(overlay);
+            console.warn(`Overlay "${id ?? 'unmanaged'}" failed to synchronize.`, error);
+            failedOverlays.add(overlay);
+            onStatus?.(id, error);
+          }
+        }
+      }
     };
 
     // MapLibre fires 'render' only when it repaints, so this covers every pan and zoom without a

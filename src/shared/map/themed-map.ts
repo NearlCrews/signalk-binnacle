@@ -14,7 +14,7 @@ import {
 import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
 import { mapThemePaint } from './map-theme';
-import { createOverlayTick, type Syncable } from './overlay-tick';
+import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
 import { beforeIdFor, installSentinels } from './sentinels';
 import type { OverlayContext } from './types';
 
@@ -35,7 +35,7 @@ export interface ThemedMapApi {
   // like AIS prune, tides, radar advance, and collision, still tick). Both stop while the document
   // is hidden. The per-overlay dirty-checks still gate real work, so this only changes WHEN sync is
   // invoked, not what it does.
-  runTick: (overlays: ReadonlyArray<Syncable>) => void;
+  runTick: (overlays: ReadonlyArray<Syncable>, onStatus?: OverlaySyncStatus) => void;
 }
 
 export interface ThemedMapOptions {

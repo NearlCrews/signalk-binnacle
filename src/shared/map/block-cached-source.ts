@@ -1,6 +1,7 @@
 import type { RangeResponse, Source } from 'pmtiles';
 import { isAbort } from './abort';
 import type { BlockStore } from './block-store';
+import { requestedRangeEnd } from './pmtiles-range';
 
 const BLOCK_SIZE = 64 * 1024;
 const WRITES_PER_PRUNE = 16;
@@ -54,6 +55,7 @@ export class BlockCachedSource implements Source {
     signal?: AbortSignal,
     etag?: string,
   ): Promise<RangeResponse> {
+    requestedRangeEnd(offset, length);
     const bs = this.#blockSize;
     const url = this.#inner.getKey();
     const first = Math.floor(offset / bs);
@@ -67,10 +69,23 @@ export class BlockCachedSource implements Source {
     let expires: string | undefined;
 
     if (first === 0) {
+      let res: RangeResponse | undefined;
       try {
-        const res = await this.#inner.getBytes(0, bs, signal, etag);
-        if (res.etag !== undefined) {
-          const prior = await this.#store.getValidator(url);
+        res = await this.#inner.getBytes(0, bs, signal, etag);
+      } catch (error) {
+        if (!cached.has(0) || isAbort(error, signal)) throw error;
+      }
+      if (res) {
+        const prior = await this.#store.getValidator(url);
+        if (res.etag === undefined) {
+          // A successful header read without a validator cannot prove that any cached block belongs
+          // to the current archive. Drop the old archive before caching the fresh header. A failed
+          // header read still takes the offline fallback below and preserves the validated cache.
+          await this.#store.purgeArchive(url);
+          cached.clear();
+          this.#etag = undefined;
+          this.#etagLoaded = true;
+        } else {
           if (prior !== undefined && prior !== res.etag) {
             // The archive was replaced: every cached block is from the old bytes.
             await this.#store.purgeArchive(url);
@@ -84,8 +99,6 @@ export class BlockCachedSource implements Source {
         cached.set(0, res.data);
         cacheControl = res.cacheControl;
         expires = res.expires;
-      } catch (error) {
-        if (!cached.has(0) || isAbort(error, signal)) throw error;
       }
     }
 

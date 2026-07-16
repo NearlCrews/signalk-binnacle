@@ -92,6 +92,38 @@ describe('SymbolIconRegistry', () => {
     expect(registry.status('u1')).toBe('failed');
   });
 
+  it('retries failed symbols after the catalog or authentication revision changes', async () => {
+    const assets = {
+      revision: 0,
+      rasterize: vi.fn().mockResolvedValue(fakeRaster()),
+      svgText: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValue('<svg/>'),
+    };
+    const registry = new SymbolIconRegistry(assets);
+    const map = createFakeMap();
+
+    expect(await registry.ensure(map as never, sym(), DAY)).toBe(false);
+    assets.revision += 1;
+    expect(await registry.ensure(map as never, sym(), DAY)).toBe(true);
+    expect(assets.svgText).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates ready and failed reads when the asset revision changes', async () => {
+    const assets = {
+      revision: 0,
+      rasterize: vi.fn().mockResolvedValue(fakeRaster()),
+      svgText: vi.fn().mockResolvedValue('<svg/>'),
+    };
+    const registry = new SymbolIconRegistry(assets);
+    const map = createFakeMap();
+    await registry.ensure(map as never, sym(), DAY);
+    expect(registry.status('u1')).toBe('ready');
+    expect(registry.entry('u1')).toBeDefined();
+
+    assets.revision += 1;
+    expect(registry.status('u1')).toBeUndefined();
+    expect(registry.entry('u1')).toBeUndefined();
+  });
+
   it('retheme re-rasterizes ready symbols with the new paint', async () => {
     const rasterize = vi.fn().mockResolvedValue(fakeRaster());
     const registry = new SymbolIconRegistry({ rasterize, svgText: async () => '<svg/>' });
