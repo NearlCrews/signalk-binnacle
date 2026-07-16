@@ -39,6 +39,12 @@ application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICEN
 guides linked from the README. It must not contain source maps, source files, test artifacts, local
 configuration, or scratch files.
 
+GitHub workflows disable `setup-node` package-manager caching until the pinned npm version is
+installed from the runner's temporary directory. Keep that bootstrap order when changing the Node
+matrix or npm requirement. `devEngines` rejects an unsupported bundled npm before a command run from
+the repository can upgrade it. The commit gate runs `ci:workflows` to enforce this ordering across
+the CI, compatibility-matrix, and publication workflows.
+
 Before requesting publication approval, also confirm:
 
 - `git diff --check` is clean, committed text contains no em dash, and the worktree contains only the

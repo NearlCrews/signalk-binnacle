@@ -28,8 +28,10 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
-          cache: npm
-      - run: npm install --global npm@11.16.0
+          package-manager-cache: false
+      - name: Install supported npm
+        working-directory: ${{ runner.temp }}
+        run: npm install --global npm@11.16.0
       # Fail fast when the release tag and the package.json version disagree, so a release can never
       # publish a version that does not match its tag. The tag arrives through an env var (not inline
       # interpolation) so it cannot be expanded as shell.
@@ -78,7 +80,10 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
-      - run: npm install --global npm@11.16.0
+          package-manager-cache: false
+      - name: Install supported npm
+        working-directory: ${{ runner.temp }}
+        run: npm install --global npm@11.16.0
       # --access public is required for the first publish of a new package when generating
       # provenance; for later versions it is the default for an unscoped public package.
       - run: npm publish artifacts/*.tgz --provenance --access public
