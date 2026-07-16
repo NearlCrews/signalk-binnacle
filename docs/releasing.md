@@ -39,6 +39,10 @@ application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICEN
 guides linked from the README. It must not contain source maps, source files, test artifacts, local
 configuration, or scratch files.
 
+Run `package:check` through npm. Its package-content validator uses npm's environment-provided
+JavaScript entry point instead of a platform-specific command shim, which keeps the same validation
+path on Linux, macOS, and Windows.
+
 GitHub workflows disable `setup-node` package-manager caching until the pinned npm version is
 installed from the runner's temporary directory. Keep that bootstrap order when changing the Node
 matrix or npm requirement. `devEngines` rejects an unsupported bundled npm before a command run from

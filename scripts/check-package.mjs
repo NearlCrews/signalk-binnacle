@@ -1,12 +1,27 @@
 import { spawnSync } from 'node:child_process';
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const result = spawnSync(npm, ['pack', '--dry-run', '--ignore-scripts', '--json'], {
-  encoding: 'utf8',
-});
+const npmCli = process.env.npm_execpath;
+if (!npmCli) {
+  console.error('Package validation must run through npm so npm_execpath is available.');
+  process.exit(1);
+}
+
+const result = spawnSync(
+  process.execPath,
+  [npmCli, 'pack', '--dry-run', '--ignore-scripts', '--json'],
+  {
+    encoding: 'utf8',
+  },
+);
+
+if (result.error) {
+  console.error(`Unable to run npm pack: ${result.error.message}`);
+  process.exit(1);
+}
 
 if (result.status !== 0) {
-  process.stderr.write(result.stderr);
+  if (result.stderr) process.stderr.write(result.stderr);
+  if (result.stdout) process.stdout.write(result.stdout);
   process.exit(result.status ?? 1);
 }
 
