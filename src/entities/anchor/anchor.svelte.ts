@@ -2,6 +2,7 @@ import type { OwnVessel } from '$entities/vessel';
 import { asNumber, isLatLon, type LatLon } from '$shared/geo';
 import { isFiniteNumber, isRecord } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
+import { binnacleStorageKey } from '$shared/persistence';
 import {
   boundedNumberPersistedCodec,
   type PersistedCodec,
@@ -91,13 +92,13 @@ export class AnchorWatch {
     this.#store = store;
     this.#vessel = vessel;
     this.#watch = new PersistedValue<LocalAnchor | null>(
-      'binnacle:anchor-watch',
+      binnacleStorageKey('anchorWatch'),
       null,
       storage,
       localAnchorCodec,
     );
     this.#preferredRadius = new PersistedValue<number>(
-      'binnacle:anchor-radius',
+      binnacleStorageKey('anchorRadius'),
       DEFAULT_RADIUS_M,
       storage,
       boundedNumberPersistedCodec(MIN_RADIUS_M, MAX_ANCHOR_RADIUS_M),

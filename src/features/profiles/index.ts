@@ -1,5 +1,14 @@
 export { default as ProfileSwitcher } from './ProfileSwitcher.svelte';
-export { default as ProfilesPanel } from './ProfilesPanel.svelte';
 export { createProfileBindings } from './profile-bindings';
 export { downloadProfileJson, type ImportedProfile } from './profile-io';
-export { seedStarterProfiles } from './starter-profiles';
+export { createProfilesController } from './profiles-controller.svelte';
+
+let profilesPanelModule: Promise<typeof import('./ProfilesPanel.svelte')> | undefined;
+
+export function loadProfilesPanel(): Promise<typeof import('./ProfilesPanel.svelte')> {
+  profilesPanelModule ??= import('./ProfilesPanel.svelte').catch((error: unknown) => {
+    profilesPanelModule = undefined;
+    throw error;
+  });
+  return profilesPanelModule;
+}

@@ -22,12 +22,13 @@ interface Props {
   profiles: Profile[];
   activeId: string | undefined;
   defaultId: string | undefined;
-  isDirty: boolean;
   syncState: ProfileSyncState;
+  remoteUpdateAvailable: boolean;
   onRetrySync: () => void;
   onApply: (id: string) => void;
+  onApplyRemoteUpdate: () => void;
+  onKeepCurrentSetup: () => void;
   onSaveNew: (name: string) => void;
-  onUpdate: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
   onSetDefault: (id: string) => void;
@@ -45,12 +46,13 @@ const {
   profiles,
   activeId,
   defaultId,
-  isDirty,
   syncState,
+  remoteUpdateAvailable,
   onRetrySync,
   onApply,
+  onApplyRemoteUpdate,
+  onKeepCurrentSetup,
   onSaveNew,
-  onUpdate,
   onRename,
   onRemove,
   onSetDefault,
@@ -107,39 +109,57 @@ async function importProfiles(): Promise<void> {
 // Delete is destructive and propagates to every synced device, so it arms a confirm step rather
 // than firing on a single tap, matching the Routes panel.
 const armedDelete = new ArmedRow((id) => onRemove(id));
-let confirmingApplyId = $state<string | undefined>();
 let actionMenuId = $state<string | undefined>();
 
 function useProfile(id: string): void {
-  if (isDirty && activeId !== undefined && activeId !== id) {
-    confirmingApplyId = id;
-    return;
-  }
   onApply(id);
 }
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
-  {#if syncState === 'syncing'}
-    <p class="muted-note" role="status">Syncing profiles with this Signal K account…</p>
-  {:else if syncState === 'synced'}
-    <p class="muted-note" role="status">Profiles are synced with this Signal K account.</p>
-  {:else if syncState === 'error'}
+  {#if syncState === 'conflict'}
     <p class="alert-note" role="alert">
-      Profiles are saved on this device. Server sync is unavailable.
+      Another station changed these profiles. Binnacle could not finish merging the changes.
     </p>
     <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+  {:else if syncState === 'error'}
+    <p class="alert-note" role="alert">
+      Profiles are saved on this device. Server profile data could not be read safely.
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+  {:else if syncState === 'syncing'}
+    <p class="muted-note">Syncing profiles with this Signal K account…</p>
   {:else if auth.writeBlocked}
     <p class="muted-note">
       Profiles are saved on this device. A write token is needed to sync them to other stations.
+    </p>
+  {:else if syncState === 'synced'}
+    <p class="muted-note">Profiles are synced with this Signal K account.</p>
+  {:else if syncState === 'waiting'}
+    <p class="muted-note" role="status">
+      Profiles are saved on this device and are waiting to sync.
     </p>
   {:else}
     <p class="muted-note">Profiles are saved on this device.</p>
   {/if}
   <p class="muted-note">
-    A profile saves which layers and overlays are on, so you can switch between setups like coastal
-    cruising and racing in one tap.
+    A profile is a named helm setup. Changes to the active profile save automatically, while each
+    device chooses which profile it uses.
   </p>
+  {#if remoteUpdateAvailable}
+    <div class="alert-note remote-update">
+      <p role="status">The active profile was updated on another station.</p>
+      <p>Apply the shared update, or sync this station's current setup back to the profile.</p>
+      <div class="panel-controls">
+        <button type="button" class="btn btn-ghost" onclick={onApplyRemoteUpdate}>
+          Apply update
+        </button>
+        <button type="button" class="btn btn-ghost" onclick={onKeepCurrentSetup}>
+          Keep current setup
+        </button>
+      </div>
+    </div>
+  {/if}
   <div class="panel-controls">
     <button
       type="button"
@@ -179,7 +199,7 @@ function useProfile(id: string): void {
   <SavedList
     heading="Saved profiles"
     items={profiles}
-    empty="No profiles yet. Set up your layers, then tap Save current as profile to keep them."
+    empty="No profiles yet. Configure the helm, then tap Save current as profile."
     key={(profile) => profile.id}
     isActive={(profile) => profile.id === activeId}
   >
@@ -192,12 +212,9 @@ function useProfile(id: string): void {
           <span class="caps-label tag">Default</span>
         {/if}
         {#if isActive}
-          <span class="badge">Active</span>
+          <span class="badge">Active here</span>
         {/if}
       </div>
-      {#if isActive && isDirty}
-        <p class="dirty caps-label">Unsaved changes</p>
-      {/if}
       {#if naming?.mode === 'rename' && naming.id === profile.id}
         <NameEntry
           label="Rename profile"
@@ -205,21 +222,9 @@ function useProfile(id: string): void {
           onConfirm={confirmName}
           onCancel={() => (naming = null)}
         />
-      {:else if confirmingApplyId === profile.id}
-        <InlineConfirm
-          question={`Use ${profile.name} and discard unsaved changes to the active profile?`}
-          confirmLabel="Use profile"
-          onConfirm={() => {
-            confirmingApplyId = undefined;
-            onApply(profile.id);
-          }}
-          onCancel={() => (confirmingApplyId = undefined)}
-        />
       {:else if armedDelete.isArmed(profile.id)}
         <InlineConfirm
-          question={auth.writeBlocked
-            ? 'Delete this profile from this device? Its server copy may remain.'
-            : 'Delete this profile on every synced device?'}
+          question="Delete this profile? If profile sync is available, the deletion will sync to other stations."
           onConfirm={() => armedDelete.confirm(profile.id)}
           onCancel={() => armedDelete.cancel()}
         />
@@ -229,23 +234,11 @@ function useProfile(id: string): void {
             <button
               type="button"
               class="icon-btn"
-              aria-label="Use this profile"
-              title="Use this profile"
+              aria-label={`Use ${profile.name} on this device`}
+              title={`Use ${profile.name} on this device`}
               onclick={() => useProfile(profile.id)}
             >
               <Check size={18} aria-hidden="true" />
-            </button>
-          {/if}
-          {#if isActive}
-            <button
-              type="button"
-              class="icon-btn"
-              aria-label="Save changes to this profile"
-              title="Save changes"
-              disabled={!isDirty}
-              onclick={() => onUpdate(profile.id)}
-            >
-              <Save size={18} aria-hidden="true" />
             </button>
           {/if}
           <OverflowActions
@@ -314,15 +307,18 @@ function useProfile(id: string): void {
 
 <style>
 /* The card list, name, actions, the active-card accent treatment, and the "Active" badge all come from
-   the shared .saved system in app.css. Only the default tag and the dirty note are profile-specific. */
+   the shared .saved system in app.css. */
 /* A quiet caps-label tag marking the default profile, distinct from the filled accent "Active" pill. */
 .tag {
   flex-shrink: 0;
   color: var(--accent);
 }
-.dirty {
+.remote-update {
+  display: grid;
+  gap: var(--space-2);
+}
+.remote-update p {
   margin: 0;
-  color: var(--text-muted);
 }
 /* The import error uses the global .alert-note rule; the armed delete confirm comes from the
    shared InlineConfirm component. */

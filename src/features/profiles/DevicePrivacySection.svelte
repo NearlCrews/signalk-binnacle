@@ -62,6 +62,8 @@ const reportText = $derived.by(() => {
   <p class="muted-note">
     These actions affect this device only. Server routes, waypoints, tracks, profiles, Chart Locker
     data, administrator sessions, and server-side device authorization are not deleted or revoked.
+    Synced profiles return after this device signs in and syncs again. Profiles and changes that
+    have not synced will be lost.
   </p>
   {#if working}
     <p class="muted-note" role="status">
@@ -86,7 +88,7 @@ const reportText = $derived.by(() => {
     />
   {:else if confirming === 'all'}
     <InlineConfirm
-      question="Erase all Binnacle settings, offline browser caches, unsaved local data, profiles, and credentials from this device?"
+      question="Erase all Binnacle settings, offline browser caches, unsaved local data, profiles, and credentials from this device? Profiles and changes that have not synced will be lost."
       confirmLabel="Erase local data"
       onConfirm={() => void run('all')}
       onCancel={() => (confirming = undefined)}

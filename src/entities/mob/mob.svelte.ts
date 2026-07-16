@@ -2,6 +2,7 @@ import type { OwnVessel } from '$entities/vessel';
 import { isLatLon, type LatLon } from '$shared/geo';
 import { hasControlCharacters, isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
+import { binnacleStorageKey } from '$shared/persistence';
 import { type PersistedCodec, PersistedValue, type StorageLike } from '$shared/settings';
 import { isSoundingNotification, type SignalKStore, SK_PATHS } from '$shared/signalk';
 
@@ -70,7 +71,7 @@ export class MobStore {
     this.#vessel = vessel;
     this.#clock = clock;
     this.#persisted = new PersistedValue<MobMark | null>(
-      'binnacle:mob',
+      binnacleStorageKey('mob'),
       null,
       storage,
       mobMarkCodec,

@@ -1,7 +1,9 @@
+import { binnacleStorageKey } from '$shared/persistence';
+
 export const THEMES = ['day', 'dusk', 'night-red'] as const;
 export type Theme = (typeof THEMES)[number];
 
-const STORAGE_KEY = 'binnacle:theme';
+const STORAGE_KEY = binnacleStorageKey('theme');
 const THEME_COLORS: Record<Theme, string> = {
   day: '#cfe0ec',
   dusk: '#0f1a24',

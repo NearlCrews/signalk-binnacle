@@ -4,6 +4,7 @@ import { createProfileBindings, type ProfileBindingDeps } from './profile-bindin
 // Minimal stand-ins: the bindings only read `.value`/`.theme` and call `.set`, so a plain object with
 // those is enough. Cast through unknown since the real types carry more.
 function makeDeps(): ProfileBindingDeps {
+  let anchorRadiusMeters = 50;
   const pv = <T>(value: T) => ({
     value,
     set(next: T) {
@@ -19,7 +20,6 @@ function makeDeps(): ProfileBindingDeps {
     },
     layers: pv({}),
     layerOrder: pv<string[]>([]),
-    layerCategories: pv({}),
     weatherLayers: pv({}),
     thresholds: pv({
       dangerCpaMeters: 1,
@@ -29,10 +29,15 @@ function makeDeps(): ProfileBindingDeps {
     }),
     trackSettings: pv({ intervalSeconds: 10, minMeters: 10, colorMode: 'speed' }),
     planningSpeedKn: pv(5),
-    arrivalMuted: pv(false),
     unitsLocal: pv('metric'),
     pinnedActions: pv<string[]>([]),
     instrumentTiles: pv<string[]>(['depth', 'speed']),
+    anchorRadius: {
+      get: () => anchorRadiusMeters,
+      set: (next: number) => {
+        anchorRadiusMeters = next;
+      },
+    },
   } as unknown as ProfileBindingDeps;
 }
 
@@ -43,8 +48,8 @@ describe('createProfileBindings', () => {
     expect(bundle).toMatchObject({
       theme: 'day',
       planningSpeedKn: 5,
-      arrivalMuted: false,
       units: 'metric',
+      anchorRadiusMeters: 50,
     });
     expect(bundle.layerOrder).toEqual([]);
     expect(bundle.trackSettings.colorMode).toBe('speed');
@@ -57,13 +62,13 @@ describe('createProfileBindings', () => {
       ...bindings.capture(),
       theme: 'night-red',
       planningSpeedKn: 7,
-      arrivalMuted: true,
       units: 'imperial',
+      anchorRadiusMeters: 75,
     });
     expect(deps.theme.theme).toBe('night-red');
     expect(deps.planningSpeedKn.value).toBe(7);
-    expect(deps.arrivalMuted.value).toBe(true);
     expect(deps.unitsLocal.value).toBe('imperial');
+    expect(deps.anchorRadius.get()).toBe(75);
   });
 
   it('a bundle without a units field leaves the local units alone', () => {

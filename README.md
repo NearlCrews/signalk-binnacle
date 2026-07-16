@@ -14,21 +14,23 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.15.4
+## What's new in 0.15.5
 
-Saved offline areas now recover cleanly across Chart Locker upgrades, lost warm-job responses, and
-temporary status failures.
+Profiles now preserve a helm setup across browsers while keeping each station's active selection and
+last-applied state local.
 
-- **Recoverable downloads.** If Chart Locker accepts a saved-area download but loses the immediate
-  job response, Binnacle follows the durable area identifier without starting a duplicate download.
-- **Honest status recovery.** Stale progress is cleared when polling restarts, and repeated temporary
-  failures provide a focused Retry status action without hiding other saved areas.
-- **Safe source changes.** Saved definitions identify chart sources removed from Chart Locker,
-  preserve existing cached coverage, and guide the user to adjust a copy before downloading again.
-- **Clearer failures.** Bounded Chart Locker rejection details explain correctable problems while
-  malformed or untrusted responses remain generic.
+- **Automatic saves.** Changes to the active profile save after a short debounce, including theme,
+  layers, instruments, units, alarms, track settings, pinned actions, and anchor radius.
+- **Cross-browser synchronization.** Authenticated Signal K users share named profiles and a default
+  through applicationData. Independent edits merge by setting, and active remote changes wait for an
+  explicit Apply update or Keep current setup choice.
+- **Reliable offline operation.** Local edits, deletions, and new profiles survive reloads and retry
+  after reconnect. An untouched offline fallback yields to the synchronized server default.
+- **Bounded and private.** Profile documents, requests, migrations, and extension fields are validated
+  and bounded. Device selection, credentials, active safety state, and server resources stay outside
+  the portable profile bundle.
 
-See the [changelog](CHANGELOG.md#v0154) for the full list.
+See the [changelog](CHANGELOG.md#v0155) and [profiles guide](docs/profiles.md) for the full details.
 
 ## What it does
 
@@ -73,10 +75,14 @@ Binnacle ships its full feature set as a Signal K webapp:
   per-waypoint and whole-route arrival times. Routes **import and export as GPX** to move between
   Binnacle and other chartplotters and MFDs, and saving an active route refreshes the server's Course
   API without dropping the current route list during a transient read failure.
-- **Profiles:** save named bundles of your settings (theme, which layers are on and their order, the
-  weather layers, the collision thresholds, and the track and planning settings), switch between them
-  in one tap, set a default, export and import them as files, and sync them across devices through the
-  server when you are logged in. The panel identifies local-only, syncing, synced, and failed states.
+- **Profiles:** keep named helm setups containing the theme, chart and weather layers, collision
+  thresholds, track and planning settings, unit fallback, toolbar pins, instrument selection, and
+  preferred anchor radius. Changes to the active profile save automatically. Profiles, defaults, and
+  edits sync through Signal K when you are logged in, while each browser keeps its own active choice
+  and chart view. Concurrent edits merge by setting instead of replacing the whole profile. Signal K
+  2.23.0 and later provide the strongest atomic cross-station revision protection, while older
+  servers retain local saves and best-effort synchronization. See [Profiles and
+  settings](docs/profiles.md).
 - **Instruments:** tap the Instruments pill and the chart slides left for a gauge dock (SOG,
   heading, depth, apparent wind, and more from a curated catalog you pick and reorder); on a phone
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
@@ -214,8 +220,9 @@ side safe areas, so its helm controls remain reachable when system chrome overla
 The **Profiles** panel includes **Forget credentials** and **Erase all local data** for a shared or
 retired display. These actions affect only Binnacle data in the current browser. They do not delete
 Signal K routes, waypoints, tracks, profiles, Chart Locker data, administrator sessions, or
-server-side device authorization. Full erasure is blocked while MOB, anchor watch, navigation, route
-editing, measurement, or an unsaved recorded track is active.
+server-side device authorization. Synced profiles return after the browser signs in and syncs again.
+Profiles and changes that have not synced are permanently lost. Full erasure is blocked while MOB,
+anchor watch, navigation, route editing, measurement, or an unsaved recorded track is active.
 
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to

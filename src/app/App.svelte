@@ -23,7 +23,7 @@ import {
   Waves,
 } from '@lucide/svelte';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { onDestroy, onMount, tick, untrack } from 'svelte';
+import { onDestroy, onMount, untrack } from 'svelte';
 import { AisTargets } from '$entities/ais';
 import { AnchorWatch } from '$entities/anchor';
 import { CollisionAssessment } from '$entities/collision';
@@ -82,11 +82,11 @@ import type { Poi } from '$features/poi-search';
 import { CompanionStatus } from '$features/prewarm';
 import {
   createProfileBindings,
+  createProfilesController,
   downloadProfileJson,
   type ImportedProfile,
+  loadProfilesPanel,
   ProfileSwitcher,
-  ProfilesPanel,
-  seedStarterProfiles,
 } from '$features/profiles';
 import { createRouteController } from '$features/routing';
 import { ThemeToggle } from '$features/theme-toggle';
@@ -119,6 +119,7 @@ import {
 } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
 import { probeCompanion } from '$shared/map';
+import { binnacleStorageKey } from '$shared/persistence';
 import {
   BINNACLE_PRIVACY_CHANNEL,
   createBinnaclePrivacyRegistry,
@@ -300,14 +301,14 @@ const routeStore = new RouteStore();
 const courseGuidance = new CourseGuidance(store, vessel, clock);
 const arrivalAlarm = new GatedAlarm(ARRIVAL_TONE);
 const arrivalMuted = new PersistedValue<boolean>(
-  'binnacle:arrival-muted',
+  binnacleStorageKey('arrivalMuted'),
   false,
   undefined,
   booleanPersistedCodec,
 );
 // The speed, in knots, used to turn a planned route's distance into per-waypoint passage times.
 const planningSpeedKn = new PersistedValue<number>(
-  'binnacle:planning-speed-kn',
+  binnacleStorageKey('planningSpeedKn'),
   5,
   undefined,
   (value): value is number =>
@@ -399,7 +400,7 @@ const layerSettingsCodec: PersistedCodec<LayerSettings> = {
   },
 };
 const weatherLayerSettings = new PersistedValue<LayerSettings>(
-  'binnacle:weather-layers',
+  binnacleStorageKey('weatherLayers'),
   {
     [WEATHER_LAYER_IDS.wind]: { visible: true, opacity: 1 },
     [WEATHER_LAYER_IDS.waves]: { visible: true, opacity: 0.7 },
@@ -413,6 +414,7 @@ let layersView = $state<LayersView | undefined>();
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
 // opening one closes whatever was open without each opener having to clear the others by hand.
 let activePanel = $state<PanelId | null>(null);
+let profilesPanelAttempt = $state(0);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
@@ -427,6 +429,10 @@ const backToMenu = (): void => {
   activePanel = null;
   menuOpen = true;
 };
+function profilesPanelForAttempt() {
+  void profilesPanelAttempt;
+  return loadProfilesPanel();
+}
 const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
@@ -497,13 +503,13 @@ const savedView = isMapView(mapViewStore.value) ? mapViewStore.value : undefined
 // load and the weather map's initial view share.
 const currentView = $derived(mapView ?? savedView);
 const layerSettings = new PersistedValue<LayerSettings>(
-  'binnacle:layers',
+  binnacleStorageKey('layers'),
   {},
   undefined,
   layerSettingsCodec,
 );
 const layerOrder = new PersistedValue<string[]>(
-  'binnacle:layer-order',
+  binnacleStorageKey('layerOrder'),
   [],
   undefined,
   stringArrayPersistedCodec({ maxItems: 512 }),
@@ -512,13 +518,13 @@ const layerOrder = new PersistedValue<string[]>(
 // "if they have radar, the radar layer is enabled". Latched so a later explicit toggle-off is never
 // overridden. Not part of a profile: it is local device state, not portable layer configuration.
 const radarAutoEnabled = new PersistedValue<boolean>(
-  'binnacle:radar-autoenabled',
+  binnacleStorageKey('radarAutoEnabled'),
   false,
   undefined,
   booleanPersistedCodec,
 );
 const pinnedActions = new PersistedValue<string[]>(
-  'binnacle:pinned-actions',
+  binnacleStorageKey('pinnedActions'),
   [...DEFAULT_PINNED],
   undefined,
   stringArrayPersistedCodec({ maxItems: 64, maxLength: 128 }),
@@ -528,13 +534,13 @@ const pinnedActions = new PersistedValue<string[]>(
 // entry reads and writes it), while the open flag stays local so a casual dock toggle never
 // dirties the active profile and a profile switch never yanks the dock.
 const instrumentTiles = new PersistedValue<string[]>(
-  'binnacle:instrument-tiles',
+  binnacleStorageKey('instrumentTiles'),
   [...DEFAULT_TILES],
   undefined,
-  stringArrayPersistedCodec({ maxItems: 128, maxLength: 256 }),
+  stringArrayPersistedCodec({ maxItems: 100, maxLength: 256 }),
 );
 const instrumentsOpen = new PersistedValue<boolean>(
-  'binnacle:instruments-open',
+  binnacleStorageKey('instrumentsOpen'),
   false,
   undefined,
   booleanPersistedCodec,
@@ -561,7 +567,7 @@ const onResetPinned = (): void => {
 };
 // Which Layers-panel categories the navigator has left open or closed, so the panel reopens that way.
 const layerCategoriesOpen = new PersistedValue<Record<string, boolean>>(
-  'binnacle:layer-categories',
+  binnacleStorageKey('layerCategories'),
   {},
   undefined,
   booleanRecordPersistedCodec({ maxEntries: 128 }),
@@ -710,15 +716,20 @@ async function forgetDeviceCredentials(): Promise<PrivacyReport> {
 }
 
 async function eraseAllLocalData(): Promise<PrivacyReport> {
-  return reloadAfterPrivacy(await privacy.eraseAllLocalData());
+  profilesController.suspend();
+  try {
+    const report = await privacy.eraseAllLocalData();
+    if (!report.clearedOwnerIds.includes('local-settings')) profilesController.resume();
+    return reloadAfterPrivacy(report);
+  } catch (error) {
+    profilesController.resume();
+    throw error;
+  }
 }
-// True only while a profile is being applied, so the dirty-tracking effect below does not flag the
-// active profile as edited by its own apply writes. A plain flag, not reactive, read inside the effect.
-let applying = false;
 // Handed up by the weather mini-map once it is ready, to push a weather-layer snapshot at runtime.
 let applyWeatherLayers = $state<((settings: LayerSettings) => void) | undefined>();
 // The mini-map is destroyed with the panel; drop the stale handle on close so a later profile
-// apply cannot push a snapshot into a removed map (which would throw and wedge dirty tracking).
+// apply cannot push a snapshot into a removed map or interrupt later profile autosaves.
 $effect(() => {
   if (!weatherPanelOpen) applyWeatherLayers = undefined;
 });
@@ -729,27 +740,21 @@ const profileBindings = createProfileBindings({
   theme,
   layers: layerSettings,
   layerOrder,
-  layerCategories: layerCategoriesOpen,
   weatherLayers: weatherLayerSettings,
   thresholds,
   trackSettings,
   planningSpeedKn,
-  arrivalMuted,
   unitsLocal: units.localSetting,
   pinnedActions,
   instrumentTiles,
+  anchorRadius: {
+    get: () => anchor.preferredRadiusMeters,
+    set: (radiusMeters) => anchor.rememberRadius(radiusMeters),
+  },
 });
 
-function captureProfileSettings(): ProfileSettings {
-  return profileBindings.capture();
-}
-
-// Write every portable store, then push the layer snapshots to the nav chart and the weather mini-map
-// so both update live. The applying guard is held until after the next tick, so the dirty effect runs
-// (and skips) within the same flush rather than flagging the apply as an edit.
-function applyProfileSettings(s: ProfileSettings): void {
-  applying = true;
-  profileBindings.apply(s);
+// Push a profile's persisted layer snapshots to the live maps after the bindings update their stores.
+function applyProfileRuntime(s: ProfileSettings): void {
   mapCommands?.applyLayers(s.layers, s.layerOrder);
   applyWeatherLayers?.(s.weatherLayers);
   // A profile that actually configures the radar layer is an explicit choice, so latch radar
@@ -757,75 +762,51 @@ function applyProfileSettings(s: ProfileSettings): void {
   // radar existed carries no marine-radar entry, so it must NOT latch, or it would permanently suppress
   // first-discovery auto-enable on this device.
   if (s.layers['marine-radar']) radarAutoEnabled.set(true);
-  void tick().then(() => {
-    applying = false;
-  });
 }
 
-// Mark the active profile edited when any portable setting changes outside of an apply, so the panel
-// and the top-bar switcher can offer to save the change. The primed flag skips the effect's mount
-// run, which would otherwise flag a restored active profile as edited at every launch. markDirty is
-// untracked: it reads activeId and isDirty, and tracking them would re-run this effect on every
-// profile save or switch and instantly re-flag the just-saved profile as dirty. Only the bound
-// settings may trigger it.
-let dirtyTrackerPrimed = false;
-$effect(() => {
-  profileBindings.track();
-  if (!dirtyTrackerPrimed) {
-    dirtyTrackerPrimed = true;
-    return;
-  }
-  if (!applying) untrack(() => profileStore.markDirty());
+const profilesController = createProfilesController({
+  store: profileStore,
+  bindings: profileBindings,
+  applyRuntime: applyProfileRuntime,
 });
 
-// Starter profiles on first run only (no stored document at all). A one-shot init check, not an
-// effect keyed on live emptiness: deleting the last profile must not instantly resurrect them.
-if (!profileStore.loadedFromStorage && profileStore.profiles.length === 0) {
-  seedStarterProfiles(profileStore, captureProfileSettings());
-}
+// A usable local cache is enough to start immediately. Server hydration still runs when
+// authentication resolves, but an offline restart must keep profile autosave working.
+if (profileStore.profiles.length > 0) void profilesController.initialize();
+
+$effect(() => profilesController.observeSettings());
 
 // Once the user is authenticated to a secured server, sync profiles through the SignalK applicationData
 // API so they follow the user across devices. An unsecured server (status 'unsecured', no token) keeps
-// profiles local, since applicationData is disabled without security. No local latch: syncWithServer is
-// idempotent while attached, and the effect re-runs only on an auth change, so a token rotation (the
-// read-write upgrade approval) retries a sync that a read-only token had detached.
+// profiles local, since applicationData is disabled without security. A fresh browser waits through
+// one bounded hydration window before the offline fallback may create local starters.
 async function syncProfiles(): Promise<void> {
   if (auth.status !== 'authenticated' || !auth.token) return;
-  const adapter = new SignalKProfileAdapter(origin, () => auth.token ?? undefined);
-  await profileStore.syncWithServer(adapter);
+  const adapter = new SignalKProfileAdapter(origin, () => auth.token ?? undefined, {
+    onWriteOutcome: (ok, status) => auth.reportWriteOutcome(ok, status),
+  });
+  await profilesController.sync(adapter);
 }
 
 $effect(() => {
-  if (auth.status !== 'authenticated' || !auth.token) return;
-  store.connection.phase;
-  void syncProfiles();
+  if (auth.status === 'authenticated' && auth.token) {
+    store.connection.phase;
+    void syncProfiles();
+  } else if (auth.status === 'unsecured' || auth.status === 'denied') {
+    void profilesController.initialize();
+  }
 });
 
 function onApplyProfile(id: string): void {
-  const profile = profileStore.profileById(id);
-  if (!profile) return;
-  applyProfileSettings(profile.settings);
-  profileStore.setActive(id);
+  profilesController.apply(id);
 }
-
-// Apply the default profile once on startup, but only when no profile is already active, so a chosen
-// default takes effect on launch without overriding a profile the navigator left active last session.
-let defaultApplied = false;
-$effect(() => {
-  if (defaultApplied) return;
-  defaultApplied = true;
-  if (profileStore.defaultId && profileStore.activeId === undefined) {
-    onApplyProfile(profileStore.defaultId);
-  }
-});
 
 function onSaveNewProfile(name: string): void {
   if (profileStore.profiles.length >= MAX_PROFILES) {
     toast.show('Profile limit reached. Delete a profile before saving another.');
     return;
   }
-  const profile = profileStore.save(name, captureProfileSettings());
-  profileStore.setActive(profile.id);
+  profilesController.saveNew(name);
 }
 
 function onExportProfile(id: string): void {
@@ -884,7 +865,7 @@ const userChartsCodec: PersistedCodec<UserChartSource[]> = {
   },
 };
 const userChartsStore = new PersistedValue<UserChartSource[]>(
-  'binnacle:user-charts',
+  binnacleStorageKey('userCharts'),
   [],
   undefined,
   userChartsCodec,
@@ -1712,6 +1693,7 @@ $effect(() => {
 // scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
 // scoped CSS below. This const is the source of truth; retune all of them together.
 const NARROW_BREAKPOINT_PX = 600;
+const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 
 onMount(() => {
   refreshCompanionProbe();
@@ -1725,7 +1707,22 @@ onMount(() => {
   window.addEventListener('pointerdown', primeAudio, { once: true });
   // The auth controller owns the focus and cross-tab listeners that pick up an approval.
   auth.watch();
-  void auth.probe();
+  void auth.probe().finally(() => {
+    // A transport failure leaves auth unknown. Treat the completed probe as enough evidence to start
+    // locally, so a first-run offline PWA still gets an active profile and autosave.
+    if (auth.status === 'unknown') void profilesController.initializeFallback();
+  });
+  // A secured server can leave access approval pending for minutes. Start profiles locally after one
+  // bounded network window so an offline chartplotter never loses profile autosave while it waits.
+  const profileStartupFallback = setTimeout(
+    () => void profilesController.initializeFallback(),
+    PROFILE_LOCAL_STARTUP_FALLBACK_MS,
+  );
+  const refreshProfiles = (): void => {
+    if (document.visibilityState === 'visible') void syncProfiles();
+  };
+  window.addEventListener('focus', refreshProfiles);
+  document.addEventListener('visibilitychange', refreshProfiles);
   // Every write flows through sendJson, so this one hook lets a refused write (read-only token) raise
   // the read-only banner app-wide, and a later successful write clears it.
   setWriteOutcomeListener((ok, status) => auth.reportWriteOutcome(ok, status));
@@ -1744,6 +1741,20 @@ onMount(() => {
     typeof BroadcastChannel === 'undefined'
       ? undefined
       : new BroadcastChannel(BINNACLE_PRIVACY_CHANNEL);
+  const profileStorageKeys = new Set<string>([
+    binnacleStorageKey('profiles'),
+    binnacleStorageKey('profileDevice'),
+  ]);
+  const suspendForRemoteErase = (): void => {
+    profilesController.suspend();
+    window.location.reload();
+  };
+  const onProfileStorage = (event: StorageEvent): void => {
+    if (event.newValue === null && event.key && profileStorageKeys.has(event.key)) {
+      suspendForRemoteErase();
+    }
+  };
+  window.addEventListener('storage', onProfileStorage);
   if (privacyChannel) {
     privacyChannel.onmessage = (event) => {
       if (!isRecord(event.data) || !Array.isArray(event.data.clearedOwnerIds)) return;
@@ -1760,6 +1771,9 @@ onMount(() => {
       );
       if (clearedOwnerIds.length !== event.data.clearedOwnerIds.length) return;
       if (clearedOwnerIds.length === 0) return;
+      // Stop timers, server pushes, and post-write local acknowledgements before this tab reloads,
+      // or it could recreate profile data another tab just erased.
+      profilesController.suspend();
       if (clearedOwnerIds.includes('signalk-credentials')) {
         auth.forgetDeviceCredentials(false);
       }
@@ -1768,7 +1782,11 @@ onMount(() => {
   }
   return () => {
     narrowQuery.removeEventListener('change', syncNarrow);
+    window.removeEventListener('focus', refreshProfiles);
+    document.removeEventListener('visibilitychange', refreshProfiles);
+    window.removeEventListener('storage', onProfileStorage);
     privacyChannel?.close();
+    clearTimeout(profileStartupFallback);
   };
 });
 
@@ -1791,6 +1809,7 @@ onDestroy(() => {
   arrivalAlarm.stop();
   setWriteOutcomeListener(undefined);
   auth.stop();
+  profilesController.dispose();
   void marineRadar.dispose();
   instruments.dispose();
   net.dispose();
@@ -1953,11 +1972,7 @@ const plotterActions = {
         onOpen={() => openPanel('regions')}
         onRetry={() => void companionStatus.refresh()}
       />
-      <ProfileSwitcher
-        active={profileStore.active}
-        isDirty={profileStore.isDirty}
-        onClick={() => openPanel('profiles')}
-      />
+      <ProfileSwitcher active={profileStore.active} onClick={() => openPanel('profiles')} />
       <ThemeToggle controller={theme} />
     </span>
   </header>
@@ -2006,30 +2021,43 @@ const plotterActions = {
 
   {#if activePanel === 'profiles'}
     <div class="panel-slot" id="profiles-panel">
-      <ProfilesPanel
-        {auth}
-        profiles={profileStore.profiles}
-        activeId={profileStore.activeId}
-        defaultId={profileStore.defaultId}
-        isDirty={profileStore.isDirty}
-        syncState={profileStore.syncState}
-        onRetrySync={() => void syncProfiles()}
-        onApply={onApplyProfile}
-        onSaveNew={onSaveNewProfile}
-        onUpdate={(id) => {
-          profileStore.update(id, captureProfileSettings());
-          profileStore.clearDirty();
-        }}
-        onRename={(id, name) => profileStore.rename(id, name)}
-        onRemove={(id) => profileStore.remove(id)}
-        onSetDefault={(id) => profileStore.setDefault(id)}
-        onExport={onExportProfile}
-        onImport={onImportProfiles}
-        onForgetCredentials={forgetDeviceCredentials}
-        onEraseAllLocalData={eraseAllLocalData}
-        onClose={closePanel}
-        onBack={backToMenu}
-      />
+      {#await profilesPanelForAttempt()}
+        <div class="panel-loading" role="status">Loading profiles…</div>
+      {:then module}
+        <module.default
+          {auth}
+          profiles={profileStore.profiles}
+          activeId={profileStore.activeId}
+          defaultId={profileStore.defaultId}
+          syncState={profileStore.syncState}
+          remoteUpdateAvailable={profileStore.remoteUpdateAvailable}
+          onRetrySync={() => void syncProfiles()}
+          onApply={onApplyProfile}
+          onApplyRemoteUpdate={profilesController.applyRemoteUpdate}
+          onKeepCurrentSetup={profilesController.keepCurrentSetup}
+          onSaveNew={onSaveNewProfile}
+          onRename={(id, name) => profileStore.rename(id, name)}
+          onRemove={profilesController.remove}
+          onSetDefault={(id) => profileStore.setDefault(id)}
+          onExport={onExportProfile}
+          onImport={onImportProfiles}
+          onForgetCredentials={forgetDeviceCredentials}
+          onEraseAllLocalData={eraseAllLocalData}
+          onClose={closePanel}
+          onBack={backToMenu}
+        />
+      {:catch}
+        <div class="panel-load-error" role="alert">
+          Profiles could not load.
+          <button
+            type="button"
+            class="btn btn-secondary"
+            onclick={() => (profilesPanelAttempt += 1)}
+          >
+            Retry
+          </button>
+        </div>
+      {/await}
     </div>
   {/if}
 

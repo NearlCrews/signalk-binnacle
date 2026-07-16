@@ -1,4 +1,5 @@
 import { fetchJsonOrUndefined, type UnitsMode } from '$shared/lib';
+import { binnacleStorageKey } from '$shared/persistence';
 import { enumPersistedCodec, PersistedValue } from '$shared/settings';
 
 // The server's unit preferences API (signalk-server 2.28 and later). The active preset is global;
@@ -37,7 +38,7 @@ export class UnitsStore {
 
   constructor(
     local = new PersistedValue<UnitsMode>(
-      'binnacle:units',
+      binnacleStorageKey('units'),
       'metric',
       undefined,
       enumPersistedCodec(['metric', 'imperial']),

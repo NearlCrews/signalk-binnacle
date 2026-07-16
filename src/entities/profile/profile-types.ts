@@ -3,22 +3,16 @@ import type { LayerSettings } from '$shared/map';
 import type { Thresholds, TrackSettings } from '$shared/settings';
 import type { Theme } from '$shared/ui';
 
-// The full set of user preferences a profile captures, so switching profiles restores a complete
-// look and policy in one step. `mode` is reserved for the future three-mode shell (Watch, Anchor,
-// Inhabit): v1 never writes it, but it round-trips so a v3 profile read by v1 keeps its value.
+// The portable preferences a named profile owns. Device chrome, active safety state, credentials,
+// caches, and server resources deliberately stay outside this bundle.
 export interface ProfileSettings {
   theme: Theme;
   layers: LayerSettings;
   layerOrder: string[];
-  layerCategories: Record<string, boolean>;
   weatherLayers: LayerSettings;
   thresholds: Thresholds;
   trackSettings: TrackSettings;
   planningSpeedKn: number;
-  // The collision-alarm mute is deliberately NOT a profile field: it is a session-only, auto-expiring
-  // safety state (see CollisionMute), never persisted or carried across a profile switch. Arrival mute
-  // is a benign convenience preference, so it stays.
-  arrivalMuted: boolean;
   // The LOCAL units fallback only; optional so profiles saved before it existed stay valid. When the
   // server's unit preferences resolve, they win and this field is inert.
   units?: UnitsMode;
@@ -27,8 +21,32 @@ export interface ProfileSettings {
   pinnedActionIds?: string[];
   // Selected instrument tiles in display order; optional for pre-instruments profiles.
   instrumentTiles?: string[];
+  // The starting radius for the next anchor drop, in meters. The active watch and its live radius are
+  // safety state and never travel with a profile.
+  anchorRadiusMeters?: number;
+  // Legacy device and safety fields remain optional so older exports validate and round-trip, but the
+  // current bindings never capture or apply them.
+  layerCategories?: Record<string, boolean>;
+  arrivalMuted?: boolean;
+  // Reserved for the future three-mode shell. Older clients must preserve it during field updates.
   mode?: string;
 }
+
+export const PORTABLE_PROFILE_SETTING_KEYS = [
+  'theme',
+  'layers',
+  'layerOrder',
+  'weatherLayers',
+  'thresholds',
+  'trackSettings',
+  'planningSpeedKn',
+  'units',
+  'pinnedActionIds',
+  'instrumentTiles',
+  'anchorRadiusMeters',
+] as const satisfies readonly (keyof ProfileSettings)[];
+
+export type PortableProfileSettingKey = (typeof PORTABLE_PROFILE_SETTING_KEYS)[number];
 
 export interface Profile {
   id: string;
@@ -36,10 +54,63 @@ export interface Profile {
   settings: ProfileSettings;
   createdAt: number;
   updatedAt: number;
+  // Field clocks let two stations merge changes to different settings without replacing the whole
+  // profile. They are synchronization metadata, not user-facing time claims.
+  settingUpdatedAt?: Record<string, number>;
+  nameUpdatedAt?: number;
+}
+
+export interface ProfileTombstone {
+  id: string;
+  deletedAt: number;
+}
+
+export interface PendingProfileChange {
+  full?: boolean;
+  settings?: Partial<Record<PortableProfileSettingKey, number>>;
+  nameUpdatedAt?: number;
+  deletedAt?: number;
+}
+
+export interface ProfilePendingJournal {
+  profiles: Record<string, PendingProfileChange>;
+  defaultId?: string | null;
 }
 
 export interface ProfilesState {
+  schemaVersion?: 2;
   profiles: Profile[];
   activeId: string | undefined;
   defaultId: string | undefined;
+  // The settings actually applied to the active browser. This can intentionally lag the cached
+  // server profile until the navigator accepts a remote update.
+  applied?: {
+    profileId: string;
+    settings: ProfileSettings;
+  };
+  tombstones?: ProfileTombstone[];
+  pending?: ProfilePendingJournal;
+}
+
+export interface RemoteProfilesSnapshot {
+  profiles: Profile[];
+  defaultId: string | undefined;
+  tombstones: ProfileTombstone[];
+  revision: number;
+}
+
+export interface ProfileServerMutation {
+  profiles: Array<
+    | { type: 'put'; profile: Profile }
+    | {
+        type: 'patch';
+        id: string;
+        settings: Partial<Pick<ProfileSettings, PortableProfileSettingKey>>;
+        settingUpdatedAt: Record<string, number>;
+        updatedAt: number;
+      }
+    | { type: 'rename'; id: string; name: string; nameUpdatedAt: number; updatedAt: number }
+    | { type: 'delete'; tombstone: ProfileTombstone }
+  >;
+  defaultId?: string | null;
 }

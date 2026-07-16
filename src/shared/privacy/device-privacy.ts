@@ -1,3 +1,5 @@
+import { binnacleStorageKeysForScope } from '$shared/persistence';
+
 export type PrivacyDataClass = 'credentials' | 'device-data';
 export type PrivacyOperation = 'forget-credentials' | 'erase-device-data' | 'erase-all-local-data';
 type PrivacyReportStatus = 'completed' | 'partial' | 'blocked';
@@ -375,7 +377,15 @@ export function createBroadcastChannelBroadcaster(
   };
 }
 
-const BINNACLE_CREDENTIAL_KEYS = ['binnacle:signalk-auth'] as const;
+const BINNACLE_CREDENTIAL_KEYS = binnacleStorageKeysForScope('credential');
+const BINNACLE_LOCAL_DATA_KEYS = binnacleStorageKeysForScope(
+  'profile',
+  'device',
+  'server-resource',
+  'safety',
+  'cache',
+  'draft',
+);
 
 const BINNACLE_INDEXED_DB_NAMES = [
   'binnacle',
@@ -428,8 +438,7 @@ export function createBinnaclePrivacyRegistry(
         id: 'local-settings',
         dataClass: 'device-data',
         storage: options.localStorage,
-        prefixes: ['binnacle:'],
-        excludeKeys: BINNACLE_CREDENTIAL_KEYS,
+        keys: BINNACLE_LOCAL_DATA_KEYS,
       }),
     );
   }

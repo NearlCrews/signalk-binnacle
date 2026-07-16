@@ -116,14 +116,20 @@ source, and surrounding traffic before relying on it.
 
 ## Settings
 
-- **Profiles** saves portable chart, weather, alarm, toolbar, instrument, track, unit-fallback, and
-  planning settings. Switching away from a dirty active profile requires confirmation. Imports are
+- **Profiles** saves portable chart, weather, threshold, toolbar, instrument, track, unit-fallback,
+  planning, and preferred anchor-radius settings. The active profile saves automatically after a
+  short debounce. Each device keeps its own active choice, while profiles and the default sync
+  through the authenticated Signal K account. A remote change to the active profile is offered for
+  explicit application or rejection so the chart does not change underneath the navigator. The
+  browser persists the last-applied setup separately, so an unresolved update survives reload.
+  Imports are
   size-limited, deeply validated, bounded, and report the number saved. Profile names, ids, settings,
-  timestamps, list sizes, and server documents are validated before merge. Without server write
-  access, edits remain local, and delete confirmation warns that a server copy may remain. The panel
-  reports Local, Syncing, Synced, and Failed states, offers Retry after a sync failure, and keeps
-  secondary card actions in a labeled overflow menu. Device privacy actions can forget only the local
-  Signal K token or erase Binnacle-owned local settings, caches, IndexedDB data, profiles, and
-  credentials. Full erasure is blocked while safety or unsaved navigation work is active and never
-  deletes or revokes server data. The guard waits for the saved-track restore check and also blocks
-  when another open Binnacle tab holds safety-critical or unsaved work in browsers with Web Locks.
+  timestamps, list sizes, journals, and server documents are validated before merge. Without server
+  write access, edits remain queued locally, and delete confirmation warns that a server copy may
+  remain. The panel reports Local, Waiting, Syncing, Synced, Conflict, and Error states, offers Retry,
+  and keeps secondary card actions in a labeled overflow menu. Device privacy actions can forget only
+  the local Signal K token or erase Binnacle-owned local settings, caches, IndexedDB data, profiles,
+  and credentials. Full erasure is blocked while safety or unsaved navigation work is active and
+  never deletes or revokes server data. Synced profiles return after sign-in and sync, while
+  unsynced profiles and edits are permanently lost. Profile writes are suspended during erasure so
+  queued work cannot recreate local data. See [Profiles and settings](profiles.md).

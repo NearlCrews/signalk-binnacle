@@ -260,6 +260,7 @@ Shared behavior lives here. Compose these; do not re-implement them.
   supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
   must distinguish loading, refresh with retained cards, real empty, and failure outside the
   primitive. Disable conflicting mutations while one is pending.
+
 - `createPanelMinimize`: the shared reactive controller passed to `SlideOver` as `{minimize}`. Use its
   `collapse`, `expand`, and `onToggle` methods instead of creating panel-local collapse state.
 - `SubViewHeader`: the back header for an in-panel sub-view drilled into inside one SlideOver (the
@@ -303,6 +304,24 @@ Shared behavior lives here. Compose these; do not re-implement them.
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.
 - `THEMES`, `ThemeController`, `createThemeController` for the theme switch.
+
+### Settings persistence
+
+Every persisted value has one product scope:
+
+- **Profile:** portable helm preferences that should follow a named setup, such as theme, layers,
+  thresholds, toolbar pins, instrument selection, and the preferred radius for the next anchor drop.
+- **Device:** browser layout and chrome, such as the chart view, active profile, instrument-dock open
+  state, disclosure state, and dismissed hints.
+- **Server resource:** routes, tracks, waypoints, charts, and other data owned by a Signal K API.
+- **Safety:** active MOB, anchor watch, navigation, alarm acknowledgement, and mute state.
+- **Credential:** Signal K device authorization and administrator sessions.
+- **Cache or draft:** derived data and unfinished work with its own documented lifecycle.
+
+Register production localStorage keys in `src/shared/persistence/storage-keys.ts`. The active profile
+autosaves portable settings. Do not show dirty, manual-save, or discard chrome for profile edits.
+Never carry active safety state, credentials, server resources, browser layout, or caches in a
+profile. See [Profiles and settings](profiles.md).
 
 ## 7. Panel anatomy and the field idioms
 

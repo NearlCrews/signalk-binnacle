@@ -11,9 +11,16 @@ export {
   createLatestWriter,
   type LatestWriterState,
 } from './latest-writer.svelte';
-export { clampInt, compareOptionalNumber, isFiniteNumber, lerp, nearestBy } from './math';
+export {
+  clampInt,
+  compareOptionalNumber,
+  isFiniteNumber,
+  isSafeNonNegativeInteger,
+  lerp,
+  nearestBy,
+} from './math';
 export { prefersReducedMotion } from './motion';
-export { isRecord } from './object';
+export { isRecord, sameJsonValue } from './object';
 export { capitalize, hasControlCharacters } from './strings';
 export { Toast } from './toast.svelte';
 export {

@@ -1,13 +1,17 @@
 import { expect, vi } from 'vitest';
 
 // A minimal JSON Response stub for the REST client tests: ok is derived from the status, and json()
-// resolves to the given body. Shared so the client tests do not each hand-roll the same shape.
+// and text() expose the same body. Shared so clients can test bounded text parsing as well as direct
+// JSON reads without each hand-rolling the same shape.
 // Imported by *.test.ts files only.
 export function jsonResponse(status: number, body: unknown): Response {
+  const text = JSON.stringify(body);
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers({ 'Content-Length': String(text.length) }),
     json: async () => body,
+    text: async () => text,
   } as unknown as Response;
 }
 

@@ -47,6 +47,7 @@ import {
   proxiedSources,
   type ThemedMapHandle,
 } from '$shared/map';
+import { binnacleStorageKey } from '$shared/persistence';
 import type { MapView, PersistedValue, TrackSettings } from '$shared/settings';
 import type { HistoryProviders, SignalKStore } from '$shared/signalk';
 import type { Theme } from '$shared/ui';
@@ -230,7 +231,7 @@ let commandsRef = $state<MapCommands | undefined>();
 let chartMenu = $state<
   { x: number; y: number; lat: number; lon: number; width: number; height: number } | undefined
 >();
-const CONTEXT_HINT_KEY = 'binnacle:chart-actions-hint';
+const CONTEXT_HINT_KEY = binnacleStorageKey('chartActionsHint');
 let showContextHint = $state(false);
 
 function dismissContextHint(): void {

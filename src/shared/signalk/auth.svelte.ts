@@ -1,4 +1,5 @@
 import { isRecord, withTimeout } from '$shared/lib';
+import { binnacleStorageKey } from '$shared/persistence';
 import { createPersistedCodec, PersistedValue } from '$shared/settings';
 import { jsonOr } from './resource';
 
@@ -38,7 +39,7 @@ interface AuthOptions {
   pollMs?: number;
 }
 
-const STORAGE_KEY = 'binnacle:signalk-auth';
+const STORAGE_KEY = binnacleStorageKey('signalkAuth');
 const PROBE_PATH = '/signalk/v1/api/vessels/self';
 const REQUEST_PATH = '/signalk/v1/access/requests';
 // The client description the server shows in its access-request list, single-sourced so the read-only

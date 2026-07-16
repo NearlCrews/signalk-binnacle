@@ -143,9 +143,11 @@ level. Inside, in this order:
 13. Bound every externally supplied collection, string, coordinate, and numeric range before it
     reaches reactive state or rendering. This includes server resources, plugin discovery, imported
     files, local persistence, IndexedDB replay, and history-provider rows.
-14. Switching configurations must confirm before discarding unsaved work. Profiles is the canonical
-    example. A button labeled Now changes the current view to the newest loaded data; it must not hide
-    a network refresh behind navigation wording.
+14. Every setting must declare whether it belongs to a portable profile, this device, a Signal K
+    resource, safety state, credentials, or disposable cache and draft state. Profiles is the
+    canonical example. Active profile settings save automatically, so do not add a separate dirty,
+    save, or discard workflow. A button labeled Now changes the current view to the newest loaded
+    data; it must not hide a network refresh behind navigation wording.
 15. Every `PersistedValue` carrying production state must receive a bounded validator or codec. A
     codec owns legacy migration and lets invalid JSON repair to a safe fallback. Record codecs should
     rebuild a clean literal when unknown fields must not survive. Do not cast parsed browser storage
@@ -154,6 +156,10 @@ level. Inside, in this order:
     `localStorage.clear()`, delete every origin database or cache, or unregister another Signal K
     webapp's service worker. Block erasure while safety or unsaved navigation state is active, and
     explain that local deletion does not revoke server access or delete server resources.
+17. Add every production localStorage key to `src/shared/persistence/storage-keys.ts`. Portable
+    settings also need a profile type, bounded validation, a binding-table entry, merge metadata, and
+    tests. Device, safety, credential, server-resource, and cache values must not enter the profile
+    capture path.
 
 Skeleton:
 

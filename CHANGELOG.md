@@ -6,6 +6,52 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0155"></a>
+
+## [0.15.5] - 2026-07-16
+
+### Added
+
+- A typed persistence-scope registry now classifies every Binnacle localStorage setting as portable
+  profile data, device state, a server resource, safety state, or credentials. The profile bundle now
+  includes the preferred radius for the next anchor drop without carrying an active watch.
+- A profiles guide documents autosave, cross-device sync, conflict handling, privacy, migration, and
+  which settings intentionally remain specific to a browser or Signal K server.
+
+### Changed
+
+- The active profile now saves automatically after settings change. Profile selection remains local
+  to each browser, while named profiles and the default sync through the authenticated Signal K
+  account. Remote changes to the profile currently in use require explicit application before they
+  alter the live chart.
+- Profile sync now uses a revisioned version 2 applicationData document, a durable local mutation
+  journal, tombstones, and per-setting logical clocks. Independent edits from multiple stations merge
+  without replacing unrelated settings, and version 1 documents migrate without being overwritten.
+- The Profiles panel now loads on demand, keeping its management and privacy tools out of the initial
+  chart bundle until they are needed.
+
+### Fixed
+
+- Startup now hydrates server profiles before creating starters or applying a default, preventing a
+  fresh browser from replacing an existing setup. Stable starter identifiers no longer receive
+  current-time timestamps that could outrank a customized server copy.
+- Offline edits survive reload and retry after reconnect, autosave writes are serialized with refresh,
+  remote defaults apply on first startup, and a profile is always active after initialization or
+  deletion.
+- Equal-clock edits now converge on the server copy, unresolved remote updates survive reload, and a
+  remotely deleted active profile is replaced without changing the live helm setup.
+- Profile erasure now suspends queued and in-flight persistence, profile HTTP requests are bounded,
+  version 2 initialization reads back the authoritative document, generic server failures are no
+  longer reported as revision conflicts, and unsafe or oversized profile data is rejected.
+- Offline edits and deletions now rebase their logical clocks above newer server state, version 2
+  creation is conditional, untouched offline fallback profiles yield to the synchronized default,
+  and forward-compatible field clocks remain readable.
+- Device-local profile selection and last-applied state now use a separate storage record from the
+  portable profile library, including during local privacy erasure. Corrupt device-only state no
+  longer discards an otherwise valid profile library.
+- Failed initial server hydration now creates a replaceable offline fallback instead of permanent
+  starter profiles, and forward-compatible values remain paired with their winning field clocks.
+
 <a id="v0154"></a>
 
 ## [0.15.4] - 2026-07-16

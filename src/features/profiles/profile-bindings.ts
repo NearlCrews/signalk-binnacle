@@ -11,18 +11,22 @@ export interface ProfileBindingDeps {
   theme: ThemeController;
   layers: PersistedValue<LayerSettings>;
   layerOrder: PersistedValue<string[]>;
-  layerCategories: PersistedValue<Record<string, boolean>>;
   weatherLayers: PersistedValue<LayerSettings>;
   thresholds: PersistedValue<Thresholds>;
   trackSettings: PersistedValue<TrackSettings>;
   planningSpeedKn: PersistedValue<number>;
-  arrivalMuted: PersistedValue<boolean>;
   // The local units fallback (the server preference, when resolved, wins outside profiles).
   unitsLocal: PersistedValue<UnitsMode>;
   // The bottom-bar pinned action ids.
   pinnedActions: PersistedValue<string[]>;
   // The instrument tile selection, in display order.
   instrumentTiles: PersistedValue<string[]>;
+  // The next anchor drop's preferred radius. This seam deliberately cannot expose or alter the
+  // active anchor watch.
+  anchorRadius: {
+    get(): number;
+    set(radiusMeters: number): void;
+  };
 }
 
 export interface ProfileBindings {
@@ -31,13 +35,13 @@ export interface ProfileBindings {
   // Write every portable store from a bundle. The live map-layer push stays in the composition root,
   // which owns the map handles.
   apply(settings: ProfileSettings): void;
-  // Read every portable store, so a reactive effect that calls this re-runs when any of them change.
+  // Read every portable store, so the controller's reactive observer re-runs when any of them change.
   track(): void;
 }
 
 // Defines every portable setting once: how to read it into a profile bundle, how to write it back, and
-// how to track it for the dirty check. Adding a setting is one entry here, not a parallel edit to a
-// capture list, an apply list, and a dirty-tracking list that could drift out of step. The layers and
+// how to track it for autosave. Adding a setting is one entry here, not a parallel edit to a capture
+// list, an apply list, and an autosave list that could drift out of step. The layers and
 // order read the persisted overrides, not the live LayerManager state, which keeps capture cheap and
 // matches what a restore writes back.
 export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings {
@@ -60,11 +64,6 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       write: (s) => deps.layerOrder.set(s.layerOrder),
       track: () => void deps.layerOrder.value,
     },
-    layerCategories: {
-      read: () => ({ layerCategories: { ...deps.layerCategories.value } }),
-      write: (s) => deps.layerCategories.set(s.layerCategories),
-      track: () => void deps.layerCategories.value,
-    },
     weatherLayers: {
       read: () => ({ weatherLayers: { ...deps.weatherLayers.value } }),
       write: (s) => deps.weatherLayers.set(s.weatherLayers),
@@ -85,11 +84,6 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       write: (s) => deps.planningSpeedKn.set(s.planningSpeedKn),
       track: () => void deps.planningSpeedKn.value,
     },
-    arrivalMuted: {
-      read: () => ({ arrivalMuted: deps.arrivalMuted.value }),
-      write: (s) => deps.arrivalMuted.set(s.arrivalMuted),
-      track: () => void deps.arrivalMuted.value,
-    },
     pinnedActionIds: {
       read: () => ({ pinnedActionIds: [...deps.pinnedActions.value] }),
       // Array-guarded, not truthy-guarded: an intentionally empty array (a cleared bar) must apply,
@@ -106,6 +100,13 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       },
       track: () => void deps.instrumentTiles.value,
     },
+    anchorRadiusMeters: {
+      read: () => ({ anchorRadiusMeters: deps.anchorRadius.get() }),
+      write: (s) => {
+        if (s.anchorRadiusMeters !== undefined) deps.anchorRadius.set(s.anchorRadiusMeters);
+      },
+      track: () => void deps.anchorRadius.get(),
+    },
     units: {
       read: () => ({ units: deps.unitsLocal.value }),
       // Optional for compatibility: a profile saved before the field existed leaves units alone.
@@ -115,7 +116,7 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       track: () => void deps.unitsLocal.value,
     },
   } satisfies {
-    [K in keyof Omit<ProfileSettings, 'mode'>]: {
+    [K in keyof Omit<ProfileSettings, 'mode' | 'layerCategories' | 'arrivalMuted'>]: {
       read: () => Pick<ProfileSettings, K>;
       write: (s: ProfileSettings) => void;
       track: () => void;

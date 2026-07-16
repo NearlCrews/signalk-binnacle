@@ -1,5 +1,6 @@
 import { isLatitude, isLongitude, type MapView } from '$shared/geo';
 import { isFiniteNumber, isRecord, nauticalMilesToMeters } from '$shared/lib';
+import { binnacleStorageKey } from '$shared/persistence';
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -291,7 +292,7 @@ export function isMapView(value: unknown): value is MapView {
 }
 
 export function createMapView(
-  key = 'binnacle:map-view',
+  key: string = binnacleStorageKey('mapView'),
   storage?: StorageLike,
 ): PersistedValue<MapView | null> {
   return new PersistedValue(
@@ -332,7 +333,7 @@ export function isTrackSettings(value: unknown): value is TrackSettings {
 
 export function createTrackSettings(storage?: StorageLike): PersistedValue<TrackSettings> {
   return new PersistedValue(
-    'binnacle:track-settings',
+    binnacleStorageKey('trackSettings'),
     DEFAULT_TRACK_SETTINGS,
     storage,
     isTrackSettings,
@@ -393,7 +394,7 @@ export function isThresholds(value: unknown): value is Thresholds {
 
 export function createThresholds(storage?: StorageLike): PersistedValue<Thresholds> {
   return new PersistedValue(
-    'binnacle:lookout-thresholds',
+    binnacleStorageKey('lookoutThresholds'),
     DEFAULT_THRESHOLDS,
     storage,
     isThresholds,

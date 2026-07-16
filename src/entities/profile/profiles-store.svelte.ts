@@ -1,51 +1,97 @@
-import { uuidv4 } from '$shared/lib';
-import type { Profile, ProfileSettings, ProfilesState } from './profile-types';
+import { isRecord, isSafeNonNegativeInteger, sameJsonValue, uuidv4 } from '$shared/lib';
+import { binnacleStorageKey } from '$shared/persistence';
+import type {
+  PendingProfileChange,
+  PortableProfileSettingKey,
+  Profile,
+  ProfilePendingJournal,
+  ProfileServerMutation,
+  ProfileSettings,
+  ProfilesState,
+  ProfileTombstone,
+  RemoteProfilesSnapshot,
+} from './profile-types';
+import { PORTABLE_PROFILE_SETTING_KEYS } from './profile-types';
 import {
   cleanProfileName,
   isProfileSettings,
+  isProfileTombstone,
   isStoredProfile,
   MAX_PROFILES,
+  sanitizeProfileSettings,
 } from './profile-validation';
 
-const STORAGE_KEY = 'binnacle:profiles';
+const STORAGE_KEY = binnacleStorageKey('profiles');
+const DEVICE_STORAGE_KEY = binnacleStorageKey('profileDevice');
+const MAX_SYNC_RETRIES = 3;
 
-// The local persistence seam: production reads and writes localStorage, tests inject an in-memory fake.
 export interface ProfileAdapter {
   load(): ProfilesState | undefined;
   save(state: ProfilesState): void;
 }
 
-// The optional server persistence seam (v2): the SignalK applicationData adapter persists per-user
-// across devices. Both calls degrade gracefully (load resolves undefined, save resolves false) when the
-// server is unsecured, unauthenticated, or unreachable, so the store falls back to the local cache.
+export type ProfileRemoteLoadResult =
+  | { state: 'ok'; snapshot: RemoteProfilesSnapshot; writable?: boolean }
+  | { state: 'unavailable' }
+  | { state: 'corrupt' };
+
+export type ProfileRemoteMutationResult = 'ok' | 'conflict' | 'unavailable';
+
 export interface AsyncProfileAdapter {
-  load(): Promise<ProfilesState | undefined>;
-  save(state: ProfilesState): Promise<boolean>;
+  load(): Promise<ProfileRemoteLoadResult>;
+  mutate(revision: number, mutation: ProfileServerMutation): Promise<ProfileRemoteMutationResult>;
 }
 
-export type ProfileSyncState = 'local' | 'syncing' | 'synced' | 'error';
+export type ProfileSyncState = 'local' | 'waiting' | 'syncing' | 'synced' | 'conflict' | 'error';
 
-// Reads and writes the whole profiles state to localStorage as one JSON document. Guarded for SSR
-// (no localStorage) and for a throwing or quota-full store, returning undefined on any read failure
-// so a corrupt or absent value falls back to empty rather than breaking startup.
+export interface ProfileSyncResult {
+  ok: boolean;
+  activeChanged: boolean;
+}
+
 class LocalProfileAdapter implements ProfileAdapter {
   load(): ProfilesState | undefined {
     if (typeof localStorage === 'undefined') return undefined;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const deviceRaw = localStorage.getItem(DEVICE_STORAGE_KEY);
+    if (raw == null && deviceRaw == null) return undefined;
+    let library: ProfilesState | undefined;
+    let device: Pick<ProfilesState, 'activeId' | 'applied'> | undefined;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw == null) return undefined;
-      return JSON.parse(raw) as ProfilesState;
+      const parsedLibrary = raw == null ? {} : JSON.parse(raw);
+      if (isRecord(parsedLibrary)) library = parsedLibrary as unknown as ProfilesState;
     } catch {
-      return undefined;
+      // A corrupt shared library cannot be recovered from device-only selection state.
     }
+    try {
+      const parsedDevice = deviceRaw == null ? undefined : JSON.parse(deviceRaw);
+      if (isRecord(parsedDevice)) {
+        device = parsedDevice as Pick<ProfilesState, 'activeId' | 'applied'>;
+      }
+    } catch {
+      // Keep the valid shared profile library and reset only this device's selection state.
+    }
+    if (!library) return undefined;
+    return {
+      ...library,
+      profiles: Array.isArray(library.profiles) ? library.profiles : [],
+      activeId: device?.activeId ?? library.activeId,
+      defaultId: library.defaultId,
+      applied: device?.applied ?? library.applied,
+    };
   }
 
   save(state: ProfilesState): void {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const { activeId, applied, ...library } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(library));
+      localStorage.setItem(
+        DEVICE_STORAGE_KEY,
+        JSON.stringify({ schemaVersion: 1, activeId, applied }),
+      );
     } catch {
-      // A failed persist (quota exceeded, private mode) must not break the in-memory update.
+      // A failed persist must not break the in-memory profile currently running the chart.
     }
   }
 }
@@ -57,241 +103,792 @@ function validProfiles(value: unknown): Profile[] {
   for (const profile of value) {
     if (!isStoredProfile(profile) || seen.has(profile.id)) continue;
     seen.add(profile.id);
-    profiles.push(profile);
+    profiles.push({ ...profile, settings: sanitizeProfileSettings(profile.settings) });
     if (profiles.length >= MAX_PROFILES) break;
   }
   return profiles;
 }
 
-// The reactive home for saved profiles. Each mutation updates the runes and persists the whole
-// state through the adapter, so the on-disk document always matches what the UI shows.
+function validTombstones(value: unknown): ProfileTombstone[] {
+  if (!Array.isArray(value)) return [];
+  const byId = new Map<string, ProfileTombstone>();
+  for (const item of value) {
+    if (!isProfileTombstone(item)) continue;
+    const existing = byId.get(item.id);
+    if (!existing || item.deletedAt > existing.deletedAt) byId.set(item.id, item);
+    if (byId.size >= MAX_PROFILES) break;
+  }
+  return [...byId.values()];
+}
+
+function validPendingChange(value: unknown): PendingProfileChange | undefined {
+  if (!isRecord(value)) return undefined;
+  const settings: Partial<Record<PortableProfileSettingKey, number>> = {};
+  if (isRecord(value.settings)) {
+    for (const key of PORTABLE_PROFILE_SETTING_KEYS) {
+      const timestamp = value.settings[key];
+      if (isSafeNonNegativeInteger(timestamp)) settings[key] = timestamp;
+    }
+  }
+  const change: PendingProfileChange = {};
+  if (value.full === true) change.full = true;
+  if (Object.keys(settings).length > 0) change.settings = settings;
+  if (isSafeNonNegativeInteger(value.nameUpdatedAt)) {
+    change.nameUpdatedAt = value.nameUpdatedAt;
+  }
+  if (isSafeNonNegativeInteger(value.deletedAt)) {
+    change.deletedAt = value.deletedAt;
+  }
+  return Object.keys(change).length > 0 ? change : undefined;
+}
+
+function validPending(value: unknown): ProfilePendingJournal {
+  const journal: ProfilePendingJournal = {
+    profiles: Object.create(null) as Record<string, PendingProfileChange>,
+  };
+  if (!isRecord(value)) return journal;
+  if (isRecord(value.profiles)) {
+    for (const [id, raw] of Object.entries(value.profiles).slice(0, MAX_PROFILES)) {
+      if (!isProfileTombstone({ id, deletedAt: 0 })) continue;
+      const change = validPendingChange(raw);
+      if (change) journal.profiles[id] = change;
+    }
+  }
+  if (value.defaultId === null || typeof value.defaultId === 'string') {
+    journal.defaultId = value.defaultId;
+  }
+  return journal;
+}
+
+function cloneValue<T>(value: T): T {
+  return structuredClone($state.snapshot(value)) as T;
+}
+
+function cloneSettings(settings: ProfileSettings): ProfileSettings {
+  return cloneValue(settings);
+}
+
+function fieldTimestamp(profile: Profile, key: string): number {
+  return profile.settingUpdatedAt?.[key] ?? profile.updatedAt;
+}
+
+function nextWallTimestamp(...values: Array<number | undefined>): number {
+  const current = Math.max(Date.now(), ...values.map((value) => value ?? 0));
+  return current >= Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : current + 1;
+}
+
+function profileClock(profile: Profile): number {
+  return Math.max(
+    profile.nameUpdatedAt ?? profile.updatedAt,
+    ...PORTABLE_PROFILE_SETTING_KEYS.map((key) => fieldTimestamp(profile, key)),
+    ...Object.values(profile.settingUpdatedAt ?? {}),
+  );
+}
+
+function nextLogicalTimestamp(...values: Array<number | undefined>): number {
+  const current = Math.max(0, ...values.map((value) => value ?? 0));
+  return current >= Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : current + 1;
+}
+
+function mergeProfiles(
+  local: Profile,
+  remote: Profile,
+  pending: PendingProfileChange | undefined,
+): Profile {
+  const localNameTime = local.nameUpdatedAt ?? local.updatedAt;
+  const remoteNameTime = remote.nameUpdatedAt ?? remote.updatedAt;
+  const pendingName = pending?.nameUpdatedAt !== undefined;
+  const localNameWins = pendingName || localNameTime > remoteNameTime;
+  const mergedNameTime =
+    pendingName && localNameTime <= remoteNameTime
+      ? nextLogicalTimestamp(localNameTime, remoteNameTime)
+      : localNameWins
+        ? localNameTime
+        : remoteNameTime;
+  const base = local.updatedAt > remote.updatedAt ? local : remote;
+  const other = base === local ? remote : local;
+  const settings = {
+    ...cloneSettings(other.settings),
+    ...cloneSettings(base.settings),
+  };
+  const settingUpdatedAt: Record<string, number> = {};
+
+  for (const key of PORTABLE_PROFILE_SETTING_KEYS) {
+    const localTime = fieldTimestamp(local, key);
+    const remoteTime = fieldTimestamp(remote, key);
+    const pendingSetting = pending?.settings?.[key] !== undefined;
+    const localWins = pendingSetting || localTime > remoteTime;
+    const source = localWins ? local.settings : remote.settings;
+    if (Object.hasOwn(source, key)) {
+      Object.assign(settings, { [key]: cloneValue(source[key]) });
+    } else {
+      delete settings[key];
+    }
+    settingUpdatedAt[key] =
+      pendingSetting && localTime <= remoteTime
+        ? nextLogicalTimestamp(localTime, remoteTime)
+        : localWins
+          ? localTime
+          : remoteTime;
+  }
+
+  const portableKeys = new Set<string>(PORTABLE_PROFILE_SETTING_KEYS);
+  const extensionKeys = new Set([
+    ...Object.keys(local.settings),
+    ...Object.keys(remote.settings),
+    ...Object.keys(local.settingUpdatedAt ?? {}),
+    ...Object.keys(remote.settingUpdatedAt ?? {}),
+  ]);
+  const settingsRecord = settings as unknown as Record<string, unknown>;
+  for (const key of extensionKeys) {
+    if (portableKeys.has(key)) continue;
+    const localTime = fieldTimestamp(local, key);
+    const remoteTime = fieldTimestamp(remote, key);
+    const localHasValue = Object.hasOwn(local.settings, key);
+    const remoteHasValue = Object.hasOwn(remote.settings, key);
+    const localHasClock = Object.hasOwn(local.settingUpdatedAt ?? {}, key);
+    const remoteHasClock = Object.hasOwn(remote.settingUpdatedAt ?? {}, key);
+    const localWins =
+      localHasValue && !remoteHasValue && !remoteHasClock
+        ? true
+        : remoteHasValue && !localHasValue && !localHasClock
+          ? false
+          : localTime > remoteTime;
+    const source = localWins ? local : remote;
+    const sourceSettings = source.settings as unknown as Record<string, unknown>;
+    if (Object.hasOwn(sourceSettings, key)) {
+      settingsRecord[key] = cloneValue(sourceSettings[key]);
+    } else {
+      delete settingsRecord[key];
+    }
+    settingUpdatedAt[key] = fieldTimestamp(source, key);
+  }
+
+  return {
+    ...base,
+    id: local.id,
+    name: localNameWins ? local.name : remote.name,
+    settings,
+    createdAt: Math.min(local.createdAt, remote.createdAt),
+    updatedAt: Math.max(local.updatedAt, remote.updatedAt),
+    nameUpdatedAt: mergedNameTime,
+    settingUpdatedAt,
+  };
+}
+
+function tombstoneMap(items: readonly ProfileTombstone[]): Map<string, ProfileTombstone> {
+  return new Map(items.map((item) => [item.id, item]));
+}
+
 export class ProfileStore {
   profiles = $state<Profile[]>([]);
   activeId = $state<string | undefined>(undefined);
-  // True when the active profile's live settings have drifted from what was saved, so the UI can
-  // offer to update it. Cleared on every profile switch and on an explicit save or update.
-  isDirty = $state(false);
   syncState = $state<ProfileSyncState>('local');
+  remoteUpdateAvailable = $state(false);
 
   #defaultId = $state<string | undefined>(undefined);
+  #tombstones: ProfileTombstone[] = [];
+  #pending: ProfilePendingJournal = {
+    profiles: Object.create(null) as Record<string, PendingProfileChange>,
+  };
   #adapter: ProfileAdapter;
-  // The optional server adapter and a single-flight push state, so concurrent saves never collide on a
-  // server that has no write-conflict detection: the latest state is always the one that lands.
   #server: AsyncProfileAdapter | undefined;
-  #pushPending = false;
-  #pushing = false;
-
-  // True when the constructor found a stored document, even an empty one. Distinguishes a fresh
-  // device (seed the starter profiles) from a store the user deliberately emptied (do not
-  // resurrect the starters on the next launch).
-  readonly loadedFromStorage: boolean = false;
+  #serverRevision = 0;
+  #pushPromise: Promise<void> | undefined;
+  #applied:
+    | {
+        profileId: string;
+        settings: ProfileSettings;
+      }
+    | undefined;
+  #persistenceSuspended = false;
 
   constructor(adapter: ProfileAdapter = new LocalProfileAdapter()) {
     this.#adapter = adapter;
     const stored = adapter.load();
-    if (stored) {
-      this.loadedFromStorage = true;
-      // Array.isArray, not a nullish fallback: a corrupt document where profiles is a truthy
-      // non-array would otherwise throw here during App init and blank the app.
-      this.profiles = validProfiles(stored.profiles);
-      this.activeId = this.profiles.some((profile) => profile.id === stored.activeId)
-        ? stored.activeId
-        : undefined;
-      this.#defaultId = this.profiles.some((profile) => profile.id === stored.defaultId)
-        ? stored.defaultId
-        : undefined;
+    if (!stored) return;
+    this.profiles = validProfiles(stored.profiles);
+    this.#tombstones = validTombstones(stored.tombstones);
+    this.#pending = validPending(stored.pending);
+    this.activeId = this.profiles.some((profile) => profile.id === stored.activeId)
+      ? stored.activeId
+      : undefined;
+    this.#defaultId = this.profiles.some((profile) => profile.id === stored.defaultId)
+      ? stored.defaultId
+      : undefined;
+    if (
+      this.activeId &&
+      stored.applied?.profileId === this.activeId &&
+      isProfileSettings(stored.applied.settings)
+    ) {
+      this.#applied = {
+        profileId: this.activeId,
+        settings: cloneSettings(sanitizeProfileSettings(stored.applied.settings)),
+      };
+    } else if (this.active) {
+      this.#applied = {
+        profileId: this.active.id,
+        settings: cloneSettings(this.active.settings),
+      };
     }
+    this.#dropOrphanPending();
+    this.#refreshRemoteUpdateState();
+    if (this.#hasPending()) this.syncState = 'waiting';
   }
 
-  // Id lookups go through a derived index rather than a per-call array scan, so profileById stays
-  // O(1) however many profiles a long-lived account accumulates. The index rebuilds only when the
-  // profiles array changes.
-  #byId = $derived(new Map(this.profiles.map((p) => [p.id, p])));
+  #byId = $derived(new Map(this.profiles.map((profile) => [profile.id, profile])));
 
   get active(): Profile | undefined {
     return this.profileById(this.activeId);
-  }
-
-  profileById(id: string | undefined): Profile | undefined {
-    return id === undefined ? undefined : this.#byId.get(id);
   }
 
   get defaultId(): string | undefined {
     return this.#defaultId;
   }
 
-  // Seed starter profiles only when the store is empty, so a fresh device or browser is not blank.
-  // Seeds carry stable ids so the same starters from two devices merge to one, not duplicate.
+  get hasPendingChanges(): boolean {
+    return this.#hasPending();
+  }
+
+  get appliedSettings(): ProfileSettings | undefined {
+    const applied = this.#applied;
+    return applied && applied.profileId === this.activeId
+      ? cloneSettings(applied.settings)
+      : undefined;
+  }
+
+  profileById(id: string | undefined): Profile | undefined {
+    return id === undefined ? undefined : this.#byId.get(id);
+  }
+
   seed(profiles: Profile[]): void {
     if (this.profiles.length > 0) return;
-    this.profiles = validProfiles(profiles);
+    this.profiles = validProfiles(profiles).map((profile) => ({
+      ...profile,
+      settings: cloneSettings(sanitizeProfileSettings(profile.settings)),
+      settingUpdatedAt: Object.fromEntries(
+        PORTABLE_PROFILE_SETTING_KEYS.map((key) => [key, profile.updatedAt]),
+      ),
+      nameUpdatedAt: profile.updatedAt,
+    }));
+    for (const profile of this.profiles) this.#markFull(profile.id);
     this.#persist();
-  }
-
-  // Attach the SignalK applicationData adapter and reconcile with the server: merge the remote profiles
-  // in by id (the later updatedAt wins), then push the reconciled state back so the server converges
-  // (and an empty server is seeded from this device). Idempotent for the success case: once a server is
-  // attached this is a no-op, so a second call (a component remount, a re-auth) does not re-merge, while
-  // a prior failure leaves no server attached so a later call can still retry.
-  // Resolves true when profiles are synced to the server (already attached, or attached on this
-  // call), false when it stayed local because the server was unavailable, so the caller can retry
-  // on a later auth or reconnect rather than latching after one transient failure.
-  async syncWithServer(server: AsyncProfileAdapter): Promise<boolean> {
-    if (this.#server) {
-      this.syncState = 'synced';
-      return true;
-    }
-    this.syncState = 'syncing';
-    let remote: ProfilesState | undefined;
-    try {
-      remote = await server.load();
-    } catch {
-      remote = undefined;
-    }
-    // undefined means the server is unavailable (unsecured, the token lacks access, or unreachable):
-    // stay local and do not attach the adapter, so no further writes are attempted and the console is
-    // not flooded with failures. A reachable server (even an empty one) attaches and pushes once.
-    if (remote === undefined) {
-      this.syncState = 'error';
-      return false;
-    }
-    this.#server = server;
-    this.#mergeRemote(remote);
-    this.#schedulePush();
-    return true;
-  }
-
-  #mergeRemote(remote: ProfilesState): void {
-    const byId = new Map<string, Profile>();
-    for (const p of this.profiles) byId.set(p.id, p);
-    // The same shape guards the local load applies: a remote document is just another stored
-    // document, so a malformed entry (or a non-array profiles field) must not enter the store.
-    const incoming = validProfiles(remote.profiles);
-    for (const p of incoming) {
-      const existing = byId.get(p.id);
-      if (!existing || (p.updatedAt ?? 0) >= (existing.updatedAt ?? 0)) byId.set(p.id, p);
-    }
-    this.profiles = [...byId.values()].slice(0, MAX_PROFILES);
-    // Merge only the profile list and the default. The active selection is per-device state:
-    // adopting the remote activeId would show a profile as Active while this device still runs
-    // its previous settings, with no dirty flag to say so.
-    if (this.profiles.some((profile) => profile.id === remote.defaultId)) {
-      this.#defaultId = remote.defaultId;
-    } else if (!this.profiles.some((profile) => profile.id === this.#defaultId)) {
-      this.#defaultId = undefined;
-    }
-    // Cache the merged state locally without re-scheduling a push; syncWithServer pushes once.
-    this.#adapter.save(this.#snapshot());
   }
 
   save(name: string, settings: ProfileSettings): Profile {
     if (this.profiles.length >= MAX_PROFILES) throw new Error('Profile limit reached.');
     const safeName = cleanProfileName(name);
     if (!safeName || !isProfileSettings(settings)) throw new Error('Profile is invalid.');
-    const now = Date.now();
+    const now = nextWallTimestamp();
+    const clock = 1;
     const profile: Profile = {
       id: uuidv4(),
       name: safeName,
-      settings,
+      settings: cloneSettings(sanitizeProfileSettings(settings)),
       createdAt: now,
       updatedAt: now,
+      nameUpdatedAt: clock,
+      settingUpdatedAt: Object.fromEntries(
+        PORTABLE_PROFILE_SETTING_KEYS.map((key) => [key, clock]),
+      ),
     };
     this.profiles = [...this.profiles, profile];
+    this.#markFull(profile.id);
     this.#persist();
     return profile;
   }
 
   update(id: string, settings: ProfileSettings): void {
-    if (!isProfileSettings(settings)) return;
-    const now = Date.now();
-    this.profiles = this.profiles.map((p) =>
-      p.id === id ? { ...p, settings, updatedAt: now } : p,
+    this.updateFields(id, settings, PORTABLE_PROFILE_SETTING_KEYS);
+  }
+
+  updateFields(
+    id: string,
+    settings: ProfileSettings,
+    keys: readonly PortableProfileSettingKey[],
+  ): void {
+    const existing = this.profileById(id);
+    if (!existing || !isProfileSettings(settings)) return;
+    const changed = [...new Set(keys)].filter(
+      (key) =>
+        PORTABLE_PROFILE_SETTING_KEYS.includes(key) &&
+        !sameJsonValue(existing.settings[key], settings[key]),
     );
+    if (changed.length === 0) return;
+    const now = nextWallTimestamp(existing.updatedAt);
+    const clock = nextLogicalTimestamp(profileClock(existing));
+    const mergedSettings = cloneSettings(existing.settings);
+    const timestamps = { ...existing.settingUpdatedAt };
+    const pending = this.#pending.profiles[id] ?? {};
+    const pendingSettings = { ...pending.settings };
+    for (const key of changed) {
+      if (Object.hasOwn(settings, key)) {
+        Object.assign(mergedSettings, { [key]: cloneValue(settings[key]) });
+      } else {
+        delete mergedSettings[key];
+      }
+      timestamps[key] = clock;
+      pendingSettings[key] = clock;
+    }
+    this.profiles = this.profiles.map((profile) =>
+      profile.id === id
+        ? { ...profile, settings: mergedSettings, settingUpdatedAt: timestamps, updatedAt: now }
+        : profile,
+    );
+    if (this.#applied?.profileId === id) {
+      const applied = cloneSettings(this.#applied.settings);
+      for (const key of changed) {
+        if (Object.hasOwn(settings, key)) {
+          Object.assign(applied, { [key]: cloneValue(settings[key]) });
+        } else {
+          delete applied[key];
+        }
+      }
+      this.#applied = { profileId: id, settings: applied };
+      this.#refreshRemoteUpdateState();
+    }
+    this.#pending.profiles[id] = { ...pending, settings: pendingSettings };
     this.#persist();
   }
 
   rename(id: string, name: string): void {
+    const existing = this.profileById(id);
     const safeName = cleanProfileName(name);
-    if (!safeName) return;
-    this.profiles = this.profiles.map((p) =>
-      p.id === id ? { ...p, name: safeName, updatedAt: Date.now() } : p,
+    if (!existing || !safeName || existing.name === safeName) return;
+    const now = nextWallTimestamp(existing.updatedAt);
+    const clock = nextLogicalTimestamp(profileClock(existing));
+    this.profiles = this.profiles.map((profile) =>
+      profile.id === id
+        ? { ...profile, name: safeName, nameUpdatedAt: clock, updatedAt: now }
+        : profile,
     );
+    this.#pending.profiles[id] = {
+      ...this.#pending.profiles[id],
+      nameUpdatedAt: clock,
+    };
     this.#persist();
   }
 
   remove(id: string): void {
-    this.profiles = this.profiles.filter((p) => p.id !== id);
+    const existing = this.profileById(id);
+    if (!existing) return;
+    const deletedAt = nextLogicalTimestamp(profileClock(existing));
+    this.profiles = this.profiles.filter((profile) => profile.id !== id);
+    this.#tombstones = [
+      ...this.#tombstones.filter((tombstone) => tombstone.id !== id),
+      { id, deletedAt },
+    ];
+    this.#pending.profiles[id] = { deletedAt };
     if (this.activeId === id) this.activeId = undefined;
-    if (this.#defaultId === id) this.#defaultId = undefined;
+    if (this.#applied?.profileId === id) this.#applied = undefined;
+    if (this.#defaultId === id) {
+      this.#defaultId = undefined;
+      this.#pending.defaultId = null;
+    }
     this.#persist();
   }
 
   setDefault(id: string): void {
-    if (!this.#byId.has(id)) return;
+    if (!this.#byId.has(id) || this.#defaultId === id) return;
     this.#defaultId = id;
+    this.#pending.defaultId = id;
     this.#persist();
   }
 
-  // Mark which profile is active and clear the dirty flag. This does NOT apply the profile's settings:
-  // the settings live in App's stores, so the caller applies them and then marks the result active.
   setActive(id: string | undefined): void {
     if (id !== undefined && !this.#byId.has(id)) return;
     this.activeId = id;
-    this.isDirty = false;
-    this.#persist();
+    const active = this.profileById(id);
+    this.#applied = active
+      ? { profileId: active.id, settings: cloneSettings(active.settings) }
+      : undefined;
+    this.remoteUpdateAvailable = false;
+    this.#persist(false);
   }
 
-  markDirty(): void {
-    // Only a live profile can be edited, and only flip the flag once: a no-op write is wasted reactivity.
-    if (this.activeId !== undefined && !this.isDirty) this.isDirty = true;
+  markRemoteUpdateApplied(): void {
+    const active = this.active;
+    if (active) {
+      this.#applied = { profileId: active.id, settings: cloneSettings(active.settings) };
+    }
+    this.#refreshRemoteUpdateState();
+    this.#persist(false);
   }
 
-  clearDirty(): void {
-    this.isDirty = false;
+  suspendPersistence(): void {
+    this.#persistenceSuspended = true;
+    this.#server = undefined;
+  }
+
+  resumePersistence(): void {
+    if (!this.#persistenceSuspended) return;
+    this.#persistenceSuspended = false;
+    this.#adapter.save(this.#snapshot());
+    if (this.#hasPending()) this.syncState = 'waiting';
+  }
+
+  setLocalOnly(): void {
+    if (!this.#server) this.syncState = 'local';
+  }
+
+  async syncWithServer(
+    server: AsyncProfileAdapter,
+    options: { discardUnsyncedProfileIds?: readonly string[] } = {},
+  ): Promise<ProfileSyncResult> {
+    if (this.#persistenceSuspended) return { ok: false, activeChanged: false };
+    if (this.#pushPromise) await this.#pushPromise;
+    if (this.#persistenceSuspended) return { ok: false, activeChanged: false };
+    this.syncState = 'syncing';
+    const activeBefore = this.active ? cloneValue(this.active) : undefined;
+    const loaded = await server.load();
+    if (this.#persistenceSuspended) return { ok: false, activeChanged: false };
+    if (loaded.state !== 'ok') {
+      this.#server = undefined;
+      this.syncState = loaded.state === 'unavailable' ? 'waiting' : 'error';
+      return { ok: false, activeChanged: false };
+    }
+    this.#server = loaded.writable === false ? undefined : server;
+    this.#serverRevision = loaded.snapshot.revision;
+    for (const id of options.discardUnsyncedProfileIds ?? []) {
+      this.#discardUnsyncedProfile(id);
+    }
+    this.#mergeRemote(loaded.snapshot);
+    const activeChanged =
+      activeBefore !== undefined &&
+      this.active !== undefined &&
+      !sameJsonValue(activeBefore.settings, this.active.settings);
+    this.#refreshRemoteUpdateState();
+    this.#persist(false);
+    if (this.#hasPending()) {
+      if (this.#server) this.#schedulePush();
+      else this.syncState = 'waiting';
+    } else {
+      this.syncState = this.#server ? 'synced' : 'waiting';
+    }
+    return { ok: true, activeChanged };
+  }
+
+  #mergeRemote(remote: RemoteProfilesSnapshot): void {
+    const localById = new Map(this.profiles.map((profile) => [profile.id, profile]));
+    const remoteById = new Map(remote.profiles.map((profile) => [profile.id, profile]));
+    const localTombstones = tombstoneMap(this.#tombstones);
+    const remoteTombstones = tombstoneMap(remote.tombstones);
+    const ids = new Set([
+      ...localById.keys(),
+      ...remoteById.keys(),
+      ...localTombstones.keys(),
+      ...remoteTombstones.keys(),
+    ]);
+    const mergedProfiles: Profile[] = [];
+    const mergedTombstones: ProfileTombstone[] = [];
+
+    for (const id of ids) {
+      const local = localById.get(id);
+      const incoming = remoteById.get(id);
+      const localDeleted = localTombstones.get(id);
+      const remoteDeleted = remoteTombstones.get(id);
+      const pending = this.#pending.profiles[id];
+      const latestDeleted =
+        !localDeleted || (remoteDeleted?.deletedAt ?? -1) > localDeleted.deletedAt
+          ? remoteDeleted
+          : localDeleted;
+      const latestProfileTime = Math.max(
+        local ? profileClock(local) : -1,
+        incoming ? profileClock(incoming) : -1,
+      );
+
+      if (latestDeleted && pending?.deletedAt !== undefined) {
+        const deletedAt =
+          latestDeleted.deletedAt <= latestProfileTime
+            ? nextLogicalTimestamp(latestDeleted.deletedAt, latestProfileTime)
+            : latestDeleted.deletedAt;
+        const rebased = { id, deletedAt };
+        mergedTombstones.push(rebased);
+        this.#pending.profiles[id] = { deletedAt };
+        continue;
+      }
+
+      if (latestDeleted && latestDeleted.deletedAt >= latestProfileTime) {
+        mergedTombstones.push(latestDeleted);
+        if (remoteDeleted?.deletedAt !== latestDeleted.deletedAt) {
+          this.#pending.profiles[id] = { deletedAt: latestDeleted.deletedAt };
+        } else {
+          delete this.#pending.profiles[id];
+        }
+        continue;
+      }
+
+      let merged: Profile | undefined;
+      if (local && incoming) merged = mergeProfiles(local, incoming, pending);
+      else merged = local ?? incoming;
+      if (!merged) continue;
+      mergedProfiles.push(merged);
+      if (!incoming) {
+        this.#markFull(id);
+      } else {
+        this.#markRemoteDelta(incoming, merged);
+      }
+    }
+
+    this.profiles = mergedProfiles.slice(0, MAX_PROFILES);
+    this.#tombstones = mergedTombstones.slice(0, MAX_PROFILES);
+    if (this.activeId && !this.profiles.some((profile) => profile.id === this.activeId)) {
+      this.activeId = undefined;
+      this.#applied = undefined;
+    }
+
+    if (this.#pending.defaultId !== undefined) {
+      this.#defaultId =
+        this.#pending.defaultId &&
+        this.profiles.some((profile) => profile.id === this.#pending.defaultId)
+          ? this.#pending.defaultId
+          : undefined;
+    } else if (
+      remote.defaultId &&
+      this.profiles.some((profile) => profile.id === remote.defaultId)
+    ) {
+      this.#defaultId = remote.defaultId;
+    } else if (this.#defaultId && this.profiles.some((profile) => profile.id === this.#defaultId)) {
+      this.#pending.defaultId = this.#defaultId;
+    } else {
+      this.#defaultId = undefined;
+    }
+  }
+
+  #markRemoteDelta(remote: Profile, merged: Profile): void {
+    const pending = this.#pending.profiles[merged.id] ?? {};
+    const settings = { ...pending.settings };
+    for (const key of PORTABLE_PROFILE_SETTING_KEYS) {
+      if (
+        !sameJsonValue(remote.settings[key], merged.settings[key]) ||
+        fieldTimestamp(remote, key) !== fieldTimestamp(merged, key)
+      ) {
+        settings[key] = fieldTimestamp(merged, key);
+      }
+    }
+    const next: PendingProfileChange = { ...pending };
+    if (Object.keys(settings).length > 0) next.settings = settings;
+    if (
+      remote.name !== merged.name ||
+      (remote.nameUpdatedAt ?? remote.updatedAt) !== (merged.nameUpdatedAt ?? merged.updatedAt)
+    ) {
+      next.nameUpdatedAt = merged.nameUpdatedAt ?? merged.updatedAt;
+    }
+    if (Object.keys(next).length > 0) this.#pending.profiles[merged.id] = next;
+  }
+
+  #markFull(id: string): void {
+    this.#pending.profiles[id] = { full: true };
+  }
+
+  #discardUnsyncedProfile(id: string): boolean {
+    if (!this.#pending.profiles[id]?.full || !this.#byId.has(id)) return false;
+    this.profiles = this.profiles.filter((profile) => profile.id !== id);
+    delete this.#pending.profiles[id];
+    this.#tombstones = this.#tombstones.filter((tombstone) => tombstone.id !== id);
+    if (this.activeId === id) this.activeId = undefined;
+    if (this.#applied?.profileId === id) this.#applied = undefined;
+    if (this.#defaultId === id) {
+      this.#defaultId = undefined;
+      if (this.#pending.defaultId === id) this.#pending.defaultId = undefined;
+    }
+    this.#refreshRemoteUpdateState();
+    return true;
   }
 
   #snapshot(): ProfilesState {
-    return { profiles: this.profiles, activeId: this.activeId, defaultId: this.#defaultId };
+    return {
+      schemaVersion: 2,
+      profiles: this.profiles,
+      activeId: this.activeId,
+      defaultId: this.#defaultId,
+      applied: this.#applied,
+      tombstones: this.#tombstones,
+      pending: this.#pending,
+    };
   }
 
-  #persist(): void {
+  #persist(schedulePush = true): void {
+    if (this.#persistenceSuspended) return;
     this.#adapter.save(this.#snapshot());
+    if (!schedulePush) return;
+    if (!this.#server) {
+      if (this.#hasPending() && this.syncState !== 'error') this.syncState = 'waiting';
+      return;
+    }
     this.#schedulePush();
   }
 
-  // Single-flight server push: mark a write pending and start the runner if idle; the runner loops
-  // until no write is pending, always sending the latest snapshot, so rapid edits collapse to one
-  // in-flight request followed by one more with the final state.
+  #hasPending(): boolean {
+    return Object.keys(this.#pending.profiles).length > 0 || this.#pending.defaultId !== undefined;
+  }
+
+  #dropOrphanPending(): void {
+    const profileIds = new Set(this.profiles.map((profile) => profile.id));
+    for (const [id, change] of Object.entries(this.#pending.profiles)) {
+      if (change.deletedAt === undefined && !profileIds.has(id)) {
+        delete this.#pending.profiles[id];
+      }
+    }
+    if (typeof this.#pending.defaultId === 'string' && !profileIds.has(this.#pending.defaultId)) {
+      this.#pending.defaultId = undefined;
+    }
+  }
+
+  #buildMutation(): {
+    mutation: ProfileServerMutation;
+    journal: ProfilePendingJournal;
+  } | null {
+    this.#dropOrphanPending();
+    if (!this.#hasPending()) return null;
+    const journal = cloneValue(this.#pending);
+    const mutations: ProfileServerMutation['profiles'] = [];
+    for (const [id, change] of Object.entries(journal.profiles)) {
+      if (change.deletedAt !== undefined) {
+        mutations.push({ type: 'delete', tombstone: { id, deletedAt: change.deletedAt } });
+        continue;
+      }
+      const profile = this.profileById(id);
+      if (!profile) continue;
+      if (change.full) {
+        mutations.push({ type: 'put', profile: cloneValue(profile) });
+        continue;
+      }
+      if (change.settings && Object.keys(change.settings).length > 0) {
+        const settings: Partial<Pick<ProfileSettings, PortableProfileSettingKey>> = {};
+        for (const key of PORTABLE_PROFILE_SETTING_KEYS) {
+          if (change.settings[key] === undefined) continue;
+          Object.assign(settings, { [key]: cloneValue(profile.settings[key]) });
+        }
+        mutations.push({
+          type: 'patch',
+          id,
+          settings,
+          settingUpdatedAt: { ...profile.settingUpdatedAt },
+          updatedAt: profile.updatedAt,
+        });
+      }
+      if (change.nameUpdatedAt !== undefined) {
+        mutations.push({
+          type: 'rename',
+          id,
+          name: profile.name,
+          nameUpdatedAt: profile.nameUpdatedAt ?? profile.updatedAt,
+          updatedAt: profile.updatedAt,
+        });
+      }
+    }
+    return {
+      mutation: {
+        profiles: mutations,
+        ...(journal.defaultId !== undefined ? { defaultId: journal.defaultId } : {}),
+      },
+      journal,
+    };
+  }
+
+  #ackMutation(sent: ProfilePendingJournal, mutation: ProfileServerMutation): void {
+    for (const [id, change] of Object.entries(sent.profiles)) {
+      const current = this.#pending.profiles[id];
+      if (!current) continue;
+      const sentOps = mutation.profiles.filter((operation) =>
+        operation.type === 'delete'
+          ? operation.tombstone.id === id
+          : operation.type === 'put'
+            ? operation.profile.id === id
+            : operation.id === id,
+      );
+      const put = sentOps.find((operation) => operation.type === 'put');
+      if (put?.type === 'put') {
+        if (current.full && sameJsonValue(this.profileById(id), put.profile)) {
+          delete this.#pending.profiles[id];
+        }
+        continue;
+      }
+      if (change.deletedAt !== undefined) {
+        if (current.deletedAt === change.deletedAt) delete this.#pending.profiles[id];
+        continue;
+      }
+      const next: PendingProfileChange = { ...current };
+      if (change.settings && next.settings) {
+        const remaining = { ...next.settings };
+        for (const [key, timestamp] of Object.entries(change.settings)) {
+          if (remaining[key as PortableProfileSettingKey] === timestamp) {
+            delete remaining[key as PortableProfileSettingKey];
+          }
+        }
+        next.settings = Object.keys(remaining).length > 0 ? remaining : undefined;
+      }
+      if (change.nameUpdatedAt !== undefined && next.nameUpdatedAt === change.nameUpdatedAt) {
+        next.nameUpdatedAt = undefined;
+      }
+      if (
+        !next.full &&
+        next.settings === undefined &&
+        next.nameUpdatedAt === undefined &&
+        next.deletedAt === undefined
+      ) {
+        delete this.#pending.profiles[id];
+      } else {
+        this.#pending.profiles[id] = next;
+      }
+    }
+    if (sent.defaultId !== undefined && this.#pending.defaultId === sent.defaultId) {
+      this.#pending.defaultId = undefined;
+    }
+  }
+
   #schedulePush(): void {
-    if (!this.#server) return;
-    this.syncState = 'syncing';
-    this.#pushPending = true;
-    if (this.#pushing) return;
-    void this.#runPush();
+    if (this.#persistenceSuspended || this.#pushPromise || !this.#server) return;
+    this.#pushPromise = this.#runPush().finally(() => {
+      this.#pushPromise = undefined;
+    });
   }
 
   async #runPush(): Promise<void> {
-    if (!this.#server) return;
-    this.#pushing = true;
-    while (this.#pushPending) {
-      this.#pushPending = false;
-      let ok = false;
-      try {
-        ok = await this.#server.save(this.#snapshot());
-      } catch {
-        ok = false;
+    if (this.#persistenceSuspended || !this.#server) return;
+    let retries = 0;
+    while (this.#server && this.#hasPending()) {
+      const built = this.#buildMutation();
+      if (!built) break;
+      this.syncState = retries > 0 ? 'conflict' : 'syncing';
+      const result = await this.#server.mutate(this.#serverRevision, built.mutation);
+      if (this.#persistenceSuspended) return;
+      if (result === 'ok') {
+        this.#serverRevision += 1;
+        this.#ackMutation(built.journal, built.mutation);
+        this.#adapter.save(this.#snapshot());
+        retries = 0;
+        continue;
       }
-      if (!ok) {
-        // A rejected write (a read-only token, or the server refusing writes) will not start
-        // succeeding under this token, so detach and let the local cache stay authoritative
-        // rather than firing a doomed request on every later edit. The next auth change (a
-        // read-write upgrade, a reconnect, or a new session) re-attaches and retries.
+      if (result === 'unavailable') {
         this.#server = undefined;
-        this.syncState = 'error';
+        this.syncState = 'waiting';
         break;
       }
+      retries += 1;
+      if (retries > MAX_SYNC_RETRIES) {
+        this.syncState = 'conflict';
+        break;
+      }
+      const refreshed = await this.#server.load();
+      if (this.#persistenceSuspended) return;
+      if (refreshed.state !== 'ok') {
+        this.#server = undefined;
+        this.syncState = refreshed.state === 'unavailable' ? 'waiting' : 'error';
+        break;
+      }
+      this.#serverRevision = refreshed.snapshot.revision;
+      this.#mergeRemote(refreshed.snapshot);
+      this.#adapter.save(this.#snapshot());
     }
-    if (this.#server) this.syncState = 'synced';
-    this.#pushing = false;
+    if (this.#server && !this.#hasPending()) this.syncState = 'synced';
+  }
+
+  #refreshRemoteUpdateState(): void {
+    this.remoteUpdateAvailable =
+      this.active !== undefined &&
+      this.#applied?.profileId === this.active.id &&
+      !sameJsonValue(this.#applied.settings, this.active.settings);
   }
 }

@@ -10,6 +10,10 @@ export function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+export function isSafeNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 // Compare two optional numbers so missing or non-finite values sort last regardless of direction,
 // keeping unknowns from burying the meaningful values. Shared by the AIS list and the POI search.
 export function compareOptionalNumber(

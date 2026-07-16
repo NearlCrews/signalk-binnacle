@@ -4,18 +4,14 @@ import type { Profile } from '$entities/profile';
 
 interface Props {
   active: Profile | undefined;
-  isDirty: boolean;
   onClick: () => void;
 }
 
-const { active, isDirty, onClick }: Props = $props();
+const { active, onClick }: Props = $props();
 
 const label = $derived(active?.name ?? 'No profile');
-// The accessible name carries the edited state explicitly, since the visual dot alone is not announced.
 const ariaLabel = $derived(
-  active
-    ? `Profile ${active.name}${isDirty ? ', edited' : ''}, open profiles`
-    : 'No profile, open profiles',
+  active ? `Profile ${active.name}, open profiles` : 'No profile, open profiles',
 );
 </script>
 
@@ -29,14 +25,11 @@ const ariaLabel = $derived(
 >
   <UserCog size={16} aria-hidden="true" />
   <span class="name">{label}</span>
-  {#if isDirty}
-    <span class="dot" aria-hidden="true"></span>
-  {/if}
 </button>
 
 <style>
-/* The base look is the shared global .btn .btn-pill; only the long-name ellipsis, the muted
-   no-profile text, and the unsaved-changes dot are switcher-specific. */
+/* The base look is the shared global .btn .btn-pill; only the long-name ellipsis and the muted
+   no-profile text are switcher-specific. */
 .switcher {
   flex: none;
   min-inline-size: var(--control-size);
@@ -49,14 +42,6 @@ const ariaLabel = $derived(
 }
 .no-profile .name {
   color: var(--text-muted);
-}
-/* A small accent dot signaling the live settings have drifted from the saved profile. */
-.dot {
-  flex-shrink: 0;
-  inline-size: 0.4rem;
-  block-size: 0.4rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
 }
 @media (max-width: 600px) {
   .name {

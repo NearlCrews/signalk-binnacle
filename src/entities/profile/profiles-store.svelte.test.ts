@@ -1,384 +1,701 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Profile, ProfileSettings, ProfilesState } from './profile-types';
+import type {
+  Profile,
+  ProfileServerMutation,
+  ProfileSettings,
+  ProfilesState,
+  RemoteProfilesSnapshot,
+} from './profile-types';
 import {
   type AsyncProfileAdapter,
   type ProfileAdapter,
   ProfileStore,
 } from './profiles-store.svelte';
 
-// An in-memory adapter so tests never touch localStorage. It can be seeded with stored state and
-// records every save for asserting persistence.
 function fakeAdapter(initial?: ProfilesState): ProfileAdapter & { saved: ProfilesState[] } {
   let state = initial;
   const saved: ProfilesState[] = [];
   return {
     saved,
     load: () => state,
-    save: (next: ProfilesState) => {
-      state = next;
+    save: (next) => {
+      state = structuredClone(next);
       saved.push(structuredClone(next));
     },
   };
 }
 
-// An in-memory async server adapter, recording every push for asserting the single-flight sync.
-function fakeServer(initial?: ProfilesState): AsyncProfileAdapter & { saved: ProfilesState[] } {
-  let state = initial;
-  const saved: ProfilesState[] = [];
+function settings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
   return {
-    saved,
-    load: async () => state,
-    save: async (next: ProfilesState) => {
-      state = next;
-      saved.push(structuredClone(next));
-      return true;
+    theme: 'day',
+    layers: {},
+    layerOrder: [],
+    weatherLayers: {},
+    thresholds: {
+      dangerCpaMeters: 926,
+      dangerTcpaSeconds: 600,
+      warningCpaMeters: 1852,
+      warningTcpaSeconds: 1200,
+    },
+    trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
+    planningSpeedKn: 6,
+    units: 'metric',
+    pinnedActionIds: ['center'],
+    instrumentTiles: ['depth'],
+    anchorRadiusMeters: 50,
+    ...overrides,
+  };
+}
+
+function profile(
+  id: string,
+  name: string,
+  updatedAt: number,
+  overrides: Partial<ProfileSettings> = {},
+): Profile {
+  return {
+    id,
+    name,
+    settings: settings(overrides),
+    createdAt: 1,
+    updatedAt,
+    nameUpdatedAt: updatedAt,
+    settingUpdatedAt: Object.fromEntries(Object.keys(settings()).map((key) => [key, updatedAt])),
+  };
+}
+
+function applyMutation(
+  snapshot: RemoteProfilesSnapshot,
+  mutation: ProfileServerMutation,
+): RemoteProfilesSnapshot {
+  const profiles = new Map(snapshot.profiles.map((item) => [item.id, structuredClone(item)]));
+  const tombstones = new Map(snapshot.tombstones.map((item) => [item.id, structuredClone(item)]));
+  for (const operation of mutation.profiles) {
+    if (operation.type === 'put') {
+      profiles.set(operation.profile.id, structuredClone(operation.profile));
+      tombstones.delete(operation.profile.id);
+    } else if (operation.type === 'delete') {
+      profiles.delete(operation.tombstone.id);
+      tombstones.set(operation.tombstone.id, structuredClone(operation.tombstone));
+    } else if (operation.type === 'rename') {
+      const item = profiles.get(operation.id);
+      if (item) {
+        item.name = operation.name;
+        item.nameUpdatedAt = operation.nameUpdatedAt;
+        item.updatedAt = operation.updatedAt;
+      }
+    } else {
+      const item = profiles.get(operation.id);
+      if (item) {
+        Object.assign(item.settings, structuredClone(operation.settings));
+        item.settingUpdatedAt = {
+          ...item.settingUpdatedAt,
+          ...operation.settingUpdatedAt,
+        };
+        item.updatedAt = operation.updatedAt;
+      }
+    }
+  }
+  return {
+    profiles: [...profiles.values()],
+    tombstones: [...tombstones.values()],
+    defaultId:
+      mutation.defaultId === null
+        ? undefined
+        : mutation.defaultId === undefined
+          ? snapshot.defaultId
+          : mutation.defaultId,
+    revision: snapshot.revision + 1,
+  };
+}
+
+function fakeServer(initial: RemoteProfilesSnapshot): AsyncProfileAdapter & {
+  mutations: ProfileServerMutation[];
+  snapshot(): RemoteProfilesSnapshot;
+} {
+  let state = structuredClone(initial);
+  const mutations: ProfileServerMutation[] = [];
+  return {
+    mutations,
+    snapshot: () => structuredClone(state),
+    load: async () => ({ state: 'ok', snapshot: structuredClone(state) }),
+    mutate: async (revision, mutation) => {
+      if (revision !== state.revision) return 'conflict';
+      mutations.push(structuredClone(mutation));
+      state = applyMutation(state, mutation);
+      return 'ok';
     },
   };
 }
 
-const profile = (id: string, name: string, updatedAt: number): Profile => ({
-  id,
-  name,
-  settings: settings(),
-  createdAt: 1,
-  updatedAt,
+const emptyRemote = (): RemoteProfilesSnapshot => ({
+  profiles: [],
+  tombstones: [],
+  defaultId: undefined,
+  revision: 0,
 });
 
-// Let the single-flight push runner finish: it is started but not awaited by syncWithServer/#persist.
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe('ProfileStore load guard', () => {
-  it('drops a malformed stored profile at load', () => {
+describe('ProfileStore local behavior', () => {
+  it('drops malformed stored profiles and invalid active ids', () => {
     const good = profile('good', 'Good', 1);
-    const adapter = fakeAdapter({
-      profiles: [good, { id: 'bad' } as unknown as Profile, null as unknown as Profile],
-      activeId: undefined,
-      defaultId: undefined,
-    });
-    const store = new ProfileStore(adapter);
-    expect(store.profiles.map((p) => p.id)).toEqual(['good']);
-  });
-
-  it('loads empty without throwing when the stored profiles field is a truthy non-array', () => {
-    const adapter = fakeAdapter({
-      profiles: 'corrupt' as unknown as Profile[],
-      activeId: 'p1',
-      defaultId: undefined,
-    });
-    const store = new ProfileStore(adapter);
-    expect(store.profiles).toEqual([]);
-    expect(store.activeId).toBeUndefined();
-  });
-});
-
-const settings = (overrides: Partial<ProfileSettings> = {}): ProfileSettings => ({
-  theme: 'day',
-  layers: {},
-  layerOrder: [],
-  layerCategories: {},
-  weatherLayers: {},
-  thresholds: {
-    dangerCpaMeters: 926,
-    dangerTcpaSeconds: 600,
-    warningCpaMeters: 1852,
-    warningTcpaSeconds: 1200,
-  },
-  trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-  planningSpeedKn: 6,
-  arrivalMuted: false,
-  ...overrides,
-});
-
-describe('ProfileStore', () => {
-  it('loads stored state into the runes on construction', () => {
-    const stored: ProfilesState = {
-      profiles: [{ id: 'p1', name: 'Coastal', settings: settings(), createdAt: 1, updatedAt: 1 }],
-      activeId: 'p1',
-      defaultId: 'p1',
-    };
-    const store = new ProfileStore(fakeAdapter(stored));
-    expect(store.profiles.map((p) => p.id)).toEqual(['p1']);
-    expect(store.activeId).toBe('p1');
-    expect(store.defaultId).toBe('p1');
-    expect(store.active?.name).toBe('Coastal');
-  });
-
-  it('starts empty when the adapter has nothing stored', () => {
-    const store = new ProfileStore(fakeAdapter());
-    expect(store.profiles).toEqual([]);
-    expect(store.activeId).toBeUndefined();
-    expect(store.defaultId).toBeUndefined();
-    expect(store.active).toBeUndefined();
-  });
-
-  it('appends a saved profile with a fresh id and timestamps', () => {
-    const adapter = fakeAdapter();
-    const store = new ProfileStore(adapter);
-    const a = store.save('Coastal', settings());
-    const b = store.save('Offshore', settings());
-    expect(store.profiles.map((p) => p.name)).toEqual(['Coastal', 'Offshore']);
-    expect(a.id).not.toBe(b.id);
-    expect(a.createdAt).toBe(a.updatedAt);
-    expect(adapter.saved.at(-1)?.profiles).toHaveLength(2);
-  });
-
-  it('rewrites settings on update while keeping the id', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings({ planningSpeedKn: 6 }));
-    store.update(p.id, settings({ planningSpeedKn: 9 }));
-    const updated = store.profiles.find((x) => x.id === p.id);
-    expect(updated?.id).toBe(p.id);
-    expect(updated?.settings.planningSpeedKn).toBe(9);
-  });
-
-  it('renames a profile, changing the name only', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings({ planningSpeedKn: 6 }));
-    store.rename(p.id, 'Inshore');
-    const renamed = store.profiles.find((x) => x.id === p.id);
-    expect(renamed?.name).toBe('Inshore');
-    expect(renamed?.settings.planningSpeedKn).toBe(6);
-  });
-
-  it('removes a profile and resets active and default when they matched it', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings());
-    store.setActive(p.id);
-    store.setDefault(p.id);
-    store.remove(p.id);
-    expect(store.profiles).toEqual([]);
-    expect(store.activeId).toBeUndefined();
-    expect(store.defaultId).toBeUndefined();
-  });
-
-  it('leaves active and default intact when removing a different profile', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const keep = store.save('Coastal', settings());
-    const drop = store.save('Offshore', settings());
-    store.setActive(keep.id);
-    store.setDefault(keep.id);
-    store.remove(drop.id);
-    expect(store.profiles.map((p) => p.id)).toEqual([keep.id]);
-    expect(store.activeId).toBe(keep.id);
-    expect(store.defaultId).toBe(keep.id);
-  });
-
-  it('persists the default and reflects it through the getter', () => {
-    const adapter = fakeAdapter();
-    const store = new ProfileStore(adapter);
-    const p = store.save('Coastal', settings());
-    store.setDefault(p.id);
-    expect(store.defaultId).toBe(p.id);
-    expect(adapter.saved.at(-1)?.defaultId).toBe(p.id);
-  });
-
-  it('clears the dirty flag on setActive', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings());
-    store.setActive(p.id);
-    store.markDirty();
-    expect(store.isDirty).toBe(true);
-    store.setActive(p.id);
-    expect(store.isDirty).toBe(false);
-  });
-
-  it('marks dirty only when a profile is active', () => {
-    const store = new ProfileStore(fakeAdapter());
-    store.markDirty();
-    expect(store.isDirty).toBe(false);
-    const p = store.save('Coastal', settings());
-    store.setActive(p.id);
-    store.markDirty();
-    expect(store.isDirty).toBe(true);
-  });
-
-  it('clears the dirty flag on clearDirty', () => {
-    const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings());
-    store.setActive(p.id);
-    store.markDirty();
-    store.clearDirty();
-    expect(store.isDirty).toBe(false);
-  });
-
-  it('calls adapter.save on each mutation', () => {
-    const adapter = fakeAdapter();
-    const saveSpy = vi.spyOn(adapter, 'save');
-    const store = new ProfileStore(adapter);
-    const p = store.save('Coastal', settings());
-    store.update(p.id, settings({ planningSpeedKn: 8 }));
-    store.rename(p.id, 'Inshore');
-    store.setDefault(p.id);
-    store.setActive(p.id);
-    store.remove(p.id);
-    expect(saveSpy).toHaveBeenCalledTimes(6);
-  });
-
-  it('round-trips the reserved mode field unchanged', () => {
-    const adapter = fakeAdapter();
-    const store = new ProfileStore(adapter);
-    const p = store.save('Anchor watch', settings({ mode: 'anchor' }));
-    const persisted = adapter.saved.at(-1)?.profiles.find((x) => x.id === p.id);
-    expect(persisted?.settings.mode).toBe('anchor');
-
-    const reloaded = new ProfileStore(fakeAdapter(adapter.saved.at(-1)));
-    expect(reloaded.profiles.find((x) => x.id === p.id)?.settings.mode).toBe('anchor');
-  });
-});
-
-describe('ProfileStore.seed', () => {
-  it('populates an empty store and persists', () => {
-    const adapter = fakeAdapter();
-    const store = new ProfileStore(adapter);
-    store.seed([profile('s1', 'Coastal day', 1)]);
-    expect(store.profiles.map((p) => p.id)).toEqual(['s1']);
-    expect(adapter.saved.at(-1)?.profiles).toHaveLength(1);
-  });
-
-  it('is a no-op when the store already has profiles', () => {
-    const store = new ProfileStore(fakeAdapter());
-    store.save('Existing', settings());
-    store.seed([profile('s1', 'Seed', 1)]);
-    expect(store.profiles.map((p) => p.name)).toEqual(['Existing']);
-  });
-});
-
-describe('ProfileStore.syncWithServer', () => {
-  it('merges remote profiles by id with the later updatedAt winning, and pushes the result', async () => {
     const store = new ProfileStore(
       fakeAdapter({
-        profiles: [profile('p1', 'Local v1', 1)],
-        activeId: 'p1',
+        profiles: [good, { id: 'bad' } as unknown as Profile],
+        activeId: 'bad',
         defaultId: undefined,
       }),
     );
-    const server = fakeServer({
-      profiles: [profile('p1', 'Remote v2', 5), profile('p2', 'Remote only', 2)],
-      activeId: 'p2',
-      defaultId: 'p2',
+    expect(store.profiles.map((item) => item.id)).toEqual(['good']);
+    expect(store.activeId).toBeUndefined();
+  });
+
+  it('drops pending writes that no longer have a profile', () => {
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [],
+        activeId: undefined,
+        defaultId: undefined,
+        pending: {
+          profiles: { orphan: { full: true } },
+          defaultId: 'orphan',
+        },
+      }),
+    );
+
+    expect(store.hasPendingChanges).toBe(false);
+    expect(store.syncState).toBe('local');
+  });
+
+  it('rejects prototype-sensitive profile ids at the persistence boundary', () => {
+    const unsafe = profile('__proto__', 'Unsafe', 1);
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [unsafe],
+        activeId: unsafe.id,
+        defaultId: unsafe.id,
+      }),
+    );
+
+    expect(store.profiles).toEqual([]);
+    expect(store.activeId).toBeUndefined();
+  });
+
+  it('rejects profile ids containing server-blocked patch path segments', () => {
+    const unsafe = profile('helm.__proto__.day', 'Unsafe', 1);
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [unsafe],
+        activeId: unsafe.id,
+        defaultId: unsafe.id,
+      }),
+    );
+
+    expect(store.profiles).toEqual([]);
+  });
+
+  it('removes legacy device and safety state from locally stored profiles', () => {
+    const legacy = profile('legacy', 'Legacy', 1, {
+      layerCategories: { charts: true },
+      arrivalMuted: true,
     });
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [legacy],
+        activeId: legacy.id,
+        defaultId: undefined,
+      }),
+    );
+
+    expect(store.active?.settings).not.toHaveProperty('layerCategories');
+    expect(store.active?.settings).not.toHaveProperty('arrivalMuted');
+  });
+
+  it('rejects oversized extension data and extra nested setting fields', () => {
+    const oversized = profile('large', 'Large', 1, {
+      future: 'x'.repeat(4_097),
+    } as Partial<ProfileSettings>);
+    const nestedExtra = profile('nested', 'Nested', 1);
+    Object.assign(nestedExtra.settings.thresholds, { unexpected: 'large payload' });
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [oversized, nestedExtra],
+        activeId: oversized.id,
+        defaultId: undefined,
+      }),
+    );
+
+    expect(store.profiles).toEqual([]);
+  });
+
+  it('accepts bounded forward-compatible settings and their field clocks', () => {
+    const future = profile('future', 'Future', 10, {
+      futureDisplay: { density: 2 },
+    } as Partial<ProfileSettings>);
+    future.settingUpdatedAt = { ...future.settingUpdatedAt, futureDisplay: 10 };
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [future],
+        activeId: future.id,
+        defaultId: undefined,
+      }),
+    );
+
+    expect(store.active?.settings).toHaveProperty('futureDisplay');
+    expect(store.active?.settingUpdatedAt?.futureDisplay).toBe(10);
+  });
+
+  it('saves a profile locally, marks it pending, and keeps the active selection device-local', () => {
+    const adapter = fakeAdapter();
+    const store = new ProfileStore(adapter);
+    const saved = store.save('Coastal', settings());
+    store.setActive(saved.id);
+    expect(store.activeId).toBe(saved.id);
+    expect(store.hasPendingChanges).toBe(true);
+    expect(adapter.saved.at(-1)?.activeId).toBe(saved.id);
+  });
+
+  it('stores the profile library separately from device-local selection state', () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    try {
+      const store = new ProfileStore();
+      const saved = store.save('Split storage', settings());
+      store.setActive(saved.id);
+
+      const library = JSON.parse(values.get('binnacle:profiles') ?? '{}') as Record<
+        string,
+        unknown
+      >;
+      const device = JSON.parse(values.get('binnacle:profile-device') ?? '{}') as Record<
+        string,
+        unknown
+      >;
+      expect(library).not.toHaveProperty('activeId');
+      expect(library).not.toHaveProperty('applied');
+      expect(device.activeId).toBe(saved.id);
+      expect(device).toHaveProperty('applied');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps a valid profile library when device-only state is corrupt', () => {
+    const valid = profile('valid', 'Valid library', 1);
+    const values = new Map<string, string>([
+      [
+        'binnacle:profiles',
+        JSON.stringify({
+          schemaVersion: 2,
+          profiles: [valid],
+          defaultId: valid.id,
+        }),
+      ],
+      ['binnacle:profile-device', '{invalid json'],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    try {
+      const store = new ProfileStore();
+
+      expect(store.profiles.map((item) => item.id)).toEqual([valid.id]);
+      expect(store.defaultId).toBe(valid.id);
+      expect(store.activeId).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('updates only changed portable fields and preserves forward-compatible settings', () => {
+    const store = new ProfileStore(fakeAdapter());
+    const saved = store.save('Anchor', settings({ mode: 'anchor' }));
+    store.update(saved.id, settings({ planningSpeedKn: 8 }));
+    const updated = store.profileById(saved.id);
+    expect(updated?.settings.planningSpeedKn).toBe(8);
+    expect(updated?.settings.mode).toBe('anchor');
+    expect(updated?.settingUpdatedAt?.planningSpeedKn).toBeGreaterThan(
+      saved.settingUpdatedAt?.planningSpeedKn ?? 0,
+    );
+  });
+
+  it('keeps timestamps monotonic when the browser clock moves backward', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1);
+    try {
+      const store = new ProfileStore(fakeAdapter());
+      const saved = store.save('Coastal', settings());
+      now.mockReturnValue(0);
+      store.rename(saved.id, 'Inshore');
+      expect(store.profileById(saved.id)?.updatedAt).toBeGreaterThan(saved.updatedAt);
+      expect(store.profileById(saved.id)?.nameUpdatedAt).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('does not overflow a validated maximum timestamp', () => {
+    const exhausted = profile('max', 'Maximum', Number.MAX_SAFE_INTEGER);
+    const adapter = fakeAdapter({
+      profiles: [exhausted],
+      activeId: exhausted.id,
+      defaultId: undefined,
+    });
+    const store = new ProfileStore(adapter);
+
+    store.rename(exhausted.id, 'Still valid');
+
+    expect(store.active?.updatedAt).toBe(Number.MAX_SAFE_INTEGER);
+    expect(new ProfileStore(adapter).active?.name).toBe('Still valid');
+  });
+
+  it('records a tombstone so a deleted profile cannot reappear on the next sync', async () => {
+    const store = new ProfileStore(fakeAdapter());
+    const saved = store.save('Coastal', settings());
+    const server = fakeServer(emptyRemote());
     await store.syncWithServer(server);
-    const byId = Object.fromEntries(store.profiles.map((p) => [p.id, p.name]));
-    expect(byId).toEqual({ p1: 'Remote v2', p2: 'Remote only' });
-    // The active selection is per-device state: the merge keeps the local activeId so the
-    // switcher never shows a profile as Active that this device has not applied.
-    expect(store.activeId).toBe('p1');
-    expect(store.defaultId).toBe('p2');
     await flush();
-    expect(store.syncState).toBe('synced');
+    store.remove(saved.id);
+    await flush();
+    expect(server.snapshot().profiles).toEqual([]);
+    expect(server.snapshot().tombstones.map((item) => item.id)).toEqual([saved.id]);
+  });
+});
+
+describe('ProfileStore server synchronization', () => {
+  it('rebases pending local settings and names above newer remote clocks', async () => {
+    const local = profile('p1', 'Offline name', 2, { theme: 'day' });
+    local.settingUpdatedAt = { theme: 2 };
+    local.nameUpdatedAt = 2;
+    const remote = profile('p1', 'Remote name', 5, { theme: 'dusk' });
+    remote.settingUpdatedAt = { theme: 5 };
+    remote.nameUpdatedAt = 5;
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [local],
+        activeId: local.id,
+        defaultId: undefined,
+        pending: {
+          profiles: {
+            [local.id]: { settings: { theme: 2 }, nameUpdatedAt: 2 },
+          },
+        },
+      }),
+    );
+    const server = fakeServer({
+      profiles: [remote],
+      tombstones: [],
+      defaultId: undefined,
+      revision: 3,
+    });
+
+    await store.syncWithServer(server);
+    await flush();
+
+    expect(server.snapshot().profiles[0].name).toBe('Offline name');
+    expect(server.snapshot().profiles[0].nameUpdatedAt).toBe(6);
+    expect(server.snapshot().profiles[0].settings.theme).toBe('day');
+    expect(server.snapshot().profiles[0].settingUpdatedAt?.theme).toBe(6);
+  });
+
+  it('rebases a pending deletion above a newer remote profile clock', async () => {
+    const remote = profile('p1', 'Remote', 5);
+    const server = fakeServer({
+      profiles: [remote],
+      tombstones: [],
+      defaultId: undefined,
+      revision: 3,
+    });
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [],
+        activeId: undefined,
+        defaultId: undefined,
+        tombstones: [{ id: remote.id, deletedAt: 2 }],
+        pending: { profiles: { [remote.id]: { deletedAt: 2 } } },
+      }),
+    );
+
+    await store.syncWithServer(server);
+    await flush();
+
+    expect(server.snapshot().profiles).toEqual([]);
+    expect(server.snapshot().tombstones).toEqual([{ id: remote.id, deletedAt: 6 }]);
+  });
+
+  it('prefers the remote value when equal clocks have no pending local mutation', async () => {
+    const local = profile('p1', 'Local name', 5, { theme: 'day' });
+    const remote = profile('p1', 'Remote name', 5, { theme: 'dusk' });
+    local.settingUpdatedAt = { theme: 5 };
+    remote.settingUpdatedAt = { theme: 5 };
+    local.nameUpdatedAt = 5;
+    remote.nameUpdatedAt = 5;
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+
+    await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
+        defaultId: undefined,
+        revision: 3,
+      }),
+    );
+
+    expect(store.active?.name).toBe('Remote name');
+    expect(store.active?.settings.theme).toBe('dusk');
+  });
+
+  it('merges different fields from two stations instead of replacing the whole profile', async () => {
+    const local = profile('p1', 'Coastal', 4, { planningSpeedKn: 9, theme: 'day' });
+    local.settingUpdatedAt = { planningSpeedKn: 4, theme: 1 };
+    const remote = profile('p1', 'Coastal', 5, { planningSpeedKn: 6, theme: 'night-red' });
+    remote.settingUpdatedAt = { planningSpeedKn: 2, theme: 5 };
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+    const server = fakeServer({
+      profiles: [remote],
+      tombstones: [],
+      defaultId: undefined,
+      revision: 3,
+    });
+
+    await store.syncWithServer(server);
+    await flush();
+    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.theme).toBe('night-red');
+    expect(store.activeId).toBe('p1');
+    expect(server.snapshot().profiles[0].settings.planningSpeedKn).toBe(9);
+    expect(server.snapshot().profiles[0].settings.theme).toBe('night-red');
+  });
+
+  it('does not let a pending stock seed replace a customized copy with the same stable id', async () => {
+    const store = new ProfileStore(fakeAdapter());
+    store.seed([profile('starter', 'Coastal day', 1)]);
+    const customized = profile('starter', 'My coastal helm', 20, {
+      instrumentTiles: ['battery:house'],
+    });
+    const server = fakeServer({
+      profiles: [customized],
+      tombstones: [],
+      defaultId: customized.id,
+      revision: 4,
+    });
+
+    await store.syncWithServer(server);
+    await flush();
+
+    expect(store.profileById('starter')?.name).toBe('My coastal helm');
+    expect(store.profileById('starter')?.settings.instrumentTiles).toEqual(['battery:house']);
+    expect(server.snapshot().profiles[0].name).toBe('My coastal helm');
+  });
+
+  it('preserves forward-compatible fields while merging a newer local portable setting', async () => {
+    const local = profile('p1', 'Coastal', 8, { planningSpeedKn: 9 });
+    const remote = profile('p1', 'Coastal', 5, { mode: 'anchor' });
+    local.settingUpdatedAt = { planningSpeedKn: 8 };
+    remote.settingUpdatedAt = { planningSpeedKn: 2 };
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+
+    await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
+        defaultId: undefined,
+        revision: 2,
+      }),
+    );
+
+    expect(store.active?.settings.mode).toBe('anchor');
+    expect(store.active?.settings.planningSpeedKn).toBe(9);
+  });
+
+  it('keeps each forward-compatible value paired with its winning field clock', async () => {
+    const local = profile('p1', 'Coastal', 20, {
+      futureMode: 'local-old',
+    } as Partial<ProfileSettings>);
+    local.settingUpdatedAt = { futureMode: 3 };
+    const remote = profile('p1', 'Coastal', 10, {
+      futureMode: 'remote-new',
+    } as Partial<ProfileSettings>);
+    remote.settingUpdatedAt = { futureMode: 7 };
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+
+    await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
+        defaultId: undefined,
+        revision: 2,
+      }),
+    );
+
     expect(
-      server.saved
-        .at(-1)
-        ?.profiles.map((p) => p.id)
-        .sort(),
-    ).toEqual(['p1', 'p2']);
+      (store.active?.settings as unknown as Record<string, unknown> | undefined)?.futureMode,
+    ).toBe('remote-new');
+    expect(store.active?.settingUpdatedAt?.futureMode).toBe(7);
   });
 
-  it('drops malformed remote profiles and tolerates a non-array remote profiles field', async () => {
-    const localStore = new ProfileStore(
-      fakeAdapter({
-        profiles: [profile('p1', 'Local', 1)],
-        activeId: undefined,
-        defaultId: undefined,
-      }),
-    );
-    await localStore.syncWithServer(
+  it('keeps the remote active id out of device state and adopts the remote default', async () => {
+    const remote = profile('p1', 'Coastal', 2);
+    const store = new ProfileStore(fakeAdapter());
+    await store.syncWithServer(
       fakeServer({
-        profiles: [profile('p2', 'Remote good', 2), { id: 'bad' } as unknown as Profile],
-        activeId: undefined,
-        defaultId: undefined,
+        profiles: [remote],
+        tombstones: [],
+        defaultId: 'p1',
+        revision: 1,
       }),
     );
-    expect(localStore.profiles.map((p) => p.id).sort()).toEqual(['p1', 'p2']);
-
-    const corruptStore = new ProfileStore(
-      fakeAdapter({
-        profiles: [profile('p1', 'Local', 1)],
-        activeId: undefined,
-        defaultId: undefined,
-      }),
-    );
-    await corruptStore.syncWithServer(
-      fakeServer({
-        profiles: 'corrupt' as unknown as Profile[],
-        activeId: undefined,
-        defaultId: undefined,
-      }),
-    );
-    expect(corruptStore.profiles.map((p) => p.id)).toEqual(['p1']);
+    expect(store.activeId).toBeUndefined();
+    expect(store.defaultId).toBe('p1');
   });
 
-  it('keeps a newer local profile over an older remote one', async () => {
+  it('hydrates readable server profiles while keeping local edits queued without write access', async () => {
+    const remote = profile('p1', 'Coastal', 2);
+    const store = new ProfileStore(fakeAdapter());
+    await store.syncWithServer({
+      load: async () => ({
+        state: 'ok',
+        snapshot: {
+          profiles: [remote],
+          tombstones: [],
+          defaultId: remote.id,
+          revision: 0,
+        },
+        writable: false,
+      }),
+      mutate: async () => 'unavailable',
+    });
+
+    expect(store.profileById(remote.id)?.name).toBe('Coastal');
+    expect(store.defaultId).toBe(remote.id);
+    expect(store.syncState).toBe('waiting');
+  });
+
+  it('reports when a remote merge changes the locally active profile', async () => {
+    const local = profile('p1', 'Coastal', 1, { theme: 'day' });
+    const remote = profile('p1', 'Coastal', 2, { theme: 'dusk' });
     const store = new ProfileStore(
-      fakeAdapter({
-        profiles: [profile('p1', 'Local v3', 10)],
-        activeId: undefined,
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+    const result = await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
         defaultId: undefined,
+        revision: 2,
       }),
     );
-    const server = fakeServer({
-      profiles: [profile('p1', 'Remote v1', 1)],
-      activeId: undefined,
+    expect(result.activeChanged).toBe(true);
+    expect(store.remoteUpdateAvailable).toBe(true);
+  });
+
+  it('persists the last-applied setup when a remote update awaits approval', async () => {
+    const local = profile('p1', 'Coastal', 1, { theme: 'day' });
+    const remote = profile('p1', 'Coastal', 2, { theme: 'dusk' });
+    const adapter = fakeAdapter({
+      profiles: [local],
+      activeId: 'p1',
       defaultId: undefined,
     });
-    await store.syncWithServer(server);
-    expect(store.profiles.find((p) => p.id === 'p1')?.name).toBe('Local v3');
+    const store = new ProfileStore(adapter);
+
+    await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
+        defaultId: undefined,
+        revision: 2,
+      }),
+    );
+    const restarted = new ProfileStore(adapter);
+
+    expect(restarted.active?.settings.theme).toBe('dusk');
+    expect(restarted.appliedSettings?.theme).toBe('day');
+    expect(restarted.remoteUpdateAvailable).toBe(true);
   });
 
-  it('degrades to local and does not push when the server is unavailable', async () => {
+  it('rebases and retries a revision conflict', async () => {
     const store = new ProfileStore(fakeAdapter());
-    const p = store.save('Coastal', settings());
-    const save = vi.fn(async () => true);
-    // A rejecting load, and an undefined-returning load, both mean unavailable: stay local, no push,
-    // and a later mutation must not push either (the adapter was never attached).
-    await store.syncWithServer({
-      load: async () => {
-        throw new Error('offline');
+    store.save('Coastal', settings());
+    const server = fakeServer(emptyRemote());
+    const mutate = server.mutate.bind(server);
+    let conflicted = false;
+    server.mutate = async (revision, mutation) => {
+      if (!conflicted) {
+        conflicted = true;
+        return 'conflict';
+      }
+      return mutate(revision, mutation);
+    };
+    await store.syncWithServer(server);
+    await flush();
+    await flush();
+    expect(server.snapshot().profiles).toHaveLength(1);
+    expect(store.syncState).toBe('synced');
+  });
+
+  it('retains local pending changes when the server is unavailable', async () => {
+    const adapter = fakeAdapter();
+    const store = new ProfileStore(adapter);
+    store.save('Coastal', settings());
+    const result = await store.syncWithServer({
+      load: async () => ({ state: 'unavailable' }),
+      mutate: async () => 'unavailable',
+    });
+    expect(result.ok).toBe(false);
+    expect(store.hasPendingChanges).toBe(true);
+    expect(store.syncState).toBe('waiting');
+
+    const restarted = new ProfileStore(adapter);
+    expect(restarted.hasPendingChanges).toBe(true);
+    expect(restarted.profiles).toHaveLength(1);
+  });
+
+  it('does not recreate local profile data after persistence is suspended', async () => {
+    let persisted: ProfilesState | undefined;
+    let finishMutation: ((result: 'ok') => void) | undefined;
+    let mutationStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      mutationStarted = resolve;
+    });
+    const adapter: ProfileAdapter = {
+      load: () => persisted,
+      save: (state) => {
+        persisted = structuredClone(state);
       },
-      save,
-    });
-    await store.syncWithServer({ load: async () => undefined, save });
-    expect(store.syncState).toBe('error');
-    store.save('Another', settings());
-    await flush();
-    expect(store.profiles.map((x) => x.name)).toEqual([p.name, 'Another']);
-    expect(save).not.toHaveBeenCalled();
-  });
-
-  it('seeds a reachable but empty server from the local profiles', async () => {
-    const store = new ProfileStore(fakeAdapter());
-    store.save('Coastal', settings());
-    const server = fakeServer({ profiles: [], activeId: undefined, defaultId: undefined });
-    await store.syncWithServer(server);
-    await flush();
-    expect(server.saved.at(-1)?.profiles.map((p) => p.name)).toEqual(['Coastal']);
-  });
-
-  it('pushes the latest state after a mutation following a sync', async () => {
-    const store = new ProfileStore(fakeAdapter());
-    const server = fakeServer({ profiles: [], activeId: undefined, defaultId: undefined });
-    await store.syncWithServer(server);
-    store.save('New profile', settings());
-    await flush();
-    expect(server.saved.at(-1)?.profiles.map((p) => p.name)).toContain('New profile');
-  });
-
-  it('stops pushing after a rejected write, so a read-only server is not hammered', async () => {
-    const store = new ProfileStore(fakeAdapter());
-    store.save('Coastal', settings());
-    // Reachable for reads (the GET succeeds, so the adapter attaches), but every write is rejected,
-    // as with a read-only or device token whose POST returns 401.
-    const save = vi.fn(async () => false);
+    };
+    const store = new ProfileStore(adapter);
+    store.save('Offline', settings());
     await store.syncWithServer({
-      load: async () => ({ profiles: [], activeId: undefined, defaultId: undefined }),
-      save,
+      load: async () => ({ state: 'ok', snapshot: emptyRemote() }),
+      mutate: async () => {
+        mutationStarted?.();
+        return new Promise<'ok'>((resolve) => {
+          finishMutation = resolve;
+        });
+      },
     });
+    await started;
+
+    store.suspendPersistence();
+    persisted = undefined;
+    finishMutation?.('ok');
     await flush();
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(store.syncState).toBe('error');
-    // The first failure detached the server, so a later mutation must not fire another doomed write.
-    store.save('Offshore', settings());
     await flush();
-    expect(save).toHaveBeenCalledTimes(1);
+
+    expect(persisted).toBeUndefined();
+    expect(new ProfileStore(adapter).profiles).toEqual([]);
   });
 });
