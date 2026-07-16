@@ -219,6 +219,41 @@ describe('RegionsController', () => {
     cleanup();
   });
 
+  it('starts region polling after a recovery-pending create response', async () => {
+    const getStatus = vi.fn(async () => null);
+    const api = client({
+      postRegion: vi.fn(async () => ({ region: region('new'), recovery: 'pending' as const })),
+      getRegionJobStatus: getStatus,
+    });
+    const { controller, cleanup } = setup(api);
+    controller.bbox = [-1, -1, 1, 1];
+    controller.selectedSources = ['basemap'];
+    controller.regionName = 'Passage';
+
+    await controller.saveRegion();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.error).toBeNull();
+    expect(getStatus).toHaveBeenCalledWith('new', expect.any(AbortSignal));
+    cleanup();
+  });
+
+  it('starts region polling after a recovery-pending redownload response', async () => {
+    const getStatus = vi.fn(async () => null);
+    const api = client({
+      redownloadRegion: vi.fn(async () => ({ recovery: 'pending' as const })),
+      getRegionJobStatus: getStatus,
+    });
+    const { controller, cleanup } = setup(api);
+
+    await controller.redownloadRegion('existing');
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.error).toBeNull();
+    expect(getStatus).toHaveBeenCalledWith('existing', expect.any(AbortSignal));
+    cleanup();
+  });
+
   it('restarts a download poll when deleting the region fails', async () => {
     const getStatus = vi.fn(async () => null);
     const api = client({

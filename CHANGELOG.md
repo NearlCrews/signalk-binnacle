@@ -6,6 +6,13 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Saved-area creation accepts the response shape from Chart Locker 0.5.0 when its cache-derived byte
+  total is absent, and creation plus re-download accept the recovery-pending response used when the
+  server lost a warm job identifier. Binnacle continues polling the region identifier until Chart
+  Locker reconciles the background download.
+
 <a id="v0153"></a>
 
 ## [0.15.3] - 2026-07-15

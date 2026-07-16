@@ -197,6 +197,10 @@ interface RegionRequest {
   name: string;
 }
 
+type RegionJobStart = { jobId: string; recovery?: never } | { jobId?: never; recovery: 'pending' };
+
+type PostRegionResult = { region: SavedRegionDto } & RegionJobStart;
+
 export interface RegionsClient {
   getConfig(signal?: AbortSignal): Promise<unknown>;
   postConfig(config: unknown): Promise<void>;
@@ -204,9 +208,9 @@ export interface RegionsClient {
   clearScrollCache(): Promise<{ freedBytes: number; freedRows: number }>;
   getCacheStats(signal?: AbortSignal): Promise<CacheStats>;
   getRegions(signal?: AbortSignal): Promise<SavedRegionDto[]>;
-  postRegion(body: RegionRequest): Promise<{ region: SavedRegionDto; jobId: string }>;
+  postRegion(body: RegionRequest): Promise<PostRegionResult>;
   deleteRegion(id: string): Promise<void>;
-  redownloadRegion(id: string): Promise<{ jobId: string }>;
+  redownloadRegion(id: string): Promise<RegionJobStart>;
   getRegionJobStatus(id: string, signal?: AbortSignal): Promise<WarmStatus | null>;
   geocode(lat: number, lon: number, signal?: AbortSignal): Promise<string | null>;
 }
@@ -231,8 +235,13 @@ function parseBbox(value: unknown): Bbox {
   return value as unknown as Bbox;
 }
 
-function parseSavedRegion(value: unknown): SavedRegionDto {
+function parseSavedRegion(value: unknown, allowMissingCachedBytes = false): SavedRegionDto {
   if (!isRecord(value)) throw new TypeError('invalid saved region');
+  // Chart Locker 0.5.0 omitted this cache-derived field from create responses even though its list
+  // response included it. A newly accepted region has no confirmed cached bytes yet, so zero is the
+  // safe compatibility value until the next list or status refresh.
+  const cachedBytes =
+    allowMissingCachedBytes && value.cachedBytes === undefined ? 0 : value.cachedBytes;
   const statuses: ReadonlySet<unknown> = new Set([
     'downloading',
     'ready',
@@ -253,7 +262,7 @@ function parseSavedRegion(value: unknown): SavedRegionDto {
     !isNonNegativeSafeInteger(value.createdAt) ||
     !(value.lastDownloadedAt === null || isNonNegativeSafeInteger(value.lastDownloadedAt)) ||
     !isNonNegativeSafeInteger(value.bytes) ||
-    !isNonNegativeSafeInteger(value.cachedBytes) ||
+    !isNonNegativeSafeInteger(cachedBytes) ||
     !statuses.has(value.status)
   ) {
     throw new TypeError('invalid saved region');
@@ -269,7 +278,7 @@ function parseSavedRegion(value: unknown): SavedRegionDto {
     lastDownloadedAt: value.lastDownloadedAt as number | null,
     bytes: value.bytes,
     status: value.status as SavedRegionDto['status'],
-    cachedBytes: value.cachedBytes,
+    cachedBytes,
   };
 }
 
@@ -277,19 +286,23 @@ function parseSavedRegions(value: unknown): SavedRegionDto[] {
   if (!Array.isArray(value) || value.length > MAX_REGION_COUNT) {
     throw new TypeError('invalid saved regions');
   }
-  return value.map(parseSavedRegion);
+  return value.map((region) => parseSavedRegion(region));
 }
 
-function parseJobResponse(value: unknown): { jobId: string } {
-  if (!isRecord(value) || !safeText(value.jobId, MAX_ID_LENGTH)) {
-    throw new TypeError('invalid region job');
-  }
-  return { jobId: value.jobId };
-}
-
-function parsePostRegionResponse(value: unknown): { region: SavedRegionDto; jobId: string } {
+function parseJobResponse(value: unknown): RegionJobStart {
   if (!isRecord(value)) throw new TypeError('invalid region job');
-  return { region: parseSavedRegion(value.region), ...parseJobResponse(value) };
+  if (safeText(value.jobId, MAX_ID_LENGTH) && value.recovery === undefined) {
+    return { jobId: value.jobId };
+  }
+  if (value.jobId === undefined && value.recovery === 'pending') {
+    return { recovery: 'pending' };
+  }
+  throw new TypeError('invalid region job');
+}
+
+function parsePostRegionResponse(value: unknown): PostRegionResult {
+  if (!isRecord(value)) throw new TypeError('invalid region job');
+  return { region: parseSavedRegion(value.region, true), ...parseJobResponse(value) };
 }
 
 function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRows: number } {
@@ -335,30 +348,39 @@ export function createRegionsClient(
   };
   const json = async <T>(r: Response): Promise<T> => {
     const response = ensureOk(r);
+    if (!response.body) throw new TypeError('companion response has no body');
     const declaredLength = response.headers.get('Content-Length');
     if (declaredLength !== null) {
+      if (!/^(0|[1-9]\d*)$/.test(declaredLength)) {
+        await response.body.cancel().catch(() => undefined);
+        throw new TypeError('invalid companion response length');
+      }
       const length = Number(declaredLength);
-      if (!Number.isSafeInteger(length) || length < 0 || length > MAX_JSON_RESPONSE_BYTES) {
+      if (!Number.isSafeInteger(length) || length > MAX_JSON_RESPONSE_BYTES) {
+        await response.body.cancel().catch(() => undefined);
         throw new TypeError('companion response is too large');
       }
     }
-    if (!response.body) throw new TypeError('companion response has no body');
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
     let total = 0;
     let text = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_JSON_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw new TypeError('companion response is too large');
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_JSON_RESPONSE_BYTES) {
+          throw new TypeError('companion response is too large');
+        }
+        text += decoder.decode(value, { stream: true });
       }
-      text += decoder.decode(value, { stream: true });
+      text += decoder.decode();
+      return JSON.parse(text) as T;
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
     }
-    text += decoder.decode();
-    return JSON.parse(text) as T;
   };
   // Every management call carries the administrator session cookie and a request timeout, so a
   // half-open link on a boat bounds the wait without masking the session with a device bearer token.

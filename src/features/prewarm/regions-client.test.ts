@@ -7,6 +7,24 @@ const ok = (body: unknown, status = 200): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const savedRegion = {
+  id: 'region-1',
+  name: 'Passage',
+  bbox: [-1, -1, 1, 1],
+  sourceIds: ['basemap'],
+  minzoom: 1,
+  maxzoom: 2,
+  createdAt: 1,
+  lastDownloadedAt: null,
+  bytes: 0,
+  status: 'downloading',
+  cachedBytes: 0,
+};
+
+const legacyCreateRegion = Object.fromEntries(
+  Object.entries(savedRegion).filter(([key]) => key !== 'cachedBytes'),
+);
+
 describe('regions client', () => {
   it('maps a region status 404 to null (the job is gone)', async () => {
     const fetchImpl = vi.fn(async () => ok({}, 404));
@@ -170,6 +188,41 @@ describe('regions client', () => {
     await expect(client.getCacheStats()).rejects.toThrow('response is too large');
   });
 
+  it('rejects malformed declared lengths and cancels the response body', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{}'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(
+        async () =>
+          new Response(body, {
+            status: 200,
+            headers: { 'Content-Length': '1e3' },
+          }),
+      ) as unknown as typeof fetch,
+    );
+
+    await expect(client.getCacheStats()).rejects.toThrow('invalid companion response length');
+    expect(cancelled).toBe(true);
+  });
+
+  it('rejects malformed UTF-8 instead of decoding replacement characters', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(
+        async () => new Response(new Uint8Array([0x7b, 0xc3, 0x28, 0x7d])),
+      ) as unknown as typeof fetch,
+    );
+    await expect(client.getCacheStats()).rejects.toThrow();
+  });
+
   it('posts config with the administrator session and no bearer token', async () => {
     const fetchImpl = vi.fn(async () => ok(undefined));
     const client = createRegionsClient(
@@ -218,6 +271,76 @@ describe('regions client', () => {
     );
   });
 
+  it('accepts Chart Locker recovery-pending responses when the warm job ID was lost', async () => {
+    const create = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({ region: savedRegion, recovery: 'pending' }, 202),
+      ) as unknown as typeof fetch,
+    );
+    await expect(
+      create.postRegion({
+        bbox: [-1, -1, 1, 1],
+        sourceIds: ['basemap'],
+        minzoom: 1,
+        maxzoom: 2,
+        name: 'Passage',
+      }),
+    ).resolves.toEqual({ region: savedRegion, recovery: 'pending' });
+
+    const redownload = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok({ recovery: 'pending' }, 202)) as unknown as typeof fetch,
+    );
+    await expect(redownload.redownloadRegion('region-1')).resolves.toEqual({
+      recovery: 'pending',
+    });
+  });
+
+  it('defaults cachedBytes for Chart Locker 0.5.0 create responses', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({ region: legacyCreateRegion, jobId: 'legacy-job' }),
+      ) as unknown as typeof fetch,
+    );
+    await expect(
+      client.postRegion({
+        bbox: [-1, -1, 1, 1],
+        sourceIds: ['basemap'],
+        minzoom: 1,
+        maxzoom: 2,
+        name: 'Passage',
+      }),
+    ).resolves.toEqual({ region: savedRegion, jobId: 'legacy-job' });
+  });
+
+  it('defaults cachedBytes for a recovery-pending legacy create response', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({ region: legacyCreateRegion, recovery: 'pending' }, 202),
+      ) as unknown as typeof fetch,
+    );
+    await expect(
+      client.postRegion({
+        bbox: [-1, -1, 1, 1],
+        sourceIds: ['basemap'],
+        minzoom: 1,
+        maxzoom: 2,
+        name: 'Passage',
+      }),
+    ).resolves.toEqual({ region: savedRegion, recovery: 'pending' });
+  });
+
+  it('still requires cachedBytes on saved-region list responses', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok([legacyCreateRegion])) as unknown as typeof fetch,
+    );
+    await expect(client.getRegions()).rejects.toThrow('invalid saved region');
+  });
+
   it('rejects malformed mutation responses before they reach controller state', async () => {
     const malformed = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
@@ -235,5 +358,11 @@ describe('regions client', () => {
       }),
     ).rejects.toThrow();
     await expect(malformed.redownloadRegion('r1')).rejects.toThrow('invalid region job');
+
+    const conflicting = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok({ jobId: 'job-1', recovery: 'pending' })) as unknown as typeof fetch,
+    );
+    await expect(conflicting.redownloadRegion('r1')).rejects.toThrow('invalid region job');
   });
 });
