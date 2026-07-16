@@ -14,21 +14,22 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.15.1
+## What's new in 0.15.3
 
-Equipment that is quiet at the dock remains configurable without presenting old readings as live.
+Navigation, offline charts, privacy controls, and discovered instruments now hold safer boundaries
+through reconnects, provider failures, and multi-tab use.
 
-- **Previously recorded equipment.** Instrument Customize checks the standard Signal K History API
-  across a bounded set of registered history providers. Engines, batteries, tanks, solar controllers,
-  and cabin sensors seen during the preceding year remain available while stopped.
-- **Honest live state.** Recorded paths are validated under `vessels.self`, labeled "Previously seen,
-  no live data," and never hydrate current tiles with stored samples.
-- **Clear battery choices.** Battery labels lead with Voltage, State of charge, Time remaining, or
-  Current, so readings from the same bank stay distinguishable on tablets and in night-red.
-- **Resilient scans.** Superseded history queries are canceled, partial failures retain accepted
-  results, and provider responses are bounded and validated while invalid entries are ignored.
+- **Distinct instrument choices.** Every discovered reading names both its metric and source, such as
+  RPM · Port engine or Level · Fresh Water Main tank. Customize automatically disambiguates future
+  repeated labels in visible text and accessible control names.
+- **Safer navigation state.** Route, MOB, AIS, anchor, tide, radar, and worker lifecycle handling
+  rejects stale continuations and expires safety-relevant data instead of presenting it as current.
+- **Stronger offline boundaries.** PMTiles, Chart Locker, symbols, feature discovery, settings, and
+  Signal K resource responses are size-bounded and validated before entering application state.
+- **Reliable privacy and access.** Cross-tab credential changes, token rotation, administrator-session
+  checks, and local-data erasure are serialized and report recoverable failures clearly.
 
-See the [changelog](CHANGELOG.md#v0151) for the full list.
+See the [changelog](CHANGELOG.md#v0153) for the full list.
 
 ## What it does
 
@@ -82,8 +83,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
   alarm bands, and selections ride profiles. Customize discovers the live Signal K model and, when a
   history provider is installed, equipment recorded during the preceding year. Previously recorded
-  readings remain clearly marked and never replace live values. Open KIP launches the installed KIP
-  webapp; when KIP is absent, the item stays visible but unavailable and explains how to add it.
+  readings remain clearly marked and never replace live values. Dynamic options name both the reading
+  and source, while a catalog-level fallback keeps future repeated labels distinct. Open KIP launches
+  the installed KIP webapp; when KIP is absent, the item stays visible but unavailable and explains
+  how to add it.
 - **Weather:** a zoom-capped mini-map with animated WebGL wind, pressure isobars, waves,
   precipitation, cloud, and radar, plus time-aware point readouts, marine forecasts, source and age
   labels, deterministic risk cues, and official warnings when a Signal K weather provider supplies

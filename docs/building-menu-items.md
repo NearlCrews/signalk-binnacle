@@ -239,7 +239,10 @@ bounded scan.
 Validate those context-free catalog paths with a `vessels.self` values query before displaying them.
 Previously seen readings remain selectable, visibly marked in Available and Shown, and identified in
 detail until live data arrives. Provider absence or failure must preserve live discovery and explain
-the reduced catalog. Never copy a stored sample into a current instrument tile. Do not add further
+the reduced catalog. Dynamic labels lead with the reading and then name the source. Customize must
+also disambiguate any repeated catalog label so visible text, checkbox names, and reorder
+announcements remain unique without deduplicating legitimate readings. Never copy a stored sample
+into a current instrument tile. Do not add further
 split panels without a matching product case; overlays stay the default.
 
 Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive from `$shared/ui`,

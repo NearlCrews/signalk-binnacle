@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0153"></a>
+
+## [0.15.3] - 2026-07-15
+
 ### Added
 
 - Profiles now includes device-privacy actions to forget the local Signal K device token or erase
@@ -33,6 +37,9 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Dynamic instrument labels now identify both the reading and its source across engines, tanks,
+  solar controllers, and cabin sensors. Customize also disambiguates any future repeated catalog
+  label in visible text, accessible checkbox names, and reorder announcements.
 - Async overlay, MapLibre event, and file-picker paths now declare or handle their promises
   explicitly, forecast risk cues use stable keys, and Svelte menu children use the native snippet
   path expected by the component API.

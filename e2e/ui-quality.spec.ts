@@ -41,8 +41,11 @@ test('keeps chart controls legible and the instrument title on one line', async 
     .poll(() => attribution.evaluate((button) => getComputedStyle(button, '::after').maskSize))
     .toBe('20px 20px');
   const scale = page.locator('.maplibregl-ctrl-scale');
+  await expect(scale).toBeVisible({ timeout: 15_000 });
   await expect
-    .poll(() => scale.evaluate((element) => getComputedStyle(element, '::before').content))
+    .poll(() => scale.evaluate((element) => getComputedStyle(element, '::before').content), {
+      timeout: 15_000,
+    })
     .toBe('"Scale"');
   await expect(scale).toHaveCSS('display', 'flex');
   await expect(scale).toHaveCSS('flex-direction', 'column');

@@ -11,19 +11,25 @@ import type { TileDeps } from './tile-catalog';
 import {
   ALL_CATALOG_PATHS,
   batteryCurrentTileDef,
+  batteryDefsFor,
   batterySocTileDef,
   batteryTileDef,
   batteryTimeTileDef,
   CLIENT_DEFAULT_ZONES,
   DEFAULT_TILES,
+  insideDefsFor,
   insideHumidityTileDef,
   insideTemperatureTileDef,
+  instrumentOptionLabels,
+  propulsionDefsFor,
   propulsionLoadTileDef,
   propulsionRpmTileDef,
   propulsionTemperatureTileDef,
+  solarDefsFor,
   solarPowerTileDef,
   TILE_CATALOG,
   TILE_STALE_MS,
+  tankDefsFor,
   tankLevelTileDef,
   tileById,
 } from './tile-catalog';
@@ -501,7 +507,7 @@ describe('batteryTileDef', () => {
     expect(def.id).toBe('battery:house');
     expect(def.label).toBe('Voltage · House battery');
     expect(def.abbr).toBe('VOLT');
-    expect(def.description).toBe('Battery house voltage.');
+    expect(def.description).toBe('House battery voltage.');
     expect(def.paths).toEqual(['electrical.batteries.house.voltage']);
     expect(def.zonesPath).toBe('electrical.batteries.house.voltage');
     expect(def.kind).toBe('numeric');
@@ -764,29 +770,77 @@ describe('dynamic non-battery tile defs', () => {
     const reading = def.read(deps);
     expect(reading.value).toBe('1200');
     expect(reading.unit).toBe('rpm');
-    expect(def.label).toBe('Port engine');
+    expect(def.label).toBe('RPM · Port engine');
     expect(def.abbr).toBe('RPM');
     expect(tileById('prop-rpm:port')?.category).toBe('propulsion');
   });
 
-  it('keeps the source and measurement split across dynamic labels and abbreviations', () => {
+  it('keeps the reading and source explicit across dynamic labels', () => {
     expect(propulsionLoadTileDef('port')).toMatchObject({
-      label: 'Port engine',
+      label: 'Load · Port engine',
       abbr: 'LOAD',
     });
     expect(propulsionTemperatureTileDef('port')).toMatchObject({
-      label: 'Port engine',
+      label: 'Temperature · Port engine',
       abbr: 'TEMP',
     });
     expect(tankLevelTileDef('freshWater.main')).toMatchObject({
-      label: 'Fresh Water Main tank',
+      label: 'Level · Fresh Water Main tank',
       abbr: 'LEVEL',
     });
-    expect(solarPowerTileDef('arch')).toMatchObject({ label: 'Arch solar', abbr: 'POWER' });
+    expect(solarPowerTileDef('arch')).toMatchObject({
+      label: 'Power · Arch solar',
+      abbr: 'POWER',
+    });
     expect(insideTemperatureTileDef('cabin')).toMatchObject({
-      label: 'Cabin',
+      label: 'Temperature · Cabin',
       abbr: 'TEMP',
     });
+  });
+
+  it('keeps every generated option label unique within a source family', () => {
+    for (const defs of [
+      propulsionDefsFor('port'),
+      tankDefsFor('freshWater.main'),
+      solarDefsFor('arch'),
+      insideDefsFor('cabin'),
+    ]) {
+      expect(new Set(defs.map((def) => def.label)).size).toBe(defs.length);
+    }
+  });
+
+  it('resolves unique option names across the complete instrument catalog', () => {
+    const defs = [
+      ...TILE_CATALOG,
+      ...batteryDefsFor('house'),
+      ...propulsionDefsFor('port'),
+      ...tankDefsFor('freshWater.main'),
+      ...solarDefsFor('arch'),
+      ...insideDefsFor('cabin'),
+    ];
+    const labels = [...instrumentOptionLabels(defs).values()].map((label) => label.toLowerCase());
+
+    expect(new Set(labels).size).toBe(defs.length);
+  });
+
+  it('disambiguates repeated future catalog labels at the option boundary', () => {
+    const rpm = propulsionRpmTileDef('port');
+    const temperature = propulsionTemperatureTileDef('port');
+    const labels = instrumentOptionLabels([
+      { ...rpm, label: 'Port engine' },
+      { ...temperature, label: 'Port engine' },
+    ]);
+
+    expect(labels.get(rpm.id)).toBe('RPM · Port engine');
+    expect(labels.get(temperature.id)).toBe('TEMP · Port engine');
+  });
+
+  it('keeps option names unique when repeated definitions also share an abbreviation', () => {
+    const first = propulsionRpmTileDef('port');
+    const second = { ...first, id: 'prop-rpm:secondary' };
+    const labels = [...instrumentOptionLabels([first, second]).values()];
+
+    expect(new Set(labels).size).toBe(2);
   });
 
   it('renders tank level as percent and resolves through tileById', () => {
@@ -809,7 +863,7 @@ describe('dynamic non-battery tile defs', () => {
     deps.store.applyFrame(skFrame({ 'tanks.freshWater.main.currentLevel': 0.72 }, 1000));
     const reading = def.read(deps);
     expect(reading.value).toBe('72');
-    expect(def.label).toBe('Fresh Water Main tank');
+    expect(def.label).toBe('Level · Fresh Water Main tank');
     expect(tileById('tank-level:freshWater.main')?.paths).toEqual([
       'tanks.freshWater.main.currentLevel',
     ]);

@@ -387,7 +387,11 @@ test('history-only engine readings stay identifiable through selection and detai
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(['propulsion.port.revolutions']),
+      body: JSON.stringify([
+        'propulsion.port.revolutions',
+        'propulsion.port.temperature',
+        'propulsion.port.engineLoad',
+      ]),
     });
   });
   await page.route(/\/signalk\/v2\/api\/history\/values/, async (route) => {
@@ -397,8 +401,12 @@ test('history-only engine readings stay identifiable through selection and detai
       contentType: 'application/json',
       body: JSON.stringify({
         range: {},
-        values: [{ path: 'propulsion.port.revolutions', method: 'average' }],
-        data: [['2026-07-01T00:00:00Z', 20]],
+        values: [
+          { path: 'propulsion.port.revolutions', method: 'average' },
+          { path: 'propulsion.port.temperature', method: 'average' },
+          { path: 'propulsion.port.engineLoad', method: 'average' },
+        ],
+        data: [['2026-07-01T00:00:00Z', 20, 350, 0.4]],
       }),
     });
   });
@@ -409,17 +417,20 @@ test('history-only engine readings stay identifiable through selection and detai
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect.poll(() => pathRequests).toBeGreaterThan(0);
   await expect.poll(() => valueRequests).toBeGreaterThan(0);
-  const portEngine = dock.getByRole('checkbox', { name: 'Port engine' });
+  const portEngine = dock.getByRole('checkbox', { name: 'RPM · Port engine' });
+  await expect(dock.getByRole('checkbox', { name: 'Temperature · Port engine' })).toBeVisible();
+  await expect(dock.getByRole('checkbox', { name: 'Load · Port engine' })).toBeVisible();
   await expect(portEngine).toHaveAttribute(
     'aria-describedby',
     'instrument-history-prop-rpm%3Aport',
     { timeout: 15_000 },
   );
-  await expect(dock.getByText('Previously seen, no live data')).toBeVisible();
+  const rpmHistoryNote = dock.locator('[id="instrument-history-prop-rpm%3Aport"]');
+  await expect(rpmHistoryNote).toHaveText('Previously seen, no live data');
   await portEngine.check();
-  await expect(dock.getByText('Previously seen, no live data')).toBeVisible();
+  await expect(rpmHistoryNote).toHaveText('Previously seen, no live data');
   await dock.getByRole('button', { name: 'Done' }).click();
-  await dock.getByRole('button', { name: /Port engine.*Open details/ }).click();
+  await dock.getByRole('button', { name: /RPM · Port engine.*Open details/ }).click();
   await expect(dock.getByText('Previously recorded, but not reporting live now.')).toBeVisible();
 });
 

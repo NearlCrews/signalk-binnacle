@@ -111,6 +111,30 @@ describe('InstrumentsPanel', () => {
     }
   });
 
+  it('keeps repeated future catalog labels visibly and accessibly distinct', () => {
+    const rpm = tileById('prop-rpm:port');
+    const temperature = tileById('prop-temp:port');
+    if (!rpm || !temperature) throw new Error('Missing propulsion test definitions');
+    const tiles = [
+      { ...rpm, label: 'Port engine' },
+      { ...temperature, label: 'Port engine' },
+    ];
+    const controller = makeController({
+      selectedIds: tiles.map((tile) => tile.id),
+      tiles,
+      catalog: tiles,
+    });
+
+    const { body } = render(InstrumentsCustomize, {
+      props: { controller, deps: makeDeps() },
+    });
+
+    expect(body).toContain('RPM · Port engine');
+    expect(body).toContain('TEMP · Port engine');
+    expect(body).toContain('Move RPM · Port engine, position 1 of 2');
+    expect(body).toContain('Move TEMP · Port engine, position 2 of 2');
+  });
+
   it('shows UnavailableHint for never-reported rows but leaves their checkbox enabled', () => {
     // All cells report epoch 0, so every tile with paths is "never-reported".
     const controller = makeController({ selectedIds: SELECTED_IDS });

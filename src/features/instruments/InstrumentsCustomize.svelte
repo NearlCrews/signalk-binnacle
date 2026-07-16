@@ -2,7 +2,7 @@
 import { GripVertical, RotateCw } from '@lucide/svelte';
 import { createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { InstrumentsController } from './instruments-controller.svelte';
-import type { TileDeps } from './tile-catalog';
+import { instrumentOptionLabels, type TileDef, type TileDeps } from './tile-catalog';
 
 interface Props {
   controller: InstrumentsController;
@@ -20,6 +20,7 @@ let listEl: HTMLElement | undefined = $state(undefined);
 const shown = $derived(controller.tiles);
 const selectedIds = $derived(new Set(controller.selectedIds));
 const available = $derived(controller.catalog.filter((def) => !selectedIds.has(def.id)));
+const optionLabels = $derived(instrumentOptionLabels(controller.catalog));
 const categoryTitles = {
   navigation: 'Navigation',
   wind: 'Wind',
@@ -38,13 +39,17 @@ const availableGroups = $derived.by(() =>
 );
 
 const reorder = createReorder({
-  getItems: () => shown.map((t) => ({ id: t.id, title: t.label })),
+  getItems: () => shown.map((tile) => ({ id: tile.id, title: optionTitle(tile) })),
   getListEl: () => listEl,
   commit: (id, slot) => controller.reorderTile(id, slot),
   rowAttribute: 'data-tile-row',
   handleSelector: '.handle',
   itemNoun: 'Tile',
 });
+
+function optionTitle(def: TileDef): string {
+  return optionLabels.get(def.id) ?? def.label;
+}
 
 function neverReported(paths: string[]): boolean {
   return paths.length > 0 && paths.every((p) => deps.store.cell(p).epoch === 0);
@@ -78,6 +83,7 @@ const historyStatusMessage = $derived(
   <ul class="tile-list bare-list">
     {#each shown as def, i (def.id)}
       {@const indicator = reorder.indicatorFor(def.id)}
+      {@const title = optionTitle(def)}
       {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
       {@const hintId = historicalOnly ? historyHintId(def.id) : undefined}
       <li
@@ -88,7 +94,7 @@ const historyStatusMessage = $derived(
         class:drop-after={indicator.after}
       >
         <LayerToggle
-          title={def.label}
+          {title}
           description={def.description}
           visible={true}
           onToggle={() => controller.toggleTile(def.id)}
@@ -100,7 +106,7 @@ const historyStatusMessage = $derived(
         <button
           type="button"
           class="icon-btn handle"
-          aria-label={`Move ${def.label}, position ${i + 1} of ${shown.length}`}
+          aria-label={`Move ${title}, position ${i + 1} of ${shown.length}`}
           aria-keyshortcuts="ArrowUp ArrowDown"
           onpointerdown={(e) => reorder.handlePointerDown(def.id, e)}
           onkeydown={(e) => reorder.handleKeydown(def.id, e)}
@@ -137,6 +143,7 @@ const historyStatusMessage = $derived(
       <h4 class="caps-label group-label">{group.title}</h4>
       <ul class="tile-list bare-list">
         {#each group.rows as def (def.id)}
+          {@const title = optionTitle(def)}
           {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
           {@const unavailable = neverReported(def.paths) &&
             !controller.isLiveDiscovered(def.id) &&
@@ -151,7 +158,7 @@ const historyStatusMessage = $derived(
             title={historicalOnly || unavailable ? unavailableHint : undefined}
           >
             <LayerToggle
-              title={def.label}
+              {title}
               description={def.description}
               visible={false}
               onToggle={() => controller.toggleTile(def.id)}

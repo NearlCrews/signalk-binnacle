@@ -186,6 +186,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   with concrete paths recorded during the preceding year by registered history providers within a
   bounded scan. A previously seen reading remains enabled for configuration and carries the visible
   "Previously seen, no live data" status.
+  Every dynamic tile label leads with the reading and then names its source, such as "RPM · Port
+  engine" or "Level · Fresh Water Main tank." Customize resolves any remaining repeated catalog
+  label with its abbreviation, description, and stable id in that order, so every visible and
+  accessible option stays distinct when another reading family is added.
   The status remains in Shown and instrument detail until a live sample arrives. Scan progress and
   provider failures use a status message while retaining live and previously accepted results.
   Context-scoped value checks prevent another vessel's catalog paths from appearing. Stored samples

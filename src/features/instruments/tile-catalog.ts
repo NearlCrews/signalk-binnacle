@@ -70,6 +70,53 @@ export interface TileDef {
   read(deps: TileDeps): TileReading;
 }
 
+function normalizedOptionLabel(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function withoutTerminalPeriod(value: string): string {
+  return value.trim().replace(/\.$/u, '');
+}
+
+// Catalog labels should already identify the reading and its source. This resolver is the final
+// presentation boundary: a future repeated label gains its abbreviation, then its description, and
+// finally its stable id rather than rendering indistinguishable controls.
+export function instrumentOptionLabels(defs: readonly TileDef[]): ReadonlyMap<string, string> {
+  const baseCounts = new Map<string, number>();
+  for (const def of defs) {
+    const key = normalizedOptionLabel(def.label);
+    baseCounts.set(key, (baseCounts.get(key) ?? 0) + 1);
+  }
+
+  const candidates = defs.map((def) => {
+    const repeated = (baseCounts.get(normalizedOptionLabel(def.label)) ?? 0) > 1;
+    const abbreviationAlreadyLeads = def.abbr
+      ? normalizedOptionLabel(def.label).startsWith(`${normalizedOptionLabel(def.abbr)} ·`)
+      : false;
+    return repeated && def.abbr && !abbreviationAlreadyLeads
+      ? `${def.abbr} · ${def.label}`
+      : def.label;
+  });
+  const candidateCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const key = normalizedOptionLabel(candidate);
+    candidateCounts.set(key, (candidateCounts.get(key) ?? 0) + 1);
+  }
+
+  const labels = new Map<string, string>();
+  const used = new Set<string>();
+  defs.forEach((def, index) => {
+    let label = candidates[index];
+    if ((candidateCounts.get(normalizedOptionLabel(label)) ?? 0) > 1) {
+      label = `${label} · ${withoutTerminalPeriod(def.description)}`;
+    }
+    if (used.has(normalizedOptionLabel(label))) label = `${label} · ${def.id}`;
+    used.add(normalizedOptionLabel(label));
+    labels.set(def.id, label);
+  });
+  return labels;
+}
+
 export const TILE_STALE_MS = 10_000;
 
 // Structural alias avoids importing PathCell from the shared/signalk internal file.
@@ -552,9 +599,9 @@ export function batteryTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery:${instanceId}`,
-    label: `Voltage · ${name}`,
+    label: readingLabel('Voltage', name),
     abbr: 'VOLT',
-    description: `Battery ${instanceId} voltage.`,
+    description: `${name} voltage.`,
     sensorGloss: 'No battery data',
     paths: [path],
     zonesPath: path,
@@ -581,9 +628,9 @@ export function batterySocTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-soc:${instanceId}`,
-    label: `State of charge · ${name}`,
+    label: readingLabel('State of charge', name),
     abbr: 'SOC',
-    description: `Battery ${instanceId} state of charge.`,
+    description: `${name} state of charge.`,
     sensorGloss: 'No charge data',
     paths: [path],
     zonesPath: path,
@@ -605,9 +652,9 @@ export function batteryTimeTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-time:${instanceId}`,
-    label: `Time remaining · ${name}`,
+    label: readingLabel('Time remaining', name),
     abbr: 'TIME',
-    description: `Battery ${instanceId} time remaining at the present load.`,
+    description: `${name} time remaining at the present load.`,
     sensorGloss: 'No time estimate',
     paths: [path],
     zonesPath: path,
@@ -632,9 +679,9 @@ export function batteryCurrentTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'battery');
   return {
     id: `battery-current:${instanceId}`,
-    label: `Current · ${name}`,
+    label: readingLabel('Current', name),
     abbr: 'AMPS',
-    description: `Battery ${instanceId} current, negative when discharging.`,
+    description: `${name} current, negative when discharging.`,
     sensorGloss: 'No current data',
     paths: [path],
     zonesPath: path,
@@ -662,6 +709,10 @@ function titledSource(instanceId: string, suffix: string): string {
   return name.toLowerCase().split(/\s+/).includes(suffix.toLowerCase())
     ? name
     : `${name} ${suffix}`;
+}
+
+function readingLabel(reading: string, source: string): string {
+  return `${reading} · ${source}`;
 }
 
 function formatWatts(value: number | undefined): string {
@@ -692,9 +743,9 @@ export function propulsionRpmTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'engine');
   return {
     id: `prop-rpm:${instanceId}`,
-    label: name,
+    label: readingLabel('RPM', name),
     abbr: 'RPM',
-    description: `${name} engine revolutions per minute.`,
+    description: `${name} revolutions per minute.`,
     sensorGloss: 'No engine speed',
     paths: [path],
     zonesPath: path,
@@ -716,9 +767,9 @@ export function propulsionTemperatureTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'engine');
   return {
     id: `prop-temp:${instanceId}`,
-    label: name,
+    label: readingLabel('Temperature', name),
     abbr: 'TEMP',
-    description: `${name} engine temperature.`,
+    description: `${name} temperature.`,
     sensorGloss: 'No engine temperature',
     paths: [path],
     zonesPath: path,
@@ -734,9 +785,9 @@ function propulsionCoolantTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'engine');
   return {
     id: `prop-coolant:${instanceId}`,
-    label: name,
+    label: readingLabel('Coolant temperature', name),
     abbr: 'COOL',
-    description: `${name} engine coolant temperature.`,
+    description: `${name} coolant temperature.`,
     sensorGloss: 'No coolant temperature',
     paths: [path],
     zonesPath: path,
@@ -752,9 +803,9 @@ function propulsionOilPressureTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'engine');
   return {
     id: `prop-oil:${instanceId}`,
-    label: name,
+    label: readingLabel('Oil pressure', name),
     abbr: 'OIL',
-    description: `${name} engine oil pressure.`,
+    description: `${name} oil pressure.`,
     sensorGloss: 'No oil pressure',
     paths: [path],
     zonesPath: path,
@@ -780,9 +831,9 @@ export function propulsionLoadTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'engine');
   return {
     id: `prop-load:${instanceId}`,
-    label: name,
+    label: readingLabel('Load', name),
     abbr: 'LOAD',
-    description: `${name} engine load.`,
+    description: `${name} load.`,
     sensorGloss: 'No engine load',
     paths: [path],
     zonesPath: path,
@@ -803,9 +854,9 @@ export function tankLevelTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'tank');
   return {
     id: `tank-level:${instanceId}`,
-    label: name,
+    label: readingLabel('Level', name),
     abbr: 'LEVEL',
-    description: `${name} tank level.`,
+    description: `${name} level.`,
     sensorGloss: 'No tank level',
     paths: [path],
     zonesPath: path,
@@ -826,9 +877,9 @@ function tankVolumeTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'tank');
   return {
     id: `tank-volume:${instanceId}`,
-    label: name,
+    label: readingLabel('Volume', name),
     abbr: 'VOL',
-    description: `${name} tank volume.`,
+    description: `${name} volume.`,
     sensorGloss: 'No tank volume',
     paths: [path],
     zonesPath: path,
@@ -853,9 +904,9 @@ export function solarPowerTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'solar');
   return {
     id: `solar-power:${instanceId}`,
-    label: name,
+    label: readingLabel('Power', name),
     abbr: 'POWER',
-    description: `${name} solar panel power.`,
+    description: `${name} panel power.`,
     sensorGloss: 'No solar power',
     paths: [path],
     zonesPath: path,
@@ -876,9 +927,9 @@ function solarCurrentTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'solar');
   return {
     id: `solar-current:${instanceId}`,
-    label: name,
+    label: readingLabel('Current', name),
     abbr: 'AMPS',
-    description: `${name} solar panel current.`,
+    description: `${name} panel current.`,
     sensorGloss: 'No solar current',
     paths: [path],
     zonesPath: path,
@@ -899,9 +950,9 @@ function solarYieldTileDef(instanceId: string): TileDef {
   const name = titledSource(instanceId, 'solar');
   return {
     id: `solar-yield:${instanceId}`,
-    label: name,
+    label: readingLabel('Energy today', name),
     abbr: 'TODAY',
-    description: `${name} solar energy yield today.`,
+    description: `${name} energy yield today.`,
     sensorGloss: 'No solar yield',
     paths: [path],
     zonesPath: path,
@@ -921,9 +972,9 @@ export function insideTemperatureTileDef(instanceId: string): TileDef {
   const name = titleId(instanceId);
   return {
     id: `inside-temp:${instanceId}`,
-    label: name,
+    label: readingLabel('Temperature', name),
     abbr: 'TEMP',
-    description: `${name} inside temperature.`,
+    description: `${name} temperature.`,
     sensorGloss: 'No inside temperature',
     paths: [path],
     zonesPath: path,
@@ -940,9 +991,9 @@ export function insideHumidityTileDef(instanceId: string): TileDef {
   const name = titleId(instanceId);
   return {
     id: `inside-humidity:${instanceId}`,
-    label: name,
+    label: readingLabel('Humidity', name),
     abbr: 'RH',
-    description: `${name} inside relative humidity.`,
+    description: `${name} relative humidity.`,
     sensorGloss: 'No humidity',
     paths: [primary, fallback],
     zonesPath: primary,
@@ -965,9 +1016,9 @@ function insidePressureTileDef(instanceId: string): TileDef {
   const name = titleId(instanceId);
   return {
     id: `inside-pressure:${instanceId}`,
-    label: name,
+    label: readingLabel('Pressure', name),
     abbr: 'BARO',
-    description: `${name} inside air pressure.`,
+    description: `${name} air pressure.`,
     sensorGloss: 'No inside pressure',
     paths: [path],
     zonesPath: path,
