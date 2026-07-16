@@ -40,7 +40,9 @@ All notable changes to Binnacle are documented here. The format follows
 - GitHub workflows now disable package-manager cache detection until the supported npm version is
   installed outside the checkout, so the Node 22 matrix can bootstrap before `devEngines` is checked.
   The commit gate prevents this ordering from regressing, and package validation invokes npm through
-  its JavaScript entry point so it runs consistently on Windows.
+  its JavaScript entry point so it runs consistently on Windows. Publication uses an explicit local
+  tarball path so npm cannot interpret the artifact as GitHub shorthand, and artifact actions use
+  their Node 24 releases.
 - Dynamic instrument labels now identify both the reading and its source across engines, tanks,
   solar controllers, and cabin sensors. Customize also disambiguates any future repeated catalog
   label in visible text, accessible checkbox names, and reorder announcements.

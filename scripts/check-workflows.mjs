@@ -9,7 +9,8 @@ const runnerTempWorkingDirectory = `working-directory: ${'$'}{{ runner.temp }}`;
 const failures = [];
 
 for (const path of workflowPaths) {
-  const lines = readFileSync(path, 'utf8').split('\n');
+  const workflow = readFileSync(path, 'utf8');
+  const lines = workflow.split('\n');
 
   lines.forEach((line, index) => {
     if (line.includes('uses: actions/setup-node@')) {
@@ -29,6 +30,13 @@ for (const path of workflowPaths) {
       }
     }
   });
+
+  if (
+    path === '.github/workflows/publish.yml' &&
+    !workflow.includes('npm publish ./artifacts/*.tgz --provenance --access public')
+  ) {
+    failures.push(`${path} must publish the downloaded tarball with an explicit relative path.`);
+  }
 }
 
 if (failures.length > 0) {

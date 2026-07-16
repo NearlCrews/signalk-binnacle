@@ -79,3 +79,6 @@ the npm package has a verified trusted-publisher binding for this repository and
 to token-free publishing requires an owner to configure that external npm setting, run a successful
 approved release, verify provenance and package ownership, and only then remove the repository
 secret. Repository code alone cannot prove or create the npm-side binding.
+
+Keep the downloaded tarball argument explicitly relative, such as `./artifacts/*.tgz`. Without the
+`./` prefix, npm can interpret the path as GitHub shorthand instead of a local package archive.
