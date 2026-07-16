@@ -68,6 +68,16 @@ PMTiles blocks use their dedicated IndexedDB store.
 
 On a phone, the panel collapses while drawing so the chart receives the gesture.
 
+If Chart Locker accepts a download but loses the immediate job response, Binnacle keeps the area in
+**Starting download** while Chart Locker recovers the job by area identifier. A temporary status
+failure does not start a second download. Use **Retry status** on the saved-area card to resume
+polling.
+
+Chart Locker can retain a saved definition after one of its chart sources is removed. Binnacle marks
+that source unavailable and preserves any already cached coverage. **Download again** stays disabled
+because it would repeat a request Chart Locker cannot fulfill. Use **Adjust a copy** to choose current
+charts, save the replacement, verify it, then delete the older area.
+
 ## Automatic caching and storage
 
 Automatic caching keeps selected charts near the moving boat. It is a rolling convenience cache, not

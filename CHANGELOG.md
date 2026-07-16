@@ -6,12 +6,20 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0154"></a>
+
+## [0.15.4] - 2026-07-16
+
 ### Fixed
 
-- Saved-area creation accepts the response shape from Chart Locker 0.5.0 when its cache-derived byte
-  total is absent, and creation plus re-download accept the recovery-pending response used when the
-  server lost a warm job identifier. Binnacle continues polling the region identifier until Chart
-  Locker reconciles the background download.
+- Saved-area creation remains compatible with Chart Locker 0.5.0 responses that omit the initial
+  cache-derived byte total, while creation and re-download now support recovery responses from newer
+  Chart Locker builds when the server loses a warm job identifier. Binnacle continues polling by
+  region identifier until Chart Locker reconciles the background download.
+- Chart Locker mutation payloads must match their documented HTTP statuses. Starting a new poll clears
+  stale progress, repeated status failures offer an explicit retry, removed chart sources are
+  identified before a re-download can fail, and bounded server rejection reasons replace opaque
+  HTTP-number errors.
 
 <a id="v0153"></a>
 

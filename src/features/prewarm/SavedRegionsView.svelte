@@ -9,6 +9,7 @@ interface Props {
   regions: SavedRegionDto[] | null;
   loadError: string | null;
   regionStatus: Record<string, WarmStatus>;
+  regionPollError: Record<string, boolean>;
   pendingRegion: Record<string, boolean>;
   submitting: boolean;
   adminAccess: boolean;
@@ -17,12 +18,14 @@ interface Props {
   onShow: (region: SavedRegionDto) => void;
   onUseTemplate: (region: SavedRegionDto) => void;
   onRedownload: (id: string) => void;
+  onRetryStatus: (id: string) => void;
 }
 
 const {
   regions,
   loadError,
   regionStatus,
+  regionPollError,
   pendingRegion,
   submitting,
   adminAccess,
@@ -31,6 +34,7 @@ const {
   onShow,
   onUseTemplate,
   onRedownload,
+  onRetryStatus,
 }: Props = $props();
 
 const STATUS_META: Record<SavedRegionDto['status'], { label: string; severity: string }> = {
@@ -46,6 +50,13 @@ function progressText(status: WarmStatus, percent: number): string {
   const skipped = status.skipped > 0 ? `, ${status.skipped} empty tiles skipped` : '';
   const errors = status.errors > 0 ? `, ${status.errors} errors` : '';
   return `${percent}% saved, ${saved.value} ${saved.unit}, ${status.done} of ${status.total} tiles${skipped}${errors}`;
+}
+
+function chartList(region: SavedRegionDto): string {
+  const unavailable = new Set(region.unavailableSourceIds);
+  return region.sourceIds
+    .map((id) => `${chartLabel(id)}${unavailable.has(id) ? ' (unavailable)' : ''}`)
+    .join(', ');
 }
 </script>
 
@@ -84,7 +95,22 @@ function progressText(status: WarmStatus, percent: number): string {
             </dd>
           {/if}
         </dl>
-        {#if region.status === 'downloading' && live && live.total > 0}
+        {#if region.status === 'downloading' && regionPollError[region.id]}
+          <div class="download-retry">
+            <p class="muted-note sev-warning" role="status">
+              Download status is unavailable. The server may still be saving this area.
+            </p>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              disabled={!adminAccess || submitting || pendingRegion[region.id]}
+              onclick={() => onRetryStatus(region.id)}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              Retry status
+            </button>
+          </div>
+        {:else if region.status === 'downloading' && live && live.total > 0}
           {@const percent = Math.round((live.done / live.total) * 100)}
           <div
             class="warm-track"
@@ -101,6 +127,15 @@ function progressText(status: WarmStatus, percent: number): string {
         {:else if region.status === 'downloading'}
           <p class="progress-note muted-note" role="status">Starting download…</p>
         {/if}
+        {#if region.unavailableSourceIds.length > 0}
+          <p class="muted-note sev-warning" role="status">
+            {region.unavailableSourceIds.length === 1
+              ? 'One included chart is no longer available from Chart Locker.'
+              : `${region.unavailableSourceIds.length} included charts are no longer available from Chart Locker.`}
+            Existing cached coverage is unchanged. Adjust a copy to choose replacements before
+            downloading again.
+          </p>
+        {/if}
         <Disclosure label="Area details">
           <dl class="detail-list area-details">
             <div class="item">
@@ -113,7 +148,7 @@ function progressText(status: WarmStatus, percent: number): string {
             </div>
             <div class="item">
               <dt>Charts</dt>
-              <dd>{region.sourceIds.map(chartLabel).join(', ')}</dd>
+              <dd>{chartList(region)}</dd>
             </div>
           </dl>
           <div class="area-detail-actions">
@@ -152,7 +187,8 @@ function progressText(status: WarmStatus, percent: number): string {
               disabled={!adminAccess ||
                 submitting ||
                 pendingRegion[region.id] ||
-                region.status === 'downloading'}
+                region.status === 'downloading' ||
+                region.unavailableSourceIds.length > 0}
               onclick={() => onRedownload(region.id)}
             >
               <RefreshCw size={18} aria-hidden="true" />
@@ -184,6 +220,14 @@ function progressText(status: WarmStatus, percent: number): string {
   min-block-size: 1.25rem;
 }
 .progress-note {
+  margin: 0;
+}
+.download-retry {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+.download-retry .muted-note {
   margin: 0;
 }
 .area-details dd {

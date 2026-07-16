@@ -18,8 +18,15 @@ import {
  * (401 and 403 are a missing or refused token, other codes are a server or transport fault). Thrown
  * rather than parsing an error body as a valid payload. */
 export class HttpStatusError extends Error {
-  constructor(readonly status: number) {
-    super(`companion request failed with ${status}`);
+  constructor(
+    readonly status: number,
+    readonly detail?: string,
+  ) {
+    super(
+      detail === undefined
+        ? `Chart Locker request failed (HTTP ${status})`
+        : `Chart Locker: ${detail}`,
+    );
     this.name = 'HttpStatusError';
   }
 }
@@ -71,6 +78,20 @@ const MAX_SOURCE_STATS_COUNT = 10_000;
 const MAX_ID_LENGTH = 256;
 const MAX_NAME_LENGTH = 512;
 const MAX_JSON_RESPONSE_BYTES = 2 * 1024 * 1024;
+const REGION_STATUSES: ReadonlySet<unknown> = new Set([
+  'downloading',
+  'ready',
+  'capped',
+  'error',
+  'needs-redownload',
+]);
+const WARM_STATES: ReadonlySet<unknown> = new Set([
+  'running',
+  'done',
+  'cancelled',
+  'capped',
+  'error',
+]);
 
 function safeText(value: unknown, maxLength: number): value is string {
   return (
@@ -187,6 +208,8 @@ export interface SavedRegionDto {
   status: 'downloading' | 'ready' | 'capped' | 'error' | 'needs-redownload';
   // Cache-derived from the container: SELECT SUM(bytes) WHERE region_id = ?.
   cachedBytes: number;
+  // Sources retained by the saved definition but absent from Chart Locker's current catalog.
+  unavailableSourceIds: string[];
 }
 
 interface RegionRequest {
@@ -200,6 +223,8 @@ interface RegionRequest {
 type RegionJobStart = { jobId: string; recovery?: never } | { jobId?: never; recovery: 'pending' };
 
 type PostRegionResult = { region: SavedRegionDto } & RegionJobStart;
+
+type SavedRegionResponse = 'list' | 'mutation';
 
 export interface RegionsClient {
   getConfig(signal?: AbortSignal): Promise<unknown>;
@@ -232,29 +257,31 @@ function parseBbox(value: unknown): Bbox {
   ) {
     throw new TypeError('invalid saved region');
   }
-  return value as unknown as Bbox;
+  return [value[0], value[1], value[2], value[3]] as Bbox;
 }
 
-function parseSavedRegion(value: unknown, allowMissingCachedBytes = false): SavedRegionDto {
+function parseSavedRegion(value: unknown, response: SavedRegionResponse): SavedRegionDto {
   if (!isRecord(value)) throw new TypeError('invalid saved region');
   // Chart Locker 0.5.0 omitted this cache-derived field from create responses even though its list
   // response included it. A newly accepted region has no confirmed cached bytes yet, so zero is the
   // safe compatibility value until the next list or status refresh.
   const cachedBytes =
-    allowMissingCachedBytes && value.cachedBytes === undefined ? 0 : value.cachedBytes;
-  const statuses: ReadonlySet<unknown> = new Set([
-    'downloading',
-    'ready',
-    'capped',
-    'error',
-    'needs-redownload',
-  ]);
+    response === 'mutation' && value.cachedBytes === undefined ? 0 : value.cachedBytes;
+  const sourceIds = Array.isArray(value.sourceIds) ? value.sourceIds : [];
+  const unavailableSourceIds =
+    value.unavailableSourceIds === undefined ? [] : value.unavailableSourceIds;
   if (
     !safeText(value.id, MAX_ID_LENGTH) ||
     !safeText(value.name, CHART_LOCKER_MAX_REGION_NAME_LENGTH) ||
-    !Array.isArray(value.sourceIds) ||
-    value.sourceIds.length > CHART_LOCKER_MAX_SOURCES ||
-    !value.sourceIds.every((source) => safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH)) ||
+    sourceIds.length === 0 ||
+    sourceIds.length > CHART_LOCKER_MAX_SOURCES ||
+    !sourceIds.every((source) => safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH)) ||
+    new Set(sourceIds).size !== sourceIds.length ||
+    !Array.isArray(unavailableSourceIds) ||
+    unavailableSourceIds.length > sourceIds.length ||
+    !unavailableSourceIds.every((source) => safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH)) ||
+    new Set(unavailableSourceIds).size !== unavailableSourceIds.length ||
+    !unavailableSourceIds.every((source) => sourceIds.includes(source)) ||
     !isNonNegativeSafeInteger(value.minzoom) ||
     !isNonNegativeSafeInteger(value.maxzoom) ||
     value.minzoom > value.maxzoom ||
@@ -263,7 +290,7 @@ function parseSavedRegion(value: unknown, allowMissingCachedBytes = false): Save
     !(value.lastDownloadedAt === null || isNonNegativeSafeInteger(value.lastDownloadedAt)) ||
     !isNonNegativeSafeInteger(value.bytes) ||
     !isNonNegativeSafeInteger(cachedBytes) ||
-    !statuses.has(value.status)
+    !REGION_STATUSES.has(value.status)
   ) {
     throw new TypeError('invalid saved region');
   }
@@ -271,7 +298,7 @@ function parseSavedRegion(value: unknown, allowMissingCachedBytes = false): Save
     id: value.id,
     name: value.name,
     bbox: parseBbox(value.bbox),
-    sourceIds: [...new Set(value.sourceIds as string[])],
+    sourceIds: [...(sourceIds as string[])],
     minzoom: value.minzoom,
     maxzoom: value.maxzoom,
     createdAt: value.createdAt,
@@ -279,6 +306,7 @@ function parseSavedRegion(value: unknown, allowMissingCachedBytes = false): Save
     bytes: value.bytes,
     status: value.status as SavedRegionDto['status'],
     cachedBytes,
+    unavailableSourceIds: [...(unavailableSourceIds as string[])],
   };
 }
 
@@ -286,23 +314,26 @@ function parseSavedRegions(value: unknown): SavedRegionDto[] {
   if (!Array.isArray(value) || value.length > MAX_REGION_COUNT) {
     throw new TypeError('invalid saved regions');
   }
-  return value.map((region) => parseSavedRegion(region));
+  return value.map((region) => parseSavedRegion(region, 'list'));
 }
 
-function parseJobResponse(value: unknown): RegionJobStart {
+function parseJobResponse(value: unknown, status: number): RegionJobStart {
   if (!isRecord(value)) throw new TypeError('invalid region job');
-  if (safeText(value.jobId, MAX_ID_LENGTH) && value.recovery === undefined) {
+  if (status === 200 && safeText(value.jobId, MAX_ID_LENGTH) && value.recovery === undefined) {
     return { jobId: value.jobId };
   }
-  if (value.jobId === undefined && value.recovery === 'pending') {
+  if (status === 202 && value.jobId === undefined && value.recovery === 'pending') {
     return { recovery: 'pending' };
   }
   throw new TypeError('invalid region job');
 }
 
-function parsePostRegionResponse(value: unknown): PostRegionResult {
+function parsePostRegionResponse(value: unknown, status: number): PostRegionResult {
   if (!isRecord(value)) throw new TypeError('invalid region job');
-  return { region: parseSavedRegion(value.region, true), ...parseJobResponse(value) };
+  return {
+    region: parseSavedRegion(value.region, 'mutation'),
+    ...parseJobResponse(value, status),
+  };
 }
 
 function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRows: number } {
@@ -318,7 +349,6 @@ function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRo
 
 function parseWarmStatus(value: unknown): WarmStatus {
   if (!isRecord(value)) throw new TypeError('invalid region status');
-  const states: ReadonlySet<unknown> = new Set(['running', 'done', 'cancelled', 'capped', 'error']);
   if (
     !isNonNegativeSafeInteger(value.total) ||
     !isNonNegativeSafeInteger(value.done) ||
@@ -327,11 +357,18 @@ function parseWarmStatus(value: unknown): WarmStatus {
     value.done + value.skipped > value.total ||
     !isNonNegativeSafeInteger(value.bytes) ||
     !isNonNegativeSafeInteger(value.errors) ||
-    !states.has(value.state)
+    !WARM_STATES.has(value.state)
   ) {
     throw new TypeError('invalid region status');
   }
-  return value as unknown as WarmStatus;
+  return {
+    total: value.total,
+    done: value.done,
+    skipped: value.skipped,
+    bytes: value.bytes,
+    errors: value.errors,
+    state: value.state as WarmStatus['state'],
+  };
 }
 
 export function createRegionsClient(
@@ -339,15 +376,7 @@ export function createRegionsClient(
   fetchImpl: typeof fetch = fetch,
 ): RegionsClient {
   const url = (path: string): string => companionApiUrl(origin, path);
-  // Without an r.ok check a 401 or a 500 would parse an error body into garbage data (or vanish
-  // entirely on the void routes). Throw the status so the caller maps 401 and 403 to an administrator
-  // access prompt and any other fault to a not-responding state.
-  const ensureOk = (r: Response): Response => {
-    if (!r.ok) throw new HttpStatusError(r.status);
-    return r;
-  };
-  const json = async <T>(r: Response): Promise<T> => {
-    const response = ensureOk(r);
+  const readJson = async <T>(response: Response): Promise<T> => {
     if (!response.body) throw new TypeError('companion response has no body');
     const declaredLength = response.headers.get('Content-Length');
     if (declaredLength !== null) {
@@ -382,6 +411,24 @@ export function createRegionsClient(
       throw error;
     }
   };
+  const statusError = async (response: Response): Promise<HttpStatusError> => {
+    try {
+      const body = await readJson<unknown>(response);
+      const detail =
+        isRecord(body) && safeText(body.error, MAX_NAME_LENGTH) ? body.error : undefined;
+      return new HttpStatusError(response.status, detail);
+    } catch {
+      return new HttpStatusError(response.status);
+    }
+  };
+  // Without an ok check a 401 or 500 could parse an error body into feature state or vanish on a void
+  // route. Preserve a bounded Chart Locker reason when available so deterministic rejections explain
+  // what the user can change, while malformed error bodies remain generic.
+  const ensureOk = async (response: Response): Promise<Response> => {
+    if (!response.ok) throw await statusError(response);
+    return response;
+  };
+  const json = async <T>(response: Response): Promise<T> => readJson<T>(await ensureOk(response));
   // Every management call carries the administrator session cookie and a request timeout, so a
   // half-open link on a boat bounds the wait without masking the session with a device bearer token.
   const init = (extra?: RequestInit): RequestInit => withTimeout(adminSessionInit(extra));
@@ -396,10 +443,10 @@ export function createRegionsClient(
       return json(await fetchImpl(url('/position-warm/config'), init({ signal })));
     },
     async postConfig(config) {
-      ensureOk(await fetchImpl(url('/position-warm/config'), jsonPost(config)));
+      await ensureOk(await fetchImpl(url('/position-warm/config'), jsonPost(config)));
     },
     async setCacheConfig(ttlDays) {
-      ensureOk(await fetchImpl(url('/cache/config'), jsonPost({ ttlDays })));
+      await ensureOk(await fetchImpl(url('/cache/config'), jsonPost({ ttlDays })));
     },
     async clearScrollCache() {
       return parseClearScrollResponse(
@@ -417,24 +464,20 @@ export function createRegionsClient(
       );
     },
     async postRegion(body) {
-      return parsePostRegionResponse(
-        await json<unknown>(await fetchImpl(url('/regions'), jsonPost(body))),
-      );
+      const response = await fetchImpl(url('/regions'), jsonPost(body));
+      return parsePostRegionResponse(await json<unknown>(response), response.status);
     },
     async deleteRegion(id) {
-      ensureOk(
+      await ensureOk(
         await fetchImpl(url(`/regions/${encodeURIComponent(id)}`), init({ method: 'DELETE' })),
       );
     },
     async redownloadRegion(id) {
-      return parseJobResponse(
-        await json<unknown>(
-          await fetchImpl(
-            url(`/regions/${encodeURIComponent(id)}/redownload`),
-            init({ method: 'POST' }),
-          ),
-        ),
+      const response = await fetchImpl(
+        url(`/regions/${encodeURIComponent(id)}/redownload`),
+        init({ method: 'POST' }),
       );
+      return parseJobResponse(await json<unknown>(response), response.status);
     },
     async getRegionJobStatus(id, signal) {
       const r = await fetchImpl(url(`/regions/${encodeURIComponent(id)}/status`), init({ signal }));
@@ -442,7 +485,6 @@ export function createRegionsClient(
       // failure. Any other non-ok is a real failure, so throw rather than parse an error body as a
       // status snapshot, letting the poller count it and stop after a small cap.
       if (r.status === 404) return null;
-      if (!r.ok) throw new Error(`region status ${r.status}`);
       return parseWarmStatus(await json<unknown>(r));
     },
     async geocode(lat, lon, signal) {

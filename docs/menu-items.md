@@ -107,6 +107,10 @@ source, and surrounding traffic before relying on it.
   network failure. The access-needed header status opens Signal K administrator sign-in directly.
   Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
   an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
+  Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
+  Repeated status failures offer Retry status without starting another download. Removed chart
+  sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
+  adjusted copy uses available sources.
   See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
   [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 

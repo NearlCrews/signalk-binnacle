@@ -31,6 +31,7 @@ function region(id: string): SavedRegionDto {
     bytes: 0,
     cachedBytes: 0,
     status: 'ready',
+    unavailableSourceIds: [],
   };
 }
 
@@ -240,17 +241,85 @@ describe('RegionsController', () => {
 
   it('starts region polling after a recovery-pending redownload response', async () => {
     const getStatus = vi.fn(async () => null);
+    const downloadingRegion: SavedRegionDto = { ...region('existing'), status: 'downloading' };
     const api = client({
       redownloadRegion: vi.fn(async () => ({ recovery: 'pending' as const })),
+      getRegions: vi.fn(async () => [downloadingRegion]),
       getRegionJobStatus: getStatus,
     });
     const { controller, cleanup } = setup(api);
+    controller.regions = [region('existing')];
 
     await controller.redownloadRegion('existing');
     await vi.advanceTimersByTimeAsync(100);
 
     expect(controller.error).toBeNull();
     expect(getStatus).toHaveBeenCalledWith('existing', expect.any(AbortSignal));
+    expect(controller.pendingRegion.existing).toBeUndefined();
+    cleanup();
+  });
+
+  it('clears stale progress when a new download poll starts', () => {
+    const { controller, cleanup } = setup(client());
+    controller.regionStatus = {
+      existing: { total: 1, done: 1, skipped: 0, bytes: 10, errors: 0, state: 'done' },
+    };
+
+    controller.pollRegion('existing');
+
+    expect(controller.regionStatus.existing).toBeUndefined();
+    cleanup();
+  });
+
+  it('offers an explicit status retry after repeated poll failures', async () => {
+    const getStatus = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const { controller, cleanup } = setup(client({ getRegionJobStatus: getStatus }));
+    controller.regions = [{ ...region('active'), status: 'downloading' }];
+    controller.pollRegion('active');
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
+
+    expect(getStatus).toHaveBeenCalledTimes(5);
+    expect(controller.regionPollError.active).toBe(true);
+
+    controller.retryRegionPoll('active');
+    expect(controller.regionPollError.active).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(getStatus).toHaveBeenCalledTimes(6);
+    cleanup();
+  });
+
+  it('does not retry status while another region action is submitting', () => {
+    const getStatus = vi.fn();
+    const { controller, cleanup } = setup(client({ getRegionJobStatus: getStatus }));
+    controller.regions = [{ ...region('active'), status: 'downloading' }];
+    controller.regionPollError = { active: true };
+    controller.submitting = true;
+
+    controller.retryRegionPoll('active');
+
+    expect(controller.regionPollError.active).toBe(true);
+    expect(getStatus).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('does not re-download active areas or areas with removed chart sources', async () => {
+    const redownload = vi.fn(async () => ({ jobId: 'job' }));
+    const { controller, cleanup } = setup(client({ redownloadRegion: redownload }));
+    controller.regions = [
+      { ...region('active'), status: 'downloading' },
+      { ...region('retired'), unavailableSourceIds: ['retired-chart'] },
+    ];
+
+    await controller.redownloadRegion('active');
+    await controller.redownloadRegion('retired');
+    await controller.redownloadRegion('missing');
+
+    expect(redownload).not.toHaveBeenCalled();
     cleanup();
   });
 

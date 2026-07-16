@@ -67,7 +67,6 @@ export interface RegionsControllerDeps {
 }
 
 interface PollState {
-  generation: number;
   failures: number;
   timer?: ReturnType<typeof setTimeout>;
   abort?: AbortController;
@@ -107,6 +106,7 @@ export class RegionsController {
   submitting = $state(false);
   error = $state<string | null>(null);
   regionStatus = $state<Record<string, WarmStatus>>({});
+  regionPollError = $state<Record<string, boolean>>({});
   pendingRegion = $state<Record<string, boolean>>({});
   ttlDays = $state(30);
   confirmingClear = $state(false);
@@ -154,6 +154,7 @@ export class RegionsController {
     this.error = null;
     this.clearNote = null;
     this.regionStatus = {};
+    this.regionPollError = {};
     this.positionLoadError = null;
     void this.loadStats();
     void this.loadRegions();
@@ -421,6 +422,8 @@ export class RegionsController {
       const active = new Set(
         list.filter((region) => region.status === 'downloading').map((r) => r.id),
       );
+      this.regionStatus = this.#retainKeys(this.regionStatus, active);
+      this.regionPollError = this.#retainKeys(this.regionPollError, active);
       for (const id of this.#polls.keys()) {
         if (!active.has(id)) this.stopRegionPoll(id);
       }
@@ -458,15 +461,29 @@ export class RegionsController {
 
   pollRegion(id: string): void {
     this.stopRegionPoll(id);
-    const poll: PollState = { generation: 1, failures: 0 };
+    this.#removeRegionStatus(id);
+    this.#setPollError(id, false);
+    const poll: PollState = { failures: 0 };
     this.#polls.set(id, poll);
     this.#schedulePoll(id, poll);
+  }
+
+  retryRegionPoll(id: string): void {
+    if (
+      this.#disposed ||
+      !this.deps.getAdminAccess() ||
+      this.submitting ||
+      this.pendingRegion[id] ||
+      !this.regions?.some((region) => region.id === id && region.status === 'downloading')
+    ) {
+      return;
+    }
+    this.pollRegion(id);
   }
 
   stopRegionPoll(id: string): void {
     const poll = this.#polls.get(id);
     if (!poll) return;
-    poll.generation += 1;
     if (poll.timer !== undefined) clearTimeout(poll.timer);
     poll.abort?.abort();
     this.#polls.delete(id);
@@ -482,12 +499,11 @@ export class RegionsController {
 
   async #runPoll(id: string, poll: PollState): Promise<void> {
     if (this.#disposed || this.#polls.get(id) !== poll) return;
-    const generation = poll.generation;
     const abort = new AbortController();
     poll.abort = abort;
     try {
       const status = await this.deps.getClient().getRegionJobStatus(id, abort.signal);
-      if (abort.signal.aborted || this.#polls.get(id) !== poll || generation !== poll.generation) {
+      if (abort.signal.aborted || this.#polls.get(id) !== poll) {
         return;
       }
       poll.failures = 0;
@@ -502,7 +518,7 @@ export class RegionsController {
       poll.failures += 1;
       if (poll.failures >= POLL_FAIL_CAP) {
         this.stopRegionPoll(id);
-        this.error = 'Lost contact with a region download. Check the connection and try again.';
+        this.#setPollError(id, true);
         return;
       }
     } finally {
@@ -566,7 +582,7 @@ export class RegionsController {
       this.#rect?.clear();
       this.subView = 'home';
       await Promise.all([this.loadRegions(), this.loadStats()]);
-      this.pollRegion(region.id);
+      if (!this.#polls.has(region.id)) this.pollRegion(region.id);
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Region download failed';
     } finally {
@@ -575,13 +591,23 @@ export class RegionsController {
   }
 
   async redownloadRegion(id: string): Promise<void> {
-    if (!this.deps.getAdminAccess() || this.submitting || this.pendingRegion[id]) return;
+    const region = this.regions?.find((candidate) => candidate.id === id);
+    if (
+      !this.deps.getAdminAccess() ||
+      this.submitting ||
+      this.pendingRegion[id] ||
+      region === undefined ||
+      region.status === 'downloading' ||
+      region.unavailableSourceIds.length > 0
+    ) {
+      return;
+    }
     this.error = null;
     this.#setPending(id, true);
     try {
       await this.deps.getClient().redownloadRegion(id);
       await this.loadRegions();
-      this.pollRegion(id);
+      if (!this.#polls.has(id)) this.pollRegion(id);
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Re-download failed';
     } finally {
@@ -718,7 +744,30 @@ export class RegionsController {
   }
 
   #setPending(id: string, busy: boolean): void {
-    this.pendingRegion = { ...this.pendingRegion, [id]: busy };
+    if (busy) {
+      this.pendingRegion = { ...this.pendingRegion, [id]: true };
+      return;
+    }
+    const { [id]: _removed, ...remaining } = this.pendingRegion;
+    this.pendingRegion = remaining;
+  }
+
+  #setPollError(id: string, failed: boolean): void {
+    if (failed) {
+      this.regionPollError = { ...this.regionPollError, [id]: true };
+      return;
+    }
+    const { [id]: _removed, ...remaining } = this.regionPollError;
+    this.regionPollError = remaining;
+  }
+
+  #removeRegionStatus(id: string): void {
+    const { [id]: _removed, ...remaining } = this.regionStatus;
+    this.regionStatus = remaining;
+  }
+
+  #retainKeys<T>(record: Record<string, T>, ids: ReadonlySet<string>): Record<string, T> {
+    return Object.fromEntries(Object.entries(record).filter(([id]) => ids.has(id)));
   }
 
   #toggleId(list: string[], id: string, enabled: boolean): string[] {

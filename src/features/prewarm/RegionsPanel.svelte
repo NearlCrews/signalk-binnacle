@@ -87,6 +87,7 @@ const regionName = $derived(controller.regionName);
 const submitting = $derived(controller.submitting);
 const error = $derived(controller.error);
 const regionStatus = $derived(controller.regionStatus);
+const regionPollError = $derived(controller.regionPollError);
 const armedDelete = controller.armedDelete;
 const pendingRegion = $derived(controller.pendingRegion);
 const ttlDays = $derived(controller.ttlDays);
@@ -192,6 +193,7 @@ function chartLabel(id: string): string {
       {regions}
       {loadError}
       {regionStatus}
+      {regionPollError}
       {pendingRegion}
       {submitting}
       {adminAccess}
@@ -200,6 +202,7 @@ function chartLabel(id: string): string {
       onShow={showRegion}
       onUseTemplate={useRegionAsTemplate}
       onRedownload={(id) => void redownloadRegion(id)}
+      onRetryStatus={(id) => controller.retryRegionPoll(id)}
     />
 
     <button

@@ -19,10 +19,13 @@ const savedRegion = {
   bytes: 0,
   status: 'downloading',
   cachedBytes: 0,
+  unavailableSourceIds: [],
 };
 
 const legacyCreateRegion = Object.fromEntries(
-  Object.entries(savedRegion).filter(([key]) => key !== 'cachedBytes'),
+  Object.entries(savedRegion).filter(
+    ([key]) => key !== 'cachedBytes' && key !== 'unavailableSourceIds',
+  ),
 );
 
 describe('regions client', () => {
@@ -81,6 +84,29 @@ describe('regions client', () => {
     await expect(impossibleProgress.getRegionJobStatus('region-9')).rejects.toThrow(
       'invalid region status',
     );
+
+    const extraStatusFields = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({
+          total: 2,
+          done: 1,
+          skipped: 0,
+          bytes: 10,
+          errors: 0,
+          state: 'running',
+          jobId: 'server-only',
+        }),
+      ) as unknown as typeof fetch,
+    );
+    await expect(extraStatusFields.getRegionJobStatus('region-9')).resolves.toEqual({
+      total: 2,
+      done: 1,
+      skipped: 0,
+      bytes: 10,
+      errors: 0,
+      state: 'running',
+    });
   });
 
   it('encodes lat and lon into the geocode query', async () => {
@@ -132,6 +158,21 @@ describe('regions client', () => {
     await expect(client.getCacheStats()).rejects.toMatchObject({
       name: 'HttpStatusError',
       status: 500,
+      detail: 'boom',
+    });
+    await expect(client.getCacheStats()).rejects.toThrow('Chart Locker: boom');
+  });
+
+  it('does not expose malformed Chart Locker error details', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok({ error: 'unsafe\nmessage' }, 409)) as unknown as typeof fetch,
+    );
+    await expect(client.redownloadRegion('region-1')).rejects.toMatchObject({
+      name: 'HttpStatusError',
+      status: 409,
+      detail: undefined,
+      message: 'Chart Locker request failed (HTTP 409)',
     });
   });
 
@@ -297,6 +338,32 @@ describe('regions client', () => {
     });
   });
 
+  it('requires recovery and normal mutation bodies to match their HTTP status', async () => {
+    const recoveryWithOk = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({ region: savedRegion, recovery: 'pending' }, 200),
+      ) as unknown as typeof fetch,
+    );
+    await expect(
+      recoveryWithOk.postRegion({
+        bbox: [-1, -1, 1, 1],
+        sourceIds: ['basemap'],
+        minzoom: 1,
+        maxzoom: 2,
+        name: 'Passage',
+      }),
+    ).rejects.toThrow('invalid region job');
+
+    const jobWithAccepted = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok({ jobId: 'job-1' }, 202)) as unknown as typeof fetch,
+    );
+    await expect(jobWithAccepted.redownloadRegion('region-1')).rejects.toThrow(
+      'invalid region job',
+    );
+  });
+
   it('defaults cachedBytes for Chart Locker 0.5.0 create responses', async () => {
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
@@ -337,6 +404,37 @@ describe('regions client', () => {
     const client = createRegionsClient(
       'http://h/plugins/signalk-chart-locker',
       vi.fn(async () => ok([legacyCreateRegion])) as unknown as typeof fetch,
+    );
+    await expect(client.getRegions()).rejects.toThrow('invalid saved region');
+  });
+
+  it('retains bounded unavailable source metadata from saved-region lists', async () => {
+    const unavailable = {
+      ...savedRegion,
+      sourceIds: ['basemap', 'retired-chart'],
+      unavailableSourceIds: ['retired-chart'],
+    };
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () => ok([unavailable])) as unknown as typeof fetch,
+    );
+    await expect(client.getRegions()).resolves.toEqual([unavailable]);
+
+    const invalid = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok([{ ...savedRegion, unavailableSourceIds: ['not-in-the-region'] }]),
+      ) as unknown as typeof fetch,
+    );
+    await expect(invalid.getRegions()).rejects.toThrow('invalid saved region');
+  });
+
+  it('rejects duplicate source identifiers instead of silently changing the saved definition', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok([{ ...savedRegion, sourceIds: ['basemap', 'basemap'] }]),
+      ) as unknown as typeof fetch,
     );
     await expect(client.getRegions()).rejects.toThrow('invalid saved region');
   });

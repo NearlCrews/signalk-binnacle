@@ -14,22 +14,21 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.15.3
+## What's new in 0.15.4
 
-Navigation, offline charts, privacy controls, and discovered instruments now hold safer boundaries
-through reconnects, provider failures, and multi-tab use.
+Saved offline areas now recover cleanly across Chart Locker upgrades, lost warm-job responses, and
+temporary status failures.
 
-- **Distinct instrument choices.** Every discovered reading names both its metric and source, such as
-  RPM · Port engine or Level · Fresh Water Main tank. Customize automatically disambiguates future
-  repeated labels in visible text and accessible control names.
-- **Safer navigation state.** Route, MOB, AIS, anchor, tide, radar, and worker lifecycle handling
-  rejects stale continuations and expires safety-relevant data instead of presenting it as current.
-- **Stronger offline boundaries.** PMTiles, Chart Locker, symbols, feature discovery, settings, and
-  Signal K resource responses are size-bounded and validated before entering application state.
-- **Reliable privacy and access.** Cross-tab credential changes, token rotation, administrator-session
-  checks, and local-data erasure are serialized and report recoverable failures clearly.
+- **Recoverable downloads.** If Chart Locker accepts a saved-area download but loses the immediate
+  job response, Binnacle follows the durable area identifier without starting a duplicate download.
+- **Honest status recovery.** Stale progress is cleared when polling restarts, and repeated temporary
+  failures provide a focused Retry status action without hiding other saved areas.
+- **Safe source changes.** Saved definitions identify chart sources removed from Chart Locker,
+  preserve existing cached coverage, and guide the user to adjust a copy before downloading again.
+- **Clearer failures.** Bounded Chart Locker rejection details explain correctable problems while
+  malformed or untrusted responses remain generic.
 
-See the [changelog](CHANGELOG.md#v0153) for the full list.
+See the [changelog](CHANGELOG.md#v0154) for the full list.
 
 ## What it does
 
@@ -262,6 +261,10 @@ The Offline charts landing page has four jobs:
    default chart selection, pick Overview, Coastal, or Harbor detail, check the estimated download and
    free space, name it, and start the download. On a phone, the panel collapses while drawing so the
    chart owns the gesture. A saved-area card is ready only when it says **Saved, works offline**.
+   Accepted downloads recover by area identifier if their immediate job response is lost, and a
+   temporary status failure offers Retry status without starting a duplicate download. If a saved
+   definition references a removed chart source, Binnacle preserves the existing cached coverage,
+   labels the missing source, and directs the user to adjust a copy before downloading again.
 2. **Automatic caching.** Optionally keep selected charts cached around the moving boat. This is a
    rolling nearby cache, not a substitute for saving and verifying the full planned passage. Settings
    follow Chart Locker's limits for 64 sources, zoom 0 through 24, distances up to 100 km, and update

@@ -1,8 +1,53 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 // Smoke tests route selected external APIs. Blocking service workers keeps those requests visible
 // to Playwright instead of letting a previously installed worker bypass the route hooks.
 test.use({ serviceWorkers: 'block' });
+
+async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<void> {
+  await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/tiles/ready')) {
+      await route.fulfill({ status: 200, body: 'ready' });
+      return;
+    }
+    if (path.endsWith('/style/basemap')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
+      });
+      return;
+    }
+    if (path.endsWith('/api/cache/stats')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          rows: 0,
+          bytes: 0,
+          cap: 1_000_000_000,
+          regionsFreeBytes: 500_000_000,
+          perSourceAvgBytes: { seamark: 565.7692307692307 },
+        }),
+      });
+      return;
+    }
+    if (path.endsWith('/api/regions')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(regions),
+      });
+      return;
+    }
+    if (path.endsWith('/api/position-warm/config')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    await route.fulfill({ status: 404, body: 'not found' });
+  });
+}
 
 test('app shell renders the brand and a connection status', async ({ page }) => {
   await page.goto('/');
@@ -171,44 +216,7 @@ test('offline area review shows a planning estimate and conservative chart defau
   page,
 }) => {
   await page.addInitScript(() => localStorage.clear());
-  await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/tiles/ready')) {
-      await route.fulfill({ status: 200, body: 'ready' });
-      return;
-    }
-    if (path.endsWith('/style/basemap')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
-      });
-      return;
-    }
-    if (path.endsWith('/api/cache/stats')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          rows: 0,
-          bytes: 0,
-          cap: 1_000_000_000,
-          regionsFreeBytes: 500_000_000,
-          perSourceAvgBytes: { seamark: 565.7692307692307 },
-        }),
-      });
-      return;
-    }
-    if (path.endsWith('/api/regions')) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-      return;
-    }
-    if (path.endsWith('/api/position-warm/config')) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-      return;
-    }
-    await route.fulfill({ status: 404, body: 'not found' });
-  });
+  await mockChartLocker(page);
 
   await page.goto('/');
   await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
@@ -239,6 +247,45 @@ test('offline area review shows a planning estimate and conservative chart defau
   await expect(panel.getByText('Maximum download')).toHaveCount(0);
   await panel.getByRole('button', { name: 'Customize included charts' }).click();
   await expect(panel.getByRole('checkbox', { name: 'NOAA ENC' })).not.toBeChecked();
+});
+
+test('offline areas explain removed chart sources before re-download', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await mockChartLocker(page, [
+    {
+      id: 'region-1',
+      name: 'Passage',
+      bbox: [-71.2, 42.2, -70.8, 42.5],
+      sourceIds: ['basemap', 'retired-chart'],
+      unavailableSourceIds: ['retired-chart'],
+      minzoom: 6,
+      maxzoom: 12,
+      createdAt: 1,
+      lastDownloadedAt: 1,
+      bytes: 2048,
+      cachedBytes: 2048,
+      status: 'ready',
+    },
+  ]);
+
+  await page.goto('/');
+  await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Offline charts', exact: true })
+    .click();
+
+  const panel = page.locator('aside.slide-over');
+  await expect(
+    panel.getByText('One included chart is no longer available from Chart Locker.'),
+  ).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Download this area again' })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Area details' }).click();
+  await expect(panel.getByText('retired-chart (unavailable)')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Adjust a copy' })).toBeEnabled();
 });
 
 test('layers and charts opens chart sources before overlay stack controls', async ({ page }) => {
