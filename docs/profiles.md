@@ -9,6 +9,10 @@ After a profile is active, Binnacle saves changes to it after a short debounce. 
 dirty, save, or discard step. Saving current settings as a new profile creates another named setup and
 makes it active on that device.
 
+Each saved-profile card keeps its device-selection action visible. Rename, set-default, export, and
+delete actions live in the labeled three-dot menu. That menu flips above or below its trigger and
+stays within the visible viewport on narrow displays and while the panel scrolls.
+
 A profile contains:
 
 - theme;

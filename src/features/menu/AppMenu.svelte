@@ -237,6 +237,9 @@ function onCardFocusOut(event: FocusEvent): void {
     inline-size: 100dvw;
     max-inline-size: none;
     max-block-size: 80dvh;
+    padding-block-end: calc(var(--space-3) + var(--system-bar-clearance));
+    padding-inline-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+    padding-inline-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));
     border-inline: 0;
     border-block-end: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;

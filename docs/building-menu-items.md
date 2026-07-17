@@ -116,6 +116,8 @@ level. Inside, in this order:
 5. A list of saved records uses `<SavedList>` with a next-step `empty` message. A destructive action
    on a card arms an `<InlineConfirm>` first. When a card needs more than one primary and two secondary
    actions, keep the primary visible and put the rest in `OverflowActions` with plain text labels.
+   Its shared anchored surface follows panel scrolling, flips above or below, and clamps to the
+   viewport. Do not replace that behavior with card-relative positioning.
 6. Live status carries a role: `role="progressbar"` with aria-valuemin/max/now for a determinate
    bar, `role="status"` for a soft advisory, `role="alert"` for a hard error. A determinate bar also
    shows a visible percentage, byte count, or item count and supplies matching `aria-valuetext`.

@@ -62,6 +62,7 @@ const isFacetGroup = $derived(subLayers.length > 0);
 const handleLabel = $derived(isFacetGroup ? (groupTitle ?? item.title) : item.title);
 
 let tuneOpen = $state(false);
+let tuneTrigger = $state<HTMLButtonElement>();
 // Close the popover if the layer is hidden while it is open: the popover lives inside the canTune
 // block, so without this re-showing the layer would pop it back open unprompted.
 $effect(() => {
@@ -89,6 +90,7 @@ $effect(() => {
         <button
           type="button"
           class="icon-btn"
+          bind:this={tuneTrigger}
           class:icon-btn--accent={dimmed}
           aria-label={`Adjust ${item.title} opacity`}
           aria-haspopup="true"
@@ -103,6 +105,9 @@ $effect(() => {
           backdropLabel={`Close ${item.title} opacity`}
           ariaLabel={`${item.title} opacity`}
           surfaceClass="popover-card tune-pop"
+          anchor={tuneTrigger}
+          preferredPlacement="below"
+          anchorAlign="end"
         >
           <div class="tune-body">
             <input
@@ -242,14 +247,11 @@ $effect(() => {
 /* The opacity popover, anchored under the tune button at the row's trailing edge. The floating-card
    frame comes from the shared .popover-card; this only positions and sizes it. */
 .tune-anchor :global(.tune-pop) {
-  position: absolute;
-  inset-block-start: calc(100% + var(--space-1));
-  inset-inline-end: 0;
   z-index: var(--z-menu);
   inline-size: 14rem;
-  max-inline-size: min(14rem, 70vw);
+  max-inline-size: calc(100vw - 1rem);
   padding: var(--space-2);
-  transform-origin: top right;
+  transform-origin: right var(--anchored-origin-y, top);
 }
 .tune-body {
   display: flex;

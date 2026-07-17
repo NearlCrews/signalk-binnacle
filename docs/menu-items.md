@@ -127,9 +127,10 @@ source, and surrounding traffic before relying on it.
   timestamps, list sizes, journals, and server documents are validated before merge. Without server
   write access, edits remain queued locally, and delete confirmation warns that a server copy may
   remain. The panel reports Local, Waiting, Syncing, Synced, Conflict, and Error states, offers Retry,
-  and keeps secondary card actions in a labeled overflow menu. Device privacy actions can forget only
-  the local Signal K token or erase Binnacle-owned local settings, caches, IndexedDB data, profiles,
-  and credentials. Full erasure is blocked while safety or unsaved navigation work is active and
-  never deletes or revokes server data. Synced profiles return after sign-in and sync, while
-  unsynced profiles and edits are permanently lost. Profile writes are suspended during erasure so
-  queued work cannot recreate local data. See [Profiles and settings](profiles.md).
+  and keeps secondary card actions in a labeled overflow menu that flips and clamps within a narrow
+  viewport or scrolled panel. Device privacy actions can forget only the local Signal K token or erase
+  Binnacle-owned local settings, caches, IndexedDB data, profiles, and credentials. Full erasure is
+  blocked while safety or unsaved navigation work is active and never deletes or revokes server data.
+  Synced profiles return after sign-in and sync, while unsynced profiles and edits are permanently
+  lost. Profile writes are suspended during erasure so queued work cannot recreate local data. See
+  [Profiles and settings](profiles.md).

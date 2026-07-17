@@ -14,23 +14,21 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.15.5
+## What's new in 0.15.6
 
-Profiles now preserve a helm setup across browsers while keeping each station's active selection and
-last-applied state local.
+Menus and popovers now stay reachable on narrow phones, short landscape displays, and installed
+tablet PWAs.
 
-- **Automatic saves.** Changes to the active profile save after a short debounce, including theme,
-  layers, instruments, units, alarms, track settings, pinned actions, and anchor radius.
-- **Cross-browser synchronization.** Authenticated Signal K users share named profiles and a default
-  through applicationData. Independent edits merge by setting, and active remote changes wait for an
-  explicit Apply update or Keep current setup choice.
-- **Reliable offline operation.** Local edits, deletions, and new profiles survive reloads and retry
-  after reconnect. An untouched offline fallback yields to the synchronized server default.
-- **Bounded and private.** Profile documents, requests, migrations, and extension fields are validated
-  and bounded. Device selection, credentials, active safety state, and server resources stay outside
-  the portable profile bundle.
+- **Visible card actions.** Profile and route three-dot menus flip above or below their trigger and
+  clamp to every viewport edge, including while their panel scrolls.
+- **Bounded layer and toolbar controls.** Layer-opacity popovers avoid clipped panel edges, while a
+  long bottom-toolbar More menu scrolls inside the available height.
+- **Safer PWA spacing.** The mobile app-menu sheet follows reported side insets and Binnacle's Android
+  and Samsung system-bar clearance, keeping its last controls above overlaid device chrome.
+- **One positioning contract.** Anchored controls share tested collision handling instead of each
+  menu relying on hard-coded placement.
 
-See the [changelog](CHANGELOG.md#v0155) and [profiles guide](docs/profiles.md) for the full details.
+See the [changelog](CHANGELOG.md#v0156) and [design system](docs/design-system.md) for the full details.
 
 ## What it does
 
@@ -214,8 +212,9 @@ Open Binnacle from the **Webapps** list in the Signal K admin UI, or go straight
 A few interactions cover most of the helm:
 
 When installed as a PWA on a touch device, Binnacle automatically reserves bottom clearance for
-Android navigation and tablet taskbars. The status strip also follows reported bottom and landscape
-side safe areas, so its helm controls remain reachable when system chrome overlays the app window.
+Android navigation and tablet taskbars. The status strip and mobile app-menu sheet also follow
+reported bottom and landscape side safe areas, so their helm controls remain reachable when system
+chrome overlays the app window.
 
 The **Profiles** panel includes **Forget credentials** and **Erase all local data** for a shared or
 retired display. These actions affect only Binnacle data in the current browser. They do not delete

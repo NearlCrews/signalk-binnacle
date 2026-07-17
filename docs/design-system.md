@@ -229,10 +229,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   and the dismiss-stack registration). Use it for any anchored menu (the app-menu launcher, the
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
-  for an inline clamp position.
+  for a bespoke coordinate system. Pass `anchor`, `preferredPlacement`, and `anchorAlign` for shared
+  viewport-fixed placement that flips and clamps at every screen edge.
 - `OverflowActions`: a labeled More button and keyboard-focused anchored menu for secondary saved-card
-  actions. Keep one primary action visible, then move dense secondary actions here instead of wrapping
-  five or six icon-only controls across a phone card.
+  actions. It uses viewport-fixed, collision-aware positioning so the menu stays on-screen at every
+  card position and while its panel scrolls. Keep one primary action visible, then move dense secondary
+  actions here instead of wrapping five or six icon-only controls across a phone card.
 - `CustomizeToggle`: the edit-mode entry control (see "Edit modes" below). Props: `object` (the
   label's object noun), `editing`, and `onToggle`. Render it, never a hand-written ghost button.
 - `createReorder`: the shared pointer and keyboard reorder controller. Use it when a list can be

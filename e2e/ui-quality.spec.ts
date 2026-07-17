@@ -1,7 +1,23 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
+
+async function expectInsideViewport(surface: Locator, page: Page): Promise<void> {
+  await expect(surface).toBeVisible();
+  const [box, viewport] = await Promise.all([
+    surface.boundingBox(),
+    page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    })),
+  ]);
+  if (!box) throw new Error('Floating surface did not lay out.');
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+}
 
 test('restores night-red before interaction and updates browser chrome', async ({ page }) => {
   await page.addInitScript(() => {
@@ -28,6 +44,56 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
   }
   await expect
     .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
+    .toBe(true);
+});
+
+test('keeps a scrolled layer opacity popover inside a narrow viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Layers and charts', exact: true })
+    .click();
+  const panel = page.locator('#layers-panel');
+  const tabs = panel.getByLabel('Layers and charts view');
+  await tabs.getByRole('button', { name: 'Overlays' }).click();
+  const adjust = panel.getByRole('button', { name: /^Adjust .* opacity$/ }).last();
+  await adjust.scrollIntoViewIfNeeded();
+  await adjust.click();
+
+  await expectInsideViewport(page.locator('.tune-pop'), page);
+});
+
+test('constrains a long toolbar More menu on a short display', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 320 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'binnacle:pinned-actions',
+      JSON.stringify([
+        'center',
+        'follow',
+        'routes',
+        'tracks',
+        'waypoints',
+        'poi-search',
+        'measure',
+        'layers',
+        'instruments',
+        'profiles',
+      ]),
+    );
+  });
+  await page.goto('/');
+
+  await page.getByRole('button', { name: /More actions \(/ }).click();
+  const menu = page.locator('.bar-more');
+  await expectInsideViewport(menu, page);
+  await expect
+    .poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight))
     .toBe(true);
 });
 

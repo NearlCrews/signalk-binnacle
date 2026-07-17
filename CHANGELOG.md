@@ -6,6 +6,26 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0156"></a>
+
+## [0.15.6] - 2026-07-17
+
+### Changed
+
+- Anchored menus can now opt into one shared viewport-fixed positioning path that aligns with its
+  trigger, flips above or below based on available room, clamps to every screen edge, and follows
+  viewport resize and panel scrolling.
+
+### Fixed
+
+- Profile and route card overflow menus remain fully visible on narrow displays, including the first
+  card in a panel and cards reached by scrolling. Final-size measurements now ignore the opening scale
+  transition so a menu cannot grow a few pixels beyond an edge.
+- Layer opacity controls flip away from a clipped panel edge, and long bottom-toolbar More menus stay
+  within short landscape displays with their own scrolling region.
+- The mobile app-menu sheet now reserves the existing Android and Samsung system-bar clearance and
+  follows landscape safe-area insets, keeping its final controls out from under device chrome.
+
 <a id="v0155"></a>
 
 ## [0.15.5] - 2026-07-16

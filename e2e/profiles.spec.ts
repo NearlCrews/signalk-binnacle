@@ -108,6 +108,30 @@ async function installProfileServer(page: Page, document: Record<string, unknown
   );
 }
 
+test('profile overflow actions stay inside a narrow viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  const serverDocument = profileDocument() as Record<string, unknown>;
+  await installProfileServer(page, serverDocument);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Profiles', exact: true })
+    .click();
+  const panel = page.getByRole('complementary', { name: 'Profiles' });
+  await panel.getByRole('button', { name: 'More actions for Test helm' }).click();
+
+  const actions = page.getByRole('menu', { name: 'More actions for Test helm' });
+  await expect(actions).toBeVisible();
+  const box = await actions.boundingBox();
+  if (!box) throw new Error('Profile overflow menu did not lay out.');
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(360);
+  expect(box.y + box.height).toBeLessThanOrEqual(640);
+});
+
 test('profiles restore instrument order in a different browser', async ({ browser, page }) => {
   const serverDocument = profileDocument() as Record<string, unknown>;
   await installProfileServer(page, serverDocument);

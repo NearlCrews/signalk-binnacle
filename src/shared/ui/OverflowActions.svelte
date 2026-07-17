@@ -12,7 +12,7 @@ interface Props {
 }
 
 const { open, label, onToggle, onClose, children: content }: Props = $props();
-let trigger: HTMLButtonElement | undefined;
+let trigger = $state<HTMLButtonElement>();
 let surface = $state<HTMLElement | undefined>();
 
 $effect(() => {
@@ -45,6 +45,7 @@ function close(): void {
     onClose={close}
     backdropLabel={`Close ${label.toLowerCase()}`}
     surfaceClass="popover-card overflow-actions-menu"
+    anchor={trigger}
     ariaLabel={label}
     role="menu"
     bind:surfaceRef={surface}
@@ -59,14 +60,12 @@ function close(): void {
 }
 
 :global(.overflow-actions-menu) {
-  position: absolute;
-  inset-inline-end: 0;
-  inset-block-end: calc(100% + var(--space-1));
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  min-inline-size: 13rem;
+  inline-size: min(13rem, calc(100vw - 1rem));
   padding: var(--space-1);
+  transform-origin: left var(--anchored-origin-y, top);
 }
 
 :global(.overflow-actions-menu .menu-item) {

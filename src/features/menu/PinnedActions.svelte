@@ -14,6 +14,7 @@ interface Props {
 const { actions }: Props = $props();
 let compactPhone = $state(false);
 let moreOpen = $state(false);
+let moreTrigger = $state<HTMLButtonElement>();
 const split = $derived(splitBarActions(actions, compactPhone ? 2 : MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
@@ -74,6 +75,7 @@ function run(action: MenuItem, after?: () => void): void {
       <button
         type="button"
         class="btn btn-pill"
+        bind:this={moreTrigger}
         class:is-on={moreActive || moreOpen}
         aria-haspopup="true"
         aria-expanded={moreOpen}
@@ -95,6 +97,9 @@ function run(action: MenuItem, after?: () => void): void {
         surfaceClass="popover-card bar-more"
         ariaLabel="More actions"
         id="bar-more-menu"
+        anchor={moreTrigger}
+        preferredPlacement="above"
+        anchorAlign="end"
       >
         {#each split.overflow as action (action.id)}
           <button
@@ -161,15 +166,14 @@ function run(action: MenuItem, after?: () => void): void {
   text-align: center;
 }
 :global(.bar-more) {
-  position: absolute;
-  inset-block-end: calc(100% + var(--space-1));
-  inset-inline-end: 0;
-  transform-origin: bottom right;
+  transform-origin: right var(--anchored-origin-y, bottom);
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  min-inline-size: 12rem;
+  inline-size: min(12rem, calc(100vw - 1rem));
+  max-block-size: calc(100dvh - 1rem);
+  overflow-y: auto;
   padding: var(--space-1);
 }
 @media (max-width: 600px) {
