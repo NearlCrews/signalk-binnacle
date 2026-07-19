@@ -4,7 +4,7 @@ import type { UserChartSource, UserCharts } from '$entities/user-charts';
 import type { LayerListItem } from '$shared/map';
 import SourceDetail from './SourceDetail.svelte';
 
-const url = 'https://charts.example/harbor.pmtiles?access_token=secret';
+const url = 'https://charts.example/harbor.pmtiles?style=day&access_token=secret';
 const source: UserChartSource = {
   id: 'chart-1',
   name: 'Harbor',
@@ -39,10 +39,12 @@ function body(writeBlocked: boolean): string {
 }
 
 describe('SourceDetail', () => {
-  it('redacts credential values from the visible source URL', () => {
+  it('redacts every query value from the visible source URL', () => {
     const html = body(false);
 
+    expect(html).toContain('style=REDACTED');
     expect(html).toContain('access_token=REDACTED');
+    expect(html).not.toContain('style=day');
     expect(html).not.toContain('access_token=secret');
   });
 

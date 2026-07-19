@@ -21,11 +21,10 @@ export function handleOverflowMenuKeydown(
   event: KeyboardEvent,
   surface: HTMLElement | undefined,
   activeElement: Element | null = document.activeElement,
-  onTab?: (reverse: boolean) => void,
+  onTab?: (reverse: boolean) => boolean,
 ): void {
   if (event.key === 'Tab' && onTab) {
-    event.preventDefault();
-    onTab(event.shiftKey);
+    if (onTab(event.shiftKey)) event.preventDefault();
     return;
   }
   if (
@@ -62,7 +61,7 @@ export function overflowTabTarget(
       !surface?.contains(candidate) && !candidate.classList.contains('anchored-menu-backdrop'),
   );
   const triggerIndex = outsideMenu.indexOf(trigger);
-  return triggerIndex < 0 ? trigger : (outsideMenu[triggerIndex + 1] ?? trigger);
+  return triggerIndex < 0 ? trigger : outsideMenu[triggerIndex + 1];
 }
 
 export function restoreOverflowMenuFocus(
@@ -102,7 +101,7 @@ const { open, label, onToggle, onClose, children: content }: Props = $props();
 let trigger = $state<HTMLButtonElement>();
 let surface = $state<HTMLElement | undefined>();
 let wasOpen = false;
-let requestedCloseFocus: HTMLElement | undefined;
+let requestedCloseFocus: HTMLElement | null | undefined;
 
 $effect(() => {
   if (open) {
@@ -114,6 +113,7 @@ $effect(() => {
   wasOpen = false;
   const target = requestedCloseFocus;
   requestedCloseFocus = undefined;
+  if (target === null) return;
   const closingSurface = surface;
   const frame = requestAnimationFrame(() =>
     restoreOverflowMenuFocus(target, trigger, closingSurface),
@@ -121,15 +121,21 @@ $effect(() => {
   return () => cancelAnimationFrame(frame);
 });
 
-function close(focusTarget: HTMLElement | undefined = trigger): void {
+function close(focusTarget: HTMLElement | null | undefined = trigger): void {
   requestedCloseFocus = focusTarget;
   onClose();
 }
 
 function handleKeydown(event: KeyboardEvent): void {
   handleOverflowMenuKeydown(event, surface, document.activeElement, (reverse) => {
+    if (reverse) {
+      close(trigger);
+      return true;
+    }
     const candidates = [...document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
-    close(overflowTabTarget(trigger, surface, reverse, candidates));
+    const target = overflowTabTarget(trigger, surface, false, candidates);
+    close(target ?? null);
+    return target !== undefined;
   });
 }
 

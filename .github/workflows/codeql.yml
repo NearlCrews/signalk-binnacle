@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      packages: read
       security-events: write
     strategy:
       fail-fast: false

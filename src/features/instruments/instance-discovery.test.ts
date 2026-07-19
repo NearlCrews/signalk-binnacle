@@ -167,11 +167,15 @@ describe('discoverInstrumentInstances', () => {
         ]);
       }
       if (url.includes('/values?') && url.includes('provider=kip')) {
-        return jsonResponse(200, { range: {}, values: [], data: [] });
+        return jsonResponse(200, {
+          range: { from: '2026-07-01T00:00:00Z', to: '2026-07-01T01:00:00Z' },
+          values: [],
+          data: [],
+        });
       }
       if (url.includes('/values?') && url.includes('provider=signalk-questdb')) {
         return jsonResponse(200, {
-          range: {},
+          range: { from: '2026-07-01T00:00:00Z', to: '2026-07-01T01:00:00Z' },
           values: [
             { path: 'propulsion.starboard.engineLoad' },
             { path: 'propulsion.starboard.revolutions' },

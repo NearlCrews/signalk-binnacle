@@ -78,10 +78,20 @@ type LayerRegistrationResult =
   | { id: string; status: 'registered' }
   | { id: string; status: 'failed'; error: unknown };
 
+interface ActiveRegistration {
+  module: OverlayModule;
+  canceled: boolean;
+}
+
 export class LayerManager {
   #ctx: OverlayContext;
   #modules = new Map<string, OverlayModule>();
   #state = new Map<string, OverlayState>();
+  // An async add can be canceled by unregister before it finishes. Keep its identity and completion
+  // task separate from the public module map so a same-id replacement waits for the canceled add's
+  // final cleanup, and a stale catch cannot delete the replacement's state.
+  #registrations = new Map<string, ActiveRegistration>();
+  #registrationTasks = new Map<string, Promise<void>>();
   #disposed = false;
   #saved: LayerSettings;
   #onChange?: (settings: LayerSettings) => void;
@@ -149,9 +159,14 @@ export class LayerManager {
   // without restacking. register and registerAll share this and own when #applyOrder runs.
   async #addModule(module: OverlayModule): Promise<void> {
     if (this.#disposed) throw new Error('layer manager is disposed');
+    const previous = this.#registrationTasks.get(module.id);
+    if (previous) await previous.catch(() => undefined);
+    if (this.#disposed) throw new Error('layer manager is disposed');
     if (this.#modules.has(module.id)) {
       throw new Error(`duplicate overlay id: ${module.id}`);
     }
+    const registration: ActiveRegistration = { module, canceled: false };
+    this.#registrations.set(module.id, registration);
     this.#modules.set(module.id, module);
     const restored = this.#saved[module.id];
     // Coerce a restored state's shape: a legacy persisted entry missing opacity would otherwise
@@ -171,21 +186,42 @@ export class LayerManager {
       }
     }
     this.#state.set(module.id, state);
+    const task = this.#finishAdd(module, state, registration);
+    this.#registrationTasks.set(module.id, task);
+    try {
+      await task;
+    } finally {
+      if (this.#registrationTasks.get(module.id) === task) {
+        this.#registrationTasks.delete(module.id);
+      }
+    }
+  }
+
+  async #finishAdd(
+    module: OverlayModule,
+    state: OverlayState,
+    registration: ActiveRegistration,
+  ): Promise<void> {
     let removedAfterAdd = false;
     try {
       await module.add(this.#ctx);
-      // An async add can finish after the owning map has been torn down. Dispose calls remove once
-      // immediately to clean up partial work, then this second pass removes anything add installed
-      // after that first cleanup. Never apply state or theme to a disposed map.
-      if (this.#disposed) {
+      // An async add can finish after the owning map has been torn down or the id was unregistered.
+      // The first remove cleans partial work immediately; this second pass removes anything the late
+      // continuation installed. A replacement cannot start until this task settles.
+      if (
+        this.#disposed ||
+        registration.canceled ||
+        this.#registrations.get(module.id) !== registration
+      ) {
         try {
           module.remove(this.#ctx);
         } catch {
-          // The owning map may already have discarded its style. Disposal still wins over the
-          // cleanup error, and the registration must not continue into state application.
+          // The map or the first cleanup may already have removed every resource.
         }
         removedAfterAdd = true;
-        throw new Error('layer manager is disposed');
+        throw new Error(
+          this.#disposed ? 'layer manager is disposed' : 'overlay registration canceled',
+        );
       }
       module.setVisible(this.#ctx, state.visible);
       module.setOpacity?.(this.#ctx, state.opacity);
@@ -199,20 +235,32 @@ export class LayerManager {
           // to remove. The original add error is the useful failure for the caller.
         }
       }
-      this.#modules.delete(module.id);
-      this.#state.delete(module.id);
+      if (this.#registrations.get(module.id) === registration) {
+        this.#registrations.delete(module.id);
+        this.#modules.delete(module.id);
+        this.#state.delete(module.id);
+      }
       throw error;
     }
   }
 
   unregister(id: string): void {
-    const module = this.#modules.get(id);
+    const registration = this.#registrations.get(id);
+    const module = registration?.module ?? this.#modules.get(id);
     if (!module) return;
-    module.remove(this.#ctx);
-    this.#modules.delete(id);
+    if (registration) registration.canceled = true;
+    try {
+      module.remove(this.#ctx);
+    } catch (error) {
+      console.warn(`Could not remove overlay "${module.id}".`, error);
+    }
+    if (!registration || this.#registrations.get(id) === registration) {
+      this.#registrations.delete(id);
+      this.#modules.delete(id);
+      this.#state.delete(id);
+    }
     // Drop the state and order entries too, and persist, so a deleted overlay (a removed user
     // chart) does not live on in the saved snapshot forever.
-    this.#state.delete(id);
     if (this.#explicitOrder.includes(id)) {
       this.#explicitOrder = this.#explicitOrder.filter((other) => other !== id);
       this.#onOrderChange?.([...this.#explicitOrder]);
@@ -226,7 +274,9 @@ export class LayerManager {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    for (const registration of this.#registrations.values()) registration.canceled = true;
     const modules = [...this.#modules.values()].reverse();
+    this.#registrations.clear();
     this.#modules.clear();
     this.#state.clear();
     for (const module of modules) {

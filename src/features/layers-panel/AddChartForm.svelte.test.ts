@@ -11,11 +11,11 @@ function body(writeBlocked = false): string {
 }
 
 describe('AddChartForm', () => {
-  it('bounds URL input and explains credential-safe sharing before import', () => {
+  it('bounds URL input and explains query-safe sharing before import', () => {
     const html = body();
 
     expect(html).toContain(`maxlength="${MAX_USER_CHART_URL_LENGTH}"`);
-    expect(html).toMatch(/URLs with access\s+credentials stay on this device by default/);
+    expect(html).toMatch(/URLs with query values\s+stay on this device by default/);
     expect(html).toContain('sharing is reviewed before save');
   });
 
@@ -23,6 +23,6 @@ describe('AddChartForm', () => {
     const html = body(true);
 
     expect(html).not.toMatch(/<input[^>]+type="url"[^>]+disabled/);
-    expect(html).toMatch(/URLs with access\s+credentials stay on this device by default/);
+    expect(html).toMatch(/URLs with query values\s+stay on this device by default/);
   });
 });

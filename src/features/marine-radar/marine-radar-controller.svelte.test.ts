@@ -145,6 +145,34 @@ describe('createMarineRadarController', () => {
     await controller.dispose();
   });
 
+  it('clears control polling during dispose', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/radars')) {
+        return new Response(JSON.stringify([fakeRadar]), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    try {
+      await controller.start();
+      controller.setPolling(true);
+      await vi.advanceTimersByTimeAsync(0);
+      await controller.dispose();
+      const callsAfterDispose = fetchMock.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(fetchMock).toHaveBeenCalledTimes(callsAfterDispose);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the latest control write when an older request fails later', async () => {
     let resolveFirst: ((response: Response) => void) | undefined;
     let controlWrites = 0;

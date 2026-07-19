@@ -8,7 +8,7 @@ import {
   UserCharts,
   userChartNeedsServerDelete,
   userChartUrlForDisplay,
-  userChartUrlHasCredentialQuery,
+  userChartUrlHasQuery,
 } from './user-charts.svelte';
 
 // The entity reads PMTiles metadata through $shared/map; stub it so the test does not need a real
@@ -78,7 +78,7 @@ describe('isUserChartSource', () => {
     ).toBe(false);
   });
 
-  it('strips URL fragments and migrates ordinary URLs to server sharing', () => {
+  it('strips URL fragments and migrates every query-bearing URL to local-only', () => {
     expect(
       cleanUserChartSource({
         ...valid,
@@ -86,37 +86,22 @@ describe('isUserChartSource', () => {
       }),
     ).toMatchObject({
       origin: { type: 'url', url: 'https://x/y.pmtiles?style=day' },
-      shareWithServer: true,
+      shareWithServer: false,
+      serverCleanupRequired: true,
     });
+    expect(userChartUrlHasQuery('https://x/y.pmtiles?style=day')).toBe(true);
+    expect(userChartUrlHasQuery('https://x/y.pmtiles')).toBe(false);
   });
 
-  it.each([
-    'token',
-    'api_key',
-    'apiToken',
-    'Authorization',
-    'auth-key',
-    'client-secret',
-    'secret_key',
-    'X-Amz-Signature',
-    'x-goog-credential',
-  ])('detects the credential-like query name %s', (name) => {
-    expect(userChartUrlHasCredentialQuery(`https://x/y.pmtiles?${name}=sensitive`)).toBe(true);
-  });
-
-  it('does not classify ordinary query controls as credentials', () => {
-    expect(userChartUrlHasCredentialQuery('https://x/y.pmtiles?style=day&locale=en')).toBe(false);
-  });
-
-  it('redacts credential-like query values for display without hiding ordinary controls', () => {
+  it('redacts every query value for display', () => {
     expect(
       userChartUrlForDisplay(
         'https://x/y.pmtiles?style=day&access_token=secret&X-Amz-Signature=signed',
       ),
-    ).toBe('https://x/y.pmtiles?style=day&access_token=REDACTED&X-Amz-Signature=REDACTED');
+    ).toBe('https://x/y.pmtiles?style=REDACTED&access_token=REDACTED&X-Amz-Signature=REDACTED');
   });
 
-  it('migrates credential-like query URLs to local-only unless sharing was explicit', () => {
+  it('migrates query-bearing URLs to local-only unless sharing was explicit', () => {
     const migrated = cleanUserChartSource({
       ...valid,
       origin: { type: 'url', url: 'https://x/y.pmtiles?access_token=sensitive' },
@@ -207,6 +192,31 @@ describe('UserCharts stage, commit, and remove', () => {
 
     charts.commit(draft, 'Shared signed chart', true);
     expect(charts.sources[0].shareWithServer).toBe(true);
+  });
+
+  it('defaults an ordinary query URL to local-only and passes cancellation to metadata reads', async () => {
+    const controller = new AbortController();
+    const charts = new UserCharts([], () => {});
+    const draft = await charts.stageUrl(
+      'https://example.com/chart.pmtiles?style=day',
+      controller.signal,
+    );
+
+    expect(draft.source.shareWithServer).toBe(false);
+    expect(readPmtilesMeta).toHaveBeenLastCalledWith(
+      'https://example.com/chart.pmtiles?style=day',
+      controller.signal,
+    );
+  });
+
+  it('preserves caller cancellation instead of converting it to a metadata error', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('Import canceled', 'AbortError'));
+    const charts = new UserCharts([], () => {});
+
+    await expect(
+      charts.stageUrl('https://example.com/chart.pmtiles', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('falls back to the metadata name when the committed name is blank', async () => {

@@ -418,6 +418,26 @@ test('history-only engine readings stay identifiable through selection and detai
 }) => {
   let pathRequests = 0;
   let valueRequests = 0;
+  const historyWindowSeconds = 365 * 24 * 60 * 60;
+  const historyPaths = [
+    'propulsion.port.engineLoad',
+    'propulsion.port.revolutions',
+    'propulsion.port.temperature',
+  ];
+  const recordedValues = new Map([
+    ['propulsion.port.engineLoad', 0.4],
+    ['propulsion.port.revolutions', 20],
+    ['propulsion.port.temperature', 350],
+  ]);
+  let pathQuery: { duration: string | null; provider: string | null } | undefined;
+  let valueQuery:
+    | {
+        paths: string[];
+        duration: string | null;
+        resolution: string | null;
+        provider: string | null;
+      }
+    | undefined;
   await page.addInitScript(() => localStorage.clear());
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
@@ -431,29 +451,39 @@ test('history-only engine readings stay identifiable through selection and detai
   );
   await page.route(/\/signalk\/v2\/api\/history\/paths/, async (route) => {
     pathRequests += 1;
+    const params = new URL(route.request().url()).searchParams;
+    pathQuery = { duration: params.get('duration'), provider: params.get('provider') };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        'propulsion.port.revolutions',
-        'propulsion.port.temperature',
-        'propulsion.port.engineLoad',
-      ]),
+      body: JSON.stringify(historyPaths),
     });
   });
   await page.route(/\/signalk\/v2\/api\/history\/values/, async (route) => {
     valueRequests += 1;
+    const params = new URL(route.request().url()).searchParams;
+    const requestedPaths = (params.get('paths') ?? '').split(',').filter(Boolean);
+    valueQuery = {
+      paths: requestedPaths,
+      duration: params.get('duration'),
+      resolution: params.get('resolution'),
+      provider: params.get('provider'),
+    };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        range: {},
-        values: [
-          { path: 'propulsion.port.revolutions', method: 'average' },
-          { path: 'propulsion.port.temperature', method: 'average' },
-          { path: 'propulsion.port.engineLoad', method: 'average' },
+        range: {
+          from: '2026-07-01T00:00:00Z',
+          to: '2026-07-01T00:01:00Z',
+        },
+        values: requestedPaths.map((path) => ({ path, method: 'average' })),
+        data: [
+          [
+            '2026-07-01T00:00:00Z',
+            ...requestedPaths.map((path) => recordedValues.get(path) ?? null),
+          ],
         ],
-        data: [['2026-07-01T00:00:00Z', 20, 350, 0.4]],
       }),
     });
   });
@@ -464,6 +494,16 @@ test('history-only engine readings stay identifiable through selection and detai
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect.poll(() => pathRequests).toBeGreaterThan(0);
   await expect.poll(() => valueRequests).toBeGreaterThan(0);
+  expect(pathQuery).toEqual({
+    duration: String(historyWindowSeconds),
+    provider: 'signalk-questdb',
+  });
+  expect(valueQuery).toEqual({
+    paths: historyPaths,
+    duration: String(historyWindowSeconds),
+    resolution: String(historyWindowSeconds),
+    provider: 'signalk-questdb',
+  });
   const portEngine = dock.getByRole('checkbox', { name: 'RPM · Port engine' });
   await expect(dock.getByRole('checkbox', { name: 'Temperature · Port engine' })).toBeVisible();
   await expect(dock.getByRole('checkbox', { name: 'Load · Port engine' })).toBeVisible();

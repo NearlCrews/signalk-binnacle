@@ -12,6 +12,7 @@ import {
 } from './history-client';
 
 const BASE = 'http://boat';
+const RANGE = { from: '2026-06-11T00:00:00Z', to: '2026-06-12T00:00:00Z' };
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -121,7 +122,7 @@ describe('fetchHistoryValues', () => {
     stubFetch({
       ok: true,
       body: {
-        range: {},
+        range: RANGE,
         values: Array.from({ length: 101 }, (_, index) => ({ path: `path.${index}` })),
         data: [],
       },
@@ -129,6 +130,36 @@ describe('fetchHistoryValues', () => {
     await expect(
       fetchHistoryValues(BASE, undefined, { paths: ['path.0'], durationSeconds: 60 }),
     ).resolves.toBeUndefined();
+  });
+
+  it('requires a valid range and a data array while preserving an empty data result', async () => {
+    stubFetch({
+      ok: true,
+      body: { range: RANGE, values: [{ path: 'path.0' }], data: [] },
+    });
+    await expect(
+      fetchHistoryValues(BASE, undefined, { paths: ['path.0'], durationSeconds: 60 }),
+    ).resolves.toEqual({
+      from: RANGE.from,
+      to: RANGE.to,
+      columns: [{ path: 'path.0', method: '' }],
+      rows: [],
+    });
+
+    for (const body of [
+      { range: {}, values: [{ path: 'path.0' }], data: [] },
+      { range: RANGE, values: [{ path: 'path.0' }], data: {} },
+      {
+        range: { from: RANGE.to, to: RANGE.from },
+        values: [{ path: 'path.0' }],
+        data: [],
+      },
+    ]) {
+      stubFetch({ ok: true, body });
+      await expect(
+        fetchHistoryValues(BASE, undefined, { paths: ['path.0'], durationSeconds: 60 }),
+      ).resolves.toBeUndefined();
+    }
   });
 });
 
@@ -230,7 +261,7 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
     const mock = stubFetch({
       ok: true,
       body: {
-        range: {},
+        range: RANGE,
         values: [{ path: 'propulsion.other.revolutions' }, { path: 'propulsion.self.revolutions' }],
         data: [['2026-07-01T00:00:00Z', null, 20]],
       },
@@ -257,7 +288,7 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
     stubFetch({
       ok: true,
       body: {
-        range: {},
+        range: RANGE,
         values: [
           { path: 'propulsion.port.revolutions' },
           { path: 'propulsion.port.revolutions' },
@@ -289,7 +320,7 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
     const mock = stubFetch({
       ok: true,
       body: {
-        range: {},
+        range: RANGE,
         values: [{ path: 'navigation.speedOverGround' }],
         data: [['2026-07-01T00:00:00Z', 4]],
       },
@@ -320,7 +351,7 @@ describe('fetchHistoryValuesAcrossProviders', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          range: {},
+          range: RANGE,
           values: [{ path: 'p', method: 'average' }],
           data: empty ? [] : [['2026-06-12T00:00:00Z', 1]],
         }),
@@ -344,7 +375,7 @@ describe('fetchHistoryValuesAcrossProviders', () => {
     const mock = stubFetch({
       ok: true,
       body: {
-        range: {},
+        range: RANGE,
         values: [{ path: 'p', method: 'average' }],
         data: [['2026-06-12T00:00:00Z', 1]],
       },

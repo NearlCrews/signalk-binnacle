@@ -9,6 +9,6 @@ export {
   userChartNeedsServerDelete,
   userChartToSignalK,
   userChartUrlForDisplay,
-  userChartUrlHasCredentialQuery,
+  userChartUrlHasQuery,
   zoomRange,
 } from './user-charts.svelte';

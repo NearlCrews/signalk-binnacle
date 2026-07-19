@@ -127,6 +127,75 @@ describe('LayerManager', () => {
     expect(manager.layers()).toEqual([]);
   });
 
+  it('cancels an async add when its id is unregistered', async () => {
+    let finishAdd = () => {};
+    let installed = false;
+    const overlay = fakeOverlay('slow');
+    overlay.add = async () => {
+      await new Promise<void>((resolve) => {
+        finishAdd = resolve;
+      });
+      installed = true;
+    };
+    overlay.remove = () => {
+      installed = false;
+      overlay.events.push('remove');
+    };
+    const manager = new LayerManager(fakeCtx());
+    const registration = manager.register(overlay);
+    const outcome = expect(registration).rejects.toThrow('overlay registration canceled');
+    await Promise.resolve();
+
+    manager.unregister('slow');
+    finishAdd();
+
+    await outcome;
+    expect(installed).toBe(false);
+    expect(overlay.events).not.toContain('visible:true');
+    expect(overlay.events.filter((event) => event === 'remove')).toHaveLength(2);
+    expect(manager.layers()).toEqual([]);
+  });
+
+  it('waits for a canceled add to clean up before registering a same-id replacement', async () => {
+    let finishOldAdd = () => {};
+    let installedBy: 'old' | 'new' | undefined;
+    const events: string[] = [];
+    const old = fakeOverlay('chart');
+    old.add = async () => {
+      await new Promise<void>((resolve) => {
+        finishOldAdd = resolve;
+      });
+      installedBy = 'old';
+      events.push('old:add');
+    };
+    old.remove = () => {
+      if (installedBy === 'old') installedBy = undefined;
+      events.push('old:remove');
+    };
+    const replacement = fakeOverlay('chart');
+    replacement.add = () => {
+      installedBy = 'new';
+      events.push('new:add');
+    };
+    const manager = new LayerManager(fakeCtx());
+    const oldRegistration = manager.register(old);
+    const oldOutcome = expect(oldRegistration).rejects.toThrow('overlay registration canceled');
+    await Promise.resolve();
+
+    manager.unregister('chart');
+    const replacementRegistration = manager.register(replacement);
+    await Promise.resolve();
+    expect(events).not.toContain('new:add');
+
+    finishOldAdd();
+    await oldOutcome;
+    await replacementRegistration;
+
+    expect(events.lastIndexOf('old:remove')).toBeLessThan(events.indexOf('new:add'));
+    expect(installedBy).toBe('new');
+    expect(manager.layers().map((layer) => layer.id)).toEqual(['chart']);
+  });
+
   it('refuses registrations after disposal', async () => {
     const overlay = fakeOverlay('late');
     const manager = new LayerManager(fakeCtx());

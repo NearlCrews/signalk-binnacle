@@ -65,9 +65,17 @@ export function openIdbDatabase(
     if (!dbPromise) {
       const pending = new Promise<IDBDatabase>((resolve, reject) => {
         const req = factory.open(dbName, version);
+        let abandoned = false;
         req.onupgradeneeded = () => upgrade(req.result);
         req.onsuccess = () => {
           const conn = req.result;
+          // `blocked` is not terminal for IDBOpenDBRequest. The browser can later deliver success
+          // after this promise was rejected and its memo cleared. Close that abandoned connection
+          // so it cannot become an untracked upgrade blocker.
+          if (abandoned) {
+            conn.close();
+            return;
+          }
           // This connection is memoized for the session, so a later tab opening a higher version
           // would block on it indefinitely; close on versionchange so that upgrade can proceed.
           conn.onversionchange = () => conn.close();
@@ -75,7 +83,10 @@ export function openIdbDatabase(
         };
         req.onerror = () => reject(req.error);
         // A second tab holding the prior version blocks the upgrade; reject instead of hanging.
-        req.onblocked = () => reject(new Error('indexedDB open blocked'));
+        req.onblocked = () => {
+          abandoned = true;
+          reject(new Error('indexedDB open blocked'));
+        };
       });
       dbPromise = pending;
       // On failure (a transient error, or a second tab blocking the upgrade) clear the memo so the

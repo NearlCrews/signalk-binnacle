@@ -14,6 +14,21 @@ function response(status: number, bytes = 4, start = 0): Response {
   } as unknown as Response;
 }
 
+function responseWithCancelableBody(
+  status: number,
+  headers: HeadersInit = {},
+): { response: Response; cancel: ReturnType<typeof vi.fn> } {
+  const cancel = vi.fn(async () => undefined);
+  return {
+    response: {
+      status,
+      headers: new Headers(headers),
+      body: { cancel } as unknown as ReadableStream<Uint8Array>,
+    } as Response,
+    cancel,
+  };
+}
+
 describe('NoStoreSource.getBytes', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -51,21 +66,33 @@ describe('NoStoreSource.getBytes', () => {
   });
 
   it('retries a 5xx then resolves', async () => {
+    const transient = responseWithCancelableBody(503);
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(response(503))
+      .mockResolvedValueOnce(transient.response)
       .mockResolvedValueOnce(response(206));
     vi.stubGlobal('fetch', fetchMock);
     const out = await new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(transient.cancel).toHaveBeenCalledOnce();
     expect(out.data.byteLength).toBe(4);
   });
 
   it('does not retry a 4xx', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(response(404));
+    const failed = responseWithCancelableBody(404);
+    const fetchMock = vi.fn().mockResolvedValue(failed.response);
     vi.stubGlobal('fetch', fetchMock);
     await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(failed.cancel).toHaveBeenCalledOnce();
+  });
+
+  it('redacts every query value from a status error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(404)));
+
+    await expect(
+      new NoStoreSource('https://x/a.pmtiles?style=day&token=secret').getBytes(0, 4),
+    ).rejects.toThrow('https://x/a.pmtiles?style=REDACTED&token=REDACTED');
   });
 
   it('does not retry a caller abort', async () => {
@@ -124,7 +151,9 @@ describe('NoStoreSource.getBytes', () => {
   it('gives up after the retry budget', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('network'));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow();
+    await expect(
+      new NoStoreSource('https://x/a.pmtiles?style=day&token=secret').getBytes(0, 4),
+    ).rejects.toThrow('https://x/a.pmtiles?style=REDACTED&token=REDACTED');
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -183,8 +212,10 @@ describe('NoStoreSource.getBytes', () => {
   });
 
   it('rejects a partial response without matching Content-Range bounds', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(206, 4, 8)));
+    const invalid = responseWithCancelableBody(206, { 'Content-Range': 'bytes 8-11/12' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(invalid.response));
     await expect(new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4)).rejects.toThrow('outside');
+    expect(invalid.cancel).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -448,6 +479,16 @@ describe('CompanionSource.getBytes auth header', () => {
     expect((init.headers as Record<string, string>).Range).toBe('bytes=100-611');
   });
 
+  it('cancels an error response and redacts every query value', async () => {
+    const failed = responseWithCancelableBody(403);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(failed.response));
+
+    await expect(
+      new CompanionSource(`${COMPANION_URL}?style=day&token=secret`, () => 'tok').getBytes(0, 4),
+    ).rejects.toThrow(`${COMPANION_URL}?style=REDACTED&token=REDACTED`);
+    expect(failed.cancel).toHaveBeenCalledOnce();
+  });
+
   it('rejects an unsafe requested range before fetching', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -459,12 +500,15 @@ describe('CompanionSource.getBytes auth header', () => {
   });
 
   it('rejects a response whose final URL crossed origins', async () => {
-    const redirected = okResponse();
-    Object.defineProperty(redirected, 'url', { value: 'http://attacker.test/a.pmtiles' });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(redirected));
+    const redirected = responseWithCancelableBody(206, { 'Content-Range': 'bytes 0-3/4' });
+    Object.defineProperty(redirected.response, 'url', {
+      value: 'http://attacker.test/a.pmtiles',
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(redirected.response));
 
     await expect(new CompanionSource(COMPANION_URL, () => 'tok').getBytes(0, 4)).rejects.toThrow(
       'outside',
     );
+    expect(redirected.cancel).toHaveBeenCalledOnce();
   });
 });

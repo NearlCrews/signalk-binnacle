@@ -53,7 +53,9 @@ describe('coops-client', () => {
     expect(events[0].kind).toBe('high');
     expect(events[1].kind).toBe('low');
     expect(Number.isFinite(events[0].timeMs)).toBe(true);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('time_zone=gmt');
+    const request = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(request.searchParams.get('time_zone')).toBe('gmt');
+    expect(request.searchParams.get('station')).toBe('8726520');
   });
 
   it('parses prediction timestamps as UTC, not browser-local', async () => {
@@ -107,6 +109,25 @@ describe('coops-client', () => {
   it('throws on a non-ok response', async () => {
     mockFetch({}, false, 503);
     await expect(fetchTideStations()).rejects.toThrow();
+  });
+
+  it('rejects an unsafe station id before fetching', async () => {
+    const fetchMock = mockFetch({ predictions: [] });
+    await expect(fetchTideEvents('8726520&product=currents_predictions')).rejects.toThrow(
+      /station id/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized or malformed station and event arrays before iterating', async () => {
+    mockFetch({ stations: Array.from({ length: 20_001 }, () => null) });
+    await expect(fetchTideStations()).rejects.toThrow(/station response/);
+
+    mockFetch({ predictions: Array.from({ length: 201 }, () => null) });
+    await expect(fetchTideEvents('8726520')).rejects.toThrow(/tide prediction response/);
+
+    mockFetch({ current_predictions: { cp: {} } });
+    await expect(fetchCurrentEvents('ACT8451')).rejects.toThrow(/current prediction response/);
   });
 
   it('builds the UTC day key from UTC date parts', () => {

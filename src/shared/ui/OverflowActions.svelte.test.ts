@@ -66,12 +66,20 @@ describe('OverflowActions menu focus', () => {
     [true, true],
   ])('closes on Tab and reports the direction (shift=%s)', (shiftKey, expectedReverse) => {
     const event = key('Tab', shiftKey);
-    const onTab = vi.fn();
+    const onTab = vi.fn(() => true);
 
     handleOverflowMenuKeydown(event, surface([item()]), null, onTab);
 
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(onTab).toHaveBeenCalledWith(expectedReverse);
+  });
+
+  it('allows native forward Tab behavior when there is no explicit focus target', () => {
+    const event = key('Tab');
+
+    handleOverflowMenuKeydown(event, surface([item()]), null, () => false);
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
 
   it('moves forward past the trigger while Shift+Tab returns to it', () => {
@@ -88,6 +96,12 @@ describe('OverflowActions menu focus', () => {
 
     expect(overflowTabTarget(trigger, menu, false, candidates)).toBe(next);
     expect(overflowTabTarget(trigger, menu, true, candidates)).toBe(trigger);
+  });
+
+  it('does not loop forward to the trigger when it is the final focusable control', () => {
+    const trigger = { classList: { contains: () => false } } as unknown as HTMLElement;
+
+    expect(overflowTabTarget(trigger, undefined, false, [trigger])).toBeUndefined();
   });
 
   it('restores the trigger when a prop-driven close removes the focused menu', () => {

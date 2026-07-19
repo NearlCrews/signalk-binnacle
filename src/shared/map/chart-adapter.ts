@@ -37,11 +37,24 @@ function absolute(url: string, base: string): string {
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-// A pmtiles archive url for MapLibre's protocol: an already-pmtiles url stays as is, a .pmtiles
-// document gets the scheme, and anything else is not a pmtiles archive.
+function hasPmtilesPath(value: string): boolean {
+  const candidate = value.startsWith(PMTILES_SCHEME) ? value.slice(PMTILES_SCHEME.length) : value;
+  try {
+    // Use the pathname rather than the whole URL so signed and cache-busted archives retain their
+    // query string while still being recognized as PMTiles documents.
+    return new URL(candidate, 'http://binnacle.invalid').pathname
+      .toLowerCase()
+      .endsWith('.pmtiles');
+  } catch {
+    return candidate.split(/[?#]/, 1)[0].toLowerCase().endsWith('.pmtiles');
+  }
+}
+
+// A PMTiles archive URL for MapLibre's protocol: an already-pmtiles URL stays as is, a URL whose
+// pathname ends in .pmtiles gets the scheme, and anything else is not a PMTiles archive.
 function pmtilesUrl(resolved: string): string | undefined {
   if (resolved.startsWith(PMTILES_SCHEME)) return resolved;
-  if (resolved.endsWith('.pmtiles')) return `${PMTILES_SCHEME}${resolved}`;
+  if (hasPmtilesPath(resolved)) return `${PMTILES_SCHEME}${resolved}`;
   return undefined;
 }
 
@@ -207,7 +220,7 @@ function isVector(chart: SignalKChart): boolean {
   // An explicit raster format wins over the .pmtiles suffix, so a raster PMTiles is not vector.
   if (chart.format && RASTER_FORMATS.has(chart.format)) return false;
   const candidate = chart.url ?? chart.tilemapUrl ?? '';
-  return candidate.endsWith('.pmtiles');
+  return hasPmtilesPath(candidate);
 }
 
 export function chartToSpecs(chart: SignalKChart, serverBase: string): ChartSpecs {

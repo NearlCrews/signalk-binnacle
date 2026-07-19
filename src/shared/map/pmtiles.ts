@@ -22,6 +22,27 @@ interface ValidatedRange {
   expires?: string;
 }
 
+function pmtilesUrlForError(value: string): string {
+  try {
+    const parsed = new URL(value);
+    for (const name of new Set(parsed.searchParams.keys())) {
+      parsed.searchParams.set(name, 'REDACTED');
+    }
+    return parsed.toString();
+  } catch {
+    const query = value.indexOf('?');
+    return query < 0 ? value : `${value.slice(0, query)}?REDACTED`;
+  }
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cancellation is best-effort. Preserve the validation or transport error that prompted it.
+  }
+}
+
 async function readBoundedBody(response: Response, maxBytes: number): Promise<ArrayBuffer> {
   if (!response.body) return response.arrayBuffer();
   const reader = response.body.getReader();
@@ -70,7 +91,7 @@ function parseContentRange(value: string | null): { start: number; end: number; 
   return { start, end, total };
 }
 
-async function validateRangeResponse(
+async function validateRangeResponseUnchecked(
   response: Response,
   offset: number,
   length: number,
@@ -134,6 +155,21 @@ async function validateRangeResponse(
   };
 }
 
+async function validateRangeResponse(
+  response: Response,
+  offset: number,
+  length: number,
+): Promise<ValidatedRange> {
+  try {
+    return await validateRangeResponseUnchecked(response, offset, length);
+  } catch (error) {
+    // Header validation can reject before the body is read. Cancel that stream as well as streams
+    // that fail during bounded reading so the browser can promptly reuse the connection.
+    await cancelResponseBody(response);
+    throw error;
+  }
+}
+
 // A PMTiles source that fetches ranges with `cache: 'no-store'`. A large PMTiles
 // archive served with a weak ETag over range requests makes Chrome fail the HTTP
 // disk-cache write (ERR_CACHE_WRITE_FAILURE), which rejects the whole fetch and blanks
@@ -165,7 +201,10 @@ export class NoStoreSource implements Source {
         response = await fetch(this.#url, init);
       } catch (error) {
         // A network error is transient and retryable; a caller abort is not.
-        if (isAbort(error, init.signal ?? signal) || attempt >= MAX_RETRIES) throw error;
+        if (isAbort(error, init.signal ?? signal)) throw error;
+        if (attempt >= MAX_RETRIES) {
+          throw new Error(`PMTiles request failed for ${pmtilesUrlForError(this.#url)}`);
+        }
         await this.#backoff(attempt, signal);
         continue;
       }
@@ -180,10 +219,14 @@ export class NoStoreSource implements Source {
       }
       // 5xx is a transient server condition worth retrying; any other error status will not.
       if (response.status >= 500 && attempt < MAX_RETRIES) {
+        await cancelResponseBody(response);
         await this.#backoff(attempt, signal);
         continue;
       }
-      throw new Error(`PMTiles fetch failed: ${response.status} for ${this.#url}`);
+      await cancelResponseBody(response);
+      throw new Error(
+        `PMTiles fetch failed: ${response.status} for ${pmtilesUrlForError(this.#url)}`,
+      );
     }
   }
 
@@ -231,15 +274,23 @@ export class CompanionSource implements Source {
     const headers: Record<string, string> = { Range: `bytes=${offset}-${end}` };
     const token = this.#getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(
-      this.#url,
-      withTimeout({ signal, headers, credentials: 'omit', redirect: 'error' }),
-    );
+    const init = withTimeout({ signal, headers, credentials: 'omit', redirect: 'error' });
+    let response: Response;
+    try {
+      response = await fetch(this.#url, init);
+    } catch (error) {
+      if (isAbort(error, init.signal ?? signal)) throw error;
+      throw new Error(`PMTiles request failed for ${pmtilesUrlForError(this.#url)}`);
+    }
     if (response.url && new URL(response.url).origin !== new URL(this.#url).origin) {
+      await cancelResponseBody(response);
       throw new Error('PMTiles companion redirected outside the Signal K origin.');
     }
     if (response.status !== 200 && response.status !== 206) {
-      throw new Error(`PMTiles fetch failed: ${response.status} for ${this.#url}`);
+      await cancelResponseBody(response);
+      throw new Error(
+        `PMTiles fetch failed: ${response.status} for ${pmtilesUrlForError(this.#url)}`,
+      );
     }
     const validated = await validateRangeResponse(response, offset, length);
     return {
@@ -308,7 +359,10 @@ export function unregisterPmtilesArchive(httpUrl: string): void {
   if (protocol && protocol.tiles instanceof Map) {
     protocol.tiles.delete(httpUrl);
   } else if (protocol) {
-    console.warn('[pmtiles] protocol.tiles is not a Map; cannot unregister archive', httpUrl);
+    console.warn(
+      '[pmtiles] protocol.tiles is not a Map; cannot unregister archive',
+      pmtilesUrlForError(httpUrl),
+    );
   }
   void blockStore?.purgeArchive(httpUrl);
 }

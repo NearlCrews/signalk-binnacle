@@ -120,6 +120,7 @@ describe('point endpoint outcomes', () => {
     expect(warningsFetch.mock.calls[0][0]).toBe(
       'https://boat.local/signalk/v2/api/weather/warnings?lat=1&lon=2&provider=provider-id',
     );
+    expect((obsFetch.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
   });
 
   it('distinguishes success, empty, unsupported, and failure', async () => {
@@ -222,6 +223,58 @@ describe('point endpoint outcomes', () => {
         0,
         undefined,
         mockFetch(Array.from({ length: MAX_WEATHER_WARNINGS + 1 }, () => warning)),
+      ),
+    ).resolves.toEqual({ status: 'failure' });
+  });
+
+  it('keeps warnings with missing or oversized optional text by applying bounded fallbacks', async () => {
+    const result = await fetchWeatherWarningsResult(
+      ORIGIN,
+      'p',
+      0,
+      0,
+      undefined,
+      mockFetch([
+        {
+          startTime: '2026-06-03T12:00:00Z',
+          endTime: '2026-06-03T18:00:00Z',
+          details: 'x'.repeat(5_000),
+          source: undefined,
+          type: 'x'.repeat(300),
+        },
+      ]),
+    );
+    expect(result).toEqual({
+      status: 'success',
+      value: [
+        {
+          startTime: '2026-06-03T12:00:00Z',
+          endTime: '2026-06-03T18:00:00Z',
+          details: 'Details unavailable.',
+          source: 'Weather provider',
+          type: 'Weather warning',
+        },
+      ],
+    });
+  });
+
+  it('rejects an inverted warning interval', async () => {
+    await expect(
+      fetchWeatherWarningsResult(
+        ORIGIN,
+        'p',
+        0,
+        0,
+        undefined,
+        mockFetch([
+          {
+            startTime: '2026-06-03T18:00:00Z',
+            endTime: '2026-06-03T12:00:00Z',
+            details: 'Gale warning',
+            source: 'Provider',
+            type: 'gale',
+          },
+        ]),
       ),
     ).resolves.toEqual({ status: 'failure' });
   });

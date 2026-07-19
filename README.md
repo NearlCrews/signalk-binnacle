@@ -14,21 +14,27 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.15.6
+## What's new in 0.16.0
 
-Menus and popovers now stay reachable on narrow phones, short landscape displays, and installed
-tablet PWAs.
+This release hardens chart imports, provider data, navigation state, and asynchronous map lifecycle
+handling.
 
-- **Visible card actions.** Profile and route three-dot menus flip above or below their trigger and
-  clamp to every viewport edge, including while their panel scrolls.
-- **Bounded layer and toolbar controls.** Layer-opacity popovers avoid clipped panel edges, while a
-  long bottom-toolbar More menu scrolls inside the available height.
-- **Safer PWA spacing.** The mobile app-menu sheet follows reported side insets and Binnacle's Android
-  and Samsung system-bar clearance, keeping its last controls above overlaid device chrome.
-- **One positioning contract.** Anchored controls share tested collision handling instead of each
-  menu relying on hard-coded placement.
+- **Private chart URLs.** Every query-bearing URL stays device-only by default, query values are
+  redacted in displays and errors, and sending the complete URL to Signal K requires an explicit
+  choice.
+- **Resilient chart loading.** Chart discovery uses `signalk-chart-sources` 0.4.0, signed PMTiles URLs
+  work without losing their queries, canceled imports stop promptly, and stale same-id overlays
+  cannot replace the user's latest action.
+- **Bounded provider data.** Signal K history and weather, Open-Meteo, RainViewer, marine radar, NOAA
+  CO-OPS, GPX, chart metadata, profiles, symbols, and companion responses are validated and bounded
+  before use.
+- **Safer long-running sessions.** Server chart writes are ordered, radar polling stops on teardown,
+  blocked IndexedDB opens cannot leak connections, and track recording survives RTC or NTP rollback
+  without joining separate segments.
+- **Stronger release gates.** WebKit functional coverage, direct alarm tests, CodeQL, current Svelte
+  and Vite tooling, and stricter package validation now protect the published build.
 
-See the [changelog](CHANGELOG.md#v0156) and [design system](docs/design-system.md) for the full details.
+See the [changelog](CHANGELOG.md#v0160) and [design system](docs/design-system.md) for the full details.
 
 ## What it does
 
@@ -237,9 +243,10 @@ weather, and tide requests are made only when the corresponding layer or feature
 results remain usable when a provider is unavailable.
 
 User-added URL charts are fetched by the browser. Binnacle rejects URLs with embedded usernames or
-passwords, removes URL fragments, and keeps URLs with credential-like query parameters on this device
-unless you explicitly choose to share them with the Signal K server. Use HTTPS for Signal K so device
-credentials and boat data are encrypted on the local network.
+passwords, removes URL fragments, redacts every query value in displays and errors, and keeps every
+query-bearing URL on this device unless you explicitly choose to share the complete URL with the
+Signal K server. Use HTTPS for Signal K so device credentials and boat data are encrypted on the
+local network.
 
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
@@ -347,8 +354,8 @@ offline use.
 ## Development
 
 Development targets Node 22.18 or newer and npm 11.6 or newer. The recommended npm version is
-11.18.0. Exact project versions are recorded in `.node-version`, `packageManager`, and `devEngines`.
-All tools use repository-local dependencies.
+11.18.0. `.node-version` and `packageManager` record the project defaults, while `devEngines`
+enforces the supported minimums. All tools use repository-local dependencies.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-binnacle.git

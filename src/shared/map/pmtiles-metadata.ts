@@ -1,4 +1,4 @@
-import { type Header, PMTiles, TileType } from 'pmtiles';
+import { type Header, PMTiles, type Source, TileType } from 'pmtiles';
 import { hasControlCharacters, isRecord } from '$shared/lib';
 import { createArchiveSource } from './pmtiles';
 
@@ -86,16 +86,29 @@ export function mapPmtilesMeta(header: Header, metadata: unknown): PmtilesMeta {
 // retrying archive source the map tiles use, so the header and metadata range reads are cached in
 // IndexedDB: re-probing the same URL, and the first render once the chart is registered, hit the
 // cache instead of refetching. A blob: URL is local bytes, so createArchiveSource skips the cache.
-export async function readPmtilesMeta(url: string): Promise<PmtilesMeta> {
-  const pm = new PMTiles(createArchiveSource(url));
+function sourceWithSignal(source: Source, signal: AbortSignal | undefined): Source {
+  if (!signal) return source;
+  return {
+    getKey: () => source.getKey(),
+    getBytes: (offset, length, _requestSignal, etag) =>
+      source.getBytes(offset, length, signal, etag),
+  };
+}
+
+export async function readPmtilesMeta(url: string, signal?: AbortSignal): Promise<PmtilesMeta> {
+  signal?.throwIfAborted();
+  const pm = new PMTiles(sourceWithSignal(createArchiveSource(url), signal));
   const header = await pm.getHeader();
+  signal?.throwIfAborted();
   // Metadata is optional convenience data (name, vector_layers); a malformed or absent
   // metadata block must not sink an otherwise-readable archive.
   let metadata: unknown;
   try {
     metadata = await pm.getMetadata();
   } catch {
+    signal?.throwIfAborted();
     metadata = undefined;
   }
+  signal?.throwIfAborted();
   return mapPmtilesMeta(header, metadata);
 }

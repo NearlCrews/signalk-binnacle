@@ -24,7 +24,9 @@ source, and surrounding traffic before relying on it.
   importing, reversing, deleting, activating, stopping, skipping, and chart-side route actions
   require write access. Route activation and chart-position navigation require confirmation. Failed
   refreshes keep the last accepted list and offer Retry. Secondary card actions live in a labeled
-  overflow menu. Route ids, names, geometry, and collection size are bounded before use.
+  overflow menu. Route ids, names, geometry, and collection size are bounded before use. GPX imports
+  accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
+  coordinates are skipped, but their records still count toward the limits.
 - **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
   remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
   continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
@@ -40,9 +42,11 @@ source, and surrounding traffic before relying on it.
   selecting Measure again preserves current work. See [Measure](measure.md).
 - **Layers and charts** opens to chart sources first. Signal K chart discovery can be retried without
   removing the last loaded sources. A broken source cannot stop the chart from opening. URL-backed
-  PMTiles imports accept bounded HTTP or HTTPS URLs, validate metadata, persist locally, and sync to
-  secured or unsecured Signal K servers when writes are available. Overlays remain in their own tab
-  with visibility, opacity, management, and stacking controls.
+  PMTiles imports accept bounded HTTP or HTTPS URLs, validate metadata, and persist locally. Plain
+  URLs may sync when Signal K writes are available. Every query-bearing URL defaults to device-only,
+  and explicitly enabling sharing sends the complete URL to Signal K. Closing or superseding an
+  import cancels its metadata request. Overlays remain in their own tab with visibility, opacity,
+  management, and stacking controls.
 
 ## Safety
 
@@ -68,12 +72,15 @@ source, and surrounding traffic before relying on it.
 - **Forecast** opens a weather mini-map at the navigation chart view. Wind and waves start visible on
   a fresh install. Cached data is labeled with source and fetch time, stale data remains visible, and
   a manual Retry bypasses automatic backoff after a failed fetch. Conditions at the boat require a
-  fresh GPS fix. Provider warnings state when warning data is unavailable or cached.
+  fresh GPS fix. Provider point requests are time-bounded, warning intervals are validated, and
+  missing optional warning labels receive bounded fallbacks. Open-Meteo marine fields are omitted
+  when the provider's sea-snapped coordinate is too far from the requested grid cell. Provider
+  warnings state when warning data is unavailable or cached.
 - **Tides** shows the nearest useful tide station, high and low events, a tide curve, and the nearest
   current station with distance, set, rate, and next flood, ebb, or slack. The signalk-tides plugin is
   preferred when available, with NOAA CO-OPS as the US-waters fallback. Cached readings survive a
   failed refresh, and Retry bypasses the automatic cooldown. Provider station and event payloads are
-  validated and bounded.
+  validated and bounded, and CO-OPS station identifiers are constrained before URL construction.
 
 ## Instruments
 

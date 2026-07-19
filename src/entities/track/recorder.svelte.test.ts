@@ -13,6 +13,7 @@ function recorder(): TrackRecorder {
 }
 
 const defaults = { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' as const };
+const MAX_DATE_MS = 8_640_000_000_000_000;
 
 describe('decideRecord', () => {
   it('records the first fix with no gap', () => {
@@ -287,7 +288,7 @@ describe('TrackRecorder', () => {
     expect(r.stats.distanceMeters).toBe(0);
   });
 
-  it('rejects future and non-monotonic restored timestamps', async () => {
+  it('rejects non-monotonic restored timestamps without discarding a future clock epoch', async () => {
     const now = Date.now();
     const store = {
       all: async () => [
@@ -302,10 +303,160 @@ describe('TrackRecorder', () => {
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     await vi.waitFor(() => expect(r.restored).toBe(true));
-    expect(r.points.map((point) => point.t)).toEqual([100, 110]);
+    expect(r.points.map((point) => point.t)).toEqual([100, now + 60_000]);
   });
 
-  it('merges a late restore chronologically', async () => {
+  it('rejects restored timestamps at or beyond the terminal JavaScript date boundary', async () => {
+    const store = {
+      all: async () => [
+        { lat: 1, lon: 1, t: Number.MAX_VALUE, sog: 1 },
+        { lat: 1.5, lon: 1.5, t: MAX_DATE_MS, sog: 1 },
+        { lat: 2, lon: 2, t: 100, sog: 1 },
+      ],
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+    expect(r.points.map((point) => point.t)).toEqual([100]);
+  });
+
+  it('restarts and persists a usable timeline when the restored clock cannot advance', async () => {
+    const persisted: TrackPoint[] = [{ lat: 1, lon: 1, t: MAX_DATE_MS - 1, sog: 1 }];
+    const store = {
+      all: async () => persisted.map((point) => ({ ...point })),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    r.consider(2, 2, 2, 1_000_000);
+
+    expect(r.points.map((point) => point.t)).toEqual([1_000_000]);
+    await vi.waitFor(() => expect(persisted.map((point) => point.t)).toEqual([1_000_000]));
+
+    const reloaded = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await vi.waitFor(() => expect(reloaded.restored).toBe(true));
+    expect(reloaded.points.map((point) => point.t)).toEqual([1_000_000]);
+  });
+
+  it('keeps live startup fixes when a late restored clock cannot be rebased safely', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const terminalPoint: TrackPoint = { lat: 2, lon: 2, t: MAX_DATE_MS - 1, sog: 1 };
+    const persisted: TrackPoint[] = [{ ...terminalPoint }];
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 1, 1_000_000);
+    resolveAll([{ ...terminalPoint }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    r.consider(1.001, 1, 1, 1_012_000);
+
+    expect(r.points.map((point) => point.t)).toEqual([1_000_000, 1_012_000]);
+    await vi.waitFor(() =>
+      expect(persisted.map((point) => point.t)).toEqual([1_000_000, 1_012_000]),
+    );
+
+    const reloaded = new TrackRecorder(createTrackSettings(createFakeStorage()), {
+      ...store,
+      all: async () => persisted.map((point) => ({ ...point })),
+    });
+    await vi.waitFor(() => expect(reloaded.restored).toBe(true));
+    expect(reloaded.points.map((point) => point.t)).toEqual([1_000_000, 1_012_000]);
+  });
+
+  it('falls back when an unsafe rebase offset would collapse timestamps', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const terminalPoint: TrackPoint = { lat: 2, lon: 2, t: MAX_DATE_MS - 1, sog: 1 };
+    const liveT = -MAX_DATE_MS + 3;
+    const persisted: TrackPoint[] = [{ ...terminalPoint }];
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 1, liveT);
+    resolveAll([{ ...terminalPoint }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    expect(r.points.map((point) => point.t)).toEqual([liveT]);
+    await vi.waitFor(() => expect(persisted.map((point) => point.t)).toEqual([liveT]));
+
+    const reloaded = new TrackRecorder(createTrackSettings(createFakeStorage()), {
+      ...store,
+      all: async () => persisted.map((point) => ({ ...point })),
+    });
+    await vi.waitFor(() => expect(reloaded.restored).toBe(true));
+    expect(reloaded.points.map((point) => point.t)).toEqual([liveT]);
+  });
+
+  it('recovers a paused fix from a restored clock that cannot advance', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const terminalPoint: TrackPoint = { lat: 2, lon: 2, t: MAX_DATE_MS - 1, sog: 1 };
+    const persisted: TrackPoint[] = [{ ...terminalPoint }];
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.pause();
+    r.consider(1, 1, 1, 1_000_000);
+    resolveAll([{ ...terminalPoint }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+    await vi.waitFor(() => expect(persisted).toEqual([]));
+
+    r.resume();
+    r.consider(1.001, 1, 2, 1_012_000);
+
+    expect(r.points.map((point) => point.t)).toEqual([1_012_000]);
+    await vi.waitFor(() => expect(persisted.map((point) => point.t)).toEqual([1_012_000]));
+  });
+
+  it('rewrites a restored timestamp collision with the authoritative live point', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const persisted: TrackPoint[] = [{ lat: 2, lon: 2, t: 1_000_000, sog: 1 }];
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 2, 1_000_000);
+    resolveAll([{ lat: 2, lon: 2, t: 1_000_000, sog: 1 }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    expect(r.points).toEqual([{ lat: 1, lon: 1, t: 1_000_000, sog: 2 }]);
+    await vi.waitFor(() => expect(persisted).toEqual(r.points));
+  });
+
+  it('merges an earlier late restore chronologically', async () => {
     let resolveAll!: (points: TrackPoint[]) => void;
     const store = {
       all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
@@ -313,8 +464,8 @@ describe('TrackRecorder', () => {
       clear: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
-    r.consider(1, 1, 1, 5_000);
-    resolveAll([{ lat: 2, lon: 2, t: 10_000, sog: 1 }]);
+    r.consider(1, 1, 1, 10_000);
+    resolveAll([{ lat: 2, lon: 2, t: 5_000, sog: 1 }]);
     await vi.waitFor(() => expect(r.restored).toBe(true));
     expect(r.points.map((point) => point.t)).toEqual([5_000, 10_000]);
   });
@@ -326,6 +477,64 @@ describe('TrackRecorder', () => {
     r.consider(1.002, 1, 1, 62_000);
     expect(r.points.map((point) => point.t)).toEqual([100_000, 100_001, 112_001]);
     expect(r.points[1].gap).toBe(true);
+  });
+
+  it('preserves a restored future clock epoch and gaps the first corrected fix', async () => {
+    const correctedNow = Date.now();
+    const oldClockTail = correctedNow + 60_000;
+    const store = {
+      all: async () => [{ lat: 1, lon: 1, t: oldClockTail, sog: 1 }],
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    r.consider(1.001, 1, 1, correctedNow);
+    r.consider(1.002, 1, 1, correctedNow + 12_000);
+
+    expect(r.points.map((point) => point.t)).toEqual([
+      oldClockTail,
+      oldClockTail + 1,
+      oldClockTail + 12_001,
+    ]);
+    expect(r.points[1].gap).toBe(true);
+  });
+
+  it('rebases a live startup fix after a late-restored future clock epoch', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const persisted: TrackPoint[] = [];
+    const correctedNow = 1_000_000;
+    const oldClockTail = correctedNow + 60_000;
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async (point: TrackPoint) => {
+        persisted.push({ ...point });
+      },
+      clear: async () => {
+        persisted.length = 0;
+      },
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1.001, 1, 1, correctedNow);
+    resolveAll([{ lat: 1, lon: 1, t: oldClockTail, sog: 1 }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    r.consider(1.002, 1, 1, correctedNow + 12_000);
+
+    expect(r.points.map((point) => point.t)).toEqual([
+      oldClockTail,
+      oldClockTail + 1,
+      oldClockTail + 12_001,
+    ]);
+    expect(r.points[1].gap).toBe(true);
+    await vi.waitFor(() =>
+      expect(persisted.map((point) => point.t)).toEqual([
+        oldClockTail,
+        oldClockTail + 1,
+        oldClockTail + 12_001,
+      ]),
+    );
   });
 
   it('does not clear anything when the saved snapshot boundary is absent', () => {

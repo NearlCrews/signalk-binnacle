@@ -1,6 +1,6 @@
 import { type Header, TileType } from 'pmtiles';
-import { describe, expect, it } from 'vitest';
-import { mapPmtilesMeta } from './pmtiles-metadata';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mapPmtilesMeta, readPmtilesMeta } from './pmtiles-metadata';
 
 function header(over: Partial<Header> = {}): Header {
   return {
@@ -88,5 +88,30 @@ describe('mapPmtilesMeta', () => {
     expect(meta.vectorLayers).toEqual(['water']);
     expect(meta.minzoom).toBe(0);
     expect(meta.maxzoom).toBe(0);
+  });
+});
+
+describe('readPmtilesMeta', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('propagates caller cancellation into archive range reads', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const requestSignal = init?.signal;
+      if (!requestSignal) throw new Error('missing request signal');
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = readPmtilesMeta('blob:http://localhost/chart.pmtiles', controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const requestSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+
+    controller.abort(new DOMException('Import canceled', 'AbortError'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requestSignal?.aborted).toBe(true);
   });
 });

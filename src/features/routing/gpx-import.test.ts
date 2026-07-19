@@ -103,6 +103,11 @@ describe('parseGpxRoutes', () => {
     });
   });
 
+  it('bounds repeated unclosed route tags without structural regex backtracking', () => {
+    const result = parseGpxRoutesDetailed(`<gpx>${'<rte>'.repeat(20_000)}</gpx>`);
+    expect(result).toEqual({ routes: [], error: 'too-many-routes' });
+  }, 1_000);
+
   it('caps imported route and waypoint names', () => {
     const longName = 'n'.repeat(300);
     const routes = parseGpxRoutes(`<gpx><rte><name>${longName}</name>

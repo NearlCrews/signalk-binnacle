@@ -62,6 +62,28 @@ describe('discoverRadars', () => {
     expect(result.radars[0].controls.gain?.value).toBe(50);
   });
 
+  it('accepts bounded control-free string ids from the Radar API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify([
+              {
+                ...radar,
+                id: 'radar:port.1/alpha',
+                controls: { 'gain.fine': { value: 25 } },
+              },
+            ]),
+            { status: 200 },
+          ),
+      ),
+    );
+    const result = await discoverRadars('http://boat.local', undefined);
+    expect(result.radars[0].id).toBe('radar:port.1/alpha');
+    expect(result.radars[0].controls['gain.fine']?.value).toBe(25);
+  });
+
   it('reports an absent provider on a 404', async () => {
     vi.stubGlobal(
       'fetch',
@@ -242,10 +264,10 @@ describe('discoverRadars', () => {
 });
 
 describe('parseRadarControls', () => {
-  it('drops unsafe ids and non-finite values', () => {
+  it('drops control-character ids and non-finite values', () => {
     const controls = parseRadarControls({
       gain: { value: 12, autoValue: 10 },
-      'bad.id': { value: 50 },
+      'bad\u0000id': { value: 50 },
       rain: { value: Number.NaN },
     });
     expect(controls).toEqual({

@@ -20,6 +20,10 @@ Mayara is the reference provider. Binnacle does not require Mayara specifically 
 the older Radar SK transport. A stock Signal K server without a Radar API provider remains fully usable;
 the Radar menu item stays visible and explains the missing capability.
 
+Radar and control ids are bounded opaque provider strings. Punctuation, including dots, is preserved.
+Control characters are rejected, and control keys named `__proto__`, `constructor`, or `prototype` are
+not accepted.
+
 ## Setup
 
 1. Run or configure a Radar API provider and confirm the discovery endpoint returns your radar.
@@ -72,7 +76,8 @@ steps return to SI when committed. A manual write to an automatic control explic
 
 Writes are optimistic and latest-write-wins per control. The panel shows pending state and rejected
 writes, restores the exact prior value after the latest write fails, and explains when read-write access
-is required.
+is required. Dotted control ids reconcile from Signal K deltas without being mistaken for nested
+controls, and closing the radar controller stops its capability polling.
 
 ## Night-red behavior
 

@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0160"></a>
+
+## [0.16.0] - 2026-07-19
+
 ### Added
 
 - Persistent warnings now explain when Binnacle is connected to a non-local Signal K server over
@@ -15,12 +19,13 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
-- Chart discovery now uses signalk-chart-sources 0.4.0 and its current provider contract.
-- Imported chart URLs can remain device-only, credential-like query URLs default to that safer mode,
-  and sharing the full URL with Signal K requires a reviewed choice.
+- Chart discovery now uses `signalk-chart-sources` 0.4.0 and its current provider contract.
+- Every query-bearing chart URL stays on this device by default, all query values are redacted in
+  displays and errors, and sharing the full URL with Signal K requires an explicit reviewed choice.
+  Signed and cache-busted PMTiles URLs retain their query strings when requested.
 - Signal K deltas, history results, radar messages, weather data, chart metadata, symbols, profiles,
   and companion responses now use explicit structural, count, text, and byte limits.
-- Map and weather rendering now bound device-pixel scaling and wind-particle buffers, while overlay
+- Map and weather renderers now bound device-pixel scaling and wind-particle buffers, while overlay
   loading and optional panel imports can recover after transient failures.
 - Development and release checks now use npm 11.18.0, current compatible Svelte and Vite tooling,
   metadata-derived package assertions, stronger coverage floors, CodeQL analysis, grouped Dependabot
@@ -34,22 +39,42 @@ All notable changes to Binnacle are documented here. The format follows
   write failures, and Silence and Acknowledge are offered only when the server explicitly advertises
   those capabilities.
 - Course guidance now clears immediately when another station removes the active server course.
-- IndexedDB writes now wait for transaction completion, saved tracks reject duplicate, future, and
-  regressed samples, restored tracks remain chronological, and track history has a fixed capacity.
-- Route and waypoint identifiers now require exact valid values, GPX imports bound names and count all
-  encountered records, and course arrival state includes route identity and point index.
+- IndexedDB writes now wait for transaction completion, and a connection that succeeds after a
+  blocked open was abandoned closes immediately instead of becoming an untracked upgrade blocker.
+- Restored active tracks reject duplicate and regressed stored timestamps but preserve a future clock
+  epoch. After an RTC or NTP rollback, the first new fix starts a segment break on a monotonic logical
+  timeline, including when live fixes race the initial IndexedDB restore, and track history retains a
+  fixed capacity.
+- Route and waypoint identifiers now require strictly valid values, GPX imports bound names and count
+  all encountered records, and course arrival state includes route identity and point index. GPX
+  structure now uses a bounded one-pass scanner, preventing repeated unclosed tags from causing
+  structural regular-expression backtracking.
 - Profile storage survives blocked localStorage access, and remote profile merges retain local data
   instead of silently truncating an over-capacity union.
-- RainViewer metadata is fully validated, rejected radar updates retain a valid weather grid, and
-  optional weather and panel loaders retry cleanly after failures.
+- RainViewer metadata is fully validated, optional RainViewer failures no longer discard a valid
+  atmospheric or marine forecast, and optional weather and panel loaders retry cleanly after failures.
+- Signal K point-weather calls now time out, inverted warning intervals fail validation, and missing
+  or oversized optional warning text receives bounded fallback labels. Open-Meteo marine fields are
+  omitted when sea-snapped coordinates exceed a grid-scaled alignment tolerance.
+- Signal K history values now require a valid ordered range, columns, and a data array. A valid empty
+  data array remains distinct from a transport or schema failure.
 - Layer, chart, and weather teardown now prevents late asynchronous work from reinstalling overlays,
-  mutating destroyed maps, or leaking partially initialized resources.
+  mutating destroyed maps, or leaking partially initialized resources. Canceled or superseded user
+  chart imports and same-id replacements wait for stale cleanup, and per-chart server PUT and DELETE
+  intents are serialized so the final local action wins.
 - Radar discovery, controls, streams, spokes, frames, and worker traffic now reject malformed or
-  oversized input and adapt update frequency to bounded copy throughput.
-- PMTiles requests now combine caller cancellation with finite timeouts, avoid retrying aborted reads,
-  reject authority credentials, and discard URL fragments before storage or use.
+  oversized input and adapt update frequency to bounded copy throughput. Radar and control
+  identifiers preserve bounded provider punctuation while rejecting control characters and unsafe
+  object keys, dotted control ids reconcile from deltas, and disposal clears control polling.
+- PMTiles recognition now uses the URL pathname so signed query URLs work. Range requests combine
+  caller cancellation with finite timeouts, avoid retrying aborted reads, cancel rejected response
+  bodies, reject authority credentials, redact query values, and discard URL fragments before
+  storage or use.
+- NOAA CO-OPS station identifiers now reject query injection, and malformed or oversized station and
+  prediction containers fail validation before iteration.
 - Anchor, MOB, overflow-menu, and night-mode controls now expose complete accessible descriptions and
-  predictable keyboard behavior.
+  predictable keyboard behavior. Forward Tab from the last overflow-menu item exits naturally instead
+  of looping back to the trigger.
 
 <a id="v0156"></a>
 

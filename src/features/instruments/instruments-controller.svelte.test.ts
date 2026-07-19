@@ -522,7 +522,7 @@ describe('createInstrumentsController', () => {
         }
         if (url.includes('/history/values?')) {
           return jsonResponse(200, {
-            range: {},
+            range: { from: '2026-07-01T00:00:00Z', to: '2026-07-01T01:00:00Z' },
             values: [
               { path: 'propulsion.port.revolutions' },
               { path: 'propulsion.port.engineLoad' },
@@ -579,7 +579,7 @@ describe('createInstrumentsController', () => {
             ? 'propulsion.current.revolutions'
             : 'propulsion.old.revolutions';
           return jsonResponse(200, {
-            range: {},
+            range: { from: '2026-07-01T00:00:00Z', to: '2026-07-01T01:00:00Z' },
             values: [{ path }],
             data: [['2026-07-01T00:00:00Z', 20]],
           });
@@ -628,7 +628,7 @@ describe('createInstrumentsController', () => {
             ? 'propulsion.starboard.revolutions'
             : 'propulsion.port.revolutions';
           return jsonResponse(200, {
-            range: {},
+            range: { from: '2026-07-01T00:00:00Z', to: '2026-07-01T01:00:00Z' },
             values: [{ path }],
             data: [['2026-07-01T00:00:00Z', 20]],
           });

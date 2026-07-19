@@ -55,7 +55,8 @@ Before requesting publication approval, also confirm:
   intended release changes;
 - `package.json`, `package-lock.json`, the changelog heading, and the proposed `v<version>` tag agree;
 - the npm registry and GitHub releases still show the prior version as latest;
-- the release commit is on `main`, and CI and SignalK Webapp CI pass on that commit; and
+- the release commit is on `main`, and CI, SignalK Webapp CI, and CodeQL pass on that exact commit;
+- the CodeQL alerts API reports zero open alerts after the successful workflow; and
 - the generated service worker, manifest, app icons, screenshots, and production entry assets exist.
 
 ## Cut the release after approval
@@ -63,7 +64,8 @@ Before requesting publication approval, also confirm:
 Only after the owner explicitly approves publication:
 
 1. Commit and push the prepared changes to `main` if that has not already been authorized and done.
-2. Wait for CI and SignalK Webapp CI to pass on the exact release commit.
+2. Wait for CI, SignalK Webapp CI, and CodeQL to pass on the exact release commit, then confirm the
+   CodeQL alerts API reports zero open alerts.
 3. Create and push the `v<version>` tag on that commit.
 4. Publish a GitHub release from the matching changelog section. Publishing the release triggers the
    npm workflow. Creating a draft does not publish npm.

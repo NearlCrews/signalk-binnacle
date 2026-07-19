@@ -47,14 +47,20 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'rect',
   'compound',
 ]);
+const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function safeId(value: unknown): string | undefined {
+function safeStringId(value: unknown): string | undefined {
   return typeof value === 'string' &&
     value.length > 0 &&
     value.length <= MAX_RADAR_ID_LENGTH &&
-    /^[A-Za-z0-9_-]+$/.test(value)
+    !hasControlCharacters(value)
     ? value
     : undefined;
+}
+
+function safeControlId(value: unknown): string | undefined {
+  const id = safeStringId(value);
+  return id && !MAGIC_OBJECT_KEYS.has(id) ? id : undefined;
 }
 
 function boundedText(value: unknown, maxLength = MAX_RADAR_TEXT_LENGTH): string | undefined {
@@ -97,7 +103,7 @@ export function parseRadarControls(raw: unknown): RadarControls {
   if (entries.length > MAX_RADAR_CONTROLS) return {};
   const out = Object.create(null) as RadarControls;
   for (const [rawId, entry] of entries) {
-    const id = safeId(rawId);
+    const id = safeControlId(rawId);
     if (!id) continue;
     if (isRecord(entry)) {
       const value = entry.value;
@@ -151,7 +157,7 @@ function parseLegend(raw: unknown): LegendEntry[] | undefined {
 
 function toRadarInfo(raw: unknown): RadarInfo | undefined {
   if (!isRecord(raw)) return undefined;
-  const id = safeId(raw.id);
+  const id = safeStringId(raw.id);
   if (!id) return undefined;
   if (
     !isFiniteNumber(raw.spokesPerRevolution) ||
@@ -233,13 +239,13 @@ const AUTO_MANUAL_MODES: Array<'auto' | 'manual'> = ['auto', 'manual'];
 // Mayara serves: flat dataType/minValue/maxValue/stepValue/units, descriptions, and a
 // flattened hasAuto/isReadOnly.
 function toControlDefinition(id: string, raw: unknown): ControlDefinition | undefined {
-  const safeControlId = safeId(id);
-  if (!safeControlId || !isRecord(raw) || typeof raw.dataType !== 'string') return undefined;
+  const idOnWire = safeControlId(id);
+  if (!idOnWire || !isRecord(raw) || typeof raw.dataType !== 'string') return undefined;
   if (!CONTROL_TYPES.has(raw.dataType)) return undefined;
   const type = raw.dataType as ControlDefinition['type'];
   return {
-    id: safeControlId,
-    name: boundedText(raw.name) ?? safeControlId,
+    id: idOnWire,
+    name: boundedText(raw.name) ?? idOnWire,
     description: boundedText(raw.description, 1_024),
     type,
     range: parseRange(raw),
@@ -290,7 +296,7 @@ function parseValuesV5(values: unknown): ControlDefinition['values'] {
 // serves this dialect; the object-keyed mayara dialect is handled above. Both feed the same widgets.
 function toControlDefinitionV5(raw: unknown): ControlDefinition | undefined {
   if (!isRecord(raw) || typeof raw.type !== 'string') return undefined;
-  const id = safeId(raw.id);
+  const id = safeControlId(raw.id);
   if (!id) return undefined;
   if (!CONTROL_TYPES.has(raw.type)) return undefined;
   const modes = Array.isArray(raw.modes)

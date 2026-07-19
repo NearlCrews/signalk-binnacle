@@ -37,39 +37,20 @@ function normalizeUserChartUrl(value: string): string | undefined {
   }
 }
 
-const CREDENTIAL_QUERY_NAMES = new Set([
-  'apiaccesskey',
-  'auth',
-  'authorization',
-  'xamzsecuritytoken',
-]);
-const CREDENTIAL_QUERY_NAME_PATTERN =
-  /^(?:(?:api|access|auth|bearer|client|private|public|session|secret|security|signing|xamz|xgoog))?(?:token|key|password|passwd|pwd|secret|signature|sig|credential|credentials)$/;
-
-function isCredentialQueryName(name: string): boolean {
-  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return CREDENTIAL_QUERY_NAMES.has(normalized) || CREDENTIAL_QUERY_NAME_PATTERN.test(normalized);
-}
-
-// Signed archive URLs remain supported, but their query parameter names make server sharing an
-// explicit opt-in. Values are never inspected or surfaced because they may themselves be secrets.
-export function userChartUrlHasCredentialQuery(value: string): boolean {
+export function userChartUrlHasQuery(value: string): boolean {
   try {
-    const parsed = new URL(value);
-    for (const name of parsed.searchParams.keys()) {
-      if (isCredentialQueryName(name)) return true;
-    }
+    return new URL(value).searchParams.size > 0;
   } catch {
-    // Invalid URLs are rejected by normalization. They do not need a separate privacy result.
+    return false;
   }
-  return false;
 }
 
 export function userChartUrlForDisplay(value: string): string {
   try {
     const parsed = new URL(value);
-    const sensitiveNames = new Set([...parsed.searchParams.keys()].filter(isCredentialQueryName));
-    for (const name of sensitiveNames) parsed.searchParams.set(name, 'REDACTED');
+    for (const name of new Set(parsed.searchParams.keys())) {
+      parsed.searchParams.set(name, 'REDACTED');
+    }
     return parsed.toString();
   } catch {
     return value;
@@ -102,10 +83,10 @@ export interface UserChartSource {
   name: string;
   kind: 'vector' | 'raster';
   origin: { type: 'url'; url: string };
-  // Older descriptors omit this field. They migrate to shared for ordinary URLs and local-only for
-  // URLs with credential-like query names, preserving discovery without disclosing likely secrets.
+  // Older descriptors omit this field. Plain URLs migrate to shared, while every query-bearing URL
+  // migrates to local-only because query values may contain private controls or credentials.
   shareWithServer?: boolean;
-  // Signed descriptors migrated from releases that automatically synced every URL can retain an
+  // Query-bearing descriptors migrated from releases that automatically synced every URL retain an
   // opaque server-cleanup obligation without sending their URL again.
   serverCleanupRequired?: boolean;
   bounds?: Bbox4;
@@ -162,8 +143,7 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
       seen.add(cleaned);
     }
   }
-  const inferredLocalOnly =
-    value.shareWithServer === undefined && userChartUrlHasCredentialQuery(url);
+  const inferredLocalOnly = value.shareWithServer === undefined && userChartUrlHasQuery(url);
   return {
     id,
     name,
@@ -172,7 +152,7 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
     shareWithServer:
       value.shareWithServer === true || value.shareWithServer === false
         ? value.shareWithServer
-        : !userChartUrlHasCredentialQuery(url),
+        : !userChartUrlHasQuery(url),
     ...(value.serverCleanupRequired === true || inferredLocalOnly
       ? { serverCleanupRequired: true }
       : {}),
@@ -188,7 +168,7 @@ export function isUserChartSource(value: unknown): value is UserChartSource {
 }
 
 export function shouldShareUserChart(source: UserChartSource): boolean {
-  return source.shareWithServer ?? !userChartUrlHasCredentialQuery(source.origin.url);
+  return source.shareWithServer ?? !userChartUrlHasQuery(source.origin.url);
 }
 
 export function userChartNeedsServerDelete(source: UserChartSource): boolean {
@@ -277,14 +257,16 @@ export class UserCharts {
 
   // Read a remote archive's metadata and stage it as a draft, without saving, so the user can review
   // and rename it before committing.
-  async stageUrl(url: string): Promise<DraftChart> {
+  async stageUrl(url: string, signal?: AbortSignal): Promise<DraftChart> {
     const safeUrl = normalizeUserChartUrl(url);
     if (!safeUrl) throw new Error('Enter a valid HTTP or HTTPS PMTiles URL.');
+    signal?.throwIfAborted();
     let meta: Awaited<ReturnType<typeof readPmtilesMeta>>;
     try {
-      meta = await readPmtilesMeta(safeUrl);
+      meta = await readPmtilesMeta(safeUrl, signal);
     } catch {
-      // PMTiles transport errors can include the full request URL. Keep signed query values out of
+      signal?.throwIfAborted();
+      // PMTiles transport errors can include the full request URL. Keep query values out of
       // the panel error surface while preserving the specific validation message above.
       throw new Error('Could not read chart metadata.');
     }
@@ -294,7 +276,7 @@ export class UserCharts {
         name: (meta.name ?? nameFromUrl(safeUrl)).slice(0, MAX_USER_CHART_NAME_LENGTH),
         kind: meta.kind,
         origin: { type: 'url', url: safeUrl },
-        shareWithServer: !userChartUrlHasCredentialQuery(safeUrl),
+        shareWithServer: !userChartUrlHasQuery(safeUrl),
         bounds: meta.bounds,
         minzoom: meta.minzoom,
         maxzoom: meta.maxzoom,

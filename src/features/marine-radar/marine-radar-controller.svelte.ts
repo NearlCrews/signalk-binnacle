@@ -127,12 +127,12 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   }
 
   function setPolling(active: boolean): void {
-    if (disposed) return;
     if (!active) {
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = undefined;
       return;
     }
+    if (disposed) return;
     const radar = store.selected;
     if (radar) void hydrateControls(radar.id, selectionGeneration);
     if (!pollTimer) {
@@ -337,13 +337,20 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   // Apply standard Signal K control deltas such as radars.navico.controls.gain. The delta value can
   // be a complete control object or a scalar value from providers that flatten the leaf.
   function applyControlDelta(path: string, value: unknown): void {
-    const match = /^radars\.([^.]+)\.controls\.([^.]+)$/.exec(path);
-    if (!match || match[1] !== store.selectedId) return;
-    const entry: RadarControlEntry | undefined =
+    const selectedId = store.selectedId;
+    if (!selectedId) return;
+    const prefix = `radars.${selectedId}.controls.`;
+    if (!path.startsWith(prefix)) return;
+    const controlId = path.slice(prefix.length);
+    if (!controlId) return;
+    const controlValue =
       typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
         ? { value }
-        : parseRadarControls({ [match[2]]: value })[match[2]];
-    if (entry) store.reconcile({ [match[2]]: entry }, pendingIds());
+        : value;
+    const entry: RadarControlEntry | undefined = parseRadarControls({ [controlId]: controlValue })[
+      controlId
+    ];
+    if (entry) store.reconcile({ [controlId]: entry }, pendingIds());
     void syncStreamLifecycle();
   }
 

@@ -73,6 +73,21 @@ describe('chartToSpecs', () => {
     );
   });
 
+  it('preserves a signed query when resolving a vector PMTiles URL', () => {
+    const chart: SignalKChart = {
+      identifier: 'signed-vector',
+      name: 'Signed vector',
+      type: 'tileJSON',
+      url: 'https://charts.example/coast.pmtiles?X-Amz-Signature=secret&style=day',
+    };
+    const { sources } = chartToSpecs(chart, base);
+    const sourceId = Object.keys(sources)[0];
+
+    expect((sources[sourceId] as { url: string }).url).toBe(
+      'pmtiles://https://charts.example/coast.pmtiles?X-Amz-Signature=secret&style=day',
+    );
+  });
+
   it('builds a vector source and themed draw layers for an mvt pmtiles tilelayer', () => {
     const chart: SignalKChart = {
       identifier: 'Michigan-pmtiles',
@@ -186,5 +201,22 @@ describe('chartToSpecs', () => {
       'pmtiles://http://pi.local/signalk/pmtiles/bathy.pmtiles',
     );
     expect(layers[0].type).toBe('raster');
+  });
+
+  it('preserves a query when resolving a raster PMTiles URL', () => {
+    const chart: SignalKChart = {
+      identifier: 'signed-raster',
+      name: 'Signed raster',
+      type: 'tilelayer',
+      format: 'png',
+      url: 'https://charts.example/bathy.PMTILES?token=secret',
+    };
+    const { sources } = chartToSpecs(chart, base);
+    const sourceId = Object.keys(sources)[0];
+
+    expect(sources[sourceId].type).toBe('raster');
+    expect((sources[sourceId] as { url: string }).url).toBe(
+      'pmtiles://https://charts.example/bathy.PMTILES?token=secret',
+    );
   });
 });

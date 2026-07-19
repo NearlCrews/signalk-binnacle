@@ -54,8 +54,9 @@ matching `Content-Range` and body length. A short response is accepted only at t
 archive. A strong ETag, or a `Last-Modified` value paired with the declared archive size, also verifies
 that cached blocks belong to the same archive version. When a successful header read has no validator,
 Binnacle purges older blocks before storing the fresh header so bytes from different archive versions
-cannot be mixed. The service worker does not cache Signal K API responses or PMTiles range responses;
-PMTiles blocks use their dedicated IndexedDB store.
+cannot be mixed. Failed, rejected, retried, and superseded PMTiles reads cancel their response streams,
+and query values are redacted from status and error text. The service worker does not cache Signal K
+API responses or PMTiles range responses; PMTiles blocks use their dedicated IndexedDB store.
 
 ## Save an area
 

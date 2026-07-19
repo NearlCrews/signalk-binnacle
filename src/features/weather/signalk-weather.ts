@@ -6,6 +6,7 @@ import {
   MINUTE_MS,
   nearestBy,
   readBoundedJson,
+  withTimeout,
 } from '$shared/lib';
 import { authInit } from '$shared/signalk';
 import type { WeatherReadout } from './weather-readout';
@@ -21,6 +22,9 @@ const MAX_PROVIDER_NAME_LENGTH = 256;
 const MAX_WEATHER_TEXT_LENGTH = 2_048;
 const MAX_WARNING_DETAILS_LENGTH = 4_096;
 const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const WARNING_TYPE_FALLBACK = 'Weather warning';
+const WARNING_DETAILS_FALLBACK = 'Details unavailable.';
+const WARNING_SOURCE_FALLBACK = 'Weather provider';
 
 export const NEAR_NOW_MS = 90 * MINUTE_MS;
 export const OBSERVATION_STALE_MS = HOUR_MS;
@@ -247,13 +251,14 @@ function cleanWarning(value: unknown): WeatherWarning | undefined {
   if (!isRecord(value)) return undefined;
   const startTime = boundedText(value.startTime, 64);
   const endTime = boundedText(value.endTime, 64);
-  const details = boundedText(value.details, MAX_WARNING_DETAILS_LENGTH);
-  const source = boundedText(value.source, MAX_PROVIDER_NAME_LENGTH);
-  const type = boundedText(value.type, MAX_PROVIDER_NAME_LENGTH);
-  if (!startTime || !endTime || !details || !source || !type) return undefined;
-  if (!Number.isFinite(Date.parse(startTime)) || !Number.isFinite(Date.parse(endTime))) {
-    return undefined;
-  }
+  if (!startTime || !endTime) return undefined;
+  const startMs = Date.parse(startTime);
+  const endMs = Date.parse(endTime);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return undefined;
+  const details =
+    boundedText(value.details, MAX_WARNING_DETAILS_LENGTH) ?? WARNING_DETAILS_FALLBACK;
+  const source = boundedText(value.source, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_SOURCE_FALLBACK;
+  const type = boundedText(value.type, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_TYPE_FALLBACK;
   return { startTime, endTime, details, source, type };
 }
 
@@ -336,7 +341,7 @@ async function fetchOutcome<T>(
   fetchFn: Fetch,
 ): Promise<EndpointOutcome<T>> {
   try {
-    const response = await fetchFn(url, authInit(token));
+    const response = await fetchFn(url, withTimeout(authInit(token)));
     if (response.status === 404 || response.status === 405 || response.status === 501) {
       return { status: 'unsupported' };
     }

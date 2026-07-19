@@ -6,7 +6,7 @@ import {
   MAX_USER_CHART_URL_LENGTH,
   shouldShareUserChart,
   type UserCharts,
-  userChartUrlHasCredentialQuery,
+  userChartUrlHasQuery,
 } from '$entities/user-charts';
 import { TextField } from '$shared/ui';
 import ChartSpecList from './ChartSpecList.svelte';
@@ -28,15 +28,25 @@ let error = $state<string | undefined>();
 let draft = $state<DraftChart | undefined>();
 let draftName = $state('');
 let shareWithServer = $state(true);
+let destroyed = false;
+let stageGeneration = 0;
+let stageController: AbortController | undefined;
+
+$effect(() => {
+  return () => {
+    destroyed = true;
+    stageGeneration += 1;
+    stageController?.abort(new DOMException('Chart source canceled', 'AbortError'));
+    stageController = undefined;
+  };
+});
 
 $effect(() => {
   if (writeBlocked) shareWithServer = false;
 });
 
 const staged = $derived(draft !== undefined);
-const draftHasCredential = $derived(
-  draft ? userChartUrlHasCredentialQuery(draft.source.origin.url) : false,
-);
+const draftHasQuery = $derived(draft ? userChartUrlHasQuery(draft.source.origin.url) : false);
 
 const draftRows = $derived.by(() => {
   if (!draft) return [];
@@ -52,15 +62,21 @@ const draftRows = $derived.by(() => {
 });
 
 // The busy and error envelope shared by the read-to-stage and the commit steps.
-async function withBusy(action: () => Promise<void>, fallbackError: string): Promise<void> {
+async function withBusy(
+  action: () => Promise<void>,
+  fallbackError: string,
+  isCurrent: () => boolean = () => !destroyed,
+): Promise<void> {
+  if (!isCurrent()) return;
   busy = true;
   error = undefined;
   try {
     await action();
   } catch (e) {
+    if (!isCurrent()) return;
     error = e instanceof Error ? e.message : fallbackError;
   } finally {
-    busy = false;
+    if (isCurrent()) busy = false;
   }
 }
 
@@ -69,12 +85,24 @@ function stageUrl(): void {
   if (busy) return;
   const trimmed = url.trim();
   if (!trimmed) return;
-  void withBusy(async () => {
-    const next = await userCharts.stageUrl(trimmed);
-    draft = next;
-    draftName = next.source.name;
-    shareWithServer = !writeBlocked && shouldShareUserChart(next.source);
-  }, 'Could not read that chart.');
+  const generation = ++stageGeneration;
+  stageController?.abort(new DOMException('Chart source superseded', 'AbortError'));
+  const controller = new AbortController();
+  stageController = controller;
+  const isCurrent = () => !destroyed && generation === stageGeneration;
+  void withBusy(
+    async () => {
+      const next = await userCharts.stageUrl(trimmed, controller.signal);
+      if (!isCurrent()) return;
+      draft = next;
+      draftName = next.source.name;
+      shareWithServer = !writeBlocked && shouldShareUserChart(next.source);
+    },
+    'Could not read that chart.',
+    isCurrent,
+  ).finally(() => {
+    if (stageController === controller) stageController = undefined;
+  });
 }
 
 function resetDraft(): void {
@@ -124,11 +152,11 @@ function cancelDraft(): void {
           This chart will stay on this device. Read/write Signal K access is needed to share it with
           the server.
         </p>
-      {:else if draftHasCredential}
+      {:else if draftHasQuery}
         <p class:alert-note={shareWithServer} class="privacy-note" role="status">
           {shareWithServer
-            ? 'Sharing sends the full URL, including its access credential, to the Signal K server.'
-            : 'This URL appears to contain an access credential. It stays on this device unless you choose to share the full URL.'}
+            ? 'Sharing sends the full URL, including every query value, to the Signal K server.'
+            : 'This URL contains query values that may be private. It stays on this device unless you choose to share the full URL.'}
         </p>
       {:else}
         <p class="hint">
@@ -182,8 +210,8 @@ function cancelDraft(): void {
         </button>
       </div>
       <p class="hint">
-        Use this for a chart archive hosted outside your Signal K server. URLs with access
-        credentials stay on this device by default, and sharing is reviewed before save.
+        Use this for a chart archive hosted outside your Signal K server. URLs with query values
+        stay on this device by default, and sharing is reviewed before save.
       </p>
     </div>
   {/if}

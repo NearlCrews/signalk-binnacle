@@ -95,6 +95,37 @@ describe('openIdbDatabase', () => {
     await open();
     expect(attempts()).toBe(2);
   });
+
+  it('closes a connection that succeeds after its blocked promise was rejected', async () => {
+    let request!: FakeRequest;
+    let closes = 0;
+    const database = {
+      close: () => {
+        closes += 1;
+      },
+    } as unknown as IDBDatabase;
+    const factory = {
+      open: () => {
+        request = {
+          onupgradeneeded: null,
+          onsuccess: null,
+          onerror: null,
+          onblocked: null,
+          result: database,
+          error: null,
+        };
+        return request as unknown as IDBOpenDBRequest;
+      },
+    } as unknown as IDBFactory;
+    const open = openIdbDatabase(factory, 'binnacle-test', 1, () => {});
+
+    const pending = open();
+    request.onblocked?.();
+    await expect(pending).rejects.toThrow('indexedDB open blocked');
+    request.onsuccess?.();
+
+    expect(closes).toBe(1);
+  });
 });
 
 describe('openIdbStore', () => {

@@ -28,8 +28,13 @@ The panel explains when the current grant is read-only.
   in meters per second.
 - The default thinning policy records after 10 seconds and 10 meters of movement. Stored profile
   settings are accepted only within 1 to 3,600 seconds and 1 to 10,000 meters.
-- Stale, malformed, out-of-order, and out-of-range fixes are ignored. Negative speed is normalized to
-  zero.
+- Stale, malformed, repeated-timestamp, and out-of-range fixes are ignored. Negative speed is
+  normalized to zero.
+- Restored history rejects duplicate or regressed stored timestamps but preserves a future clock
+  epoch. If RTC or NTP correction moves the live clock backward, the first corrected fix starts a
+  new segment on a monotonic logical timeline. Fixes that arrive while IndexedDB is still restoring
+  are rebased and persisted after that restored tail instead of being suppressed until wall time
+  catches up.
 - A pause, a fix outage longer than five minutes, or an implausible GPS jump starts a new segment. No
   distance or chart line crosses that gap.
 - IndexedDB is the active-track store. If it is unavailable or fails, recording continues in memory,

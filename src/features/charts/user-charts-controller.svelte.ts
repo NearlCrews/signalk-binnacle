@@ -25,35 +25,87 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   const { origin, userCharts } = deps;
 
   let userChartRegistrar = $state<UserChartRegistrar | undefined>();
-  const registeredUserCharts = new Set<string>();
+  const mountedUserCharts = new Map<string, UserChartRegistrar>();
+  const overlayAttempts = new Map<string, { token: symbol; registrar: UserChartRegistrar }>();
+  type ServerIntent =
+    | { type: 'put'; source: UserChartSource; token: string | undefined }
+    | { type: 'delete'; token: string | undefined };
+  const pendingServerIntents = new Map<string, ServerIntent>();
+  const serverWorkers = new Map<string, Promise<void>>();
   let lastSyncKey: string | undefined;
 
   function reportSyncError(message: string): void {
     deps.onSyncError?.(message);
   }
 
+  function queueServerIntent(id: string, intent: ServerIntent): void {
+    pendingServerIntents.set(id, intent);
+    ensureServerWorker(id);
+  }
+
+  function ensureServerWorker(id: string): void {
+    if (serverWorkers.has(id)) return;
+    const worker = drainServerIntents(id).finally(() => {
+      if (serverWorkers.get(id) === worker) serverWorkers.delete(id);
+      // An intent can arrive after the drain loop observes an empty queue but before this finally
+      // callback runs. Start a successor instead of leaving that last intent stranded.
+      if (pendingServerIntents.has(id)) ensureServerWorker(id);
+    });
+    serverWorkers.set(id, worker);
+  }
+
+  async function drainServerIntents(id: string): Promise<void> {
+    for (;;) {
+      const intent = pendingServerIntents.get(id);
+      if (!intent) return;
+      pendingServerIntents.delete(id);
+      let ok = false;
+      try {
+        ok =
+          intent.type === 'put'
+            ? await putChart(
+                origin,
+                intent.token,
+                userChartToSignalK(intent.source, intent.source.origin.url),
+              )
+            : await deleteChart(origin, intent.token, id);
+      } catch {
+        ok = false;
+      }
+      // A newer intent already supersedes this outcome. Only the final desired server state should
+      // surface an error, and the loop still executes that newer PUT or DELETE in order.
+      if (!ok && !pendingServerIntents.has(id)) {
+        if (intent.type === 'put') {
+          console.warn(`User chart "${id}" did not sync to the server.`);
+          reportSyncError('Chart saved on this device, but server sync failed.');
+        } else {
+          reportSyncError('Chart removed on this device, but its server copy may remain.');
+        }
+      }
+    }
+  }
+
   function syncUrlChartToServer(source: UserChartSource): void {
     if (!shouldShareUserChart(source) || !deps.canWrite()) return;
-    const token = deps.getToken();
-    void putChart(origin, token, userChartToSignalK(source, source.origin.url)).then((ok) => {
-      if (!ok) {
-        console.warn(`User chart "${source.id}" did not sync to the server.`);
-        reportSyncError('Chart saved on this device, but server sync failed.');
-      }
-    });
+    queueServerIntent(source.id, { type: 'put', source, token: deps.getToken() });
   }
 
   function dropRegisteredUserChart(id: string): void {
-    if (!registeredUserCharts.delete(id)) return;
-    userChartRegistrar?.unregister(id);
+    const attempt = overlayAttempts.get(id);
+    if (attempt) {
+      overlayAttempts.delete(id);
+      attempt.registrar.unregister(id);
+    }
+    const mountedRegistrar = mountedUserCharts.get(id);
+    if (mountedRegistrar) {
+      mountedUserCharts.delete(id);
+      if (mountedRegistrar !== attempt?.registrar) mountedRegistrar.unregister(id);
+    }
   }
 
   function deleteUserChartFromServer(source: UserChartSource): void {
     if (!userChartNeedsServerDelete(source) || !deps.canWrite()) return;
-    const token = deps.getToken();
-    void deleteChart(origin, token, source.id).then((ok) => {
-      if (!ok) reportSyncError('Chart removed on this device, but its server copy may remain.');
-    });
+    queueServerIntent(source.id, { type: 'delete', token: deps.getToken() });
   }
 
   // Re-sync restored URL charts when access resolves or credentials change. `untrack` keeps source
@@ -71,38 +123,66 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   async function addUserChartOverlay(
     source: UserChartSource,
     registrar: UserChartRegistrar,
+    token: symbol,
   ): Promise<void> {
     try {
       await registrar.register(userChartToSignalK(source, source.origin.url));
     } catch (error) {
+      if (overlayAttempts.get(source.id)?.token !== token) return;
+      overlayAttempts.delete(source.id);
       console.error('User chart overlay failed to register', error);
-      registeredUserCharts.delete(source.id);
       return;
     }
-    if (!registeredUserCharts.has(source.id)) {
-      registrar.unregister(source.id);
+    const current = overlayAttempts.get(source.id);
+    if (
+      current?.token !== token ||
+      current.registrar !== registrar ||
+      userChartRegistrar !== registrar
+    ) {
+      // Do not let a stale completion unregister a newer same-id attempt on the same manager. The
+      // manager's cancellation token cleans the old add before starting its replacement. With no
+      // replacement, unregister remains the final safety cleanup.
+      const newerUsesRegistrar =
+        overlayAttempts.get(source.id)?.registrar === registrar ||
+        mountedUserCharts.get(source.id) === registrar;
+      if (!newerUsesRegistrar) registrar.unregister(source.id);
       return;
     }
+    overlayAttempts.delete(source.id);
+    mountedUserCharts.set(source.id, registrar);
     deps.recolorMap(deps.getTheme());
   }
 
-  $effect(() => {
+  function reconcileUserChartOverlays(): void {
     const registrar = userChartRegistrar;
     const sources = userCharts.sources;
     if (!registrar) return;
     const wanted = new Set(sources.map((source) => source.id));
-    for (const id of registeredUserCharts) {
+    for (const id of new Set([...mountedUserCharts.keys(), ...overlayAttempts.keys()])) {
       if (!wanted.has(id)) dropRegisteredUserChart(id);
     }
     for (const source of sources) {
-      if (registeredUserCharts.has(source.id)) continue;
-      registeredUserCharts.add(source.id);
-      void addUserChartOverlay(source, registrar);
+      if (mountedUserCharts.has(source.id) || overlayAttempts.has(source.id)) continue;
+      const token = Symbol(source.id);
+      overlayAttempts.set(source.id, { token, registrar });
+      void addUserChartOverlay(source, registrar, token);
     }
+  }
+
+  $effect(() => {
+    reconcileUserChartOverlays();
   });
 
   function onUserChartsReady(registrar: UserChartRegistrar): void {
+    if (userChartRegistrar && userChartRegistrar !== registrar) {
+      for (const id of new Set([...mountedUserCharts.keys(), ...overlayAttempts.keys()])) {
+        dropRegisteredUserChart(id);
+      }
+    }
     userChartRegistrar = registrar;
+    // The registrar arrives from the map after startup. Reconcile immediately as well as reactively
+    // so registration does not depend on a later state invalidation.
+    reconcileUserChartOverlays();
   }
 
   return {

@@ -341,13 +341,37 @@ describe('mergeMarine', () => {
     };
     const marine = {
       source: {
-        coordinates: new Array(4).fill({ latitude: 0, longitude: 2 }),
+        coordinates: new Array(4).fill({ latitude: 0, longitude: 0.45 }),
         times: [1000],
       },
       waveHeight: [[2, 2, 2, 2]],
     } as MarineFields;
     const merged = mergeMarine(grid, marine);
     expect(merged.waveHeight).toBeUndefined();
-    expect(merged.marineAlignment?.maxDisplacementM).toBeGreaterThan(200_000);
+    expect(merged.marineAlignment?.maxDisplacementM).toBeGreaterThan(40_000);
+    expect(merged.marineAlignment?.maxDisplacementM).toBeLessThan(100_000);
+  });
+
+  it('tightens the alignment tolerance for a fine grid while allowing nearby sea snapping', () => {
+    const coordinates = new Array(4).fill({ latitude: 0, longitude: 0 });
+    const grid = {
+      lats: [0, 0.02],
+      lons: [0, 0.02],
+      times: [1000],
+      windU: [[0, 0, 0, 0]],
+      windV: [[0, 0, 0, 0]],
+      atmosphericSource: { coordinates, times: [1000] },
+    };
+    const marine = {
+      source: {
+        coordinates: new Array(4).fill({ latitude: 0, longitude: 0.005 }),
+        times: [1000],
+      },
+      waveHeight: [[2, 2, 2, 2]],
+    } as MarineFields;
+    expect(mergeMarine(grid, marine).waveHeight).toEqual(marine.waveHeight);
+
+    marine.source.coordinates = new Array(4).fill({ latitude: 0, longitude: 0.015 });
+    expect(mergeMarine(grid, marine).waveHeight).toBeUndefined();
   });
 });

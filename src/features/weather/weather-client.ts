@@ -13,6 +13,9 @@ const MAX_LOCS_PER_REQUEST = 200;
 export const MAX_FORECAST_CELLS = 600;
 export const MAX_FORECAST_DAYS = 7;
 export const MAX_FORECAST_HOURLY_STEPS = 24 * MAX_FORECAST_DAYS;
+const MIN_MARINE_ALIGNMENT_TOLERANCE_M = 1_000;
+const MAX_MARINE_ALIGNMENT_TOLERANCE_M = 20_000;
+const MARINE_ALIGNMENT_CELL_FRACTION = 0.25;
 // Longer than the shared default: a 200-location batch is a real server-side workload, but a
 // half-open boat link must still not hang the loader for the browser's minutes-long default.
 const FETCH_TIMEOUT_MS = 15_000;
@@ -395,12 +398,13 @@ export function mergeMarine(grid: WeatherGrid, marine: MarineFields): WeatherGri
   if (marine.waveHeight.length !== grid.windU.length) return grid;
   const maxTimeMismatchMs = maxTimeMismatch(grid.times, marine.source.times);
   const maxDisplacementM = maxSourceDisplacement(grid.atmosphericSource, marine.source);
+  const displacementToleranceM = marineAlignmentToleranceM(grid);
   const qualified = {
     ...grid,
     marineSource: marine.source,
     marineAlignment: { maxDisplacementM, maxTimeMismatchMs },
   };
-  if (maxTimeMismatchMs !== 0 || maxDisplacementM > 100_000) return qualified;
+  if (maxTimeMismatchMs !== 0 || maxDisplacementM > displacementToleranceM) return qualified;
   return {
     ...qualified,
     waveHeight: marine.waveHeight,
@@ -418,6 +422,37 @@ export function mergeMarine(grid: WeatherGrid, marine: MarineFields): WeatherGri
     oceanCurrentDirection: marine.oceanCurrentDirection,
     seaSurfaceTemperature: marine.seaSurfaceTemperature,
   };
+}
+
+// Marine cells are snapped to sea while atmospheric cells may be snapped to land. Permit a small
+// fraction of the requested grid spacing so ordinary coastal snapping still works, but cap the
+// tolerance well below the old 100 km ceiling so distant offshore values are never painted locally.
+function marineAlignmentToleranceM(grid: WeatherGrid): number {
+  const centerLat = (grid.lats[0] + grid.lats[grid.lats.length - 1]) / 2;
+  const centerLon = (grid.lons[0] + grid.lons[grid.lons.length - 1]) / 2;
+  const spacings: number[] = [];
+  for (let index = 1; index < grid.lats.length; index += 1) {
+    spacings.push(
+      distanceMeters(
+        { latitude: grid.lats[index - 1], longitude: centerLon },
+        { latitude: grid.lats[index], longitude: centerLon },
+      ),
+    );
+  }
+  for (let index = 1; index < grid.lons.length; index += 1) {
+    spacings.push(
+      distanceMeters(
+        { latitude: centerLat, longitude: grid.lons[index - 1] },
+        { latitude: centerLat, longitude: grid.lons[index] },
+      ),
+    );
+  }
+  const spacing = Math.min(...spacings.filter((value) => Number.isFinite(value) && value > 0));
+  if (!Number.isFinite(spacing)) return MIN_MARINE_ALIGNMENT_TOLERANCE_M;
+  return Math.min(
+    MAX_MARINE_ALIGNMENT_TOLERANCE_M,
+    Math.max(MIN_MARINE_ALIGNMENT_TOLERANCE_M, spacing * MARINE_ALIGNMENT_CELL_FRACTION),
+  );
 }
 
 function maxTimeMismatch(a: number[], b: number[]): number {

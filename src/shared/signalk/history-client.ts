@@ -36,6 +36,24 @@ function safeHistoryPath(path: unknown): path is string {
   );
 }
 
+function safeHistoryTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 64 &&
+    !hasControlCharacters(value) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function parseHistoryRange(value: unknown): { from: string; to: string } | undefined {
+  if (!isRecord(value) || !safeHistoryTimestamp(value.from) || !safeHistoryTimestamp(value.to)) {
+    return undefined;
+  }
+  if (Date.parse(value.from) > Date.parse(value.to)) return undefined;
+  return { from: value.from, to: value.to };
+}
+
 function safeQueryPaths(paths: readonly string[]): boolean {
   return (
     paths.length > 0 && paths.length <= MAX_HISTORY_QUERY_PATHS && paths.every(safeHistoryPath)
@@ -135,21 +153,24 @@ export async function fetchHistoryValues(
   }
   if (query.provider) params.set('provider', query.provider);
   const body = await fetchJsonOrUndefined<{
-    range?: { from?: unknown; to?: unknown };
+    range?: unknown;
     values?: unknown;
     data?: unknown;
   }>(
     `${base}${HISTORY_API}/values?${params}`,
     authInit(token, query.signal ? { signal: query.signal } : undefined),
   );
-  // A non-ok or malformed body is undefined (unreachable); a 2xx with columns but missing or empty
-  // data is a real empty result (provider present, no samples in the window), kept distinct so the
-  // panel can say "no data" rather than treating it as a transport failure.
+  const range = parseHistoryRange(body?.range);
+  // A non-ok or malformed body is undefined (unreachable); a 2xx with a valid range, columns, and an
+  // empty data array is a real empty result (provider present, no samples in the window), kept
+  // distinct so the panel can say "no data" rather than treating it as a transport failure.
   if (
     !body ||
+    !range ||
     !Array.isArray(body.values) ||
     body.values.length > MAX_HISTORY_QUERY_PATHS ||
-    (Array.isArray(body.data) && body.data.length > MAX_HISTORY_ROWS)
+    !Array.isArray(body.data) ||
+    body.data.length > MAX_HISTORY_ROWS
   ) {
     return undefined;
   }
@@ -167,8 +188,7 @@ export async function fetchHistoryValues(
     }
     columns.push({ path, method: typeof method === 'string' ? method : '' });
   }
-  const data = Array.isArray(body.data) ? body.data : [];
-  const rows = data.filter(
+  const rows = body.data.filter(
     (row): row is [string, ...unknown[]] =>
       Array.isArray(row) &&
       typeof row[0] === 'string' &&
@@ -177,8 +197,8 @@ export async function fetchHistoryValues(
       row.length === columns.length + 1,
   );
   return {
-    from: typeof body.range?.from === 'string' ? body.range.from : '',
-    to: typeof body.range?.to === 'string' ? body.range.to : '',
+    from: range.from,
+    to: range.to,
     columns,
     rows,
   };

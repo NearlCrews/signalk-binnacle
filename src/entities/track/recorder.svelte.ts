@@ -9,6 +9,12 @@ import type { TrackPoint, TrackStats } from './track-types';
 const GAP_MS = 5 * MINUTE_MS;
 const JUMP_MIN_METERS = 500;
 const JUMP_MAX_METERS_PER_SECOND = 80;
+const MAX_DATE_MS = 8_640_000_000_000_000;
+
+function isTrackTimestamp(value: unknown): value is number {
+  // Keep track times strictly inside the JavaScript Date range and exact at millisecond precision.
+  return typeof value === 'number' && Number.isSafeInteger(value) && Math.abs(value) < MAX_DATE_MS;
+}
 
 export interface RecordDecision {
   append: boolean;
@@ -112,7 +118,6 @@ export class TrackRecorder {
 
   async #restore(): Promise<void> {
     const lifecycle = this.#lifecycle;
-    const restoreStartedAt = Date.now();
     let saved: TrackPoint[];
     try {
       saved = await this.#store.all();
@@ -133,8 +138,7 @@ export class TrackRecorder {
         !Number.isFinite(p.lon) ||
         p.lon < -180 ||
         p.lon > 180 ||
-        !Number.isFinite(p.t) ||
-        p.t > restoreStartedAt ||
+        !isTrackTimestamp(p.t) ||
         p.t <= lastRestoredT
       ) {
         return [];
@@ -143,32 +147,95 @@ export class TrackRecorder {
       const sog = Number.isFinite(p.sog) && p.sog >= 0 ? p.sog : 0;
       return [{ lat: p.lat, lon: p.lon, t: p.t, sog, gap: p.gap === true ? true : undefined }];
     });
-    // Fixes can land before the store read completes. Merge them chronologically, preferring the
-    // live copy on an equal timestamp, so a late restore cannot create a regressed timeline or
-    // duplicate a write that became visible to the read transaction.
-    const liveByTime = new Map(this.points.map((point) => [point.t, point]));
-    const merged = [...restored.filter((point) => !liveByTime.has(point.t)), ...this.points].sort(
-      (a, b) => a.t - b.t,
-    );
-    // A live fix recorded while IndexedDB was opening initially looked like the first point and had
-    // no gap. Once restored history is inserted before it, reclassify that junction using the same
-    // outage and implausible-jump policy as a normal incoming fix so app downtime is never bridged.
-    this.points = merged.map((point, index) => {
-      const previous = merged[index - 1];
-      if (!previous || point.gap || !liveByTime.has(point.t) || liveByTime.has(previous.t)) {
-        return point;
+    // Fixes can land before the store read completes. Prefer the live copy on an equal timestamp so
+    // a read transaction that observed an early append cannot duplicate that point.
+    const live = this.points;
+    const liveByTime = new Map(live.map((point) => [point.t, point]));
+    const restoredOnly = restored.filter((point) => !liveByTime.has(point.t));
+    const restoredTail = restoredOnly[restoredOnly.length - 1];
+    const firstLive = live[0];
+    if (restoredTail && firstLive && firstLive.t <= restoredTail.t) {
+      // The persisted clock epoch is ahead of fixes captured while IndexedDB opened. Rebase those
+      // live fixes after the restored tail, preserve their elapsed time, and rewrite the append log
+      // so a reload cannot resurrect their obsolete raw timestamps.
+      const offset = restoredTail.t + 1 - firstLive.t;
+      const rebasedLive = live.map((point, index) => ({
+        ...point,
+        t: point.t + offset,
+        ...(index === 0 ? { gap: true } : {}),
+      }));
+      const rebasedLastFixT = this.#lastFixT === undefined ? undefined : this.#lastFixT + offset;
+      const rebasedLastFix = this.#lastFix
+        ? { ...this.#lastFix, t: this.#lastFix.t + offset }
+        : undefined;
+      let previousRebasedT = restoredTail.t;
+      const rebasedPointsAreOrdered = rebasedLive.every((point) => {
+        if (!isTrackTimestamp(point.t) || point.t <= previousRebasedT) return false;
+        previousRebasedT = point.t;
+        return true;
+      });
+      const canRebase =
+        Number.isSafeInteger(offset) &&
+        offset > 0 &&
+        rebasedPointsAreOrdered &&
+        (rebasedLastFixT === undefined || isTrackTimestamp(rebasedLastFixT)) &&
+        (rebasedLastFix === undefined || isTrackTimestamp(rebasedLastFix.t));
+      if (canRebase) {
+        this.points = [...restoredOnly, ...rebasedLive];
+        this.#lastFixT = rebasedLastFixT;
+        this.#lastFix = rebasedLastFix;
+        this.#queueRewrite(this.points);
+      } else {
+        // A terminal persisted epoch cannot make room for the live session. The live points are
+        // authoritative, so retain them and replace the unusable persisted timeline.
+        this.points = live;
+        this.#queueRewrite(live);
       }
-      const decision = decideRecord(
-        previous,
-        undefined,
-        point.lat,
-        point.lon,
-        point.t,
-        this.#settings.value,
-        previous,
-      );
-      return decision.gap ? { ...point, gap: true } : point;
-    });
+    } else {
+      const merged = [...restoredOnly, ...live].sort((a, b) => a.t - b.t);
+      // A live fix recorded while IndexedDB was opening initially looked like the first point and
+      // had no gap. Once restored history is inserted before it, reclassify that junction using the
+      // normal outage and implausible-jump policy so app downtime is never bridged.
+      this.points = merged.map((point, index) => {
+        const previous = merged[index - 1];
+        if (!previous || point.gap || !liveByTime.has(point.t) || liveByTime.has(previous.t)) {
+          return point;
+        }
+        const decision = decideRecord(
+          previous,
+          undefined,
+          point.lat,
+          point.lon,
+          point.t,
+          this.#settings.value,
+          previous,
+        );
+        return decision.gap ? { ...point, gap: true } : point;
+      });
+      if (live.length > 0 || restored.length !== saved.length) {
+        // Live points, repaired junctions, timestamp collisions, and filtered corrupt records must
+        // replace the append log so a later reload sees the same authoritative merged timeline.
+        this.#queueRewrite(this.points);
+      }
+    }
+    if (
+      restoredTail &&
+      live.length === 0 &&
+      this.#lastFixT !== undefined &&
+      this.#lastFixT <= restoredTail.t
+    ) {
+      // A fix can arrive while recording is paused, leaving no live point to rebase. Keep its raw
+      // observation for elapsed-time tracking, but move its logical time beyond restored history.
+      const successor = restoredTail.t + 1;
+      if (isTrackTimestamp(successor)) {
+        this.#lastFixT = successor;
+        if (this.#lastFix) this.#lastFix = { ...this.#lastFix, t: successor };
+      } else {
+        // A paused live fix is more useful than persisted history whose clock cannot advance.
+        this.points = [];
+        this.#queueRewrite([]);
+      }
+    }
     if (this.#lastFixT === undefined) {
       const last = this.points[this.points.length - 1];
       if (last) {
@@ -192,7 +259,7 @@ export class TrackRecorder {
       lon < -180 ||
       lon > 180 ||
       !Number.isFinite(sog) ||
-      !Number.isFinite(now)
+      !isTrackTimestamp(now)
     ) {
       return;
     }
@@ -201,12 +268,26 @@ export class TrackRecorder {
     const lastObservedT = this.#lastObservedT;
     const lastFix = this.#lastFix;
     if (lastObservedT !== undefined && now === lastObservedT) return;
-    const clockRegressed = lastObservedT !== undefined && now < lastObservedT;
+    // A persisted tail can be ahead of the current wall clock after RTC or NTP correction while the
+    // app was closed. Treat the first new fix as a clock regression too, keeping the stored logical
+    // timeline monotonic and starting a visible segment break instead of suppressing fixes until the
+    // wall clock catches up.
+    const clockRegressed =
+      (lastObservedT !== undefined && now < lastObservedT) ||
+      (lastObservedT === undefined && lastFixT !== undefined && now <= lastFixT);
     let logicalNow = now;
-    if (lastObservedT !== undefined && lastFixT !== undefined) {
+    if (lastObservedT === undefined && lastFixT !== undefined && now <= lastFixT) {
+      logicalNow = lastFixT + 1;
+    } else if (lastObservedT !== undefined && lastFixT !== undefined) {
       const elapsed = now - lastObservedT;
       if (elapsed < 0) logicalNow = lastFixT + 1;
       else if (now <= lastFixT) logicalNow = lastFixT + elapsed;
+    }
+    if (!isTrackTimestamp(logicalNow)) {
+      // The stored epoch is too close to the terminal Date boundary to advance. Start a valid
+      // timeline at the current raw fix and rewrite persistence so the recovery survives reload.
+      this.#restartTimeline(lat, lon, sog, now);
+      return;
     }
     this.#lastObservedT = now;
     this.#lastFixT = logicalNow;
@@ -275,7 +356,31 @@ export class TrackRecorder {
     const seeded = computeStats(this.points);
     this.#distanceMeters = seeded.distanceMeters;
     this.#maxSog = seeded.maxSog;
-    const snapshot = this.points.map((point) => ({ ...point }));
+    this.#queueRewrite(this.points);
+  }
+
+  #restartTimeline(lat: number, lon: number, sog: number, now: number): void {
+    this.#lifecycle += 1;
+    this.points = [];
+    this.#distanceMeters = 0;
+    this.#maxSog = 0;
+    this.#lastObservedT = now;
+    this.#lastFixT = now;
+    this.#lastFix = { lat, lon, t: now };
+    if (this.paused) {
+      this.#resumeGap = true;
+      this.#queueRewrite([]);
+      return;
+    }
+    const point: TrackPoint = { lat, lon, t: now, sog };
+    this.points = [point];
+    this.#maxSog = sog;
+    this.#resumeGap = false;
+    this.#queueRewrite([point]);
+  }
+
+  #queueRewrite(points: readonly TrackPoint[]): void {
+    const snapshot = points.map((point) => ({ ...point }));
     this.#writeQueue = this.#writeQueue.then(async () => {
       await this.#store.clear();
       for (const point of snapshot) await this.#store.append(point);
