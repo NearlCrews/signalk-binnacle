@@ -87,17 +87,16 @@ const alertTime = (n: ActiveNotification): string | undefined => {
   return Number.isFinite(ms) ? formatClockTime(ms) : undefined;
 };
 
-// The v2 silence and acknowledge routes address the server-assigned id, so both need one;
-// the server also refuses to silence an emergency, and a state change resets both flags.
+// The v2 silence and acknowledge routes need a server-assigned id and an explicit capability flag.
 const canSilence = (n: ActiveNotification): boolean =>
   n.id !== undefined &&
   n.state !== 'emergency' &&
-  n.canSilence !== false &&
+  n.canSilence === true &&
   !n.silenced &&
   !n.acknowledged;
 
 const canAcknowledge = (n: ActiveNotification): boolean =>
-  n.id !== undefined && n.canAcknowledge !== false && !n.acknowledged;
+  n.id !== undefined && n.canAcknowledge === true && !n.acknowledged;
 
 // Stored values are SI (meters, seconds); the editor works in nautical miles and minutes and
 // converts at this edge. UnitField commits on blur, so typing is not reformatted mid-keystroke,

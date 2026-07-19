@@ -20,6 +20,7 @@ export {
 } from './history-client';
 export type { MetaZone, PathMeta, ZoneState } from './meta';
 export { fetchPathMeta, zoneStateFor } from './meta';
+export type { NotificationActionResult } from './notifications-client';
 export {
   acknowledgeNotification,
   postMobNotification,

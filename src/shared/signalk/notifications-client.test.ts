@@ -103,23 +103,29 @@ describe('resolveNotification', () => {
 describe('silence and acknowledge', () => {
   it('posts to the per-id action routes', async () => {
     const mock = stubFetch({ ok: true });
-    await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe(true);
-    await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe(true);
+    await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe('completed');
+    await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe('completed');
     const urls = mock.mock.calls.map((call) => call[0]);
     expect(urls).toEqual([`${API}/${ID}/silence`, `${API}/${ID}/acknowledge`]);
     expect(mock.mock.calls.every((call) => call[1]?.method === 'POST')).toBe(true);
   });
 
-  it('returns false on a transport failure instead of throwing', async () => {
+  it('reports a transport failure instead of throwing', async () => {
     stubFetch('reject');
-    await expect(silenceNotification(BASE, undefined, ID)).resolves.toBe(false);
-    await expect(acknowledgeNotification(BASE, undefined, ID)).resolves.toBe(false);
+    await expect(silenceNotification(BASE, undefined, ID)).resolves.toBe('failed');
+    await expect(acknowledgeNotification(BASE, undefined, ID)).resolves.toBe('failed');
   });
 
-  it('returns false when the server refuses the action, the path the panel error surfaces', async () => {
+  it('reports an access refusal as a failure', async () => {
     stubFetch({ ok: false, status: 403 });
-    await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe(false);
-    await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe(false);
+    await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe('failed');
+    await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe('failed');
+  });
+
+  it('reports disabled server-side notification management as unsupported', async () => {
+    stubFetch({ ok: false, status: 501 });
+    await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
+    await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
   });
 });
 

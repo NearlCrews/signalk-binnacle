@@ -9,7 +9,7 @@ import { CollisionNotifier } from '$features/lookout';
 import type { CompanionStatus } from '$features/prewarm';
 import type { TimeTravelStore } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
-import type { SignalKClient } from '$shared/signalk';
+import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
 import {
   acknowledgeNotification,
   postNotification,
@@ -98,8 +98,11 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
         'Collision alarm muted on this device. Server write access is needed to silence other stations.';
       return;
     }
-    void silenceNotification(deps.origin, deps.token(), collisionAlertId).then((ok) => {
-      if (!ok) {
+    void silenceNotification(deps.origin, deps.token(), collisionAlertId).then((result) => {
+      if (result === 'unsupported') {
+        alarmActionError =
+          'Collision alarm muted on this device. This server delegates notification management, so boat-wide silence is unavailable.';
+      } else if (result === 'failed') {
         alarmActionError = 'Could not silence the alert boat-wide. Other stations may still sound.';
       }
     });
@@ -107,7 +110,12 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
 
   function runNotificationAction(
     notification: ActiveNotification,
-    action: (base: string, token: string | undefined, id: string) => Promise<boolean>,
+    action: (
+      base: string,
+      token: string | undefined,
+      id: string,
+    ) => Promise<NotificationActionResult>,
+    unsupportedMessage: string,
     failMessage: string,
   ): void {
     if (!notification.id) return;
@@ -116,8 +124,9 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
       alarmActionError = 'Server write access is needed for this alarm action.';
       return;
     }
-    void action(deps.origin, deps.token(), notification.id).then((ok) => {
-      if (!ok) alarmActionError = failMessage;
+    void action(deps.origin, deps.token(), notification.id).then((result) => {
+      if (result === 'unsupported') alarmActionError = unsupportedMessage;
+      else if (result === 'failed') alarmActionError = failMessage;
     });
   }
 
@@ -125,6 +134,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     runNotificationAction(
       notification,
       silenceNotification,
+      'This server delegates notification management, so silence is unavailable.',
       'Could not silence the alert. Check the connection and access.',
     );
   }
@@ -133,6 +143,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     runNotificationAction(
       notification,
       acknowledgeNotification,
+      'This server delegates notification management, so acknowledgment is unavailable.',
       'Could not acknowledge the alert. Check the connection and access.',
     );
   }

@@ -177,6 +177,38 @@ describe('CourseGuidance', () => {
     expect(g.isLastPoint).toBe(false);
   });
 
+  it('deactivates when the server streams an external course clear', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 }, name: 'B' },
+      'navigation.course.previousPoint': { position: { latitude: 0, longitude: 0 } },
+      'navigation.course.activeRoute': {
+        href: '/resources/routes/r',
+        pointIndex: 0,
+        pointTotal: 2,
+      },
+      'navigation.course.calcValues.distance': 1852,
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.active).toBe(true);
+    expect(g.activeRouteSnapshot).toBeDefined();
+
+    applySelf(
+      store,
+      {
+        'navigation.course.nextPoint': null,
+        'navigation.course.previousPoint': null,
+        'navigation.course.activeRoute': null,
+        'navigation.course.calcValues.distance': null,
+      },
+      2,
+    );
+
+    expect(g.active).toBe(false);
+    expect(g.activeRouteSnapshot).toBeUndefined();
+    expect(g.source).toBe('computed');
+  });
+
   it('skips seeding when a stream delta wrote a course cell after the hydrate began', () => {
     const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
     const g = new CourseGuidance(store, new OwnVessel(store));

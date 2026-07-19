@@ -4,7 +4,7 @@ import type { NotificationState } from './types';
 // Thin client for the server's v2 Notifications API (signalk-server src/api/notifications).
 // Raising returns a server-assigned uuid notification id; silence, acknowledge, update, and
 // clear all address that id (the routes uuid-validate it, so there is no path-addressed form).
-// Every call degrades to undefined or false on any failure and never throws.
+// Every call degrades to a bounded failure result and never throws.
 const NOTIFICATIONS_API = '/signalk/v2/api/notifications';
 
 export interface RaiseNotificationOptions {
@@ -54,6 +54,13 @@ export async function postNotification(
 // it, so a fresh raise is right); or the transport failed (a fresh raise would also fail, and
 // could orphan a still-raised duplicate once the link returns).
 export type UpdateNotificationResult = 'updated' | 'missing' | 'failed';
+export type NotificationActionResult = 'completed' | 'unsupported' | 'failed';
+
+function notificationActionResult(response: Response | undefined): NotificationActionResult {
+  if (!response) return 'failed';
+  if (response.ok) return 'completed';
+  return response.status === 501 ? 'unsupported' : 'failed';
+}
 
 // Update a raised notification in place (state, message, or data). A state change resets the
 // server-side silenced and acknowledged flags.
@@ -86,18 +93,18 @@ export async function silenceNotification(
   base: string,
   token: string | undefined,
   id: string,
-): Promise<boolean> {
+): Promise<NotificationActionResult> {
   const response = await postJson(`${base}${NOTIFICATIONS_API}/${id}/silence`, token);
-  return response?.ok ?? false;
+  return notificationActionResult(response);
 }
 
 export async function acknowledgeNotification(
   base: string,
   token: string | undefined,
   id: string,
-): Promise<boolean> {
+): Promise<NotificationActionResult> {
   const response = await postJson(`${base}${NOTIFICATIONS_API}/${id}/acknowledge`, token);
-  return response?.ok ?? false;
+  return notificationActionResult(response);
 }
 
 // The server's MOB convenience route: raises an emergency at notifications.mob.{id} with
