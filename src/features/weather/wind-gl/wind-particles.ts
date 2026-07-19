@@ -3,6 +3,32 @@ import type { WindField } from '../wind-field-texture';
 import { createBuffer, createProgram, createTexture, type GL } from './gl-resources';
 import { DRAW_FRAG, DRAW_VERT, QUAD_VERT, SCREEN_FRAG, UPDATE_FRAG } from './shaders';
 
+// Two RGBA trail textures are kept for the fade ping-pong. Cap each at one megapixel and 2048 on
+// either axis so a high-density or ultrawide display cannot turn the weather overlay into an
+// unbounded GPU allocation. WebGL 1 implementations support textures at least this large.
+export const MAX_WIND_TRAIL_PIXELS = 1024 * 1024;
+const MAX_WIND_TRAIL_DIMENSION = 2048;
+
+export interface WindTrailSize {
+  width: number;
+  height: number;
+}
+
+export function windTrailSize(widthPx: number, heightPx: number): WindTrailSize {
+  const width = Number.isFinite(widthPx) ? Math.max(1, Math.floor(widthPx)) : 1;
+  const height = Number.isFinite(heightPx) ? Math.max(1, Math.floor(heightPx)) : 1;
+  const scale = Math.min(
+    1,
+    MAX_WIND_TRAIL_DIMENSION / width,
+    MAX_WIND_TRAIL_DIMENSION / height,
+    Math.sqrt(MAX_WIND_TRAIL_PIXELS / (width * height)),
+  );
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale)),
+  };
+}
+
 export interface WindParticlesOptions {
   // Square root of the particle count; particleCount = resolution^2. ~90 gives ~8100 on a Pi GPU.
   resolution?: number;
@@ -207,16 +233,19 @@ export class WindParticles {
     this.#opacity = opacity;
   }
 
-  #resizeScreen(w: number, h: number): void {
-    if (w === this.#screenW && h === this.#screenH) return;
+  #resizeScreen(viewportWidth: number, viewportHeight: number): WindTrailSize {
+    const { width, height } = windTrailSize(viewportWidth, viewportHeight);
+    if (width === this.#screenW && height === this.#screenH) return { width, height };
     const gl = this.#gl;
     gl.deleteTexture(this.#screen0);
     gl.deleteTexture(this.#screen1);
-    const empty = new Uint8Array(w * h * 4);
-    this.#screen0 = createTexture(gl, gl.NEAREST, empty, w, h);
-    this.#screen1 = createTexture(gl, gl.NEAREST, empty, w, h);
-    this.#screenW = w;
-    this.#screenH = h;
+    // A null upload allocates zero-initialized texture storage without also creating a same-sized
+    // CPU buffer for each resize.
+    this.#screen0 = createTexture(gl, gl.NEAREST, null, width, height);
+    this.#screen1 = createTexture(gl, gl.NEAREST, null, width, height);
+    this.#screenW = width;
+    this.#screenH = height;
+    return { width, height };
   }
 
   #bindAttribute(buffer: WebGLBuffer, location: number, size: number): void {
@@ -300,7 +329,7 @@ export class WindParticles {
   render(matrix: Float32Array | number[], widthPx: number, heightPx: number, moved: boolean): void {
     const gl = this.#gl;
     if (!this.#wind || !this.#field) return;
-    this.#resizeScreen(widthPx, heightPx);
+    const trailSize = this.#resizeScreen(widthPx, heightPx);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
 
@@ -308,7 +337,9 @@ export class WindParticles {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.#framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.#screen1, 0);
-    gl.viewport(0, 0, widthPx, heightPx);
+    // The map matrix produces clip-space coordinates, so drawing into a proportionally scaled
+    // viewport and stretching the finished texture back to the full viewport preserves alignment.
+    gl.viewport(0, 0, trailSize.width, trailSize.height);
     if (moved) {
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -321,6 +352,7 @@ export class WindParticles {
     gl.disable(gl.BLEND);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, widthPx, heightPx);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.#drawTexture(this.#screen1, this.#opacity);
@@ -341,6 +373,7 @@ export class WindParticles {
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, widthPx, heightPx);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.#drawTexture(this.#screen0, this.#opacity);

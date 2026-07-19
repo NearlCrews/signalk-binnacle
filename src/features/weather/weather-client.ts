@@ -4,12 +4,15 @@ import {
   type WeatherGrid,
   type WeatherSourceMetadata,
 } from '$entities/weather';
-import { DEG_TO_RAD, PA_PER_HPA, withTimeout } from '$shared/lib';
+import { DEG_TO_RAD, PA_PER_HPA, readBoundedJson, withTimeout } from '$shared/lib';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 // Open-Meteo accepts many locations per request; keep batches well under its cap.
 const MAX_LOCS_PER_REQUEST = 200;
+export const MAX_FORECAST_CELLS = 600;
+export const MAX_FORECAST_DAYS = 7;
+export const MAX_FORECAST_HOURLY_STEPS = 24 * MAX_FORECAST_DAYS;
 // Longer than the shared default: a 200-location batch is a real server-side workload, but a
 // half-open boat link must still not hang the loader for the browser's minutes-long default.
 const FETCH_TIMEOUT_MS = 15_000;
@@ -79,6 +82,49 @@ interface GridLocations<T> {
   lons: number[];
 }
 
+function safeForecastOptions(opts: ForecastOptions): boolean {
+  return (
+    Number.isSafeInteger(opts.maxCells) &&
+    opts.maxCells >= 4 &&
+    opts.maxCells <= MAX_FORECAST_CELLS &&
+    Number.isSafeInteger(opts.forecastDays) &&
+    opts.forecastDays > 0 &&
+    opts.forecastDays <= MAX_FORECAST_DAYS
+  );
+}
+
+function parseHourlyTimes(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_FORECAST_HOURLY_STEPS) {
+    return undefined;
+  }
+  const times: number[] = [];
+  let previous = Number.NEGATIVE_INFINITY;
+  for (const raw of value) {
+    if (
+      typeof raw !== 'number' ||
+      !Number.isSafeInteger(raw) ||
+      raw < 0 ||
+      raw > Number.MAX_SAFE_INTEGER / 1000 ||
+      raw <= previous
+    ) {
+      return undefined;
+    }
+    previous = raw;
+    times.push(raw * 1000);
+  }
+  return times;
+}
+
+function hourlyTimesAlign(
+  locs: Array<{ hourly?: { time?: number[] } }>,
+  times: readonly number[],
+): boolean {
+  return locs.every((loc) => {
+    const candidate = parseHourlyTimes(loc?.hourly?.time);
+    return candidate?.length === times.length && candidate.every((time, i) => time === times[i]);
+  });
+}
+
 // Fetch one Open-Meteo endpoint for a bbox sampled to a grid, batched under the per-request location
 // cap. Returns the per-location records plus the grid axes, or undefined on any failure so callers
 // leave the last grid in place and retry.
@@ -91,6 +137,7 @@ async function fetchGridLocations<T>(
   fetchFn: typeof fetch,
   signal?: AbortSignal,
 ): Promise<GridLocations<T> | undefined> {
+  if (!safeForecastOptions(opts)) return undefined;
   const { lats, lons } = sampleGrid(bbox, opts.maxCells);
   const points: Array<{ lat: number; lon: number }> = [];
   for (const lat of lats) for (const lon of lons) points.push({ lat, lon });
@@ -103,7 +150,7 @@ async function fetchGridLocations<T>(
     const locs: T[] = [];
     for (const r of responses) {
       if (!r.ok) return undefined;
-      const body = (await r.json()) as T | T[];
+      const body = await readBoundedJson<T | T[]>(r, 16 * 1024 * 1024);
       for (const l of Array.isArray(body) ? body : [body]) locs.push(l);
     }
     return { locs, lats, lons };
@@ -114,16 +161,7 @@ async function fetchGridLocations<T>(
 }
 
 function requestInit(signal?: AbortSignal): RequestInit {
-  const timed = withTimeout({ credentials: 'omit' }, FETCH_TIMEOUT_MS);
-  if (!signal) return timed;
-  const timeoutSignal = timed.signal;
-  return {
-    credentials: 'omit',
-    signal:
-      timeoutSignal && typeof AbortSignal.any === 'function'
-        ? AbortSignal.any([signal, timeoutSignal])
-        : signal,
-  };
+  return withTimeout({ credentials: 'omit', signal }, FETCH_TIMEOUT_MS);
 }
 
 function buildUrl(
@@ -186,11 +224,11 @@ export async function fetchForecast(
 
 function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | undefined {
   const first = locs[0]?.hourly;
-  if (!first?.time || first.time.length === 0) return undefined;
-  const times = first.time.map((t) => Number(t) * 1000);
-  const steps = times.length;
   const cells = lats.length * lons.length;
   if (locs.length !== cells) return undefined;
+  const times = parseHourlyTimes(first?.time);
+  if (!times || !hourlyTimesAlign(locs, times)) return undefined;
+  const steps = times.length;
   const windU = grid2d(steps, cells);
   const windV = grid2d(steps, cells);
   const windGust = grid2d(steps, cells);
@@ -280,9 +318,10 @@ export async function fetchMarine(
 
 function parseMarine(locs: MarineLoc[], cells: number): MarineFields | undefined {
   const first = locs[0]?.hourly;
-  if (!first?.time || first.time.length === 0) return undefined;
   if (locs.length !== cells) return undefined;
-  const steps = first.time.length;
+  const times = parseHourlyTimes(first?.time);
+  if (!times || !hourlyTimesAlign(locs, times)) return undefined;
+  const steps = times.length;
   const waveHeight = grid2d(steps, cells);
   const waveDirection = grid2d(steps, cells);
   const wavePeriod = grid2d(steps, cells);
@@ -326,10 +365,7 @@ function parseMarine(locs: MarineLoc[], cells: number): MarineFields | undefined
     }
   }
   return {
-    source: sourceMetadata(
-      locs,
-      first.time.map((time) => time * 1000),
-    ),
+    source: sourceMetadata(locs, times),
     waveHeight,
     waveDirection,
     wavePeriod,

@@ -145,4 +145,25 @@ describe('SymbolIconRegistry', () => {
     expect(registry.status('u1')).toBe('ready');
     expect(map.hasImage(symbolIconId('u1'))).toBe(true);
   });
+
+  it('does not mutate the map when invalidated during rasterization', async () => {
+    let resolveRaster!: (value: SymbolRaster) => void;
+    const rasterize = vi.fn(
+      () =>
+        new Promise<SymbolRaster>((resolve) => {
+          resolveRaster = resolve;
+        }),
+    );
+    const registry = new SymbolIconRegistry({ rasterize, svgText: async () => '<svg/>' });
+    const map = createFakeMap();
+    const loading = registry.ensure(map as never, sym(), DAY);
+    await settle();
+
+    registry.invalidate();
+    resolveRaster(fakeRaster());
+
+    expect(await loading).toBe(false);
+    expect(map.hasImage(symbolIconId('u1'))).toBe(false);
+    expect(registry.status('u1')).toBeUndefined();
+  });
 });

@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/signalk-binnacle.svg)](https://www.npmjs.com/package/signalk-binnacle)
 [![CI](https://github.com/NearlCrews/signalk-binnacle/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-binnacle/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-binnacle/blob/main/LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%3E%3D22.18-brightgreen.svg)](https://nodejs.org)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)
 
 A WebGL chartplotter for [Signal K](https://signalk.org).
@@ -167,7 +167,7 @@ Binnacle is built on a current web stack and engineered to run on modest helm ha
 ## Requirements
 
 - Signal K server 2.x.
-- Node.js >= 22 (for building from source).
+- Node.js >= 22.18 (for building from source).
 - A browser on the helm display, tablet, or phone.
 - Optional: `signalk-chart-locker` for server-managed saved areas, automatic caching, shared storage,
   and installed PMTiles chart management.
@@ -222,6 +222,24 @@ Signal K routes, waypoints, tracks, profiles, Chart Locker data, administrator s
 server-side device authorization. Synced profiles return after the browser signs in and syncs again.
 Profiles and changes that have not synced are permanently lost. Full erasure is blocked while MOB,
 anchor watch, navigation, route editing, measurement, or an unsaved recorded track is active.
+
+### Network privacy
+
+Binnacle gets boat data from your Signal K server and loads its vector base map from OpenFreeMap when
+the chart opens. When their chart or overlay layers are visible, the browser can also request tiles
+from OpenSeaMap, NASA GIBS, Open Water Seascape, GEBCO, EMODnet, and NOAA services for ENC,
+BlueTopo, and marine protected areas. The maritime-boundaries overlay requests VLIZ Marine Regions.
+
+Opening weather or enabling its optional layers can contact Open-Meteo and RainViewer. Opening tides
+can contact NOAA CO-OPS when a Signal K tide provider is unavailable. These services can observe your
+public network address and the requested tile, map area, or forecast coordinates. Optional marine,
+weather, and tide requests are made only when the corresponding layer or feature is used, and cached
+results remain usable when a provider is unavailable.
+
+User-added URL charts are fetched by the browser. Binnacle rejects URLs with embedded usernames or
+passwords, removes URL fragments, and keeps URLs with credential-like query parameters on this device
+unless you explicitly choose to share them with the Signal K server. Use HTTPS for Signal K so device
+credentials and boat data are encrypted on the local network.
 
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
@@ -328,8 +346,9 @@ offline use.
 
 ## Development
 
-Development targets Node 22.18 or newer and npm 11.6 or newer. The exact recommended versions are in
-`.node-version`, `packageManager`, and `devEngines`. All tools use repository-local dependencies.
+Development targets Node 22.18 or newer and npm 11.6 or newer. The recommended npm version is
+11.18.0. Exact project versions are recorded in `.node-version`, `packageManager`, and `devEngines`.
+All tools use repository-local dependencies.
 
 ```bash
 git clone https://github.com/NearlCrews/signalk-binnacle.git

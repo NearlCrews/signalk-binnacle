@@ -1,4 +1,4 @@
-import { hasControlCharacters, isRecord, withTimeout } from '$shared/lib';
+import { hasControlCharacters, isRecord, readBoundedJson, withTimeout } from '$shared/lib';
 
 // Helpers shared by the resource clients (charts, notes, tracks): the bearer-auth request init
 // and the string guards for parsing untyped resource JSON. A token is sent only when present.
@@ -50,7 +50,7 @@ export class SignalKResourceClient {
         withTimeout(authInit(this.#getToken()), this.#timeoutMs),
       );
       if (!response.ok) return undefined;
-      return (await response.json()) as T;
+      return await readBoundedJson<T>(response);
     } catch {
       return undefined;
     }
@@ -64,7 +64,7 @@ export class SignalKResourceClient {
       );
       if (response.status === 404) return { state: 'not-found' };
       if (!response.ok) return { state: 'failed' };
-      return { state: 'ok', value: (await response.json()) as T };
+      return { state: 'ok', value: await readBoundedJson<T>(response) };
     } catch {
       return { state: 'failed' };
     }
@@ -175,7 +175,7 @@ export function strArray(value: unknown): string[] | undefined {
 // parse-JSON-or-default idiom is spelled once rather than re-rolled as `.json().catch(...)` per client.
 export async function jsonOr<T>(response: Response, fallback: T): Promise<T> {
   try {
-    return (await response.json()) as T;
+    return await readBoundedJson<T>(response);
   } catch {
     return fallback;
   }
@@ -221,7 +221,7 @@ async function tryKeyedResource<T>(
       onError?.(url, response.status);
       return undefined;
     }
-    const keyed = asKeyedObject(await response.json());
+    const keyed = asKeyedObject(await readBoundedJson<unknown>(response));
     if (!keyed) return undefined;
     const out: T[] = [];
     for (const [id, raw] of Object.entries(keyed)) {

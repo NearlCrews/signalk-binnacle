@@ -182,7 +182,9 @@ describe('featureToRoute', () => {
     const body = routeToFeature(ROUTE);
     expect(featureToRoute('', body)).toBeUndefined();
     expect(featureToRoute('bad\u0000id', body)).toBeUndefined();
-    const parsed = featureToRoute('  safe-id  ', {
+    expect(featureToRoute('  safe-id  ', body)).toBeUndefined();
+    expect(featureToRoute('r'.repeat(513), body)).toBeUndefined();
+    const parsed = featureToRoute('safe-id', {
       ...body,
       name: 'r'.repeat(300),
       feature: {

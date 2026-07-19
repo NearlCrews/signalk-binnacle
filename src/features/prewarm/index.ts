@@ -1,15 +1,13 @@
+import { createRetryableLazyLoader } from '$shared/lib';
+
 export {
   COMPANION_POLL_MS,
   type CompanionState,
   CompanionStatus,
 } from './companion-status.svelte';
 
-let regionsPanelModule: Promise<typeof import('./RegionsPanel.svelte')> | undefined;
+const regionsPanelLoader = createRetryableLazyLoader(() => import('./RegionsPanel.svelte'));
 
 export function loadRegionsPanel(): Promise<typeof import('./RegionsPanel.svelte')> {
-  regionsPanelModule ??= import('./RegionsPanel.svelte').catch((error: unknown) => {
-    regionsPanelModule = undefined;
-    throw error;
-  });
-  return regionsPanelModule;
+  return regionsPanelLoader();
 }

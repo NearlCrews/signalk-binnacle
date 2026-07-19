@@ -101,7 +101,7 @@ vi.mock('maplibre-gl', () => {
     }
     setPaintProperty(): void {}
     resize(): void {}
-    remove(): void {}
+    remove = vi.fn();
     unproject([x, y]: [number, number]): { lng: number; lat: number } {
       return { lng: x, lat: y };
     }
@@ -124,6 +124,7 @@ interface FakeMapInstance {
   keyboard: { disableRotation: ReturnType<typeof vi.fn> };
   touchZoomRotate: { disableRotation: ReturnType<typeof vi.fn> };
   attribElement: { classList: { remove: ReturnType<typeof vi.fn> } };
+  remove: ReturnType<typeof vi.fn>;
 }
 
 async function lastMap(): Promise<FakeMapInstance> {
@@ -183,6 +184,20 @@ describe('createThemedMap attribution', () => {
 });
 
 describe('createThemedMap onLoad', () => {
+  it('logs a synchronous onLoad failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    createThemedMap({
+      container,
+      onLoad: () => {
+        throw new Error('broken widget initialization');
+      },
+    });
+
+    (await lastMap()).fire('load');
+
+    expect(errorSpy).toHaveBeenCalledWith('map onLoad failed', expect.any(Error));
+  });
+
   it('logs an onLoad rejection instead of dropping it silently', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createThemedMap({
@@ -196,6 +211,46 @@ describe('createThemedMap onLoad', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(errorSpy).toHaveBeenCalledWith('map onLoad failed', expect.any(Error));
+  });
+
+  it('does not report an initialization rejection caused by teardown', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let rejectLoad = (_error: Error) => {};
+    const handle = createThemedMap({
+      container,
+      onLoad: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectLoad = reject;
+        }),
+    });
+    const map = await lastMap();
+    map.fire('load');
+
+    handle.destroy();
+    rejectLoad(new Error('layer manager is disposed'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize a map whose owner was destroyed before load', async () => {
+    const onLoad = vi.fn();
+    const handle = createThemedMap({ container, onLoad });
+    const map = await lastMap();
+
+    handle.destroy();
+    handle.destroy();
+    map.fire('load');
+
+    expect(onLoad).not.toHaveBeenCalled();
+    expect(map.remove).toHaveBeenCalledOnce();
+  });
+
+  it('passes an explicit pixel ratio to MapLibre', async () => {
+    createThemedMap({ container, pixelRatio: 1.5, onLoad: () => {} });
+
+    expect((await lastMap()).options.pixelRatio).toBe(1.5);
   });
 });
 

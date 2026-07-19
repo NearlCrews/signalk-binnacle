@@ -1,5 +1,6 @@
 import * as Comlink from 'comlink';
 import { type RadarFrame, RadarFrameCore } from './radar-frame-core';
+import { MAX_RADAR_MESSAGE_BYTES } from './radar-limits';
 import type { RadarStreamStatus } from './radar-worker-client';
 
 type Releasable = { [Comlink.releaseProxy]?: () => void };
@@ -48,6 +49,9 @@ class RadarWorker {
     onStatus: (status: RadarStreamStatus) => void,
   ): Promise<void> {
     this.#teardown();
+    if (!Number.isFinite(flushHz) || flushHz < 1 || flushHz > 15) {
+      throw new RangeError('invalid radar flush rate');
+    }
     this.#callbacks = [onFrame as Releasable, onStatus as Releasable];
     const core = new RadarFrameCore(spokesPerRev, maxSpokeLen, initialRange);
     this.#core = core;
@@ -64,6 +68,10 @@ class RadarWorker {
     socket.onmessage = (event) => {
       if (!(event.data instanceof ArrayBuffer)) {
         console.warn('[marine-radar] ignoring a non-binary stream message');
+        return;
+      }
+      if (event.data.byteLength > MAX_RADAR_MESSAGE_BYTES) {
+        console.warn('[marine-radar] ignoring an oversized stream message');
         return;
       }
       try {
@@ -93,7 +101,7 @@ class RadarWorker {
         const frame = core.flush();
         onFrame(Comlink.transfer(frame, [frame.buffer]));
       },
-      Math.round(1000 / flushHz),
+      Math.max(1, Math.round(1000 / flushHz)),
     );
   }
 

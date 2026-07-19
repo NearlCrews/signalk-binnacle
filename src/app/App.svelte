@@ -59,7 +59,7 @@ import {
   KIP_URL,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
-import { CollisionMute, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
+import { CollisionMute, isShallowAlarmActive, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
 import { createMarineRadarController, type RadarStatus } from '$features/marine-radar';
 import {
   AppMenu,
@@ -70,7 +70,7 @@ import {
   togglePinned,
 } from '$features/menu';
 import { createMobController, MOB_TONE, MobButton } from '$features/mob';
-import { ARRIVAL_TONE } from '$features/navigation';
+import { ARRIVAL_TONE, shouldSoundArrivalAlarm } from '$features/navigation';
 import {
   createNoteDetailLoader,
   type NoteDetailLoader,
@@ -259,10 +259,7 @@ const shallowLimit = $derived(
   thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters,
 );
 const shallowAlarming = $derived(
-  vessel.depthMeters !== undefined &&
-    !vessel.depthStale &&
-    shallowLimit !== undefined &&
-    vessel.depthMeters < shallowLimit,
+  isShallowAlarmActive(vessel.depthMeters, vessel.depthStale, shallowLimit),
 );
 const shallowAlert = $derived.by(() => {
   if (vessel.depthStale) return 'Depth data lost. Shallow-water monitoring is unavailable.';
@@ -878,7 +875,7 @@ const userCharts = new UserCharts(
     if (source.bounds) mapCommands?.fitBounds(source.bounds);
     userChartsController.syncUrlChartToServer(source);
   },
-  (source) => userChartsController.deleteUserChartFromServer(source.id),
+  (source) => userChartsController.deleteUserChartFromServer(source),
   (source) => {
     userChartsController.dropRegisteredUserChart(source.id);
     userChartsController.syncUrlChartToServer(source);
@@ -1503,7 +1500,13 @@ let arrivedLast = false;
 const ARRIVAL_BANNER_MS = 8000;
 $effect(() => {
   const arrived = courseGuidance.arrived && routeController.courseActive;
-  arrivalAlarm.update(arrived && !arrivalMuted.value);
+  arrivalAlarm.update(
+    shouldSoundArrivalAlarm(
+      courseGuidance.arrived,
+      routeController.courseActive,
+      arrivalMuted.value,
+    ),
+  );
   if (arrived && !arrivedLast) {
     // Rising edge: show the arrival banner for the point just reached, before any auto-advance moves
     // the name on. A single "go to here" has no name, so fall back to a generic label.

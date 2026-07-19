@@ -16,7 +16,16 @@ function cleanText(value: unknown, maxLength: number): string | undefined {
 }
 
 export function cleanRouteId(value: unknown): string | undefined {
-  return cleanText(value, MAX_ROUTE_ID_LENGTH);
+  const text = str(value);
+  if (
+    !text ||
+    text.length > MAX_ROUTE_ID_LENGTH ||
+    text !== text.trim() ||
+    hasControlCharacters(text)
+  ) {
+    return undefined;
+  }
+  return text;
 }
 
 // The Signal K v2 route resource body: a GeoJSON Feature with a LineString, plus name and the

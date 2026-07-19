@@ -29,7 +29,7 @@ export {
   silenceNotification,
   updateNotification,
 } from './notifications-client';
-export { appendToken, serverOrigin, streamUrl } from './origin';
+export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
 export { SK_PATHS } from './paths';
 export {
   adminSessionInit,

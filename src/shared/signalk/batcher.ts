@@ -4,6 +4,10 @@ import type { PathSource, Value } from './types';
 // firing into a store the app is disposing.
 type Schedule = (cb: (epoch: number) => void) => () => void;
 
+export const MAX_BATCH_SELF_PATHS = 5_000;
+export const MAX_BATCH_AIS_CONTEXTS = 2_000;
+export const MAX_BATCH_AIS_PATHS_PER_CONTEXT = 64;
+
 // The epoch stamped on each flush is a wall clock (Date.now), not the scheduler's
 // high-res timestamp, which would use a different time origin than the main thread
 // that prunes by staleness. Date.now is consistent across both threads.
@@ -48,6 +52,7 @@ export class FrameBatcher {
   }
 
   put(path: string, value: Value, source?: PathSource, receivedAt = Date.now()): void {
+    if (!this.#self.has(path) && this.#self.size >= MAX_BATCH_SELF_PATHS) return;
     this.#self.set(path, value);
     this.#selfEpochs.set(path, receivedAt);
     if (source) this.#selfSources.set(path, source);
@@ -57,9 +62,11 @@ export class FrameBatcher {
   putVessel(context: string, path: string, value: Value, receivedAt = Date.now()): void {
     let vessel = this.#ais.get(context);
     if (!vessel) {
+      if (this.#ais.size >= MAX_BATCH_AIS_CONTEXTS) return;
       vessel = new Map();
       this.#ais.set(context, vessel);
     }
+    if (!vessel.has(path) && vessel.size >= MAX_BATCH_AIS_PATHS_PER_CONTEXT) return;
     vessel.set(path, value);
     let epochs = this.#aisEpochs.get(context);
     if (!epochs) {

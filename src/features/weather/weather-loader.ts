@@ -201,10 +201,15 @@ export function createWeatherLoader(overrides: Partial<LoaderDeps> = {}): Weathe
       // Stamp the TTL only on a real fetch: re-stamping on cache hits would slide the expiry
       // forever under steady loads and the nowcast would never refresh.
       else
-        radarPromise = deps.radar(abortableFetch(signal)).then((fresh) => {
-          if (fresh) radarCache.put(RADAR_KEY, fresh, t);
-          return fresh;
-        });
+        radarPromise = deps
+          .radar(abortableFetch(signal))
+          .then((fresh) => {
+            if (fresh) radarCache.put(RADAR_KEY, fresh, t);
+            return fresh;
+          })
+          // Radar is optional. A malformed response or provider failure must not reject the valid
+          // atmospheric and marine grid fetched alongside it.
+          .catch(() => undefined);
 
       let resolved: Awaited<ReturnType<typeof resolveGrid>>;
       let radar: RadarData | undefined;

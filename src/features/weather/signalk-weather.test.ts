@@ -9,6 +9,10 @@ import {
   fetchWeatherProviders,
   fetchWeatherWarningsResult,
   MAX_OBSERVATION_AGE_MS,
+  MAX_WEATHER_FORECASTS,
+  MAX_WEATHER_OBSERVATIONS,
+  MAX_WEATHER_PROVIDERS,
+  MAX_WEATHER_WARNINGS,
   nearestInTimeBounded,
   normalizePressureTendency,
   pickProviderEntry,
@@ -69,6 +73,30 @@ describe('weather providers', () => {
   it('distinguishes no providers from transport failure', async () => {
     expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch({}))).toEqual({});
     expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch({}, 500))).toBeUndefined();
+  });
+
+  it('rejects oversized or unsafe provider catalogs', async () => {
+    const oversized = Object.fromEntries(
+      Array.from({ length: MAX_WEATHER_PROVIDERS + 1 }, (_, index) => [
+        `provider-${index}`,
+        { isDefault: index === 0 },
+      ]),
+    );
+    expect(await fetchWeatherProviders(ORIGIN, undefined, mockFetch(oversized))).toBeUndefined();
+    expect(
+      await fetchWeatherProviders(
+        ORIGIN,
+        undefined,
+        mockFetch({ 'bad\u0000provider': { isDefault: true } }),
+      ),
+    ).toBeUndefined();
+    expect(
+      await fetchWeatherProviders(
+        ORIGIN,
+        undefined,
+        mockFetch(JSON.parse('{"__proto__":{"isDefault":true}}')),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -134,6 +162,94 @@ describe('point endpoint outcomes', () => {
       status: 'success',
       value: [{ date: '2026-06-03T12:00:00Z' }, { date: '2026-06-03T18:00:00Z' }],
     });
+  });
+
+  it('caps sorted forecasts to the requested count', async () => {
+    const result = await fetchPointForecastsResult(
+      ORIGIN,
+      'p',
+      0,
+      0,
+      2,
+      undefined,
+      mockFetch([
+        { date: '2026-06-03T18:00:00Z' },
+        { date: '2026-06-03T12:00:00Z' },
+        { date: '2026-06-03T15:00:00Z' },
+      ]),
+    );
+    expect(result).toEqual({
+      status: 'success',
+      value: [{ date: '2026-06-03T12:00:00Z' }, { date: '2026-06-03T15:00:00Z' }],
+    });
+  });
+
+  it('rejects oversized observation, forecast, and warning collections', async () => {
+    const observation = { date: '2026-06-03T12:00:00Z' };
+    await expect(
+      fetchObservationsResult(
+        ORIGIN,
+        'p',
+        0,
+        0,
+        undefined,
+        mockFetch(Array.from({ length: MAX_WEATHER_OBSERVATIONS + 1 }, () => observation)),
+      ),
+    ).resolves.toEqual({ status: 'failure' });
+    await expect(
+      fetchPointForecastsResult(
+        ORIGIN,
+        'p',
+        0,
+        0,
+        MAX_WEATHER_FORECASTS,
+        undefined,
+        mockFetch(Array.from({ length: MAX_WEATHER_FORECASTS + 1 }, () => observation)),
+      ),
+    ).resolves.toEqual({ status: 'failure' });
+    const warning = {
+      startTime: '2026-06-03T12:00:00Z',
+      endTime: '2026-06-03T18:00:00Z',
+      details: 'Gale warning',
+      source: 'Provider',
+      type: 'gale',
+    };
+    await expect(
+      fetchWeatherWarningsResult(
+        ORIGIN,
+        'p',
+        0,
+        0,
+        undefined,
+        mockFetch(Array.from({ length: MAX_WEATHER_WARNINGS + 1 }, () => warning)),
+      ),
+    ).resolves.toEqual({ status: 'failure' });
+  });
+
+  it('rejects malformed atmospheric and marine leaves before normalization', async () => {
+    const malformed = [
+      { outside: { pressureTendency: {} } },
+      { outside: { pressure: '101325' } },
+      { wind: { speedTrue: '5' } },
+      { water: { temperature: '290' } },
+      { water: { waves: { significantHeight: '2' } } },
+      { water: { swell: [] } },
+      { water: { current: { speed: {} } } },
+      { current: { direction: '1.5' } },
+    ];
+
+    for (const fields of malformed) {
+      await expect(
+        fetchObservationsResult(
+          ORIGIN,
+          'p',
+          0,
+          0,
+          undefined,
+          mockFetch({ date: '2026-06-03T12:00:00Z', ...fields }),
+        ),
+      ).resolves.toEqual({ status: 'failure' });
+    }
   });
 });
 
@@ -213,6 +329,7 @@ describe('Signal K adapter', () => {
     expect(normalizePressureTendency(-2)).toBe('falling');
     expect(normalizePressureTendency('not available')).toBeUndefined();
     expect(normalizePressureTendency('N/A')).toBeUndefined();
+    expect(normalizePressureTendency({} as never)).toBeUndefined();
   });
 });
 

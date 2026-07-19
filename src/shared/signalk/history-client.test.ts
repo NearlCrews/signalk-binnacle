@@ -91,6 +91,45 @@ describe('fetchHistoryValues', () => {
       fetchHistoryValues(BASE, undefined, { paths: ['a'], durationSeconds: 60 }),
     ).resolves.toBeUndefined();
   });
+
+  it('rejects unsafe query bounds before fetching', async () => {
+    const mock = stubFetch({ ok: true, body: {} });
+    await expect(
+      fetchHistoryValues(BASE, undefined, {
+        paths: ['navigation.position,environment.depth'],
+        durationSeconds: 60,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fetchHistoryValues(BASE, undefined, {
+        paths: ['navigation.position'],
+        durationSeconds: 60,
+        resolutionSeconds: 61,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fetchHistoryValues(BASE, undefined, {
+        paths: ['navigation.position'],
+        durationSeconds: 60,
+        provider: 'bad\u0000provider',
+      }),
+    ).resolves.toBeUndefined();
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized or unsafe response schema', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        range: {},
+        values: Array.from({ length: 101 }, (_, index) => ({ path: `path.${index}` })),
+        data: [],
+      },
+    });
+    await expect(
+      fetchHistoryValues(BASE, undefined, { paths: ['path.0'], durationSeconds: 60 }),
+    ).resolves.toBeUndefined();
+  });
 });
 
 describe('fetchHistoryPaths', () => {
@@ -134,6 +173,31 @@ describe('fetchHistoryPaths', () => {
     stubFetch({ ok: true, body: paths });
     const result = await fetchHistoryPaths(BASE, undefined, { durationSeconds: 60 });
     expect(result).toHaveLength(MAX_HISTORY_CATALOG_PATHS - 1);
+  });
+
+  it('drops catalog paths that cannot be represented safely in a values query', async () => {
+    stubFetch({
+      ok: true,
+      body: [
+        'navigation.speedOverGround',
+        'navigation.position,environment.depth',
+        'navigation.bad\u0000path',
+      ],
+    });
+    await expect(fetchHistoryPaths(BASE, undefined, { durationSeconds: 60 })).resolves.toEqual([
+      'navigation.speedOverGround',
+    ]);
+  });
+
+  it('rejects unsafe catalog query bounds before fetching', async () => {
+    const mock = stubFetch({ ok: true, body: [] });
+    await expect(
+      fetchHistoryPaths(BASE, undefined, { durationSeconds: 0 }),
+    ).resolves.toBeUndefined();
+    await expect(
+      fetchHistoryPaths(BASE, undefined, { durationSeconds: 60, provider: 'bad\u0000provider' }),
+    ).resolves.toBeUndefined();
+    expect(mock).not.toHaveBeenCalled();
   });
 });
 
@@ -219,6 +283,32 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
       complete: false,
       answered: true,
     });
+  });
+
+  it('drops an unsafe candidate without suppressing a neighboring valid path', async () => {
+    const mock = stubFetch({
+      ok: true,
+      body: {
+        range: {},
+        values: [{ path: 'navigation.speedOverGround' }],
+        data: [['2026-07-01T00:00:00Z', 4]],
+      },
+    });
+
+    await expect(
+      fetchPopulatedHistoryPathsForProvider(
+        BASE,
+        undefined,
+        'signalk-questdb',
+        ['navigation.bad,environment.depth', 'navigation.speedOverGround'],
+        3600,
+      ),
+    ).resolves.toEqual({
+      paths: ['navigation.speedOverGround'],
+      complete: true,
+      answered: true,
+    });
+    expect(String(mock.mock.calls[0][0])).not.toContain('navigation.bad');
   });
 });
 

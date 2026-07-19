@@ -12,6 +12,7 @@ const LON = /\blon\s*=\s*["']([^"']*)["']/i;
 const MAX_GPX_CHARACTERS = 5 * 1024 * 1024;
 const MAX_GPX_ROUTES = 100;
 const MAX_GPX_WAYPOINTS = 10_000;
+const MAX_GPX_NAME_LENGTH = 256;
 
 type GpxParseError = 'file-too-large' | 'too-many-routes' | 'too-many-waypoints';
 
@@ -26,20 +27,25 @@ function attrNumber(attrs: string, pattern: RegExp): number {
   return Number(m[1]);
 }
 
-function parseWaypoints(block: string, remaining: number): RouteWaypoint[] | undefined {
+function parseWaypoints(
+  block: string,
+  remaining: number,
+): { waypoints: RouteWaypoint[]; encountered: number } | undefined {
   const waypoints: RouteWaypoint[] = [];
+  let encountered = 0;
   for (const pt of block.matchAll(RTEPT)) {
+    if (encountered >= remaining) return undefined;
+    encountered += 1;
     const latitude = attrNumber(pt[1], LAT);
     const longitude = attrNumber(pt[1], LON);
     if (!isLatitude(latitude) || !isLongitude(longitude)) continue;
-    if (waypoints.length >= remaining) return undefined;
     const nameMatch = pt[2]?.match(NAME);
-    const name = nameMatch ? unescapeXml(nameMatch[1]).trim() : '';
+    const name = nameMatch ? unescapeXml(nameMatch[1]).trim().slice(0, MAX_GPX_NAME_LENGTH) : '';
     waypoints.push(
       name ? { position: { latitude, longitude }, name } : { position: { latitude, longitude } },
     );
   }
-  return waypoints;
+  return { waypoints, encountered };
 }
 
 // Parse the <rte> elements of a GPX document into routes, the inverse of routeToGpx. Coordinates are
@@ -54,18 +60,21 @@ export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
     return { routes: [], error: 'file-too-large' };
   }
   const routes: Route[] = [];
+  let routeCount = 0;
   let waypointCount = 0;
   for (const rte of xml.matchAll(RTE)) {
-    if (routes.length >= MAX_GPX_ROUTES) return { routes: [], error: 'too-many-routes' };
+    routeCount += 1;
+    if (routeCount > MAX_GPX_ROUTES) return { routes: [], error: 'too-many-routes' };
     const block = rte[1];
-    const waypoints = parseWaypoints(block, MAX_GPX_WAYPOINTS - waypointCount);
-    if (!waypoints) return { routes: [], error: 'too-many-waypoints' };
+    const parsed = parseWaypoints(block, MAX_GPX_WAYPOINTS - waypointCount);
+    if (!parsed) return { routes: [], error: 'too-many-waypoints' };
+    waypointCount += parsed.encountered;
+    const { waypoints } = parsed;
     if (waypoints.length < 2) continue;
-    waypointCount += waypoints.length;
     // The route name is the <name> before the first rtept, not a waypoint's name.
     const head = block.search(/<(?:\w+:)?rtept\b/i);
     const nameMatch = (head >= 0 ? block.slice(0, head) : block).match(NAME);
-    const name = nameMatch ? unescapeXml(nameMatch[1]).trim() : '';
+    const name = nameMatch ? unescapeXml(nameMatch[1]).trim().slice(0, MAX_GPX_NAME_LENGTH) : '';
     routes.push({ id: uuidv4(), name: name || `Imported route ${routes.length + 1}`, waypoints });
   }
   return { routes };

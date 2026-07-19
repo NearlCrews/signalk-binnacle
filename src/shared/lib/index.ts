@@ -1,3 +1,4 @@
+export { readBoundedJson, readBoundedText } from './bounded-json';
 export { formatBytes } from './bytes';
 export { Clock, type ReactiveClock } from './clock.svelte';
 export { formatLatitude, formatLongitude, PLACEHOLDER } from './coords';
@@ -21,6 +22,7 @@ export {
 } from './math';
 export { prefersReducedMotion } from './motion';
 export { isRecord, sameJsonValue } from './object';
+export { createRetryableLazyLoader } from './retryable-lazy-loader';
 export { capitalize, hasControlCharacters } from './strings';
 export { Toast } from './toast.svelte';
 export {

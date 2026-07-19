@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readPmtilesMeta } from '$shared/map';
 import {
   cleanUserChartSource,
   isUserChartSource,
+  shouldShareUserChart,
   type UserChartSource,
   UserCharts,
+  userChartNeedsServerDelete,
+  userChartUrlForDisplay,
+  userChartUrlHasCredentialQuery,
 } from './user-charts.svelte';
 
 // The entity reads PMTiles metadata through $shared/map; stub it so the test does not need a real
@@ -46,6 +51,7 @@ describe('isUserChartSource', () => {
       name: 'Chart',
       kind: 'vector',
       origin: { type: 'url', url: 'https://x/y.pmtiles' },
+      shareWithServer: true,
       layers: ['water'],
     });
   });
@@ -63,6 +69,70 @@ describe('isUserChartSource', () => {
     ).toBe(false);
     expect(isUserChartSource({ ...valid, minzoom: 12, maxzoom: 4 })).toBe(false);
     expect(isUserChartSource({ ...valid, layers: ['ok', 'bad\nlayer'] })).toBe(false);
+    expect(isUserChartSource({ ...valid, shareWithServer: 'yes' })).toBe(false);
+    expect(
+      isUserChartSource({
+        ...valid,
+        origin: { type: 'url', url: 'https://captain:secret@x/y.pmtiles' },
+      }),
+    ).toBe(false);
+  });
+
+  it('strips URL fragments and migrates ordinary URLs to server sharing', () => {
+    expect(
+      cleanUserChartSource({
+        ...valid,
+        origin: { type: 'url', url: 'https://x/y.pmtiles?style=day#private-fragment' },
+      }),
+    ).toMatchObject({
+      origin: { type: 'url', url: 'https://x/y.pmtiles?style=day' },
+      shareWithServer: true,
+    });
+  });
+
+  it.each([
+    'token',
+    'api_key',
+    'apiToken',
+    'Authorization',
+    'auth-key',
+    'client-secret',
+    'secret_key',
+    'X-Amz-Signature',
+    'x-goog-credential',
+  ])('detects the credential-like query name %s', (name) => {
+    expect(userChartUrlHasCredentialQuery(`https://x/y.pmtiles?${name}=sensitive`)).toBe(true);
+  });
+
+  it('does not classify ordinary query controls as credentials', () => {
+    expect(userChartUrlHasCredentialQuery('https://x/y.pmtiles?style=day&locale=en')).toBe(false);
+  });
+
+  it('redacts credential-like query values for display without hiding ordinary controls', () => {
+    expect(
+      userChartUrlForDisplay(
+        'https://x/y.pmtiles?style=day&access_token=secret&X-Amz-Signature=signed',
+      ),
+    ).toBe('https://x/y.pmtiles?style=day&access_token=REDACTED&X-Amz-Signature=REDACTED');
+  });
+
+  it('migrates credential-like query URLs to local-only unless sharing was explicit', () => {
+    const migrated = cleanUserChartSource({
+      ...valid,
+      origin: { type: 'url', url: 'https://x/y.pmtiles?access_token=sensitive' },
+    });
+    expect(migrated?.shareWithServer).toBe(false);
+    expect(migrated?.serverCleanupRequired).toBe(true);
+    expect(migrated && shouldShareUserChart(migrated)).toBe(false);
+    expect(migrated && userChartNeedsServerDelete(migrated)).toBe(true);
+
+    expect(
+      cleanUserChartSource({
+        ...valid,
+        origin: { type: 'url', url: 'https://x/y.pmtiles?access_token=sensitive' },
+        shareWithServer: true,
+      })?.shareWithServer,
+    ).toBe(true);
   });
 
   it('rejects the legacy file origin, so old browser-local file charts drop at load', () => {
@@ -102,10 +172,41 @@ describe('UserCharts stage, commit, and remove', () => {
     expect(charts.sources).toHaveLength(0);
     expect(draft.source.name).toBe('Meta name');
     expect(draft.source.origin).toEqual({ type: 'url', url: 'https://example.com/chart.pmtiles' });
+    expect(draft.source.shareWithServer).toBe(true);
 
     charts.commit(draft, 'My coastal chart');
     expect(charts.sources).toHaveLength(1);
     expect(charts.sources[0].name).toBe('My coastal chart');
+  });
+
+  it('rejects authority credentials and removes fragments before reading an archive', async () => {
+    const charts = new UserCharts([], () => {});
+    await expect(
+      charts.stageUrl('https://captain:secret@example.com/chart.pmtiles'),
+    ).rejects.toThrow('Enter a valid HTTP or HTTPS PMTiles URL.');
+
+    const draft = await charts.stageUrl('https://example.com/chart.pmtiles#access-token');
+    expect(draft.source.origin.url).toBe('https://example.com/chart.pmtiles');
+  });
+
+  it('does not surface a signed chart URL from a metadata transport error', async () => {
+    vi.mocked(readPmtilesMeta).mockRejectedValueOnce(
+      new Error('PMTiles request failed: https://example.com/chart.pmtiles?access_token=secret'),
+    );
+    const charts = new UserCharts([], () => {});
+
+    await expect(
+      charts.stageUrl('https://example.com/chart.pmtiles?access_token=secret'),
+    ).rejects.toThrow('Could not read chart metadata.');
+  });
+
+  it('defaults a signed URL to local-only and preserves an explicit sharing choice', async () => {
+    const charts = new UserCharts([], () => {});
+    const draft = await charts.stageUrl('https://example.com/chart.pmtiles?X-Amz-Signature=secret');
+    expect(draft.source.shareWithServer).toBe(false);
+
+    charts.commit(draft, 'Shared signed chart', true);
+    expect(charts.sources[0].shareWithServer).toBe(true);
   });
 
   it('falls back to the metadata name when the committed name is blank', async () => {

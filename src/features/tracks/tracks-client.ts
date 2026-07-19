@@ -140,10 +140,21 @@ export async function fetchSavedTracks(
   base: string,
   token?: string,
 ): Promise<SavedTrack[] | undefined> {
-  const tracks = await fetchKeyedResource(base, [V2, V1], token, toSavedTrack, (url, status) =>
-    console.warn(`[tracks] ${url} returned ${status}`),
+  let accepted = 0;
+  return fetchKeyedResource(
+    base,
+    [V2, V1],
+    token,
+    (id, raw) => {
+      // The collection guard permits more entries than the UI accepts. Stop decoding geometry as
+      // soon as the saved-track budget is full instead of walking every remaining coordinate.
+      if (accepted >= MAX_SAVED_TRACKS) return undefined;
+      const track = toSavedTrack(id, raw);
+      if (track) accepted += 1;
+      return track;
+    },
+    (url, status) => console.warn(`[tracks] ${url} returned ${status}`),
   );
-  return tracks?.slice(0, MAX_SAVED_TRACKS);
 }
 
 export function savedTrackFromPoints(

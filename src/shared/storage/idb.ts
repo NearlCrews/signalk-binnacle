@@ -34,8 +34,20 @@ export async function runTransaction<T>(
   run: (tx: IDBTransaction) => T,
 ): Promise<T> {
   const tx = conn.transaction(storeNames, mode);
-  const result = run(tx);
-  await txDone(tx);
+  const completion = txDone(tx);
+  let result: T;
+  try {
+    result = run(tx);
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch {
+      // Preserve the callback error if the transaction already completed before abort.
+    }
+    await completion.catch(() => undefined);
+    throw error;
+  }
+  await completion;
   return result;
 }
 
@@ -86,15 +98,34 @@ export function openIdbStore(
 ): IdbRunner {
   const db = openIdbDatabase(factory, dbName, 1, createStore);
   return {
-    run: <R>(mode: IDBTransactionMode, op: (store: IDBObjectStore) => IDBRequest): Promise<R> =>
-      db().then(
-        (conn) =>
-          new Promise<R>((resolve, reject) => {
-            const req = op(conn.transaction(storeName, mode).objectStore(storeName));
-            req.onsuccess = () => resolve(req.result as R);
-            req.onerror = () => reject(req.error);
-          }),
-      ),
+    run: async <R>(
+      mode: IDBTransactionMode,
+      op: (store: IDBObjectStore) => IDBRequest,
+    ): Promise<R> => {
+      const conn = await db();
+      const tx = conn.transaction(storeName, mode);
+      const completion = txDone(tx);
+      let request: IDBRequest;
+      try {
+        request = op(tx.objectStore(storeName));
+      } catch (error) {
+        // The completion handlers were installed before invoking the caller so a fast transaction
+        // cannot be missed. If the caller throws synchronously, abort and consume that completion
+        // outcome while preserving the original programming error for the caller.
+        try {
+          tx.abort();
+        } catch {
+          // A transaction that already completed cannot be aborted, but its completion promise is
+          // still handled below.
+        }
+        void completion.catch(() => undefined);
+        throw error;
+      }
+      // A request can succeed before its transaction later aborts, for example on a quota or
+      // constraint failure in another request. Persistence is successful only after commit.
+      const [result] = await Promise.all([reqPromise(request as IDBRequest<R>), completion]);
+      return result;
+    },
   };
 }
 

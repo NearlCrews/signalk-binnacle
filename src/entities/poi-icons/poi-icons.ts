@@ -94,11 +94,15 @@ export const ICON_PIXEL_RATIO = 2;
 
 // Register (or recolor, on a theme change) the marker icon for every category. Never
 // throws: an icon that fails to rasterize is skipped so it cannot break overlay setup.
-export async function registerPoiIcons(map: MapLibreMap, paint: MapThemePaint): Promise<void> {
+export async function registerPoiIcons(
+  map: MapLibreMap,
+  paint: MapThemePaint,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   await Promise.all(
     POI_CATEGORIES.map(async (category) => {
       const image = await rasterizeSvg(markerSvg(category, paint));
-      if (!image) return;
+      if (!image || !isCurrent()) return;
       setMapImage(map, poiIconId(category), image, ICON_PIXEL_RATIO);
     }),
   );

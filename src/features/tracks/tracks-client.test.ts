@@ -125,6 +125,36 @@ describe('fetchSavedTracks', () => {
     expect(tracks?.[0].distanceMeters).toBeUndefined();
     expect(tracks?.[0].durationSeconds).toBeUndefined();
   });
+
+  it('stops decoding entries after the saved-track limit', async () => {
+    const keyed: Record<string, unknown> = {};
+    for (let index = 0; index < 500; index += 1) {
+      keyed[`track-${index}`] = {
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      };
+    }
+    let overflowDecoded = false;
+    keyed.overflow = {
+      get geometry() {
+        overflowDecoded = true;
+        throw new Error('overflow track should not be decoded');
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => keyed } as Response),
+    );
+
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks).toHaveLength(500);
+    expect(overflowDecoded).toBe(false);
+  });
 });
 
 describe('savedTrackFromPoints', () => {

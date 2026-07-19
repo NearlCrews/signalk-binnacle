@@ -4,6 +4,7 @@ import {
   discoverRadars,
   fetchCapabilities,
   fetchRadarControls,
+  parseRadarControls,
   setPower,
   spokesUrl,
   writeControl,
@@ -215,6 +216,69 @@ describe('discoverRadars', () => {
     expect(result.radars).toEqual([]);
     expect(result.availability).toBe('invalid');
   });
+
+  it('rejects an oversized radar catalog', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify(
+              Array.from({ length: 17 }, (_, index) => ({
+                id: `radar-${index}`,
+                spokesPerRevolution: 2048,
+                maxSpokeLen: 1024,
+                controls: {},
+              })),
+            ),
+            { status: 200 },
+          ),
+      ),
+    );
+    const result = await discoverRadars('http://boat.local', undefined);
+    expect(result.radars).toEqual([]);
+    expect(result.availability).toBe('invalid');
+  });
+});
+
+describe('parseRadarControls', () => {
+  it('drops unsafe ids and non-finite values', () => {
+    const controls = parseRadarControls({
+      gain: { value: 12, autoValue: 10 },
+      'bad.id': { value: 50 },
+      rain: { value: Number.NaN },
+    });
+    expect(controls).toEqual({
+      gain: {
+        value: 12,
+        auto: undefined,
+        autoValue: 10,
+        enabled: undefined,
+        endValue: undefined,
+        startDistance: undefined,
+        endDistance: undefined,
+        x: undefined,
+        y: undefined,
+        width: undefined,
+        height: undefined,
+        allowed: undefined,
+      },
+      rain: {
+        value: undefined,
+        auto: undefined,
+        autoValue: undefined,
+        enabled: undefined,
+        endValue: undefined,
+        startDistance: undefined,
+        endDistance: undefined,
+        x: undefined,
+        y: undefined,
+        width: undefined,
+        height: undefined,
+        allowed: undefined,
+      },
+    });
+  });
 });
 
 describe('spokesUrl', () => {
@@ -261,6 +325,36 @@ describe('spokesUrl', () => {
     );
   });
 
+  it('appends the token to same-endpoint ws and wss provider URLs', () => {
+    expect(spokesUrl('http://boat.local', radar, 'tok')).toBe(
+      'ws://boat.local/signalk/v2/api/vessels/self/radars/nav1034A/stream?token=tok',
+    );
+    expect(
+      spokesUrl(
+        'https://boat.local:3443',
+        { ...radar, streamUrl: 'wss://boat.local:3443/radar/stream' },
+        'tok',
+      ),
+    ).toBe('wss://boat.local:3443/radar/stream?token=tok');
+  });
+
+  it('does not send the token across ports or transport security families', () => {
+    expect(
+      spokesUrl(
+        'http://boat.local:3000',
+        { ...radar, streamUrl: 'ws://boat.local:3001/radar/stream' },
+        'tok',
+      ),
+    ).toBe('ws://boat.local:3001/radar/stream');
+    expect(
+      spokesUrl(
+        'https://boat.local',
+        { ...radar, streamUrl: 'ws://boat.local:80/radar/stream' },
+        'tok',
+      ),
+    ).toBe('ws://boat.local/radar/stream');
+  });
+
   it('never leaks the token to a cross-origin provider streamUrl', () => {
     const r: RadarInfo = { ...radar, streamUrl: 'ws://other.host:6502/stream' };
     expect(spokesUrl('http://boat.local', r, 'tok')).toBe('ws://other.host:6502/stream');
@@ -270,6 +364,18 @@ describe('spokesUrl', () => {
     const r: RadarInfo = { ...radar, streamUrl: '/radar/nav1034A/stream' };
     expect(spokesUrl('https://boat.local', r, 'tok')).toBe(
       'wss://boat.local/radar/nav1034A/stream?token=tok',
+    );
+  });
+
+  it('rejects provider stream credentials and fragments', () => {
+    expect(() =>
+      spokesUrl('https://boat.local', {
+        ...radar,
+        streamUrl: 'wss://user:pass@boat.local/radar',
+      }),
+    ).toThrow(/credentials/);
+    expect(() => spokesUrl('https://boat.local', { ...radar, streamUrl: '/radar#secret' })).toThrow(
+      /fragment/,
     );
   });
 });

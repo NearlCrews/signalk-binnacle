@@ -157,6 +157,20 @@ describe('createWeatherLoader', () => {
     expect(deps.radar).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a valid forecast when the optional radar request rejects', async () => {
+    const deps = makeDeps({ ms: 0 });
+    deps.radar.mockRejectedValue(new Error('malformed radar response'));
+    const loader = createWeatherLoader(deps);
+    const result = makeStore();
+
+    await loader.load(result.store, BBOX, OPTS, { waves: false, radar: true });
+
+    expect(result.grids).toHaveLength(1);
+    expect(result.radars).toEqual([]);
+    expect(result.status).not.toContain('error');
+    expect(result.status).not.toContain('stale');
+  });
+
   it('does not slide the radar TTL on cache hits', async () => {
     const nowRef = { ms: 0 };
     const deps = makeDeps(nowRef);

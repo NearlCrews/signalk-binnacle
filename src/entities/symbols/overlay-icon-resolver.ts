@@ -15,6 +15,8 @@ export interface OverlayIconResolver<T> {
   ensurePending(map: MapLibreMap, paint: MapThemePaint, onLoaded: () => void): void;
   // Re-rasterize every registered provided symbol for a theme change.
   retheme(map: MapLibreMap, paint: MapThemePaint): void;
+  // Cancel pending work before the owning overlay is removed or its base style is replaced.
+  invalidate(): void;
 }
 
 // The provided-symbol icon-resolution glue shared by the imperative overlays (notes, waypoints):
@@ -57,6 +59,10 @@ export function createOverlayIconResolver<T>(
     },
     retheme(map, paint) {
       registry?.retheme(map, paint);
+    },
+    invalidate() {
+      pendingSymbols.clear();
+      registry?.invalidate();
     },
   };
 }

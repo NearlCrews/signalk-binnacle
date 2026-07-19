@@ -129,10 +129,10 @@ export default defineConfig({
         'src/shared/types/**',
       ],
       thresholds: {
-        statements: 59,
-        branches: 55,
-        functions: 56,
-        lines: 61,
+        statements: 65,
+        branches: 60,
+        functions: 65,
+        lines: 67,
       },
     },
     projects: [

@@ -6,6 +6,7 @@ export function writeSpoke(
   maxSpokeLen: number,
   spoke: RadarSpoke,
 ): void {
+  if (!Number.isSafeInteger(spoke.angle) || spoke.angle < 0) return;
   const slot = (spoke.angle % spokesPerRev) * maxSpokeLen;
   const count = Math.min(spoke.data.length, maxSpokeLen);
   for (let i = 0; i < count; i += 1) buffer[slot + i] = spoke.data[i];

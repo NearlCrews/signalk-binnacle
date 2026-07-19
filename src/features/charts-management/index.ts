@@ -1,15 +1,11 @@
-let chartsManagementPanelModule:
-  | Promise<typeof import('./ChartsManagementPanel.svelte')>
-  | undefined;
+import { createRetryableLazyLoader } from '$shared/lib';
+
+const chartsManagementPanelLoader = createRetryableLazyLoader(
+  () => import('./ChartsManagementPanel.svelte'),
+);
 
 export function loadChartsManagementPanel(): Promise<
   typeof import('./ChartsManagementPanel.svelte')
 > {
-  chartsManagementPanelModule ??= import('./ChartsManagementPanel.svelte').catch(
-    (error: unknown) => {
-      chartsManagementPanelModule = undefined;
-      throw error;
-    },
-  );
-  return chartsManagementPanelModule;
+  return chartsManagementPanelLoader();
 }

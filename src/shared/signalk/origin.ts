@@ -2,6 +2,19 @@ export function serverOrigin(): string {
   return `${location.protocol}//${location.host}`;
 }
 
+export function isInsecureTransportOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== 'http:') return false;
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/u, '');
+    const isLocalhost = hostname === 'localhost' || hostname.endsWith('.localhost');
+    const isIpv4Loopback = /^127(?:\.\d{1,3}){3}$/u.test(hostname);
+    return !isLocalhost && !isIpv4Loopback && hostname !== '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 // Append one `key=value` query parameter to a URL, choosing `?` or `&` by whether the URL already
 // carries a query. The value is percent-encoded; the key is assumed already safe. Shared by the token
 // and subscribe parameters so the separator choice lives in one place.
@@ -26,7 +39,7 @@ export function appendToken(url: string, token: string): string {
 // authenticate from it (zero data delivered), while the query parameter is the only
 // form that actually streams data. So query-string auth is required here, not a
 // preference. The exposure is bounded: this is a same-origin connection to the boat's
-// own server over the LAN, the token is a device token scoped to read, and the URL is
+// own server over the LAN, the token is a device token scoped to the approved access, and the URL is
 // not sent to any third party. To harden, serve Signal K over TLS (wss) so the URL is
 // encrypted in transit, and keep the server's access logs off or scrubbed of `token`.
 // The connection appends `subscribe=none` via appendQuery, so this only adds the token.

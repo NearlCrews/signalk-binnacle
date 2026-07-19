@@ -100,6 +100,42 @@ describe('LayerManager', () => {
     expect(manager.layers()).toEqual([]);
   });
 
+  it('removes resources installed by an async add that finishes after disposal', async () => {
+    let finishAdd = () => {};
+    let installed = false;
+    const overlay = fakeOverlay('slow');
+    overlay.add = async () => {
+      await new Promise<void>((resolve) => {
+        finishAdd = resolve;
+      });
+      installed = true;
+    };
+    overlay.remove = () => {
+      installed = false;
+      overlay.events.push('remove');
+    };
+    const manager = new LayerManager(fakeCtx());
+    const registration = manager.register(overlay);
+    await Promise.resolve();
+
+    manager.dispose();
+    finishAdd();
+
+    await expect(registration).rejects.toThrow('layer manager is disposed');
+    expect(installed).toBe(false);
+    expect(overlay.events.filter((event) => event === 'remove')).toHaveLength(2);
+    expect(manager.layers()).toEqual([]);
+  });
+
+  it('refuses registrations after disposal', async () => {
+    const overlay = fakeOverlay('late');
+    const manager = new LayerManager(fakeCtx());
+    manager.dispose();
+
+    await expect(manager.register(overlay)).rejects.toThrow('layer manager is disposed');
+    expect(overlay.events).toEqual([]);
+  });
+
   it('unregister drops the id from the persisted snapshot and saved order', async () => {
     const changes: Array<Record<string, { visible: boolean; opacity: number }>> = [];
     const orders: string[][] = [];
@@ -183,6 +219,33 @@ describe('LayerManager', () => {
     expect(overlay.events).toContain('opacity:0.5');
     // reset must precede the re-add so an overlay's recreated-empty source repopulates on next sync.
     expect(overlay.events.indexOf('reset')).toBeLessThan(overlay.events.indexOf('add'));
+  });
+
+  it('cleans up a reattach that finishes after disposal', async () => {
+    let finishReattach = () => {};
+    let installed = false;
+    const overlay = fakeOverlay('slow');
+    overlay.reattach = async () => {
+      await new Promise<void>((resolve) => {
+        finishReattach = resolve;
+      });
+      installed = true;
+    };
+    overlay.remove = () => {
+      installed = false;
+      overlay.events.push('remove');
+    };
+    const manager = new LayerManager(fakeCtx());
+    await manager.register(overlay);
+    const reattach = manager.reattachAll();
+    await Promise.resolve();
+
+    manager.dispose();
+    finishReattach();
+    await reattach;
+
+    expect(installed).toBe(false);
+    expect(overlay.events.filter((event) => event === 'remove')).toHaveLength(2);
   });
 
   it('layers() returns overlays top of the map first', async () => {

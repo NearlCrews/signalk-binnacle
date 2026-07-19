@@ -1,3 +1,90 @@
+<script module lang="ts">
+const ENABLED_MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled):not([aria-disabled="true"])';
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+function enabledMenuItems(surface: HTMLElement | undefined): HTMLElement[] {
+  return surface ? [...surface.querySelectorAll<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR)] : [];
+}
+
+function focusMenuItem(items: HTMLElement[], index: number): void {
+  for (const [itemIndex, item] of items.entries()) item.tabIndex = itemIndex === index ? 0 : -1;
+  items[index]?.focus({ preventScroll: true });
+}
+
+export function initializeOverflowMenuFocus(surface: HTMLElement | undefined): void {
+  const items = enabledMenuItems(surface);
+  if (items.length > 0) focusMenuItem(items, 0);
+}
+
+export function handleOverflowMenuKeydown(
+  event: KeyboardEvent,
+  surface: HTMLElement | undefined,
+  activeElement: Element | null = document.activeElement,
+  onTab?: (reverse: boolean) => void,
+): void {
+  if (event.key === 'Tab' && onTab) {
+    event.preventDefault();
+    onTab(event.shiftKey);
+    return;
+  }
+  if (
+    event.key !== 'ArrowDown' &&
+    event.key !== 'ArrowUp' &&
+    event.key !== 'Home' &&
+    event.key !== 'End'
+  )
+    return;
+
+  const items = enabledMenuItems(surface);
+  if (items.length === 0) return;
+  event.preventDefault();
+
+  const current = items.indexOf(activeElement as HTMLElement);
+  let next: number;
+  if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = items.length - 1;
+  else if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
+  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+  focusMenuItem(items, next);
+}
+
+export function overflowTabTarget(
+  trigger: HTMLElement | undefined,
+  surface: HTMLElement | undefined,
+  reverse: boolean,
+  candidates: readonly HTMLElement[],
+): HTMLElement | undefined {
+  if (!trigger) return undefined;
+  if (reverse) return trigger;
+  const outsideMenu = candidates.filter(
+    (candidate) =>
+      !surface?.contains(candidate) && !candidate.classList.contains('anchored-menu-backdrop'),
+  );
+  const triggerIndex = outsideMenu.indexOf(trigger);
+  return triggerIndex < 0 ? trigger : (outsideMenu[triggerIndex + 1] ?? trigger);
+}
+
+export function restoreOverflowMenuFocus(
+  requested: HTMLElement | undefined,
+  trigger: HTMLElement | undefined,
+  surface: HTMLElement | undefined,
+  activeElement: Element | null = document.activeElement,
+  body: HTMLElement = document.body,
+): void {
+  if (requested?.isConnected) {
+    requested.focus({ preventScroll: true });
+    return;
+  }
+  const focusWasLost =
+    activeElement === null ||
+    activeElement === body ||
+    !activeElement.isConnected ||
+    surface?.contains(activeElement) === true;
+  if (focusWasLost && trigger?.isConnected) trigger.focus({ preventScroll: true });
+}
+</script>
+
 <script lang="ts">
 import { MoreHorizontal } from '@lucide/svelte';
 import type { Snippet } from 'svelte';
@@ -14,17 +101,48 @@ interface Props {
 const { open, label, onToggle, onClose, children: content }: Props = $props();
 let trigger = $state<HTMLButtonElement>();
 let surface = $state<HTMLElement | undefined>();
+let wasOpen = false;
+let requestedCloseFocus: HTMLElement | undefined;
 
 $effect(() => {
-  if (!open) return;
-  requestAnimationFrame(() =>
-    surface?.querySelector<HTMLElement>('button:not(:disabled)')?.focus(),
+  if (open) {
+    wasOpen = true;
+    const frame = requestAnimationFrame(() => initializeOverflowMenuFocus(surface));
+    return () => cancelAnimationFrame(frame);
+  }
+  if (!wasOpen) return;
+  wasOpen = false;
+  const target = requestedCloseFocus;
+  requestedCloseFocus = undefined;
+  const closingSurface = surface;
+  const frame = requestAnimationFrame(() =>
+    restoreOverflowMenuFocus(target, trigger, closingSurface),
   );
+  return () => cancelAnimationFrame(frame);
 });
 
-function close(): void {
+function close(focusTarget: HTMLElement | undefined = trigger): void {
+  requestedCloseFocus = focusTarget;
   onClose();
-  trigger?.focus();
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  handleOverflowMenuKeydown(event, surface, document.activeElement, (reverse) => {
+    const candidates = [...document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
+    close(overflowTabTarget(trigger, surface, reverse, candidates));
+  });
+}
+
+function handleClick(event: MouseEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const item = target.closest<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR);
+  if (item && surface?.contains(item)) {
+    // The action may mount and focus an editor or confirmation control. Do not request the trigger
+    // explicitly here; the close effect restores it only when focus was actually lost.
+    requestedCloseFocus = undefined;
+    onClose();
+  }
 }
 </script>
 
@@ -49,6 +167,8 @@ function close(): void {
     ariaLabel={label}
     role="menu"
     bind:surfaceRef={surface}
+    onKeydown={handleKeydown}
+    onClick={handleClick}
   >
     {@render content()}
   </AnchoredMenu>

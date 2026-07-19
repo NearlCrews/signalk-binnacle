@@ -1,5 +1,6 @@
 import * as maplibregl from 'maplibre-gl';
 import { PMTiles, Protocol, type RangeResponse, type Source } from 'pmtiles';
+import { withTimeout } from '$shared/lib';
 import { isAbort } from './abort';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';
 import { requestedRangeEnd } from './pmtiles-range';
@@ -159,11 +160,12 @@ export class NoStoreSource implements Source {
     const headers = { Range: `bytes=${offset}-${end}` };
     for (let attempt = 0; ; attempt++) {
       let response: Response;
+      const init = withTimeout({ signal, cache: 'no-store', headers });
       try {
-        response = await fetch(this.#url, { signal, cache: 'no-store', headers });
+        response = await fetch(this.#url, init);
       } catch (error) {
         // A network error is transient and retryable; a caller abort is not.
-        if (isAbort(error, signal) || attempt >= MAX_RETRIES) throw error;
+        if (isAbort(error, init.signal ?? signal) || attempt >= MAX_RETRIES) throw error;
         await this.#backoff(attempt, signal);
         continue;
       }
@@ -229,12 +231,10 @@ export class CompanionSource implements Source {
     const headers: Record<string, string> = { Range: `bytes=${offset}-${end}` };
     const token = this.#getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(this.#url, {
-      signal,
-      headers,
-      credentials: 'omit',
-      redirect: 'error',
-    });
+    const response = await fetch(
+      this.#url,
+      withTimeout({ signal, headers, credentials: 'omit', redirect: 'error' }),
+    );
     if (response.url && new URL(response.url).origin !== new URL(this.#url).origin) {
       throw new Error('PMTiles companion redirected outside the Signal K origin.');
     }

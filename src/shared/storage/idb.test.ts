@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { openIdbDatabase } from './idb';
+import { openIdbDatabase, openIdbStore } from './idb';
 
 interface FakeRequest {
   onupgradeneeded: (() => void) | null;
@@ -37,6 +37,43 @@ function blockedThenOpenFactory(): { factory: IDBFactory; attempts: () => number
   return { factory, attempts: () => attempts };
 }
 
+function storeHarness() {
+  const request = {
+    onsuccess: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    result: 'stored',
+    error: null as DOMException | null,
+  };
+  const transaction = {
+    oncomplete: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onabort: null as (() => void) | null,
+    error: null as DOMException | null,
+    objectStore: () => ({}) as IDBObjectStore,
+  };
+  const database = {
+    onversionchange: null as (() => void) | null,
+    close: () => {},
+    transaction: () => transaction as unknown as IDBTransaction,
+  };
+  const factory = {
+    open: () => {
+      const openRequest = {
+        onupgradeneeded: null as (() => void) | null,
+        onsuccess: null as (() => void) | null,
+        onerror: null as (() => void) | null,
+        onblocked: null as (() => void) | null,
+        result: database as unknown as IDBDatabase,
+        error: null,
+      };
+      queueMicrotask(() => openRequest.onsuccess?.());
+      return openRequest as unknown as IDBOpenDBRequest;
+    },
+  } as unknown as IDBFactory;
+  const runner = openIdbStore(factory, 'binnacle-test', 'items', () => {});
+  return { request, transaction, runner };
+}
+
 describe('openIdbDatabase', () => {
   it('retries the open after a rejection rather than reusing the failed promise', async () => {
     const { factory, attempts } = blockedThenOpenFactory();
@@ -57,5 +94,34 @@ describe('openIdbDatabase', () => {
     // A third call reuses the resolved connection without a new open.
     await open();
     expect(attempts()).toBe(2);
+  });
+});
+
+describe('openIdbStore', () => {
+  it('does not resolve a successful request until its transaction commits', async () => {
+    const { request, transaction, runner } = storeHarness();
+    let settled = false;
+    const pending = runner.run<string>('readwrite', () => request as unknown as IDBRequest);
+    pending.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    request.onsuccess?.();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    transaction.oncomplete?.();
+    await expect(pending).resolves.toBe('stored');
+  });
+
+  it('rejects when the transaction aborts after the request succeeds', async () => {
+    const { request, transaction, runner } = storeHarness();
+    const pending = runner.run<string>('readwrite', () => request as unknown as IDBRequest);
+    await Promise.resolve();
+    await Promise.resolve();
+    request.onsuccess?.();
+    transaction.error = new DOMException('quota exceeded', 'QuotaExceededError');
+    transaction.onabort?.();
+    await expect(pending).rejects.toMatchObject({ name: 'QuotaExceededError' });
   });
 });

@@ -34,6 +34,7 @@ interface Props {
   surfaceRef?: HTMLElement;
   onKeydown?: (event: KeyboardEvent) => void;
   onFocusOut?: (event: FocusEvent) => void;
+  onClick?: (event: MouseEvent) => void;
   children: Snippet;
 }
 
@@ -52,6 +53,7 @@ let {
   surfaceRef = $bindable(),
   onKeydown,
   onFocusOut,
+  onClick,
   children,
 }: Props = $props();
 
@@ -117,6 +119,10 @@ $effect(() => {
   ></button>
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a prop (group by default, menu for
        context menus); both support aria-label, but biome cannot resolve the dynamic role statically. -->
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: role is a dynamic prop, and menu consumers
+       delegate activation from their semantic button children. -->
+  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the delegated handler observes button clicks,
+       including keyboard-generated clicks; it does not create a separate pointer-only action. -->
   <div
     class={surfaceClass ? `anchored-menu-surface ${surfaceClass}` : 'anchored-menu-surface'}
     {role}
@@ -126,6 +132,7 @@ $effect(() => {
     bind:this={surfaceRef}
     use:onKeydownAction={onKeydown}
     onfocusout={onFocusOut}
+    onclick={onClick}
     transition:scale={{
       start: 0.92,
       duration: prefersReducedMotion() ? 0 : 140,

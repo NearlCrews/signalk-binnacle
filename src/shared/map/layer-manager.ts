@@ -82,6 +82,7 @@ export class LayerManager {
   #ctx: OverlayContext;
   #modules = new Map<string, OverlayModule>();
   #state = new Map<string, OverlayState>();
+  #disposed = false;
   #saved: LayerSettings;
   #onChange?: (settings: LayerSettings) => void;
   // The explicit user order (bottom to top) of non-pinned overlays; seeds the effective order.
@@ -147,6 +148,7 @@ export class LayerManager {
   // Add a single module (state restore, exclusion enforcement, add, visibility, and opacity)
   // without restacking. register and registerAll share this and own when #applyOrder runs.
   async #addModule(module: OverlayModule): Promise<void> {
+    if (this.#disposed) throw new Error('layer manager is disposed');
     if (this.#modules.has(module.id)) {
       throw new Error(`duplicate overlay id: ${module.id}`);
     }
@@ -169,17 +171,33 @@ export class LayerManager {
       }
     }
     this.#state.set(module.id, state);
+    let removedAfterAdd = false;
     try {
       await module.add(this.#ctx);
+      // An async add can finish after the owning map has been torn down. Dispose calls remove once
+      // immediately to clean up partial work, then this second pass removes anything add installed
+      // after that first cleanup. Never apply state or theme to a disposed map.
+      if (this.#disposed) {
+        try {
+          module.remove(this.#ctx);
+        } catch {
+          // The owning map may already have discarded its style. Disposal still wins over the
+          // cleanup error, and the registration must not continue into state application.
+        }
+        removedAfterAdd = true;
+        throw new Error('layer manager is disposed');
+      }
       module.setVisible(this.#ctx, state.visible);
       module.setOpacity?.(this.#ctx, state.opacity);
       if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);
     } catch (error) {
-      try {
-        module.remove(this.#ctx);
-      } catch {
-        // Best-effort rollback: an add that failed before creating map resources may have nothing
-        // to remove. The original add error is the useful failure for the caller.
+      if (!removedAfterAdd) {
+        try {
+          module.remove(this.#ctx);
+        } catch {
+          // Best-effort rollback: an add that failed before creating map resources may have nothing
+          // to remove. The original add error is the useful failure for the caller.
+        }
       }
       this.#modules.delete(module.id);
       this.#state.delete(module.id);
@@ -206,6 +224,8 @@ export class LayerManager {
   // registration order mirrors stack unwinding, and clearing first makes repeated disposal a no-op
   // even if one module's cleanup throws through a host integration.
   dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
     const modules = [...this.#modules.values()].reverse();
     this.#modules.clear();
     this.#state.clear();
@@ -286,6 +306,7 @@ export class LayerManager {
   // It deliberately does NOT re-run exclusive-group enforcement: the snapshot was a valid state
   // when it was captured, so re-enforcing here could suppress a layer the saved profile kept on.
   applySnapshot(settings: LayerSettings, order: string[]): void {
+    if (this.#disposed) return;
     for (const [id, module] of this.#modules) {
       const next = settings[id];
       const state = this.#state.get(id);
@@ -383,6 +404,7 @@ export class LayerManager {
   // Realize the effective order on the map by chaining moveLayer from the top down, anchoring
   // the whole overlay group just beneath the top sentinel so it stays above the base style.
   #applyOrder(order = this.#effectiveOrder()): void {
+    if (this.#disposed) return;
     // Band insertion already yields the default order, so a restack only matters once a saved
     // order or a pin makes the desired order differ from the plain band sequence.
     if (!this.#explicitOrder.length && !this.#pinned.size) return;
@@ -405,6 +427,7 @@ export class LayerManager {
   // Broadcast a theme change to every overlay that recolors itself, so each slice owns
   // the theming of its own layers instead of the widget reaching into them by id.
   applyTheme(paint: MapThemePaint): void {
+    if (this.#disposed) return;
     this.#lastPaint = paint;
     for (const module of this.#modules.values()) {
       module.applyTheme?.(this.#ctx, paint);
@@ -415,6 +438,7 @@ export class LayerManager {
   // No in-app action swaps the base style yet (theme changes recolor in place), so this is forward
   // scaffolding for that path, exercised by tests and ready for when a style swap lands.
   async reattachAll(): Promise<void> {
+    if (this.#disposed) return;
     // A base-style swap wipes the sentinel layers too, so restore them before
     // re-adding overlays or every beforeId would point at a missing layer.
     installSentinels(this.#ctx.map);
@@ -423,7 +447,26 @@ export class LayerManager {
       // The swap recreated this overlay's sources empty, so invalidate its change-detection cache
       // before re-adding, so the next sync repopulates rather than early-returning as unchanged.
       module.reset?.();
-      await (module.reattach ?? module.add).call(module, this.#ctx);
+      try {
+        await (module.reattach ?? module.add).call(module, this.#ctx);
+      } catch (error) {
+        try {
+          module.remove(this.#ctx);
+        } catch {
+          // Keep the reattach failure as the useful error when partial cleanup is also unavailable.
+        }
+        throw error;
+      }
+      if (this.#disposed) {
+        // The reattach completed after disposal and may have recreated map resources after the
+        // first cleanup pass. Remove them now, then stop the batch without touching map state.
+        try {
+          module.remove(this.#ctx);
+        } catch {
+          // The map may already have removed its style. Cleanup remains best effort here.
+        }
+        return;
+      }
       module.setVisible(this.#ctx, state.visible);
       module.setOpacity?.(this.#ctx, state.opacity);
       if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);

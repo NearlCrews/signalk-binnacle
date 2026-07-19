@@ -6,6 +6,7 @@ import type {
   ProfilesState,
   RemoteProfilesSnapshot,
 } from './profile-types';
+import { MAX_PROFILES } from './profile-validation';
 import {
   type AsyncProfileAdapter,
   type ProfileAdapter,
@@ -246,6 +247,29 @@ describe('ProfileStore local behavior', () => {
     expect(store.active?.settingUpdatedAt?.futureDisplay).toBe(10);
   });
 
+  it('rejects prototype-sensitive extension and field-clock keys', () => {
+    const unsafeSetting = profile('unsafe-setting', 'Unsafe setting', 10);
+    Object.defineProperty(unsafeSetting.settings, '__proto__', {
+      enumerable: true,
+      value: { arrivalMuted: true },
+    });
+    const unsafeClock = profile('unsafe-clock', 'Unsafe clock', 10);
+    Object.defineProperty(unsafeClock.settingUpdatedAt ?? {}, 'constructor', {
+      enumerable: true,
+      value: 10,
+    });
+    const store = new ProfileStore(
+      fakeAdapter({
+        profiles: [unsafeSetting, unsafeClock],
+        activeId: unsafeSetting.id,
+        defaultId: undefined,
+      }),
+    );
+
+    expect(store.profiles).toEqual([]);
+    expect(store.activeId).toBeUndefined();
+  });
+
   it('saves a profile locally, marks it pending, and keeps the active selection device-local', () => {
     const adapter = fakeAdapter();
     const store = new ProfileStore(adapter);
@@ -312,6 +336,21 @@ describe('ProfileStore local behavior', () => {
     }
   });
 
+  it('starts with an empty profile library when browser storage access is blocked', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new DOMException('Blocked by browser policy', 'SecurityError');
+      },
+      setItem: vi.fn(),
+    });
+    try {
+      expect(() => new ProfileStore()).not.toThrow();
+      expect(new ProfileStore().profiles).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('updates only changed portable fields and preserves forward-compatible settings', () => {
     const store = new ProfileStore(fakeAdapter());
     const saved = store.save('Anchor', settings({ mode: 'anchor' }));
@@ -367,6 +406,42 @@ describe('ProfileStore local behavior', () => {
 });
 
 describe('ProfileStore server synchronization', () => {
+  it('rejects a remote profile with prototype-sensitive extension keys before merging', async () => {
+    const local = profile('p1', 'Local', 2);
+    const remote = profile('p1', 'Remote', 3);
+    Object.defineProperty(remote.settings, '__proto__', {
+      enumerable: true,
+      value: { arrivalMuted: true },
+    });
+    Object.defineProperty(remote.settingUpdatedAt ?? {}, '__proto__', {
+      enumerable: true,
+      value: 3,
+    });
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: local.id, defaultId: undefined }),
+    );
+    const server: AsyncProfileAdapter = {
+      load: async () => ({
+        state: 'ok',
+        snapshot: {
+          profiles: [remote],
+          tombstones: [],
+          defaultId: undefined,
+          revision: 1,
+        },
+      }),
+      mutate: async () => 'ok',
+    };
+
+    const result = await store.syncWithServer(server);
+
+    expect(result.ok).toBe(false);
+    expect(store.syncState).toBe('error');
+    expect(store.active?.name).toBe('Local');
+    expect(store.active?.settings.arrivalMuted).toBeUndefined();
+    expect(Object.getPrototypeOf(store.active?.settings)).toBe(Object.prototype);
+  });
+
   it('rebases pending local settings and names above newer remote clocks', async () => {
     const local = profile('p1', 'Offline name', 2, { theme: 'day' });
     local.settingUpdatedAt = { theme: 2 };
@@ -544,6 +619,31 @@ describe('ProfileStore server synchronization', () => {
       (store.active?.settings as unknown as Record<string, unknown> | undefined)?.futureMode,
     ).toBe('remote-new');
     expect(store.active?.settingUpdatedAt?.futureMode).toBe(7);
+  });
+
+  it('surfaces a capacity conflict without dropping local profiles or pushing a truncated union', async () => {
+    const locals = Array.from({ length: MAX_PROFILES }, (_, index) =>
+      profile(`local-${index}`, `Local ${index}`, index + 1),
+    );
+    const remote = profile('remote-only', 'Remote only', MAX_PROFILES + 1);
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: locals, activeId: locals.at(-1)?.id, defaultId: undefined }),
+    );
+    const server = fakeServer({
+      profiles: [remote],
+      tombstones: [],
+      defaultId: undefined,
+      revision: 1,
+    });
+
+    const result = await store.syncWithServer(server);
+
+    expect(result.ok).toBe(false);
+    expect(store.syncState).toBe('capacity-conflict');
+    expect(store.profiles).toHaveLength(MAX_PROFILES);
+    expect(store.activeId).toBe(locals.at(-1)?.id);
+    expect(store.profileById(remote.id)).toBeUndefined();
+    expect(server.mutations).toEqual([]);
   });
 
   it('keeps the remote active id out of device state and adopts the remote default', async () => {

@@ -300,6 +300,36 @@ describe('CourseGuidance', () => {
     expect(g.arrived).toBe(false);
   });
 
+  it('resets arrival when a route advances to the same coordinates', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0.00045 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 0 }, name: 'B' },
+      'navigation.course.activeRoute': {
+        href: '/resources/routes/r',
+        pointIndex: 0,
+        pointTotal: 3,
+      },
+    });
+    const guidance = new CourseGuidance(store, new OwnVessel(store));
+    expect(guidance.arrived).toBe(true);
+
+    // The next route point repeats the same coordinate, while the vessel has moved just outside
+    // the arrival circle but remains inside the old point's hysteresis exit margin.
+    applySelf(
+      store,
+      {
+        'navigation.position': { latitude: 0, longitude: 0.000944 },
+        'navigation.course.activeRoute': {
+          href: '/resources/routes/r',
+          pointIndex: 1,
+          pointTotal: 3,
+        },
+      },
+      2,
+    );
+    expect(guidance.arrived).toBe(false);
+  });
+
   it('clears arrival immediately when the own-vessel fix becomes stale', () => {
     const store = new SignalKStore();
     const clock = $state({ now: 1000 });

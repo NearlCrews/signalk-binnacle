@@ -96,9 +96,10 @@ export class TrackRecorder {
   #store: TrackStore<TrackPoint>;
   // Set when recording resumes or a paused fix arrives, so the next kept fix starts a break.
   #resumeGap = false;
-  // When the last fix was considered (recorded or not), so a dropout is detected from the fix
-  // stream rather than from the last recorded point.
+  // The logical timestamp of the last considered fix and its raw clock reading. Keeping both lets
+  // a wall-clock regression start a new segment without making the stored timeline go backward.
   #lastFixT: number | undefined;
+  #lastObservedT: number | undefined;
   #lastFix: Pick<TrackPoint, 'lat' | 'lon' | 't'> | undefined;
   #lifecycle = 0;
   #writeQueue: Promise<void> = Promise.resolve();
@@ -111,6 +112,7 @@ export class TrackRecorder {
 
   async #restore(): Promise<void> {
     const lifecycle = this.#lifecycle;
+    const restoreStartedAt = Date.now();
     let saved: TrackPoint[];
     try {
       saved = await this.#store.all();
@@ -132,7 +134,8 @@ export class TrackRecorder {
         p.lon < -180 ||
         p.lon > 180 ||
         !Number.isFinite(p.t) ||
-        p.t < lastRestoredT
+        p.t > restoreStartedAt ||
+        p.t <= lastRestoredT
       ) {
         return [];
       }
@@ -140,9 +143,39 @@ export class TrackRecorder {
       const sog = Number.isFinite(p.sog) && p.sog >= 0 ? p.sog : 0;
       return [{ lat: p.lat, lon: p.lon, t: p.t, sog, gap: p.gap === true ? true : undefined }];
     });
-    // Prepend rather than assign: fixes recorded between construction and the store read must
-    // not be clobbered by the restore.
-    this.points = [...restored, ...this.points];
+    // Fixes can land before the store read completes. Merge them chronologically, preferring the
+    // live copy on an equal timestamp, so a late restore cannot create a regressed timeline or
+    // duplicate a write that became visible to the read transaction.
+    const liveByTime = new Map(this.points.map((point) => [point.t, point]));
+    const merged = [...restored.filter((point) => !liveByTime.has(point.t)), ...this.points].sort(
+      (a, b) => a.t - b.t,
+    );
+    // A live fix recorded while IndexedDB was opening initially looked like the first point and had
+    // no gap. Once restored history is inserted before it, reclassify that junction using the same
+    // outage and implausible-jump policy as a normal incoming fix so app downtime is never bridged.
+    this.points = merged.map((point, index) => {
+      const previous = merged[index - 1];
+      if (!previous || point.gap || !liveByTime.has(point.t) || liveByTime.has(previous.t)) {
+        return point;
+      }
+      const decision = decideRecord(
+        previous,
+        undefined,
+        point.lat,
+        point.lon,
+        point.t,
+        this.#settings.value,
+        previous,
+      );
+      return decision.gap ? { ...point, gap: true } : point;
+    });
+    if (this.#lastFixT === undefined) {
+      const last = this.points[this.points.length - 1];
+      if (last) {
+        this.#lastFixT = last.t;
+        this.#lastFix = { lat: last.lat, lon: last.lon, t: last.t };
+      }
+    }
     // Re-seed the accumulators from the merged history in one pass, including the junction leg
     // between the restored tail and any fixes recorded before the store read resolved.
     const seeded = computeStats(this.points);
@@ -165,18 +198,29 @@ export class TrackRecorder {
     }
     sog = Math.max(0, sog);
     const lastFixT = this.#lastFixT;
+    const lastObservedT = this.#lastObservedT;
     const lastFix = this.#lastFix;
-    if (lastFixT !== undefined && now <= lastFixT) return;
-    this.#lastFixT = now;
-    this.#lastFix = { lat, lon, t: now };
+    if (lastObservedT !== undefined && now === lastObservedT) return;
+    const clockRegressed = lastObservedT !== undefined && now < lastObservedT;
+    let logicalNow = now;
+    if (lastObservedT !== undefined && lastFixT !== undefined) {
+      const elapsed = now - lastObservedT;
+      if (elapsed < 0) logicalNow = lastFixT + 1;
+      else if (now <= lastFixT) logicalNow = lastFixT + elapsed;
+    }
+    this.#lastObservedT = now;
+    this.#lastFixT = logicalNow;
+    this.#lastFix = { lat, lon, t: logicalNow };
     if (this.paused) {
       this.#resumeGap = true;
       return;
     }
     const last = this.points[this.points.length - 1];
-    const decision = decideRecord(last, lastFixT, lat, lon, now, this.#settings.value, lastFix);
+    const decision = clockRegressed
+      ? { append: true, gap: true }
+      : decideRecord(last, lastFixT, lat, lon, logicalNow, this.#settings.value, lastFix);
     if (!decision.append) return;
-    const point: TrackPoint = { lat, lon, t: now, sog };
+    const point: TrackPoint = { lat, lon, t: logicalNow, sog };
     // Flag a gap when this point follows a break (a pause-resume or a fix-rate dropout) so the
     // renderer does not draw a line across it. Left absent otherwise rather than set false.
     if (decision.gap || this.#resumeGap) point.gap = true;
@@ -207,6 +251,7 @@ export class TrackRecorder {
     this.#maxSog = 0;
     this.#resumeGap = false;
     this.#lastFixT = undefined;
+    this.#lastObservedT = undefined;
     this.#lastFix = undefined;
     this.#writeQueue = this.#writeQueue.then(() => this.#store.clear());
   }
@@ -214,7 +259,11 @@ export class TrackRecorder {
   // Remove only the prefix accepted by a completed server save. Fixes captured while that request
   // was in flight remain the new active recording and are rewritten to the local persistence log.
   clearThrough(savedThroughT: number): void {
-    const remaining = this.points.filter((point) => point.t > savedThroughT);
+    // The caller passes the final point from its immutable save snapshot. Require that exact point
+    // to remain present instead of interpreting an arbitrary timestamp as a destructive cutoff.
+    const boundaryIndex = this.points.findLastIndex((point) => point.t === savedThroughT);
+    if (boundaryIndex < 0) return;
+    const remaining = this.points.slice(boundaryIndex + 1);
     if (remaining.length === 0) {
       this.clear();
       return;

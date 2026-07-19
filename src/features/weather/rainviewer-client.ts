@@ -1,14 +1,50 @@
 import type { RadarData } from '$entities/weather';
-import { fetchJsonOrUndefined } from '$shared/lib';
+import { fetchJsonOrUndefined, hasControlCharacters, isRecord } from '$shared/lib';
 
 const MAPS_URL = 'https://api.rainviewer.com/public/weather-maps.json';
 
-interface RainViewerMaps {
-  host?: string;
-  radar?: {
-    past?: Array<{ time: number; path: string }>;
-    nowcast?: Array<{ time: number; path: string }>;
-  };
+const MAX_RADAR_FRAMES = 128;
+const MAX_RADAR_HOST_LENGTH = 512;
+const MAX_RADAR_PATH_LENGTH = 1_024;
+
+function safeHost(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > MAX_RADAR_HOST_LENGTH) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      return undefined;
+    }
+    return url.href.replace(/\/$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
+function safeFrames(value: unknown): Array<{ time: number; path: string }> | undefined {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_RADAR_FRAMES) return undefined;
+  const frames: Array<{ time: number; path: string }> = [];
+  for (const frame of value) {
+    if (!isRecord(frame) || !Number.isSafeInteger(frame.time) || (frame.time as number) <= 0) {
+      return undefined;
+    }
+    const time = (frame.time as number) * 1000;
+    if (!Number.isSafeInteger(time)) return undefined;
+    const path = frame.path;
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      path.startsWith('//') ||
+      path.includes('?') ||
+      path.includes('#') ||
+      path.length > MAX_RADAR_PATH_LENGTH ||
+      hasControlCharacters(path)
+    ) {
+      return undefined;
+    }
+    frames.push({ time, path });
+  }
+  return frames;
 }
 
 export interface RadarTimeline {
@@ -48,17 +84,15 @@ export function radarTimeline(
 export async function fetchRadar(
   fetchFn: typeof fetch = globalThis.fetch.bind(globalThis),
 ): Promise<RadarData | undefined> {
-  const body = await fetchJsonOrUndefined<RainViewerMaps>(
-    MAPS_URL,
-    { credentials: 'omit' },
-    fetchFn,
-  );
-  if (body === undefined) return undefined;
-  if (!body.host || !body.radar) return undefined;
-  const raw = [...(body.radar.past ?? []), ...(body.radar.nowcast ?? [])];
-  const frames = raw
-    .map((f) => ({ time: f.time * 1000, path: f.path }))
-    .sort((a, b) => a.time - b.time);
+  const body = await fetchJsonOrUndefined<unknown>(MAPS_URL, { credentials: 'omit' }, fetchFn);
+  if (!isRecord(body) || !isRecord(body.radar)) return undefined;
+  const host = safeHost(body.host);
+  const past = safeFrames(body.radar.past);
+  const nowcast = safeFrames(body.radar.nowcast);
+  if (!host || !past || !nowcast || past.length + nowcast.length > MAX_RADAR_FRAMES) {
+    return undefined;
+  }
+  const frames = [...past, ...nowcast].sort((a, b) => a.time - b.time);
   if (frames.length === 0) return undefined;
-  return { host: body.host, frames };
+  return { host, frames };
 }

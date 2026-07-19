@@ -2,6 +2,7 @@ import type { AnchorWatch } from '$entities/anchor';
 import type { OwnVessel } from '$entities/vessel';
 import type { GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
+import { shouldSoundAnchorAlarm } from './anchor-alarm';
 import { resolveAnchorTransport } from './anchor-transport';
 
 export interface AnchorControllerDeps {
@@ -58,7 +59,7 @@ export function createAnchorController(deps: AnchorControllerDeps) {
   // Sound the anchor-drag alarm. The acknowledge semantics live in the watch: client mode clears the
   // latch outright, server mode silences the current grade until it changes or clears.
   $effect(() => {
-    anchorAlarm.update(anchor.dragging && !anchor.acknowledged);
+    anchorAlarm.update(shouldSoundAnchorAlarm(anchor.dragging, anchor.acknowledged));
   });
 
   // The anchor channel of the assertive live region, separate from the collision channel so a drag

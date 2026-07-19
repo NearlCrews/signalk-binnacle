@@ -54,6 +54,9 @@ export interface ThemedMapOptions {
   defaultZoom?: number;
   minZoom?: number;
   maxZoom?: number;
+  // Override the canvas pixel ratio for secondary or resource-constrained map surfaces. Omitted
+  // maps retain MapLibre's device-pixel-ratio default.
+  pixelRatio?: number;
   managerOptions?: LayerManagerOptions;
   // Coalesced to one emit per animation frame, for the live position readout and view persistence.
   onView?: (view: MapView) => void;
@@ -92,6 +95,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       zoom: Math.min(wanted, opts.maxZoom ?? Number.POSITIVE_INFINITY),
       minZoom: opts.minZoom,
       maxZoom: opts.maxZoom,
+      pixelRatio: opts.pixelRatio,
       dragRotate: false,
       touchPitch: false,
       pitchWithRotate: false,
@@ -251,7 +255,10 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     removeCanvasListeners = contextMenu.remove;
   }
 
-  mapInstance.on('load', () => {
+  void mapInstance.once('load', () => {
+    // MapLibre normally removes pending listeners with the map, but the load event can already be
+    // queued when a component closes. Do not create sentinels, a manager, or widget wiring then.
+    if (destroyed) return;
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
@@ -278,20 +285,30 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     // wiring (or no-ops if runTick was never called).
     stopTick = tick.stopTick;
 
-    Promise.resolve(
-      opts.onLoad({
-        map: mapInstance,
-        ctx,
-        manager: loadedManager,
-        recolor,
-        isDestroyed: () => destroyed,
-        runTick: tick.runTick,
-      }),
-    ).catch((e) => console.error('map onLoad failed', e));
+    const api: ThemedMapApi = {
+      map: mapInstance,
+      ctx,
+      manager: loadedManager,
+      recolor,
+      isDestroyed: () => destroyed,
+      runTick: tick.runTick,
+    };
+    const reportLoadError = (error: unknown): void => {
+      // A manager disposal barrier can reject an in-flight widget initialization during normal
+      // teardown. Only report failures while the map is still live.
+      if (!destroyed) console.error('map onLoad failed', error);
+    };
+    try {
+      void Promise.resolve(opts.onLoad(api)).catch(reportLoadError);
+    } catch (error) {
+      // Promise.resolve cannot catch a callback that throws before returning a promise.
+      reportLoadError(error);
+    }
   });
 
   return {
     destroy: () => {
+      if (destroyed) return;
       destroyed = true;
       cancelLongPress();
       removeCanvasListeners();

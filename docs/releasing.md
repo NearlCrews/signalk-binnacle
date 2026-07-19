@@ -75,10 +75,16 @@ Only after the owner explicitly approves publication:
 The workflow rejects a tag that disagrees with `package.json` or points to a commit outside `main`.
 
 The publish job requests `id-token: write` and adds npm provenance. Keep `NPM_TOKEN` configured until
-the npm package has a verified trusted-publisher binding for this repository and workflow. Migrating
-to token-free publishing requires an owner to configure that external npm setting, run a successful
-approved release, verify provenance and package ownership, and only then remove the repository
-secret. Repository code alone cannot prove or create the npm-side binding.
+the npm package has a verified trusted-publisher binding. An npm package owner must add a GitHub
+Actions trusted publisher for organization `NearlCrews`, repository `signalk-binnacle`, and workflow
+`publish.yml`. Allow the `npm publish` action, and leave the environment unset unless the publish job
+is later assigned a matching GitHub environment. Trusted publishing requires the existing
+GitHub-hosted runner and `id-token: write` permission.
+
+Migrating to token-free publishing requires an owner to configure that external npm setting, run a
+successful approved release, verify provenance and package ownership, and only then remove the
+`NODE_AUTH_TOKEN` workflow environment entry and the `NPM_TOKEN` repository secret. Repository code
+alone cannot prove or create the npm-side binding.
 
 Keep the downloaded tarball argument explicitly relative, such as `./artifacts/*.tgz`. Without the
 `./` prefix, npm can interpret the path as GitHub shorthand instead of a local package archive.

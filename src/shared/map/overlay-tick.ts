@@ -43,6 +43,9 @@ export function createOverlayTick(
     // A second call must not orphan the first 'render' listener, interval, and visibilitychange
     // listener, so tear down any prior wiring first.
     teardown();
+    // An async widget initializer can reach runTick after the map owner has already torn down. Do
+    // not reinstall listeners or timers on the dead map in that case.
+    if (isDestroyed()) return;
     // Calling this once replaces the old unconditional rAF loop, which synced ~60x/sec for the life
     // of the map even at anchor. Now sync runs only when the map actually repaints (pan, zoom) and
     // on a low-frequency interval for the store-driven overlays, and both pause while hidden.
@@ -50,6 +53,7 @@ export function createOverlayTick(
     const syncAll = () => {
       if (isDestroyed()) return;
       for (const overlay of overlays) {
+        if (isDestroyed()) return;
         try {
           overlay.sync(ctx);
           if (failedOverlays.delete(overlay)) onStatus?.(syncableId(overlay), undefined);

@@ -169,8 +169,10 @@ describe('notes overlay', () => {
     overlay.sync(ctx);
     await settle();
     expect(map.hasImage(symbolIconId('u9'))).toBe(true);
-    const fc = map.sources.get('binnacle-notes')?.data as GeoJSON.FeatureCollection;
-    expect(fc.features[0].properties).toMatchObject({ icon: symbolIconId('u9') });
+    await vi.waitFor(() => {
+      const fc = map.sources.get('binnacle-notes')?.data as GeoJSON.FeatureCollection;
+      expect(fc.features[0].properties).toMatchObject({ icon: symbolIconId('u9') });
+    });
     // The anchor offset rides on the layer's icon-offset match (keyed on the icon id), not on the
     // feature: MapLibre would coerce an array-valued feature property to a string.
     expect(map.setLayoutProperty).toHaveBeenLastCalledWith('binnacle-notes-symbol', 'icon-offset', [

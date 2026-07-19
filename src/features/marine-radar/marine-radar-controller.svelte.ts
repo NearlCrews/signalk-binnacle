@@ -14,6 +14,7 @@ import {
   writeControl,
 } from './radar-client';
 import type { RadarFrame } from './radar-frame-core';
+import { radarFlushHz } from './radar-limits';
 import { POWER_PENDING_KEY, type RadarControlEntry, type RadarStatus } from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
 
@@ -27,7 +28,6 @@ export interface MarineRadarDeps {
   radarAvailable: () => boolean;
 }
 
-const FLUSH_HZ = 15;
 const REOPEN_BASE_MS = 1000;
 const REOPEN_MAX_MS = 30_000;
 const CONTROL_POLL_MS = 15_000;
@@ -175,7 +175,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         radar.spokesPerRevolution,
         radar.maxSpokeLen,
         radar.range,
-        FLUSH_HZ,
+        radarFlushHz(radar.spokesPerRevolution, radar.maxSpokeLen),
         (frame) => {
           if (disposed || generation !== streamGeneration || store.selectedId !== radar.id) {
             worker?.recycle(frame.buffer);

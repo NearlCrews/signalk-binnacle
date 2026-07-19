@@ -135,6 +135,59 @@ describe('WorkerCore', () => {
     expect(frames.at(-1)?.self.get('navigation.speedOverGround')).toBe(2.5);
   });
 
+  it('drops valid JSON primitives without interrupting subsequent deltas', () => {
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+    for (const data of ['null', 'true', '42', '"hello"', '[]']) ws.onmessage?.({ data });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        context: 'vessels.self',
+        updates: [{ values: [{ path: 'navigation.speedOverGround', value: 3 }] }],
+      }),
+    });
+    vi.runAllTimers();
+    expect(frames.at(-1)?.self.get('navigation.speedOverGround')).toBe(3);
+  });
+
+  it('drops an oversized text frame and continues with the next valid delta', () => {
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+    ws.onmessage?.({ data: 'x'.repeat(1_048_577) });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        context: 'vessels.self',
+        updates: [{ values: [{ path: 'navigation.speedOverGround', value: 6 }] }],
+      }),
+    });
+    vi.runAllTimers();
+    expect(frames.at(-1)?.self.get('navigation.speedOverGround')).toBe(6);
+  });
+
+  it('closes the previous socket when connect is called again', () => {
+    const firstFrames: SKFrame[] = [];
+    const secondFrames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://first', (frame) => firstFrames.push(frame));
+    const first = FakeWebSocket.instances[0];
+    core.connect('ws://second', (frame) => secondFrames.push(frame));
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(first.readyState).toBe(WebSocket.CLOSED);
+    first.onmessage?.({
+      data: JSON.stringify({
+        context: 'vessels.self',
+        updates: [{ values: [{ path: 'navigation.speedOverGround', value: 99 }] }],
+      }),
+    });
+    vi.runAllTimers();
+    expect(secondFrames.some((frame) => frame.self.has('navigation.speedOverGround'))).toBe(false);
+  });
+
   it('disconnect() fires no further frames after the batcher is drained', () => {
     const frames: SKFrame[] = [];
     const core = new WorkerCore();
@@ -212,5 +265,25 @@ describe('WorkerCore', () => {
     });
     vi.runAllTimers();
     expect(frames.at(-1)?.self.get('navigation.speedOverGround')).toBe(7);
+  });
+
+  it('does not retain an oversized or control-bearing self context from hello', () => {
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+
+    for (const self of [`vessels.${'x'.repeat(600)}`, 'vessels.bad\u0000context']) {
+      ws.onmessage?.({ data: JSON.stringify({ name: 'sk', version: '1.0.0', self }) });
+      ws.onmessage?.({
+        data: JSON.stringify({
+          context: 'vessels.self',
+          updates: [{ values: [{ path: 'navigation.speedOverGround', value: 4 }] }],
+        }),
+      });
+      vi.runAllTimers();
+      expect(frames.at(-1)?.selfContext).toBeUndefined();
+    }
   });
 });

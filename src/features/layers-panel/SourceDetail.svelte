@@ -2,8 +2,11 @@
 import { LocateFixed, Trash2 } from '@lucide/svelte';
 import {
   MAX_USER_CHART_NAME_LENGTH,
+  shouldShareUserChart,
   type UserChartSource,
   type UserCharts,
+  userChartNeedsServerDelete,
+  userChartUrlForDisplay,
 } from '$entities/user-charts';
 import { type Bbox4, formatBounds } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
@@ -34,8 +37,15 @@ let chartName = $derived(userSource?.name ?? item.title);
 
 const chart = $derived(item.chart);
 const canEdit = $derived(userSource !== undefined && userCharts !== undefined);
+const renameBlocked = $derived(
+  writeBlocked && userSource !== undefined && shouldShareUserChart(userSource),
+);
+const deleteBlocked = $derived(
+  writeBlocked && userSource !== undefined && userChartNeedsServerDelete(userSource),
+);
 const chartBounds = $derived(chart?.bounds ?? userSource?.bounds);
-const chartUrl = $derived(chart?.url ?? userSource?.origin.url);
+const rawChartUrl = $derived(chart?.url ?? userSource?.origin.url);
+const chartUrl = $derived(rawChartUrl ? userChartUrlForDisplay(rawChartUrl) : undefined);
 const chartKind = $derived.by(() => {
   if (chart?.kind === 'vector') return 'Vector';
   if (chart?.kind === 'raster') return 'Raster';
@@ -58,13 +68,13 @@ const specRows = $derived([
 ]);
 
 function saveName(): void {
-  if (!canEdit || writeBlocked || !userSource || !userCharts) return;
+  if (!canEdit || renameBlocked || !userSource || !userCharts) return;
   const trimmed = chartName.trim();
   if (trimmed && trimmed !== userSource.name) userCharts.rename(userSource.id, trimmed);
 }
 
 function doDelete(): void {
-  if (writeBlocked || !userSource || !userCharts) return;
+  if (deleteBlocked || !userSource || !userCharts) return;
   // Capture the id before onBack: onBack clears the panel's detail id, which can remove the live
   // userSource prop before the delete runs.
   const { id } = userSource;
@@ -82,7 +92,7 @@ function doDelete(): void {
       label="Name"
       value={chartName}
       ariaLabel="Chart name"
-      disabled={writeBlocked}
+      disabled={renameBlocked}
       maxLength={MAX_USER_CHART_NAME_LENGTH}
       onCommit={(value) => {
         chartName = value;
@@ -101,6 +111,12 @@ function doDelete(): void {
   {/if}
 
   {#if canEdit}
+    {#if writeBlocked && userSource?.serverCleanupRequired}
+      <p class="alert-note" role="status">
+        Read/write Signal K access is needed to remove the legacy server copy before deleting this
+        chart from the device.
+      </p>
+    {/if}
     {#if confirming}
       <InlineConfirm
         question="Delete this chart?"
@@ -112,7 +128,7 @@ function doDelete(): void {
         type="button"
         class="btn btn-danger"
         onclick={() => (confirming = true)}
-        disabled={writeBlocked}
+        disabled={deleteBlocked}
       >
         <Trash2 size={16} aria-hidden="true" />
         Delete chart

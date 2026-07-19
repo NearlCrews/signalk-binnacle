@@ -42,7 +42,14 @@ export interface AsyncProfileAdapter {
   mutate(revision: number, mutation: ProfileServerMutation): Promise<ProfileRemoteMutationResult>;
 }
 
-export type ProfileSyncState = 'local' | 'waiting' | 'syncing' | 'synced' | 'conflict' | 'error';
+export type ProfileSyncState =
+  | 'local'
+  | 'waiting'
+  | 'syncing'
+  | 'synced'
+  | 'conflict'
+  | 'capacity-conflict'
+  | 'error';
 
 export interface ProfileSyncResult {
   ok: boolean;
@@ -52,8 +59,16 @@ export interface ProfileSyncResult {
 class LocalProfileAdapter implements ProfileAdapter {
   load(): ProfilesState | undefined {
     if (typeof localStorage === 'undefined') return undefined;
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const deviceRaw = localStorage.getItem(DEVICE_STORAGE_KEY);
+    let raw: string | null;
+    let deviceRaw: string | null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+      deviceRaw = localStorage.getItem(DEVICE_STORAGE_KEY);
+    } catch {
+      // Storage access itself can throw under browser privacy policy. Start with an empty local
+      // library, matching the guarded-write behavior, rather than failing app construction.
+      return undefined;
+    }
     if (raw == null && deviceRaw == null) return undefined;
     let library: ProfilesState | undefined;
     let device: Pick<ProfilesState, 'activeId' | 'applied'> | undefined;
@@ -121,6 +136,29 @@ function validTombstones(value: unknown): ProfileTombstone[] {
   return [...byId.values()];
 }
 
+function validRemoteSnapshot(snapshot: RemoteProfilesSnapshot): boolean {
+  if (
+    !isSafeNonNegativeInteger(snapshot.revision) ||
+    !Array.isArray(snapshot.profiles) ||
+    snapshot.profiles.length > MAX_PROFILES ||
+    !Array.isArray(snapshot.tombstones) ||
+    snapshot.tombstones.length > MAX_PROFILES * 10
+  ) {
+    return false;
+  }
+  const profiles = validProfiles(snapshot.profiles);
+  if (profiles.length !== snapshot.profiles.length) return false;
+  if (new Set(profiles.map((profile) => profile.id)).size !== profiles.length) return false;
+  if (!snapshot.tombstones.every(isProfileTombstone)) return false;
+  if (new Set(snapshot.tombstones.map((item) => item.id)).size !== snapshot.tombstones.length) {
+    return false;
+  }
+  return (
+    snapshot.defaultId === undefined ||
+    profiles.some((profile) => profile.id === snapshot.defaultId)
+  );
+}
+
 function validPendingChange(value: unknown): PendingProfileChange | undefined {
   if (!isRecord(value)) return undefined;
   const settings: Partial<Record<PortableProfileSettingKey, number>> = {};
@@ -166,6 +204,15 @@ function cloneValue<T>(value: T): T {
 
 function cloneSettings(settings: ProfileSettings): ProfileSettings {
   return cloneValue(settings);
+}
+
+function setOwn(record: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(record, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
 }
 
 function fieldTimestamp(profile: Profile, key: string): number {
@@ -257,11 +304,11 @@ function mergeProfiles(
     const source = localWins ? local : remote;
     const sourceSettings = source.settings as unknown as Record<string, unknown>;
     if (Object.hasOwn(sourceSettings, key)) {
-      settingsRecord[key] = cloneValue(sourceSettings[key]);
+      setOwn(settingsRecord, key, cloneValue(sourceSettings[key]));
     } else {
       delete settingsRecord[key];
     }
-    settingUpdatedAt[key] = fieldTimestamp(source, key);
+    setOwn(settingUpdatedAt, key, fieldTimestamp(source, key));
   }
 
   return {
@@ -547,18 +594,30 @@ export class ProfileStore {
       this.syncState = loaded.state === 'unavailable' ? 'waiting' : 'error';
       return { ok: false, activeChanged: false };
     }
+    if (!validRemoteSnapshot(loaded.snapshot)) {
+      this.#server = undefined;
+      this.syncState = 'error';
+      return { ok: false, activeChanged: false };
+    }
     this.#server = loaded.writable === false ? undefined : server;
     this.#serverRevision = loaded.snapshot.revision;
     for (const id of options.discardUnsyncedProfileIds ?? []) {
       this.#discardUnsyncedProfile(id);
     }
-    this.#mergeRemote(loaded.snapshot);
+    const capacityConflict = this.#mergeRemote(loaded.snapshot);
     const activeChanged =
       activeBefore !== undefined &&
       this.active !== undefined &&
       !sameJsonValue(activeBefore.settings, this.active.settings);
     this.#refreshRemoteUpdateState();
     this.#persist(false);
+    if (capacityConflict) {
+      // Do not push a truncated union back to the server. Keep every local profile, surface the
+      // capacity conflict, and require the user to reduce the library before synchronization retries.
+      this.#server = undefined;
+      this.syncState = 'capacity-conflict';
+      return { ok: false, activeChanged };
+    }
     if (this.#hasPending()) {
       if (this.#server) this.#schedulePush();
       else this.syncState = 'waiting';
@@ -568,7 +627,7 @@ export class ProfileStore {
     return { ok: true, activeChanged };
   }
 
-  #mergeRemote(remote: RemoteProfilesSnapshot): void {
+  #mergeRemote(remote: RemoteProfilesSnapshot): boolean {
     const localById = new Map(this.profiles.map((profile) => [profile.id, profile]));
     const remoteById = new Map(remote.profiles.map((profile) => [profile.id, profile]));
     const localTombstones = tombstoneMap(this.#tombstones);
@@ -630,6 +689,7 @@ export class ProfileStore {
       }
     }
 
+    const capacityConflict = mergedProfiles.length > MAX_PROFILES;
     this.profiles = mergedProfiles.slice(0, MAX_PROFILES);
     this.#tombstones = mergedTombstones.slice(0, MAX_PROFILES);
     if (this.activeId && !this.profiles.some((profile) => profile.id === this.activeId)) {
@@ -653,6 +713,7 @@ export class ProfileStore {
     } else {
       this.#defaultId = undefined;
     }
+    return capacityConflict;
   }
 
   #markRemoteDelta(remote: Profile, merged: Profile): void {
@@ -879,7 +940,12 @@ export class ProfileStore {
         break;
       }
       this.#serverRevision = refreshed.snapshot.revision;
-      this.#mergeRemote(refreshed.snapshot);
+      if (this.#mergeRemote(refreshed.snapshot)) {
+        this.#server = undefined;
+        this.syncState = 'capacity-conflict';
+        this.#adapter.save(this.#snapshot());
+        break;
+      }
       this.#adapter.save(this.#snapshot());
     }
     if (this.#server && !this.#hasPending()) this.syncState = 'synced';

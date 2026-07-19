@@ -1,7 +1,7 @@
 import * as Comlink from 'comlink';
 import { FrameBatcher } from './batcher';
 import { SkConnection } from './connection';
-import { reconcileDelta } from './reconcile';
+import { cleanContext, reconcileDelta } from './reconcile';
 import { SubscriptionRegistry } from './subscription-registry';
 import {
   type ConnectionState,
@@ -22,6 +22,8 @@ type DeltaOrHello = Delta & { self?: string };
 
 type FrameCallback = ((frame: SKFrame) => void) & { [Comlink.releaseProxy]?: () => void };
 
+const MAX_DELTA_FRAME_CHARACTERS = 1_048_576;
+
 export class WorkerCore {
   #connection?: SkConnection;
   // Constructed with the core, not per connect(): a feature controller restoring persisted state
@@ -40,12 +42,18 @@ export class WorkerCore {
     // Release the previous connect()'s callback proxy before replacing it, so a page that calls
     // connect() again (a remount, a fresh reconnect flow) does not leak a MessagePort. Mirrors
     // RadarWorker#teardown's release of its own callback proxies in radar-worker.ts.
+    this.#connection?.disconnect();
+    this.#batcher.reset();
+    this.#selfContext = undefined;
     this.#onFrame?.[Comlink.releaseProxy]?.();
     this.#onFrame = onFrame as FrameCallback;
     this.#connection = new SkConnection(url, {
       onState: (state) => {
         if (state.phase !== 'open') this.#batcher.reset();
-        if (state.phase === 'open') this.#generation += 1;
+        if (state.phase === 'open') {
+          this.#generation += 1;
+          this.#selfContext = undefined;
+        }
         this.#connectionState = state;
         // Push the new phase to the store immediately, not piggybacked on the next data frame. A
         // dropped socket produces no data, so without this the batcher (which only flushes when a
@@ -124,23 +132,30 @@ export class WorkerCore {
   };
 
   #ingest(raw: string): void {
+    if (typeof raw !== 'string' || raw.length > MAX_DELTA_FRAME_CHARACTERS) {
+      if (import.meta.env?.DEV) console.warn('[signalk] dropped an oversized delta frame');
+      return;
+    }
     this.#receivedAt = Date.now();
-    let message: DeltaOrHello;
+    let parsed: unknown;
     try {
-      message = JSON.parse(raw) as DeltaOrHello;
+      parsed = JSON.parse(raw) as unknown;
     } catch {
       // A malformed frame indicates a real server or transport fault. Log it in dev
       // and drop it: one bad frame must not tear down the stream.
       if (import.meta.env?.DEV) console.warn('[signalk] dropped a malformed delta frame');
       return;
     }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+    const message = parsed as DeltaOrHello;
     if (!message.updates) {
       // The hello handshake carries the self identifier but no updates. A Signal K server always
       // sends hello first on /signalk/v1/stream, so #selfContext is set before any vessels.<self>
       // delta arrives. If that ordering were ever violated, a self delta would be misrouted into the
       // AIS bucket under its own urn and only cleared after the AIS TTL; we rely on the hello-first
       // contract rather than reconciling it.
-      if (typeof message.self === 'string') this.#selfContext = message.self;
+      const selfContext = cleanContext(message.self);
+      if (selfContext) this.#selfContext = selfContext;
       return;
     }
     reconcileDelta(message, this.#route);

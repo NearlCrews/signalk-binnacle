@@ -357,7 +357,20 @@ export class CourseGuidance {
 
   arrived: boolean = $derived.by(() => {
     const next = this.#next;
-    const key = next ? `${next.latitude},${next.longitude}` : undefined;
+    const route = this.#info.activeRoute;
+    const routePointIndex = route?.pointIndex;
+    const routePointKey =
+      typeof route?.href === 'string' &&
+      route.href.length > 0 &&
+      typeof routePointIndex === 'number' &&
+      Number.isSafeInteger(routePointIndex) &&
+      routePointIndex >= 0
+        ? `route:${route.href}:${routePointIndex}`
+        : undefined;
+    // Consecutive route points may intentionally share coordinates. Prefer the server's route and
+    // traversal identity so advancing to such a point resets hysteresis; single-mark courses and
+    // incomplete provider data fall back to the destination coordinate.
+    const key = routePointKey ?? (next ? `position:${next.latitude},${next.longitude}` : undefined);
     if (key !== this.#arrivalLatchKey) {
       this.#arrivalLatchKey = key;
       this.#arrivedLatched = false;

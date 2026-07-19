@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchForecast, fetchMarine, type MarineFields, mergeMarine } from './weather-client';
+import {
+  fetchForecast,
+  fetchMarine,
+  MAX_FORECAST_HOURLY_STEPS,
+  type MarineFields,
+  mergeMarine,
+} from './weather-client';
 
 function res(body: unknown): Response {
   return { ok: true, json: async () => body } as unknown as Response;
@@ -93,6 +99,38 @@ describe('fetchForecast', () => {
     ).rejects.toBeDefined();
   });
 
+  it('retains timeout composition when AbortSignal.any is unavailable', async () => {
+    const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    if (!anyDescriptor) throw new Error('AbortSignal.any descriptor is unavailable');
+    Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchFn = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return res([
+        loc(0, 0, [0, 0], [0, 0]),
+        loc(0, 1, [0, 0], [0, 0]),
+        loc(1, 0, [0, 0], [0, 0]),
+        loc(1, 1, [0, 0], [0, 0]),
+      ]);
+    });
+
+    try {
+      await fetchForecast(
+        { west: 0, south: 0, east: 1, north: 1 },
+        { maxCells: 4, forecastDays: 1 },
+        fetchFn as unknown as typeof fetch,
+        controller.signal,
+      );
+      expect(requestSignal).toBeInstanceOf(AbortSignal);
+      expect(requestSignal).not.toBe(controller.signal);
+      controller.abort(new Error('superseded'));
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      Object.defineProperty(AbortSignal, 'any', anyDescriptor);
+    }
+  });
+
   it('wraps antimeridian grid requests while preserving unwrapped coverage', async () => {
     const body = [
       loc(0, 170, [0, 0], [0, 0]),
@@ -121,6 +159,28 @@ describe('fetchForecast', () => {
       fetchFn as unknown as typeof fetch,
     );
     expect(grid).toBeUndefined();
+  });
+
+  it('rejects oversized, non-finite, or non-monotonic hourly axes before allocation', async () => {
+    const invalidTimes: unknown[][] = [
+      Array.from({ length: MAX_FORECAST_HOURLY_STEPS + 1 }, (_, index) => 1_700_000_000 + index),
+      [1_700_000_000, Number.NaN],
+      [1_700_000_000, 1_700_000_000],
+    ];
+    for (const time of invalidTimes) {
+      const body = Array.from({ length: 4 }, () => {
+        const value = loc(0, 0, [], []) as { hourly: { time: unknown[] } };
+        value.hourly.time = time;
+        return value;
+      });
+      await expect(
+        fetchForecast(
+          { west: 0, south: 0, east: 1, north: 1 },
+          { maxCells: 4, forecastDays: 1 },
+          vi.fn(async () => res(body)) as unknown as typeof fetch,
+        ),
+      ).resolves.toBeUndefined();
+    }
   });
 });
 
@@ -188,6 +248,25 @@ describe('fetchMarine', () => {
         fetchFn as unknown as typeof fetch,
       ),
     ).toBeUndefined();
+  });
+
+  it('rejects an oversized marine hourly axis before allocating field grids', async () => {
+    const time = Array.from(
+      { length: MAX_FORECAST_HOURLY_STEPS + 1 },
+      (_, index) => 1_700_000_000 + index,
+    );
+    const body = Array.from({ length: 4 }, () => {
+      const value = marineLoc([], [], []) as { hourly: { time: number[] } };
+      value.hourly.time = time;
+      return value;
+    });
+    await expect(
+      fetchMarine(
+        { west: 0, south: 0, east: 1, north: 1 },
+        { maxCells: 4, forecastDays: 1 },
+        vi.fn(async () => res(body)) as unknown as typeof fetch,
+      ),
+    ).resolves.toBeUndefined();
   });
 });
 

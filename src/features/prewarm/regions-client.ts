@@ -5,7 +5,7 @@
 
 import type { Bbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
-import { withTimeout } from '$shared/lib';
+import { readBoundedJson, withTimeout } from '$shared/lib';
 import { adminSessionInit } from '$shared/signalk';
 import {
   CHART_LOCKER_MAX_REGION_NAME_LENGTH,
@@ -378,36 +378,15 @@ export function createRegionsClient(
   const url = (path: string): string => companionApiUrl(origin, path);
   const readJson = async <T>(response: Response): Promise<T> => {
     if (!response.body) throw new TypeError('companion response has no body');
-    const declaredLength = response.headers.get('Content-Length');
-    if (declaredLength !== null) {
-      if (!/^(0|[1-9]\d*)$/.test(declaredLength)) {
-        await response.body.cancel().catch(() => undefined);
+    try {
+      return await readBoundedJson<T>(response, MAX_JSON_RESPONSE_BYTES);
+    } catch (error) {
+      if (error instanceof TypeError && error.message === 'invalid JSON response length') {
         throw new TypeError('invalid companion response length');
       }
-      const length = Number(declaredLength);
-      if (!Number.isSafeInteger(length) || length > MAX_JSON_RESPONSE_BYTES) {
-        await response.body.cancel().catch(() => undefined);
+      if (error instanceof TypeError && error.message === 'JSON response is too large') {
         throw new TypeError('companion response is too large');
       }
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8', { fatal: true });
-    let total = 0;
-    let text = '';
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > MAX_JSON_RESPONSE_BYTES) {
-          throw new TypeError('companion response is too large');
-        }
-        text += decoder.decode(value, { stream: true });
-      }
-      text += decoder.decode();
-      return JSON.parse(text) as T;
-    } catch (error) {
-      await reader.cancel().catch(() => undefined);
       throw error;
     }
   };

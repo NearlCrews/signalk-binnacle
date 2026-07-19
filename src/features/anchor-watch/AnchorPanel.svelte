@@ -140,7 +140,7 @@ function captureFromDistance(): void {
     {unit}
     min={minRadiusDisplay}
     step={1}
-    ariaLabel="Watch radius in {mode === 'imperial' ? 'feet' : 'meters'}"
+    ariaLabel={`Watch radius in ${mode === 'imperial' ? 'feet' : 'meters'}`}
     value={radiusDisplay}
     disabled={busy || serverWritesBlocked}
     onCommit={commitRadius}

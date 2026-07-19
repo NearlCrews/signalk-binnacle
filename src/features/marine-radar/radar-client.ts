@@ -1,5 +1,22 @@
-import { fetchJsonOrUndefined, isRecord, withTimeout } from '$shared/lib';
-import { appendToken, authInit, sendJson, str } from '$shared/signalk';
+import {
+  fetchJsonOrUndefined,
+  hasControlCharacters,
+  isFiniteNumber,
+  isRecord,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
+import { appendToken, authInit, sendJson } from '$shared/signalk';
+import {
+  isSafeRadarGeometry,
+  MAX_RADAR_CONTROLS,
+  MAX_RADAR_ID_LENGTH,
+  MAX_RADAR_JSON_BYTES,
+  MAX_RADAR_LEGEND_ENTRIES,
+  MAX_RADAR_TEXT_LENGTH,
+  MAX_RADAR_URL_LENGTH,
+  MAX_RADARS,
+} from './radar-limits';
 import type {
   ControlDefinition,
   LegendEntry,
@@ -18,9 +35,6 @@ import type {
 const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
 const RADAR_STATUSES: ReadonlySet<string> = new Set(['off', 'standby', 'transmit', 'warming']);
-const MAX_SPOKES_PER_REVOLUTION = 16_384;
-const MAX_SPOKE_LENGTH = 8_192;
-const MAX_FRAME_BYTES = 64 * 1024 * 1024;
 const MAX_RADAR_RANGE_METERS = 1_000_000;
 const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'boolean',
@@ -34,31 +48,78 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'compound',
 ]);
 
-function safeGeometry(value: unknown, maximum: number): value is number {
-  return Number.isSafeInteger(value) && (value as number) > 0 && (value as number) <= maximum;
+function safeId(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_RADAR_ID_LENGTH &&
+    /^[A-Za-z0-9_-]+$/.test(value)
+    ? value
+    : undefined;
+}
+
+function boundedText(value: unknown, maxLength = MAX_RADAR_TEXT_LENGTH): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= maxLength && !hasControlCharacters(trimmed)
+    ? trimmed
+    : undefined;
+}
+
+function safeStreamUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (
+    trimmed.length === 0 ||
+    trimmed.length > MAX_RADAR_URL_LENGTH ||
+    hasControlCharacters(trimmed)
+  ) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(trimmed, 'http://binnacle.invalid');
+    if (
+      !['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.hash
+    ) {
+      return undefined;
+    }
+    return trimmed;
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseRadarControls(raw: unknown): RadarControls {
   if (!isRecord(raw)) return {};
-  const out: RadarControls = {};
-  for (const [id, entry] of Object.entries(raw)) {
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_RADAR_CONTROLS) return {};
+  const out = Object.create(null) as RadarControls;
+  for (const [rawId, entry] of entries) {
+    const id = safeId(rawId);
+    if (!id) continue;
     if (isRecord(entry)) {
       const value = entry.value;
       out[id] = {
         value:
-          typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
+          (typeof value === 'number' && Number.isFinite(value)) ||
+          (typeof value === 'string' &&
+            value.length <= MAX_RADAR_TEXT_LENGTH &&
+            !hasControlCharacters(value)) ||
+          typeof value === 'boolean'
             ? value
             : undefined,
         auto: typeof entry.auto === 'boolean' ? entry.auto : undefined,
-        autoValue: typeof entry.autoValue === 'number' ? entry.autoValue : undefined,
+        autoValue: isFiniteNumber(entry.autoValue) ? entry.autoValue : undefined,
         enabled: typeof entry.enabled === 'boolean' ? entry.enabled : undefined,
-        endValue: typeof entry.endValue === 'number' ? entry.endValue : undefined,
-        startDistance: typeof entry.startDistance === 'number' ? entry.startDistance : undefined,
-        endDistance: typeof entry.endDistance === 'number' ? entry.endDistance : undefined,
-        x: typeof entry.x === 'number' ? entry.x : undefined,
-        y: typeof entry.y === 'number' ? entry.y : undefined,
-        width: typeof entry.width === 'number' ? entry.width : undefined,
-        height: typeof entry.height === 'number' ? entry.height : undefined,
+        endValue: isFiniteNumber(entry.endValue) ? entry.endValue : undefined,
+        startDistance: isFiniteNumber(entry.startDistance) ? entry.startDistance : undefined,
+        endDistance: isFiniteNumber(entry.endDistance) ? entry.endDistance : undefined,
+        x: isFiniteNumber(entry.x) ? entry.x : undefined,
+        y: isFiniteNumber(entry.y) ? entry.y : undefined,
+        width: isFiniteNumber(entry.width) ? entry.width : undefined,
+        height: isFiniteNumber(entry.height) ? entry.height : undefined,
         allowed: typeof entry.allowed === 'boolean' ? entry.allowed : undefined,
       };
     }
@@ -69,7 +130,7 @@ export function parseRadarControls(raw: unknown): RadarControls {
 // Validate each legend entry rather than casting the array wholesale: a malformed color would flow
 // straight into the GL color table as NaN. Entries without a string color are dropped.
 function parseLegend(raw: unknown): LegendEntry[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw) || raw.length > MAX_RADAR_LEGEND_ENTRIES) return undefined;
   const out: LegendEntry[] = [];
   for (const e of raw) {
     if (
@@ -79,9 +140,9 @@ function parseLegend(raw: unknown): LegendEntry[] | undefined {
     ) {
       out.push({
         color: e.color,
-        label: typeof e.label === 'string' ? e.label : '',
-        minValue: typeof e.minValue === 'number' ? e.minValue : undefined,
-        maxValue: typeof e.maxValue === 'number' ? e.maxValue : undefined,
+        label: boundedText(e.label) ?? '',
+        minValue: isFiniteNumber(e.minValue) ? e.minValue : undefined,
+        maxValue: isFiniteNumber(e.maxValue) ? e.maxValue : undefined,
       });
     }
   }
@@ -89,12 +150,13 @@ function parseLegend(raw: unknown): LegendEntry[] | undefined {
 }
 
 function toRadarInfo(raw: unknown): RadarInfo | undefined {
-  if (!isRecord(raw) || typeof raw.id !== 'string') return undefined;
-  const id = raw.id;
+  if (!isRecord(raw)) return undefined;
+  const id = safeId(raw.id);
+  if (!id) return undefined;
   if (
-    !safeGeometry(raw.spokesPerRevolution, MAX_SPOKES_PER_REVOLUTION) ||
-    !safeGeometry(raw.maxSpokeLen, MAX_SPOKE_LENGTH) ||
-    raw.spokesPerRevolution * raw.maxSpokeLen > MAX_FRAME_BYTES
+    !isFiniteNumber(raw.spokesPerRevolution) ||
+    !isFiniteNumber(raw.maxSpokeLen) ||
+    !isSafeRadarGeometry(raw.spokesPerRevolution, raw.maxSpokeLen)
   ) {
     console.warn(
       `[marine-radar] radar ${id} reported unsafe geometry (spokesPerRevolution=${String(raw.spokesPerRevolution)}, maxSpokeLen=${String(raw.maxSpokeLen)})`,
@@ -103,11 +165,11 @@ function toRadarInfo(raw: unknown): RadarInfo | undefined {
   }
   // A blank or whitespace streamUrl is treated as absent so the built-in stream fallback engages rather
   // than `new WebSocket('')` throwing.
-  const streamUrl = typeof raw.streamUrl === 'string' ? raw.streamUrl.trim() : '';
+  const streamUrl = safeStreamUrl(raw.streamUrl);
   return {
     id,
-    name: typeof raw.name === 'string' ? raw.name : id,
-    brand: typeof raw.brand === 'string' ? raw.brand : undefined,
+    name: boundedText(raw.name) ?? id,
+    brand: boundedText(raw.brand),
     status: RADAR_STATUSES.has(raw.status as string) ? (raw.status as RadarStatus) : 'off',
     spokesPerRevolution: raw.spokesPerRevolution,
     maxSpokeLen: raw.maxSpokeLen,
@@ -120,7 +182,7 @@ function toRadarInfo(raw: unknown): RadarInfo | undefined {
         : 0,
     controls: parseRadarControls(raw.controls),
     legend: parseLegend(raw.legend),
-    streamUrl: streamUrl.length > 0 ? streamUrl : undefined,
+    streamUrl,
   };
 }
 
@@ -128,12 +190,18 @@ function toRadarInfo(raw: unknown): RadarInfo | undefined {
 // them as numbers, so an undefined bound from a malformed capability must collapse the whole range to
 // undefined (the slider then falls back to 0..100) rather than producing a NaN-bounded slider.
 function parseRange(raw: Record<string, unknown>): ControlDefinition['range'] {
-  if (typeof raw.minValue !== 'number' || typeof raw.maxValue !== 'number') return undefined;
+  if (
+    !isFiniteNumber(raw.minValue) ||
+    !isFiniteNumber(raw.maxValue) ||
+    raw.minValue > raw.maxValue
+  ) {
+    return undefined;
+  }
   return {
     min: raw.minValue,
     max: raw.maxValue,
-    step: typeof raw.stepValue === 'number' ? raw.stepValue : undefined,
-    unit: typeof raw.units === 'string' ? raw.units : undefined,
+    step: isFiniteNumber(raw.stepValue) && raw.stepValue > 0 ? raw.stepValue : undefined,
+    unit: boundedText(raw.units, 64),
   };
 }
 
@@ -143,11 +211,11 @@ function parseRange(raw: Record<string, unknown>): ControlDefinition['range'] {
 function parseEnumValues(descriptions: unknown, validValues: unknown): ControlDefinition['values'] {
   if (!isRecord(descriptions)) return undefined;
   const wanted = Array.isArray(validValues)
-    ? validValues.filter((v): v is number => typeof v === 'number')
+    ? validValues.slice(0, MAX_RADAR_CONTROLS).filter((v): v is number => isFiniteNumber(v))
     : Object.keys(descriptions).map(Number).filter(Number.isFinite);
-  const values = wanted.map((value) => {
+  const values = [...new Set(wanted)].slice(0, MAX_RADAR_CONTROLS).map((value) => {
     const label = descriptions[String(value)];
-    return { value, label: typeof label === 'string' ? label : String(value) };
+    return { value, label: boundedText(label) ?? String(value) };
   });
   return values.length > 0 ? values : undefined;
 }
@@ -165,21 +233,22 @@ const AUTO_MANUAL_MODES: Array<'auto' | 'manual'> = ['auto', 'manual'];
 // Mayara serves: flat dataType/minValue/maxValue/stepValue/units, descriptions, and a
 // flattened hasAuto/isReadOnly.
 function toControlDefinition(id: string, raw: unknown): ControlDefinition | undefined {
-  if (!isRecord(raw) || typeof raw.dataType !== 'string') return undefined;
+  const safeControlId = safeId(id);
+  if (!safeControlId || !isRecord(raw) || typeof raw.dataType !== 'string') return undefined;
   if (!CONTROL_TYPES.has(raw.dataType)) return undefined;
   const type = raw.dataType as ControlDefinition['type'];
   return {
-    id,
-    name: str(raw.name) ?? id,
-    description: str(raw.description),
+    id: safeControlId,
+    name: boundedText(raw.name) ?? safeControlId,
+    description: boundedText(raw.description, 1_024),
     type,
     range: parseRange(raw),
     values: type === 'enum' ? parseEnumValues(raw.descriptions, raw.validValues) : undefined,
     // hasAuto declares an automatic mode; the panel offers an Auto toggle beside the manual value.
     modes: raw.hasAuto === true ? AUTO_MANUAL_MODES : undefined,
     readOnly: raw.isReadOnly === true,
-    category: str(raw.category),
-    order: typeof raw.order === 'number' ? raw.order : undefined,
+    category: boundedText(raw.category),
+    order: isFiniteNumber(raw.order) ? raw.order : undefined,
     hasEnabled: raw.hasEnabled === true,
     allowed: typeof raw.allowed === 'boolean' ? raw.allowed : undefined,
   };
@@ -189,23 +258,28 @@ function toControlDefinition(id: string, raw: unknown): ControlDefinition | unde
 // both real numbers, mirroring parseRange's NaN guard.
 function parseRangeV5(raw: Record<string, unknown>): ControlDefinition['range'] {
   const r = raw.range;
-  if (!isRecord(r) || typeof r.min !== 'number' || typeof r.max !== 'number') return undefined;
+  if (!isRecord(r) || !isFiniteNumber(r.min) || !isFiniteNumber(r.max) || r.min > r.max)
+    return undefined;
   return {
     min: r.min,
     max: r.max,
-    step: typeof r.step === 'number' ? r.step : undefined,
-    unit: typeof r.unit === 'string' ? r.unit : undefined,
+    step: isFiniteNumber(r.step) && r.step > 0 ? r.step : undefined,
+    unit: boundedText(r.unit, 64),
   };
 }
 
 // The enum choices of a ControlDefinitionV5: an array of {value,label}. The internal model is numeric,
 // so a string-valued choice (legal in the type but not used by radar enums) is dropped.
 function parseValuesV5(values: unknown): ControlDefinition['values'] {
-  if (!Array.isArray(values)) return undefined;
+  if (!Array.isArray(values) || values.length > MAX_RADAR_CONTROLS) return undefined;
   const out: NonNullable<ControlDefinition['values']> = [];
   for (const v of values) {
-    if (isRecord(v) && (typeof v.value === 'number' || typeof v.value === 'string')) {
-      out.push({ value: v.value, label: typeof v.label === 'string' ? v.label : String(v.value) });
+    if (
+      isRecord(v) &&
+      ((typeof v.value === 'number' && Number.isFinite(v.value)) ||
+        (typeof v.value === 'string' && v.value.length <= MAX_RADAR_TEXT_LENGTH))
+    ) {
+      out.push({ value: v.value, label: boundedText(v.label) ?? String(v.value) });
     }
   }
   return out.length > 0 ? out : undefined;
@@ -215,8 +289,9 @@ function parseValuesV5(values: unknown): ControlDefinition['values'] {
 // control definition: id, name, type, nested range, values, modes, and readOnly. A conformant server
 // serves this dialect; the object-keyed mayara dialect is handled above. Both feed the same widgets.
 function toControlDefinitionV5(raw: unknown): ControlDefinition | undefined {
-  if (!isRecord(raw) || typeof raw.id !== 'string' || typeof raw.type !== 'string')
-    return undefined;
+  if (!isRecord(raw) || typeof raw.type !== 'string') return undefined;
+  const id = safeId(raw.id);
+  if (!id) return undefined;
   if (!CONTROL_TYPES.has(raw.type)) return undefined;
   const modes = Array.isArray(raw.modes)
     ? raw.modes.filter((m): m is 'auto' | 'manual' => m === 'auto' || m === 'manual')
@@ -224,16 +299,16 @@ function toControlDefinitionV5(raw: unknown): ControlDefinition | undefined {
   // The RENDERABLE guard above leaves only number, enum, or boolean, all members of the type union.
   const type = raw.type as ControlDefinition['type'];
   return {
-    id: raw.id,
-    name: str(raw.name) ?? raw.id,
-    description: str(raw.description),
+    id,
+    name: boundedText(raw.name) ?? id,
+    description: boundedText(raw.description, 1_024),
     type,
     range: parseRangeV5(raw),
     values: type === 'enum' ? parseValuesV5(raw.values) : undefined,
     modes: modes && modes.length > 0 ? modes : undefined,
     readOnly: raw.readOnly === true,
-    category: str(raw.category),
-    order: typeof raw.order === 'number' ? raw.order : undefined,
+    category: boundedText(raw.category),
+    order: isFiniteNumber(raw.order) ? raw.order : undefined,
     hasEnabled: raw.hasEnabled === true,
     allowed: typeof raw.allowed === 'boolean' ? raw.allowed : undefined,
   };
@@ -271,8 +346,8 @@ export async function discoverRadars(
         detail: `Radar discovery returned HTTP ${response.status}.`,
       };
     }
-    const body = await response.json();
-    if (!Array.isArray(body))
+    const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);
+    if (!Array.isArray(body) || body.length > MAX_RADARS)
       return { radars: [], availability: 'invalid', detail: 'Radar discovery was not an array.' };
     const radars = body.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined);
     return {
@@ -298,16 +373,24 @@ export async function fetchCapabilities(
   radarId: string,
 ): Promise<RadarCapabilities | undefined> {
   const url = `${origin}${RADARS_PATH}/${encodeURIComponent(radarId)}/capabilities`;
-  const body = await fetchJsonOrUndefined<unknown>(url, authInit(token));
+  const body = await fetchJsonOrUndefined<unknown>(
+    url,
+    authInit(token),
+    undefined,
+    MAX_RADAR_JSON_BYTES,
+  );
   if (!isRecord(body)) return undefined;
   if (Array.isArray(body.controls)) {
+    if (body.controls.length > MAX_RADAR_CONTROLS) return undefined;
     const controls = body.controls
       .map(toControlDefinitionV5)
       .filter((c): c is ControlDefinition => c !== undefined);
     return { controls };
   }
   if (isRecord(body.controls)) {
-    const controls = Object.entries(body.controls)
+    const entries = Object.entries(body.controls);
+    if (entries.length > MAX_RADAR_CONTROLS) return undefined;
+    const controls = entries
       .map(([id, raw]) => toControlDefinition(id, raw))
       .filter((c): c is ControlDefinition => c !== undefined);
     return { controls };
@@ -348,17 +431,45 @@ export async function fetchRadarControls(
   radarId: string,
 ): Promise<RadarControls | undefined> {
   const url = `${origin}${RADARS_PATH}/${encodeURIComponent(radarId)}/controls`;
-  const body = await fetchJsonOrUndefined<unknown>(url, authInit(token));
+  const body = await fetchJsonOrUndefined<unknown>(
+    url,
+    authInit(token),
+    undefined,
+    MAX_RADAR_JSON_BYTES,
+  );
   if (!isRecord(body)) return undefined;
   return parseRadarControls(isRecord(body.controls) ? body.controls : body);
 }
 
-// Whether a provider-supplied streamUrl is on the server origin, by parsed-origin comparison (not a
-// string prefix, which would match a suffix-extension host like `boat.local.evil.com` and leak the
-// token). A streamUrl that fails to parse is treated as cross-origin.
+function transportSecurity(protocol: string): 'secure' | 'insecure' | undefined {
+  if (protocol === 'https:' || protocol === 'wss:') return 'secure';
+  if (protocol === 'http:' || protocol === 'ws:') return 'insecure';
+  return undefined;
+}
+
+function effectiveTransportPort(url: URL): string | undefined {
+  if (url.port) return url.port;
+  const security = transportSecurity(url.protocol);
+  if (security === 'secure') return '443';
+  if (security === 'insecure') return '80';
+  return undefined;
+}
+
+// Whether a provider stream resolves to the same transport endpoint as Signal K. HTTP and WS are
+// the same insecure endpoint family, as are HTTPS and WSS. Comparing hostname and effective port
+// explicitly avoids both suffix-host token leaks and the false mismatch produced by URL.origin when
+// a provider already reports its stream with a WebSocket scheme.
 function isSameOrigin(streamUrl: string, origin: string): boolean {
   try {
-    return new URL(streamUrl, origin).origin === new URL(origin).origin;
+    const stream = new URL(streamUrl, origin);
+    const server = new URL(origin);
+    const streamSecurity = transportSecurity(stream.protocol);
+    return (
+      streamSecurity !== undefined &&
+      streamSecurity === transportSecurity(server.protocol) &&
+      stream.hostname === server.hostname &&
+      effectiveTransportPort(stream) === effectiveTransportPort(server)
+    );
   } catch {
     return false;
   }
@@ -373,15 +484,22 @@ export function spokesUrl(origin: string, radar: RadarInfo, token?: string): str
   const raw = radar.streamUrl
     ? new URL(radar.streamUrl, origin).toString()
     : `${origin}${RADARS_PATH}/${encodeURIComponent(radar.id)}/stream`;
+  if (raw.length > MAX_RADAR_URL_LENGTH) throw new Error('Radar stream URL is too long.');
   const sameOrigin = isSameOrigin(raw, origin);
   const parsed = new URL(raw);
+  if (parsed.username || parsed.password || parsed.hash) {
+    throw new Error('Radar stream URL contains unsupported credentials or a fragment.');
+  }
   if (parsed.protocol === 'http:') parsed.protocol = 'ws:';
   else if (parsed.protocol === 'https:') parsed.protocol = 'wss:';
   if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
     throw new Error(`Unsupported radar stream protocol: ${parsed.protocol}`);
   }
-  const ws = parsed.toString();
-  return token && sameOrigin ? appendToken(ws, token) : ws;
+  if (token && sameOrigin) {
+    parsed.searchParams.delete('token');
+    return appendToken(parsed.toString(), token);
+  }
+  return parsed.toString();
 }
 
 // One control write: a manual value, or an auto-mode toggle. The v2 control PUT reads `body.value`

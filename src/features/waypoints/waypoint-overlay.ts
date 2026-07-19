@@ -41,6 +41,9 @@ export function createWaypointOverlay(
 ): WaypointOverlay {
   let paint: MapThemePaint = mapThemePaint('day');
   let lastVersion = -1;
+  let mounted = false;
+  let lifecycle = 0;
+  let iconGeneration = 0;
   const layers = [MARKER_LAYER, SYMBOL_MARKER_LAYER, LABEL_LAYER];
   // Provided symbols (signalk-symbol-manager), absent on a stock server. The resolver owns the
   // per-overlay icon registry and the pending-symbol queue; a waypoint's icon resolves to a provided
@@ -100,27 +103,48 @@ export function createWaypointOverlay(
     };
   }
 
-  function redraw(ctx: OverlayContext): void {
+  function isCurrent(generation: number): boolean {
+    return mounted && generation === lifecycle;
+  }
+
+  function redraw(ctx: OverlayContext, generation = lifecycle): void {
+    if (!isCurrent(generation)) return;
     const { data, iconOffset } = buildFeatures(store.waypoints);
     setSourceData(ctx.map, SOURCE_ID, data);
     // The offset is a layer property (see iconOffsetExpression); restyle it each redraw.
     if (ctx.map.getLayer(SYMBOL_MARKER_LAYER)) {
       ctx.map.setLayoutProperty(SYMBOL_MARKER_LAYER, 'icon-offset', iconOffset);
     }
-    ensurePendingIcons(ctx);
+    ensurePendingIcons(ctx, generation);
   }
 
   // Kick the loads a render queued; each success redraws so the now-registered symbol replaces its
   // disc. A failure is remembered by the registry, so the disc simply stays.
-  function ensurePendingIcons(ctx: OverlayContext): void {
-    iconResolver.ensurePending(ctx.map, paint, () => redraw(ctx));
+  function ensurePendingIcons(ctx: OverlayContext, generation: number): void {
+    iconResolver.ensurePending(ctx.map, paint, () => redraw(ctx, generation));
+  }
+
+  function registerBuiltInIcons(
+    ctx: OverlayContext,
+    nextPaint: MapThemePaint,
+    generation: number,
+  ): void {
+    const icons = ++iconGeneration;
+    const iconsAreCurrent = (): boolean => isCurrent(generation) && icons === iconGeneration;
+    void registerPoiIcons(ctx.map, nextPaint, iconsAreCurrent).then(() => {
+      if (iconsAreCurrent()) redraw(ctx, generation);
+    });
   }
 
   // Invalidate the change-detection cache so the next sync repopulates from scratch. The manager
   // calls this on a base-style swap, which recreates the source empty; add() calls it so a fresh
   // add draws too.
   function reset(): void {
+    mounted = false;
+    lifecycle += 1;
+    iconGeneration += 1;
     lastVersion = -1;
+    iconResolver.invalidate();
   }
 
   return {
@@ -130,7 +154,9 @@ export function createWaypointOverlay(
     supportsOpacity: true,
     layerIds: layers,
     add(ctx) {
-      reset();
+      const generation = ++lifecycle;
+      mounted = true;
+      lastVersion = -1;
       const before = ctx.beforeIdFor(BAND);
       ensureGeoJsonSource(ctx.map, SOURCE_ID);
       if (!ctx.map.getLayer(MARKER_LAYER)) {
@@ -196,8 +222,8 @@ export function createWaypointOverlay(
         };
         ctx.map.addLayer(layer, before);
       }
-      redraw(ctx);
-      void registerPoiIcons(ctx.map, paint).then(() => redraw(ctx));
+      redraw(ctx, generation);
+      registerBuiltInIcons(ctx, paint, generation);
     },
     reset,
     sync(ctx) {
@@ -222,9 +248,10 @@ export function createWaypointOverlay(
       ctx.map.setPaintProperty(LABEL_LAYER, 'text-halo-color', paint.background);
       // Re-raster registered symbols in place (same image ids), so the symbol layer updates.
       iconResolver.retheme(ctx.map, next);
-      void registerPoiIcons(ctx.map, next).then(() => redraw(ctx));
+      registerBuiltInIcons(ctx, next, lifecycle);
     },
     remove(ctx) {
+      reset();
       removeLayersAndSources(ctx.map, layers, [SOURCE_ID]);
     },
   };

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FrameBatcher } from './batcher';
+import {
+  FrameBatcher,
+  MAX_BATCH_AIS_CONTEXTS,
+  MAX_BATCH_AIS_PATHS_PER_CONTEXT,
+  MAX_BATCH_SELF_PATHS,
+} from './batcher';
 import type { Value } from './types';
 
 beforeEach(() => {
@@ -131,5 +136,28 @@ describe('FrameBatcher', () => {
     // The first vessel was cleared by reset; only the second survives.
     expect(aisFrames[0].has('vessels.a')).toBe(false);
     expect(aisFrames[0].get('vessels.b')?.get('navigation.headingTrue')).toBe(0.7);
+  });
+
+  it('bounds self paths, AIS contexts, and AIS paths per context', () => {
+    const batcher = new FrameBatcher();
+    let selfSize = 0;
+    let ais: Map<string, Map<string, Value>> | undefined;
+    batcher.onFlush = (self, vessels) => {
+      selfSize = self.size;
+      ais = vessels;
+    };
+    for (let index = 0; index <= MAX_BATCH_SELF_PATHS; index += 1) {
+      batcher.put(`self.${index}`, index);
+    }
+    for (let index = 0; index <= MAX_BATCH_AIS_CONTEXTS; index += 1) {
+      batcher.putVessel(`vessels.${index}`, 'navigation.position', index);
+    }
+    for (let index = 0; index <= MAX_BATCH_AIS_PATHS_PER_CONTEXT; index += 1) {
+      batcher.putVessel('vessels.0', `path.${index}`, index);
+    }
+    vi.runAllTimers();
+    expect(selfSize).toBe(MAX_BATCH_SELF_PATHS);
+    expect(ais?.size).toBe(MAX_BATCH_AIS_CONTEXTS);
+    expect(ais?.get('vessels.0')?.size).toBe(MAX_BATCH_AIS_PATHS_PER_CONTEXT);
   });
 });

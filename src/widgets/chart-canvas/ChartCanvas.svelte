@@ -435,6 +435,7 @@ onMount(async () => {
         (overlay) => !criticalOverlayIds.includes(overlay.id),
       );
       const criticalResults = await mgr.registerBatch(criticalOverlays);
+      if (isDestroyed()) return;
       const criticalFailures = criticalResults.filter((result) => result.status === 'failed');
       for (const failure of criticalFailures) {
         if (!criticalFailureIds.includes(failure.id)) criticalFailureIds.push(failure.id);
@@ -445,6 +446,7 @@ onMount(async () => {
         }
       }
       reportCriticalFailures();
+      if (isDestroyed()) return;
       // Start live vessel, course, collision, MOB, anchor, and route synchronization immediately.
       // Optional overlays and remote providers can take longer to register and must not hold it up.
       const registeredDynamicIds = criticalResults
@@ -454,8 +456,10 @@ onMount(async () => {
         criticalOverlays.filter((overlay) => registeredDynamicIds.includes(overlay.id)),
         onOverlaySyncStatus,
       );
+      if (isDestroyed()) return;
 
       const supportingResults = await mgr.registerBatch(supportingOverlays);
+      if (isDestroyed()) return;
       for (const result of supportingResults) {
         if (result.status === 'registered') registeredDynamicIds.push(result.id);
         else console.warn(`Could not register overlay "${result.id}".`, result.error);
@@ -465,6 +469,7 @@ onMount(async () => {
         dynamicOverlays.filter((overlay) => registeredDynamicIds.includes(overlay.id)),
         onOverlaySyncStatus,
       );
+      if (isDestroyed()) return;
 
       // Route the remote raster overlays through the Chart Locker tile proxy when it is installed,
       // so the boat shares one cache and works offline. When it is absent, the sources keep their direct
@@ -488,15 +493,16 @@ onMount(async () => {
           createSeamarkOverlay(source),
         ),
       ]);
+      if (isDestroyed()) return;
       for (const result of providerResults) {
         if (result.status === 'failed') {
           console.warn(`Could not register overlay "${result.id}".`, result.error);
         }
       }
       // Capture the manager so the time-travel review effect can dim the vessel and toggle history.
+      if (isDestroyed()) return;
       manager = mgr;
       mapRef = map;
-      if (isDestroyed()) return;
 
       // The Terra Draw route editor draws into its own layers anchored in the routes band. It writes
       // edits back into the working route, which the panel reads for its live distance and count.
@@ -525,7 +531,7 @@ onMount(async () => {
             // clear it so a later attempt re-imports, and surface the failure.
             console.error('Route editor failed to load', error);
             editorLoading = undefined;
-            onRouteEditorError?.();
+            if (!isDestroyed()) onRouteEditorError?.();
             return undefined;
           });
         return editorLoading;
@@ -534,6 +540,7 @@ onMount(async () => {
       const view = new LayersView(mgr);
       view.refresh();
       onReady?.(view);
+      if (isDestroyed()) return;
 
       let serverChartsGeneration = 0;
       let serverChartsQueue = Promise.resolve();
@@ -554,6 +561,17 @@ onMount(async () => {
         const results = await mgr.registerBatch(
           wanted.map((chart) => createChartOverlay(chart, origin, 'basemap', () => chartsToken)),
         );
+        if (isDestroyed()) return;
+        if (generation !== serverChartsGeneration) {
+          // A newer refresh can be queued while this async batch installs. These ids were never
+          // admitted to serverChartIds, so remove the completed batch directly before yielding to
+          // the newer generation or it would leave stale overlays and duplicate registrations.
+          for (const result of results) {
+            if (result.status === 'registered') mgr.unregister(result.id);
+          }
+          view.refresh();
+          return;
+        }
         for (const result of results) {
           const chart = wanted.find(
             (candidate) => chartSourceId(candidate.identifier) === result.id,
@@ -573,14 +591,16 @@ onMount(async () => {
       }
 
       function retryServerCharts(): Promise<void> {
+        if (isDestroyed()) return Promise.resolve();
         const generation = ++serverChartsGeneration;
         onServerChartsStatus?.('loading');
+        if (isDestroyed()) return Promise.resolve();
         serverChartsQueue = serverChartsQueue
           .catch(() => undefined)
           .then(() => loadServerCharts(generation))
           .catch((error) => {
-            console.warn('Could not refresh server charts.', error);
             if (!isDestroyed() && generation === serverChartsGeneration) {
+              console.warn('Could not refresh server charts.', error);
               onServerChartsStatus?.('error');
             }
           });
@@ -588,6 +608,7 @@ onMount(async () => {
       }
 
       onServerChartsReady?.(() => void retryServerCharts());
+      if (isDestroyed()) return;
       // Safety and vessel overlays are already live before optional chart discovery starts. A slow
       // or unavailable charts endpoint therefore cannot postpone navigation rendering or map tools.
       void retryServerCharts();
@@ -595,21 +616,30 @@ onMount(async () => {
       const userChartRegistrar: UserChartRegistrar = {
         register: async (chart) => {
           if (isDestroyed()) return;
-          await mgr.register(
-            createChartOverlay(chart, origin, 'bathymetry', () => chartsToken, {
-              source: 'user',
-            }),
-          );
+          try {
+            await mgr.register(
+              createChartOverlay(chart, origin, 'bathymetry', () => chartsToken, {
+                source: 'user',
+              }),
+            );
+          } catch (error) {
+            if (isDestroyed()) return;
+            throw error;
+          }
+          if (isDestroyed()) return;
           view.refresh();
         },
         unregister: (identifier) => {
+          if (isDestroyed()) return;
           mgr.unregister(chartSourceId(identifier));
           view.refresh();
         },
       };
       onUserChartsReady?.(userChartRegistrar);
+      if (isDestroyed()) return;
 
       onMapReady?.(recolor);
+      if (isDestroyed()) return;
 
       const commands = buildMapCommands({
         map,
@@ -630,7 +660,9 @@ onMount(async () => {
       });
       commandsRef = commands;
       onCommandsReady?.(commands);
+      if (isDestroyed()) return;
       onMapInstance?.(map);
+      if (isDestroyed()) return;
 
       // The working-route overlay rides the same tick but is not registered with the manager (it is
       // not a user-toggleable layer); its editVersion dirty-check gates its work. The initial theme

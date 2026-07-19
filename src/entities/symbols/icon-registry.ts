@@ -36,6 +36,7 @@ export class SymbolIconRegistry {
   #paint: MapThemePaint = mapThemePaint('day');
   readonly #assets: SymbolAssets;
   #revision: number;
+  #lifecycle = 0;
 
   constructor(assets: SymbolAssets) {
     this.#assets = assets;
@@ -53,6 +54,12 @@ export class SymbolIconRegistry {
     return this.#states.get(uuid)?.status;
   }
 
+  // Cancel deferred loads before an overlay is removed or its style is replaced. A later ensure
+  // starts cleanly in the new lifecycle, while work from the old map can no longer register images.
+  invalidate(): void {
+    this.#clearStates();
+  }
+
   // Register the symbol's image for the given paint, resolving true once it is usable. Safe to
   // call repeatedly: concurrent callers share one load, and a ready symbol whose image survived
   // is a no-op. A ready symbol whose image is gone (a base-style swap drops all images) reloads
@@ -66,7 +73,7 @@ export class SymbolIconRegistry {
     if (state?.status === 'ready' && map.hasImage(symbolIconId(symbol.uuid))) {
       return Promise.resolve(true);
     }
-    const promise = this.#load(map, symbol);
+    const promise = this.#load(map, symbol, this.#lifecycle);
     this.#states.set(symbol.uuid, { status: 'loading', symbol, promise });
     return promise;
   }
@@ -77,17 +84,19 @@ export class SymbolIconRegistry {
   retheme(map: MapLibreMap, paint: MapThemePaint): void {
     this.#syncRevision();
     this.#paint = paint;
+    const lifecycle = this.#lifecycle;
     for (const state of this.#states.values()) {
-      if (state.status === 'ready') void this.#refresh(map, state.symbol);
+      if (state.status === 'ready')
+        void this.#refresh(map, state.symbol, this.#revision, lifecycle);
     }
   }
 
   #warnedDegrade = false;
 
-  async #load(map: MapLibreMap, symbol: SkSymbol): Promise<boolean> {
+  async #load(map: MapLibreMap, symbol: SkSymbol, lifecycle: number): Promise<boolean> {
     const revision = this.#revision;
-    const ok = await this.#refresh(map, symbol, revision);
-    if (revision !== this.#revision) return false;
+    const ok = await this.#refresh(map, symbol, revision, lifecycle);
+    if (!this.#isCurrent(revision, lifecycle)) return false;
     if (!ok) {
       this.#states.set(symbol.uuid, { status: 'failed' });
       // Per-symbol degrade to the built-in icon is by design; a SYSTEMATIC failure (every asset
@@ -102,12 +111,17 @@ export class SymbolIconRegistry {
     return ok;
   }
 
-  async #refresh(map: MapLibreMap, symbol: SkSymbol, revision = this.#revision): Promise<boolean> {
+  async #refresh(
+    map: MapLibreMap,
+    symbol: SkSymbol,
+    revision = this.#revision,
+    lifecycle = this.#lifecycle,
+  ): Promise<boolean> {
     const svg = await this.#assets.svgText(symbol);
-    if (!svg || revision !== this.#revision) return false;
+    if (!svg || !this.#isCurrent(revision, lifecycle)) return false;
     const paint = this.#paint;
     const raster = await this.#assets.rasterize(svg, symbol.scale ?? 1, paint);
-    if (!raster || revision !== this.#revision) return false;
+    if (!raster || !this.#isCurrent(revision, lifecycle)) return false;
     const iconId = symbolIconId(symbol.uuid);
     setMapImage(map, iconId, raster.image, SYMBOL_PIXEL_RATIO);
     this.#states.set(symbol.uuid, {
@@ -120,15 +134,30 @@ export class SymbolIconRegistry {
     });
     // The theme changed while this raster was in flight; redo it so a stale-theme bitmap
     // never sticks until the next theme change.
-    if (paint.theme !== this.#paint.theme) return this.#refresh(map, symbol, revision);
+    if (paint.theme !== this.#paint.theme) {
+      return this.#refresh(map, symbol, revision, lifecycle);
+    }
     return true;
+  }
+
+  #isCurrent(revision: number, lifecycle: number): boolean {
+    return (
+      lifecycle === this.#lifecycle &&
+      revision === this.#revision &&
+      revision === (this.#assets.revision ?? 0)
+    );
+  }
+
+  #clearStates(): void {
+    this.#lifecycle += 1;
+    this.#states.clear();
+    this.#warnedDegrade = false;
   }
 
   #syncRevision(): void {
     const revision = this.#assets.revision ?? 0;
     if (revision === this.#revision) return;
     this.#revision = revision;
-    this.#states.clear();
-    this.#warnedDegrade = false;
+    this.#clearStates();
   }
 }

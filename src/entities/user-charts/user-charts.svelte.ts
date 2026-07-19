@@ -24,9 +24,55 @@ function normalizeUserChartUrl(value: string): string | undefined {
   }
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : undefined;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+    // Credentials in URL authority are easy to disclose through logs, history, and server sync.
+    // Query credentials are handled separately because signed PMTiles URLs commonly require them.
+    if (parsed.username || parsed.password) return undefined;
+    // Fragments are never sent in the range request, so retaining one only creates multiple stored
+    // descriptors for the same archive and risks persisting client-side secrets unnecessarily.
+    parsed.hash = '';
+    return parsed.href;
   } catch {
     return undefined;
+  }
+}
+
+const CREDENTIAL_QUERY_NAMES = new Set([
+  'apiaccesskey',
+  'auth',
+  'authorization',
+  'xamzsecuritytoken',
+]);
+const CREDENTIAL_QUERY_NAME_PATTERN =
+  /^(?:(?:api|access|auth|bearer|client|private|public|session|secret|security|signing|xamz|xgoog))?(?:token|key|password|passwd|pwd|secret|signature|sig|credential|credentials)$/;
+
+function isCredentialQueryName(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return CREDENTIAL_QUERY_NAMES.has(normalized) || CREDENTIAL_QUERY_NAME_PATTERN.test(normalized);
+}
+
+// Signed archive URLs remain supported, but their query parameter names make server sharing an
+// explicit opt-in. Values are never inspected or surfaced because they may themselves be secrets.
+export function userChartUrlHasCredentialQuery(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    for (const name of parsed.searchParams.keys()) {
+      if (isCredentialQueryName(name)) return true;
+    }
+  } catch {
+    // Invalid URLs are rejected by normalization. They do not need a separate privacy result.
+  }
+  return false;
+}
+
+export function userChartUrlForDisplay(value: string): string {
+  try {
+    const parsed = new URL(value);
+    const sensitiveNames = new Set([...parsed.searchParams.keys()].filter(isCredentialQueryName));
+    for (const name of sensitiveNames) parsed.searchParams.set(name, 'REDACTED');
+    return parsed.toString();
+  } catch {
+    return value;
   }
 }
 
@@ -56,6 +102,12 @@ export interface UserChartSource {
   name: string;
   kind: 'vector' | 'raster';
   origin: { type: 'url'; url: string };
+  // Older descriptors omit this field. They migrate to shared for ordinary URLs and local-only for
+  // URLs with credential-like query names, preserving discovery without disclosing likely secrets.
+  shareWithServer?: boolean;
+  // Signed descriptors migrated from releases that automatically synced every URL can retain an
+  // opaque server-cleanup obligation without sending their URL again.
+  serverCleanupRequired?: boolean;
   bounds?: Bbox4;
   minzoom?: number;
   maxzoom?: number;
@@ -78,6 +130,15 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
   if (origin.type !== 'url' || typeof origin.url !== 'string') return undefined;
   const url = normalizeUserChartUrl(origin.url);
   if (!url) return undefined;
+  if (value.shareWithServer !== undefined && typeof value.shareWithServer !== 'boolean') {
+    return undefined;
+  }
+  if (
+    value.serverCleanupRequired !== undefined &&
+    typeof value.serverCleanupRequired !== 'boolean'
+  ) {
+    return undefined;
+  }
   if (value.bounds !== undefined && !validBounds(value.bounds)) return undefined;
   if (value.minzoom !== undefined && !validZoom(value.minzoom)) return undefined;
   if (value.maxzoom !== undefined && !validZoom(value.maxzoom)) return undefined;
@@ -101,11 +162,20 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
       seen.add(cleaned);
     }
   }
+  const inferredLocalOnly =
+    value.shareWithServer === undefined && userChartUrlHasCredentialQuery(url);
   return {
     id,
     name,
     kind: value.kind,
     origin: { type: 'url', url },
+    shareWithServer:
+      value.shareWithServer === true || value.shareWithServer === false
+        ? value.shareWithServer
+        : !userChartUrlHasCredentialQuery(url),
+    ...(value.serverCleanupRequired === true || inferredLocalOnly
+      ? { serverCleanupRequired: true }
+      : {}),
     ...(value.bounds === undefined ? {} : { bounds: [...value.bounds] as Bbox4 }),
     ...(value.minzoom === undefined ? {} : { minzoom: value.minzoom }),
     ...(value.maxzoom === undefined ? {} : { maxzoom: value.maxzoom }),
@@ -115,6 +185,14 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
 
 export function isUserChartSource(value: unknown): value is UserChartSource {
   return cleanUserChartSource(value) !== undefined;
+}
+
+export function shouldShareUserChart(source: UserChartSource): boolean {
+  return source.shareWithServer ?? !userChartUrlHasCredentialQuery(source.origin.url);
+}
+
+export function userChartNeedsServerDelete(source: UserChartSource): boolean {
+  return shouldShareUserChart(source) || source.serverCleanupRequired === true;
 }
 
 // A staged import: the resolved descriptor, not yet saved. Staging reads the PMTiles metadata so
@@ -183,7 +261,8 @@ export class UserCharts {
     // charts of older builds, whose browser-local blobs are gone with the file import path.
     const ids = new Set<string>();
     this.sources = persisted
-      .filter(isUserChartSource)
+      .map(cleanUserChartSource)
+      .filter((source): source is UserChartSource => source !== undefined)
       .filter((source) => {
         if (ids.has(source.id)) return false;
         ids.add(source.id);
@@ -201,13 +280,21 @@ export class UserCharts {
   async stageUrl(url: string): Promise<DraftChart> {
     const safeUrl = normalizeUserChartUrl(url);
     if (!safeUrl) throw new Error('Enter a valid HTTP or HTTPS PMTiles URL.');
-    const meta = await readPmtilesMeta(safeUrl);
+    let meta: Awaited<ReturnType<typeof readPmtilesMeta>>;
+    try {
+      meta = await readPmtilesMeta(safeUrl);
+    } catch {
+      // PMTiles transport errors can include the full request URL. Keep signed query values out of
+      // the panel error surface while preserving the specific validation message above.
+      throw new Error('Could not read chart metadata.');
+    }
     return {
       source: {
         id: uuidv4(),
         name: (meta.name ?? nameFromUrl(safeUrl)).slice(0, MAX_USER_CHART_NAME_LENGTH),
         kind: meta.kind,
         origin: { type: 'url', url: safeUrl },
+        shareWithServer: !userChartUrlHasCredentialQuery(safeUrl),
         bounds: meta.bounds,
         minzoom: meta.minzoom,
         maxzoom: meta.maxzoom,
@@ -217,14 +304,18 @@ export class UserCharts {
   }
 
   // Save a staged draft with the reviewed name, which fires onAdd so the map flies to the new chart.
-  commit(draft: DraftChart, name: string): void {
+  commit(
+    draft: DraftChart,
+    name: string,
+    shareWithServer = shouldShareUserChart(draft.source),
+  ): void {
     if (this.sources.length >= MAX_USER_CHARTS) throw new Error('Chart limit reached.');
     if (this.sources.some((source) => source.id === draft.source.id)) {
       throw new Error('That chart is already saved.');
     }
     const nextName = cleanText(name, MAX_USER_CHART_NAME_LENGTH) ?? draft.source.name;
-    const source: UserChartSource = { ...draft.source, name: nextName };
-    if (!isUserChartSource(source)) throw new Error('Chart metadata is invalid.');
+    const source = cleanUserChartSource({ ...draft.source, name: nextName, shareWithServer });
+    if (!source) throw new Error('Chart metadata is invalid.');
     this.sources = [...this.sources, source];
     this.#persist(this.sources);
     this.#onAdd?.(source);

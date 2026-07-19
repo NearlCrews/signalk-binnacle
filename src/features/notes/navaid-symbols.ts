@@ -113,11 +113,15 @@ function navaidSvg(cls: NavaidClass, paint: MapThemePaint): string {
 
 // Register (or recolor) every navaid symbol. Never throws: a symbol that fails to rasterize
 // is skipped, leaving the generic navaid disc as the fallback.
-export async function registerNavaidIcons(map: MapLibreMap, paint: MapThemePaint): Promise<void> {
+export async function registerNavaidIcons(
+  map: MapLibreMap,
+  paint: MapThemePaint,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   await Promise.all(
     NAVAID_VARIANTS.map(async (cls) => {
       const image = await rasterizeSvg(navaidSvg(cls, paint));
-      if (!image) return;
+      if (!image || !isCurrent()) return;
       setMapImage(map, navaidIconId(cls), image, ICON_PIXEL_RATIO);
     }),
   );

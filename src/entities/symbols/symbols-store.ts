@@ -1,4 +1,4 @@
-import { withTimeout } from '$shared/lib';
+import { readBoundedText, withTimeout } from '$shared/lib';
 import type { SkSymbol } from '$shared/signalk';
 import { SymbolIconRegistry } from './icon-registry';
 import { type RasterizeSymbol, rasterizeSymbolSvg } from './symbol-raster';
@@ -91,35 +91,6 @@ function safeSvg(text: string): boolean {
     }
   }
   return true;
-}
-
-async function boundedText(response: Response): Promise<string | undefined> {
-  const declared = Number(response.headers.get('Content-Length'));
-  if (Number.isFinite(declared) && declared > MAX_SVG_BYTES) return undefined;
-  if (!response.body) {
-    const text = await response.text();
-    return new TextEncoder().encode(text).byteLength <= MAX_SVG_BYTES ? text : undefined;
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let text = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_SVG_BYTES) {
-        await reader.cancel();
-        return undefined;
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-    text += decoder.decode();
-    return text;
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 // The fetched symbol set with alias and role lookup. Constructed only when the symbols
@@ -264,8 +235,8 @@ export class SymbolsStore {
       if (finalUrl.origin !== origin) return undefined;
       const mediaType = response.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase();
       if (mediaType !== 'image/svg+xml') return undefined;
-      const text = await boundedText(response);
-      return text && safeSvg(text) ? text : undefined;
+      const text = await readBoundedText(response, MAX_SVG_BYTES);
+      return safeSvg(text) ? text : undefined;
     } catch {
       return undefined;
     }

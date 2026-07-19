@@ -148,4 +148,41 @@ describe('waypoint overlay', () => {
     expect(map.getLayer('binnacle-waypoint-symbol')).toBeTruthy();
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
   });
+
+  it('cancels a deferred symbol registration when removed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } }),
+        ),
+    );
+    let resolveRaster!: (value: Awaited<ReturnType<SymbolsStore['rasterize']>>) => void;
+    const rasterize = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<SymbolsStore['rasterize']>>>((resolve) => {
+          resolveRaster = resolve;
+        }),
+    );
+    const symbols = new SymbolsStore('http://pi', undefined, [waypointSymbol()], rasterize);
+    const overlay = createWaypointOverlay(storeWith(), symbols);
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    await settle();
+
+    overlay.remove(ctx);
+    resolveRaster({
+      image: { width: 48, height: 48, data: new Uint8ClampedArray(4) } as never,
+      cssWidth: 24,
+      cssHeight: 24,
+      scale: 1,
+    });
+    await settle();
+
+    expect(map.hasImage(symbolIconId('w9'))).toBe(false);
+    expect(map.sources.size).toBe(0);
+    expect(map.layers.size).toBe(0);
+  });
 });

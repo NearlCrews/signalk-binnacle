@@ -4,7 +4,9 @@ import {
   type DraftChart,
   MAX_USER_CHART_NAME_LENGTH,
   MAX_USER_CHART_URL_LENGTH,
+  shouldShareUserChart,
   type UserCharts,
+  userChartUrlHasCredentialQuery,
 } from '$entities/user-charts';
 import { TextField } from '$shared/ui';
 import ChartSpecList from './ChartSpecList.svelte';
@@ -25,8 +27,16 @@ let error = $state<string | undefined>();
 // the import inputs; committing it saves the chart.
 let draft = $state<DraftChart | undefined>();
 let draftName = $state('');
+let shareWithServer = $state(true);
+
+$effect(() => {
+  if (writeBlocked) shareWithServer = false;
+});
 
 const staged = $derived(draft !== undefined);
+const draftHasCredential = $derived(
+  draft ? userChartUrlHasCredentialQuery(draft.source.origin.url) : false,
+);
 
 const draftRows = $derived.by(() => {
   if (!draft) return [];
@@ -34,7 +44,10 @@ const draftRows = $derived.by(() => {
   return [
     spec.type,
     spec.zoom,
-    { label: 'Stored', value: 'This device, and shared to the server' },
+    {
+      label: 'Stored',
+      value: shareWithServer ? 'This device, and shared to the server' : 'This device only',
+    },
   ];
 });
 
@@ -53,27 +66,29 @@ async function withBusy(action: () => Promise<void>, fallbackError: string): Pro
 
 // Stage an import by reading its metadata, without saving, so the review step can rename it first.
 function stageUrl(): void {
-  if (busy || writeBlocked) return;
+  if (busy) return;
   const trimmed = url.trim();
   if (!trimmed) return;
   void withBusy(async () => {
     const next = await userCharts.stageUrl(trimmed);
     draft = next;
     draftName = next.source.name;
+    shareWithServer = !writeBlocked && shouldShareUserChart(next.source);
   }, 'Could not read that chart.');
 }
 
 function resetDraft(): void {
   draft = undefined;
   draftName = '';
+  shareWithServer = true;
 }
 
 function saveDraft(): void {
-  if (busy || writeBlocked) return;
+  if (busy) return;
   const stagedDraft = draft;
   if (!stagedDraft) return;
   void withBusy(async () => {
-    userCharts.commit(stagedDraft, draftName);
+    userCharts.commit(stagedDraft, draftName, !writeBlocked && shareWithServer);
     onDone();
     resetDraft();
   }, 'Could not add that chart.');
@@ -93,19 +108,40 @@ function cancelDraft(): void {
         variant="stacked"
         label="Name"
         value={draftName}
-        disabled={busy || writeBlocked}
+        disabled={busy}
         maxLength={MAX_USER_CHART_NAME_LENGTH}
         focusOnOpen
         onInput={(value) => (draftName = value)}
         onCommit={(value) => (draftName = value)}
       />
       <ChartSpecList rows={draftRows} />
+      <label class="share-choice">
+        <input type="checkbox" bind:checked={shareWithServer} disabled={busy || writeBlocked}>
+        <span>Share the full chart URL with the Signal K server</span>
+      </label>
+      {#if writeBlocked}
+        <p class="privacy-note" role="status">
+          This chart will stay on this device. Read/write Signal K access is needed to share it with
+          the server.
+        </p>
+      {:else if draftHasCredential}
+        <p class:alert-note={shareWithServer} class="privacy-note" role="status">
+          {shareWithServer
+            ? 'Sharing sends the full URL, including its access credential, to the Signal K server.'
+            : 'This URL appears to contain an access credential. It stays on this device unless you choose to share the full URL.'}
+        </p>
+      {:else}
+        <p class="hint">
+          Sharing lets other Signal K clients discover this chart. Turn it off to keep the full URL
+          on this device.
+        </p>
+      {/if}
       <div class="panel-controls">
         <button
           type="button"
           class="btn btn-primary"
           onclick={saveDraft}
-          disabled={busy || writeBlocked || !draftName.trim()}
+          disabled={busy || !draftName.trim()}
         >
           Save chart
         </button>
@@ -134,18 +170,21 @@ function cancelDraft(): void {
           aria-labelledby="add-chart-url-label"
           bind:value={url}
           maxlength={MAX_USER_CHART_URL_LENGTH}
-          disabled={busy || writeBlocked}
+          disabled={busy}
         >
         <button
           type="button"
           class="btn btn-ghost"
           onclick={stageUrl}
-          disabled={busy || writeBlocked || !url.trim()}
+          disabled={busy || !url.trim()}
         >
           Add
         </button>
       </div>
-      <p class="hint">Use this for a chart archive hosted outside your Signal K server.</p>
+      <p class="hint">
+        Use this for a chart archive hosted outside your Signal K server. URLs with access
+        credentials stay on this device by default, and sharing is reviewed before save.
+      </p>
     </div>
   {/if}
 
@@ -203,5 +242,20 @@ function cancelDraft(): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+.share-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.share-choice input {
+  flex: 0 0 auto;
+  margin-block-start: 0.15rem;
+}
+.privacy-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 </style>

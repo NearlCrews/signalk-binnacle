@@ -1,4 +1,10 @@
-import { isRecord, isSafeNonNegativeInteger, withTimeout } from '$shared/lib';
+import {
+  isRecord,
+  isSafeNonNegativeInteger,
+  readBoundedJson,
+  readBoundedText,
+  withTimeout,
+} from '$shared/lib';
 import { authInit } from '$shared/signalk';
 import type {
   Profile,
@@ -53,7 +59,7 @@ interface PatchContext {
 }
 
 const MAX_STORED_TOMBSTONES = MAX_PROFILES * 10;
-const MAX_PROFILE_RESPONSE_CHARACTERS = 5_000_000;
+const MAX_PROFILE_RESPONSE_BYTES = 5_000_000;
 
 type GetResult = { state: 'ok'; body: unknown } | { state: 'unavailable' } | { state: 'corrupt' };
 
@@ -396,7 +402,7 @@ export class SignalKProfileAdapter implements AsyncProfileAdapter {
       let responseBody: string | undefined;
       if (!response.ok) {
         try {
-          responseBody = await response.text();
+          responseBody = await readBoundedText(response, 16_384);
         } catch {
           // The status still distinguishes authorization and transport failures when no body exists.
         }
@@ -412,14 +418,11 @@ export class SignalKProfileAdapter implements AsyncProfileAdapter {
     try {
       const response = await this.#fetch(url, withTimeout(authInit(this.#token())));
       if (!response.ok) return { state: 'unavailable' };
-      const contentLength = Number(response.headers.get('Content-Length'));
-      if (Number.isFinite(contentLength) && contentLength > MAX_PROFILE_RESPONSE_CHARACTERS) {
-        return { state: 'corrupt' };
-      }
-      const text = await response.text();
-      if (text.length > MAX_PROFILE_RESPONSE_CHARACTERS) return { state: 'corrupt' };
       try {
-        return { state: 'ok', body: JSON.parse(text) };
+        return {
+          state: 'ok',
+          body: await readBoundedJson<unknown>(response, MAX_PROFILE_RESPONSE_BYTES),
+        };
       } catch {
         return { state: 'corrupt' };
       }

@@ -4,9 +4,10 @@ import type { AuthController } from '$shared/signalk';
 interface Props {
   auth: AuthController;
   requestsUrl: string;
+  insecureTransport?: boolean;
 }
 
-const { auth, requestsUrl }: Props = $props();
+const { auth, requestsUrl, insecureTransport = false }: Props = $props();
 </script>
 
 {#if auth.status === 'requesting'}
@@ -52,6 +53,13 @@ const { auth, requestsUrl }: Props = $props();
     <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestWriteAccess()}>
       Request read/write access
     </button>
+  </div>
+{/if}
+
+{#if insecureTransport}
+  <div class="auth-banner warn" role="status">
+    This connection is not encrypted. Signal K device credentials and boat data can be observed on
+    this network. Enable HTTPS in Signal K to protect them.
   </div>
 {/if}
 

@@ -6,6 +6,51 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Persistent warnings now explain when Binnacle is connected to a non-local Signal K server over
+  insecure HTTP.
+- Functional WebKit smoke coverage now complements the full Chromium browser suite, and direct alarm
+  tests cover anchor, MOB, shallow-water, and waypoint-arrival behavior.
+
+### Changed
+
+- Chart discovery now uses signalk-chart-sources 0.4.0 and its current provider contract.
+- Imported chart URLs can remain device-only, credential-like query URLs default to that safer mode,
+  and sharing the full URL with Signal K requires a reviewed choice.
+- Signal K deltas, history results, radar messages, weather data, chart metadata, symbols, profiles,
+  and companion responses now use explicit structural, count, text, and byte limits.
+- Map and weather rendering now bound device-pixel scaling and wind-particle buffers, while overlay
+  loading and optional panel imports can recover after transient failures.
+- Development and release checks now use npm 11.18.0, current compatible Svelte and Vite tooling,
+  metadata-derived package assertions, stronger coverage floors, CodeQL analysis, grouped Dependabot
+  security updates, and the exact Node 22.18 compatibility floor.
+- Network privacy documentation now identifies every external data provider and explains when each
+  request occurs.
+
+### Fixed
+
+- Alarm actions now distinguish servers that delegate notification management from transport or
+  write failures, and Silence and Acknowledge are offered only when the server explicitly advertises
+  those capabilities.
+- Course guidance now clears immediately when another station removes the active server course.
+- IndexedDB writes now wait for transaction completion, saved tracks reject duplicate, future, and
+  regressed samples, restored tracks remain chronological, and track history has a fixed capacity.
+- Route and waypoint identifiers now require exact valid values, GPX imports bound names and count all
+  encountered records, and course arrival state includes route identity and point index.
+- Profile storage survives blocked localStorage access, and remote profile merges retain local data
+  instead of silently truncating an over-capacity union.
+- RainViewer metadata is fully validated, rejected radar updates retain a valid weather grid, and
+  optional weather and panel loaders retry cleanly after failures.
+- Layer, chart, and weather teardown now prevents late asynchronous work from reinstalling overlays,
+  mutating destroyed maps, or leaking partially initialized resources.
+- Radar discovery, controls, streams, spokes, frames, and worker traffic now reject malformed or
+  oversized input and adapt update frequency to bounded copy throughput.
+- PMTiles requests now combine caller cancellation with finite timeouts, avoid retrying aborted reads,
+  reject authority credentials, and discard URL fragments before storage or use.
+- Anchor, MOB, overflow-menu, and night-mode controls now expose complete accessible descriptions and
+  predictable keyboard behavior.
+
 <a id="v0156"></a>
 
 ## [0.15.6] - 2026-07-17

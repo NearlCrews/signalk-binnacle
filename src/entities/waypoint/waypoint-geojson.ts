@@ -15,7 +15,16 @@ function cleanText(value: unknown, maxLength: number): string | undefined {
 }
 
 export function cleanWaypointId(value: unknown): string | undefined {
-  return cleanText(value, MAX_WAYPOINT_ID_LENGTH);
+  const text = str(value);
+  if (
+    !text ||
+    text.length > MAX_WAYPOINT_ID_LENGTH ||
+    text !== text.trim() ||
+    hasControlCharacters(text)
+  ) {
+    return undefined;
+  }
+  return text;
 }
 
 export function cleanWaypointName(value: unknown, fallback: string): string {

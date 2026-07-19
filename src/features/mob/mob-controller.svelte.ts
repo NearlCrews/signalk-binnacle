@@ -3,6 +3,7 @@ import type { GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
 import type { UnitsMode } from '$shared/lib';
 import { postMobNotification, resolveNotification, SK_PATHS } from '$shared/signalk';
+import { shouldSoundMobAlarm } from './mob-alarm';
 import { mobClearNotification, mobNotification } from './mob-notification';
 
 const NOTIFICATION_RESOLVE_CONCURRENCY = 4;
@@ -63,7 +64,7 @@ export function createMobController(deps: MobControllerDeps) {
 
   // Sound the man-overboard alarm while a mark is active and unacknowledged.
   $effect(() => {
-    mobAlarm.update(mob.active && !mob.acknowledged);
+    mobAlarm.update(shouldSoundMobAlarm(mob.active, mob.acknowledged));
   });
 
   // The MOB channel of the assertive live region, the most urgent announcement in the app.

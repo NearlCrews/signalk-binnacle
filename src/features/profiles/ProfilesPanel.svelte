@@ -1,6 +1,6 @@
 <script lang="ts">
 import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
-import type { Profile, ProfileSyncState } from '$entities/profile';
+import { MAX_PROFILES, type Profile, type ProfileSyncState } from '$entities/profile';
 import type { PrivacyReport } from '$shared/privacy';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -117,7 +117,14 @@ function useProfile(id: string): void {
 </script>
 
 <SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
-  {#if syncState === 'conflict'}
+  {#if syncState === 'capacity-conflict'}
+    <p class="alert-note" role="alert">
+      The combined device and server libraries exceed the
+      {MAX_PROFILES.toLocaleString('en-US')}-profile limit. Delete at least one profile, then retry
+      profile sync.
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+  {:else if syncState === 'conflict'}
     <p class="alert-note" role="alert">
       Another station changed these profiles. Binnacle could not finish merging the changes.
     </p>

@@ -1,5 +1,5 @@
 import type { PoiType } from '$entities/poi-icons';
-import { withTimeout } from '$shared/lib';
+import { readBoundedJson, withTimeout } from '$shared/lib';
 import { asKeyedObject, authInit, str } from '$shared/signalk';
 import { NOTES_PATH } from './notes-client';
 
@@ -130,7 +130,7 @@ async function tryFetch(
   try {
     const response = await fetch(url, withTimeout(authInit(token)));
     if (!response.ok) return undefined;
-    const keyed = asKeyedObject(await response.json());
+    const keyed = asKeyedObject(await readBoundedJson<unknown>(response));
     if (!keyed) return undefined;
     const note = keyed as {
       name?: unknown;

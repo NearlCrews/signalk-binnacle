@@ -60,6 +60,10 @@ export function cleanProfileId(value: unknown): string | undefined {
     : undefined;
 }
 
+function validRecordKey(value: string, maxLength = MAX_PROFILE_ID_LENGTH): boolean {
+  return cleanText(value, maxLength) === value && !DANGEROUS_PATH_SEGMENTS.has(value);
+}
+
 function validStringList(value: unknown, maxEntries: number): value is string[] {
   return (
     Array.isArray(value) &&
@@ -75,6 +79,7 @@ function validLayerSettings(value: unknown): value is LayerSettings {
     const cleanedId = cleanText(id, MAX_PROFILE_ID_LENGTH);
     return (
       cleanedId === id &&
+      validRecordKey(id) &&
       isRecord(setting) &&
       Object.keys(setting).length === 2 &&
       typeof setting.visible === 'boolean' &&
@@ -88,7 +93,7 @@ function validLayerSettings(value: unknown): value is LayerSettings {
 function validCategorySettings(value: unknown): value is Record<string, boolean> {
   if (!isRecord(value) || Object.keys(value).length > MAX_LAYER_ENTRIES) return false;
   return Object.entries(value).every(
-    ([id, open]) => cleanText(id, MAX_PROFILE_ID_LENGTH) === id && typeof open === 'boolean',
+    ([id, open]) => validRecordKey(id) && typeof open === 'boolean',
   );
 }
 
@@ -149,7 +154,7 @@ function validExtensionValue(
   let valid = true;
   for (const [key, entry] of entries) {
     if (
-      (!Array.isArray(value) && cleanText(String(key), MAX_PROFILE_ID_LENGTH) !== key) ||
+      (!Array.isArray(value) && !validRecordKey(String(key))) ||
       !validExtensionValue(entry, depth + 1, budget, ancestors)
     ) {
       valid = false;
@@ -212,11 +217,9 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   if (value.mode !== undefined && cleanText(value.mode, 64) !== value.mode) return false;
   const extensionBudget = { remaining: MAX_EXTENSION_NODES };
   for (const [key, extension] of Object.entries(value)) {
+    if (!validRecordKey(key)) return false;
     if (KNOWN_SETTING_KEYS.has(key)) continue;
-    if (
-      cleanText(key, MAX_PROFILE_ID_LENGTH) !== key ||
-      !validExtensionValue(extension, 0, extensionBudget, new Set())
-    ) {
+    if (!validExtensionValue(extension, 0, extensionBudget, new Set())) {
       return false;
     }
   }
@@ -227,8 +230,7 @@ function validFieldTimestamps(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value) || Object.keys(value).length > MAX_PROFILE_SETTING_KEYS) return false;
   return Object.entries(value).every(
-    ([key, timestamp]) =>
-      cleanText(key, MAX_PROFILE_ID_LENGTH) === key && isSafeNonNegativeInteger(timestamp),
+    ([key, timestamp]) => validRecordKey(key) && isSafeNonNegativeInteger(timestamp),
   );
 }
 

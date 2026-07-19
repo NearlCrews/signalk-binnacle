@@ -4,7 +4,13 @@
 
 import { companionApiUrl } from '$shared/companion';
 import { isLatitude, isLongitude } from '$shared/geo';
-import { hasControlCharacters, isFiniteNumber, isRecord, withTimeout } from '$shared/lib';
+import {
+  hasControlCharacters,
+  isFiniteNumber,
+  isRecord,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 import { adminSessionInit } from '$shared/signalk';
 
 const MAX_MANAGED_CHARTS = 5_000;
@@ -138,7 +144,7 @@ export async function fetchManagedCharts(
       withTimeout(adminSessionInit()),
     );
     if (!response.ok) return undefined;
-    return parseManagedChartsResponse(await response.json());
+    return parseManagedChartsResponse(await readBoundedJson<unknown>(response));
   } catch {
     return undefined;
   }

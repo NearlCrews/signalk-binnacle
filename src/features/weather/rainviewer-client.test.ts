@@ -32,6 +32,32 @@ describe('fetchRadar', () => {
     });
     expect(await fetchRadar(fetchFn as unknown as typeof fetch)).toBeUndefined();
   });
+
+  it.each([
+    { radar: { past: {} }, host: 'https://tilecache.rainviewer.com' },
+    { radar: { past: [{ time: 1, path: 'relative' }] }, host: 'https://tilecache.rainviewer.com' },
+    {
+      radar: { past: [{ time: Number.NaN, path: '/radar' }] },
+      host: 'https://tilecache.rainviewer.com',
+    },
+    {
+      radar: { past: [{ time: Number.MAX_SAFE_INTEGER, path: '/radar' }] },
+      host: 'https://tilecache.rainviewer.com',
+    },
+    {
+      radar: { past: [{ time: 1, path: '/radar?token=secret' }] },
+      host: 'https://tilecache.rainviewer.com',
+    },
+    {
+      radar: { past: [{ time: 1, path: '/radar#fragment' }] },
+      host: 'https://tilecache.rainviewer.com',
+    },
+    { radar: { past: [] }, host: 'http://tilecache.rainviewer.com' },
+    { radar: { past: [] }, host: 'https://user:secret@tilecache.rainviewer.com' },
+  ])('returns undefined for malformed provider data without throwing', async (body) => {
+    const fetchFn = vi.fn(async () => res(body));
+    await expect(fetchRadar(fetchFn as unknown as typeof fetch)).resolves.toBeUndefined();
+  });
 });
 
 describe('radarTimeline', () => {

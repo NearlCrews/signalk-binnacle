@@ -1,3 +1,4 @@
+import { isSafeRadarGeometry, MAX_SPOKES_PER_MESSAGE } from './radar-limits';
 import { headingSpokes, spokesToRadians, writeSpoke } from './radar-math';
 import { decodeRadarMessage } from './radar-protocol';
 
@@ -48,6 +49,9 @@ export class RadarFrameCore {
     initialRange = 0,
     now: () => number = Date.now,
   ) {
+    if (!isSafeRadarGeometry(spokesPerRev, maxSpokeLen)) {
+      throw new RangeError('unsafe radar frame geometry');
+    }
     this.#spokesPerRev = spokesPerRev;
     this.#maxSpokeLen = maxSpokeLen;
     this.#accumulator = new Uint8Array(spokesPerRev * maxSpokeLen);
@@ -57,7 +61,10 @@ export class RadarFrameCore {
 
   // Decode one stream message into the accumulator and return how many spokes it integrated.
   ingest(bytes: Uint8Array): number {
-    const message = decodeRadarMessage(bytes);
+    const message = decodeRadarMessage(bytes, {
+      maxSpokeBytes: this.#maxSpokeLen,
+      maxSpokes: Math.min(MAX_SPOKES_PER_MESSAGE, this.#spokesPerRev * 2),
+    });
     for (const spoke of message.spokes) {
       writeSpoke(this.#accumulator, this.#spokesPerRev, this.#maxSpokeLen, spoke);
       // Keep the last POSITIVE range: a spoke that omits range (proto3 default 0) or reports 0 during

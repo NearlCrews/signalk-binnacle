@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileDelta } from './reconcile';
+import { MAX_VALUES_PER_UPDATE, reconcileDelta } from './reconcile';
 import type { Context, Delta, Path, Value } from './types';
 
 interface Collected {
@@ -110,5 +110,38 @@ describe('reconcileDelta', () => {
     } as unknown as Delta;
     const writes = collect(delta);
     expect(writes.map((w) => w.source?.label)).toEqual(['NMEA2000.35', 'NMEA2000.35']);
+  });
+
+  it('rejects unsafe contexts and paths', () => {
+    expect(
+      collect({
+        context: `vessels.${'x'.repeat(600)}`,
+        updates: [{ values: [{ path: 'navigation.position', value: null }] }],
+      } as unknown as Delta),
+    ).toEqual([]);
+    expect(
+      collect({
+        context: 'vessels.self',
+        updates: [
+          {
+            values: [
+              { path: `navigation.${'x'.repeat(600)}`, value: 1 },
+              { path: 'navigation.\u0000position', value: 2 },
+              { path: 'navigation.position', value: 3 },
+            ],
+          },
+        ],
+      } as unknown as Delta),
+    ).toHaveLength(1);
+  });
+
+  it('drops an oversized update before iterating its values', () => {
+    const values = Array.from({ length: MAX_VALUES_PER_UPDATE + 1 }, (_, index) => ({
+      path: `navigation.test.${index}`,
+      value: index,
+    }));
+    expect(collect({ context: 'vessels.self', updates: [{ values }] } as unknown as Delta)).toEqual(
+      [],
+    );
   });
 });

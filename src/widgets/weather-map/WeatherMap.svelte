@@ -113,6 +113,10 @@ const {
 const MAX_ZOOM = 7;
 const MIN_ZOOM = 1;
 const DEFAULT_ZOOM = 3;
+// The secondary map does not need the navigation chart's full device-pixel density. A 1.5 cap
+// keeps labels crisp while reducing canvas pixels, weather fill work, and wind composition cost on
+// high-density displays.
+const MAX_PIXEL_RATIO = 1.5;
 const STEP_MS = 3 * HOUR_MS;
 // Debounce the forecast refetch so a pan settles into one request, not one per moveend tick.
 const FETCH_DEBOUNCE_MS = 400;
@@ -276,7 +280,7 @@ const playback = createForecastPlayback(
 // keep well under Open-Meteo's free-tier rate limit.
 const FORECAST_OPTS = { maxCells: 200, forecastDays: 5 };
 function loadCurrentWeather(currentItems = items, force = false): void {
-  if (!getBounds || currentItems.every((item) => !item.visible)) return;
+  if (destroyed || !getBounds || currentItems.every((item) => !item.visible)) return;
   const visible = (id: string) => currentItems.some((item) => item.id === id && item.visible);
   void loader.load(
     store,
@@ -291,8 +295,11 @@ function loadCurrentWeather(currentItems = items, force = false): void {
 }
 
 function scheduleFetch(): void {
+  if (destroyed) return;
   if (fetchTimer) clearTimeout(fetchTimer);
   fetchTimer = setTimeout(() => {
+    fetchTimer = undefined;
+    if (destroyed) return;
     loadCurrentWeather();
   }, FETCH_DEBOUNCE_MS);
 }
@@ -339,6 +346,7 @@ onMount(() => {
     defaultZoom: DEFAULT_ZOOM,
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
+    pixelRatio: Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO),
     managerOptions: {
       saved: savedLayers,
       onChange: onLayersChange,
@@ -371,9 +379,11 @@ onMount(() => {
       // is intentional, not an oversight. The nav chart, which does reorder, applies layers through
       // MapCommands.applyLayers instead.
       onLayersReady?.((settings) => {
+        if (isDestroyed()) return;
         manager.applySnapshot(settings, []);
         view.refresh();
       });
+      if (isDestroyed()) return;
 
       recolor = recolorFn;
       recolor(theme);

@@ -1,6 +1,10 @@
 import { untrack } from 'svelte';
 import type { UserChartSource, UserCharts } from '$entities/user-charts';
-import { userChartToSignalK } from '$entities/user-charts';
+import {
+  shouldShareUserChart,
+  userChartNeedsServerDelete,
+  userChartToSignalK,
+} from '$entities/user-charts';
 import type { Theme } from '$shared/ui';
 import type { UserChartRegistrar } from '$widgets/chart-canvas';
 import { deleteChart, putChart } from './charts-client';
@@ -29,7 +33,7 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   }
 
   function syncUrlChartToServer(source: UserChartSource): void {
-    if (!deps.canWrite()) return;
+    if (!shouldShareUserChart(source) || !deps.canWrite()) return;
     const token = deps.getToken();
     void putChart(origin, token, userChartToSignalK(source, source.origin.url)).then((ok) => {
       if (!ok) {
@@ -44,10 +48,10 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
     userChartRegistrar?.unregister(id);
   }
 
-  function deleteUserChartFromServer(id: string): void {
-    if (!deps.canWrite()) return;
+  function deleteUserChartFromServer(source: UserChartSource): void {
+    if (!userChartNeedsServerDelete(source) || !deps.canWrite()) return;
     const token = deps.getToken();
-    void deleteChart(origin, token, id).then((ok) => {
+    void deleteChart(origin, token, source.id).then((ok) => {
       if (!ok) reportSyncError('Chart removed on this device, but its server copy may remain.');
     });
   }

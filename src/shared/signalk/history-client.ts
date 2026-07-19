@@ -1,4 +1,4 @@
-import { fetchJsonOrUndefined, isRecord } from '$shared/lib';
+import { fetchJsonOrUndefined, hasControlCharacters, isRecord } from '$shared/lib';
 import { asKeyedObject, authInit } from './resource';
 
 // The server's v2 History API (signalk-server 2.19 and later): the server core mounts
@@ -10,7 +10,37 @@ const HISTORY_API = '/signalk/v2/api/history';
 export const MAX_HISTORY_PROVIDERS = 8;
 export const MAX_HISTORY_CATALOG_PATHS = 2_000;
 const MAX_HISTORY_PATH_LENGTH = 512;
+const MAX_HISTORY_QUERY_PATHS = 100;
+const MAX_HISTORY_ROWS = 100_000;
+const MAX_HISTORY_DURATION_SECONDS = 366 * 24 * 60 * 60;
+const MAX_HISTORY_METHOD_LENGTH = 64;
 const HISTORY_VALIDATION_BATCH_SIZE = 25;
+
+function safeProviderId(value: string | undefined): boolean {
+  return (
+    value === undefined || (value.length > 0 && value.length <= 128 && !hasControlCharacters(value))
+  );
+}
+
+function safeDuration(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0 && value <= MAX_HISTORY_DURATION_SECONDS;
+}
+
+function safeHistoryPath(path: unknown): path is string {
+  return (
+    typeof path === 'string' &&
+    path.length > 0 &&
+    path.length <= MAX_HISTORY_PATH_LENGTH &&
+    !path.includes(',') &&
+    !hasControlCharacters(path)
+  );
+}
+
+function safeQueryPaths(paths: readonly string[]): boolean {
+  return (
+    paths.length > 0 && paths.length <= MAX_HISTORY_QUERY_PATHS && paths.every(safeHistoryPath)
+  );
+}
 
 // The default review window and bucket resolution, shared by the history-track overlay and the
 // time-travel scrub so their geometry lines up. 24 hours at 60 seconds is about 1440 buckets.
@@ -74,7 +104,7 @@ export async function fetchHistoryProviders(
     return isRecord(entry) && entry.isDefault === true;
   };
   const ids = Object.keys(keyed)
-    .filter((id) => id.length > 0 && id.length <= 128)
+    .filter((id) => safeProviderId(id))
     .sort((a, b) => Number(isDefault(b)) - Number(isDefault(a)))
     .slice(0, MAX_HISTORY_PROVIDERS);
   return { ids };
@@ -85,6 +115,17 @@ export async function fetchHistoryValues(
   token: string | undefined,
   query: HistoryQuery,
 ): Promise<HistoryValues | undefined> {
+  if (
+    !safeQueryPaths(query.paths) ||
+    !safeDuration(query.durationSeconds) ||
+    !safeProviderId(query.provider) ||
+    (query.resolutionSeconds !== undefined &&
+      (!Number.isSafeInteger(query.resolutionSeconds) ||
+        query.resolutionSeconds <= 0 ||
+        query.resolutionSeconds > query.durationSeconds))
+  ) {
+    return undefined;
+  }
   const params = new URLSearchParams({
     paths: query.paths.join(','),
     duration: String(query.durationSeconds),
@@ -104,17 +145,36 @@ export async function fetchHistoryValues(
   // A non-ok or malformed body is undefined (unreachable); a 2xx with columns but missing or empty
   // data is a real empty result (provider present, no samples in the window), kept distinct so the
   // panel can say "no data" rather than treating it as a transport failure.
-  if (!body || !Array.isArray(body.values)) return undefined;
+  if (
+    !body ||
+    !Array.isArray(body.values) ||
+    body.values.length > MAX_HISTORY_QUERY_PATHS ||
+    (Array.isArray(body.data) && body.data.length > MAX_HISTORY_ROWS)
+  ) {
+    return undefined;
+  }
   const columns: HistoryColumn[] = [];
   for (const col of body.values) {
     const { path, method } = (col ?? {}) as { path?: unknown; method?: unknown };
-    if (typeof path !== 'string') return undefined;
+    if (
+      !safeHistoryPath(path) ||
+      (method !== undefined &&
+        (typeof method !== 'string' ||
+          method.length > MAX_HISTORY_METHOD_LENGTH ||
+          hasControlCharacters(method)))
+    ) {
+      return undefined;
+    }
     columns.push({ path, method: typeof method === 'string' ? method : '' });
   }
   const data = Array.isArray(body.data) ? body.data : [];
   const rows = data.filter(
     (row): row is [string, ...unknown[]] =>
-      Array.isArray(row) && typeof row[0] === 'string' && row.length === columns.length + 1,
+      Array.isArray(row) &&
+      typeof row[0] === 'string' &&
+      row[0].length <= 64 &&
+      !hasControlCharacters(row[0]) &&
+      row.length === columns.length + 1,
   );
   return {
     from: typeof body.range?.from === 'string' ? body.range.from : '',
@@ -131,6 +191,7 @@ export async function fetchHistoryPaths(
   token: string | undefined,
   query: HistoryPathsQuery,
 ): Promise<readonly string[] | undefined> {
+  if (!safeDuration(query.durationSeconds) || !safeProviderId(query.provider)) return undefined;
   const params = new URLSearchParams({ duration: String(query.durationSeconds) });
   if (query.provider) params.set('provider', query.provider);
   const body = await fetchJsonOrUndefined<unknown>(
@@ -140,9 +201,7 @@ export async function fetchHistoryPaths(
   if (!Array.isArray(body)) return undefined;
   const bounded = body.slice(0, MAX_HISTORY_CATALOG_PATHS);
   if (bounded.some((path) => typeof path !== 'string')) return undefined;
-  return [
-    ...new Set(bounded.filter((path) => path.length > 0 && path.length <= MAX_HISTORY_PATH_LENGTH)),
-  ].sort();
+  return [...new Set(bounded.filter(safeHistoryPath))].sort();
 }
 
 export interface HistoryProviderPathCatalogs {
@@ -184,7 +243,7 @@ export async function fetchPopulatedHistoryPathsForProvider(
   signal?: AbortSignal,
 ): Promise<{ paths: readonly string[]; complete: boolean; answered: boolean }> {
   const candidates = [...new Set(paths)]
-    .filter((path) => path.length > 0 && path.length <= MAX_HISTORY_PATH_LENGTH)
+    .filter(safeHistoryPath)
     .slice(0, MAX_HISTORY_CATALOG_PATHS);
   const populated = new Set<string>();
   let complete = true;

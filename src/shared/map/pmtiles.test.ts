@@ -17,6 +17,7 @@ function response(status: number, bytes = 4, start = 0): Response {
 describe('NoStoreSource.getBytes', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -76,6 +77,48 @@ describe('NoStoreSource.getBytes', () => {
       new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4, controller.signal),
     ).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('composes caller cancellation with its request timeout', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const requestSignal = init?.signal;
+      if (!requestSignal) throw new Error('missing request signal');
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4, controller.signal);
+    await Promise.resolve();
+    const requestSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+    expect(requestSignal).not.toBe(controller.signal);
+
+    controller.abort(new DOMException('Caller canceled', 'AbortError'));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requestSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('stops after its bounded request timeout instead of retrying the abort', async () => {
+    const timeout = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const requestSignal = init?.signal;
+      if (!requestSignal) throw new Error('missing request signal');
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = new NoStoreSource('http://x/a.pmtiles').getBytes(0, 4);
+    await Promise.resolve();
+    timeout.abort(new DOMException('Request timed out', 'TimeoutError'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('gives up after the retry budget', async () => {
@@ -336,7 +379,10 @@ describe('CompanionSource.getBytes auth header', () => {
 
   const okResponse = (start = 0): Response => response(206, 4, start);
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it('includes Authorization header when token is provided', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse());
@@ -367,6 +413,31 @@ describe('CompanionSource.getBytes auth header', () => {
     await new CompanionSource(COMPANION_URL, () => undefined).getBytes(0, 4);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it('composes caller cancellation with its request timeout', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      const requestSignal = init?.signal;
+      if (!requestSignal) throw new Error('missing request signal');
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = new CompanionSource(COMPANION_URL, () => 'tok').getBytes(
+      0,
+      4,
+      controller.signal,
+    );
+    await Promise.resolve();
+    const requestSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+    expect(requestSignal).not.toBe(controller.signal);
+
+    controller.abort(new DOMException('Caller canceled', 'AbortError'));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requestSignal?.aborted).toBe(true);
   });
 
   it('always includes the Range header', async () => {

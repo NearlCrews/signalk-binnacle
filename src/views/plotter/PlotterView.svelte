@@ -47,6 +47,7 @@ import type {
   ServerFeatures,
   SignalKStore,
 } from '$shared/signalk';
+import { isInsecureTransportOrigin } from '$shared/signalk';
 import { type PanelId, SlideOver, type Theme, type ThemeController } from '$shared/ui';
 import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
 import { loadWeatherMap } from '$widgets/weather-map';
@@ -351,6 +352,7 @@ const {
   categoriesOpen,
   arrivalMuted,
 } = $derived(services);
+const insecureTransport = $derived(isInsecureTransportOrigin(origin));
 const {
   anchorController,
   mobController,
@@ -543,7 +545,7 @@ $effect(() => {
     {onMapDestroyed}
   />
   <div class="banner-slot">
-    <AuthBanner {auth} requestsUrl={accessRequestsUrl} />
+    <AuthBanner {auth} requestsUrl={accessRequestsUrl} {insecureTransport} />
   </div>
   <div class="top-banner-stack">
     {#if criticalOverlayError}

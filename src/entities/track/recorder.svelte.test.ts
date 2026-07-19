@@ -267,4 +267,72 @@ describe('TrackRecorder', () => {
     await Promise.resolve();
     expect(r.points.map((p) => p.t)).toEqual([0, 20000]);
   });
+
+  it('marks a late-restored startup junction as a gap after app downtime', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async () => {},
+      clear: async () => {},
+    };
+    const now = Date.now();
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(36.9, -121.7, 1, now);
+    resolveAll([{ lat: 36.8, lon: -121.7, t: now - 10 * 60 * 1000, sog: 1 }]);
+
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+
+    expect(r.points).toHaveLength(2);
+    expect(r.points[1].gap).toBe(true);
+    expect(r.stats.distanceMeters).toBe(0);
+  });
+
+  it('rejects future and non-monotonic restored timestamps', async () => {
+    const now = Date.now();
+    const store = {
+      all: async () => [
+        { lat: 1, lon: 1, t: 100, sog: 1 },
+        { lat: 2, lon: 2, t: 90, sog: 1 },
+        { lat: 3, lon: 3, t: 100, sog: 1 },
+        { lat: 4, lon: 4, t: now + 60_000, sog: 1 },
+        { lat: 5, lon: 5, t: 110, sog: 1 },
+      ],
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+    expect(r.points.map((point) => point.t)).toEqual([100, 110]);
+  });
+
+  it('merges a late restore chronologically', async () => {
+    let resolveAll!: (points: TrackPoint[]) => void;
+    const store = {
+      all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
+      append: async () => {},
+      clear: async () => {},
+    };
+    const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
+    r.consider(1, 1, 1, 5_000);
+    resolveAll([{ lat: 2, lon: 2, t: 10_000, sog: 1 }]);
+    await vi.waitFor(() => expect(r.restored).toBe(true));
+    expect(r.points.map((point) => point.t)).toEqual([5_000, 10_000]);
+  });
+
+  it('starts a monotonic new segment when the wall clock regresses', () => {
+    const r = recorder();
+    r.consider(1, 1, 1, 100_000);
+    r.consider(1.001, 1, 1, 50_000);
+    r.consider(1.002, 1, 1, 62_000);
+    expect(r.points.map((point) => point.t)).toEqual([100_000, 100_001, 112_001]);
+    expect(r.points[1].gap).toBe(true);
+  });
+
+  it('does not clear anything when the saved snapshot boundary is absent', () => {
+    const r = recorder();
+    r.consider(1, 1, 1, 1);
+    r.consider(1.001, 1, 1, 12_000);
+    r.clearThrough(6_000);
+    expect(r.points.map((point) => point.t)).toEqual([1, 12_000]);
+  });
 });

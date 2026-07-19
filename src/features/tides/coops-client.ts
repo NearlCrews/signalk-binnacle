@@ -5,7 +5,13 @@ import {
   type TideStation,
 } from '$entities/tides';
 import { isLatitude, isLongitude } from '$shared/geo';
-import { DEG_TO_RAD, hasControlCharacters, isFiniteNumber, withTimeout } from '$shared/lib';
+import {
+  DEG_TO_RAD,
+  hasControlCharacters,
+  isFiniteNumber,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 
 // NOAA CO-OPS, the US tide and tidal-current authority. Public domain, key-free, CORS-open. The
 // metadata API lists stations; the datagetter returns predictions for one station.
@@ -44,7 +50,7 @@ export function utcYmd(ms: number, sep = ''): string {
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url, withTimeout());
   if (!response.ok) throw new Error(`CO-OPS ${response.status}`);
-  const data = await response.json();
+  const data = await readBoundedJson<unknown>(response);
   // The datagetter answers 200 with an { error } body for an unknown station or out-of-range
   // request, which the service worker would otherwise cache as if it were data. Treat it as a
   // failure so a no-data response is never stored or rendered as predictions.

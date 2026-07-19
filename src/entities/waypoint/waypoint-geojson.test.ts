@@ -77,8 +77,10 @@ describe('featureToWaypoint', () => {
   it('rejects unsafe ids and bounds provider-controlled text', () => {
     expect(featureToWaypoint('', waypointToFeature(WAYPOINT))).toBeUndefined();
     expect(featureToWaypoint('bad\u0000id', waypointToFeature(WAYPOINT))).toBeUndefined();
+    expect(featureToWaypoint('  safe-id  ', waypointToFeature(WAYPOINT))).toBeUndefined();
+    expect(featureToWaypoint('w'.repeat(513), waypointToFeature(WAYPOINT))).toBeUndefined();
 
-    const waypoint = featureToWaypoint('  safe-id  ', {
+    const waypoint = featureToWaypoint('safe-id', {
       name: `  ${'n'.repeat(300)}  `,
       description: 'd'.repeat(10_100),
       feature: {

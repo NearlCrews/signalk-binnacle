@@ -1,4 +1,4 @@
-import { withTimeout } from '$shared/lib';
+import { readBoundedJson, withTimeout } from '$shared/lib';
 import { adminSessionInit } from './resource.js';
 
 export type AdminSessionState = 'admin' | 'non-admin' | 'signed-out' | 'unknown';
@@ -42,7 +42,7 @@ export async function fetchAdminSessionState(
       withTimeout(adminSessionInit()),
     );
     if (!response.ok) return 'unknown';
-    const body = (await response.json()) as { status?: unknown; userLevel?: unknown };
+    const body = await readBoundedJson<{ status?: unknown; userLevel?: unknown }>(response);
     if (body.status === 'loggedOut' || body.status === 'notLoggedIn') return 'signed-out';
     if (body.status !== 'loggedIn') return 'unknown';
     if (body.userLevel === 'admin') return 'admin';

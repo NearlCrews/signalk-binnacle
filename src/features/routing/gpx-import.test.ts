@@ -88,4 +88,27 @@ describe('parseGpxRoutes', () => {
     const result = parseGpxRoutesDetailed(`<gpx>${route.repeat(101)}</gpx>`);
     expect(result).toEqual({ routes: [], error: 'too-many-routes' });
   });
+
+  it('counts malformed routes and points against the import limits', () => {
+    const emptyRoute = '<rte><rtept lat="bad" lon="bad"/></rte>';
+    expect(parseGpxRoutesDetailed(`<gpx>${emptyRoute.repeat(101)}</gpx>`)).toEqual({
+      routes: [],
+      error: 'too-many-routes',
+    });
+
+    const invalidPoint = '<rtept lat="bad" lon="bad"/>';
+    expect(parseGpxRoutesDetailed(`<gpx><rte>${invalidPoint.repeat(10_001)}</rte></gpx>`)).toEqual({
+      routes: [],
+      error: 'too-many-waypoints',
+    });
+  });
+
+  it('caps imported route and waypoint names', () => {
+    const longName = 'n'.repeat(300);
+    const routes = parseGpxRoutes(`<gpx><rte><name>${longName}</name>
+      <rtept lat="1" lon="1"><name>${longName}</name></rtept>
+      <rtept lat="2" lon="2"/></rte></gpx>`);
+    expect(routes[0].name).toHaveLength(256);
+    expect(routes[0].waypoints[0].name).toHaveLength(256);
+  });
 });

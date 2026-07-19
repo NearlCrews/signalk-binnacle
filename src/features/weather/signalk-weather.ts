@@ -1,9 +1,26 @@
-import { capitalize, HOUR_MS, MINUTE_MS, nearestBy } from '$shared/lib';
+import {
+  capitalize,
+  HOUR_MS,
+  hasControlCharacters,
+  isRecord,
+  MINUTE_MS,
+  nearestBy,
+  readBoundedJson,
+} from '$shared/lib';
 import { authInit } from '$shared/signalk';
 import type { WeatherReadout } from './weather-readout';
 
 const WEATHER_BASE = '/signalk/v2/api/weather';
 const METERS_TO_MM = 1000;
+export const MAX_WEATHER_PROVIDERS = 32;
+export const MAX_WEATHER_OBSERVATIONS = 256;
+export const MAX_WEATHER_FORECASTS = 512;
+export const MAX_WEATHER_WARNINGS = 64;
+const MAX_PROVIDER_ID_LENGTH = 128;
+const MAX_PROVIDER_NAME_LENGTH = 256;
+const MAX_WEATHER_TEXT_LENGTH = 2_048;
+const MAX_WARNING_DETAILS_LENGTH = 4_096;
+const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export const NEAR_NOW_MS = 90 * MINUTE_MS;
 export const OBSERVATION_STALE_MS = HOUR_MS;
@@ -94,6 +111,152 @@ export type EndpointStatus = EndpointOutcome<never>['status'];
 type Fetch = typeof fetch;
 const defaultFetch: Fetch = globalThis.fetch.bind(globalThis);
 
+function boundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !hasControlCharacters(value)
+    ? value
+    : undefined;
+}
+
+function safeProviderId(value: unknown): value is string {
+  return (
+    boundedText(value, MAX_PROVIDER_ID_LENGTH) !== undefined &&
+    !MAGIC_OBJECT_KEYS.has(value as string)
+  );
+}
+
+function safePointQuery(providerId: string, lat: number, lon: number): boolean {
+  return (
+    safeProviderId(providerId) &&
+    Number.isFinite(lat) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    Number.isFinite(lon) &&
+    lon >= -180 &&
+    lon <= 180
+  );
+}
+
+function hasOnlyFiniteNumbers(
+  value: Record<string, unknown> | undefined,
+  fields: readonly string[],
+): boolean {
+  return (
+    value === undefined ||
+    fields.every(
+      (field) =>
+        value[field] === undefined ||
+        (typeof value[field] === 'number' && Number.isFinite(value[field])),
+    )
+  );
+}
+
+const OUTSIDE_NUMBER_FIELDS = [
+  'temperature',
+  'feelsLikeTemperature',
+  'minTemperature',
+  'maxTemperature',
+  'dewPointTemperature',
+  'pressure',
+  'relativeHumidity',
+  'cloudCover',
+  'precipitationVolume',
+  'uvIndex',
+  'horizontalVisibility',
+] as const;
+const WIND_NUMBER_FIELDS = ['speedTrue', 'directionTrue', 'gust', 'gustDirection'] as const;
+const WATER_NUMBER_FIELDS = [
+  'temperature',
+  'waveSignificantHeight',
+  'wavePeriod',
+  'waveDirection',
+  'swellHeight',
+  'swellPeriod',
+  'swellDirection',
+  'surfaceCurrentSpeed',
+  'surfaceCurrentDirection',
+] as const;
+const WAVE_NUMBER_FIELDS = [
+  'significantHeight',
+  'height',
+  'period',
+  'direction',
+  'directionTrue',
+] as const;
+const CURRENT_NUMBER_FIELDS = ['speed', 'drift', 'direction', 'set'] as const;
+
+function validNumericRecord(value: unknown, fields: readonly string[]): boolean {
+  return value === undefined || (isRecord(value) && hasOnlyFiniteNumbers(value, fields));
+}
+
+function cleanWeatherEntry(value: unknown): SignalKWeatherData | undefined {
+  if (!isRecord(value)) return undefined;
+  const date = boundedText(value.date, 64);
+  if (!date) return undefined;
+  if (
+    value.description !== undefined &&
+    boundedText(value.description, MAX_WEATHER_TEXT_LENGTH) === undefined
+  ) {
+    return undefined;
+  }
+  for (const field of ['outside', 'wind', 'water', 'current', 'sun'] as const) {
+    if (value[field] !== undefined && !isRecord(value[field])) return undefined;
+  }
+  const outside = isRecord(value.outside) ? value.outside : undefined;
+  const wind = isRecord(value.wind) ? value.wind : undefined;
+  const water = isRecord(value.water) ? value.water : undefined;
+  const current = isRecord(value.current) ? value.current : undefined;
+  if (
+    !hasOnlyFiniteNumbers(outside, OUTSIDE_NUMBER_FIELDS) ||
+    !hasOnlyFiniteNumbers(wind, WIND_NUMBER_FIELDS) ||
+    !hasOnlyFiniteNumbers(water, WATER_NUMBER_FIELDS) ||
+    !hasOnlyFiniteNumbers(current, CURRENT_NUMBER_FIELDS) ||
+    !validNumericRecord(water?.waves, WAVE_NUMBER_FIELDS) ||
+    !validNumericRecord(water?.swell, WAVE_NUMBER_FIELDS) ||
+    !validNumericRecord(water?.current, CURRENT_NUMBER_FIELDS)
+  ) {
+    return undefined;
+  }
+  if (
+    outside?.precipitationType !== undefined &&
+    boundedText(outside.precipitationType, 128) === undefined
+  ) {
+    return undefined;
+  }
+  if (outside?.pressureTendency !== undefined) {
+    const tendency = outside.pressureTendency;
+    if (
+      !(
+        (typeof tendency === 'number' && Number.isFinite(tendency)) ||
+        boundedText(tendency, 128) !== undefined
+      )
+    ) {
+      return undefined;
+    }
+  }
+  const sun = isRecord(value.sun) ? value.sun : undefined;
+  for (const field of ['sunrise', 'sunset'] as const) {
+    if (sun?.[field] !== undefined && boundedText(sun[field], 64) === undefined) return undefined;
+  }
+  return value as unknown as SignalKWeatherData;
+}
+
+function cleanWarning(value: unknown): WeatherWarning | undefined {
+  if (!isRecord(value)) return undefined;
+  const startTime = boundedText(value.startTime, 64);
+  const endTime = boundedText(value.endTime, 64);
+  const details = boundedText(value.details, MAX_WARNING_DETAILS_LENGTH);
+  const source = boundedText(value.source, MAX_PROVIDER_NAME_LENGTH);
+  const type = boundedText(value.type, MAX_PROVIDER_NAME_LENGTH);
+  if (!startTime || !endTime || !details || !source || !type) return undefined;
+  if (!Number.isFinite(Date.parse(startTime)) || !Number.isFinite(Date.parse(endTime))) {
+    return undefined;
+  }
+  return { startTime, endTime, details, source, type };
+}
+
 export async function fetchWeatherProviders(
   origin: string,
   token?: string,
@@ -102,8 +265,21 @@ export async function fetchWeatherProviders(
   const result = await fetchOutcome<unknown>(`${origin}${WEATHER_BASE}/_providers`, token, fetchFn);
   if (result.status !== 'success') return result.status === 'empty' ? {} : undefined;
   const body = result.value;
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
-  return body as Record<string, WeatherProviderInfo>;
+  if (!isRecord(body)) return undefined;
+  const providers: Record<string, WeatherProviderInfo> = {};
+  let count = 0;
+  for (const id in body) {
+    if (!Object.hasOwn(body, id)) continue;
+    count += 1;
+    if (count > MAX_WEATHER_PROVIDERS || !safeProviderId(id)) return undefined;
+    const raw = body[id];
+    if (!isRecord(raw) || typeof raw.isDefault !== 'boolean') return undefined;
+    const name =
+      raw.name === undefined ? undefined : boundedText(raw.name, MAX_PROVIDER_NAME_LENGTH);
+    if (raw.name !== undefined && name === undefined) return undefined;
+    providers[id] = { isDefault: raw.isDefault, ...(name ? { name } : {}) };
+  }
+  return providers;
 }
 
 export function defaultProviderName(
@@ -166,7 +342,7 @@ async function fetchOutcome<T>(
     }
     if (!response.ok) return { status: 'failure' };
     if (response.status === 204) return { status: 'empty' };
-    const body = (await response.json()) as T;
+    const body = await readBoundedJson<T>(response);
     return body === null || body === undefined
       ? { status: 'empty' }
       : { status: 'success', value: body };
@@ -179,15 +355,21 @@ async function fetchWeatherListResult(
   url: string,
   token: string | undefined,
   fetchFn: Fetch,
+  maxEntries: number,
 ): Promise<EndpointOutcome<SignalKWeatherData[]>> {
   const result = await fetchOutcome<unknown>(url, token, fetchFn);
   if (result.status !== 'success') return result;
   const list = Array.isArray(result.value)
-    ? (result.value as SignalKWeatherData[])
+    ? result.value
     : result.value && typeof result.value === 'object'
-      ? [result.value as SignalKWeatherData]
+      ? [result.value]
       : [];
-  return list.length > 0 ? { status: 'success', value: list } : { status: 'empty' };
+  if (list.length > maxEntries) return { status: 'failure' };
+  const cleaned = list.map(cleanWeatherEntry);
+  if (cleaned.some((entry) => entry === undefined)) return { status: 'failure' };
+  return cleaned.length > 0
+    ? { status: 'success', value: cleaned as SignalKWeatherData[] }
+    : { status: 'empty' };
 }
 
 function entryMs(entry: SignalKWeatherData | undefined): number {
@@ -202,10 +384,12 @@ export async function fetchObservationsResult(
   token?: string,
   fetchFn: Fetch = defaultFetch,
 ): Promise<EndpointOutcome<SignalKWeatherData>> {
+  if (!safePointQuery(providerId, lat, lon)) return { status: 'failure' };
   const result = await fetchWeatherListResult(
     pointUrl(origin, 'observations', providerId, lat, lon),
     token,
     fetchFn,
+    MAX_WEATHER_OBSERVATIONS,
   );
   if (result.status !== 'success') return result;
   const latest = nearestBy(result.value, entryMs, Number.MAX_SAFE_INTEGER);
@@ -221,16 +405,26 @@ export async function fetchPointForecastsResult(
   token?: string,
   fetchFn: Fetch = defaultFetch,
 ): Promise<EndpointOutcome<SignalKWeatherData[]>> {
+  if (
+    !safePointQuery(providerId, lat, lon) ||
+    !Number.isSafeInteger(count) ||
+    count <= 0 ||
+    count > MAX_WEATHER_FORECASTS
+  ) {
+    return { status: 'failure' };
+  }
   const result = await fetchWeatherListResult(
     pointUrl(origin, 'forecasts/point', providerId, lat, lon, count),
     token,
     fetchFn,
+    MAX_WEATHER_FORECASTS,
   );
   if (result.status !== 'success') return result;
   const sorted = result.value
     .filter((entry) => !Number.isNaN(entryMs(entry)))
     .slice()
-    .sort((a, b) => entryMs(a) - entryMs(b));
+    .sort((a, b) => entryMs(a) - entryMs(b))
+    .slice(0, count);
   return sorted.length > 0 ? { status: 'success', value: sorted } : { status: 'empty' };
 }
 
@@ -242,6 +436,7 @@ export async function fetchWeatherWarningsResult(
   token?: string,
   fetchFn: Fetch = defaultFetch,
 ): Promise<EndpointOutcome<WeatherWarning[]>> {
+  if (!safePointQuery(providerId, lat, lon)) return { status: 'failure' };
   const result = await fetchOutcome<unknown>(
     pointUrl(origin, 'warnings', providerId, lat, lon),
     token,
@@ -249,8 +444,11 @@ export async function fetchWeatherWarningsResult(
   );
   if (result.status !== 'success') return result;
   if (!Array.isArray(result.value)) return { status: 'failure' };
-  return result.value.length > 0
-    ? { status: 'success', value: result.value as WeatherWarning[] }
+  if (result.value.length > MAX_WEATHER_WARNINGS) return { status: 'failure' };
+  const warnings = result.value.map(cleanWarning);
+  if (warnings.some((warning) => warning === undefined)) return { status: 'failure' };
+  return warnings.length > 0
+    ? { status: 'success', value: warnings as WeatherWarning[] }
     : { status: 'empty' };
 }
 
@@ -330,7 +528,8 @@ export function normalizePressureTendency(value: string | number | undefined): s
     if (Math.abs(value) < 0.5) return 'steady';
     return value > 0 ? 'rising' : 'falling';
   }
-  const normalized = value?.trim().toLowerCase();
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
   if (!normalized) return undefined;
   if (/^(rising|rise|increasing|increase|up)$/.test(normalized)) return 'rising';
   if (/^(falling|fall|decreasing|decrease|down)$/.test(normalized)) return 'falling';

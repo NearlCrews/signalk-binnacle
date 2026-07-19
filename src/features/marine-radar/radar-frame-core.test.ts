@@ -19,6 +19,10 @@ function encodeSpoke(angle: number, range: number, data: Uint8Array, bearing?: n
 }
 
 describe('RadarFrameCore', () => {
+  it('rejects unsafe frame geometry before allocating', () => {
+    expect(() => new RadarFrameCore(8192, 4096)).toThrow(/unsafe radar frame geometry/);
+  });
+
   it('integrates synthetic spokes into a flushed buffer of spokesPerRev x maxSpokeLen', () => {
     const core = new RadarFrameCore(16, 8);
     for (const frame of syntheticFrames({ spokesPerRev: 16, maxSpokeLen: 8 })) {

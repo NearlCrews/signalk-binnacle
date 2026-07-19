@@ -170,8 +170,8 @@ const reorder = createLayerReorder(
     {#if mode === 'charts'}
       {#if auth.writeBlocked}
         <p class="muted-note" role="status">
-          A write token is needed to add, rename, or delete URL charts. Request a read/write token
-          to continue.
+          URL charts can still be stored on this device. Read/write access is needed to share them
+          with Signal K or change charts that are already shared.
         </p>
       {/if}
       {#if chartsLoadState === 'loading'}
@@ -241,12 +241,7 @@ const reorder = createLayerReorder(
               onDone={() => (addOpen = false)}
             />
           {:else}
-            <button
-              type="button"
-              class="btn"
-              onclick={() => (addOpen = true)}
-              disabled={auth.writeBlocked}
-            >
+            <button type="button" class="btn" onclick={() => (addOpen = true)}>
               <Plus size={16} aria-hidden="true" />
               Add a chart
             </button>

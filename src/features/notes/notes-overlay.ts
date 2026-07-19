@@ -81,6 +81,12 @@ export function createNotesOverlay(
   let lastToken = getToken();
   let lastOnline = isOnline();
   let forceRefresh = false;
+  // The overlay is live as soon as it is constructed so source-only synchronization can warm its
+  // cache before map registration. Reset or remove makes deferred work stale until add starts a
+  // fresh lifecycle.
+  let mounted = true;
+  let lifecycle = 0;
+  let iconGeneration = 0;
 
   function report(phase: PoiViewPhase, offline = false): void {
     if (lastStatus?.phase === phase && lastStatus.offline === offline) return;
@@ -116,33 +122,42 @@ export function createNotesOverlay(
   // so the now-registered symbol replaces its category disc. A failure resolves false and is
   // remembered by the registry, so the disc simply stays: no missing-image warning either way,
   // because a feature never references an unregistered image id.
-  function ensurePendingIcons(ctx: OverlayContext, notes: NotePoint[]): void {
+  function isCurrent(generation: number): boolean {
+    return mounted && generation === lifecycle;
+  }
+
+  function ensurePendingIcons(ctx: OverlayContext, notes: NotePoint[], generation: number): void {
     iconResolver.ensurePending(ctx.map, themePaint, () => {
-      if (renderedNotes !== notes) return;
+      if (!isCurrent(generation) || renderedNotes !== notes) return;
       renderedNotes = undefined;
-      render(ctx, notes);
+      render(ctx, notes, generation);
     });
   }
 
   // Re-raster the 18 POI and navaid SVGs and the provided symbols to a new theme paint. Run on a
   // theme change while shown and deferred to the next show while hidden.
-  function refreshIcons(ctx: OverlayContext, paint: MapThemePaint): void {
-    void registerPoiIcons(ctx.map, paint);
-    void registerNavaidIcons(ctx.map, paint);
-    iconResolver.retheme(ctx.map, paint);
+  async function refreshIcons(ctx: OverlayContext, paint: MapThemePaint): Promise<void> {
+    const generation = lifecycle;
+    const icons = ++iconGeneration;
+    const iconsAreCurrent = (): boolean => isCurrent(generation) && icons === iconGeneration;
+    await Promise.all([
+      registerPoiIcons(ctx.map, paint, iconsAreCurrent),
+      registerNavaidIcons(ctx.map, paint, iconsAreCurrent),
+    ]);
+    if (iconsAreCurrent()) iconResolver.retheme(ctx.map, paint);
   }
 
   // Render a note set, skipping the work when it is the same set already shown. Leaving the source
   // untouched on a no-op avoids re-clustering the markers every idle frame.
-  function render(ctx: OverlayContext, notes: NotePoint[]): void {
-    if (notes === renderedNotes) return;
+  function render(ctx: OverlayContext, notes: NotePoint[], generation = lifecycle): void {
+    if (!isCurrent(generation) || notes === renderedNotes) return;
     renderedNotes = notes;
     const { data, iconOffset } = buildRender(notes, iconResolver.iconEntry);
     setSourceData(ctx.map, SOURCE_ID, data);
     // The offset is a layer property, not a feature one (MapLibre stringifies an array feature
     // property), so it is restyled here. The getLayer guard mirrors setData's missing-source degrade.
     if (ctx.map.getLayer(LAYER_ID)) ctx.map.setLayoutProperty(LAYER_ID, 'icon-offset', iconOffset);
-    ensurePendingIcons(ctx, notes);
+    ensurePendingIcons(ctx, notes, generation);
     onNotes?.(notes);
   }
 
@@ -165,18 +180,23 @@ export function createNotesOverlay(
     supportsOpacity: true,
     layerIds: LAYERS,
     async add(ctx) {
+      mounted = true;
+      lifecycle += 1;
       const before = ctx.beforeIdFor('routes');
       addNoteLayers(ctx.map, themePaint, before);
       ring.reset();
       hit.attach(ctx);
       // Load the category and navaid icons after the layers exist, concurrently; resilient, so a
       // failure here leaves the markers as text labels rather than breaking overlay setup.
-      await Promise.all([
-        registerPoiIcons(ctx.map, themePaint),
-        registerNavaidIcons(ctx.map, themePaint),
-      ]);
+      await refreshIcons(ctx, themePaint);
     },
     reset() {
+      mounted = false;
+      lifecycle += 1;
+      iconGeneration += 1;
+      iconResolver.invalidate();
+      renderedNotes = undefined;
+      invalidateIdleAnchor();
       ring.reset();
     },
     sync(ctx) {
@@ -248,7 +268,10 @@ export function createNotesOverlay(
         }
         // Hiding or removing the overlay while a request is in flight keeps the successful response
         // cached, but it must not repopulate the list or replace the explicit hidden state.
-        if (!visible) return;
+        if (!mounted || !visible) {
+          invalidateIdleAnchor();
+          return;
+        }
         // undefined is a transient failure: keep the markers already shown and retry after the
         // source's cooldown, even stationary (the fast-path would otherwise pin the failure
         // forever). An empty array is a real "no POIs here" answer, so it renders and clears them.
@@ -275,7 +298,7 @@ export function createNotesOverlay(
       // The cheap per-layer color updates always run so the layer is correct the instant it shows.
       // The expensive icon re-raster (18 SVGs) is deferred while hidden and done on the next show.
       if (visible) {
-        refreshIcons(ctx, paint);
+        void refreshIcons(ctx, paint);
       } else {
         pendingIconPaint = paint;
       }
@@ -300,7 +323,7 @@ export function createNotesOverlay(
       if (isVisible && pendingIconPaint) {
         const paint = pendingIconPaint;
         pendingIconPaint = undefined;
-        refreshIcons(ctx, paint);
+        void refreshIcons(ctx, paint);
       }
     },
     setOpacity(ctx, opacity) {
@@ -317,6 +340,10 @@ export function createNotesOverlay(
       ctx.map.setPaintProperty(SELECT_LAYER, 'circle-stroke-opacity', opacity);
     },
     remove(ctx) {
+      mounted = false;
+      lifecycle += 1;
+      iconGeneration += 1;
+      iconResolver.invalidate();
       visible = false;
       hit.detach(ctx);
       removeNoteLayers(ctx.map);

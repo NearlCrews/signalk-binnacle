@@ -1,4 +1,4 @@
-import { isFiniteNumber, withTimeout } from '$shared/lib';
+import { isFiniteNumber, readBoundedJson, withTimeout } from '$shared/lib';
 import { asKeyedObject, authInit, str } from './resource';
 
 // A symbol provided by a symbols resource provider (signalk-symbol-manager). The provider API
@@ -153,38 +153,6 @@ function symbolFromEntry(id: string, raw: unknown): SkSymbol | undefined {
   };
 }
 
-async function boundedJson(response: Response): Promise<unknown> {
-  const declaredHeader = response.headers?.get?.('Content-Length') ?? null;
-  if (declaredHeader !== null) {
-    const declared = Number(declaredHeader);
-    if (!Number.isSafeInteger(declared) || declared < 0 || declared > MAX_CATALOG_BYTES) {
-      throw new TypeError('invalid symbols response size');
-    }
-  }
-  if (!response.body) return response.json();
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let text = '';
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_CATALOG_BYTES) {
-        await reader.cancel();
-        throw new TypeError('symbols response is too large');
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-    text += decoder.decode();
-    return JSON.parse(text) as unknown;
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 // Fetch the provided symbols. A 404 (a stock server without a symbols provider) resolves to an
 // empty list, same as a reachable provider with none configured; undefined is reserved for a
 // genuine transport failure. Either way callers keep their built-in icons.
@@ -197,7 +165,7 @@ export async function fetchSymbols(base: string, token?: string): Promise<SkSymb
       console.warn(`[symbols] ${url} returned ${response.status}`);
       return undefined;
     }
-    const keyed = asKeyedObject(await boundedJson(response));
+    const keyed = asKeyedObject(await readBoundedJson<unknown>(response, MAX_CATALOG_BYTES));
     if (!keyed) return undefined;
     const symbols: SkSymbol[] = [];
     const seenUuids = new Set<string>();

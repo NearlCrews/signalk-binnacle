@@ -1,3 +1,4 @@
+import { DEFAULT_JSON_RESPONSE_BYTES, readBoundedJson } from './bounded-json';
 import { withTimeout } from './fetch-timeout';
 
 // The default fetch applies a timeout so a half-open boat link cannot hang a request forever; an
@@ -12,11 +13,12 @@ export async function fetchJsonOrUndefined<T>(
   url: string,
   init?: RequestInit,
   fetchFn: typeof fetch = timeoutFetch,
+  maxBytes: number = DEFAULT_JSON_RESPONSE_BYTES,
 ): Promise<T | undefined> {
   try {
     const r = await fetchFn(url, init);
     if (!r.ok) return undefined;
-    return (await r.json()) as T;
+    return await readBoundedJson<T>(r, maxBytes);
   } catch {
     return undefined;
   }
