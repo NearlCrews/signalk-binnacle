@@ -5,7 +5,7 @@ import type { CollisionAssessment } from '$entities/collision';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
 import type { CollisionMute, LookoutAlarm } from '$features/lookout';
-import { CollisionNotifier } from '$features/lookout';
+import { CollisionNotifier, NOTIFICATION_PATH } from '$features/lookout';
 import type { CompanionStatus } from '$features/prewarm';
 import type { TimeTravelStore } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
@@ -143,7 +143,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
           !notification.acknowledged &&
           !notification.path.startsWith(SK_PATHS.mobNotification) &&
           notification.path !== SK_PATHS.anchorNotification &&
-          notification.path !== 'notifications.navigation.collision',
+          notification.path !== NOTIFICATION_PATH,
       ),
   );
   let genericNotificationAlert = $state('');

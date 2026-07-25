@@ -1,5 +1,5 @@
 import { deleteResource, jsonOr, sendJson } from './resource';
-import type { NotificationState } from './types';
+import { NOTIFICATIONS_PREFIX, type NotificationState } from './types';
 
 // Thin client for the server's v2 Notifications API (signalk-server src/api/notifications).
 // Raising returns a server-assigned uuid notification id; silence, acknowledge, update, and
@@ -10,8 +10,9 @@ const NOTIFICATIONS_API = '/signalk/v2/api/notifications';
 export interface RaiseNotificationOptions {
   state: NotificationState;
   message: string;
-  // Path to file the notification under (the server prefixes 'notifications.' when absent
-  // from the value); defaults to notifications.{id} when omitted.
+  // Path to file the notification under, in either the canonical 'notifications.'-prefixed form or
+  // the bare form; postNotification strips the prefix the wire format re-adds. Defaults to
+  // notifications.{id} when omitted.
   path?: string;
   // Append the assigned id to the path, so repeated raises do not collide.
   idInPath?: boolean;
@@ -47,7 +48,12 @@ export async function postNotification(
   token: string | undefined,
   options: RaiseNotificationOptions,
 ): Promise<string | undefined> {
-  return idFrom(await postJson(`${base}${NOTIFICATIONS_API}`, token, options));
+  // The v2 raise wants the bare path; the server re-adds the 'notifications.' prefix when filing.
+  // Normalizing here keeps the wire quirk out of every caller, so they pass the canonical path.
+  const body = options.path?.startsWith(NOTIFICATIONS_PREFIX)
+    ? { ...options, path: options.path.slice(NOTIFICATIONS_PREFIX.length) }
+    : options;
+  return idFrom(await postJson(`${base}${NOTIFICATIONS_API}`, token, body));
 }
 
 // The three ways an update lands: applied; the server no longer knows the id (a restart reaped

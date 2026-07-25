@@ -32,6 +32,22 @@ describe('postNotification', () => {
     expectBearerAuth(init, 'tok');
   });
 
+  it('strips the notifications prefix off a canonical path before the raise', async () => {
+    // Callers pass the one canonical 'notifications.'-prefixed path; the wire format wants the
+    // bare form the server re-prefixes, and the client owns that quirk.
+    const mock = stubFetch({
+      ok: true,
+      body: { state: 'COMPLETED', statusCode: 200, message: 'OK', id: ID },
+    });
+    await postNotification(BASE, 'tok', {
+      state: 'alarm',
+      message: 'Collision risk',
+      path: 'notifications.navigation.collision',
+    });
+    const [, init] = mock.mock.calls[0];
+    expect(JSON.parse(init?.body as string).path).toBe('navigation.collision');
+  });
+
   it('returns undefined when the server rejects the raise', async () => {
     stubFetch({ ok: false, body: { state: 'FAILED', statusCode: 400 } });
     await expect(
