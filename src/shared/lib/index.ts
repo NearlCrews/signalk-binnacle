@@ -18,7 +18,9 @@ export {
   isFiniteNumber,
   isSafeNonNegativeInteger,
   lerp,
+  lowerBound,
   nearestBy,
+  nearestBySorted,
 } from './math';
 export { prefersReducedMotion } from './motion';
 export { isRecord, sameJsonValue } from './object';

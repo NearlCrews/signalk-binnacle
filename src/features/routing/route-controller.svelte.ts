@@ -359,7 +359,6 @@ export function createRouteController(deps: RouteControllerDeps) {
       !Number.isInteger(pointTotal) ||
       pointTotal === undefined ||
       pointIndex < 0 ||
-      pointIndex >= pointTotal ||
       pointIndex >= pointTotal - 1
     ) {
       return;

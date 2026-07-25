@@ -1,4 +1,5 @@
 import type { TideStation } from '$entities/tides';
+import { lowerBound } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 
 export interface RankedStation {
@@ -23,17 +24,7 @@ function sortedByLat(stations: TideStation[]): TideStation[] {
   return sorted;
 }
 
-// The first index whose latitude is not below lat (binary lower bound).
-function lowerBound(sorted: TideStation[], lat: number): number {
-  let lo = 0;
-  let hi = sorted.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (sorted[mid].latitude < lat) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
+const stationLatitude = (station: TideStation): number => station.latitude;
 
 // The stations within maxDistMeters of the position, nearest first, capped at k. The haversine
 // runs only over the latitude band that can possibly be in range: binary search finds the band's
@@ -49,7 +40,7 @@ export function nearestStations(
   const sorted = sortedByLat(stations);
   const latWindowDeg = maxDistMeters / LAT_METERS_PER_DEG;
   const ranked: RankedStation[] = [];
-  for (let i = lowerBound(sorted, lat - latWindowDeg); i < sorted.length; i += 1) {
+  for (let i = lowerBound(sorted, stationLatitude, lat - latWindowDeg); i < sorted.length; i += 1) {
     const station = sorted[i];
     if (station.latitude > lat + latWindowDeg) break;
     const distanceMeters = haversineMeters(lat, lon, station.latitude, station.longitude);

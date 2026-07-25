@@ -1,5 +1,5 @@
 import { isLatLon } from '$shared/geo';
-import { HOUR_MS, nearestBy } from '$shared/lib';
+import { HOUR_MS, nearestBySorted } from '$shared/lib';
 import { columnIndex, type HistoryValues, SK_PATHS } from '$shared/signalk';
 
 export interface HistorySample {
@@ -48,18 +48,19 @@ export function toSamples(values: HistoryValues): HistorySample[] {
   return out.sort((a, b) => a.t - b.t);
 }
 
+// toSamples returns samples sorted ascending by t, so both lookups use the binary-search variant.
 export function nearestSample(
   samples: readonly HistorySample[],
   targetMs: number,
 ): HistorySample | undefined {
-  return nearestBy(samples, (s) => s.t, targetMs);
+  return nearestBySorted(samples, (s) => s.t, targetMs);
 }
 
 export function nearestPositioned(
   samples: readonly HistorySample[],
   targetMs: number,
 ): HistorySample | undefined {
-  return nearestBy(
+  return nearestBySorted(
     samples,
     (s) => s.t,
     targetMs,

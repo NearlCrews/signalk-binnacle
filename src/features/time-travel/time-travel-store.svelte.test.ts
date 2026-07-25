@@ -54,6 +54,19 @@ describe('TimeTravelStore', () => {
     expect(store.status).toBe('empty');
   });
 
+  it('moves scrub into the new range when a reload returns no samples', async () => {
+    const load = vi
+      .fn<() => Promise<TimeTravelData | undefined>>()
+      .mockResolvedValueOnce(data)
+      .mockResolvedValueOnce({ from: 1000, to: 5000, samples: [] });
+    const store = make(load);
+    await store.enter();
+    expect(store.scrubMs).toBe(6000);
+    await store.reload();
+    expect(store.status).toBe('empty');
+    expect(store.scrubMs).toBe(5000);
+  });
+
   it('reports failed when the load is undefined', async () => {
     const store = make(() => Promise.resolve(undefined));
     await store.enter();

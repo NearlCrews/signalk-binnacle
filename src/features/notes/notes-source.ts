@@ -51,13 +51,11 @@ export function createNotesSource(
   // cannot pin itself for its whole persisted life.
   const promotedKeys = new Set<string>();
   let generation = 0;
-  let fetchingGeneration: number | undefined;
-  let activeLoad:
-    | {
-        generation: number;
-        promise: Promise<NotePoint[] | undefined>;
-      }
-    | undefined;
+  // Every in-flight load, keyed by generation and viewport together, so concurrent loads for
+  // different areas coexist: each deduplicates, completes, and clears independently, and
+  // inFlight() stays true until the last current-generation flight lands.
+  const activeLoads = new Map<string, Promise<NotePoint[] | undefined>>();
+  const loadKey = (loadGeneration: number, key: string): string => `${loadGeneration}|${key}`;
   let cooldownUntil = 0;
   let allowPersisted = true;
 
@@ -102,17 +100,21 @@ export function createNotesSource(
 
   return {
     cached: (viewport, offline) => cache.get(viewport, Date.now(), offline),
-    inFlight: () => fetchingGeneration === generation,
+    inFlight: () => {
+      const prefix = loadKey(generation, '');
+      for (const mapKey of activeLoads.keys()) if (mapKey.startsWith(prefix)) return true;
+      return false;
+    },
     coolingDown: () => Date.now() < cooldownUntil,
     load(fetchBbox, token, allowNetwork = true) {
       const loadGeneration = generation;
       const key = bboxKey(fetchBbox);
-      if (activeLoad?.generation === loadGeneration) {
-        return activeLoad.promise;
-      }
-      fetchingGeneration = loadGeneration;
-      let pending!: Promise<NotePoint[] | undefined>;
-      pending = (async () => {
+      const mapKey = loadKey(loadGeneration, key);
+      // Dedup on the generation and the viewport together: a second caller in the same generation
+      // asking for a different area must get its own fetch, not this one's in-flight promise.
+      const existing = activeLoads.get(mapKey);
+      if (existing) return existing;
+      const pending = (async () => {
         try {
           const resolved = await resolveNotes(key, fetchBbox, token, allowNetwork);
           if (loadGeneration !== generation) return undefined;
@@ -146,17 +148,17 @@ export function createNotesSource(
           cooldownUntil = Date.now() + RETRY_COOLDOWN_MS;
           return undefined;
         } finally {
-          if (activeLoad?.promise === pending) activeLoad = undefined;
-          if (fetchingGeneration === loadGeneration) fetchingGeneration = undefined;
+          // Deletes only this flight's own entry; a superseding generation's identical viewport
+          // lives under a different key, so it is never clobbered.
+          activeLoads.delete(mapKey);
         }
       })();
-      activeLoad = { generation: loadGeneration, promise: pending };
+      activeLoads.set(mapKey, pending);
       return pending;
     },
     invalidate() {
       generation += 1;
-      fetchingGeneration = undefined;
-      activeLoad = undefined;
+      activeLoads.clear();
       cooldownUntil = 0;
       allowPersisted = false;
       promotedKeys.clear();

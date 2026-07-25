@@ -59,3 +59,54 @@ export function nearestBy<T>(
   }
   return best;
 }
+
+// The first index whose key is not below the target, for an array sorted ascending by that key
+// (binary lower bound). Shared by nearestBySorted and the tide-station latitude band scan.
+export function lowerBound<T>(
+  items: readonly T[],
+  key: (item: T) => number,
+  target: number,
+): number {
+  let lo = 0;
+  let hi = items.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (key(items[mid]) < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+// The item whose time is nearest the target, for an array already sorted ascending by that time
+// (finite values only). Binary search finds the insertion point, then a neighbor walk expands
+// outward from it, always advancing the temporally closer side, so the first predicate match it
+// reaches is the nearest one. This turns the per-scrub history lookups from a full linear scan of
+// up to ten thousand samples into a logarithmic search. On a tie the earlier item wins, matching
+// nearestBy. Callers with unsorted data must keep using nearestBy.
+export function nearestBySorted<T>(
+  items: readonly T[],
+  toMs: (item: T) => number,
+  targetMs: number,
+  predicate?: (item: T) => boolean,
+): T | undefined {
+  const count = items.length;
+  if (count === 0) return undefined;
+  const lo = lowerBound(items, toMs, targetMs);
+  let left = lo - 1;
+  let right = lo;
+  while (left >= 0 || right < count) {
+    const gapLeft = left >= 0 ? Math.abs(toMs(items[left]) - targetMs) : Number.POSITIVE_INFINITY;
+    const gapRight =
+      right < count ? Math.abs(toMs(items[right]) - targetMs) : Number.POSITIVE_INFINITY;
+    if (gapLeft <= gapRight) {
+      const item = items[left];
+      if (!predicate || predicate(item)) return item;
+      left -= 1;
+    } else {
+      const item = items[right];
+      if (!predicate || predicate(item)) return item;
+      right += 1;
+    }
+  }
+  return undefined;
+}

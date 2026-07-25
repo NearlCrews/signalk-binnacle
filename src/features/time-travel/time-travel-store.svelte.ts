@@ -95,6 +95,7 @@ export class TimeTravelStore {
       this.samples = [];
       this.from = data.from;
       this.to = data.to;
+      this.scrubMs = data.to;
       this.status = 'empty';
       return;
     }

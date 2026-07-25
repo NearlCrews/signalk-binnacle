@@ -59,6 +59,43 @@ describe('antimeridianLineGeometry', () => {
     });
   });
 
+  it('emits no zero-length segment when the first vertex sits exactly on the antimeridian', () => {
+    expect(
+      antimeridianLineGeometry([
+        [180, 10],
+        [-179, 12],
+      ]),
+    ).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [-180, 10],
+        [-179, 12],
+      ],
+    });
+  });
+
+  it('emits no zero-length segment when a middle vertex sits exactly on the antimeridian', () => {
+    expect(
+      antimeridianLineGeometry([
+        [170, 5],
+        [180, 11],
+        [-170, 12],
+      ]),
+    ).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [170, 5],
+          [180, 11],
+        ],
+        [
+          [-180, 11],
+          [-170, 12],
+        ],
+      ],
+    });
+  });
+
   it('splits a westbound crossing and preserves later points', () => {
     expect(
       antimeridianLineGeometry([
