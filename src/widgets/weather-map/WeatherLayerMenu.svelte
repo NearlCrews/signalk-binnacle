@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Check } from '@lucide/svelte';
+import Check from '@lucide/svelte/icons/check';
 import type { LayerListItem } from '$shared/map';
 import { AnchoredMenu, rovingFocus } from '$shared/ui';
 
@@ -38,6 +38,7 @@ const groups = $derived(
   surfaceClass="popover-card weather-menu"
   ariaLabel="Weather layers"
   id="weather-layer-menu"
+  onFocusLeft={onClose}
 >
   <!-- Non-modal on purpose: a toolbar dropdown over the map, not a modal. No focus trap, so Tab can
          leave into the map and footer; do not "correct" this into a focusTrap. rovingFocus lands the

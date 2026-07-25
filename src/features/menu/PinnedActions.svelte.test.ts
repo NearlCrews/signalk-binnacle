@@ -1,72 +1,33 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  handlePinnedMenuKeydown,
-  initializePinnedMenuFocus,
-  restorePinnedMenuFocus,
-} from './PinnedActions.svelte';
+import { render } from 'svelte/server';
+import { describe, expect, it } from 'vitest';
+import type { MenuItem } from './menu-item';
+import PinnedActions from './PinnedActions.svelte';
 
-interface FakeItem {
-  tabIndex: number;
-  focus: ReturnType<typeof vi.fn>;
+// The keyboard-focus machine is unit-tested in menu-focus.test.ts; this covers the component's own
+// wiring: the bar renders its pinned pills and collapses the rest behind a menu trigger.
+function renderBar(actions: MenuItem[]): string {
+  return render(PinnedActions, { props: { actions } }).body;
 }
 
-function item(): FakeItem {
-  return { tabIndex: 0, focus: vi.fn() };
+function action(id: string, overrides: Partial<MenuItem> = {}): MenuItem {
+  return { id, label: id, onSelect: () => {}, ...overrides };
 }
 
-function surface(items: FakeItem[]): HTMLElement {
-  return {
-    querySelectorAll: vi.fn(() => items),
-  } as unknown as HTMLElement;
-}
+describe('PinnedActions', () => {
+  it('renders a visible pill for a pinned action', () => {
+    const body = renderBar([action('center', { label: 'Center', shortLabel: 'Center' })]);
 
-function key(value: string): KeyboardEvent {
-  return { key: value, preventDefault: vi.fn() } as unknown as KeyboardEvent;
-}
-
-describe('PinnedActions More menu focus', () => {
-  it('focuses one enabled menu item and removes its peers from the tab order', () => {
-    const items = [item(), item(), item()];
-    const menu = surface(items);
-
-    initializePinnedMenuFocus(menu);
-
-    expect(items.map(({ tabIndex }) => tabIndex)).toEqual([0, -1, -1]);
-    expect(items[0]?.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(body).toContain('Center');
   });
 
-  it.each([
-    ['ArrowDown', 1],
-    ['ArrowUp', 2],
-    ['Home', 0],
-    ['End', 2],
-  ])('moves menu focus with %s', (value, expected) => {
-    const items = [item(), item(), item()];
-    const event = key(value);
+  it('collapses actions beyond the bar limit behind a menu trigger', () => {
+    const actions = Array.from({ length: 8 }, (_, index) =>
+      action(`a${index}`, { label: `A${index}` }),
+    );
 
-    handlePinnedMenuKeydown(event, surface(items), items[0] as unknown as Element);
+    const body = renderBar(actions);
 
-    expect(event.preventDefault).toHaveBeenCalledOnce();
-    expect(items[expected]?.focus).toHaveBeenCalledWith({ preventScroll: true });
-  });
-
-  it('restores the trigger after popup focus is removed', () => {
-    const trigger = { focus: vi.fn(), isConnected: true } as unknown as HTMLElement;
-    const body = {} as HTMLElement;
-    const removedItem = { isConnected: false } as unknown as Element;
-
-    restorePinnedMenuFocus(trigger, removedItem, body);
-
-    expect(trigger.focus).toHaveBeenCalledWith({ preventScroll: true });
-  });
-
-  it('preserves focus when an action moved it to another live surface', () => {
-    const trigger = { focus: vi.fn(), isConnected: true } as unknown as HTMLElement;
-    const body = {} as HTMLElement;
-    const nextControl = { isConnected: true } as unknown as Element;
-
-    restorePinnedMenuFocus(trigger, nextControl, body);
-
-    expect(trigger.focus).not.toHaveBeenCalled();
+    expect(body).toContain('aria-haspopup="menu"');
+    expect(body).toContain('aria-label="More actions (3)"');
   });
 });

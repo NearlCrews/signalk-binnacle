@@ -5,6 +5,7 @@ import { prefersReducedMotion } from '$shared/lib';
 import { registerDismiss } from './dialog';
 import { type FloatingAlign, type FloatingPlacement, floatingPosition } from './floating-position';
 import { onKeydownAction } from './focus';
+import { menuFocusLeft } from './menu-focus';
 
 interface Props {
   open: boolean;
@@ -34,6 +35,11 @@ interface Props {
   surfaceRef?: HTMLElement;
   onKeydown?: (event: KeyboardEvent) => void;
   onFocusOut?: (event: FocusEvent) => void;
+  // The shared close-on-focus-out contract: called when focus moves to a concrete control outside
+  // the surface while open (menuFocusLeft semantics, so an internal step change or a transient
+  // loss to the body never fires it). Consumers pass their close function instead of re-deriving
+  // the check from a surfaceRef binding.
+  onFocusLeft?: () => void;
   onClick?: (event: MouseEvent) => void;
   children: Snippet;
 }
@@ -53,9 +59,17 @@ let {
   surfaceRef = $bindable(),
   onKeydown,
   onFocusOut,
+  onFocusLeft,
   onClick,
   children,
 }: Props = $props();
+
+// The surface stays mounted during the closing transition, so gate on open to keep a late
+// focusout from double-closing.
+function handleFocusOut(event: FocusEvent): void {
+  onFocusOut?.(event);
+  if (open && onFocusLeft && menuFocusLeft(event.relatedTarget, surfaceRef)) onFocusLeft();
+}
 
 let automaticStyle = $state('position: fixed; visibility: hidden;');
 const resolvedSurfaceStyle = $derived(
@@ -132,7 +146,7 @@ $effect(() => {
     {id}
     bind:this={surfaceRef}
     use:onKeydownAction={onKeydown}
-    onfocusout={onFocusOut}
+    onfocusout={handleFocusOut}
     onclick={onClick}
     transition:scale={{
       start: 0.92,

@@ -1,5 +1,8 @@
 <script lang="ts">
-import { MapPin, Navigation, Route, Ruler } from '@lucide/svelte';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import Navigation from '@lucide/svelte/icons/navigation';
+import Route from '@lucide/svelte/icons/route';
+import Ruler from '@lucide/svelte/icons/ruler';
 import { AnchoredMenu, InlineConfirm, rovingFocus } from '$shared/ui';
 
 interface Props {
@@ -77,6 +80,7 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   ariaLabel={confirmingGoTo ? 'Confirm chart navigation' : 'Chart actions'}
   role={confirmingGoTo ? 'dialog' : 'menu'}
   surfaceStyle={`left: ${left}px; top: ${top}px; inline-size: ${MENU_WIDTH}px; transform: translate(-50%, ${above ? '-100%' : '0'});`}
+  onFocusLeft={close}
 >
   {#if confirmingGoTo}
     <div class="goto-confirm">

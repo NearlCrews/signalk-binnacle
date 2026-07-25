@@ -18,7 +18,10 @@ export function restoreLayerOpacityFocus(
 </script>
 
 <script lang="ts">
-import { GripVertical, RotateCcw, Settings2, SlidersHorizontal } from '@lucide/svelte';
+import GripVertical from '@lucide/svelte/icons/grip-vertical';
+import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+import Settings2 from '@lucide/svelte/icons/settings-2';
+import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 import type { LayerListItem } from '$shared/map';
 import { AnchoredMenu, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { LayersView } from './layers-view.svelte';
@@ -85,6 +88,15 @@ let tuneTrigger = $state<HTMLButtonElement>();
 let tuneControl = $state<HTMLInputElement>();
 let wasTuneOpen = false;
 const itemUnavailableId = $derived(`layer-${item.id}-unavailable`);
+
+// A facet child's accessible description points at whichever hint explains why it is disabled: its
+// own provider-absent hint when the child is unavailable, otherwise the parent's hint when only the
+// parent is unavailable, and none when nothing unavailable has hint text to show.
+function childDescribedBy(sub: LayerListItem, subUnavailableId: string): string | undefined {
+  if (!sub.available) return sub.unavailableHint ? subUnavailableId : undefined;
+  if (item.available || !item.unavailableHint) return undefined;
+  return itemUnavailableId;
+}
 // Close the popover if the layer is hidden while it is open: the popover lives inside the canTune
 // block, so without this re-showing the layer would pop it back open unprompted.
 $effect(() => {
@@ -148,6 +160,7 @@ $effect(() => {
           anchor={tuneTrigger}
           preferredPlacement="below"
           anchorAlign="end"
+          onFocusLeft={() => (tuneOpen = false)}
         >
           <div class="tune-body">
             <input
@@ -243,13 +256,7 @@ $effect(() => {
               description={sub.description}
               visible={sub.visible}
               disabled={!item.available || !item.visible || !sub.available}
-              describedBy={!sub.available
-                ? sub.unavailableHint
-                  ? subUnavailableId
-                  : undefined
-                : item.available || !item.unavailableHint
-                  ? undefined
-                  : itemUnavailableId}
+              describedBy={childDescribedBy(sub, subUnavailableId)}
               onToggle={(visible) => view.toggle(sub.id, visible)}
             />
           </div>

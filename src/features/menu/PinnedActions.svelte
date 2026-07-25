@@ -1,66 +1,13 @@
-<script module lang="ts">
-const ENABLED_MORE_ITEM_SELECTOR =
-  '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)';
-
-function enabledMoreItems(surface: HTMLElement | undefined): HTMLElement[] {
-  return surface ? [...surface.querySelectorAll<HTMLElement>(ENABLED_MORE_ITEM_SELECTOR)] : [];
-}
-
-function focusMoreItem(items: HTMLElement[], index: number): void {
-  for (const [itemIndex, item] of items.entries()) item.tabIndex = itemIndex === index ? 0 : -1;
-  items[index]?.focus({ preventScroll: true });
-}
-
-export function initializePinnedMenuFocus(surface: HTMLElement | undefined): void {
-  const items = enabledMoreItems(surface);
-  if (items.length > 0) focusMoreItem(items, 0);
-}
-
-export function handlePinnedMenuKeydown(
-  event: KeyboardEvent,
-  surface: HTMLElement | undefined,
-  activeElement: Element | null = document.activeElement,
-): void {
-  if (
-    event.key !== 'ArrowDown' &&
-    event.key !== 'ArrowUp' &&
-    event.key !== 'Home' &&
-    event.key !== 'End'
-  )
-    return;
-
-  const items = enabledMoreItems(surface);
-  if (items.length === 0) return;
-  event.preventDefault();
-
-  const current = items.indexOf(activeElement as HTMLElement);
-  let next: number;
-  if (event.key === 'Home') next = 0;
-  else if (event.key === 'End') next = items.length - 1;
-  else if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
-  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
-  focusMoreItem(items, next);
-}
-
-export function restorePinnedMenuFocus(
-  trigger: HTMLElement | undefined,
-  activeElement: Element | null = document.activeElement,
-  body: HTMLElement = document.body,
-): void {
-  if (
-    trigger?.isConnected &&
-    (activeElement === null || activeElement === body || !activeElement.isConnected)
-  ) {
-    trigger.focus({ preventScroll: true });
-  }
-}
-</script>
-
 <script lang="ts">
-import { Ellipsis } from '@lucide/svelte';
+import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy, onMount } from 'svelte';
 import { Toast } from '$shared/lib';
-import { AnchoredMenu, UnavailableHint } from '$shared/ui';
+import {
+  AnchoredMenu,
+  createMenuFocusMachine,
+  initializeMenuFocus,
+  UnavailableHint,
+} from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import { MAX_BAR_PILLS, splitBarActions } from './pinned-actions';
@@ -74,7 +21,16 @@ let compactPhone = $state(false);
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
-let wasMoreOpen = false;
+
+// The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the close-focus
+// protocol live in $shared/ui menu-focus, identical to OverflowActions.
+const machine = createMenuFocusMachine({
+  surface: () => moreSurface,
+  trigger: () => moreTrigger,
+  requestClose: () => {
+    moreOpen = false;
+  },
+});
 const split = $derived(splitBarActions(actions, compactPhone ? 2 : MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
@@ -91,16 +47,6 @@ onMount(() => {
   return () => query.removeEventListener('change', sync);
 });
 
-function closeMore(): void {
-  moreOpen = false;
-}
-
-function handleMoreFocusOut(event: FocusEvent): void {
-  const next = event.relatedTarget;
-  if (next instanceof Node && moreSurface?.contains(next)) return;
-  closeMore();
-}
-
 function run(action: MenuItem, after?: () => void): void {
   if (itemBlocked(action)) {
     blockedNote.show(blockedReason(action) ?? action.label, NOTE_MS);
@@ -115,20 +61,17 @@ function run(action: MenuItem, after?: () => void): void {
 
 $effect(() => {
   if (moreOpen) {
-    wasMoreOpen = true;
+    machine.opened();
     let focusFrame = 0;
     const positionFrame = requestAnimationFrame(() => {
-      focusFrame = requestAnimationFrame(() => initializePinnedMenuFocus(moreSurface));
+      focusFrame = requestAnimationFrame(() => initializeMenuFocus(moreSurface));
     });
     return () => {
       cancelAnimationFrame(positionFrame);
       cancelAnimationFrame(focusFrame);
     };
   }
-  if (!wasMoreOpen) return;
-  wasMoreOpen = false;
-  const frame = requestAnimationFrame(() => restorePinnedMenuFocus(moreTrigger));
-  return () => cancelAnimationFrame(frame);
+  return machine.closed();
 });
 </script>
 
@@ -176,7 +119,7 @@ $effect(() => {
       </button>
       <AnchoredMenu
         open={moreOpen}
-        onClose={closeMore}
+        onClose={() => machine.close()}
         backdropLabel="Close more actions"
         surfaceClass="popover-card bar-more"
         ariaLabel="More actions"
@@ -186,8 +129,8 @@ $effect(() => {
         preferredPlacement="above"
         anchorAlign="end"
         bind:surfaceRef={moreSurface}
-        onKeydown={(event) => handlePinnedMenuKeydown(event, moreSurface)}
-        onFocusOut={handleMoreFocusOut}
+        onKeydown={machine.handleKeydown}
+        onFocusLeft={() => machine.close()}
       >
         {#each split.overflow as action (action.id)}
           <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is menuitemcheckbox exactly when aria-checked is defined. -->
@@ -200,7 +143,7 @@ $effect(() => {
             disabled={action.disabled === true}
             aria-disabled={action.available === false ? true : undefined}
             title={blockedReason(action) ?? action.label}
-            onclick={() => run(action, closeMore)}
+            onclick={() => run(action, machine.close)}
           >
             <UnavailableHint
               hint={action.available === false ? action.unavailableHint : undefined}
