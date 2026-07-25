@@ -1,20 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { MeasureStore } from '$entities/measure';
 import type { UnitsMode } from '$shared/lib';
-import type { OverlayContext } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { createMeasureOverlay } from './measure-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function setup(mode: UnitsMode = 'metric') {
   const measure = new MeasureStore();
   const map = createFakeMap();
   const units: { mode: UnitsMode } = { mode };
   const overlay = createMeasureOverlay(measure, units);
-  return { measure, map, units, overlay, ctx: ctxFor(map) };
+  return { measure, map, units, overlay, ctx: fakeOverlayContext(map) };
 }
 
 describe('measure overlay', () => {

@@ -3,16 +3,12 @@ import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import type { OverlayContext } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
 import { createExpiringStore } from '$shared/storage';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { fetchNotes, type NotePoint } from './notes-client';
 import { createNotesOverlay } from './notes-overlay';
 
 vi.mock('./notes-client', () => ({ fetchNotes: vi.fn(), MAX_NOTES_PER_VIEW: 5_000 }));
 const fetchNotesMock = vi.mocked(fetchNotes);
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 // The viewport stub sync reads: a 2 by 2 degree view around a mutable center, so a test pans the
 // map by mutating the state object.
@@ -36,7 +32,7 @@ function viewCtx(state: { zoom: number; lng: number; lat: number }): OverlayCont
     getSource: () => undefined,
     getLayer: () => undefined,
   };
-  return { map: map as never, beforeIdFor: () => undefined };
+  return fakeOverlayContext(map);
 }
 
 async function settle(): Promise<void> {
@@ -85,7 +81,7 @@ describe('notes overlay', () => {
   it('adds the cluster ring, icon, count, point, and selection layers in the routes band', async () => {
     const overlay = createNotesOverlay('http://pi', () => undefined);
     const map = createFakeMap();
-    await overlay.add(ctxFor(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
     expect(overlay.title).toBe('Points of interest');
     // The note source (clustered) plus the selection-ring source.
@@ -101,7 +97,7 @@ describe('notes overlay', () => {
   it('highlights a position by ringing it, and clears the ring with undefined', async () => {
     const overlay = createNotesOverlay('http://pi', () => undefined);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
 
     overlay.highlight(ctx, { latitude: 12, longitude: 34 });
@@ -164,7 +160,7 @@ describe('notes overlay', () => {
     fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
     const overlay = createNotesOverlay('http://pi', () => undefined, undefined, store);
     const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.sync(ctx);
     await settle();
@@ -190,7 +186,7 @@ describe('notes overlay', () => {
     fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
     const overlay = createNotesOverlay('http://pi', () => undefined, undefined, store);
     const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.sync(ctx);
     await settle();
@@ -209,7 +205,7 @@ describe('notes overlay', () => {
     fetchNotesMock.mockResolvedValue([MARINA_NOTE]);
     const overlay = createNotesOverlay('http://pi', () => undefined);
     const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.sync(ctx);
     await settle();
@@ -315,7 +311,7 @@ describe('notes overlay', () => {
     });
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.sync(ctx);
     await settle();
@@ -338,7 +334,7 @@ describe('notes overlay', () => {
     });
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
 
     overlay.sync(ctx);
@@ -378,7 +374,7 @@ describe('notes overlay', () => {
       onStatus: (state) => statuses.push(state.phase),
     });
     const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.sync(ctx);
     await settle();

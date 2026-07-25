@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RouteStore } from '$entities/route';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { mapThemePaint } from '$shared/map';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createRouteOverlay } from './route-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWithShownRoute(): RouteStore {
   const store = new RouteStore();
@@ -28,8 +24,8 @@ describe('route overlay', () => {
   it('adds the route, waypoint, and label layers and syncs shown routes', () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
     expect(map.getLayer('binnacle-route-line-casing')).toBeTruthy();
     expect(map.getLayer('binnacle-route-line')).toBeTruthy();
@@ -45,26 +41,26 @@ describe('route overlay', () => {
     const store = storeWithShownRoute();
     const overlay = createRouteOverlay(store);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     map.sources.get('binnacle-route-lines')?.setData?.('marker');
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(map.sources.get('binnacle-route-lines')?.data).toBe('marker');
   });
 
   it('applyTheme recolors the layers', () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'));
+    overlay.add(fakeOverlayContext(map));
+    overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
   it('remove tears down layers and sources', () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });

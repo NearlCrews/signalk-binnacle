@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { OverlayContext } from '$shared/map';
 import { SK_PATHS } from '$shared/signalk';
-import { createFakeMap, sourceFeatures } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { createHistoryTrackOverlay } from './history-track-overlay';
 
 describe('createHistoryTrackOverlay', () => {
@@ -25,7 +24,7 @@ describe('createHistoryTrackOverlay', () => {
       { fetchValues, now: () => 1 },
     );
     const map = createFakeMap();
-    const context: OverlayContext = { map: map as never, beforeIdFor: () => undefined };
+    const context = fakeOverlayContext(map);
     overlay.add(context);
 
     overlay.sync(context);

@@ -1,12 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WeatherStore } from '$entities/weather';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { mapThemePaint } from '$shared/map';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createWavesOverlay } from './waves-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function fakeCanvas() {
   return { width: 0, height: 0, getContext: () => null } as unknown as HTMLCanvasElement;
@@ -32,7 +28,7 @@ describe('waves overlay', () => {
   it('adds a field source and layer and an arrow source and layer in the weather band', () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(2);
     expect(map.layers.size).toBe(2);
@@ -41,13 +37,13 @@ describe('waves overlay', () => {
   it('syncs the arrow features from the grid', () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     const arrowSource = map.sources.get('binnacle-weather-waves-arrows');
     const hidden = arrowSource?.data as GeoJSON.FeatureCollection;
     expect(hidden.features).toHaveLength(0);
 
-    overlay.setVisible(ctxFor(map), true);
+    overlay.setVisible(fakeOverlayContext(map), true);
     const fc = arrowSource?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBeGreaterThan(0);
   });
@@ -62,8 +58,8 @@ describe('waves overlay', () => {
     const canvas = { width: 0, height: 0, getContext: () => ctx2d } as unknown as HTMLCanvasElement;
     const overlay = createWavesOverlay(store, () => canvas);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
     expect(canvas.width).toBeGreaterThan(1); // the wave field was drawn
 
     // A refetch without marine data must render empty, not stretch the old pixels over the new bbox.
@@ -75,7 +71,7 @@ describe('waves overlay', () => {
       windU: [new Array(cells).fill(0)],
       windV: [new Array(cells).fill(0)],
     });
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(canvas.width).toBe(1);
     expect(ctx2d.clearRect).toHaveBeenCalled();
   });
@@ -83,8 +79,8 @@ describe('waves overlay', () => {
   it('removes its layers and sources', () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
@@ -92,7 +88,9 @@ describe('waves overlay', () => {
   it('recolors for the theme without throwing', () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
+    overlay.add(fakeOverlayContext(map));
+    expect(() =>
+      overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
+    ).not.toThrow();
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { fakeOverlayContext } from '$shared/testing';
 import type { SeascapeVectorSource } from './seascape-sources';
 import { createSeascapeVectorOverlay } from './seascape-vector-overlay';
 
@@ -33,10 +34,7 @@ function fakeMap() {
   };
 }
 
-const ctx = (map: ReturnType<typeof fakeMap>) => ({
-  map: map as never,
-  beforeIdFor: () => undefined,
-});
+const ctx = (map: ReturnType<typeof fakeMap>) => fakeOverlayContext(map);
 
 describe('createSeascapeVectorOverlay', () => {
   it('drying is a standalone fill row; contours bundles the line and both symbol layers', () => {

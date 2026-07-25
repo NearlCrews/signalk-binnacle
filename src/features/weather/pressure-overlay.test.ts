@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { WeatherStore } from '$entities/weather';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { mapThemePaint } from '$shared/map';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createPressureOverlay } from './pressure-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWithGrid(): WeatherStore {
   const store = new WeatherStore();
@@ -27,7 +23,7 @@ describe('pressure overlay', () => {
   it('adds a line and a label layer in the weather band', () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(2);
     expect(map.layers.size).toBe(2);
@@ -36,13 +32,13 @@ describe('pressure overlay', () => {
   it('syncs isobar features from the grid', () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     const hidden = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
     expect(hidden.features).toHaveLength(0);
 
-    overlay.setVisible(ctxFor(map), true);
-    overlay.sync(ctxFor(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
+    overlay.sync(fakeOverlayContext(map));
     const fc = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBeGreaterThan(0);
   });
@@ -50,8 +46,8 @@ describe('pressure overlay', () => {
   it('removes its layers and sources', () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
@@ -59,7 +55,9 @@ describe('pressure overlay', () => {
   it('recolors for the theme without throwing', () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
+    overlay.add(fakeOverlayContext(map));
+    expect(() =>
+      overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
+    ).not.toThrow();
   });
 });

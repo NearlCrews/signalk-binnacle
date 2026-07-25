@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mapThemePaint } from '$shared/map';
+import { fakeOverlayContext } from '$shared/testing';
 import { createSeascapeDemOverlay } from './seascape-dem-overlay';
 import type { SeascapeDemSource } from './seascape-sources';
 
@@ -30,10 +31,7 @@ function fakeMap() {
   };
 }
 
-const ctx = (map: ReturnType<typeof fakeMap>) => ({
-  map: map as never,
-  beforeIdFor: () => undefined,
-});
+const ctx = (map: ReturnType<typeof fakeMap>) => fakeOverlayContext(map);
 
 // setPaintProperty is a vi.fn(), so its .mock.calls is already properly typed; these two just
 // name the two operations the applyTheme assertions below repeat.

@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createSymbolOverlay, type SymbolOverlayConfig } from './symbol-overlay';
-import type { OverlayContext } from './types';
 
 // The shared fake map covers the source, layer, and image surface except removeImage,
 // which only this overlay exercises.
 function fakeSymbolMap() {
   const base = createFakeMap();
   return { ...base, removeImage: (id: string) => base.images.delete(id) };
-}
-
-function ctxFor(map: ReturnType<typeof fakeSymbolMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
 }
 
 function config(): SymbolOverlayConfig {
@@ -34,7 +29,7 @@ describe('createSymbolOverlay', () => {
   it('adds the icon, source, and layer', () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(map.images.has('binnacle-ais-icon')).toBe(true);
     expect(map.getSource('binnacle-ais-source')).toBeTruthy();
     expect(map.getLayer('binnacle-ais-symbol')).toBeTruthy();
@@ -43,7 +38,7 @@ describe('createSymbolOverlay', () => {
   it('add is idempotent when the source and layer already exist (the reattach path)', () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     expect(() => overlay.add(ctx)).not.toThrow();
     expect(map.sources.size).toBe(1);
@@ -53,7 +48,7 @@ describe('createSymbolOverlay', () => {
   it('remove deletes the layer, source, and icon image', () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.size).toBe(0);
@@ -64,7 +59,7 @@ describe('createSymbolOverlay', () => {
   it('remove tolerates an icon that is already gone', () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     map.images.delete('binnacle-ais-icon');
     expect(() => overlay.remove(ctx)).not.toThrow();

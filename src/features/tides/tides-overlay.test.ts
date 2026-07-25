@@ -2,13 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import type { UnitsMode } from '$shared/lib';
-import type { OverlayContext } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { createTidesOverlay } from './tides-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function unitsStub(mode: UnitsMode = 'metric'): { mode: UnitsMode } {
   return { mode };
@@ -40,7 +35,7 @@ describe('tides overlay', () => {
     const units = unitsStub();
     const overlay = createTidesOverlay(store, units as unknown as UnitsStore);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const label = () =>
@@ -60,7 +55,7 @@ describe('tides overlay', () => {
   it('dims the circle stroke along with the rest of the layer opacity', () => {
     const overlay = createTidesOverlay(new TidesStore(), unitsStub() as unknown as UnitsStore);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith(

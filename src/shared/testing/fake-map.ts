@@ -98,9 +98,12 @@ export function createFakeMap() {
 
 export type FakeMap = ReturnType<typeof createFakeMap>;
 
-// The OverlayContext an overlay test hands its overlay: the fake map plus a no-op beforeId
+// The OverlayContext an overlay test hands its overlay: a test map plus a no-op beforeId
 // resolver. Hoisted because nearly every overlay test was re-declaring this same two-line shape.
-export function fakeOverlayContext(map: FakeMap): OverlayContext {
+// The parameter is deliberately loose: the context's map field is cast to the MapLibre type
+// regardless, and tests hand in FakeMap, extended variants with real listeners, and minimal
+// bespoke stubs alike.
+export function fakeOverlayContext(map: object): OverlayContext {
   return { map: map as never, beforeIdFor: () => undefined };
 }
 

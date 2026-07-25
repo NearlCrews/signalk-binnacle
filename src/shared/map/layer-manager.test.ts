@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { LayerManager } from './layer-manager';
 import type { OverlayContext, OverlayModule, ZBand } from './types';
 
-function fakeCtx(): OverlayContext {
-  return {
-    map: createFakeMap() as never,
-    beforeIdFor: () => undefined,
-  };
-}
+const fakeCtx = (): OverlayContext => fakeOverlayContext(createFakeMap());
 
 function fakeOverlay(id: string, band: ZBand = 'traffic'): OverlayModule & { events: string[] } {
   const events: string[] = [];

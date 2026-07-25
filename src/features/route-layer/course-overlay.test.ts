@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { mapThemePaint } from '$shared/map';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createCourseOverlay } from './course-overlay';
 
 const LINE_SRC = 'binnacle-course-line-src';
@@ -17,10 +17,6 @@ interface FakeGuidance {
 interface FakeVessel {
   position: { latitude: number; longitude: number } | undefined;
   positionStale: boolean;
-}
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
 }
 
 function lineFeatures(map: ReturnType<typeof createFakeMap>): GeoJSON.Feature[] {
@@ -59,7 +55,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: undefined, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     expect(map.sources.has(LINE_SRC)).toBe(true);
     expect(map.sources.has(POINT_SRC)).toBe(true);
@@ -81,7 +77,7 @@ describe('course overlay', () => {
     };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
 
@@ -114,7 +110,7 @@ describe('course overlay', () => {
     };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
 
@@ -146,7 +142,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: { latitude: 5, longitude: 15 }, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(1);
@@ -167,7 +163,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: undefined, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(0);
@@ -183,7 +179,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: { latitude: 5, longitude: 15 }, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(1);
@@ -202,7 +198,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: { latitude: 5, longitude: 15 }, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
 
@@ -227,7 +223,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: { latitude: 5, longitude: 15 }, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
 
@@ -247,7 +243,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: undefined, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     const nightPaint = mapThemePaint('night-red');
     overlay.applyTheme?.(ctx, nightPaint);
@@ -268,7 +264,7 @@ describe('course overlay', () => {
     const vessel: FakeVessel = { position: undefined, positionStale: false };
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.size).toBe(0);

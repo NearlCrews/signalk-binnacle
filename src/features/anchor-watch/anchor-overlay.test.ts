@@ -1,19 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AnchorWatch } from '$entities/anchor';
 import { OwnVessel } from '$entities/vessel';
-import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
 import {
   createFakeMap,
   createFakeStorage,
   createFrameFactory,
+  fakeOverlayContext,
   sourceFeatures,
 } from '$shared/testing';
 import { createAnchorOverlay } from './anchor-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 const frame = createFrameFactory();
 
@@ -23,7 +19,7 @@ function setup() {
   const anchor = new AnchorWatch(store, vessel, createFakeStorage());
   const map = createFakeMap();
   const overlay = createAnchorOverlay(anchor, vessel);
-  const ctx = ctxFor(map);
+  const ctx = fakeOverlayContext(map);
   return { store, vessel, anchor, map, overlay, ctx };
 }
 
@@ -166,7 +162,7 @@ function dragSetup() {
   const onMoved = vi.fn();
   const overlay = createAnchorOverlay(anchor, vessel, onMoved);
   const map = eventfulMap();
-  const ctx: OverlayContext = { map: map as never, beforeIdFor: () => undefined };
+  const ctx = fakeOverlayContext(map);
   overlay.add(ctx);
   overlay.sync(ctx);
   return { map, overlay, ctx, onMoved };

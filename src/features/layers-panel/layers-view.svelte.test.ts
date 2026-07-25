@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { OverlayContext, OverlayModule } from '$shared/map';
 import { LayerManager } from '$shared/map';
+import { fakeOverlayContext } from '$shared/testing';
 import { LayersView } from './layers-view.svelte';
 
-function fakeCtx(): OverlayContext {
-  return { map: {} as never, beforeIdFor: () => undefined };
-}
+// The empty map is load-bearing: any direct map access from the view would throw, proving the
+// view goes through the LayerManager only.
+const fakeCtx = (): OverlayContext => fakeOverlayContext({});
 
 function fakeOverlay(id: string): OverlayModule {
   return {

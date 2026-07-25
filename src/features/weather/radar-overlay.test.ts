@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { WeatherStore } from '$entities/weather';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { mapThemePaint } from '$shared/map';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createRadarOverlay, radarFrameTiming } from './radar-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWithRadar(): WeatherStore {
   const store = new WeatherStore();
@@ -24,13 +20,13 @@ describe('radar overlay', () => {
   it('creates the source and layer in the weather band once a frame is available', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     // Nothing is created until a frame lands: a raster source has no usable empty placeholder.
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
 
-    overlay.setVisible(ctxFor(map), true);
-    overlay.sync(ctxFor(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
+    overlay.sync(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
@@ -39,8 +35,8 @@ describe('radar overlay', () => {
   it('creates the source pointed at the latest frame, never empty', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
     const source = [...map.sources.values()][0];
     expect(source.tiles).toEqual([
       'https://tilecache.rainviewer.com/v2/radar/b/256/{z}/{x}/{y}/2/1_1.png',
@@ -50,9 +46,9 @@ describe('radar overlay', () => {
   it('creates nothing while there is no radar data, even when shown', () => {
     const overlay = createRadarOverlay(new WeatherStore());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
+    overlay.sync(fakeOverlayContext(map));
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
   });
@@ -61,15 +57,15 @@ describe('radar overlay', () => {
     const store = new WeatherStore();
     const overlay = createRadarOverlay(store);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
     expect(map.layers.size).toBe(0);
 
     store.setRadar({
       host: 'https://tilecache.rainviewer.com',
       frames: [{ time: 1000, path: '/v2/radar/a' }],
     });
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(map.layers.size).toBe(1);
   });
 
@@ -88,8 +84,8 @@ describe('radar overlay', () => {
       added.push(layer as (typeof added)[number]);
       return addLayer(layer);
     };
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
     expect(map.layers.size).toBe(0);
     expect(added).toHaveLength(0);
   });
@@ -97,10 +93,10 @@ describe('radar overlay', () => {
   it('removes its layer and source', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setVisible(ctxFor(map), true);
-    overlay.sync(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.setVisible(fakeOverlayContext(map), true);
+    overlay.sync(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
@@ -108,10 +104,14 @@ describe('radar overlay', () => {
   it('recolors for the theme without throwing, before and after the layer exists', () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
-    overlay.sync(ctxFor(map));
-    expect(() => overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'))).not.toThrow();
+    overlay.add(fakeOverlayContext(map));
+    expect(() =>
+      overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
+    ).not.toThrow();
+    overlay.sync(fakeOverlayContext(map));
+    expect(() =>
+      overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
+    ).not.toThrow();
   });
 });
 

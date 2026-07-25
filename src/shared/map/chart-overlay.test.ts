@@ -1,17 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createChartOverlay } from './chart-overlay';
 import { registerPmtilesArchive, unregisterPmtilesArchive } from './pmtiles';
-import type { OverlayContext } from './types';
 
 vi.mock('./pmtiles', () => ({
   registerPmtilesArchive: vi.fn(),
   unregisterPmtilesArchive: vi.fn(),
 }));
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 describe('chart overlay', () => {
   it('adds the chart source and layer in the basemap band', () => {
@@ -20,7 +15,7 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('basemap');
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
@@ -65,8 +60,8 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
@@ -77,8 +72,8 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setOpacity?.(ctxFor(map), 0.4);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setOpacity?.(fakeOverlayContext(map), 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       expect.stringContaining('chart-noaa'),
       'raster-opacity',
@@ -92,8 +87,8 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.setOpacity?.(ctxFor(map), 0.5);
+    overlay.add(fakeOverlayContext(map));
+    overlay.setOpacity?.(fakeOverlayContext(map), 0.5);
     expect(map.setPaintProperty).toHaveBeenCalledWith('chart-vec-water', 'fill-opacity', 0.5);
     expect(map.setPaintProperty).toHaveBeenCalledWith('chart-vec-roads', 'line-opacity', 0.5);
   });
@@ -104,9 +99,9 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(registerPmtilesArchive).toHaveBeenCalledWith('https://x/c.pmtiles', undefined);
-    overlay.remove(ctxFor(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(unregisterPmtilesArchive).toHaveBeenCalledWith('https://x/c.pmtiles');
   });
 
@@ -118,8 +113,8 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(registerPmtilesArchive).not.toHaveBeenCalled();
     expect(unregisterPmtilesArchive).not.toHaveBeenCalled();
   });
@@ -136,7 +131,7 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     // The source has not loaded (its native max zoom is not known yet), so nothing is capped and a
     // sourcedata listener is waiting.
     expect(map.setLayerZoomRange).not.toHaveBeenCalled();

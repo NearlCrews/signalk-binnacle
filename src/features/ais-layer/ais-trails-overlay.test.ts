@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mapThemePaint, type OverlayContext, rgbaCss } from '$shared/map';
-import { createFakeMap, sourceFeatures } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { type AisTrail, fetchAisTrails } from './ais-trails-client';
 import { type AisTrailsOverlay, createAisTrailsOverlay } from './ais-trails-overlay';
 
@@ -46,10 +46,6 @@ function viewFakeMap(state: { zoom: number; lng: number; lat: number }) {
   };
 }
 
-function ctxFor(map: unknown): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
-
 async function flush(): Promise<void> {
   for (let i = 0; i < 12; i += 1) await Promise.resolve();
 }
@@ -80,7 +76,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.id).toBe('ais-trails');
     expect(overlay.title).toBe('AIS trails');
     expect(overlay.band).toBe('traffic');
@@ -97,7 +93,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     await settleSync(overlay, ctx);
@@ -115,7 +111,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -141,7 +137,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const map = viewFakeMap({ zoom: 12, lng: 180, lat: 11 });
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
 
@@ -157,7 +153,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     const source = [...map.sources.values()][0];
     const spy = vi.spyOn(source, 'setData');
@@ -187,7 +183,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
-    const ctx = ctxFor(viewFakeMap(state));
+    const ctx = fakeOverlayContext(viewFakeMap(state));
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     state.lng = 30;
@@ -204,7 +200,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(1);
@@ -229,7 +225,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
-    const ctx = ctxFor(viewFakeMap(state));
+    const ctx = fakeOverlayContext(viewFakeMap(state));
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -254,7 +250,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.setVisible(ctx, false);
     await settleSync(overlay, ctx);
@@ -274,7 +270,7 @@ describe('ais trails overlay', () => {
     );
     const state = { zoom: 12, lng: 0, lat: 0 };
     const map = viewFakeMap(state);
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settleSync(overlay, ctx);
     expect(sourceFeatures(map, SOURCE_ID)).toHaveLength(1);
@@ -290,7 +286,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     const paint = mapThemePaint('night-red');
     overlay.applyTheme?.(ctx, paint);
@@ -308,7 +304,7 @@ describe('ais trails overlay', () => {
       () => true,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.5);
     const [, property, value] = vi.mocked(map.setPaintProperty).mock.calls.at(-1) as [

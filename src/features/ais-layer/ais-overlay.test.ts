@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AisTargets } from '$entities/ais';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
+import { mapThemePaint } from '$shared/map';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
-import { createFakeMap, createFrameFactory } from '$shared/testing';
+import { createFakeMap, createFrameFactory, fakeOverlayContext } from '$shared/testing';
 import { createAisOverlay } from './ais-overlay';
 
 // Seeded from the wall clock: AIS freshness is judged against real time, so a tiny epoch would
@@ -29,16 +29,12 @@ class FakeImageData {
 beforeEach(() => vi.stubGlobal('ImageData', FakeImageData));
 afterEach(() => vi.unstubAllGlobals());
 
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
-
 describe('ais overlay', () => {
   it('adds an image, a source, and a symbol layer in the traffic band', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('traffic');
     expect(map.images.size).toBe(1);
     expect(map.sources.size).toBe(1);
@@ -49,7 +45,7 @@ describe('ais overlay', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -62,7 +58,7 @@ describe('ais overlay', () => {
       connection: { phase: 'open', attempt: 0 },
       epoch: Date.now(),
     });
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
     const fc = source.data as { features: unknown[] };
     expect(fc.features).toHaveLength(1);
@@ -72,7 +68,7 @@ describe('ais overlay', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -86,7 +82,7 @@ describe('ais overlay', () => {
       // overlay must not present the old position as current traffic.
       epoch: Date.now() - 10_000_000,
     });
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
     const fc = source.data as { features: unknown[] };
     expect(fc.features).toHaveLength(0);
@@ -97,7 +93,7 @@ describe('ais overlay', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -111,8 +107,8 @@ describe('ais overlay', () => {
     });
     const source = [...map.sources.values()][0];
     const spy = vi.spyOn(source, 'setData');
-    overlay.sync(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -121,22 +117,22 @@ describe('ais overlay', () => {
     let t = 0;
     const overlay = createAisOverlay(new AisTargets(store), () => t);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
     const spy = vi.spyOn(source, 'setData');
 
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1.001, longitude: 2 } }));
     t = 250;
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1.002, longitude: 2 } }));
     t = 500;
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(spy).not.toHaveBeenCalled();
 
     t = 1_000;
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(spy).toHaveBeenCalledTimes(1);
     const fc = source.data as GeoJSON.FeatureCollection;
     const point = fc.features[0].geometry as GeoJSON.Point;
@@ -148,15 +144,15 @@ describe('ais overlay', () => {
     let t = 0;
     const overlay = createAisOverlay(new AisTargets(store), () => t);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
     const spy = vi.spyOn(source, 'setData');
 
     store.applyFrame(positionFrame({ 'vessels.b': { latitude: 3, longitude: 4 } }));
     t = 100;
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(spy).toHaveBeenCalledTimes(1);
     const fc = source.data as GeoJSON.FeatureCollection;
     expect(fc.features).toHaveLength(2);
@@ -166,8 +162,8 @@ describe('ais overlay', () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'));
+    overlay.add(fakeOverlayContext(map));
+    overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.updatedImages).toContain('binnacle-ais-icon');
   });
 });

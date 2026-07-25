@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackRecorder } from '$entities/track';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
+import { mapThemePaint } from '$shared/map';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createTrackOverlay } from './track-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function stubRecorder(points: TrackRecorder['points']): TrackRecorder {
   return { points } as unknown as TrackRecorder;
@@ -23,7 +19,7 @@ describe('track overlay', () => {
   it('adds active and saved sources and line layers in the track band', () => {
     const overlay = createTrackOverlay(stubRecorder([]), stubSettings('speed'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('track');
     expect(map.sources.size).toBe(2);
     expect(map.layers.has('binnacle-track-active-line')).toBe(true);
@@ -39,8 +35,8 @@ describe('track overlay', () => {
       stubSettings('speed'),
     );
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     const source = map.sources.get('binnacle-track-active');
     const fc = source?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBe(1);
@@ -58,8 +54,8 @@ describe('track overlay', () => {
     ];
     const overlay = createTrackOverlay(stubRecorder(points), stubSettings('speed'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     const fc = map.sources.get('binnacle-track-active')?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBe(1);
     const line = fc.features[0].geometry as GeoJSON.LineString;
@@ -80,8 +76,8 @@ describe('track overlay', () => {
     ];
     const overlay = createTrackOverlay(stubRecorder(points), stubSettings('speed'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     const fc = map.sources.get('binnacle-track-active')?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBe(2);
     const legs = fc.features.map((f) => (f.geometry as GeoJSON.LineString).coordinates);
@@ -104,13 +100,13 @@ describe('track overlay', () => {
     ];
     const overlay = createTrackOverlay(stubRecorder(points), stubSettings('speed'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     let fc = map.sources.get('binnacle-track-active')?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBe(1);
 
     points.push({ lat: 0.02, lon: 0.02, t: 20_000, sog: 1 });
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     fc = map.sources.get('binnacle-track-active')?.data as GeoJSON.FeatureCollection;
     expect(fc.features.length).toBe(2);
   });
@@ -118,16 +114,16 @@ describe('track overlay', () => {
   it('applyTheme recolors both layers', () => {
     const overlay = createTrackOverlay(stubRecorder([]), stubSettings('solid'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'));
+    overlay.add(fakeOverlayContext(map));
+    overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
   it('remove tears down layers and sources', () => {
     const overlay = createTrackOverlay(stubRecorder([]), stubSettings('speed'));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });

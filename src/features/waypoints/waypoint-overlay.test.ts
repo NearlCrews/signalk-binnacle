@@ -1,14 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import { WaypointsStore } from '$entities/waypoint';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
+import { mapThemePaint } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createWaypointOverlay } from './waypoint-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWith(waypoint: Partial<{ icon: string }> = {}): WaypointsStore {
   const store = new WaypointsStore();
@@ -56,8 +52,8 @@ describe('waypoint overlay', () => {
   it('adds the marker, symbol, and label layers and syncs the waypoints', () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
     expect(map.getLayer('binnacle-waypoint-marker')).toBeTruthy();
     expect(map.getLayer('binnacle-waypoint-symbol')).toBeTruthy();
@@ -73,26 +69,26 @@ describe('waypoint overlay', () => {
     const store = storeWith();
     const overlay = createWaypointOverlay(store);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.sync(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
     map.sources.get('binnacle-waypoints')?.setData?.('marker');
-    overlay.sync(ctxFor(map));
+    overlay.sync(fakeOverlayContext(map));
     expect(map.sources.get('binnacle-waypoints')?.data).toBe('marker');
   });
 
   it('applyTheme recolors the layers', () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.applyTheme?.(ctxFor(map), mapThemePaint('night-red'));
+    overlay.add(fakeOverlayContext(map));
+    overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
   it('remove tears down layers and sources', () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
-    overlay.remove(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
+    overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
@@ -109,7 +105,7 @@ describe('waypoint overlay', () => {
     // No explicit icon: the binnacle:waypoint symbol is the host built-in for 'waypoint'.
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(waypointSymbol()));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     // Before the image loads the waypoint stays a disc (no iconImage).
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
     await settle();
@@ -134,7 +130,7 @@ describe('waypoint overlay', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(waypointSymbol()));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     await settle();
     expect(map.hasImage(symbolIconId('w9'))).toBe(false);
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
@@ -144,7 +140,7 @@ describe('waypoint overlay', () => {
     const noteOnly = waypointSymbol({ roles: ['note'] });
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(noteOnly));
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(map.getLayer('binnacle-waypoint-symbol')).toBeTruthy();
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
   });
@@ -168,7 +164,7 @@ describe('waypoint overlay', () => {
     const symbols = new SymbolsStore('http://pi', undefined, [waypointSymbol()], rasterize);
     const overlay = createWaypointOverlay(storeWith(), symbols);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     await settle();
 

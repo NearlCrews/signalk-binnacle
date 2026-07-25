@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { OverlayContext } from '$shared/map';
+import { fakeOverlayContext } from '$shared/testing';
 import { createTimeTravelOverlay } from './time-travel-overlay';
 import { TimeTravelStore } from './time-travel-store.svelte';
 
@@ -16,7 +16,7 @@ function fakeCtx() {
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
   };
-  const ctx = { map, beforeIdFor: () => undefined } as unknown as OverlayContext;
+  const ctx = fakeOverlayContext(map);
   return { ctx, sources, layers };
 }
 

@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WeatherStore } from '$entities/weather';
-import type { OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createFieldOverlay } from './field-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWithGrid(): WeatherStore {
   const store = new WeatherStore();
@@ -53,7 +48,7 @@ describe('field overlay', () => {
       canvasWithContext,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
 
     overlay.sync(ctx);
@@ -98,7 +93,7 @@ describe('field overlay', () => {
       canvasWithContext,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     const source = map.sources.get('test-field-source') as typeof map.sources extends Map<
       string,

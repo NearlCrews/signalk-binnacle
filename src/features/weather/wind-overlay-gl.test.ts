@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WeatherStore } from '$entities/weather';
-import type { OverlayContext } from '$shared/map';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 
 const windParticles = vi.hoisted(() => ({
   setWind: vi.fn(),
@@ -23,10 +22,6 @@ vi.mock('./wind-gl/wind-particles', () => ({
 }));
 
 import { createWindOverlay } from './wind-overlay';
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function storeWithGrid(): WeatherStore {
   const store = new WeatherStore();
@@ -57,7 +52,7 @@ describe('wind overlay WebGL field', () => {
       addLayer(layer);
       layer.onAdd?.(map, {});
     }) as typeof map.addLayer;
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
 
     overlay.add(ctx);
     overlay.sync(ctx);

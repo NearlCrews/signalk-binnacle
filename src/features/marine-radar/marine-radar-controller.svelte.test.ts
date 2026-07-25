@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeOverlayContext } from '$shared/testing';
 
 const workerMock = vi.hoisted(() => ({
   open: vi.fn().mockResolvedValue(undefined),
@@ -241,7 +242,7 @@ describe('createMarineRadarController', () => {
     // Keep the lifecycle test independent of discovery-control reconciliation.
     expect(controller.store.selectedId).toBe('a');
     controller.store.setOperationalStatus('transmit');
-    controller.layer.setVisible({ map, beforeIdFor: () => undefined } as never, true);
+    controller.layer.setVisible(fakeOverlayContext(map), true);
     await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledOnce());
 
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });

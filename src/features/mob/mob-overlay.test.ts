@@ -1,21 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { MobStore } from '$entities/mob';
 import { OwnVessel } from '$entities/vessel';
-import type { OverlayContext } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
 import {
   createFakeMap,
   createFakeStorage,
   createFrameFactory,
+  fakeOverlayContext,
   sourceFeatures,
 } from '$shared/testing';
 import { createMobOverlay } from './mob-overlay';
 
 const frame = createFrameFactory();
-
-function ctxFor(map: ReturnType<typeof createFakeMap>): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function setup() {
   const store = new SignalKStore();
@@ -23,7 +19,7 @@ function setup() {
   const mob = new MobStore(store, vessel, undefined, createFakeStorage());
   const map = createFakeMap();
   const overlay = createMobOverlay(mob, vessel);
-  return { store, mob, map, overlay, ctx: ctxFor(map) };
+  return { store, mob, map, overlay, ctx: fakeOverlayContext(map) };
 }
 
 describe('mob overlay', () => {

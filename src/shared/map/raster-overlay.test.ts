@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import {
   createRasterOverlay,
   RASTER_ID_PREFIX,
@@ -8,9 +8,7 @@ import {
 } from './raster-overlay';
 import type { OverlayContext } from './types';
 
-function fakeCtx(): OverlayContext {
-  return { map: createFakeMap() as never, beforeIdFor: () => undefined };
-}
+const fakeCtx = (): OverlayContext => fakeOverlayContext(createFakeMap());
 
 const source: RasterOverlaySource = {
   id: 'demo',

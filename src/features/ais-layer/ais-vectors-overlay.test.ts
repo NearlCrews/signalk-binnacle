@@ -2,17 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AisTargetView } from '$entities/ais';
 import type { Assessment, Severity } from '$entities/collision';
-import { mapThemePaint, type OverlayContext } from '$shared/map';
+import { mapThemePaint } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
-import { createFakeMap } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { buildFeatures, createAisVectorsOverlay } from './ais-vectors-overlay';
 
 const LAYER_ID = 'binnacle-ais-vectors-line';
 const SOURCE_ID = 'binnacle-ais-vectors';
-
-function ctxFor(map: unknown): OverlayContext {
-  return { map: map as never, beforeIdFor: () => undefined };
-}
 
 function noSeverity(): Map<string, Severity> {
   return new Map();
@@ -165,7 +161,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    overlay.add(ctxFor(map));
+    overlay.add(fakeOverlayContext(map));
     expect(overlay.id).toBe('ais-vectors');
     expect(overlay.title).toBe('AIS course vectors');
     expect(overlay.band).toBe('traffic');
@@ -179,7 +175,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([target]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
@@ -193,7 +189,7 @@ describe('createAisVectorsOverlay', () => {
     const assessment = emptyAssessment;
     const overlay = createAisVectorsOverlay(targets as never, assessment);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
@@ -208,7 +204,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([movingTarget()]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment, () => t);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
@@ -241,7 +237,7 @@ describe('createAisVectorsOverlay', () => {
       () => t,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
@@ -267,7 +263,7 @@ describe('createAisVectorsOverlay', () => {
       () => t,
     );
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
@@ -291,7 +287,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     const paint = mapThemePaint('night-red');
     overlay.applyTheme?.(ctx, paint);
@@ -304,7 +300,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.5);
     const calls = vi.mocked(map.setPaintProperty).mock.calls;
@@ -317,7 +313,7 @@ describe('createAisVectorsOverlay', () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    const ctx = ctxFor(map);
+    const ctx = fakeOverlayContext(map);
     overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.has(LAYER_ID)).toBe(false);
