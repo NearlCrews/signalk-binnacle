@@ -39,7 +39,10 @@ vi.mock('maplibre-gl', () => {
     // createThemedMap's collapse call actually reaches it, not just that the no-op path
     // (selector finds nothing) is safe.
     attribElement = { classList: { remove: vi.fn() } };
+    // Lets a test exercise the cannot-construct path (a browser without WebGL2 throws here).
+    static throwOnConstruct = false;
     constructor(opts: Record<string, unknown> = {}) {
+      if (FakeMap.throwOnConstruct) throw new Error('WebGL2 unavailable');
       FakeMap.instances.push(this);
       this.options = opts;
     }
@@ -440,5 +443,33 @@ describe('createThemedMap transformRequest', () => {
     const map = await lastMap();
     const tr = map.options.transformRequest as (url: string) => unknown;
     expect(tr('https://tiles.openfreemap.org/fonts/figtree/0-255.pbf')).toBeUndefined();
+  });
+});
+
+describe('createThemedMap when the map cannot construct', () => {
+  it('shows the cannot-start notice and clears it on destroy', async () => {
+    const maplibregl = await import('maplibre-gl');
+    const MapClass = maplibregl.Map as unknown as { throwOnConstruct: boolean };
+    MapClass.throwOnConstruct = true;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const notice = { className: '', textContent: '', remove: vi.fn() };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn(() => notice),
+    });
+    const failingContainer = { replaceChildren: vi.fn() } as unknown as HTMLElement;
+    try {
+      const handle = createThemedMap({ container: failingContainer, onLoad: () => {} });
+      expect(notice.className).toContain('chart-start-error');
+      expect(notice.textContent).toContain('WebGL2');
+      expect(failingContainer.replaceChildren).toHaveBeenCalledWith(notice);
+      expect(consoleError).toHaveBeenCalled();
+      handle.destroy();
+      expect(notice.remove).toHaveBeenCalled();
+    } finally {
+      MapClass.throwOnConstruct = false;
+    }
   });
 });

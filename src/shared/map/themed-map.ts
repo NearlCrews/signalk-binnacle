@@ -130,7 +130,18 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     });
   } catch (error) {
     console.error('Map failed to initialize', error);
-    return { destroy: () => {} };
+    // A dead handle alone would leave a silent blank chart. Say so where the map would be: the
+    // usual cause is a browser without the WebGL2 support MapLibre requires.
+    const notice = document.createElement('p');
+    notice.className = 'alert-note chart-start-error';
+    notice.textContent =
+      'The chart cannot start on this device. The usual cause is a browser without WebGL2 support. Instruments, alarms, and panels keep working.';
+    opts.container.replaceChildren(notice);
+    return {
+      destroy: () => {
+        notice.remove();
+      },
+    };
   }
 
   // Keep pinch zoom, arrow-key pan, and keyboard zoom available while disabling only rotation.
