@@ -1,5 +1,11 @@
 import type { Map as MapLibreMap, MapSourceDataEvent } from 'maplibre-gl';
-import { chartSourceId, chartToSpecs, PMTILES_SCHEME, THEME_PAINT_KEY } from './chart-adapter';
+import {
+  chartSourceId,
+  chartToSpecs,
+  hasPmtilesPath,
+  PMTILES_SCHEME,
+  THEME_PAINT_KEY,
+} from './chart-adapter';
 import type { SignalKChart } from './chart-types';
 import { applyRasterTheme, colorProperty, type MapColorKey } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility, setPaintProp } from './overlay-helpers';
@@ -33,7 +39,7 @@ function chartKind(chart: SignalKChart): ChartLayerInfo['kind'] {
     return 'vector';
   if (chart.format && RASTER_FORMATS.has(chart.format)) return 'raster';
   const candidate = chart.url ?? chart.tilemapUrl ?? '';
-  return candidate.endsWith('.pmtiles') ? 'vector' : 'raster';
+  return hasPmtilesPath(candidate) ? 'vector' : 'raster';
 }
 
 // Server charts default to the basemap band; a user-imported chart passes 'bathymetry' so it

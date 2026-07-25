@@ -52,6 +52,12 @@ export function createNotesSource(
   const promotedKeys = new Set<string>();
   let generation = 0;
   let fetchingGeneration: number | undefined;
+  let activeLoad:
+    | {
+        generation: number;
+        promise: Promise<NotePoint[] | undefined>;
+      }
+    | undefined;
   let cooldownUntil = 0;
   let allowPersisted = true;
 
@@ -98,49 +104,59 @@ export function createNotesSource(
     cached: (viewport, offline) => cache.get(viewport, Date.now(), offline),
     inFlight: () => fetchingGeneration === generation,
     coolingDown: () => Date.now() < cooldownUntil,
-    async load(fetchBbox, token, allowNetwork = true) {
+    load(fetchBbox, token, allowNetwork = true) {
       const loadGeneration = generation;
+      const key = bboxKey(fetchBbox);
+      if (activeLoad?.generation === loadGeneration) {
+        return activeLoad.promise;
+      }
       fetchingGeneration = loadGeneration;
-      try {
-        const key = bboxKey(fetchBbox);
-        const resolved = await resolveNotes(key, fetchBbox, token, allowNetwork);
-        if (loadGeneration !== generation) return undefined;
-        const { notes } = resolved;
-        if (!notes) {
-          if (!allowNetwork) {
-            const empty: NotePoint[] = [];
-            cache.put(fetchBbox, empty, Date.now());
-            return empty;
+      let pending!: Promise<NotePoint[] | undefined>;
+      pending = (async () => {
+        try {
+          const resolved = await resolveNotes(key, fetchBbox, token, allowNetwork);
+          if (loadGeneration !== generation) return undefined;
+          const { notes } = resolved;
+          if (!notes) {
+            if (!allowNetwork) {
+              const empty: NotePoint[] = [];
+              cache.put(fetchBbox, empty, Date.now());
+              return empty;
+            }
+            cooldownUntil = Date.now() + RETRY_COOLDOWN_MS;
+            return undefined;
           }
+          if (resolved.network) {
+            promotedKeys.add(key);
+            const now = Date.now();
+            // The network result is ready for the chart now. IndexedDB durability is best-effort and
+            // must not hold the panel in Loading on a slow or blocked browser store.
+            void persist
+              .put(key, notes, now + PERSIST_TTL_MS)
+              .then(() => persist.prune(now))
+              .catch(() => undefined);
+          }
+          cache.put(fetchBbox, notes, Date.now());
+          return notes;
+        } catch (error) {
+          // Persistence and parsing are designed to degrade, but a browser integration can still
+          // reject unexpectedly. Never leave the overlay's single-flight flag looking permanently
+          // active; report a transient load failure and retain the last rendered set.
+          console.warn('[notes] viewport load failed', error);
           cooldownUntil = Date.now() + RETRY_COOLDOWN_MS;
           return undefined;
+        } finally {
+          if (activeLoad?.promise === pending) activeLoad = undefined;
+          if (fetchingGeneration === loadGeneration) fetchingGeneration = undefined;
         }
-        if (resolved.network) {
-          promotedKeys.add(key);
-          const now = Date.now();
-          // The network result is ready for the chart now. IndexedDB durability is best-effort and
-          // must not hold the panel in Loading on a slow or blocked browser store.
-          void persist
-            .put(key, notes, now + PERSIST_TTL_MS)
-            .then(() => persist.prune(now))
-            .catch(() => undefined);
-        }
-        cache.put(fetchBbox, notes, Date.now());
-        return notes;
-      } catch (error) {
-        // Persistence and parsing are designed to degrade, but a browser integration can still
-        // reject unexpectedly. Never leave the overlay's single-flight flag looking permanently
-        // active; report a transient load failure and retain the last rendered set.
-        console.warn('[notes] viewport load failed', error);
-        cooldownUntil = Date.now() + RETRY_COOLDOWN_MS;
-        return undefined;
-      } finally {
-        if (fetchingGeneration === loadGeneration) fetchingGeneration = undefined;
-      }
+      })();
+      activeLoad = { generation: loadGeneration, promise: pending };
+      return pending;
     },
     invalidate() {
       generation += 1;
       fetchingGeneration = undefined;
+      activeLoad = undefined;
       cooldownUntil = 0;
       allowPersisted = false;
       promotedKeys.clear();

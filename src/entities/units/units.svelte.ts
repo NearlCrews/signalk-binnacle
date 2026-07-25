@@ -35,6 +35,9 @@ export class UnitsStore {
   #server = $state<UnitsMode | undefined>(undefined);
   // The origin the resolved preset belongs to, so a switch to a different server clears it.
   #syncedOrigin: string | undefined;
+  // Supersedes older in-flight resolutions, including a retry against the same origin. Without this
+  // guard, a slower response can overwrite the preference resolved by a newer request.
+  #syncGeneration = 0;
 
   constructor(
     local = new PersistedValue<UnitsMode>(
@@ -62,10 +65,15 @@ export class UnitsStore {
     return this.#local;
   }
 
+  #isCurrentSync(generation: number, base: string): boolean {
+    return generation === this.#syncGeneration && base === this.#syncedOrigin;
+  }
+
   // Resolve the server preference: the user's own preset first (same-origin credentials, the
   // admin UI's resolution), then the global active preset. A transport failure or 404 leaves the
   // current value, so a flaky link cannot flip units mid-passage.
   async syncFromServer(base: string, fetchFn?: typeof fetch): Promise<void> {
+    const generation = ++this.#syncGeneration;
     // Clear a resolved preset only when the origin actually changed, so a server switch falls back
     // to local rather than carrying the prior server's preset, while a same-server flaky re-sync
     // keeps the value (stability over churn: a transient failure must not flip units mid-passage).
@@ -78,12 +86,14 @@ export class UnitsStore {
       { credentials: 'include' },
       fetchFn,
     );
+    if (!this.#isCurrentSync(generation, base)) return;
     if (typeof userPref?.activePreset === 'string' && userPref.activePreset) {
       const preset = await fetchJsonOrUndefined<PresetCategories>(
         `${base}${PRESETS_PATH}/${encodeURIComponent(userPref.activePreset)}`,
         undefined,
         fetchFn,
       );
+      if (!this.#isCurrentSync(generation, base)) return;
       const mode = modeFromPreset(preset);
       if (mode) {
         this.#server = mode;
@@ -95,6 +105,7 @@ export class UnitsStore {
       undefined,
       fetchFn,
     );
+    if (!this.#isCurrentSync(generation, base)) return;
     const mode = modeFromPreset(active);
     if (mode) {
       this.#server = mode;

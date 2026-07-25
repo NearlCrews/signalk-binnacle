@@ -271,12 +271,24 @@ export function createRouteController(deps: RouteControllerDeps) {
       return;
     }
     invalidateRefresh();
-    if (id === routeStore.activeId && !(await stopActiveCourse())) {
+    const wasActive = id === routeStore.activeId;
+    if (wasActive && !(await stopActiveCourse())) {
       flagRouteError('Could not stop the active route, so it was not deleted.');
       return;
     }
     if (!(await deleteRoute(origin, deps.getToken(), id))) {
-      flagRouteError('Could not delete the route.');
+      if (!wasActive) {
+        flagRouteError('Could not delete the route.');
+        return;
+      }
+      if (await activateRoute(origin, deps.getToken(), routeHref(id))) {
+        routeStore.setActive(id);
+        routeStore.toggleShown(id, true);
+        await hydrateAndSeedCourse();
+        flagRouteError('Could not delete the route. Active navigation was restarted.');
+      } else {
+        flagRouteError('Could not delete the route, and active navigation could not be restarted.');
+      }
       return;
     }
     routeStore.removeRoute(id);

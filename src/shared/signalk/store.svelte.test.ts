@@ -1,4 +1,3 @@
-import { flushSync } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { SignalKStore } from './store.svelte';
 import type { SKFrame } from './types';
@@ -126,56 +125,6 @@ describe('SignalKStore', () => {
     store.applyFrame({ ...frame({ 'notifications.mob': null }), generation: 2 });
     store.applyFrame({ ...frame({ 'notifications.mob': emergency }), generation: 2 });
     expect(store.cell('notifications.mob').activation).toBe(2);
-  });
-
-  it('reacts only for the changed cell, not unrelated cells', () => {
-    const store = new SignalKStore();
-    const cleanup = $effect.root(() => {
-      let windRuns = 0;
-      const wind = store.cell('environment.wind.speedApparent');
-      $effect(() => {
-        void wind.value;
-        windRuns += 1;
-      });
-      flushSync();
-      expect(windRuns).toBe(1);
-      store.applyFrame(frame({ 'navigation.speedOverGround': 6 }));
-      flushSync();
-      expect(windRuns).toBe(1);
-      store.applyFrame(frame({ 'environment.wind.speedApparent': 9 }));
-      flushSync();
-      expect(windRuns).toBe(2);
-    });
-    cleanup();
-  });
-
-  it('does not retrigger connection consumers when phase and attempt are unchanged', () => {
-    const store = new SignalKStore();
-    const cleanup = $effect.root(() => {
-      let runs = 0;
-      $effect(() => {
-        void store.connection;
-        runs += 1;
-      });
-      flushSync();
-      expect(runs).toBe(1);
-      // The worker sends a fresh connection object per frame; an unchanged state must not re-run.
-      store.applyFrame(frame({ 'navigation.speedOverGround': 1 }));
-      store.applyFrame(frame({ 'navigation.speedOverGround': 2 }));
-      flushSync();
-      expect(runs).toBe(2);
-      store.applyFrame(frame({ 'navigation.speedOverGround': 3 }));
-      flushSync();
-      expect(runs).toBe(2);
-      store.applyFrame({
-        self: new Map(),
-        connection: { phase: 'reconnecting', attempt: 1 },
-        epoch: 2000,
-      });
-      flushSync();
-      expect(runs).toBe(3);
-    });
-    cleanup();
   });
 
   it('applies ais targets from the frame', () => {

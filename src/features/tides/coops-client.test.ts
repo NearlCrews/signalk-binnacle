@@ -65,6 +65,11 @@ describe('coops-client', () => {
     expect(events[0].timeMs).toBe(Date.UTC(2026, 5, 8, 9, 34));
   });
 
+  it('rejects a tide height with a unit suffix', async () => {
+    mockFetch({ predictions: [{ t: '2026-06-08 09:34', v: '0.532m', type: 'H' }] });
+    await expect(fetchTideEvents('8726520')).resolves.toEqual([]);
+  });
+
   it('converts current velocity from cm/s to SI m/s and reads the set', async () => {
     mockFetch({
       current_predictions: {

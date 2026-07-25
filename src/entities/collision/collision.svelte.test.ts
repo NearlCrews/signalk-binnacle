@@ -82,6 +82,20 @@ describe('assessContacts', () => {
     expect(r.worst).toBe('clear');
   });
 
+  it('rejects a negative provider CPA and falls back to local geometry', () => {
+    const t = target({
+      id: 'invalid-provider',
+      position: { latitude: 1852 / 111320, longitude: 0 },
+      sogMps: knotsToMetersPerSecond(10),
+      cogRad: degreesToRadians(180),
+      cpaMeters: -50,
+      tcpaSeconds: 60,
+    });
+    const r = assessContacts(ownStationary, [t], DEFAULT_THRESHOLDS);
+    expect(r.contacts[0]?.source).toBe('computed');
+    expect(r.contacts[0]?.cpaMeters).toBeGreaterThanOrEqual(0);
+  });
+
   it('computes CPA/TCPA when the provider value is absent and flags it computed', () => {
     // 1 nm due north closing south at about 10 kn: inside the danger or warning band.
     const t = target({

@@ -89,6 +89,24 @@ describe('fetchAisTrails', () => {
           ],
         },
         'vessels.no-coords': { type: 'MultiLineString' },
+        'vessels.non-finite': {
+          type: 'MultiLineString',
+          coordinates: [
+            [
+              [-83, 42],
+              [Number.POSITIVE_INFINITY, 42.1],
+            ],
+          ],
+        },
+        'vessels.out-of-range': {
+          type: 'MultiLineString',
+          coordinates: [
+            [
+              [-83, 42],
+              [-82.9, 91],
+            ],
+          ],
+        },
         'vessels.junk': 7,
         'vessels.good': {
           type: 'MultiLineString',
@@ -111,6 +129,20 @@ describe('fetchAisTrails', () => {
         ],
       },
     ]);
+  });
+
+  it('drops a trail that exceeds the per-line point budget', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        'vessels.too-long': {
+          type: 'MultiLineString',
+          coordinates: [Array.from({ length: 10_001 }, () => [-83, 42])],
+        },
+      },
+    });
+
+    await expect(fetchAisTrails(BASE, undefined, BBOX)).resolves.toEqual([]);
   });
 
   it('returns undefined on a 404, the degrade signal for an absent or stopped plugin', async () => {

@@ -251,9 +251,10 @@ export class AuthController {
 
   // POST an access request for a client id, requesting readwrite up front so the admin's approval UI
   // defaults to it rather than the server's readonly fallback (Binnacle writes routes, waypoints,
-  // tracks, course, alarms, and radar controls; a readonly grant 401s every one). `ok` is false only
-  // when the POST itself did not land (offline), so the caller can retry; `href` is the granted poll
-  // URL. Anonymous (credentials omitted): the request is keyed by clientId and href, never a cookie.
+  // tracks, course, alarms, and radar controls; a readonly grant 401s every one). `ok` is false for
+  // a transport or non-success response, so the caller can retry; `href` is the granted poll URL.
+  // Only a successful response without a usable href is malformed. Anonymous (credentials omitted):
+  // the request is keyed by clientId and href, never a cookie.
   async #postAccessRequest(
     clientId: string,
     description: string,
@@ -264,7 +265,7 @@ export class AuthController {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId, description, permissions: 'readwrite' }),
     });
-    if (!res) return { ok: false };
+    if (!res?.ok) return { ok: false };
     const body = await jsonOr<Record<string, unknown>>(res, {});
     return { ok: true, href: typeof body.href === 'string' ? body.href : undefined };
   }
@@ -406,7 +407,7 @@ export class AuthController {
     const upgradeClientId = this.#upgradeClientId;
     const identityGeneration = this.#identityGeneration;
     this.upgrading = true;
-    const { href } = await this.#postAccessRequest(
+    const { ok, href } = await this.#postAccessRequest(
       upgradeClientId,
       `${CLIENT_DESCRIPTION} (read/write)`,
     );
@@ -418,7 +419,7 @@ export class AuthController {
     )
       return;
     this.#upgradePoll.href = href;
-    if (!href) {
+    if (!ok || !href) {
       this.#endUpgrade();
       return;
     }

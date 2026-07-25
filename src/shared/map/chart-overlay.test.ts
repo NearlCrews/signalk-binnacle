@@ -46,6 +46,19 @@ describe('chart overlay', () => {
     });
   });
 
+  it('reports a query-suffixed PMTiles chart as vector', () => {
+    const overlay = createChartOverlay(
+      {
+        identifier: 'pm',
+        name: 'PMTiles',
+        type: 'tilelayer',
+        url: 'https://charts.example/coast.pmtiles?token=secret',
+      },
+      'http://pi.local',
+    );
+    expect(overlay.chart?.kind).toBe('vector');
+  });
+
   it('remove deletes the layer and source', () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },

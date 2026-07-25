@@ -107,4 +107,24 @@ describe('TimeTravelStore', () => {
     await Promise.all([p1, p2]);
     expect(store.to).toBe(9000);
   });
+
+  it('invalidates a pending load when the history provider disappears', async () => {
+    let resolve: (d: TimeTravelData) => void = () => {};
+    const held = new Promise<TimeTravelData>((accept) => (resolve = accept));
+    let currentProviders: HistoryProviders | undefined = providers;
+    const store = make(
+      () => held,
+      () => currentProviders,
+    );
+    const entering = store.enter();
+
+    currentProviders = { ids: [] };
+    await store.reload();
+    resolve(data);
+    await entering;
+
+    expect(store.status).toBe('no-provider');
+    expect(store.samples).toEqual([]);
+    expect(store.to).toBe(0);
+  });
 });

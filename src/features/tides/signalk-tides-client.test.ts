@@ -131,6 +131,20 @@ describe('parseTidesResource', () => {
     expect(parseTidesResource([], 27.7, -82.7, NOW_MS)).toBeUndefined();
     expect(parseTidesResource({ extremes: [] }, 27.7, -82.7, NOW_MS)).toBeUndefined();
   });
+
+  it('rejects numeric strings with trailing units or text', () => {
+    expect(
+      parseTidesResource(
+        {
+          station: { latitude: '27.7north', longitude: '-82.7west' },
+          extremes: [{ time: '2026-06-08T07:20:00.000Z', type: 'High', value: '1.2m' }],
+        },
+        27.7,
+        -82.7,
+        NOW_MS,
+      ),
+    ).toBeUndefined();
+  });
 });
 
 describe('fetchSignalkTidesReading', () => {

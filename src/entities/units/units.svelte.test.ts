@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PersistedValue } from '$shared/settings';
 import { createFakeStorage } from '$shared/testing';
 import { modeFromPreset, UnitsStore } from './units.svelte';
@@ -75,5 +75,50 @@ describe('UnitsStore', () => {
     );
     await units.syncFromServer('http://pi', fetchStub({}));
     expect(units.mode).toBe('imperial');
+  });
+
+  it('ignores an older same-origin resolution that finishes after a newer one', async () => {
+    let resolveOlder!: (response: Response) => void;
+    const olderActive = new Promise<Response>((resolve) => {
+      resolveOlder = resolve;
+    });
+    const olderFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({ ok: false } as Response)
+      .mockReturnValueOnce(olderActive);
+    const units = new UnitsStore(localSetting());
+
+    const older = units.syncFromServer('http://pi', olderFetch);
+    await Promise.resolve();
+    await units.syncFromServer('http://pi', fetchStub({ '/unitpreferences/active': metricPreset }));
+    resolveOlder({ ok: true, json: async () => imperialPreset } as Response);
+    await older;
+
+    expect(units.mode).toBe('metric');
+    expect(units.source).toBe('server');
+  });
+
+  it('ignores a response from the previously selected server origin', async () => {
+    let resolveOlder!: (response: Response) => void;
+    const olderActive = new Promise<Response>((resolve) => {
+      resolveOlder = resolve;
+    });
+    const olderFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({ ok: false } as Response)
+      .mockReturnValueOnce(olderActive);
+    const units = new UnitsStore(localSetting());
+
+    const older = units.syncFromServer('http://old-pi', olderFetch);
+    await Promise.resolve();
+    await units.syncFromServer(
+      'http://new-pi',
+      fetchStub({ '/unitpreferences/active': metricPreset }),
+    );
+    resolveOlder({ ok: true, json: async () => imperialPreset } as Response);
+    await older;
+
+    expect(units.mode).toBe('metric');
+    expect(units.source).toBe('server');
   });
 });

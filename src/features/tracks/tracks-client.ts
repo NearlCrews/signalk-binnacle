@@ -1,7 +1,7 @@
 import { computeStats, splitAtGaps, type TrackPoint, toLonLat } from '$entities/track';
 import { isLonLat } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
-import { featureCollection } from '$shared/map';
+import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
 import { toGeoJsonFeature } from './track-export';
 
@@ -18,7 +18,7 @@ export interface SavedTrack {
   durationSeconds?: number;
 }
 
-// One LineString per segment, for the saved tracks the user has chosen to show. Saved tracks
+// One line geometry per segment, for the saved tracks the user has chosen to show. Saved tracks
 // draw in a single color, so no per-point speed is carried.
 export function savedTracksToFeatures(
   tracks: readonly SavedTrack[],
@@ -31,7 +31,7 @@ export function savedTracksToFeatures(
       if (segment.length < 2) continue;
       features.push({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates: segment.map(toLonLat) },
+        geometry: antimeridianLineGeometry(segment.map(toLonLat)),
         properties: { id: track.id },
       });
     }

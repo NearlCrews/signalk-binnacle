@@ -16,11 +16,13 @@ const GIBS_DEFAULT_OPACITY = 0.7;
 // Built as a function so the date is resolved at construction time, not at module load.
 export function buildOceanSources(): RasterOverlaySource[] {
   const date = gibsDate();
+  const datedDescription = (summary: string): string =>
+    `${summary} NASA imagery date: ${date}. Reload after the UTC date changes to refresh it.`;
   return [
     {
       id: 'gibs-sst',
       title: 'Sea-surface temperature',
-      description: 'A satellite color map of how warm the sea surface is.',
+      description: datedDescription('A satellite color map of how warm the sea surface is.'),
       tiles: [gibsTiles('GHRSST_L4_MUR_Sea_Surface_Temperature', date)],
       minzoom: 0,
       maxzoom: 7,
@@ -31,7 +33,7 @@ export function buildOceanSources(): RasterOverlaySource[] {
     {
       id: 'gibs-sea-ice',
       title: 'Sea ice concentration',
-      description: 'How much of the sea surface is covered by ice.',
+      description: datedDescription('How much of the sea surface is covered by ice.'),
       tiles: [gibsTiles('GHRSST_L4_MUR_Sea_Ice_Concentration', date)],
       minzoom: 0,
       maxzoom: 7,

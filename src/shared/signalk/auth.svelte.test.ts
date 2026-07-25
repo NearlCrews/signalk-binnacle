@@ -537,6 +537,23 @@ describe('AuthController', () => {
     expect(scheduled.length).toBeGreaterThan(1);
   });
 
+  it('retries a non-success access-request response instead of reporting denial', async () => {
+    const scheduled: Array<() => void> = [];
+    const fetchFn = vi.fn(async () => res(false, {}, 503));
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: (run) => {
+        scheduled.push(run);
+      },
+    });
+
+    await auth.requestAccess();
+
+    expect(auth.status).toBe('requesting');
+    expect(scheduled).toHaveLength(1);
+  });
+
   it('cancels scheduled polling and prevents its callback from running after stop', async () => {
     const scheduled: Array<() => void> = [];
     const handle = {};

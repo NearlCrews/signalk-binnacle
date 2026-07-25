@@ -37,7 +37,7 @@ function absolute(url: string, base: string): string {
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-function hasPmtilesPath(value: string): boolean {
+export function hasPmtilesPath(value: string): boolean {
   const candidate = value.startsWith(PMTILES_SCHEME) ? value.slice(PMTILES_SCHEME.length) : value;
   try {
     // Use the pathname rather than the whole URL so signed and cache-busted archives retain their

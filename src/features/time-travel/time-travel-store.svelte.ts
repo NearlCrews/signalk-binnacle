@@ -66,15 +66,19 @@ export class TimeTravelStore {
   }
 
   async #load(): Promise<void> {
+    const mine = ++this.#loadSeq;
     const providers = this.#providers();
     // A stock server with no history plugin returns { ids: [] } (truthy), so guard on the id count,
     // not just presence, or the query falls through to a 501 and reports failed instead of honestly
     // saying a provider is needed. Mirrors the history-track overlay's guard.
     if (!providers || providers.ids.length === 0) {
+      this.samples = [];
+      this.from = 0;
+      this.to = 0;
+      this.scrubMs = 0;
       this.status = 'no-provider';
       return;
     }
-    const mine = ++this.#loadSeq;
     this.status = 'loading';
     let data: Awaited<ReturnType<typeof loadTimeTravelHistory>>;
     try {

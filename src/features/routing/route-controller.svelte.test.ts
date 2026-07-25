@@ -77,6 +77,9 @@ describe('createRouteController', () => {
     vi.mocked(courseClient.activationFromCourse).mockReturnValue({});
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue([]);
     vi.mocked(routesClient.saveRoute).mockResolvedValue(true);
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue(true);
+    vi.mocked(courseClient.clearCourse).mockResolvedValue(true);
+    vi.mocked(courseClient.activateRoute).mockResolvedValue(true);
     vi.mocked(courseClient.refreshActiveRoute).mockResolvedValue(true);
     vi.mocked(courseClient.setActiveRoutePointIndex).mockResolvedValue(true);
   });
@@ -129,6 +132,41 @@ describe('createRouteController', () => {
     resolveSave(true);
     await Promise.all([first, second]);
     expect(controller.busy).toBe(false);
+  });
+
+  it('restarts navigation when deleting the active route fails', async () => {
+    const { controller, routeStore, toast } = makeController();
+    routeStore.setRoutes([route]);
+    routeStore.setActive('r1');
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue(false);
+
+    await controller.onDeleteRoute('r1');
+
+    expect(courseClient.clearCourse).toHaveBeenCalled();
+    expect(courseClient.activateRoute).toHaveBeenCalledWith(
+      'http://sk',
+      'token',
+      '/resources/routes/r1',
+    );
+    expect(routeStore.activeId).toBe('r1');
+    expect(toast.show).toHaveBeenCalledWith(
+      'Could not delete the route. Active navigation was restarted.',
+    );
+  });
+
+  it('reports when failed active-route deletion cannot restore navigation', async () => {
+    const { controller, routeStore, toast } = makeController();
+    routeStore.setRoutes([route]);
+    routeStore.setActive('r1');
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue(false);
+    vi.mocked(courseClient.activateRoute).mockResolvedValue(false);
+
+    await controller.onDeleteRoute('r1');
+
+    expect(routeStore.activeId).toBeUndefined();
+    expect(toast.show).toHaveBeenCalledWith(
+      'Could not delete the route, and active navigation could not be restarted.',
+    );
   });
 
   it('serializes rapid waypoint skips', async () => {

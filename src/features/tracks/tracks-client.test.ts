@@ -228,6 +228,27 @@ describe('savedTracksToFeatures', () => {
   it('omits tracks that are not shown', () => {
     expect(savedTracksToFeatures([track], new Set()).features).toHaveLength(0);
   });
+
+  it('splits a saved track crossing the antimeridian', () => {
+    const crossing: SavedTrack = {
+      id: 'crossing',
+      name: 'Crossing',
+      points: [[p(10, 179), p(12, -179)]],
+    };
+    expect(savedTracksToFeatures([crossing], new Set(['crossing'])).features[0].geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [179, 10],
+          [180, 11],
+        ],
+        [
+          [-180, 11],
+          [-179, 12],
+        ],
+      ],
+    });
+  });
 });
 
 describe('deleteTrack', () => {

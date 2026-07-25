@@ -119,7 +119,7 @@ export async function fetchTideEvents(
   return data.predictions.flatMap((p) => {
     if (!isRecord(p) || typeof p.t !== 'string' || typeof p.v !== 'string') return [];
     const timeMs = parseGmtTime(p.t);
-    const heightMeters = Number.parseFloat(p.v);
+    const heightMeters = p.v.trim() === '' ? Number.NaN : Number(p.v);
     if (
       !isFiniteNumber(timeMs) ||
       !isFiniteNumber(heightMeters) ||
