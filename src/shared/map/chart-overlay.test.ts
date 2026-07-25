@@ -119,7 +119,7 @@ describe('chart overlay', () => {
     expect(unregisterPmtilesArchive).not.toHaveBeenCalled();
   });
 
-  it('caps chart layers one zoom past the source native max, only once the source loads', () => {
+  it('caps chart layers immediately when the spec declares the native max zoom', () => {
     const overlay = createChartOverlay(
       {
         identifier: 'noaa',
@@ -132,17 +132,76 @@ describe('chart overlay', () => {
     );
     const map = createFakeMap();
     overlay.add(fakeOverlayContext(map));
-    // The source has not loaded (its native max zoom is not known yet), so nothing is capped and a
-    // sourcedata listener is waiting.
-    expect(map.setLayerZoomRange).not.toHaveBeenCalled();
-    // Tiles arrive: the source reports loaded and a sourcedata event fires for it.
-    const chartSource = [...map.sources.keys()][0];
-    map.markSourceLoaded(chartSource);
-    map.emit('sourcedata', { sourceId: chartSource, isSourceLoaded: true });
+    // A spec-declared maxzoom is final at construction: nothing to wait for.
     expect(map.setLayerZoomRange).toHaveBeenCalledWith(
       expect.stringContaining('chart-noaa'),
       0,
       15,
     );
+  });
+
+  it('caps a TileJSON-backed chart once its metadata arrives, without trusting the loaded flag', () => {
+    const overlay = createChartOverlay(
+      { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
+      'http://pi.local',
+    );
+    const map = createFakeMap();
+    overlay.add(fakeOverlayContext(map));
+    // The native max zoom is unknown until the TileJSON loads, so nothing is capped yet.
+    expect(map.setLayerZoomRange).not.toHaveBeenCalled();
+    const chartSource = [...map.sources.keys()][0];
+    // Metadata arrives: the source now reports its native max zoom. MapLibre 6 never flips
+    // isSourceLoaded for a vector source, so the cap must not depend on it.
+    const fakeSource = map.sources.get(chartSource);
+    if (!fakeSource) throw new Error('chart source missing');
+    fakeSource.maxzoom = 12;
+    map.emit('sourcedata', { sourceId: chartSource, sourceDataType: 'metadata' });
+    expect(map.setLayerZoomRange).toHaveBeenCalledWith(
+      expect.stringContaining('chart-noaa'),
+      0,
+      13,
+    );
+  });
+
+  it('caps a TileJSON-backed chart through the bounded fallback when no metadata event lands', () => {
+    vi.useFakeTimers();
+    try {
+      const overlay = createChartOverlay(
+        { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
+        'http://pi.local',
+      );
+      const map = createFakeMap();
+      overlay.add(fakeOverlayContext(map));
+      const chartSource = [...map.sources.keys()][0];
+      const fakeSource = map.sources.get(chartSource);
+      if (!fakeSource) throw new Error('chart source missing');
+      fakeSource.maxzoom = 11;
+      expect(map.setLayerZoomRange).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(8_000);
+      expect(map.setLayerZoomRange).toHaveBeenCalledWith(
+        expect.stringContaining('chart-noaa'),
+        0,
+        12,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('remove cancels the pending fallback so a removed chart is never capped later', () => {
+    vi.useFakeTimers();
+    try {
+      const overlay = createChartOverlay(
+        { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
+        'http://pi.local',
+      );
+      const map = createFakeMap();
+      overlay.add(fakeOverlayContext(map));
+      overlay.remove(fakeOverlayContext(map));
+      vi.advanceTimersByTime(8_000);
+      expect(map.setLayerZoomRange).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

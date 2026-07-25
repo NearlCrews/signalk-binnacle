@@ -75,6 +75,7 @@ export function createChartOverlay(
       : [];
   });
   let onSourceData: ((event: MapSourceDataEvent) => void) | undefined;
+  let capFallbackTimer: ReturnType<typeof setTimeout> | undefined;
   const source = options.source ?? 'server';
   const url = chart.url ?? chart.tilemapUrl;
   const kind = chartKind(chart);
@@ -140,23 +141,49 @@ export function createChartOverlay(
         ctx.map.off('sourcedata', onSourceData);
         onSourceData = undefined;
       }
-      const tryCap = () => ctx.map.isSourceLoaded(chartSource) && capToNativeZoom(ctx.map);
-      if (!tryCap()) {
-        const handler = (event: MapSourceDataEvent) => {
-          if (event.sourceId === chartSource && event.isSourceLoaded && tryCap()) {
-            ctx.map.off('sourcedata', handler);
-            if (onSourceData === handler) onSourceData = undefined;
-          }
-        };
-        onSourceData = handler;
-        ctx.map.on('sourcedata', handler);
+      clearTimeout(capFallbackTimer);
+      capFallbackTimer = undefined;
+      // A spec-declared maxzoom is final at construction, so cap immediately. A TileJSON-backed
+      // source (a PMTiles archive, or any url-form source) reports its native maxzoom only once
+      // its metadata loads; reading earlier would see MapLibre's default instead.
+      const specSource = specs.sources[chartSource] as { maxzoom?: number } | undefined;
+      if (specSource?.maxzoom !== undefined) {
+        capToNativeZoom(ctx.map);
+        return;
       }
+      // MapLibre 6's isSourceLoaded bookkeeping is broken for vector sources (the loaded flag
+      // never flips even though tiles fetch and paint), so readiness comes from the source's
+      // 'metadata' sourcedata event, still accepting the loaded flag for versions where it
+      // works. The 8 second fallback bounds the wait: a source whose tiles paint has long since
+      // loaded its TileJSON by then, so the cap reads the real native maxzoom, and a source that
+      // never produced metadata still returns false from the cap and changes nothing.
+      const done = () => {
+        if (onSourceData) {
+          ctx.map.off('sourcedata', onSourceData);
+          onSourceData = undefined;
+        }
+        clearTimeout(capFallbackTimer);
+        capFallbackTimer = undefined;
+      };
+      const handler = (event: MapSourceDataEvent) => {
+        if (event.sourceId !== chartSource) return;
+        if (event.sourceDataType !== 'metadata' && !event.isSourceLoaded) return;
+        if (capToNativeZoom(ctx.map)) done();
+      };
+      onSourceData = handler;
+      ctx.map.on('sourcedata', handler);
+      capFallbackTimer = setTimeout(() => {
+        capToNativeZoom(ctx.map);
+        done();
+      }, 8000);
     },
     remove(ctx) {
       if (onSourceData) {
         ctx.map.off('sourcedata', onSourceData);
         onSourceData = undefined;
       }
+      clearTimeout(capFallbackTimer);
+      capFallbackTimer = undefined;
       removeLayersAndSources(ctx.map, layerIds, sourceIds);
       for (const url of pmtilesUrls) {
         unregisterPmtilesArchive(url);
