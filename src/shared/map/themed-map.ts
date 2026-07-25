@@ -1,4 +1,4 @@
-import type { MapMouseEvent, MapStyleImageMissingEvent } from 'maplibre-gl';
+import type { MapMouseEvent } from 'maplibre-gl';
 import * as maplibregl from 'maplibre-gl';
 import type { MapView } from '$shared/geo';
 import type { Theme } from '$shared/ui';
@@ -223,9 +223,11 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // load. Supply a 1x1 transparent placeholder so the console stays clean and the affected icon or
   // pattern renders nothing, which matches how the theme already flattens those landuse fills.
   const transparentPixel = { width: 1, height: 1, data: new Uint8Array(4) };
-  mapInstance.on('styleimagemissing', (event: MapStyleImageMissingEvent) => {
-    if (mapInstance.hasImage(event.id)) return;
-    mapInstance.addImage(event.id, transparentPixel);
+  // MapLibre 6 made 'styleimagemissing' notify-only: on-demand images go through the resolver,
+  // which MapLibre awaits before treating the image as missing.
+  mapInstance.setMissingStyleImageResolver((id: string) => {
+    if (mapInstance.hasImage(id)) return;
+    mapInstance.addImage(id, transparentPixel);
   });
 
   // The container resizes when side panels open or the viewport changes without a window resize, so
@@ -266,10 +268,18 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     removeCanvasListeners = contextMenu.remove;
   }
 
-  void mapInstance.once('load', () => {
+  let mapReady = false;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  let maxWaitTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const initialize = () => {
     // MapLibre normally removes pending listeners with the map, but the load event can already be
     // queued when a component closes. Do not create sentinels, a manager, or widget wiring then.
-    if (destroyed) return;
+    if (mapReady || destroyed) return;
+    mapReady = true;
+    clearTimeout(settleTimer);
+    clearTimeout(maxWaitTimer);
+    mapInstance.off('render', onRenderForReadyCheck);
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
@@ -315,12 +325,38 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       // Promise.resolve cannot catch a callback that throws before returning a promise.
       reportLoadError(error);
     }
+  };
+
+  // MapLibre 6.0.0 has an upstream bug (present since the 6.0.0-20 prerelease, verified still
+  // present in stable): a vector tile source's internal load bookkeeping never flips true, even
+  // though its tiles fetch and paint normally (a raster source is unaffected), so map.loaded()
+  // never returns true and the 'load' event this all used to hang off never fires. Race the real
+  // 'load' event, so this self-heals the moment a maplibre-gl upgrade fixes it, against a
+  // synthetic ready signal built only from events proven to fire in this build: 'styledata' (the
+  // style JSON parsed), armed once no further 'render' activity has happened for half a second
+  // (mirrors 'idle' without trusting the broken loaded() check), capped at 8 seconds after
+  // styledata so a link slow or flaky enough to keep triggering renders can never block
+  // initialization forever. Delete this block and go back to a plain
+  // mapInstance.once('load', initialize) once maplibre-gl fires 'load' normally again; re-prove
+  // the fix empirically with this block deleted on a branch before dropping it.
+  const armSettleTimer = () => {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(initialize, 500);
+  };
+  const onRenderForReadyCheck = () => armSettleTimer();
+  void mapInstance.once('styledata', () => {
+    armSettleTimer();
+    maxWaitTimer = setTimeout(initialize, 8000);
   });
+  mapInstance.on('render', onRenderForReadyCheck);
+  void mapInstance.once('load', initialize);
 
   return {
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
+      clearTimeout(settleTimer);
+      clearTimeout(maxWaitTimer);
       cancelLongPress();
       removeCanvasListeners();
       stopTick();
