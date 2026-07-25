@@ -116,8 +116,8 @@ per the SignalK pack-banner caveat above):
 
 - `pre-commit` runs `npm run verify:commit`, the shared formatting, lint, prose, architecture, and
   dead-code gate.
-- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, and Chromium E2E
-  gate without rebuilding the application for Playwright.
+- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, Chromium, PWA, and
+  focused WebKit smoke gate without rebuilding the application for Playwright.
   A failure blocks the push.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
@@ -132,8 +132,9 @@ review-ready, but do not push, publish, tag, or release without the authorizatio
 The project works directly on `main`, so the working tree should stay clean between commits.
 Scratch artifacts (Playwright screenshots, throwaway debug scripts, captured logs) go in the
 gitignored `tmp/` directory at the repo root, never loose at the root or inside `src/`. A stray
-`*.png` at the repo root is also gitignored as a backstop. Real app and store screenshots
-(`signalk.screenshots`) are not scratch: they live under `public/` or `src/` and are committed.
+`*.png` at the repo root is also gitignored as a backstop. Real app and store screenshot sources
+(`signalk.screenshots`) are not scratch: they live under `static/screenshots/`, are committed, and
+are copied into the generated `public/` build output.
 
 The working rhythm: write every file, run the gate capturing each result to a file and reading it
 back (shell output on this Pi intermittently truncates, so trust the file, not a glanced line),

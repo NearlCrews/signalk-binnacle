@@ -20,7 +20,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run preview',
     url: 'http://localhost:4173/signalk-binnacle/',
-    reuseExistingServer: !process.env.CI,
+    // Never trust a process already on this port: it may be an unrelated server or a stale build.
+    reuseExistingServer: false,
     timeout: 120000,
   },
   projects: [

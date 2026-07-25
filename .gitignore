@@ -51,8 +51,8 @@ Thumbs.db
 # Scratch directory for screenshots, throwaway debug scripts, and captured logs.
 /tmp/
 
-# Local debug screenshots dropped at the repo root during live verification (real
-# app and store screenshots live under public/ or src/, never at the root).
+# Local debug screenshots dropped at the repo root during live verification. Real app and store
+# screenshot sources live under static/screenshots/ and are copied into the generated public/ output.
 /*.png
 
 # Agent and session scratch (local only, not for contributors)

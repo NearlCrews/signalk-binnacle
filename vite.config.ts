@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { playwright } from '@vitest/browser-playwright';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 import packageJson from './package.json' with { type: 'json' };
@@ -151,6 +152,22 @@ export default defineConfig({
           name: 'unit-svelte',
           environment: 'node',
           include: ['src/**/*.svelte.{test,spec}.ts'],
+          exclude: ['src/**/*.client.svelte.{test,spec}.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'client-svelte',
+          // Browser compilation executes client-side rune lifecycle, which the Node SSR compiler
+          // intentionally does not run. Keep effect-driven controller tests in this project.
+          include: ['src/**/*.client.svelte.{test,spec}.ts'],
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: 'chromium' }],
+          },
         },
       },
     ],

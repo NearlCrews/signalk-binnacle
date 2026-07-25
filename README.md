@@ -374,8 +374,8 @@ npm run test:coverage # unit tests with the enforced coverage floor
 npm run build      # production build into public/
 npm run size       # compressed production bundle budgets
 npm run verify     # complete non-browser local and CI gate
-npm run test:e2e   # Chromium browser checks against an existing build
-npm run test:e2e:cross-browser # Chromium and WebKit UI checks; CI runs this gate
+npm run test:e2e   # Build, then run the Chromium browser checks
+npm run test:e2e:cross-browser # Build, then run Chromium, PWA, and WebKit checks
 npm run verify:release # full gate, cross-browser E2E, package checks, and runtime audit
 ```
 
