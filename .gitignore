@@ -30,6 +30,7 @@ playwright-report/
 playwright-results/
 test-results/
 .playwright-mcp/
+.vitest-attachments/
 
 # Tooling caches
 .eslintcache

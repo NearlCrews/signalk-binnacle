@@ -381,8 +381,8 @@ npm run verify:release # full gate, cross-browser E2E, package checks, and runti
 
 After `npm run hooks`, git runs `verify:commit` before each commit and `verify:browser` before each
 push. The hooks live in `.githooks/` and are opt-in via `core.hooksPath`, never a package lifecycle
-script. The E2E commands consume the existing `public/` build; use the `:with-build` variants when
-running them directly from a tree without a current build.
+script. The E2E commands build first, while the pre-push
+`test:e2e:gate` reuses the existing `public/` build from `verify` so a push does not rebuild.
 
 Maintainers preparing a version should follow the [release checklist](docs/releasing.md). Preparation
 does not authorize a tag, GitHub release, or npm publication.
