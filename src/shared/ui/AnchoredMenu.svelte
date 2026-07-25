@@ -115,6 +115,7 @@ $effect(() => {
     type="button"
     class="overlay-backdrop anchored-menu-backdrop"
     aria-label={backdropLabel}
+    tabindex="-1"
     onclick={onClose}
   ></button>
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a prop (group by default, menu for

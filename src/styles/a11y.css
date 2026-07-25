@@ -11,7 +11,7 @@
    (--text) still marks focus while keeping the brightest pixel low. 1.5px rather than 1px so the
    ring stays perceptible on a wet, glare-lit screen. */
 :root[data-theme="night-red"]
-  :where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+:where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline-width: 1.5px;
   outline-color: var(--text);
 }

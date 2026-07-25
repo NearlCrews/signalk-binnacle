@@ -1,3 +1,22 @@
+<script module lang="ts">
+export function focusLayerOpacityControl(control: HTMLElement | undefined): void {
+  control?.focus({ preventScroll: true });
+}
+
+export function restoreLayerOpacityFocus(
+  trigger: HTMLElement | undefined,
+  activeElement: Element | null = document.activeElement,
+  body: HTMLElement = document.body,
+): void {
+  if (
+    trigger?.isConnected &&
+    (activeElement === null || activeElement === body || !activeElement.isConnected)
+  ) {
+    trigger.focus({ preventScroll: true });
+  }
+}
+</script>
+
 <script lang="ts">
 import { GripVertical, RotateCcw, Settings2, SlidersHorizontal } from '@lucide/svelte';
 import type { LayerListItem } from '$shared/map';
@@ -52,7 +71,7 @@ const MIN_LAYER_OPACITY = 0.15;
 const percent = $derived(Math.round(item.opacity * 100));
 // The opacity control shows only when the layer is on and can be dimmed, and it lights when the layer
 // is below full so a faded layer is visible at a glance without opening the popover.
-const canTune = $derived(item.supportsOpacity && item.visible);
+const canTune = $derived(item.supportsOpacity && item.visible && item.available);
 const dimmed = $derived(item.opacity < 1);
 // A row only counts as a facet group when it actually has sub-layers nested under it: a row that
 // merely shares a group id with something it is not the parent of (for example a plain sibling row
@@ -63,10 +82,30 @@ const handleLabel = $derived(isFacetGroup ? (groupTitle ?? item.title) : item.ti
 
 let tuneOpen = $state(false);
 let tuneTrigger = $state<HTMLButtonElement>();
+let tuneControl = $state<HTMLInputElement>();
+let wasTuneOpen = false;
+const itemUnavailableId = $derived(`layer-${item.id}-unavailable`);
 // Close the popover if the layer is hidden while it is open: the popover lives inside the canTune
 // block, so without this re-showing the layer would pop it back open unprompted.
 $effect(() => {
   if (!canTune) tuneOpen = false;
+});
+$effect(() => {
+  if (tuneOpen) {
+    wasTuneOpen = true;
+    let focusFrame = 0;
+    const positionFrame = requestAnimationFrame(() => {
+      focusFrame = requestAnimationFrame(() => focusLayerOpacityControl(tuneControl));
+    });
+    return () => {
+      cancelAnimationFrame(positionFrame);
+      cancelAnimationFrame(focusFrame);
+    };
+  }
+  if (!wasTuneOpen) return;
+  wasTuneOpen = false;
+  const frame = requestAnimationFrame(() => restoreLayerOpacityFocus(tuneTrigger));
+  return () => cancelAnimationFrame(frame);
 });
 </script>
 
@@ -93,7 +132,7 @@ $effect(() => {
           bind:this={tuneTrigger}
           class:icon-btn--accent={dimmed}
           aria-label={`Adjust ${item.title} opacity`}
-          aria-haspopup="true"
+          aria-haspopup="dialog"
           aria-expanded={tuneOpen}
           onclick={() => (tuneOpen = !tuneOpen)}
         >
@@ -104,6 +143,7 @@ $effect(() => {
           onClose={() => (tuneOpen = false)}
           backdropLabel={`Close ${item.title} opacity`}
           ariaLabel={`${item.title} opacity`}
+          role="dialog"
           surfaceClass="popover-card tune-pop"
           anchor={tuneTrigger}
           preferredPlacement="below"
@@ -118,6 +158,7 @@ $effect(() => {
               step="0.05"
               value={item.opacity}
               aria-label={`${item.title} opacity`}
+              bind:this={tuneControl}
               oninput={(e) => view.setOpacity(item.id, Number(e.currentTarget.value))}
             >
             <span class="num tune-val">{percent}%</span>
@@ -162,7 +203,10 @@ $effect(() => {
   title={item.available ? undefined : item.unavailableHint}
   data-layer-row={item.id}
 >
-  <UnavailableHint hint={item.available ? undefined : item.unavailableHint} />
+  <UnavailableHint
+    id={itemUnavailableId}
+    hint={item.available ? undefined : item.unavailableHint}
+  />
   {#if isFacetGroup}
     <!-- A facet group: one handle moves the whole group, the parent and child toggles share one
          aligned column, and the tune control sits on the parent line. -->
@@ -176,18 +220,36 @@ $effect(() => {
             title={item.title}
             description={item.description}
             visible={item.visible}
+            disabled={!item.available}
+            describedBy={!item.available && item.unavailableHint ? itemUnavailableId : undefined}
             onToggle={(visible) => view.toggle(item.id, visible)}
           />
           {@render regionTag()}
           {@render trailing()}
         </div>
         {#each subLayers as sub (sub.id)}
-          <div class="facet-line facet-child">
+          {@const subUnavailableId = `layer-${sub.id}-unavailable`}
+          <div
+            class="facet-line facet-child"
+            class:unavailable={!sub.available}
+            title={sub.available ? undefined : sub.unavailableHint}
+          >
+            <UnavailableHint
+              id={subUnavailableId}
+              hint={sub.available ? undefined : sub.unavailableHint}
+            />
             <LayerToggle
               title={sub.title}
               description={sub.description}
               visible={sub.visible}
-              disabled={!item.visible}
+              disabled={!item.available || !item.visible || !sub.available}
+              describedBy={!sub.available
+                ? sub.unavailableHint
+                  ? subUnavailableId
+                  : undefined
+                : item.available || !item.unavailableHint
+                  ? undefined
+                  : itemUnavailableId}
               onToggle={(visible) => view.toggle(sub.id, visible)}
             />
           </div>
@@ -204,6 +266,7 @@ $effect(() => {
         description={item.description}
         visible={item.visible}
         disabled={!item.available}
+        describedBy={!item.available && item.unavailableHint ? itemUnavailableId : undefined}
         onToggle={(visible) => view.toggle(item.id, visible)}
       />
       {@render regionTag()}

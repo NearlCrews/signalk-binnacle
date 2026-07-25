@@ -1,3 +1,61 @@
+<script module lang="ts">
+const ENABLED_MORE_ITEM_SELECTOR =
+  '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)';
+
+function enabledMoreItems(surface: HTMLElement | undefined): HTMLElement[] {
+  return surface ? [...surface.querySelectorAll<HTMLElement>(ENABLED_MORE_ITEM_SELECTOR)] : [];
+}
+
+function focusMoreItem(items: HTMLElement[], index: number): void {
+  for (const [itemIndex, item] of items.entries()) item.tabIndex = itemIndex === index ? 0 : -1;
+  items[index]?.focus({ preventScroll: true });
+}
+
+export function initializePinnedMenuFocus(surface: HTMLElement | undefined): void {
+  const items = enabledMoreItems(surface);
+  if (items.length > 0) focusMoreItem(items, 0);
+}
+
+export function handlePinnedMenuKeydown(
+  event: KeyboardEvent,
+  surface: HTMLElement | undefined,
+  activeElement: Element | null = document.activeElement,
+): void {
+  if (
+    event.key !== 'ArrowDown' &&
+    event.key !== 'ArrowUp' &&
+    event.key !== 'Home' &&
+    event.key !== 'End'
+  )
+    return;
+
+  const items = enabledMoreItems(surface);
+  if (items.length === 0) return;
+  event.preventDefault();
+
+  const current = items.indexOf(activeElement as HTMLElement);
+  let next: number;
+  if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = items.length - 1;
+  else if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
+  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+  focusMoreItem(items, next);
+}
+
+export function restorePinnedMenuFocus(
+  trigger: HTMLElement | undefined,
+  activeElement: Element | null = document.activeElement,
+  body: HTMLElement = document.body,
+): void {
+  if (
+    trigger?.isConnected &&
+    (activeElement === null || activeElement === body || !activeElement.isConnected)
+  ) {
+    trigger.focus({ preventScroll: true });
+  }
+}
+</script>
+
 <script lang="ts">
 import { Ellipsis } from '@lucide/svelte';
 import { onDestroy, onMount } from 'svelte';
@@ -15,6 +73,8 @@ const { actions }: Props = $props();
 let compactPhone = $state(false);
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
+let moreSurface = $state<HTMLElement>();
+let wasMoreOpen = false;
 const split = $derived(splitBarActions(actions, compactPhone ? 2 : MAX_BAR_PILLS));
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
@@ -35,6 +95,12 @@ function closeMore(): void {
   moreOpen = false;
 }
 
+function handleMoreFocusOut(event: FocusEvent): void {
+  const next = event.relatedTarget;
+  if (next instanceof Node && moreSurface?.contains(next)) return;
+  closeMore();
+}
+
 function run(action: MenuItem, after?: () => void): void {
   if (itemBlocked(action)) {
     blockedNote.show(blockedReason(action) ?? action.label, NOTE_MS);
@@ -46,6 +112,24 @@ function run(action: MenuItem, after?: () => void): void {
     after?.();
   }
 }
+
+$effect(() => {
+  if (moreOpen) {
+    wasMoreOpen = true;
+    let focusFrame = 0;
+    const positionFrame = requestAnimationFrame(() => {
+      focusFrame = requestAnimationFrame(() => initializePinnedMenuFocus(moreSurface));
+    });
+    return () => {
+      cancelAnimationFrame(positionFrame);
+      cancelAnimationFrame(focusFrame);
+    };
+  }
+  if (!wasMoreOpen) return;
+  wasMoreOpen = false;
+  const frame = requestAnimationFrame(() => restorePinnedMenuFocus(moreTrigger));
+  return () => cancelAnimationFrame(frame);
+});
 </script>
 
 <div class="pinned-actions strip-center">
@@ -77,7 +161,7 @@ function run(action: MenuItem, after?: () => void): void {
         class="btn btn-pill"
         bind:this={moreTrigger}
         class:is-on={moreActive || moreOpen}
-        aria-haspopup="true"
+        aria-haspopup="menu"
         aria-expanded={moreOpen}
         aria-controls={moreOpen ? 'bar-more-menu' : undefined}
         aria-label={`More actions (${split.overflow.length})`}
@@ -96,17 +180,23 @@ function run(action: MenuItem, after?: () => void): void {
         backdropLabel="Close more actions"
         surfaceClass="popover-card bar-more"
         ariaLabel="More actions"
+        role="menu"
         id="bar-more-menu"
         anchor={moreTrigger}
         preferredPlacement="above"
         anchorAlign="end"
+        bind:surfaceRef={moreSurface}
+        onKeydown={(event) => handlePinnedMenuKeydown(event, moreSurface)}
+        onFocusOut={handleMoreFocusOut}
       >
         {#each split.overflow as action (action.id)}
+          <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is menuitemcheckbox exactly when aria-checked is defined. -->
           <button
             type="button"
+            role={action.pressed === undefined ? 'menuitem' : 'menuitemcheckbox'}
             class="menu-item"
             class:is-on={action.pressed === true}
-            aria-pressed={action.pressed === undefined ? undefined : action.pressed}
+            aria-checked={action.pressed}
             disabled={action.disabled === true}
             aria-disabled={action.available === false ? true : undefined}
             title={blockedReason(action) ?? action.label}
