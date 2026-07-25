@@ -1797,6 +1797,7 @@ onDestroy(() => {
   privacyActivity.dispose();
   companionStatus.stop();
   streamController.dispose();
+  notificationsController.dispose();
   trendRecorder.stop();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
@@ -1817,9 +1818,8 @@ onDestroy(() => {
   instruments.dispose();
   net.dispose();
   clock.dispose();
-  void client.disconnect();
-  // Release the Comlink proxy and terminate the worker so an HMR reload or test remount does not
-  // leak it; disconnect above closes the socket first.
+  // Release the Comlink proxy and terminate the worker, which also closes its socket, so an HMR
+  // reload or test remount does not leak either one.
   client.dispose();
 });
 const plotterServices = {

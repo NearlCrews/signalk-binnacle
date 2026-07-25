@@ -12,13 +12,11 @@ import { MINUTE_MS } from '$shared/lib';
 import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
 import {
   acknowledgeNotification,
-  postNotification,
-  resolveNotification,
   SELF_CONTEXT,
   SK_PATHS,
   silenceNotification,
-  updateNotification,
 } from '$shared/signalk';
+import { createCollisionNotificationPublisher } from './collision-notification-publisher';
 
 interface NotificationsControllerDeps {
   origin: string;
@@ -40,7 +38,6 @@ interface NotificationsControllerDeps {
 // active danger to sound and time-travel exit. It remains app-level because it deliberately composes
 // several feature and entity slices, while each feature's own controller stays self-contained.
 export function createNotificationsController(deps: NotificationsControllerDeps) {
-  let collisionAlertId: string | undefined;
   let alarmActionError = $state<string | undefined>();
 
   function publishDelta(path: string, value: unknown): void {
@@ -50,55 +47,25 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     });
   }
 
-  const collisionNotifier = new CollisionNotifier({
-    publish: async (path, value) => {
-      const apiAvailable = deps.notificationsApi();
-      const token = deps.token();
-      if (!apiAvailable) {
-        publishDelta(path, value);
-        return;
-      }
-      if (value.state === 'normal') {
-        if (collisionAlertId) {
-          const cleared = await resolveNotification(deps.origin, token, collisionAlertId);
-          collisionAlertId = undefined;
-          if (!cleared) publishDelta(path, value);
-        }
-        return;
-      }
-      if (collisionAlertId) {
-        const updated = await updateNotification(deps.origin, token, collisionAlertId, {
-          state: value.state,
-          message: value.message,
-        });
-        if (updated === 'updated') return;
-        if (updated === 'failed') {
-          publishDelta(path, value);
-          return;
-        }
-        collisionAlertId = undefined;
-      }
-      collisionAlertId = await postNotification(deps.origin, token, {
-        state: value.state,
-        message: value.message,
-        path: 'navigation.collision',
-        includePosition: true,
-        includeCreatedAt: true,
-      });
-      if (!collisionAlertId) publishDelta(path, value);
-    },
+  const collisionPublisher = createCollisionNotificationPublisher({
+    origin: deps.origin,
+    token: deps.token,
+    apiAvailable: deps.notificationsApi,
+    publishDelta,
   });
+  const collisionNotifier = new CollisionNotifier({ publish: collisionPublisher.publish });
 
   function toggleCollisionMute(): void {
     deps.collisionMute.toggle();
-    if (!deps.collisionMute.active || !collisionAlertId) return;
+    const alertId = collisionPublisher.alertId;
+    if (!deps.collisionMute.active || !alertId) return;
     alarmActionError = undefined;
     if (deps.writeBlocked()) {
       alarmActionError =
         'Collision alarm muted on this device. Server write access is needed to silence other stations.';
       return;
     }
-    void silenceNotification(deps.origin, deps.token(), collisionAlertId).then((result) => {
+    void silenceNotification(deps.origin, deps.token(), alertId).then((result) => {
       if (result === 'unsupported') {
         alarmActionError =
           'Collision alarm muted on this device. This server delegates notification management, so boat-wide silence is unavailable.';
@@ -228,6 +195,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     toggleCollisionMute,
     onSilenceNotification,
     onAcknowledgeNotification,
+    dispose: collisionPublisher.dispose,
     get collisionAlert() {
       return collisionAlert;
     },
