@@ -6,7 +6,7 @@
 // contract, which AnchoredMenu itself applies through menuFocusLeft. Disabled and aria-disabled
 // items are excluded from the roving set in every menu, so a grayed item is never arrow-reachable.
 
-import { FOCUSABLE_SELECTOR } from './focus';
+import { FOCUSABLE_SELECTOR, isRovingKey, nextRovingIndex } from './focus';
 
 // menuitemcheckbox covers the toolbar More menu's toggle rows; menuitem covers the rest. Both
 // exclude the disabled and aria-disabled states so the roving set matches what a pointer can
@@ -38,25 +38,14 @@ export function handleMenuKeydown(
     if (onTab(event.shiftKey)) event.preventDefault();
     return;
   }
-  if (
-    event.key !== 'ArrowDown' &&
-    event.key !== 'ArrowUp' &&
-    event.key !== 'Home' &&
-    event.key !== 'End'
-  )
-    return;
+  if (!isRovingKey(event.key)) return;
 
   const items = menuItems(surface);
   if (items.length === 0) return;
   event.preventDefault();
 
   const current = items.indexOf(activeElement as HTMLElement);
-  let next: number;
-  if (event.key === 'Home') next = 0;
-  else if (event.key === 'End') next = items.length - 1;
-  else if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
-  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
-  focusMenuItem(items, next);
+  focusMenuItem(items, nextRovingIndex(event.key, current, items.length));
 }
 
 // The page's focusable controls in document order, handed to menuTabTarget by the machine.

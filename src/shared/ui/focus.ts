@@ -90,37 +90,36 @@ export const trapFocus: Action<HTMLElement, boolean> = (node, enabled) => {
  * Left/Right/Home/End handler. The listener lives in the action, not a template onkeydown, so the
  * host element can carry a non-interactive role without tripping the a11y interaction lint.
  */
+const ROVING_KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End'] as const;
+type RovingKey = (typeof ROVING_KEYS)[number];
+
+export function isRovingKey(key: string): key is RovingKey {
+  return (ROVING_KEYS as readonly string[]).includes(key);
+}
+
+// The 1D roving target index: Home and End jump to the ends, the arrows step with wraparound, and
+// when focus is outside the set (current -1) ArrowDown enters at the first item and ArrowUp at the
+// last rather than skipping one. The single copy of this math, shared by the rovingFocus action
+// (map menus) and the menu-focus machine (toolbar menus), so arrow behavior cannot drift.
+export function nextRovingIndex(key: RovingKey, current: number, count: number): number {
+  if (key === 'Home') return 0;
+  if (key === 'End') return count - 1;
+  const down = key === 'ArrowDown';
+  if (current < 0) return down ? 0 : count - 1;
+  return down ? (current + 1) % count : (current - 1 + count) % count;
+}
+
 export const rovingFocus: Action<HTMLElement, string> = (node, selector) => {
   // The selector is captured once: both consumers pass a literal, so the action needs no update.
   const items = (): HTMLElement[] => [...node.querySelectorAll<HTMLElement>(selector)];
   items()[0]?.focus({ preventScroll: true });
   function onKeydown(event: KeyboardEvent): void {
-    if (
-      event.key !== 'ArrowDown' &&
-      event.key !== 'ArrowUp' &&
-      event.key !== 'Home' &&
-      event.key !== 'End'
-    )
-      return;
+    if (!isRovingKey(event.key)) return;
     const list = items();
     if (list.length === 0) return;
     event.preventDefault();
-    if (event.key === 'Home') {
-      list[0]?.focus({ preventScroll: true });
-      return;
-    }
-    if (event.key === 'End') {
-      list[list.length - 1]?.focus({ preventScroll: true });
-      return;
-    }
-    const down = event.key === 'ArrowDown';
     const current = list.indexOf(document.activeElement as HTMLElement);
-    // When focus is outside the set (indexOf -1), ArrowDown lands on the first item and ArrowUp on
-    // the last, rather than skipping the first.
-    let next: number;
-    if (current < 0) next = down ? 0 : list.length - 1;
-    else next = down ? current + 1 : current - 1 + list.length;
-    list[next % list.length]?.focus({ preventScroll: true });
+    list[nextRovingIndex(event.key, current, list.length)]?.focus({ preventScroll: true });
   }
   node.addEventListener('keydown', onKeydown);
   return {
