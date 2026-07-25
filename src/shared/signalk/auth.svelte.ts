@@ -5,6 +5,13 @@ import { jsonOr } from './resource';
 
 export type AuthStatus = 'unknown' | 'unsecured' | 'authenticated' | 'requesting' | 'denied';
 
+// The result of a finished read/write upgrade that did not grant the token: the admin refused it
+// ('declined'), the request landed but was never answered before it expired or the poll budget ran
+// out ('unanswered', so it may still be sitting in the admin's Access Requests list), or the POST
+// never reached the server ('unreachable'). Drives the read-only banner's follow-up copy and its
+// retry cue; undefined means no upgrade has failed since the last attempt or grant.
+export type UpgradeOutcome = 'declined' | 'unanswered' | 'unreachable';
+
 interface AuthIdentity {
   clientId: string;
   token: string | null;
@@ -136,6 +143,10 @@ export class AuthController {
   // True while a read/write upgrade request is pending admin approval. The existing read token stays
   // live throughout, so the chart keeps updating while the navigator waits for the new grant.
   upgrading = $state(false);
+  // Set when a read/write upgrade finishes without granting the token, so the banner can tell a
+  // declined request, an unanswered one, and an unreachable server apart and offer a retry rather
+  // than silently reverting.
+  upgradeOutcome = $state<UpgradeOutcome | undefined>();
 
   #base: string;
   #fetch: typeof fetch;
@@ -179,7 +190,10 @@ export class AuthController {
       this.#cancelSchedule,
       this.#pollMs,
       () => !this.#stopped && this.#upgradePoll.href !== undefined,
-      () => this.#endUpgrade(),
+      // Exhausting the budget means the request was never answered, not that the server was
+      // unreachable: it may still sit in the admin's Access Requests list. End the upgrade as
+      // unanswered so the banner says so and offers a retry instead of silently reverting.
+      () => this.#endUpgrade('unanswered'),
     );
     this.#identity = new PersistedValue<AuthIdentity>(
       STORAGE_KEY,
@@ -391,8 +405,12 @@ export class AuthController {
   // banner disappears once an upgraded token takes effect). Reads and an unsecured server never set it.
   reportWriteOutcome(ok: boolean, status: number): void {
     if (this.status !== 'authenticated') return;
-    if (ok) this.writeBlocked = false;
-    else if (status === 401 || status === 403) this.writeBlocked = true;
+    if (ok) {
+      this.writeBlocked = false;
+      // A write now succeeds, so any lingering "upgrade failed" banner from an earlier attempt is
+      // stale: clear it along with the read-only flag.
+      this.upgradeOutcome = undefined;
+    } else if (status === 401 || status === 403) this.writeBlocked = true;
   }
 
   // Request a fresh read/write token when the current one is read-only. A new clientId is used so the
@@ -401,6 +419,8 @@ export class AuthController {
   // keeps updating; on approval the new identity is adopted wholesale.
   async requestWriteAccess(): Promise<void> {
     if (this.#stopped || this.upgrading) return;
+    // A fresh attempt supersedes any prior failure, so drop the outcome banner before starting.
+    this.upgradeOutcome = undefined;
     // Set the upgrade client id before the reactive flag so the banner names it on first render.
     this.#upgradePoll.reset();
     this.#upgradeClientId = newClientId();
@@ -420,7 +440,8 @@ export class AuthController {
       return;
     this.#upgradePoll.href = href;
     if (!ok || !href) {
-      this.#endUpgrade();
+      // The POST failed in transit or came back without a usable href, so the request never landed.
+      this.#endUpgrade('unreachable');
       return;
     }
     this.#upgradePoll.schedule(() => void this.checkUpgrade());
@@ -443,12 +464,16 @@ export class AuthController {
       this.#upgradePoll.schedule(() => void this.checkUpgrade());
       return;
     }
-    // On approval adopt the new read/write identity wholesale; 'gone' and 'denied' just end the upgrade,
-    // leaving the live read token in place so the chart keeps updating.
+    // On approval adopt the new read/write identity wholesale (which ends the upgrade and clears the
+    // outcome), leaving the live read token in place until then so the chart keeps updating.
     if (typeof result === 'object' && this.#upgradeClientId) {
       this.#applyIdentity({ clientId: this.#upgradeClientId, token: result.token }, true);
+      return;
     }
-    this.#endUpgrade();
+    // The admin refused it ('denied'), or the request expired or vanished without an answer
+    // ('gone'); either way the read-only token stays. The server answered in both cases, so
+    // neither is 'unreachable'. Record which so the banner explains it and offers a retry.
+    this.#endUpgrade(result === 'denied' ? 'declined' : 'unanswered');
   }
 
   stop(): void {
@@ -484,11 +509,13 @@ export class AuthController {
     }
   };
 
-  #endUpgrade(): void {
+  #endUpgrade(outcome?: UpgradeOutcome): void {
     this.#upgradePoll.cancel();
     this.upgrading = false;
     this.#upgradePoll.href = undefined;
     this.#upgradeClientId = undefined;
+    // Only a genuine failure sets an outcome; teardown and a fresh grant end the upgrade silently.
+    if (outcome) this.upgradeOutcome = outcome;
   }
 
   #applyIdentity(identity: AuthIdentity, persist: boolean): void {
@@ -498,6 +525,7 @@ export class AuthController {
     this.token = identity.token;
     this.status = identity.token === null ? 'unknown' : 'authenticated';
     this.writeBlocked = false;
+    this.upgradeOutcome = undefined;
     this.#accessPoll.cancel();
     this.#accessPoll.href = undefined;
     this.#endUpgrade();

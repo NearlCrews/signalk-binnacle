@@ -46,6 +46,28 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
       Approve in Signal K
     </a>
   </div>
+{:else if auth.upgradeOutcome}
+  {@const outcomeCopy = {
+    declined: {
+      message: 'Write access was declined. Binnacle still has read-only access.',
+      action: 'Request again',
+    },
+    unanswered: {
+      message:
+        'The write access request was not approved in time. It may still be waiting in Signal K under Security, then Access Requests.',
+      action: 'Request again',
+    },
+    unreachable: {
+      message: 'Could not reach the server to request write access. Binnacle still has read-only access.',
+      action: 'Try again',
+    },
+  }[auth.upgradeOutcome]}
+  <div class="auth-banner warn" role="status" aria-live="polite">
+    {outcomeCopy.message}
+    <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestWriteAccess()}>
+      {outcomeCopy.action}
+    </button>
+  </div>
 {:else if auth.writeBlocked}
   <div class="auth-banner warn" role="status" aria-live="polite">
     Binnacle has read-only access. Saving routes, waypoints, tracks, course, alarms, and radar

@@ -638,6 +638,117 @@ describe('AuthController', () => {
     expect(auth.status).toBe('authenticated');
     expect(auth.writeBlocked).toBe(false);
     expect(auth.upgrading).toBe(false);
+    expect(auth.upgradeOutcome).toBeUndefined();
+  });
+
+  it('records an unreachable upgrade outcome when the request POST fails', async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'tok' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    await auth.requestWriteAccess();
+
+    expect(auth.upgrading).toBe(false);
+    expect(auth.upgradeOutcome).toBe('unreachable');
+  });
+
+  it('records a declined upgrade outcome when the admin refuses it', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/up1' });
+      if (url.endsWith('/requests/up1'))
+        return res(true, { state: 'COMPLETED', accessRequest: { permission: 'DENIED' } });
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'tok' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    await auth.requestWriteAccess();
+    expect(auth.upgrading).toBe(true);
+    await auth.checkUpgrade();
+
+    expect(auth.upgrading).toBe(false);
+    expect(auth.upgradeOutcome).toBe('declined');
+  });
+
+  it('records an unanswered upgrade outcome when the request is gone', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/up1' });
+      if (url.endsWith('/requests/up1')) return res(false, {}, 404);
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'tok' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    await auth.requestWriteAccess();
+    await auth.checkUpgrade();
+
+    // The server answered (the request expired or was cleared), so this is unanswered, not
+    // unreachable: the banner must not steer the navigator toward connectivity troubleshooting.
+    expect(auth.upgradeOutcome).toBe('unanswered');
+  });
+
+  it('clears a prior upgrade outcome when a new upgrade begins', async () => {
+    let fail = true;
+    const fetchFn = vi.fn(async (url: string) => {
+      if (fail) throw new Error('offline');
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/up1' });
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'tok' }),
+      }),
+      schedule: noSchedule,
+    });
+
+    await auth.requestWriteAccess();
+    expect(auth.upgradeOutcome).toBe('unreachable');
+
+    fail = false;
+    await auth.requestWriteAccess();
+
+    expect(auth.upgradeOutcome).toBeUndefined();
+    expect(auth.upgrading).toBe(true);
+  });
+
+  it('clears the upgrade outcome once a write succeeds', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) throw new Error('offline');
+      return res(true, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'tok' }),
+      }),
+      schedule: noSchedule,
+    });
+    await auth.probe();
+    auth.reportWriteOutcome(false, 403);
+    await auth.requestWriteAccess();
+    expect(auth.upgradeOutcome).toBe('unreachable');
+
+    auth.reportWriteOutcome(true, 200);
+
+    expect(auth.upgradeOutcome).toBeUndefined();
   });
 
   it('clears an in-progress write upgrade when stopped', async () => {
