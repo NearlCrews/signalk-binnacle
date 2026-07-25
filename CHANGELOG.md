@@ -32,6 +32,11 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- The automatic reload after a service-worker update is now single-shot per 30 second window. A
+  pathological environment that keeps changing the controlling worker (a mutating proxy or
+  extension, or repeated external activations) previously drove an endless reload storm that
+  canceled its own navigation attempts and left the page unable to settle; the guard reloads once, then
+  logs and defers to the Update control.
 - With an active collision contact, AIS vectors and icons no longer rebuild once per second: the
   collision assessment re-runs only when a staleness flag actually flips, steady-state AIS churn is
   throttled to about one repaint per second while new targets and severity changes still paint

@@ -15,6 +15,49 @@ function deleteOrphanCaches(): void {
   });
 }
 
+const RELOAD_GUARD_KEY = 'binnacle:pwa-reload-at';
+// One post-update reload per window is the legitimate maximum. Anything faster is a reload storm.
+export const PWA_RELOAD_GUARD_MS = 30_000;
+
+// The library's default is an unconditional window.location.reload() whenever the controlling
+// service worker changes. A pathological environment (a proxy or extension mutating the worker
+// script per fetch, or repeated external activations) turns that into an infinite reload storm
+// that cancels its own navigations, leaves the page unable to settle, and cannot be escaped from
+// the UI. This guard makes the reload single-shot per guard window: the first controller change
+// reloads as before, and any further change inside the window logs and leaves the Update control
+// to the navigator instead of reloading. sessionStorage scopes the guard to the tab and survives
+// the reload itself.
+export function guardedReload(
+  now: () => number = Date.now,
+  storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof sessionStorage === 'undefined'
+    ? undefined
+    : sessionStorage,
+  reload: () => void = () => window.location.reload(),
+): void {
+  let last = Number.NaN;
+  try {
+    // An absent key must stay NaN: Number(null) is 0, which would read as a reload at epoch zero
+    // and wrongly suppress the first legitimate reload.
+    const raw = storage?.getItem(RELOAD_GUARD_KEY);
+    if (raw !== null && raw !== undefined && raw !== '') last = Number(raw);
+  } catch {
+    // Storage can throw in degraded contexts; treat it as no prior reload.
+  }
+  const at = now();
+  if (Number.isFinite(last) && at - last < PWA_RELOAD_GUARD_MS) {
+    console.warn(
+      '[pwa] a second service-worker controller change arrived within the reload guard window; suppressing the automatic reload. Use the Update control to apply the new version.',
+    );
+    return;
+  }
+  try {
+    storage?.setItem(RELOAD_GUARD_KEY, String(at));
+  } catch {
+    // If the timestamp cannot persist the guard degrades to reload-always, the old behavior.
+  }
+  reload();
+}
+
 // Registers the service worker (prompt mode). onNeedRefresh fires when a new build is waiting so the
 // UI can offer a reload, and update(true) activates it. On plain http (no secure context) registerSW
 // no-ops, so this degrades cleanly. A registration error in a secure context is logged rather than
@@ -26,6 +69,7 @@ export function registerPwa(onNeedRefresh?: () => void): PwaController {
   void navigator.storage?.persist?.().catch(() => undefined);
   const updateSW = registerSW({
     onNeedRefresh,
+    onNeedReload: () => guardedReload(),
     onRegisterError: (error) => {
       // An untrusted server certificate makes the browser refuse to register a service worker, even
       // after the user clicks through the page warning, so offline caching stays off (the app itself
