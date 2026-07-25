@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Radar } from '@lucide/svelte';
+import Radar from '@lucide/svelte/icons/radar';
 import {
   feetToMeters,
   formatDuration,

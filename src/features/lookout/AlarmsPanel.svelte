@@ -1,5 +1,6 @@
 <script lang="ts">
-import { Bell, BellOff } from '@lucide/svelte';
+import Bell from '@lucide/svelte/icons/bell';
+import BellOff from '@lucide/svelte/icons/bell-off';
 import { untrack } from 'svelte';
 import {
   type ActiveNotification,

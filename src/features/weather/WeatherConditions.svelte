@@ -1,5 +1,5 @@
 <script lang="ts">
-import { TriangleAlert } from '@lucide/svelte';
+import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
 import type { WeatherStore } from '$entities/weather';

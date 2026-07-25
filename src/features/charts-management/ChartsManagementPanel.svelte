@@ -1,5 +1,5 @@
 <script lang="ts">
-import { RefreshCw } from '@lucide/svelte';
+import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import { onDestroy } from 'svelte';
 import { formatBounds } from '$shared/geo';
 import {

@@ -1,5 +1,6 @@
 <script lang="ts">
-import { LogOut, Trash2 } from '@lucide/svelte';
+import LogOut from '@lucide/svelte/icons/log-out';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { PrivacyReport } from '$shared/privacy';
 import { InlineConfirm } from '$shared/ui';
 

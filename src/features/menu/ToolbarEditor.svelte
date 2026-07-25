@@ -1,5 +1,6 @@
 <script lang="ts">
-import { GripVertical, RotateCcw } from '@lucide/svelte';
+import GripVertical from '@lucide/svelte/icons/grip-vertical';
+import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 import { createReorder, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, type MenuItem } from './menu-item';

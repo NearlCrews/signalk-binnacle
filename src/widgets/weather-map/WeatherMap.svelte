@@ -1,5 +1,9 @@
 <script lang="ts">
-import { ChevronDown, ChevronUp, Layers, RefreshCw, X } from '@lucide/svelte';
+import ChevronDown from '@lucide/svelte/icons/chevron-down';
+import ChevronUp from '@lucide/svelte/icons/chevron-up';
+import Layers from '@lucide/svelte/icons/layers';
+import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+import X from '@lucide/svelte/icons/x';
 import { onDestroy, onMount, untrack } from 'svelte';
 import { fly } from 'svelte/transition';
 import type { UnitsStore } from '$entities/units';

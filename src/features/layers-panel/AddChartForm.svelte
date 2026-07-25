@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Link2 } from '@lucide/svelte';
+import Link2 from '@lucide/svelte/icons/link-2';
 import {
   type DraftChart,
   MAX_USER_CHART_NAME_LENGTH,

@@ -1,5 +1,6 @@
 <script lang="ts">
-import { GripVertical, RotateCw } from '@lucide/svelte';
+import GripVertical from '@lucide/svelte/icons/grip-vertical';
+import RotateCw from '@lucide/svelte/icons/rotate-cw';
 import { createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import { instrumentOptionLabels, type TileDef, type TileDeps } from './tile-catalog';

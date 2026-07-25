@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LifeBuoy } from '@lucide/svelte';
+import LifeBuoy from '@lucide/svelte/icons/life-buoy';
 import { onMount } from 'svelte';
 import type { MobMark } from '$entities/mob';
 import { formatClockTime, formatLatitude, formatLongitude } from '$shared/lib';

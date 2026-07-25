@@ -1,13 +1,11 @@
 <script lang="ts">
-import {
-  ChevronRight,
-  Download,
-  DownloadCloud,
-  Files,
-  RefreshCw,
-  SquareDashed,
-  Trash2,
-} from '@lucide/svelte';
+import ChevronRight from '@lucide/svelte/icons/chevron-right';
+import Download from '@lucide/svelte/icons/download';
+import DownloadCloud from '@lucide/svelte/icons/download-cloud';
+import Files from '@lucide/svelte/icons/files';
+import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+import SquareDashed from '@lucide/svelte/icons/square-dashed';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';

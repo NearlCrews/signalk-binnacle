@@ -1,5 +1,6 @@
 <script lang="ts">
-import { LocateFixed, Trash2 } from '@lucide/svelte';
+import LocateFixed from '@lucide/svelte/icons/locate-fixed';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import {
   MAX_USER_CHART_NAME_LENGTH,
   shouldShareUserChart,

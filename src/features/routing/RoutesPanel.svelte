@@ -1,16 +1,14 @@
 <script lang="ts">
-import {
-  ArrowLeftRight,
-  Download,
-  Navigation,
-  Plus,
-  Save,
-  Square,
-  SquarePen,
-  Trash2,
-  Upload,
-  X,
-} from '@lucide/svelte';
+import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
+import Download from '@lucide/svelte/icons/download';
+import Navigation from '@lucide/svelte/icons/navigation';
+import Plus from '@lucide/svelte/icons/plus';
+import Save from '@lucide/svelte/icons/save';
+import Square from '@lucide/svelte/icons/square';
+import SquarePen from '@lucide/svelte/icons/square-pen';
+import Trash2 from '@lucide/svelte/icons/trash-2';
+import Upload from '@lucide/svelte/icons/upload';
+import X from '@lucide/svelte/icons/x';
 import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
 import { formatNm } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';

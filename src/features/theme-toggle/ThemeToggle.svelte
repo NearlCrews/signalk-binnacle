@@ -95,7 +95,9 @@ export class HoldActivation {
 </script>
 
 <script lang="ts">
-import { Moon, Sun, Sunset } from '@lucide/svelte';
+import Moon from '@lucide/svelte/icons/moon';
+import Sun from '@lucide/svelte/icons/sun';
+import Sunset from '@lucide/svelte/icons/sunset';
 import type { Component } from 'svelte';
 import { onDestroy } from 'svelte';
 import { scale } from 'svelte/transition';

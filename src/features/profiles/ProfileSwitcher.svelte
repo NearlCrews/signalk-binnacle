@@ -1,5 +1,5 @@
 <script lang="ts">
-import { UserCog } from '@lucide/svelte';
+import UserCog from '@lucide/svelte/icons/user-cog';
 import type { Profile } from '$entities/profile';
 
 interface Props {

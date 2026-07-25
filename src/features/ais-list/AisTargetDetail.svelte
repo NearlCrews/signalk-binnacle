@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Crosshair } from '@lucide/svelte';
+import Crosshair from '@lucide/svelte/icons/crosshair';
 import type { UnitsStore } from '$entities/units';
 import type { LatLon } from '$shared/geo';
 import {

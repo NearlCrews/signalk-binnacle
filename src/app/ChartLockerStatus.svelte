@@ -1,13 +1,11 @@
 <script lang="ts">
-import {
-  Check,
-  KeyRound,
-  LoaderCircle,
-  ShieldAlert,
-  ShieldX,
-  TriangleAlert,
-  Unplug,
-} from '@lucide/svelte';
+import Check from '@lucide/svelte/icons/check';
+import KeyRound from '@lucide/svelte/icons/key-round';
+import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+import ShieldX from '@lucide/svelte/icons/shield-x';
+import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+import Unplug from '@lucide/svelte/icons/unplug';
 import type { CompanionState } from '$features/prewarm';
 import { formatBytes } from '$shared/lib';
 

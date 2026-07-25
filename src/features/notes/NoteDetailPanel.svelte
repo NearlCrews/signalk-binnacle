@@ -1,5 +1,7 @@
 <script lang="ts">
-import { Crosshair, ExternalLink, Star } from '@lucide/svelte';
+import Crosshair from '@lucide/svelte/icons/crosshair';
+import ExternalLink from '@lucide/svelte/icons/external-link';
+import Star from '@lucide/svelte/icons/star';
 import { categoryLabel } from '$entities/poi-icons';
 import { SlideOver } from '$shared/ui';
 import type { NoteSelection } from './notes-client';

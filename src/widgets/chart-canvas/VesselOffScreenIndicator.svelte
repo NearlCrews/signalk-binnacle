@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Navigation } from '@lucide/svelte';
+import Navigation from '@lucide/svelte/icons/navigation';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { bboxContainsPoint, type LatLon, latLonToLonLat, lngLatBoundsToBbox4 } from '$shared/geo';
 

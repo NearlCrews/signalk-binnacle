@@ -1,5 +1,8 @@
 <script lang="ts">
-import { ChevronRight, Lock, Plus, RefreshCw } from '@lucide/svelte';
+import ChevronRight from '@lucide/svelte/icons/chevron-right';
+import Lock from '@lucide/svelte/icons/lock';
+import Plus from '@lucide/svelte/icons/plus';
+import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import type { UserCharts } from '$entities/user-charts';
 import type { Bbox4 } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';

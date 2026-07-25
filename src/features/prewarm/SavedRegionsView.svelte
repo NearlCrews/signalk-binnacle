@@ -1,5 +1,8 @@
 <script lang="ts">
-import { Eye, PencilRuler, RefreshCw, Trash2 } from '@lucide/svelte';
+import Eye from '@lucide/svelte/icons/eye';
+import PencilRuler from '@lucide/svelte/icons/pencil-ruler';
+import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import { formatBounds } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
 import { type ArmedRow, Disclosure, InlineConfirm, SavedList } from '$shared/ui';

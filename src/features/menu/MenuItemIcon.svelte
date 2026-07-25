@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Puzzle } from '@lucide/svelte';
+import Puzzle from '@lucide/svelte/icons/puzzle';
 import type { MenuItem } from './menu-item';
 
 interface Props {

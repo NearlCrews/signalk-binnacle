@@ -1,5 +1,11 @@
 <script lang="ts">
-import { Check, Download, Save, SquarePen, Star, Trash2, Upload } from '@lucide/svelte';
+import Check from '@lucide/svelte/icons/check';
+import Download from '@lucide/svelte/icons/download';
+import Save from '@lucide/svelte/icons/save';
+import SquarePen from '@lucide/svelte/icons/square-pen';
+import Star from '@lucide/svelte/icons/star';
+import Trash2 from '@lucide/svelte/icons/trash-2';
+import Upload from '@lucide/svelte/icons/upload';
 import { MAX_PROFILES, type Profile, type ProfileSyncState } from '$entities/profile';
 import type { PrivacyReport } from '$shared/privacy';
 import type { AuthController } from '$shared/signalk';

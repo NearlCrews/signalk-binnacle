@@ -1,5 +1,6 @@
 <script lang="ts">
-import { SkipBack, SkipForward } from '@lucide/svelte';
+import SkipBack from '@lucide/svelte/icons/skip-back';
+import SkipForward from '@lucide/svelte/icons/skip-forward';
 import type { CourseGuidance } from '$entities/course';
 import {
   formatBearingOr,

@@ -1,5 +1,7 @@
 <script lang="ts">
-import { Navigation, SquarePen, Trash2 } from '@lucide/svelte';
+import Navigation from '@lucide/svelte/icons/navigation';
+import SquarePen from '@lucide/svelte/icons/square-pen';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { Waypoint } from '$entities/waypoint';
 import { formatLatitude, formatLongitude } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';

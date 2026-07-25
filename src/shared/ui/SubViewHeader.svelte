@@ -1,5 +1,5 @@
 <script lang="ts">
-import { ArrowLeft } from '@lucide/svelte';
+import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 
 // The back header shared by every in-panel sub-view: an accent back button and a sub-title, rendered
 // inside the parent's single SlideOver. The panel-level back is suppressed by the parent while a

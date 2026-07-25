@@ -1,5 +1,12 @@
 <script lang="ts">
-import { Download, Eraser, Pause, Play, Route, Save, Trash2, Undo2 } from '@lucide/svelte';
+import Download from '@lucide/svelte/icons/download';
+import Eraser from '@lucide/svelte/icons/eraser';
+import Pause from '@lucide/svelte/icons/pause';
+import Play from '@lucide/svelte/icons/play';
+import Route from '@lucide/svelte/icons/route';
+import Save from '@lucide/svelte/icons/save';
+import Trash2 from '@lucide/svelte/icons/trash-2';
+import Undo2 from '@lucide/svelte/icons/undo-2';
 import {
   hasDrawableTrack,
   hasTrackGaps,

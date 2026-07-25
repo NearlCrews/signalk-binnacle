@@ -1,5 +1,6 @@
 <script lang="ts">
-import { Anchor, Crosshair } from '@lucide/svelte';
+import Anchor from '@lucide/svelte/icons/anchor';
+import Crosshair from '@lucide/svelte/icons/crosshair';
 import { untrack } from 'svelte';
 import {
   type AnchorMode,

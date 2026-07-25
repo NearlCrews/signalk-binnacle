@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Menu } from '@lucide/svelte';
+import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
 import { AnchoredMenu, CustomizeToggle, UnavailableHint } from '$shared/ui';

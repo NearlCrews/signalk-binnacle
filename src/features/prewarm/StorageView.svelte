@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Trash2 } from '@lucide/svelte';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { LatestWriterState } from '$shared/lib';
 import { Disclosure, InlineConfirm, SaveStatus, UnitField } from '$shared/ui';
 import { formatBySource } from './estimate.js';

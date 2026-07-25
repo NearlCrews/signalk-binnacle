@@ -1,5 +1,8 @@
 <script lang="ts">
-import { ArrowLeft, ChevronDown, ChevronUp, X } from '@lucide/svelte';
+import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+import ChevronDown from '@lucide/svelte/icons/chevron-down';
+import ChevronUp from '@lucide/svelte/icons/chevron-up';
+import X from '@lucide/svelte/icons/x';
 import type { Snippet } from 'svelte';
 
 // The panel-header triad shared by every docked panel: an optional accent back button, the heading

@@ -3,7 +3,7 @@ let nextDisclosureId = 0;
 </script>
 
 <script lang="ts">
-import { ChevronRight } from '@lucide/svelte';
+import ChevronRight from '@lucide/svelte/icons/chevron-right';
 import type { Snippet } from 'svelte';
 
 // A labeled collapsible section: a chevron toggle over content that stays in the DOM (hidden) when
