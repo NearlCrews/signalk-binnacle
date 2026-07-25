@@ -106,6 +106,19 @@ test('keeps chart controls legible and the instrument title on one line', async 
   await expect
     .poll(() => attribution.evaluate((button) => getComputedStyle(button, '::after').maskSize))
     .toBe('20px 20px');
+  // MapLibre's compact attribution auto-expands itself whenever attribution content changes; the
+  // app strips the expansion class on every styledata, sourcedata, and terrain tick. This pins
+  // that private-internals dependency (the maplibregl-compact-show class) so a MapLibre upgrade
+  // that changes the control's internals fails here instead of silently regressing the chart.
+  const attributionControl = page.locator('.maplibregl-ctrl-attrib');
+  await expect(attributionControl).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(() =>
+      attributionControl.evaluate((control) =>
+        control.classList.contains('maplibregl-compact-show'),
+      ),
+    )
+    .toBe(false);
   const scale = page.locator('.maplibregl-ctrl-scale');
   await expect(scale).toBeVisible({ timeout: 15_000 });
   await expect
