@@ -765,10 +765,6 @@ const profilesController = createProfilesController({
   applyRuntime: applyProfileRuntime,
 });
 
-// A usable local cache is enough to start immediately. Server hydration still runs when
-// authentication resolves, but an offline restart must keep profile autosave working.
-if (profileStore.profiles.length > 0) void profilesController.initialize();
-
 $effect(() => profilesController.observeSettings());
 
 // Once the user is authenticated to a secured server, sync profiles through the SignalK applicationData
@@ -916,6 +912,19 @@ $effect(() => {
 });
 
 let mapCommands = $state<MapCommands | undefined>();
+
+// A usable local cache is enough to start immediately. Server hydration still runs when
+// authentication resolves, but an offline restart must keep profile autosave working. This call
+// sits BELOW every declaration applyProfileRuntime touches (mapCommands is the last): with no
+// server argument, initialize reaches applySettings synchronously, so calling it earlier reads
+// the mapCommands state before its declaration executes, a startup ReferenceError whenever a
+// saved profile exists locally. The catch keeps a failed startup apply a visible logged error
+// instead of an unhandled rejection.
+if (profileStore.profiles.length > 0) {
+  profilesController.initialize().catch((error) => {
+    console.error('[profiles] startup apply failed', error);
+  });
+}
 
 // Follow lock: while on, the map recenters on the boat as each fix arrives. A manual pan
 // (dragging the chart) releases it; it does not persist across reloads.

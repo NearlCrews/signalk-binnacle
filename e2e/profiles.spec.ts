@@ -203,3 +203,52 @@ test('profiles restore instrument order in a different browser', async ({ browse
 
   await secondContext.close();
 });
+
+test('a locally cached profile applies at boot without a startup error', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'binnacle:profiles',
+      JSON.stringify({
+        schemaVersion: 2,
+        defaultId: 'p1',
+        profiles: [
+          {
+            id: 'p1',
+            name: 'Helm day',
+            createdAt: 1,
+            updatedAt: 2,
+            nameUpdatedAt: 2,
+            settingUpdatedAt: {},
+            settings: {
+              theme: 'day',
+              layers: {},
+              layerOrder: [],
+              weatherLayers: {},
+              thresholds: {
+                dangerCpaMeters: 926,
+                dangerTcpaSeconds: 600,
+                warningCpaMeters: 1852,
+                warningTcpaSeconds: 1200,
+              },
+              trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
+              planningSpeedKn: 6,
+              units: 'metric',
+              pinnedActionIds: ['center'],
+              instrumentTiles: ['depth'],
+              anchorRadiusMeters: 50,
+            },
+          },
+        ],
+      }),
+    );
+  });
+  await page.goto('/');
+  await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
+  // The local-cache initialize path runs during App setup; give the boot flush a beat before
+  // asserting no startup exception surfaced.
+  await page.waitForTimeout(500);
+  expect(pageErrors.filter((message) => message.includes('before initialization'))).toEqual([]);
+});
