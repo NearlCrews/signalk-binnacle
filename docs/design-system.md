@@ -230,7 +230,11 @@ Shared behavior lives here. Compose these; do not re-implement them.
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
   for a bespoke coordinate system. Pass `anchor`, `preferredPlacement`, and `anchorAlign` for shared
-  viewport-fixed placement that flips and clamps at every screen edge.
+  viewport-fixed placement that flips and clamps at every screen edge. Pass `onFocusLeft` with the
+  close function for the shared close-on-focus-out contract: the primitive applies it against its own
+  surface while open, and ignores a transient focus loss to the body, so an in-place content swap
+  (the chart menu's confirm step) never self-closes. Do not re-derive that check from a `surfaceRef`
+  binding in a consumer.
 - `OverflowActions`: a labeled More button and keyboard-focused anchored menu for secondary saved-card
   actions. It uses viewport-fixed, collision-aware positioning so the menu stays on-screen at every
   card position and while its panel scrolls. Keep one primary action visible, then move dense secondary
@@ -302,6 +306,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   CSS token contract.
 - Focus and dialog helpers: `rovingFocus`, `focusOnMount`, `onKeydownAction`, `isTabKey`,
   `dialog`, and `registerDismiss` (the Escape dismiss stack that peels the topmost surface first).
+- `createMenuFocusMachine` and `initializeMenuFocus`: the toolbar-menu keyboard machine shared by
+  `OverflowActions` and the pinned-actions More menu. It owns arrow and Home and End roving over
+  enabled rows (disabled and aria-disabled rows are never arrow-reachable), the Tab redirect to the
+  control after the trigger (reverse Tab returns to the trigger), and the close-focus restore
+  protocol. The roving index math lives once in `focus.ts`; the `rovingFocus` action the map menus
+  use steps through the same copy, so arrow behavior cannot drift between menu families.
 - `pickTextFile` and `readErrorMessage` for file import; `defaultSaveName` to seed a save name, and
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.

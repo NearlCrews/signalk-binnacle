@@ -284,7 +284,8 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | A layer or chart toggle row | `LayerToggle` with `description` | a bare checkbox row |
 | An in-panel "show on chart" control | `ShowOnChartToggle` with `description` | a bespoke toggle button |
 | A compact per-card show or hide | `VisibilityToggle` | a re-styled icon button |
-| A map-anchored menu or popover | `AnchoredMenu` | a bespoke backdrop and Escape handler |
+| A map-anchored menu or popover | `AnchoredMenu` with `onFocusLeft` | a bespoke backdrop, Escape handler, or focus-out check |
+| A toolbar menu with a trigger button | `createMenuFocusMachine` | a bespoke Tab redirect and close-focus protocol |
 | Explain why a control is grayed | `UnavailableHint` plus a matching `title` | a `title` alone, silent to assistive tech |
 | Focus a freshly revealed control | `focusOnMount` | an ad hoc onMount focus call |
 | Arrow-key roving in a small menu | `rovingFocus` | a bespoke keydown index walker |

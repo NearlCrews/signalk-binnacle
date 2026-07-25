@@ -6,6 +6,44 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Collision warnings now publish over the delta stream only, so a warning stays visual instead of
+  sounding boat-wide through the server's REST raise, which hardcodes an audible method. Danger
+  alarms still raise through the Notifications API, and a successful raise or update now retracts
+  any outstanding delta so the shown grade cannot stick at an older state after a clear.
+- A write-access upgrade that ends without a grant now says whether it was declined, went
+  unanswered (it may still be waiting in Access Requests), or never reached the server, each with a
+  retry, instead of silently reverting to the generic read-only banner.
+- Menus share one keyboard focus machine: the toolbar More and overflow menus redirect Tab and
+  restore focus identically, grayed rows are skipped by arrow keys in every menu, every anchored
+  menu closes when focus leaves it, and the layer opacity dialog no longer stays open when Tab
+  moves past its controls.
+- Line geometry that crosses the antimeridian now splits into canonical date-line segments across
+  every overlay (trails, vectors, rings, tracks, routes, and measurements).
+
+### Fixed
+
+- With an active collision contact, AIS vectors and icons no longer rebuild once per second: the
+  collision assessment re-runs only when a staleness flag actually flips, steady-state AIS churn is
+  throttled to about one repaint per second while new targets and severity changes still paint
+  immediately, and radar range rings are reused when only the heading changes.
+- Time-travel scrubbing finds its samples by binary search instead of a full scan, and the scrub
+  position clamps into range when a reload returns no samples.
+- A stale notification could linger on the server when a collision cleared during a Notifications
+  API outage; the orphaned alert is now resolved once the API answers again.
+- Concurrent note loads for different viewports no longer share one in-flight slot, so the notes
+  overlay cannot report ready or failed while a fetch is still running.
+
+### Development
+
+- The build tooling moved to rolldown code splitting, per-icon lucide imports, and refreshed lint
+  and test dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13). TypeScript 7 and
+  @types/node 26 are deliberately deferred until typescript-eslint supports TypeScript 7 and the
+  supported Node runtimes advance; maplibre-gl 6 awaits its own migration pass.
+- Overlay tests build their map context through one shared helper, and SKFrame test factories can
+  carry AIS vessels.
+
 <a id="v0160"></a>
 
 ## [0.16.0] - 2026-07-19

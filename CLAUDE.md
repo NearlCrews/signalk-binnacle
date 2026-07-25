@@ -189,7 +189,12 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   VisibilityToggle, ShowOnChartToggle, and LayerToggle (the three share one VisibilityToggleProps
   contract), CustomizeToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the
   rovingFocus (with Home and End support), focusOnMount, focusSelectOnMount, focusOnMountIf, and
-  onKeydownAction focus actions, the isTabKey helper, the pickTextFile importer, the NameEntry name
+  onKeydownAction focus actions, the createMenuFocusMachine toolbar-menu keyboard machine (one
+  arrow-roving, Tab-redirect, and close-focus-restore protocol shared by OverflowActions and the
+  pinned More menu; the roving index math lives once in focus.ts and the rovingFocus action uses the
+  same copy), AnchoredMenu's onFocusLeft prop (the shared close-on-focus-out contract, applied
+  against its own surface while open, so consumers pass their close function instead of re-deriving
+  the check from a surface binding), the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
   `.surface-elevated` floating-panel frame, `.modal-card`, `.menu-item`, the `.row-interactive`
@@ -209,14 +214,16 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   rather than a hand-rolled flex column, so the section rhythm matches across panels. When the same
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
 - Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (isRecord, formatPercent,
-  formatFixed, formatBytes and the unit formatters including lengthUnit, the SI converters, uuidv4), `$shared/map` (featureCollection,
+  formatFixed, formatBytes and the unit formatters including lengthUnit, the SI converters, uuidv4,
+  and the sorted-array searches lowerBound and nearestBySorted; nearestBy stays for unsorted
+  callers), `$shared/map` (featureCollection,
   emptyFeatureCollection, setSourceData, iconOffsetExpression with CENTERED_OFFSET, removeLayersAndSources,
   setLayersVisibility, createSafetyOverlay for safety-band rasters, ensureSource and removeSharedSourceIfOrphaned
   for a MapLibre source two overlays share, setPaintProp and getPaintProp for a dynamically-computed
   paint property name (casts once through MapLibre's keyed paint types instead of re-spelling `as
   keyof AllPaintProperties` / `as never` at each call site), rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
-  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
+  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; fakeOverlayContext for the overlay-test context, the one place the `{ map, beforeIdFor }` shape is built; createFrameFactory for SKFrames, including AIS vessels from plain records; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a
   `getSource(...) as { setData }` cast or a `{ type: 'FeatureCollection', features }` literal should use
   setSourceData and featureCollection instead.
