@@ -6,11 +6,23 @@ const CENTERED_OFFSET: [number, number] = [0, 0];
 // The shared marker zoom scaling both symbol overlays apply through icon-size (0.6 at zoom 9 up to
 // 0.9 at zoom 14). MapLibre 6 stopped scaling icon-offset by icon-size, so the offsets carry the
 // same zoom interpolation themselves to keep a provided symbol's anchor pixel pinned to the
-// geographic point at every zoom.
+// geographic point at every zoom. The one source of the stops: both overlays build their icon-size
+// from markerIconSizeExpression below, so a tuning edit cannot desynchronize sizes from offsets.
 const MARKER_SCALE_STOPS: readonly (readonly [number, number])[] = [
   [9, 0.6],
   [14, 0.9],
 ];
+
+// The marker icon-size expression over the shared stops. The optional perStop mapper lets a
+// consumer wrap each stop's scale in its own data expression (the waypoint overlay cases on the
+// iconSize property so nameless marker discs stay at 1) while the zoom stops stay shared.
+export function markerIconSizeExpression(
+  perStop: (scale: number) => number | ExpressionSpecification = (scale) => scale,
+): ExpressionSpecification {
+  const interpolate: unknown[] = ['interpolate', ['linear'], ['zoom']];
+  for (const [zoom, scale] of MARKER_SCALE_STOPS) interpolate.push(zoom, perStop(scale));
+  return interpolate as ExpressionSpecification;
+}
 
 // Per-feature icon offset as a MapLibre `match` on a feature property, wrapped in the marker zoom
 // interpolation (camera expressions must wrap data expressions, not the other way around). The

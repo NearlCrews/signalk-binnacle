@@ -15,6 +15,7 @@ import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
 import { mapThemePaint } from './map-theme';
 import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
+import { MAPLIBRE_READY_FALLBACK_MS, MAPLIBRE_READY_SETTLE_MS } from './ready-fallback';
 import { beforeIdFor, installSentinels } from './sentinels';
 import type { OverlayContext } from './types';
 
@@ -48,6 +49,9 @@ export interface ThemedMapOptions {
   // receives an Authorization: Bearer header so the Chart Locker proxied basemap style, glyphs,
   // sprite, and tile routes work on a security-enabled server.
   getToken?: () => string | undefined;
+  // Overrides the notice shown in place of the map when construction fails (usually a browser
+  // without WebGL2), so a surface the default chart copy misdescribes can say its own thing.
+  cannotStartNotice?: string;
   // The view to open at; capped to maxZoom. Falls back to the default center and zoom.
   view?: MapView;
   defaultCenter?: [number, number];
@@ -130,11 +134,13 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     });
   } catch (error) {
     console.error('Map failed to initialize', error);
-    // A dead handle alone would leave a silent blank chart. Say so where the map would be: the
-    // usual cause is a browser without the WebGL2 support MapLibre requires.
+    // A dead handle alone would leave a silent blank map surface. Say so where the map would be:
+    // the usual cause is a browser without the WebGL2 support MapLibre requires. A surface with
+    // different framing (the weather mini-map) overrides the copy through cannotStartNotice.
     const notice = document.createElement('p');
     notice.className = 'alert-note chart-start-error';
     notice.textContent =
+      opts.cannotStartNotice ??
       'The chart cannot start on this device. The usual cause is a browser without WebGL2 support. Instruments, alarms, and panels keep working.';
     opts.container.replaceChildren(notice);
     return {
@@ -198,7 +204,21 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   let triedDirectBase = false;
   void mapInstance.once('styledata', () => {
     styleArrived = true;
+    clearTimeout(styleWatchdog);
   });
+  // A style request that neither completes nor errors (a stalled connection can hang far past any
+  // usefulness at sea) would otherwise leave a permanently blank map with nothing logged: the
+  // error path below reacts only to an 'error' event. Bound that wait the same way the ready
+  // signal bounds its own: after MAPLIBRE_READY_FALLBACK_MS with neither styledata nor an error,
+  // fall back exactly like the terminal error branch.
+  const styleWatchdog = setTimeout(() => {
+    if (styleArrived || destroyed) return;
+    styleArrived = true;
+    console.info(
+      '[map] the base map style did not arrive; starting on the offline fallback base. Cached charts and overlays still load.',
+    );
+    mapInstance.setStyle(fallbackBaseStyle());
+  }, MAPLIBRE_READY_FALLBACK_MS);
   mapInstance.on('error', () => {
     if (styleArrived || destroyed) return;
     // A companion-proxied base style that fails while the device is online should not drop straight to
@@ -279,7 +299,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     mapReady = true;
     clearTimeout(settleTimer);
     clearTimeout(maxWaitTimer);
-    mapInstance.off('render', onRenderForReadyCheck);
+    mapInstance.off('render', armSettleTimer);
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
@@ -334,27 +354,33 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // 'load' event, so this self-heals the moment a maplibre-gl upgrade fixes it, against a
   // synthetic ready signal built only from events proven to fire in this build: 'styledata' (the
   // style JSON parsed), armed once no further 'render' activity has happened for half a second
-  // (mirrors 'idle' without trusting the broken loaded() check), capped at 8 seconds after
-  // styledata so a link slow or flaky enough to keep triggering renders can never block
-  // initialization forever. Delete this block and go back to a plain
+  // (mirrors 'idle' without trusting the broken loaded() check), capped at
+  // MAPLIBRE_READY_FALLBACK_MS after styledata so a link slow or flaky enough to keep triggering
+  // renders can never block initialization forever. The sibling workaround for the same broken
+  // bookkeeping is chart-overlay's native zoom cap. Delete this block and go back to a plain
   // mapInstance.once('load', initialize) once maplibre-gl fires 'load' normally again; re-prove
   // the fix empirically with this block deleted on a branch before dropping it.
   const armSettleTimer = () => {
     clearTimeout(settleTimer);
-    settleTimer = setTimeout(initialize, 500);
+    settleTimer = setTimeout(initialize, MAPLIBRE_READY_SETTLE_MS);
   };
-  const onRenderForReadyCheck = () => armSettleTimer();
   void mapInstance.once('styledata', () => {
+    if (mapReady || destroyed) return;
+    // The render listener attaches only now: a pre-styledata render (a user poking the still
+    // blank map while the style JSON fetches) must never arm the settle timer, or initialize
+    // would run against an unloaded style, throw in addLayer, and latch mapReady with nothing
+    // mounted for the whole session.
+    mapInstance.on('render', armSettleTimer);
     armSettleTimer();
-    maxWaitTimer = setTimeout(initialize, 8000);
+    maxWaitTimer = setTimeout(initialize, MAPLIBRE_READY_FALLBACK_MS);
   });
-  mapInstance.on('render', onRenderForReadyCheck);
   void mapInstance.once('load', initialize);
 
   return {
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
+      clearTimeout(styleWatchdog);
       clearTimeout(settleTimer);
       clearTimeout(maxWaitTimer);
       cancelLongPress();

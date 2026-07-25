@@ -97,15 +97,10 @@ test('constrains a long toolbar More menu on a short display', async ({ page }) 
     .toBe(true);
 });
 
-test('keeps chart controls legible and the instrument title on one line', async ({ page }) => {
+test('keeps the attribution control collapsed', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  const attribution = page.locator('.maplibregl-ctrl-attrib-button');
-  await expect(attribution).toHaveCSS('background-image', 'none');
-  await expect
-    .poll(() => attribution.evaluate((button) => getComputedStyle(button, '::after').maskSize))
-    .toBe('20px 20px');
   // MapLibre's compact attribution auto-expands itself whenever attribution content changes; the
   // app strips the expansion class on every styledata, sourcedata, and terrain tick. This pins
   // that private-internals dependency (the maplibregl-compact-show class) so a MapLibre upgrade
@@ -119,6 +114,17 @@ test('keeps chart controls legible and the instrument title on one line', async 
       ),
     )
     .toBe(false);
+});
+
+test('keeps chart controls legible and the instrument title on one line', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  const attribution = page.locator('.maplibregl-ctrl-attrib-button');
+  await expect(attribution).toHaveCSS('background-image', 'none');
+  await expect
+    .poll(() => attribution.evaluate((button) => getComputedStyle(button, '::after').maskSize))
+    .toBe('20px 20px');
   const scale = page.locator('.maplibregl-ctrl-scale');
   await expect(scale).toBeVisible({ timeout: 15_000 });
   await expect

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SymbolsStore, symbolIconId } from '$entities/symbols';
-import type { OverlayContext } from '$shared/map';
+import { iconOffsetExpression, type OverlayContext } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
 import { createExpiringStore } from '$shared/storage';
 import { createFakeMap, fakeOverlayContext } from '$shared/testing';
@@ -169,30 +169,13 @@ describe('notes overlay', () => {
       const fc = map.sources.get('binnacle-notes')?.data as GeoJSON.FeatureCollection;
       expect(fc.features[0].properties).toMatchObject({ icon: symbolIconId('u9') });
     });
-    // The anchor offset rides on the layer's icon-offset match (keyed on the icon id), wrapped in
-    // the marker zoom stops: MapLibre 6 no longer scales icon-offset by icon-size, so the
-    // expression carries the 0.6 and 0.9 factors itself.
-    expect(map.setLayoutProperty).toHaveBeenLastCalledWith('binnacle-notes-symbol', 'icon-offset', [
-      'interpolate',
-      ['linear'],
-      ['zoom'],
-      9,
-      [
-        'match',
-        ['get', 'icon'],
-        symbolIconId('u9'),
-        ['literal', [0, -12 * 0.6]],
-        ['literal', [0, 0]],
-      ],
-      14,
-      [
-        'match',
-        ['get', 'icon'],
-        symbolIconId('u9'),
-        ['literal', [0, -12 * 0.9]],
-        ['literal', [0, 0]],
-      ],
-    ]);
+    // What this pins: the overlay routed the symbol's anchor offset into the shared builder and
+    // applied its result on the layer. The builder's own unit test pins the expression grammar.
+    expect(map.setLayoutProperty).toHaveBeenLastCalledWith(
+      'binnacle-notes-symbol',
+      'icon-offset',
+      iconOffsetExpression('icon', new Map([[symbolIconId('u9'), [0, -12]]])),
+    );
   });
 
   it('degrades to the category disc when the symbol SVG fetch fails', async () => {

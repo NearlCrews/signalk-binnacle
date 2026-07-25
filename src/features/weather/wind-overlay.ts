@@ -164,7 +164,7 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
       render(gl: GL, args: unknown) {
         if (!particles || !visible || contextLost) return;
         const matrix = matrixOf(args);
-        if (matrix.length < 16) return; // unrecognized render args; MapLibre 5 gives a 4x4 matrix
+        if (matrix.length < 16) return; // matrixOf already warned about the unrecognized shape
         const moved = !hasLastMatrix || !sameMatrix(matrix, lastMatrix);
         // Copy, never alias: if MapLibre mutates the matrix in place, sameMatrix would compare an
         // array to itself and never see a move. Overwrite the reused buffer instead of allocating.
