@@ -117,12 +117,28 @@ describe('waypoint overlay', () => {
     const offsetCall = map.setLayoutProperty.mock.calls
       .filter((c) => c[0] === 'binnacle-waypoint-symbol' && c[1] === 'icon-offset')
       .at(-1);
+    // The offsets ride the marker zoom stops themselves: MapLibre 6 no longer scales icon-offset
+    // by icon-size, so the expression carries the 0.6 and 0.9 factors.
     expect(offsetCall?.[2]).toEqual([
-      'match',
-      ['get', 'iconImage'],
-      symbolIconId('w9'),
-      ['literal', [0, -12]],
-      ['literal', [0, 0]],
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      9,
+      [
+        'match',
+        ['get', 'iconImage'],
+        symbolIconId('w9'),
+        ['literal', [0, -12 * 0.6]],
+        ['literal', [0, 0]],
+      ],
+      14,
+      [
+        'match',
+        ['get', 'iconImage'],
+        symbolIconId('w9'),
+        ['literal', [0, -12 * 0.9]],
+        ['literal', [0, 0]],
+      ],
     ]);
   });
 

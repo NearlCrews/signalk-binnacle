@@ -183,8 +183,10 @@ export function createWaypointOverlay(
           filter: ['has', 'iconImage'],
           layout: {
             'icon-image': ['get', 'iconImage'],
-            // Built-in POI icons match the notes overlay's zoom-interpolated size.
-            // Provided symbols are pre-scaled during rasterization and stay at 1.
+            // Every icon-carrying feature (built-in POI icons and provided symbols alike) scales
+            // with the shared marker zoom stops, matching the notes overlay; the nameless marker
+            // discs stay at 1. iconOffsetExpression carries the same stops so provided-symbol
+            // anchors stay pinned under MapLibre 6's unscaled icon-offset.
             // Camera expressions (zoom) must wrap data expressions, not the other way around.
             'icon-size': [
               'interpolate',

@@ -169,14 +169,29 @@ describe('notes overlay', () => {
       const fc = map.sources.get('binnacle-notes')?.data as GeoJSON.FeatureCollection;
       expect(fc.features[0].properties).toMatchObject({ icon: symbolIconId('u9') });
     });
-    // The anchor offset rides on the layer's icon-offset match (keyed on the icon id), not on the
-    // feature: MapLibre would coerce an array-valued feature property to a string.
+    // The anchor offset rides on the layer's icon-offset match (keyed on the icon id), wrapped in
+    // the marker zoom stops: MapLibre 6 no longer scales icon-offset by icon-size, so the
+    // expression carries the 0.6 and 0.9 factors itself.
     expect(map.setLayoutProperty).toHaveBeenLastCalledWith('binnacle-notes-symbol', 'icon-offset', [
-      'match',
-      ['get', 'icon'],
-      symbolIconId('u9'),
-      ['literal', [0, -12]],
-      ['literal', [0, 0]],
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      9,
+      [
+        'match',
+        ['get', 'icon'],
+        symbolIconId('u9'),
+        ['literal', [0, -12 * 0.6]],
+        ['literal', [0, 0]],
+      ],
+      14,
+      [
+        'match',
+        ['get', 'icon'],
+        symbolIconId('u9'),
+        ['literal', [0, -12 * 0.9]],
+        ['literal', [0, 0]],
+      ],
     ]);
   });
 
