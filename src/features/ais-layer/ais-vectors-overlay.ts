@@ -17,6 +17,7 @@ import {
   setSourceData,
 } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
+import { createAisRefreshGate } from './ais-refresh';
 
 const SOURCE_ID = 'binnacle-ais-vectors';
 const LAYER_ID = 'binnacle-ais-vectors-line';
@@ -74,13 +75,28 @@ export interface AisVectorsOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
 
+// True when the contacts carry a different id-to-severity mapping than the map holds. Assessment
+// recomputes mint a fresh contacts array on every AIS flush while any contact is active, so the
+// repaint-now decision must compare the rendered content, not the array identity.
+function severitiesDiffer(
+  severityById: ReadonlyMap<string, Severity>,
+  contacts: Assessment['contacts'],
+): boolean {
+  if (severityById.size !== contacts.length) return true;
+  for (const contact of contacts) {
+    if (severityById.get(contact.id) !== contact.severity) return true;
+  }
+  return false;
+}
+
 export function createAisVectorsOverlay(
   targets: AisTargets,
   assessment: () => Assessment,
+  now: () => number = Date.now,
 ): AisVectorsOverlay {
   let paint = mapThemePaint('day');
   let visible = true;
-  let lastVersion = -1;
+  const gate = createAisRefreshGate(targets, now);
   let lastContacts: Assessment['contacts'] | undefined;
   const severityById = new Map<string, Severity>();
 
@@ -92,8 +108,9 @@ export function createAisVectorsOverlay(
     supportsOpacity: true,
     layerIds: [LAYER_ID],
     add(ctx) {
-      lastVersion = -1;
+      gate.reset();
       lastContacts = undefined;
+      severityById.clear();
       ensureGeoJsonSource(ctx.map, SOURCE_ID);
       if (!ctx.map.getLayer(LAYER_ID)) {
         const layer: LineLayerSpecification = {
@@ -111,16 +128,20 @@ export function createAisVectorsOverlay(
       }
     },
     sync(ctx) {
-      // Hidden pays nothing: skip the rebuild entirely. The dirty check still fires on re-show, since
-      // the version or the contacts reference advance while hidden and no longer match.
+      // Hidden pays nothing: skip the rebuild entirely. The dirty check still fires on re-show,
+      // since the version or the severities advance while hidden and no longer match.
       if (!visible) return;
-      const version = targets.version;
       const contacts = assessment().contacts;
-      if (version === lastVersion && contacts === lastContacts) return;
-      lastVersion = version;
-      lastContacts = contacts;
-      severityById.clear();
-      for (const contact of contacts) severityById.set(contact.id, contact.severity);
+      let severitiesChanged = false;
+      if (contacts !== lastContacts) {
+        lastContacts = contacts;
+        if (severitiesDiffer(severityById, contacts)) {
+          severitiesChanged = true;
+          severityById.clear();
+          for (const contact of contacts) severityById.set(contact.id, contact.severity);
+        }
+      }
+      if (!gate.shouldRefresh(severitiesChanged)) return;
       setSourceData(
         ctx.map,
         SOURCE_ID,

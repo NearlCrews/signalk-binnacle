@@ -132,12 +132,32 @@ describe('buildFeatures', () => {
 });
 
 describe('createAisVectorsOverlay', () => {
-  function makeTargets(list: AisTargetView[], version = 1) {
+  function makeTargets(initial: AisTargetView[]) {
+    let list = initial;
+    let version = 1;
     return {
       list: () => list,
       get version() {
         return version;
       },
+      set(next: AisTargetView[]) {
+        list = next;
+        version += 1;
+      },
+      bump() {
+        version += 1;
+      },
+    };
+  }
+
+  function dangerContact(target: AisTargetView): Assessment['contacts'][number] {
+    return {
+      id: target.id,
+      position: target.position,
+      cpaMeters: 100,
+      tcpaSeconds: 60,
+      severity: 'danger',
+      source: 'provider',
     };
   }
 
@@ -169,7 +189,7 @@ describe('createAisVectorsOverlay', () => {
 
   it('sync skips rebuild when version and contacts are unchanged', () => {
     const target = movingTarget({ cogRad: 0, sogMps: 5 });
-    const targets = makeTargets([target], 1);
+    const targets = makeTargets([target]);
     const assessment = emptyAssessment;
     const overlay = createAisVectorsOverlay(targets as never, assessment);
     const map = createFakeMap();
@@ -181,6 +201,90 @@ describe('createAisVectorsOverlay', () => {
     const spy = vi.spyOn(source, 'setData');
     overlay.sync(ctx);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('throttles version-only churn to about 1 Hz and repaints immediately on a count change', () => {
+    let t = 0;
+    const targets = makeTargets([movingTarget()]);
+    const overlay = createAisVectorsOverlay(targets as never, emptyAssessment, () => t);
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = map.sources.get(SOURCE_ID);
+    if (!source) throw new Error(`${SOURCE_ID} not added`);
+    const spy = vi.spyOn(source, 'setData');
+
+    targets.bump();
+    t = 250;
+    overlay.sync(ctx);
+    expect(spy).not.toHaveBeenCalled();
+
+    t = 1_000;
+    overlay.sync(ctx);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    targets.set([movingTarget(), movingTarget({ id: 'target-2' })]);
+    t = 1_100;
+    overlay.sync(ctx);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('repaints immediately when a contact severity changes', () => {
+    let t = 0;
+    const target = movingTarget();
+    const targets = makeTargets([target]);
+    let assessment: Assessment = EMPTY_ASSESSMENT;
+    const overlay = createAisVectorsOverlay(
+      targets as never,
+      () => assessment,
+      () => t,
+    );
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = map.sources.get(SOURCE_ID);
+    if (!source) throw new Error(`${SOURCE_ID} not added`);
+    const spy = vi.spyOn(source, 'setData');
+
+    assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    t = 100;
+    overlay.sync(ctx);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const fc = source.data as GeoJSON.FeatureCollection;
+    expect(fc.features[0].properties?.severity).toBe('danger');
+  });
+
+  it('does not treat an identical severity set with a fresh identity as a change', () => {
+    let t = 0;
+    const target = movingTarget();
+    const targets = makeTargets([target]);
+    let assessment: Assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    const overlay = createAisVectorsOverlay(
+      targets as never,
+      () => assessment,
+      () => t,
+    );
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = map.sources.get(SOURCE_ID);
+    if (!source) throw new Error(`${SOURCE_ID} not added`);
+    const spy = vi.spyOn(source, 'setData');
+
+    // The busy-anchorage steady state: each assessment recompute returns a fresh contacts array
+    // carrying the same id-to-severity mapping, and that alone must not bypass the throttle.
+    assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    targets.bump();
+    t = 250;
+    overlay.sync(ctx);
+    expect(spy).not.toHaveBeenCalled();
+
+    t = 1_000;
+    overlay.sync(ctx);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it('applyTheme resets the line-color paint property', () => {

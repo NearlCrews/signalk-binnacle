@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { OverlayContext } from '$shared/map';
 
 // Test-only fake MapLibre map covering the source, layer, and image surface the
 // overlays use. Imported by *.test.ts files, never by production code.
@@ -96,6 +97,12 @@ export function createFakeMap() {
 }
 
 export type FakeMap = ReturnType<typeof createFakeMap>;
+
+// The OverlayContext an overlay test hands its overlay: the fake map plus a no-op beforeId
+// resolver. Hoisted because nearly every overlay test was re-declaring this same two-line shape.
+export function fakeOverlayContext(map: FakeMap): OverlayContext {
+  return { map: map as never, beforeIdFor: () => undefined };
+}
 
 // Reads back a geojson source's current features for assertions. Throws rather than defaulting to
 // an empty array on a missing source or data, so a test that forgot overlay.add or used the wrong

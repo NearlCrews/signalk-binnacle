@@ -1,9 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AisTargets } from '$entities/ais';
 import { mapThemePaint, type OverlayContext } from '$shared/map';
-import { SignalKStore } from '$shared/signalk';
-import { createFakeMap } from '$shared/testing';
+import { SignalKStore, type SKFrame } from '$shared/signalk';
+import { createFakeMap, createFrameFactory } from '$shared/testing';
 import { createAisOverlay } from './ais-overlay';
+
+// Seeded from the wall clock: AIS freshness is judged against real time, so a tiny epoch would
+// read as an ancient fix and filter every target out.
+const frameFactory = createFrameFactory(Date.now());
+
+function positionFrame(vessels: Record<string, { latitude: number; longitude: number }>): SKFrame {
+  return frameFactory(
+    {},
+    Object.fromEntries(
+      Object.entries(vessels).map(([id, position]) => [id, { 'navigation.position': position }]),
+    ),
+  );
+}
 
 class FakeImageData {
   constructor(
@@ -101,6 +114,52 @@ describe('ais overlay', () => {
     overlay.sync(ctxFor(map));
     overlay.sync(ctxFor(map));
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('throttles steady-state position churn to about 1 Hz and paints the latest data', () => {
+    const store = new SignalKStore();
+    let t = 0;
+    const overlay = createAisOverlay(new AisTargets(store), () => t);
+    const map = createFakeMap();
+    overlay.add(ctxFor(map));
+    store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
+    overlay.sync(ctxFor(map));
+    const source = [...map.sources.values()][0];
+    const spy = vi.spyOn(source, 'setData');
+
+    store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1.001, longitude: 2 } }));
+    t = 250;
+    overlay.sync(ctxFor(map));
+    store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1.002, longitude: 2 } }));
+    t = 500;
+    overlay.sync(ctxFor(map));
+    expect(spy).not.toHaveBeenCalled();
+
+    t = 1_000;
+    overlay.sync(ctxFor(map));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const fc = source.data as GeoJSON.FeatureCollection;
+    const point = fc.features[0].geometry as GeoJSON.Point;
+    expect(point.coordinates[1]).toBe(1.002);
+  });
+
+  it('paints a new target immediately even inside the throttle window', () => {
+    const store = new SignalKStore();
+    let t = 0;
+    const overlay = createAisOverlay(new AisTargets(store), () => t);
+    const map = createFakeMap();
+    overlay.add(ctxFor(map));
+    store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
+    overlay.sync(ctxFor(map));
+    const source = [...map.sources.values()][0];
+    const spy = vi.spyOn(source, 'setData');
+
+    store.applyFrame(positionFrame({ 'vessels.b': { latitude: 3, longitude: 4 } }));
+    t = 100;
+    overlay.sync(ctxFor(map));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const fc = source.data as GeoJSON.FeatureCollection;
+    expect(fc.features).toHaveLength(2);
   });
 
   it('applyTheme recolors the icon image', () => {

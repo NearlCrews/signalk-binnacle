@@ -10,6 +10,7 @@ import { formatNm, METERS_PER_NAUTICAL_MILE } from '$shared/lib';
 import {
   emptyFeatureCollection,
   ensureGeoJsonSource,
+  featureCollection,
   type MapThemePaint,
   matrixOf,
   type OverlayContext,
@@ -91,6 +92,10 @@ export function createPpiLayer(
   let lastRingRange = Number.NaN;
   let lastRingHeading = Number.NaN;
   let ringsDrawn = false;
+  // The geodesic ring and label features for the last position and range. Underway the heading
+  // updates several times per second while the fix and range hold still, so only the 2-point
+  // heading line is rebuilt per sync; the three 65-point rings and their labels are reused.
+  let ringFeatures: GeoJSON.Feature[] = [];
   // The last reason the echo render was a no-op, logged only on a transition (render runs every repaint)
   // and only in dev, so "Live but blank" is traceable to no fix, no frame, or zero range.
   let lastSuppress = '';
@@ -271,27 +276,27 @@ export function createPpiLayer(
     }
     const effectiveHeading =
       frame.heading ?? (freshness.heading?.() === false ? undefined : getHeading());
-    const heading = effectiveHeading ?? Number.NaN;
     // Object.is so the no-heading (NaN) case compares equal to itself and does not rebuild every sync.
-    if (
-      ringsDrawn &&
-      Object.is(center.latitude, lastRingLat) &&
-      Object.is(center.longitude, lastRingLon) &&
-      Object.is(range, lastRingRange) &&
-      Object.is(heading, lastRingHeading)
-    ) {
-      return;
+    const heading = effectiveHeading ?? Number.NaN;
+    const ringsChanged =
+      !ringsDrawn ||
+      !Object.is(center.latitude, lastRingLat) ||
+      !Object.is(center.longitude, lastRingLon) ||
+      !Object.is(range, lastRingRange);
+    if (!ringsChanged && Object.is(heading, lastRingHeading)) return;
+    if (ringsChanged) {
+      ringFeatures = rangeRingFeatures(center, range, RANGE_RINGS, ringLabel).features;
     }
     lastRingLat = center.latitude;
     lastRingLon = center.longitude;
     lastRingRange = range;
     lastRingHeading = heading;
     ringsDrawn = true;
-    const rings = rangeRingFeatures(center, range, RANGE_RINGS, ringLabel);
-    if (effectiveHeading !== undefined) {
-      rings.features.push(headingLineFeature(center, effectiveHeading, range));
-    }
-    setSourceData(ctx.map, RINGS_SOURCE_ID, rings);
+    const features =
+      effectiveHeading === undefined
+        ? ringFeatures
+        : [...ringFeatures, headingLineFeature(center, effectiveHeading, range)];
+    setSourceData(ctx.map, RINGS_SOURCE_ID, featureCollection(features));
   }
 
   return {

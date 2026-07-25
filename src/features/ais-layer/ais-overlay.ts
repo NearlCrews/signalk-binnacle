@@ -9,6 +9,7 @@ import {
   type SymbolOverlay,
 } from '$shared/map';
 import { AIS_ICON_ID, aisIconImage } from './ais-icon';
+import { createAisRefreshGate } from './ais-refresh';
 
 const SOURCE_ID = 'binnacle-ais';
 const LAYER_ID = 'binnacle-ais-symbol';
@@ -19,8 +20,8 @@ const DEFAULT_COLOR: Rgba = mapThemePaint('day').aisTarget;
 // Purely presentational: stale-target expiry lives on an app-level timer (store.pruneAis with the
 // entities/ais TTL), never in this render path, which pauses in a hidden tab while the collision
 // math keeps consuming the store.
-export function createAisOverlay(targets: AisTargets): SymbolOverlay {
-  let lastVersion = -1;
+export function createAisOverlay(targets: AisTargets, now: () => number = Date.now): SymbolOverlay {
+  const gate = createAisRefreshGate(targets, now);
 
   function buildFeatures(): GeoJSON.FeatureCollection {
     return featureCollection(
@@ -39,13 +40,6 @@ export function createAisOverlay(targets: AisTargets): SymbolOverlay {
     );
   }
 
-  function shouldRefresh(): boolean {
-    const version = targets.version;
-    if (version === lastVersion) return false;
-    lastVersion = version;
-    return true;
-  }
-
   return createSymbolOverlay({
     id: 'ais',
     title: 'AIS targets',
@@ -58,6 +52,6 @@ export function createAisOverlay(targets: AisTargets): SymbolOverlay {
     defaultColor: DEFAULT_COLOR,
     paintColor: (paint) => paint.aisTarget,
     features: buildFeatures,
-    shouldRefresh,
+    shouldRefresh: () => gate.shouldRefresh(),
   });
 }

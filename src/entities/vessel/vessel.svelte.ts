@@ -65,40 +65,47 @@ export class OwnVessel {
     return isLatLon(value) ? value : undefined;
   }
 
-  // True when a fix was once received but has not refreshed within VESSEL_DATA_STALE_MS, so the last
-  // position is no longer trustworthy. False before the first fix (absent, not stale) and false
-  // when no clock is wired (tests, and any caller that does not need staleness). Reads the ticking
-  // clock, so it flips on its own the moment the feed stops, without a fresh frame to trigger it.
-  #stale = $derived.by<boolean>(() => {
-    return this.#pathStale(SK_PATHS.position);
-  });
+  // True when a value was once received but has not refreshed within VESSEL_DATA_STALE_MS, so the
+  // last reading is no longer trustworthy. False before the first value (absent, not stale) and
+  // false when no clock is wired (tests, and any caller that does not need staleness). Each flag
+  // reads the ticking clock, so it flips on its own the moment the feed stops, without a fresh
+  // frame to trigger it. Every flag is its own $derived boolean so the 1 Hz tick invalidates only
+  // these flags: a consumer derived (the collision assessment reads sogStale and cogStale on every
+  // pass) re-runs only when a flag actually flips, not once per second.
+  #positionStale = $derived(this.#pathStale(SK_PATHS.position));
+  #sogStale = $derived(this.#pathStale(SK_PATHS.speedOverGround));
+  #cogStale = $derived(this.#pathStale(SK_PATHS.courseOverGroundTrue));
+  #headingStale = $derived(this.#pathStale(SK_PATHS.headingTrue));
+  #depthStale = $derived(this.#pathStale(SK_PATHS.depthBelowTransducer));
+  #windStale = $derived(this.#pathStale(SK_PATHS.windSpeedApparent));
+  #pressureStale = $derived(this.#pathStale(SK_PATHS.outsidePressure));
 
   get positionStale(): boolean {
-    return this.#stale;
+    return this.#positionStale;
   }
 
   get sogStale(): boolean {
-    return this.#pathStale(SK_PATHS.speedOverGround);
+    return this.#sogStale;
   }
 
   get cogStale(): boolean {
-    return this.#pathStale(SK_PATHS.courseOverGroundTrue);
+    return this.#cogStale;
   }
 
   get headingStale(): boolean {
-    return this.#pathStale(SK_PATHS.headingTrue);
+    return this.#headingStale;
   }
 
   get depthStale(): boolean {
-    return this.#pathStale(SK_PATHS.depthBelowTransducer);
+    return this.#depthStale;
   }
 
   get windStale(): boolean {
-    return this.#pathStale(SK_PATHS.windSpeedApparent);
+    return this.#windStale;
   }
 
   get pressureStale(): boolean {
-    return this.#pathStale(SK_PATHS.outsidePressure);
+    return this.#pressureStale;
   }
 
   #raw(path: string): unknown {
