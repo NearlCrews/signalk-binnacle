@@ -125,6 +125,29 @@ describe('ais trails overlay', () => {
     expect(features[0].properties).toEqual({ context: trailA().context });
   });
 
+  it('splits a trail that crosses the antimeridian', async () => {
+    fetchMock.mockResolvedValue([
+      {
+        context: 'vessels.crossing',
+        line: [
+          [179, 10],
+          [-179, 12],
+        ],
+      },
+    ]);
+    const overlay = createAisTrailsOverlay(
+      'http://pi',
+      () => undefined,
+      () => true,
+    );
+    const map = viewFakeMap({ zoom: 12, lng: 180, lat: 11 });
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    await settleSync(overlay, ctx);
+
+    expect(sourceFeatures(map, SOURCE_ID)[0]?.geometry.type).toBe('MultiLineString');
+  });
+
   it('skips the rebuild when a refetch returns unchanged trails, rebuilds when one moved', async () => {
     fetchMock.mockImplementation(async () => [trailA()]);
     const overlay = createAisTrailsOverlay(

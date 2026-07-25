@@ -115,6 +115,20 @@ describe('buildFeatures', () => {
     const features = buildFeatures([moving, still], noSeverity());
     expect(features).toHaveLength(1);
   });
+
+  it('splits a course vector that crosses the antimeridian', () => {
+    const target = movingTarget({
+      position: { latitude: 0, longitude: 179.99 },
+      cogRad: Math.PI / 2,
+      sogMps: 20,
+    });
+    const [feature] = buildFeatures([target], noSeverity());
+
+    expect(feature.geometry.type).toBe('MultiLineString');
+    const lines = (feature.geometry as GeoJSON.MultiLineString).coordinates;
+    expect(lines[0].at(-1)?.[0]).toBe(180);
+    expect(lines[1][0][0]).toBe(-180);
+  });
 });
 
 describe('createAisVectorsOverlay', () => {

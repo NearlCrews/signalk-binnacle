@@ -28,6 +28,30 @@ describe('routeLineFeatures', () => {
     const fc = routeLineFeatures([route], new Set(['r1']), 'r1');
     expect(fc.features[0].properties?.active).toBe(true);
   });
+
+  it('splits a route crossing the antimeridian into the short visual leg', () => {
+    const crossing: Route = {
+      ...route,
+      waypoints: [
+        { position: { latitude: 10, longitude: 179 }, name: 'A' },
+        { position: { latitude: 12, longitude: -179 }, name: 'B' },
+      ],
+    };
+    const geometry = routeLineFeatures([crossing], new Set(['r1']), undefined).features[0].geometry;
+    expect(geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [179, 10],
+          [180, 11],
+        ],
+        [
+          [-180, 11],
+          [-179, 12],
+        ],
+      ],
+    });
+  });
 });
 
 describe('waypointFeatures', () => {

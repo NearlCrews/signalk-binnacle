@@ -2,6 +2,7 @@ import type { LineLayerSpecification } from 'maplibre-gl';
 import { isLatLon, latLonToLonLat } from '$shared/geo';
 import { MINUTE_MS } from '$shared/lib';
 import {
+  antimeridianLineGeometry,
   ensureGeoJsonSource,
   featureCollection,
   mapThemePaint,
@@ -80,7 +81,7 @@ export function createHistoryTrackOverlay(
     return featureCollection(
       lines.map((coordinates) => ({
         type: 'Feature',
-        geometry: { type: 'LineString', coordinates },
+        geometry: antimeridianLineGeometry(coordinates),
         properties: {},
       })),
     );

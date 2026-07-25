@@ -1,5 +1,5 @@
 import { type LatLon, latLonToLonLat } from '$shared/geo';
-import { featureCollection } from '$shared/map';
+import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 import { geodesicCircleRing, geodesicDestination } from '$shared/nav';
 
 export function rangeRingFeatures(
@@ -19,7 +19,7 @@ export function rangeRingFeatures(
     features.push({
       type: 'Feature',
       properties: { ring: k },
-      geometry: { type: 'LineString', coordinates },
+      geometry: antimeridianLineGeometry(coordinates),
     });
     if (labelFor) {
       // The range label sits at the ring's north point (the chart is north-up), so the rings read as a
@@ -46,6 +46,6 @@ export function headingLineFeature(
   return {
     type: 'Feature',
     properties: { heading: true },
-    geometry: { type: 'LineString', coordinates: [latLonToLonLat(center), tip] },
+    geometry: antimeridianLineGeometry([latLonToLonLat(center), tip]),
   };
 }

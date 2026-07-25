@@ -57,6 +57,19 @@ describe('anchor overlay', () => {
     expect(sourceFeatures(map, 'binnacle-anchor-point')).toHaveLength(1);
   });
 
+  it('splits a rode line that crosses the antimeridian', () => {
+    const { store, anchor, map, overlay, ctx } = setup();
+    overlay.add(ctx);
+    anchor.dropLocal({ latitude: 10, longitude: 179 }, 50);
+    store.applyFrame(frame({ 'navigation.position': { latitude: 12, longitude: -179 } }));
+    overlay.sync(ctx);
+
+    const rode = sourceFeatures(map, 'binnacle-anchor-shapes').find(
+      (feature) => feature.properties?.rode === true,
+    );
+    expect(rode?.geometry.type).toBe('MultiLineString');
+  });
+
   it('skips the redraw when nothing changed, and clears after a raise', () => {
     const { anchor, map, overlay, ctx } = setup();
     overlay.add(ctx);

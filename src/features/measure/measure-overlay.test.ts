@@ -59,13 +59,19 @@ describe('measure overlay', () => {
     measure.add({ latitude: 0, longitude: -179 });
     overlay.sync(ctx);
     const line = sourceFeatures(map, 'binnacle-measure').find(
-      (feature) => feature.geometry.type === 'LineString',
+      (feature) => feature.geometry.type === 'MultiLineString',
     );
     expect(line?.geometry).toEqual({
-      type: 'LineString',
+      type: 'MultiLineString',
       coordinates: [
-        [179, 0],
-        [181, 0],
+        [
+          [179, 0],
+          [180, 0],
+        ],
+        [
+          [-180, 0],
+          [-179, 0],
+        ],
       ],
     });
   });

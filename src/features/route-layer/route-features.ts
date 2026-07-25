@@ -1,8 +1,8 @@
 import { type Route, waypointPointFeatures } from '$entities/route';
 import { latLonToLonLat as toLonLat } from '$shared/geo';
-import { featureCollection } from '$shared/map';
+import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 
-// One LineString per shown route, flagged active so the overlay can style the active route apart.
+// One line feature per shown route, flagged active so the overlay can style the active route apart.
 export function routeLineFeatures(
   routes: readonly Route[],
   shownIds: ReadonlySet<string>,
@@ -14,10 +14,7 @@ export function routeLineFeatures(
     if (route.waypoints.length < 2) continue;
     features.push({
       type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: route.waypoints.map((w) => toLonLat(w.position)),
-      },
+      geometry: antimeridianLineGeometry(route.waypoints.map((w) => toLonLat(w.position))),
       properties: { id: route.id, active: route.id === activeId },
     });
   }

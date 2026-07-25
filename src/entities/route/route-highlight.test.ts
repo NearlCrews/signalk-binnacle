@@ -92,4 +92,17 @@ describe('highlightFeatures', () => {
     expect(dots.features).toHaveLength(0);
     expect(segments.features).toHaveLength(0);
   });
+
+  it('splits a highlighted leg at the antimeridian', () => {
+    const crossing: Route = {
+      id: 'crossing',
+      name: 'crossing',
+      waypoints: [
+        { position: { latitude: 10, longitude: 179 } },
+        { position: { latitude: 12, longitude: -179 } },
+      ],
+    };
+    const { segments } = highlightFeatures(crossing, { kind: 'leg', index: 0 });
+    expect(segments.features[0].geometry.type).toBe('MultiLineString');
+  });
 });

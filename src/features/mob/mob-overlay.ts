@@ -7,6 +7,7 @@ import type { MobStore } from '$entities/mob';
 import type { OwnVessel } from '$entities/vessel';
 import { type LatLon, latLonToLonLat } from '$shared/geo';
 import {
+  antimeridianLineGeometry,
   emptyFeatureCollection,
   ensureGeoJsonSource,
   featureCollection,
@@ -40,10 +41,7 @@ function features(mark: LatLon | undefined, vessel: LatLon | undefined): GeoJSON
   if (vessel) {
     out.push({
       type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: [latLonToLonLat(vessel), latLonToLonLat(mark)],
-      },
+      geometry: antimeridianLineGeometry([latLonToLonLat(vessel), latLonToLonLat(mark)]),
       properties: { line: true },
     });
   }

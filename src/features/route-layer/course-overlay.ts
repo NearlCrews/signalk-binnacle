@@ -4,6 +4,7 @@ import type { CourseGuidance } from '$entities/course';
 import type { OwnVessel } from '$entities/vessel';
 import { latLonToLonLat as toLonLat } from '$shared/geo';
 import {
+  antimeridianLineGeometry,
   DARK_SCRIM,
   emptyFeatureCollection,
   ensureGeoJsonSources,
@@ -139,7 +140,7 @@ export function createCourseOverlay(guidance: CourseGuidance, vessel: OwnVessel)
         featureCollection([
           {
             type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [vesselCoord, destCoord] },
+            geometry: antimeridianLineGeometry([vesselCoord, destCoord]),
             properties: {},
           },
         ]),

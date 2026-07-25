@@ -1,5 +1,5 @@
 import { latLonToLonLat } from '$shared/geo';
-import { featureCollection } from '$shared/map';
+import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 import type { Route, RouteHighlight } from './route-types';
 
 // The cross-highlight derivation: given the highlighted leg or waypoint, which dots and which legs
@@ -39,10 +39,10 @@ export function highlightFeatures(
   }));
   const segments: GeoJSON.Feature[] = litLegIndices(h, wps.length).map((i) => ({
     type: 'Feature',
-    geometry: {
-      type: 'LineString',
-      coordinates: [latLonToLonLat(wps[i].position), latLonToLonLat(wps[i + 1].position)],
-    },
+    geometry: antimeridianLineGeometry([
+      latLonToLonLat(wps[i].position),
+      latLonToLonLat(wps[i + 1].position),
+    ]),
     properties: { index: i },
   }));
   return { dots: featureCollection(dots), segments: featureCollection(segments) };

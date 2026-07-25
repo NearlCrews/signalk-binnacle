@@ -102,6 +102,41 @@ describe('course overlay', () => {
     expect(point.coordinates).toEqual([20, 10]);
   });
 
+  it('splits a course across the antimeridian into the short visual leg', () => {
+    const guidance: FakeGuidance = {
+      active: true,
+      nextPosition: { latitude: 12, longitude: -179 },
+      nextPointName: 'Across the date line',
+    };
+    const vessel: FakeVessel = {
+      position: { latitude: 10, longitude: 179 },
+      positionStale: false,
+    };
+    const overlay = createCourseOverlay(guidance as never, vessel as never);
+    const map = createFakeMap();
+    const ctx = ctxFor(map);
+    overlay.add(ctx);
+    overlay.sync(ctx);
+
+    expect(lineFeatures(map)[0].geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [179, 10],
+          [180, 11],
+        ],
+        [
+          [-180, 11],
+          [-179, 12],
+        ],
+      ],
+    });
+    expect(pointFeatures(map)[0].geometry).toEqual({
+      type: 'Point',
+      coordinates: [-179, 12],
+    });
+  });
+
   it('sync clears both sources when not active', () => {
     const guidance: FakeGuidance = {
       active: true,

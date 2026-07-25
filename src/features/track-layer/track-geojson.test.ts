@@ -23,4 +23,21 @@ describe('trackSegments', () => {
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0].properties).toEqual({ sog: 3 });
   });
+
+  it('splits a crossing fix pair at the antimeridian', () => {
+    const geometry = trackSegments([p(179, 1), p(-179, 2)]).features[0].geometry;
+    expect(geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [179, 0],
+          [180, 0],
+        ],
+        [
+          [-180, 0],
+          [-179, 0],
+        ],
+      ],
+    });
+  });
 });

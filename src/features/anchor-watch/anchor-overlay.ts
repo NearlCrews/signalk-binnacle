@@ -12,6 +12,7 @@ import type { AnchorWatch } from '$entities/anchor';
 import type { OwnVessel } from '$entities/vessel';
 import { type LatLon, latLonToLonLat } from '$shared/geo';
 import {
+  antimeridianLineGeometry,
   emptyFeatureCollection,
   ensureGeoJsonSources,
   featureCollection,
@@ -64,10 +65,7 @@ function shapeFeatures(
   if (anchor && vessel) {
     features.push({
       type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: [latLonToLonLat(anchor), latLonToLonLat(vessel)],
-      },
+      geometry: antimeridianLineGeometry([latLonToLonLat(anchor), latLonToLonLat(vessel)]),
       properties: { dragging, rode: true },
     });
   }

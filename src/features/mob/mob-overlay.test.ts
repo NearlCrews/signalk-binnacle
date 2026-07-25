@@ -47,6 +47,20 @@ describe('mob overlay', () => {
     ).toEqual(['LineString', 'Point']);
   });
 
+  it('splits the return line when the boat crosses the antimeridian', () => {
+    const { store, mob, overlay, map, ctx } = setup();
+    overlay.add(ctx);
+    store.applyFrame(frame({ 'navigation.position': { latitude: 10, longitude: 179 } }));
+    mob.trigger();
+    store.applyFrame(frame({ 'navigation.position': { latitude: 12, longitude: -179 } }));
+    overlay.sync(ctx);
+
+    const line = sourceFeatures(map, 'binnacle-mob').find(
+      (feature) => feature.properties?.line === true,
+    );
+    expect(line?.geometry.type).toBe('MultiLineString');
+  });
+
   it('clears once the mark is cancelled', () => {
     const { store, mob, overlay, map, ctx } = setup();
     overlay.add(ctx);

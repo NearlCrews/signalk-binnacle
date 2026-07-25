@@ -8,6 +8,7 @@ import {
   VIEWPORT_FETCH_PAD_FRACTION,
 } from '$shared/geo';
 import {
+  antimeridianLineGeometry,
   emptyFeatureCollection,
   ensureGeoJsonSource,
   featureCollection,
@@ -87,7 +88,7 @@ export function createAisTrailsOverlay(
         shown.map(
           (trail): GeoJSON.Feature => ({
             type: 'Feature',
-            geometry: { type: 'LineString', coordinates: trail.line },
+            geometry: antimeridianLineGeometry(trail.line),
             properties: { context: trail.context },
           }),
         ),

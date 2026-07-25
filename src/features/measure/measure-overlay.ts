@@ -7,6 +7,7 @@ import type { MeasureStore } from '$entities/measure';
 import { type LatLon, latLonToLonLat } from '$shared/geo';
 import { formatMetersOrNm, type UnitsMode } from '$shared/lib';
 import {
+  antimeridianLineGeometry,
   emptyFeatureCollection,
   ensureGeoJsonSource,
   featureCollection,
@@ -17,7 +18,6 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
-import { normalizeLonDeltaDeg } from '$shared/nav';
 
 const SRC = 'binnacle-measure';
 const LINE_LAYER = 'binnacle-measure-line';
@@ -28,17 +28,7 @@ const LAYERS = [LINE_LAYER, VERTEX_LAYER, LABEL_LAYER];
 function features(measure: MeasureStore, mode: UnitsMode): GeoJSON.FeatureCollection {
   const points = measure.points;
   if (points.length === 0) return emptyFeatureCollection();
-  const coordinates: [number, number][] = [];
-  for (const point of points) {
-    const [longitude, latitude] = latLonToLonLat(point);
-    const priorLongitude = coordinates.at(-1)?.[0];
-    coordinates.push([
-      priorLongitude === undefined
-        ? longitude
-        : priorLongitude + normalizeLonDeltaDeg(longitude - priorLongitude),
-      latitude,
-    ]);
-  }
+  const coordinates = points.map(latLonToLonLat);
   const out: GeoJSON.Feature[] = coordinates.map((position, index) => ({
     type: 'Feature',
     geometry: { type: 'Point', coordinates: position },
@@ -52,7 +42,7 @@ function features(measure: MeasureStore, mode: UnitsMode): GeoJSON.FeatureCollec
   if (coordinates.length > 1) {
     out.push({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates },
+      geometry: antimeridianLineGeometry(coordinates),
       properties: { line: true },
     });
   }

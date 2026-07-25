@@ -1,3 +1,4 @@
+export { antimeridianLineGeometry } from './antimeridian';
 export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';

@@ -4,6 +4,7 @@ import type { AisTargets, AisTargetView } from '$entities/ais';
 import type { Assessment, Severity } from '$entities/collision';
 import { latLonToLonLat } from '$shared/geo';
 import {
+  antimeridianLineGeometry,
   ensureGeoJsonSource,
   featureCollection,
   type MapThemePaint,
@@ -62,7 +63,7 @@ export function buildFeatures(
     );
     features.push({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [origin, tip] },
+      geometry: antimeridianLineGeometry([origin, tip]),
       properties: { severity: severityById.get(target.id) ?? 'clear' },
     });
   }

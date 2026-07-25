@@ -30,8 +30,9 @@ constant-bearing geometry. Bearings are clockwise from true north and display as
 the Signal K server unit preference, using meters or feet at short range and nautical miles above the
 shared threshold.
 
-Longitude deltas use the short direction across the antimeridian. Overlay coordinates are unwrapped
-from one point to the next, so a two-degree leg across the date line does not draw a near-global line.
+Longitude deltas use the short direction across the antimeridian. Overlay geometry splits at the
+date line into canonical east-edge and west-edge segments, so a two-degree leg does not draw a
+near-global line.
 
 ## State and safety boundaries
 
