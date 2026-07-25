@@ -1,27 +1,25 @@
 <script lang="ts">
-import {
-  Anchor,
-  Bell,
-  ChartLine,
-  CloudSun,
-  DownloadCloud,
-  ExternalLink,
-  Gauge,
-  History,
-  Layers,
-  LocateFixed,
-  MapPin,
-  Navigation,
-  Radar,
-  Route,
-  Ruler,
-  Search,
-  Ship,
-  Spline,
-  UserCog,
-  VolumeX,
-  Waves,
-} from '@lucide/svelte';
+import Anchor from '@lucide/svelte/icons/anchor';
+import Bell from '@lucide/svelte/icons/bell';
+import ChartLine from '@lucide/svelte/icons/chart-line';
+import CloudSun from '@lucide/svelte/icons/cloud-sun';
+import DownloadCloud from '@lucide/svelte/icons/download-cloud';
+import ExternalLink from '@lucide/svelte/icons/external-link';
+import Gauge from '@lucide/svelte/icons/gauge';
+import History from '@lucide/svelte/icons/history';
+import Layers from '@lucide/svelte/icons/layers';
+import LocateFixed from '@lucide/svelte/icons/locate-fixed';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import Navigation from '@lucide/svelte/icons/navigation';
+import Radar from '@lucide/svelte/icons/radar';
+import Route from '@lucide/svelte/icons/route';
+import Ruler from '@lucide/svelte/icons/ruler';
+import Search from '@lucide/svelte/icons/search';
+import Ship from '@lucide/svelte/icons/ship';
+import Spline from '@lucide/svelte/icons/spline';
+import UserCog from '@lucide/svelte/icons/user-cog';
+import VolumeX from '@lucide/svelte/icons/volume-x';
+import Waves from '@lucide/svelte/icons/waves';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { onDestroy, onMount, untrack } from 'svelte';
 import { AisTargets } from '$entities/ais';
@@ -1818,8 +1816,10 @@ onDestroy(() => {
   instruments.dispose();
   net.dispose();
   clock.dispose();
-  // Release the Comlink proxy and terminate the worker, which also closes its socket, so an HMR
-  // reload or test remount does not leak either one.
+  void client.disconnect();
+  // Release the Comlink proxy and terminate the worker so an HMR reload or test remount does not
+  // leak it. The disconnect above is best-effort: termination can outrun the posted message, and
+  // it severs the socket regardless, so the clean close is preferred but not guaranteed.
   client.dispose();
 });
 const plotterServices = {
