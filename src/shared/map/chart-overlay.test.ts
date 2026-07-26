@@ -140,7 +140,7 @@ describe('chart overlay', () => {
     );
   });
 
-  it('caps a TileJSON-backed chart once its metadata arrives, without trusting the loaded flag', () => {
+  it('caps a TileJSON-backed chart when its metadata arrives before the whole source loads', () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
@@ -150,8 +150,7 @@ describe('chart overlay', () => {
     // The native max zoom is unknown until the TileJSON loads, so nothing is capped yet.
     expect(map.setLayerZoomRange).not.toHaveBeenCalled();
     const chartSource = [...map.sources.keys()][0];
-    // Metadata arrives: the source now reports its native max zoom. MapLibre 6 never flips
-    // isSourceLoaded for a vector source, so the cap must not depend on it.
+    // Metadata arrives before the whole source loads, and now reports its native max zoom.
     const fakeSource = map.sources.get(chartSource);
     if (!fakeSource) throw new Error('chart source missing');
     fakeSource.maxzoom = 12;
@@ -163,7 +162,7 @@ describe('chart overlay', () => {
     );
   });
 
-  it('keeps waiting for metadata instead of capping against the v6 default maxzoom', () => {
+  it('keeps waiting for metadata instead of capping against the constructor default maxzoom', () => {
     vi.useFakeTimers();
     try {
       const overlay = createChartOverlay(
@@ -175,7 +174,7 @@ describe('chart overlay', () => {
       const chartSource = [...map.sources.keys()][0];
       const fakeSource = map.sources.get(chartSource);
       if (!fakeSource) throw new Error('chart source missing');
-      // A v6 tile source reports the default maxzoom (22) from construction; a timed fallback
+      // A tile source reports the default maxzoom (22) from construction; a timed fallback
       // would cap against it and stop listening, so no amount of waiting may trigger a cap.
       fakeSource.maxzoom = 22;
       vi.advanceTimersByTime(60_000);

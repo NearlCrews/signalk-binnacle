@@ -15,7 +15,6 @@ import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
 import { mapThemePaint } from './map-theme';
 import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
-import { MAPLIBRE_READY_FALLBACK_MS, MAPLIBRE_READY_SETTLE_MS } from './ready-fallback';
 import { beforeIdFor, installSentinels } from './sentinels';
 import type { OverlayContext } from './types';
 import './maplibre-worker';
@@ -80,6 +79,7 @@ export interface ThemedMapHandle {
 
 const DEFAULT_CENTER: [number, number] = [0, 30];
 const DEFAULT_ZOOM = 2;
+const STYLE_ARRIVAL_TIMEOUT_MS = 8_000;
 
 // The shared MapLibre bootstrap for both map widgets (the navigation chart and the weather mini-map):
 // map creation, a ResizeObserver, the per-frame view-emit coalescer, sentinels, the LayerManager, the
@@ -211,9 +211,8 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   });
   // A style request that neither completes nor errors (a stalled connection can hang far past any
   // usefulness at sea) would otherwise leave a permanently blank map with nothing logged: the
-  // error path below reacts only to an 'error' event. Bound that wait the same way the ready
-  // signal bounds its own: after MAPLIBRE_READY_FALLBACK_MS with neither styledata nor an error,
-  // fall back exactly like the terminal error branch.
+  // error path below reacts only to an 'error' event. After the bounded wait with neither
+  // styledata nor an error, fall back exactly like the terminal error branch.
   const styleWatchdog = setTimeout(() => {
     if (styleArrived || destroyed) return;
     styleArrived = true;
@@ -221,7 +220,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       '[map] the base map style did not arrive; starting on the offline fallback base. Cached charts and overlays still load.',
     );
     mapInstance.setStyle(fallbackBaseStyle());
-  }, MAPLIBRE_READY_FALLBACK_MS);
+  }, STYLE_ARRIVAL_TIMEOUT_MS);
   mapInstance.on('error', () => {
     if (styleArrived || destroyed) return;
     // A companion-proxied base style that fails while the device is online should not drop straight to
@@ -291,18 +290,10 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     removeCanvasListeners = contextMenu.remove;
   }
 
-  let mapReady = false;
-  let settleTimer: ReturnType<typeof setTimeout> | undefined;
-  let maxWaitTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const initialize = () => {
+  void mapInstance.once('load', () => {
     // MapLibre normally removes pending listeners with the map, but the load event can already be
     // queued when a component closes. Do not create sentinels, a manager, or widget wiring then.
-    if (mapReady || destroyed) return;
-    mapReady = true;
-    clearTimeout(settleTimer);
-    clearTimeout(maxWaitTimer);
-    mapInstance.off('render', armSettleTimer);
+    if (destroyed) return;
     emitView();
     const ctx: OverlayContext = { map: mapInstance, beforeIdFor };
     installSentinels(mapInstance);
@@ -348,44 +339,13 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       // Promise.resolve cannot catch a callback that throws before returning a promise.
       reportLoadError(error);
     }
-  };
-
-  // MapLibre 6.0.0 has an upstream bug (present since the 6.0.0-20 prerelease, verified still
-  // present in stable): a vector tile source's internal load bookkeeping never flips true, even
-  // though its tiles fetch and paint normally (a raster source is unaffected), so map.loaded()
-  // never returns true and the 'load' event this all used to hang off never fires. Race the real
-  // 'load' event, so this self-heals the moment a maplibre-gl upgrade fixes it, against a
-  // synthetic ready signal built only from events proven to fire in this build: 'styledata' (the
-  // style JSON parsed), armed once no further 'render' activity has happened for half a second
-  // (mirrors 'idle' without trusting the broken loaded() check), capped at
-  // MAPLIBRE_READY_FALLBACK_MS after styledata so a link slow or flaky enough to keep triggering
-  // renders can never block initialization forever. The sibling workaround for the same broken
-  // bookkeeping is chart-overlay's native zoom cap. Delete this block and go back to a plain
-  // mapInstance.once('load', initialize) once maplibre-gl fires 'load' normally again; re-prove
-  // the fix empirically with this block deleted on a branch before dropping it.
-  const armSettleTimer = () => {
-    clearTimeout(settleTimer);
-    settleTimer = setTimeout(initialize, MAPLIBRE_READY_SETTLE_MS);
-  };
-  void mapInstance.once('styledata', () => {
-    if (mapReady || destroyed) return;
-    // The render listener attaches only now: a pre-styledata render (a user poking the still
-    // blank map while the style JSON fetches) must never arm the settle timer, or initialize
-    // would run against an unloaded style, throw in addLayer, and latch mapReady with nothing
-    // mounted for the whole session.
-    mapInstance.on('render', armSettleTimer);
-    armSettleTimer();
-    maxWaitTimer = setTimeout(initialize, MAPLIBRE_READY_FALLBACK_MS);
   });
-  void mapInstance.once('load', initialize);
 
   return {
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
       clearTimeout(styleWatchdog);
-      clearTimeout(settleTimer);
-      clearTimeout(maxWaitTimer);
       cancelLongPress();
       removeCanvasListeners();
       stopTick();

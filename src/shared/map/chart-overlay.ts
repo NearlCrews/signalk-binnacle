@@ -75,7 +75,7 @@ export function createChartOverlay(
       : [];
   });
   let onSourceData: ((event: MapSourceDataEvent) => void) | undefined;
-  // The one teardown for the cap wait, shared by the add preamble (reattach path), the
+  // The one teardown for the metadata wait, shared by the add preamble (reattach path), the
   // sourcedata handler, and remove.
   const stopCapWait = (map: MapLibreMap): void => {
     if (onSourceData) {
@@ -142,8 +142,8 @@ export function createChartOverlay(
       // A chart with no sources (the empty mapstyleJSON specs) has nothing to cap, so skip
       // the listener entirely rather than waiting forever on an undefined source id.
       if (!chartSource) return;
-      // Clear anything left by a prior add (the reattach path) so the handler reference and the
-      // fallback timer cannot be orphaned.
+      // Clear anything left by a prior add (the reattach path) so the handler reference cannot
+      // be orphaned.
       stopCapWait(ctx.map);
       // A spec-declared maxzoom is final at construction, so cap immediately. A TileJSON-backed
       // source (a PMTiles archive, or any url-form source) reports its native maxzoom only once
@@ -153,13 +153,11 @@ export function createChartOverlay(
         capToNativeZoom(ctx.map);
         return;
       }
-      // MapLibre 6's isSourceLoaded bookkeeping is broken for vector sources (the loaded flag
-      // never flips even though tiles fetch and paint; the sibling workaround is themed-map's
-      // synthetic ready signal), so readiness comes from the source's 'metadata' sourcedata
-      // event, still accepting the loaded flag for versions where it works. The wait is purely
-      // event-driven, with no timed fallback: a v6 tile source reports MapLibre's default
-      // maxzoom of 22 from construction, so capping on a timer before the metadata arrives would
-      // cap against the default and, worse, stop listening for the real value. The listener
+      // A URL-backed source's native maxzoom becomes authoritative when its metadata arrives, so
+      // use the matching 'metadata' sourcedata event while still accepting a loaded event. The
+      // wait is purely event-driven, with no timed fallback: a tile source reports MapLibre's
+      // default maxzoom of 22 from construction, so capping on a timer before the metadata arrives
+      // would cap against the default and, worse, stop listening for the real value. The listener
       // costs one string compare per sourcedata event and is detached on success or remove.
       const handler = (event: MapSourceDataEvent) => {
         if (event.sourceId !== chartSource) return;
