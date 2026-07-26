@@ -11,7 +11,6 @@ import {
   emptyFeatureCollection,
   ensureGeoJsonSource,
   type MapThemePaint,
-  markerIconSizeExpression,
   removeLayersAndSources,
   rgbaCss,
 } from '$shared/map';
@@ -187,12 +186,10 @@ export function addNoteLayers(
       filter: ['!', ['has', 'point_count']],
       layout: {
         'icon-image': ['get', 'icon'],
-        // The shared marker zoom stops, so this size and iconOffsetExpression's offset scaling
-        // cannot drift apart.
-        'icon-size': markerIconSizeExpression(),
-        // Default offset; render() sets a per-icon zoom-interpolated match via setLayoutProperty
-        // (a provided symbol's offset pins its declared anchor pixel to the point, scaled with
-        // the marker zoom stops since MapLibre 6 stopped scaling icon-offset by icon-size).
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 0.9],
+        // Default offset; render() sets a per-icon match via setLayoutProperty (a provided
+        // symbol's offset pins its declared anchor pixel to the point). The offset cannot ride on
+        // the feature as a ['get'], because MapLibre coerces an array-valued property to a string.
         'icon-offset': [0, 0],
         'icon-allow-overlap': true,
         'text-field': ['get', 'name'],

@@ -93,25 +93,24 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 6.0.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
-  TypeScript stays on the 6.x line deliberately: typescript-eslint caps its peer at
-  `typescript <6.1.0`, so TypeScript 7 waits for a typescript-eslint release that admits it.
-  The MapLibre 6 migration landed 2026-07-25 (a 6.0.0-20 prerelease attempt was reverted
-  2026-07-08). v6 requires WebGL2 (roughly Safari 15 and 2021-era browsers; the chart shows a
-  visible cannot-start notice on older devices), and 6.0.0 STABLE still has the upstream bug where
-  a vector tile source's internal load bookkeeping never flips true even though its tiles fetch
-  and paint normally, so `map.loaded()` never returns true, the `'load'` event never fires, and
-  `isSourceLoaded` stays false. Two shipped countermeasures depend on that bug staying understood:
-  themed-map races the real `'load'` against a synthetic ready signal (styledata plus a 500 ms
-  render-settle timer capped at 8 s), and chart-overlay caps native zoom from the source's
-  metadata sourcedata event with an 8 s bounded fallback instead of trusting `isSourceLoaded`.
-  Both self-heal when upstream fixes the events; drop them only against a release whose fix is
-  re-proven empirically (delete the workaround on a branch and watch the load verdict test).
-  MapLibre 6 also stopped scaling `icon-offset` by `icon-size`, so `iconOffsetExpression` carries
-  the marker zoom stops itself; keep any new offset consumer on that helper.
+  A MapLibre GL JS 6 migration has been tried and reverted twice. First (2026-07-08): the
+  `6.0.0-20` prerelease has an upstream bug where a vector tile source's internal load bookkeeping
+  never flips true even though its tiles fetch and paint normally, so `map.loaded()` never returns
+  true and the `'load'` event this app's whole chart initialization hangs off never fires. Second
+  (2026-07-25): a full migration to stable 6.0.0 landed with verified workarounds (a synthetic
+  ready signal racing the real `'load'`, an event-driven chart zoom cap, icon-offset scaling
+  carried in the expression, a WebGL2 cannot-start notice) and ran correctly in live use, but was
+  reverted the same evening by owner decision during a chain of chart-provider incidents; the
+  incidents that were root-caused all traced to the chart-provider side, so v6 was not proven
+  causal. The migration survives intact in history (commits 750e737 through d0f7d63, reverted by
+  the revert commit that follows them); the version-independent pieces stayed (the cannot-start
+  notice and the attribution e2e assertion). Re-landing is the owner's explicit call, revisited
+  once the chart-provider stack has been stable for a while; re-land from history rather than
+  redoing the work.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 

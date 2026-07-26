@@ -119,7 +119,7 @@ describe('chart overlay', () => {
     expect(unregisterPmtilesArchive).not.toHaveBeenCalled();
   });
 
-  it('caps chart layers immediately when the spec declares the native max zoom', () => {
+  it('caps chart layers one zoom past the source native max, only once the source loads', () => {
     const overlay = createChartOverlay(
       {
         identifier: 'noaa',
@@ -132,79 +132,17 @@ describe('chart overlay', () => {
     );
     const map = createFakeMap();
     overlay.add(fakeOverlayContext(map));
-    // A spec-declared maxzoom is final at construction: nothing to wait for.
+    // The source has not loaded (its native max zoom is not known yet), so nothing is capped and a
+    // sourcedata listener is waiting.
+    expect(map.setLayerZoomRange).not.toHaveBeenCalled();
+    // Tiles arrive: the source reports loaded and a sourcedata event fires for it.
+    const chartSource = [...map.sources.keys()][0];
+    map.markSourceLoaded(chartSource);
+    map.emit('sourcedata', { sourceId: chartSource, isSourceLoaded: true });
     expect(map.setLayerZoomRange).toHaveBeenCalledWith(
       expect.stringContaining('chart-noaa'),
       0,
       15,
     );
-  });
-
-  it('caps a TileJSON-backed chart once its metadata arrives, without trusting the loaded flag', () => {
-    const overlay = createChartOverlay(
-      { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
-      'http://pi.local',
-    );
-    const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
-    // The native max zoom is unknown until the TileJSON loads, so nothing is capped yet.
-    expect(map.setLayerZoomRange).not.toHaveBeenCalled();
-    const chartSource = [...map.sources.keys()][0];
-    // Metadata arrives: the source now reports its native max zoom. MapLibre 6 never flips
-    // isSourceLoaded for a vector source, so the cap must not depend on it.
-    const fakeSource = map.sources.get(chartSource);
-    if (!fakeSource) throw new Error('chart source missing');
-    fakeSource.maxzoom = 12;
-    map.emit('sourcedata', { sourceId: chartSource, sourceDataType: 'metadata' });
-    expect(map.setLayerZoomRange).toHaveBeenCalledWith(
-      expect.stringContaining('chart-noaa'),
-      0,
-      13,
-    );
-  });
-
-  it('keeps waiting for metadata instead of capping against the v6 default maxzoom', () => {
-    vi.useFakeTimers();
-    try {
-      const overlay = createChartOverlay(
-        { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
-        'http://pi.local',
-      );
-      const map = createFakeMap();
-      overlay.add(fakeOverlayContext(map));
-      const chartSource = [...map.sources.keys()][0];
-      const fakeSource = map.sources.get(chartSource);
-      if (!fakeSource) throw new Error('chart source missing');
-      // A v6 tile source reports the default maxzoom (22) from construction; a timed fallback
-      // would cap against it and stop listening, so no amount of waiting may trigger a cap.
-      fakeSource.maxzoom = 22;
-      vi.advanceTimersByTime(60_000);
-      expect(map.setLayerZoomRange).not.toHaveBeenCalled();
-      // The real metadata arrives late (a slow satellite link): the cap uses the real value.
-      fakeSource.maxzoom = 11;
-      map.emit('sourcedata', { sourceId: chartSource, sourceDataType: 'metadata' });
-      expect(map.setLayerZoomRange).toHaveBeenCalledWith(
-        expect.stringContaining('chart-noaa'),
-        0,
-        12,
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('remove detaches the metadata listener so a removed chart is never capped later', () => {
-    const overlay = createChartOverlay(
-      { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
-      'http://pi.local',
-    );
-    const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
-    const chartSource = [...map.sources.keys()][0];
-    overlay.remove(fakeOverlayContext(map));
-    const fakeSource = map.sources.get(chartSource);
-    if (fakeSource) fakeSource.maxzoom = 11;
-    map.emit('sourcedata', { sourceId: chartSource, sourceDataType: 'metadata' });
-    expect(map.setLayerZoomRange).not.toHaveBeenCalled();
   });
 });

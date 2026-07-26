@@ -19,7 +19,7 @@ export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
 export type { MapThemePaint } from './map-theme';
 export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
-export { iconOffsetExpression, markerIconSizeExpression } from './overlay-expressions';
+export { iconOffsetExpression } from './overlay-expressions';
 export {
   ensureGeoJsonSource,
   ensureGeoJsonSources,

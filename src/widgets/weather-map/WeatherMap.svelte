@@ -344,8 +344,6 @@ $effect(() => {
 onMount(() => {
   mapHandle = createThemedMap({
     container,
-    cannotStartNotice:
-      'The weather map cannot start on this device. The usual cause is a browser without WebGL2 support.',
     // The panel opens centered on the nav chart's current view, so the forecast is for the area you
     // are looking at; the zoom is capped to MAX_ZOOM by createThemedMap.
     view: initialView,

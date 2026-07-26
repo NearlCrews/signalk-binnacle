@@ -1,9 +1,4 @@
-import type {
-  AllPaintProperties,
-  GeoJSONSource,
-  Map as MapLibreMap,
-  SourceSpecification,
-} from 'maplibre-gl';
+import type { GeoJSONSource, Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
 import { emptyFeatureCollection } from './feature-collection';
 
 // Add an empty GeoJSON source under `id` when the map does not already hold it: the idle state every
@@ -24,14 +19,12 @@ export function ensureGeoJsonSources(map: MapLibreMap, ids: readonly string[]): 
 // Set a GeoJSON source's data, narrowing the source handle in one place: the dozen-odd overlays that
 // push fresh features otherwise re-spell the `(map.getSource(id) as GeoJSONSource | undefined)?.setData`
 // cast at each site. A no-op when the source is absent (the overlay was removed mid-flight).
-// MapLibre 6's setData returns a promise that settles when the worker finishes; every caller here
-// is fire-and-forget by design (the render pipeline paints when ready), so it is explicitly voided.
 export function setSourceData(
   map: MapLibreMap,
   sourceId: string,
   data: GeoJSON.GeoJSON | string,
 ): void {
-  void (map.getSource(sourceId) as GeoJSONSource | undefined)?.setData(data);
+  (map.getSource(sourceId) as GeoJSONSource | undefined)?.setData(data);
 }
 
 // The two loops every overlay module's setVisible and remove repeat, shared so the lifecycle
@@ -66,22 +59,19 @@ export function removeLayersAndSources(
   }
 }
 
-// Casts a dynamically-computed paint property name and value through MapLibre 6's keyed paint
-// types, so callers pass a plain string instead of re-spelling `as keyof AllPaintProperties` /
-// `as never` at each call site. Throws exactly as the underlying MapLibre call would (a layer
-// lacking the property, or the style not yet loaded); a caller that needs to skip such layers
-// still wraps this in its own try/catch, same as before.
+// A dynamically-computed paint property name, hoisted so callers do not re-spell the same
+// setPaintProperty/getPaintProperty call at each site.
 export function setPaintProp(
   map: MapLibreMap,
   layerId: string,
   property: string,
   value: unknown,
 ): void {
-  map.setPaintProperty(layerId, property as keyof AllPaintProperties, value as never);
+  map.setPaintProperty(layerId, property, value);
 }
 
 export function getPaintProp(map: MapLibreMap, layerId: string, property: string): unknown {
-  return map.getPaintProperty(layerId, property as keyof AllPaintProperties);
+  return map.getPaintProperty(layerId, property);
 }
 
 // Guard-add a source only if absent, so two OverlayModules that share one MapLibre source can

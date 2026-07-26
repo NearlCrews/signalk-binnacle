@@ -8,14 +8,6 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
-- The map engine is MapLibre GL JS 6, which requires WebGL2 (roughly 2021-era browsers, Safari 15
-  and later). A device without WebGL2 now sees a clear notice in the chart area explaining that
-  the chart cannot start there while instruments, alarms, and panels keep working, instead of a
-  silent blank map. Chart initialization no longer depends on MapLibre's load bookkeeping, which
-  v6 still gets wrong for vector sources: the app arms its own ready signal, and PMTiles charts
-  apply their native zoom cap from the source metadata event with a bounded fallback. Provided
-  symbol anchors stay pinned at every zoom under v6's changed icon-offset scaling.
-
 - Collision warnings now publish over the delta stream only, so a warning stays visual instead of
   sounding boat-wide through the server's REST raise, which hardcodes an audible method. Danger
   alarms still raise through the Notifications API, and a successful raise or update now retracts
@@ -32,6 +24,9 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- A locally cached profile applies at startup again. The startup apply ran before the map command
+  bindings it pushes settings into existed, so any saved profile made boot fail its apply with an
+  initialization error whenever profiles were stored locally.
 - The automatic reload after a service-worker update is now single-shot per 30 second window. A
   pathological environment that keeps changing the controlling worker (a mutating proxy or
   extension, or repeated external activations) previously drove an endless reload storm that
@@ -53,10 +48,9 @@ All notable changes to Binnacle are documented here. The format follows
 ### Development
 
 - The build tooling moved to rolldown code splitting, per-icon lucide imports, and refreshed lint
-  and test dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13, @types/node 26).
-  The maplibre-gl 6 migration shrank the map chunk to 197 kB compressed and dropped the old
-  dev-server prebundle workaround. TypeScript 7 remains deliberately deferred until
-  typescript-eslint supports it.
+  and test dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13). TypeScript 7 and
+  @types/node 26 are deliberately deferred until typescript-eslint supports TypeScript 7 and the
+  supported Node runtimes advance; maplibre-gl 6 awaits its own migration pass.
 - Overlay tests build their map context through one shared helper, and SKFrame test factories can
   carry AIS vessels.
 
