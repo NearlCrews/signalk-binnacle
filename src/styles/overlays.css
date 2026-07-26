@@ -125,9 +125,9 @@ dialog.modal-card {
   opacity: 0.65;
 }
 
-/* The chart host's cannot-start notice, shown in place of the map when MapLibre fails to
-   construct (usually a browser without WebGL2). Centered in the chart area, composed with
-   .alert-note for the tinted banner treatment. */
+/* The cannot-start notice, shown in place of a map surface (the chart or the weather mini-map)
+   when MapLibre fails to construct (usually a browser without WebGL2). Centered in the surface,
+   composed with .alert-note for the tinted banner treatment. */
 .chart-start-error {
   display: grid;
   place-content: center;

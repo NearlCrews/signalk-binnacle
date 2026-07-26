@@ -7,6 +7,9 @@ function makeDeps(): ProfileBindingDeps {
   let anchorRadiusMeters = 50;
   const pv = <T>(value: T) => ({
     value,
+    snapshot() {
+      return structuredClone(this.value);
+    },
     set(next: T) {
       this.value = next;
     },
@@ -53,6 +56,7 @@ describe('createProfileBindings', () => {
     });
     expect(bundle.layerOrder).toEqual([]);
     expect(bundle.trackSettings.colorMode).toBe('speed');
+    expect(() => structuredClone(bundle)).not.toThrow();
   });
 
   it('applies a bundle back to every store', () => {

@@ -1,8 +1,17 @@
 import { expect, type Page, test } from '@playwright/test';
+import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 // Smoke tests route selected external APIs. Blocking service workers keeps those requests visible
 // to Playwright instead of letting a previously installed worker bypass the route hooks.
 test.use({ serviceWorkers: 'block' });
+
+async function openInstruments(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instruments', exact: true })
+    .click();
+}
 
 async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<void> {
   await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
@@ -52,7 +61,10 @@ async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<voi
 test('app shell renders the brand and a connection status', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
-  await expect(page.getByText(/Connecting|Connected|Reconnecting|Not connected/)).toBeVisible();
+  await expect(page.locator('.status-strip .conn')).toHaveAttribute(
+    'title',
+    /Connecting|Connected|Reconnecting|Not connected/,
+  );
   await expect(page.getByText('SOG')).toBeVisible();
 });
 
@@ -61,6 +73,7 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
+  const workerProof = await installMapLibreWorkerProof(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#app-menu-launcher');
@@ -71,6 +84,7 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
   // MapLibre can take longer than the default assertion window to finish on the Pi. Wait for the
   // chart-loading gate to resolve before checking the distinct no-position explanation.
   await expect(center).toHaveAttribute('title', /GPS position/, { timeout: 15_000 });
+  await workerProof.assertInitialNavigation();
   await center.click({ force: true });
   await expect(menu.locator('.blocked-note')).toContainText('GPS position');
 });
@@ -389,8 +403,7 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   page,
 }) => {
   await page.goto('/');
-  // The Instruments pill is default-pinned on the bottom bar for a fresh profile.
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  await openInstruments(page);
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // The chart host stays in the layout beside the dock (true split, not an overlay).
@@ -489,7 +502,7 @@ test('history-only engine readings stay identifiable through selection and detai
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  await openInstruments(page);
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect.poll(() => pathRequests).toBeGreaterThan(0);
@@ -523,7 +536,7 @@ test('history-only engine readings stay identifiable through selection and detai
 
 test('a touch drag on a customize grip reorders the shown instruments', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  await openInstruments(page);
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
 
@@ -558,7 +571,7 @@ test('instrument tiles take the full screen under the breakpoint with their own 
 }) => {
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  await openInstruments(page);
   const dock = page.getByRole('dialog', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // Full-screen mode swaps the close label; this chrome is the only way back on a phone.

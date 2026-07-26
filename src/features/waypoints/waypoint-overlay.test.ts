@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import { WaypointsStore } from '$entities/waypoint';
-import { mapThemePaint } from '$shared/map';
+import { iconOffsetExpression, mapThemePaint } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
 import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { createWaypointOverlay } from './waypoint-overlay';
@@ -117,13 +117,11 @@ describe('waypoint overlay', () => {
     const offsetCall = map.setLayoutProperty.mock.calls
       .filter((c) => c[0] === 'binnacle-waypoint-symbol' && c[1] === 'icon-offset')
       .at(-1);
-    expect(offsetCall?.[2]).toEqual([
-      'match',
-      ['get', 'iconImage'],
-      symbolIconId('w9'),
-      ['literal', [0, -12]],
-      ['literal', [0, 0]],
-    ]);
+    // What this pins: the overlay routed the symbol's anchor offset into the shared builder and
+    // applied its result. The builder's own unit test pins the expression grammar.
+    expect(offsetCall?.[2]).toEqual(
+      iconOffsetExpression('iconImage', new Map([[symbolIconId('w9'), [0, -12]]])),
+    );
   });
 
   it('keeps the disc when the symbol SVG fetch fails', async () => {

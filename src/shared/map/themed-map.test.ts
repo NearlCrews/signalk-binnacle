@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createThemedMap, type ThemedMapApi } from './themed-map';
 
+vi.mock('./maplibre-worker', () => ({}));
+
 // A minimal MapLibre Map mock covering the surface createThemedMap touches: event wiring, the
 // canvas (for the touch long-press listeners), and the style and image calls the load handler
 // makes. Instances are collected on the constructor so a test can reach the map it created.
@@ -88,7 +90,14 @@ vi.mock('maplibre-gl', () => {
     hasImage(): boolean {
       return false;
     }
-    addImage(): void {}
+    addedImages: string[] = [];
+    addImage(id: string): void {
+      this.addedImages.push(id);
+    }
+    missingImageResolver: ((id: string) => void | Promise<void>) | null = null;
+    setMissingStyleImageResolver(resolver: ((id: string) => void | Promise<void>) | null): void {
+      this.missingImageResolver = resolver;
+    }
     getLayer(): undefined {
       return undefined;
     }
@@ -128,6 +137,9 @@ interface FakeMapInstance {
   touchZoomRotate: { disableRotation: ReturnType<typeof vi.fn> };
   attribElement: { classList: { remove: ReturnType<typeof vi.fn> } };
   remove: ReturnType<typeof vi.fn>;
+  addedImages: string[];
+  missingImageResolver: ((id: string) => void | Promise<void>) | null;
+  styles: unknown[];
 }
 
 async function lastMap(): Promise<FakeMapInstance> {
@@ -254,6 +266,12 @@ describe('createThemedMap onLoad', () => {
     createThemedMap({ container, pixelRatio: 1.5, onLoad: () => {} });
 
     expect((await lastMap()).options.pixelRatio).toBe(1.5);
+  });
+
+  it('preserves MapLibre 5 vector overscaling behavior', async () => {
+    createThemedMap({ container, onLoad: () => {} });
+
+    expect((await lastMap()).options).toHaveProperty('zoomLevelsToOverscale', undefined);
   });
 });
 
@@ -471,5 +489,103 @@ describe('createThemedMap when the map cannot construct', () => {
     } finally {
       MapClass.throwOnConstruct = false;
     }
+  });
+});
+
+describe('createThemedMap missing style images', () => {
+  it('supplies the transparent placeholder through the resolver', async () => {
+    createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+    expect(map.missingImageResolver).toBeTruthy();
+    map.missingImageResolver?.('office');
+    expect(map.addedImages).toContain('office');
+  });
+});
+
+describe('createThemedMap synthetic ready signal', () => {
+  it('initializes once renders settle after styledata, without a load event', async () => {
+    vi.useFakeTimers();
+    const onLoad = vi.fn();
+    createThemedMap({ container, onLoad });
+    const map = await lastMap();
+    map.fire('styledata');
+    expect(onLoad).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(500);
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+
+  it('re-arms the settle timer while renders keep arriving and initializes only once', async () => {
+    vi.useFakeTimers();
+    const onLoad = vi.fn();
+    createThemedMap({ container, onLoad });
+    const map = await lastMap();
+    map.fire('styledata');
+    vi.advanceTimersByTime(400);
+    map.fire('render');
+    vi.advanceTimersByTime(400);
+    expect(onLoad).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(onLoad).toHaveBeenCalledOnce();
+    // The real load event arriving later must not initialize twice.
+    map.fire('load');
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+
+  it('caps the wait at eight seconds when renders never settle', async () => {
+    vi.useFakeTimers();
+    const onLoad = vi.fn();
+    createThemedMap({ container, onLoad });
+    const map = await lastMap();
+    map.fire('styledata');
+    for (let i = 0; i < 20; i += 1) {
+      vi.advanceTimersByTime(400);
+      map.fire('render');
+    }
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+});
+
+describe('createThemedMap destroy during the synthetic ready window', () => {
+  it('clears the pending timers so initialization never runs after destroy', async () => {
+    vi.useFakeTimers();
+    const onLoad = vi.fn();
+    const handle = createThemedMap({ container, onLoad });
+    const map = await lastMap();
+    map.fire('styledata');
+    handle.destroy();
+    vi.advanceTimersByTime(10_000);
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+});
+
+describe('createThemedMap pre-styledata interaction', () => {
+  it('never initializes from renders that precede styledata', async () => {
+    vi.useFakeTimers();
+    const onLoad = vi.fn();
+    createThemedMap({ container, onLoad });
+    const map = await lastMap();
+    // A user poking the still blank map fires renders while the style JSON fetches. Those must
+    // not arm the settle timer: initializing against an unloaded style throws in addLayer and
+    // would latch the ready flag with nothing mounted for the whole session.
+    map.fire('render');
+    vi.advanceTimersByTime(5_000);
+    expect(onLoad).not.toHaveBeenCalled();
+
+    map.fire('styledata');
+    vi.advanceTimersByTime(500);
+    expect(onLoad).toHaveBeenCalledOnce();
+  });
+});
+
+describe('createThemedMap style watchdog', () => {
+  it('falls back to the offline base when the style neither arrives nor errors', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+    expect(map.styles).toHaveLength(0);
+    vi.advanceTimersByTime(8_000);
+    expect(map.styles).toHaveLength(1);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('did not arrive'));
   });
 });

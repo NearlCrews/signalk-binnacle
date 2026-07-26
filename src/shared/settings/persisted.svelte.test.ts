@@ -41,6 +41,15 @@ describe('PersistedValue', () => {
     expect(JSON.parse(store.get('k') as string)).toEqual({ a: 2 });
   });
 
+  it('returns a detached, structured-cloneable snapshot of reactive values', () => {
+    const p = new PersistedValue('k', { nested: { value: 1 } }, fakeStorage(new Map()));
+    const snapshot = p.snapshot();
+
+    expect(() => structuredClone(snapshot)).not.toThrow();
+    p.value.nested.value = 2;
+    expect(snapshot).toEqual({ nested: { value: 1 } });
+  });
+
   it('rejects a runtime value that its codec does not accept', () => {
     const store = new Map<string, string>();
     const p = new PersistedValue(

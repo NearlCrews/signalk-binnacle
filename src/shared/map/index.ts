@@ -10,7 +10,7 @@ export {
   proxiedSources,
 } from './companion';
 export { DARK_SCRIM, rgbaCss } from './contrast';
-export { matrixOf } from './custom-layer';
+export { type CustomLayerMatrix, matrixForWebGl, matrixOf } from './custom-layer';
 export { emptyFeatureCollection, featureCollection } from './feature-collection';
 export type { Rgba } from './icon-raster';
 export { rasterIcon, rasterIconColored } from './icon-raster';
@@ -19,7 +19,7 @@ export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
 export type { MapThemePaint } from './map-theme';
 export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
-export { iconOffsetExpression } from './overlay-expressions';
+export { iconOffsetExpression, markerIconSizeExpression } from './overlay-expressions';
 export {
   ensureGeoJsonSource,
   ensureGeoJsonSources,

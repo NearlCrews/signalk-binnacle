@@ -75,6 +75,14 @@ export function createChartOverlay(
       : [];
   });
   let onSourceData: ((event: MapSourceDataEvent) => void) | undefined;
+  // The one teardown for the cap wait, shared by the add preamble (reattach path), the
+  // sourcedata handler, and remove.
+  const stopCapWait = (map: MapLibreMap): void => {
+    if (onSourceData) {
+      map.off('sourcedata', onSourceData);
+      onSourceData = undefined;
+    }
+  };
   const source = options.source ?? 'server';
   const url = chart.url ?? chart.tilemapUrl;
   const kind = chartKind(chart);
@@ -134,29 +142,35 @@ export function createChartOverlay(
       // A chart with no sources (the empty mapstyleJSON specs) has nothing to cap, so skip
       // the listener entirely rather than waiting forever on an undefined source id.
       if (!chartSource) return;
-      // Clear any listener left by a prior add (the reattach path) before installing a
-      // new one, so the handler reference cannot be orphaned.
-      if (onSourceData) {
-        ctx.map.off('sourcedata', onSourceData);
-        onSourceData = undefined;
+      // Clear anything left by a prior add (the reattach path) so the handler reference and the
+      // fallback timer cannot be orphaned.
+      stopCapWait(ctx.map);
+      // A spec-declared maxzoom is final at construction, so cap immediately. A TileJSON-backed
+      // source (a PMTiles archive, or any url-form source) reports its native maxzoom only once
+      // its metadata loads; reading earlier would see MapLibre's default instead.
+      const specSource = specs.sources[chartSource] as { maxzoom?: number } | undefined;
+      if (specSource?.maxzoom !== undefined) {
+        capToNativeZoom(ctx.map);
+        return;
       }
-      const tryCap = () => ctx.map.isSourceLoaded(chartSource) && capToNativeZoom(ctx.map);
-      if (!tryCap()) {
-        const handler = (event: MapSourceDataEvent) => {
-          if (event.sourceId === chartSource && event.isSourceLoaded && tryCap()) {
-            ctx.map.off('sourcedata', handler);
-            if (onSourceData === handler) onSourceData = undefined;
-          }
-        };
-        onSourceData = handler;
-        ctx.map.on('sourcedata', handler);
-      }
+      // MapLibre 6's isSourceLoaded bookkeeping is broken for vector sources (the loaded flag
+      // never flips even though tiles fetch and paint; the sibling workaround is themed-map's
+      // synthetic ready signal), so readiness comes from the source's 'metadata' sourcedata
+      // event, still accepting the loaded flag for versions where it works. The wait is purely
+      // event-driven, with no timed fallback: a v6 tile source reports MapLibre's default
+      // maxzoom of 22 from construction, so capping on a timer before the metadata arrives would
+      // cap against the default and, worse, stop listening for the real value. The listener
+      // costs one string compare per sourcedata event and is detached on success or remove.
+      const handler = (event: MapSourceDataEvent) => {
+        if (event.sourceId !== chartSource) return;
+        if (event.sourceDataType !== 'metadata' && !event.isSourceLoaded) return;
+        if (capToNativeZoom(ctx.map)) stopCapWait(ctx.map);
+      };
+      onSourceData = handler;
+      ctx.map.on('sourcedata', handler);
     },
     remove(ctx) {
-      if (onSourceData) {
-        ctx.map.off('sourcedata', onSourceData);
-        onSourceData = undefined;
-      }
+      stopCapWait(ctx.map);
       removeLayersAndSources(ctx.map, layerIds, sourceIds);
       for (const url of pmtilesUrls) {
         unregisterPmtilesArchive(url);

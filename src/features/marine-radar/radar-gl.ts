@@ -1,3 +1,5 @@
+import { type CustomLayerMatrix, matrixForWebGl } from '$shared/map';
+
 // 4 floats * 4 bytes per vertex: [posX, posY, localX, localY]. posX/posY are a mercator-coordinate
 // quad corner; localX/localY are the corner in [-1,1] for the polar mapping.
 const VERTEX_STRIDE = 16;
@@ -172,6 +174,7 @@ export class RadarGl {
   readonly #loc: Locations;
   // A reusable vertex buffer, re-uploaded only when the quad's center or extent changes.
   readonly #quad = new Float32Array(QUAD_FLOATS);
+  readonly #matrixScratch = new Float32Array(16);
   #spokes = 0;
   #texW = 0;
   #texH = 0;
@@ -300,7 +303,7 @@ export class RadarGl {
     this.#sweepColor = rgb;
   }
 
-  render(matrix: number[], cx: number, cy: number, half: number): void {
+  render(matrix: CustomLayerMatrix, cx: number, cy: number, half: number): void {
     const gl = this.#gl;
     if (this.#spokes === 0) return;
     const loc = this.#loc;
@@ -317,7 +320,7 @@ export class RadarGl {
     gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, VERTEX_STRIDE, 0);
     gl.enableVertexAttribArray(loc.local);
     gl.vertexAttribPointer(loc.local, 2, gl.FLOAT, false, VERTEX_STRIDE, 8);
-    gl.uniformMatrix4fv(loc.matrix, false, matrix);
+    gl.uniformMatrix4fv(loc.matrix, false, matrixForWebGl(matrix, this.#matrixScratch));
     gl.uniform1f(loc.heading, this.#heading);
     gl.uniform1f(loc.opacity, this.#opacity);
     gl.uniform1f(loc.blip, this.#blip);

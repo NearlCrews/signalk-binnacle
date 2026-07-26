@@ -13,6 +13,7 @@ import {
   iconOffsetExpression,
   type MapThemePaint,
   mapThemePaint,
+  markerIconSizeExpression,
   type OverlayContext,
   type OverlayModule,
   removeLayersAndSources,
@@ -183,18 +184,18 @@ export function createWaypointOverlay(
           filter: ['has', 'iconImage'],
           layout: {
             'icon-image': ['get', 'iconImage'],
-            // Built-in POI icons match the notes overlay's zoom-interpolated size.
-            // Provided symbols are pre-scaled during rasterization and stay at 1.
-            // Camera expressions (zoom) must wrap data expressions, not the other way around.
-            'icon-size': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              9,
-              ['case', ['has', 'iconSize'], 0.6, 1],
-              14,
-              ['case', ['has', 'iconSize'], 0.9, 1],
-            ],
+            // Every icon-carrying feature (built-in POI icons and provided symbols alike) scales
+            // with the shared marker zoom stops from markerIconSizeExpression, matching the notes
+            // overlay; the nameless marker discs stay at 1. iconOffsetExpression carries the same
+            // stops so provided-symbol anchors stay pinned under MapLibre 6's unscaled
+            // icon-offset. Camera expressions (zoom) must wrap data expressions, not the other
+            // way around, which the builder guarantees.
+            'icon-size': markerIconSizeExpression((scale) => [
+              'case',
+              ['has', 'iconSize'],
+              scale,
+              1,
+            ]),
             'icon-allow-overlap': true,
           },
         };

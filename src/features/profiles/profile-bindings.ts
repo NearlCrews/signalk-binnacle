@@ -55,37 +55,37 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       track: () => void deps.theme.theme,
     },
     layers: {
-      read: () => ({ layers: { ...deps.layers.value } }),
+      read: () => ({ layers: deps.layers.snapshot() }),
       write: (s) => deps.layers.set(s.layers),
       track: () => void deps.layers.value,
     },
     layerOrder: {
-      read: () => ({ layerOrder: [...deps.layerOrder.value] }),
+      read: () => ({ layerOrder: deps.layerOrder.snapshot() }),
       write: (s) => deps.layerOrder.set(s.layerOrder),
       track: () => void deps.layerOrder.value,
     },
     weatherLayers: {
-      read: () => ({ weatherLayers: { ...deps.weatherLayers.value } }),
+      read: () => ({ weatherLayers: deps.weatherLayers.snapshot() }),
       write: (s) => deps.weatherLayers.set(s.weatherLayers),
       track: () => void deps.weatherLayers.value,
     },
     thresholds: {
-      read: () => ({ thresholds: { ...deps.thresholds.value } }),
+      read: () => ({ thresholds: deps.thresholds.snapshot() }),
       write: (s) => deps.thresholds.set(s.thresholds),
       track: () => void deps.thresholds.value,
     },
     trackSettings: {
-      read: () => ({ trackSettings: { ...deps.trackSettings.value } }),
+      read: () => ({ trackSettings: deps.trackSettings.snapshot() }),
       write: (s) => deps.trackSettings.set(s.trackSettings),
       track: () => void deps.trackSettings.value,
     },
     planningSpeedKn: {
-      read: () => ({ planningSpeedKn: deps.planningSpeedKn.value }),
+      read: () => ({ planningSpeedKn: deps.planningSpeedKn.snapshot() }),
       write: (s) => deps.planningSpeedKn.set(s.planningSpeedKn),
       track: () => void deps.planningSpeedKn.value,
     },
     pinnedActionIds: {
-      read: () => ({ pinnedActionIds: [...deps.pinnedActions.value] }),
+      read: () => ({ pinnedActionIds: deps.pinnedActions.snapshot() }),
       // Array-guarded, not truthy-guarded: an intentionally empty array (a cleared bar) must apply,
       // and a non-array from a corrupt or cross-version document must be ignored.
       write: (s) => {
@@ -94,7 +94,7 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       track: () => void deps.pinnedActions.value,
     },
     instrumentTiles: {
-      read: () => ({ instrumentTiles: [...deps.instrumentTiles.value] }),
+      read: () => ({ instrumentTiles: deps.instrumentTiles.snapshot() }),
       write: (s) => {
         if (Array.isArray(s.instrumentTiles)) deps.instrumentTiles.set(s.instrumentTiles);
       },
@@ -108,7 +108,7 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       track: () => void deps.anchorRadius.get(),
     },
     units: {
-      read: () => ({ units: deps.unitsLocal.value }),
+      read: () => ({ units: deps.unitsLocal.snapshot() }),
       // Optional for compatibility: a profile saved before the field existed leaves units alone.
       write: (s) => {
         if (s.units) deps.unitsLocal.set(s.units);

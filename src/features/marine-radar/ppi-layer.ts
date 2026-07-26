@@ -197,7 +197,7 @@ export function createPpiLayer(
         }
         if (store.rendererStatus === 'blocked') store.setRendererStatus('ready');
         const matrix = matrixOf(args);
-        if (matrix.length < 16) return suppress('bad-matrix');
+        if (matrix.length !== 16) return suppress('bad-matrix');
         const range = effectiveRange();
         if (range <= 0) return suppress('no-range');
         if (dirty) {

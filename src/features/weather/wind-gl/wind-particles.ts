@@ -1,3 +1,4 @@
+import { type CustomLayerMatrix, matrixForWebGl } from '$shared/map';
 import { RAMP_MAX_SPEED, RAMP_WIDTH } from '../wind-color-texture';
 import type { WindField } from '../wind-field-texture';
 import { createBuffer, createProgram, createTexture, type GL } from './gl-resources';
@@ -105,6 +106,7 @@ export class WindParticles {
   #dropRateBump: number;
   #fadeOpacity: number;
   #opacity = 1;
+  readonly #matrixScratch = new Float32Array(16);
 
   constructor(gl: GL, options: WindParticlesOptions = {}) {
     this.#gl = gl;
@@ -294,7 +296,7 @@ export class WindParticles {
     this.#state1 = tmp;
   }
 
-  #drawParticles(matrix: Float32Array | number[]): void {
+  #drawParticles(matrix: CustomLayerMatrix): void {
     const gl = this.#gl;
     if (!this.#wind || !this.#field) return;
     const loc = this.#drawLoc;
@@ -310,7 +312,7 @@ export class WindParticles {
     gl.bindTexture(gl.TEXTURE_2D, this.#colorRamp);
     gl.uniform1i(loc.uColorRamp, 2);
     gl.uniform1f(loc.uParticlesRes, this.#res);
-    gl.uniformMatrix4fv(loc.uMatrix, false, matrix);
+    gl.uniformMatrix4fv(loc.uMatrix, false, matrixForWebGl(matrix, this.#matrixScratch));
     gl.uniform2f(loc.uWindMin, this.#field.uMin, this.#field.vMin);
     gl.uniform2f(loc.uWindMax, this.#field.uMax, this.#field.vMax);
     gl.uniform1f(loc.uSpeedMax, RAMP_MAX_SPEED);
@@ -326,7 +328,7 @@ export class WindParticles {
 
   // Run the update, draw into the fading trail buffer, and blit to the map. `moved` clears the trail
   // so screen-space accumulation never smears after a pan or zoom.
-  render(matrix: Float32Array | number[], widthPx: number, heightPx: number, moved: boolean): void {
+  render(matrix: CustomLayerMatrix, widthPx: number, heightPx: number, moved: boolean): void {
     const gl = this.#gl;
     if (!this.#wind || !this.#field) return;
     const trailSize = this.#resizeScreen(widthPx, heightPx);

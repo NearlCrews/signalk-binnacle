@@ -26,8 +26,10 @@ export type RasterizeSymbol = (
 
 // MapLibre has no per-pixel icon anchor (icon-anchor is nine named positions), so the documented
 // top-left anchor pixel is mapped to icon-offset: the offset that moves the centered icon so the
-// anchor pixel lands on the geographic point. Offset units are icon CSS pixels, scaled by
-// icon-size at render, so the mapping holds across the zoom-interpolated sizes.
+// anchor pixel lands on the geographic point. Offset units are icon CSS pixels at icon-size 1;
+// MapLibre 6 no longer scales icon-offset by icon-size, so iconOffsetExpression applies the
+// marker zoom scaling to these offsets itself, keeping the mapping true across the
+// zoom-interpolated sizes.
 export function anchorOffset(
   cssWidth: number,
   cssHeight: number,

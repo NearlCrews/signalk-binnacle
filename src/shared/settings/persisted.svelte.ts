@@ -210,6 +210,10 @@ export class PersistedValue<T> {
     }
   }
 
+  snapshot(): T {
+    return $state.snapshot(this.value) as T;
+  }
+
   // Reports whether the value came from storage by key presence and a successful
   // parse, not by comparing to the default: a stored primitive equal to the default
   // is still "from storage", which a value compare would miss.
