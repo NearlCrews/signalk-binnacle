@@ -8,6 +8,11 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
+- The map engine is MapLibre GL JS 6 and now requires WebGL2, including Safari 15 and later. A
+  device without WebGL2 sees a clear notice in the affected map surface while instruments, alarms,
+  and panels keep working. Provided symbol anchors stay pinned under v6's changed icon-offset
+  scaling, and bundled builds explicitly emit and configure the map worker so vector maps start
+  reliably.
 - Collision warnings now publish over the delta stream only, so a warning stays visual instead of
   sounding boat-wide through the server's REST raise, which hardcodes an audible method. Danger
   alarms still raise through the Notifications API, and a successful raise or update now retracts
@@ -54,10 +59,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Development
 
-- The build tooling moved to rolldown code splitting, per-icon lucide imports, and refreshed lint
-  and test dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13). TypeScript 7 and
-  @types/node 26 are deliberately deferred until typescript-eslint supports TypeScript 7 and the
-  supported Node runtimes advance; maplibre-gl 6 awaits its own migration pass.
+- The build tooling moved to rolldown code splitting, per-icon lucide imports, MapLibre GL JS 6.0.0
+  with an explicitly emitted worker bundle, @types/node 26.1.1, and refreshed lint and test
+  dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13). TypeScript 7 remains
+  deferred until typescript-eslint supports it.
 - Overlay tests build their map context through one shared helper, and SKFrame test factories can
   carry AIS vessels.
 

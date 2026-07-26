@@ -35,7 +35,7 @@ not have to be corrected after the fact.
 
 - Framework: Svelte 5 (runes), Vite, TypeScript. This was a deliberate clean break from the
   Angular lineage of the prior fork; do not reintroduce Angular.
-- Map: MapLibre GL JS 5.x used directly, plus a thin imperative LayerManager for dynamic
+- Map: MapLibre GL JS 6.x used directly, plus a thin imperative LayerManager for dynamic
   overlays. deck.gl MapboxOverlay is an optional pluggable overlay, not the base.
 - Charts: a generic ChartSourceAdapter over the Signal K `/resources/charts` API, plus a
   vector base map. S-57 to vector-tile pipeline and full S-52 styling are a later spec.
@@ -93,31 +93,21 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6,
-  Svelte 5, MapLibre GL JS 5.24 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  Svelte 5, MapLibre GL JS 6.0.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
-  A MapLibre GL JS 6 migration has been tried and reverted twice, and the root cause of both
-  failures is now known (isolated 2026-07-26 with a standalone reproduction): it was never an
-  upstream load-bookkeeping bug. MapLibre 6 ships ESM-only and loads its worker from a URL it
-  computes at runtime against `import.meta.url` (the filename is a dev-or-prod ternary, so no
-  bundler can statically emit the asset); after a Vite build the resolved
-  `assets/maplibre-gl-worker.mjs` 404s, and MapLibre swallows the worker `error` event, so the
-  failure is completely silent: no console output, no map `error`, raster sources still render
-  (they skip the worker), vector sources never parse, and `'load'` and `map.loaded()` never
-  settle. That raster-only picture is what both migration attempts misread as "tiles paint but
-  the bookkeeping is broken". The v5-to-v6 migration guide documents the required fix, and
-  MapLibre's own vite-rolldown example shows it: `import workerUrl from
-  'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'` then `setWorkerUrl(workerUrl)` before
-  any Map is constructed. Verified in a minimal Vite 8 app mirroring this project's build
-  config: without the call, the silent hang; with it, `'load'` fires in about 3 s and every
-  source reaches `isSourceLoaded`. The silent-failure defect is filed upstream as
-  maplibre/maplibre-gl-js#8018. The migration survives intact in history (commits 750e737
-  through d0f7d63, reverted by e4de97d); the version-independent pieces stayed (the cannot-start
-  notice and the attribution e2e assertion). Re-landing is the owner's explicit call: re-land
-  from history, add the `setWorkerUrl` wiring, and expect the synthetic ready signal and the
-  chart zoom-cap fallback in that stack to be unnecessary once the worker loads (verify, then
-  drop them rather than carrying dead workarounds).
+  MapLibre 6 ships ESM-only, and bundlers cannot automatically discover the runtime worker
+  filename it computes. `src/shared/map/maplibre-worker.ts` explicitly emits that worker through
+  Vite's `?worker&url` import and calls `setWorkerUrl`; its side effect must run before every
+  Map construction. Without it, the worker failure can be silent and raster-only: raster sources
+  render, vector sources never parse, and the real `'load'` event never settles. That silent
+  failure is tracked upstream as maplibre/maplibre-gl-js#8018. MapLibre 6 requires WebGL2, so the
+  chart and weather cannot-start notices must remain. Explicit worker wiring restored the real
+  load event, and the synthetic-ready race was removed after the worker-backed path was proven.
+  The independent style-arrival watchdog and chart source-metadata lifecycle gate remain. Radar
+  and wind custom layers use `defaultProjectionData.mainMatrix` for normalized Mercator
+  coordinates.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 
