@@ -97,20 +97,27 @@ not have to be corrected after the fact.
   and pbf 5 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder
   and test fixtures import `PbfWriter`).
-  A MapLibre GL JS 6 migration has been tried and reverted twice. First (2026-07-08): the
-  `6.0.0-20` prerelease has an upstream bug where a vector tile source's internal load bookkeeping
-  never flips true even though its tiles fetch and paint normally, so `map.loaded()` never returns
-  true and the `'load'` event this app's whole chart initialization hangs off never fires. Second
-  (2026-07-25): a full migration to stable 6.0.0 landed with verified workarounds (a synthetic
-  ready signal racing the real `'load'`, an event-driven chart zoom cap, icon-offset scaling
-  carried in the expression, a WebGL2 cannot-start notice) and ran correctly in live use, but was
-  reverted the same evening by owner decision during a chain of chart-provider incidents; the
-  incidents that were root-caused all traced to the chart-provider side, so v6 was not proven
-  causal. The migration survives intact in history (commits 750e737 through d0f7d63, reverted by
-  the revert commit that follows them); the version-independent pieces stayed (the cannot-start
-  notice and the attribution e2e assertion). Re-landing is the owner's explicit call, revisited
-  once the chart-provider stack has been stable for a while; re-land from history rather than
-  redoing the work.
+  A MapLibre GL JS 6 migration has been tried and reverted twice, and the root cause of both
+  failures is now known (isolated 2026-07-26 with a standalone reproduction): it was never an
+  upstream load-bookkeeping bug. MapLibre 6 ships ESM-only and loads its worker from a URL it
+  computes at runtime against `import.meta.url` (the filename is a dev-or-prod ternary, so no
+  bundler can statically emit the asset); after a Vite build the resolved
+  `assets/maplibre-gl-worker.mjs` 404s, and MapLibre swallows the worker `error` event, so the
+  failure is completely silent: no console output, no map `error`, raster sources still render
+  (they skip the worker), vector sources never parse, and `'load'` and `map.loaded()` never
+  settle. That raster-only picture is what both migration attempts misread as "tiles paint but
+  the bookkeeping is broken". The v5-to-v6 migration guide documents the required fix, and
+  MapLibre's own vite-rolldown example shows it: `import workerUrl from
+  'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'` then `setWorkerUrl(workerUrl)` before
+  any Map is constructed. Verified in a minimal Vite 8 app mirroring this project's build
+  config: without the call, the silent hang; with it, `'load'` fires in about 3 s and every
+  source reaches `isSourceLoaded`. The silent-failure defect is filed upstream as
+  maplibre/maplibre-gl-js#8018. The migration survives intact in history (commits 750e737
+  through d0f7d63, reverted by e4de97d); the version-independent pieces stayed (the cannot-start
+  notice and the attribution e2e assertion). Re-landing is the owner's explicit call: re-land
+  from history, add the `setWorkerUrl` wiring, and expect the synthetic ready signal and the
+  chart zoom-cap fallback in that stack to be unnecessary once the worker loads (verify, then
+  drop them rather than carrying dead workarounds).
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 
