@@ -4,6 +4,17 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<a id="v0171"></a>
+
+## [0.17.1] - 2026-07-27
+
+### Fixed
+
+- The README no longer contains relative file links. The Signal K App Store README view renders
+  link targets unmodified (only image paths are rewritten to the package CDN), so links to the
+  shipped guides and repository files could never resolve there. Guide references are plain text
+  now, and the security policy link is an absolute URL.
+
 <a id="v0170"></a>
 
 ## [0.17.0] - 2026-07-27
