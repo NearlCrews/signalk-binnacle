@@ -25,6 +25,7 @@ const textExtensions = new Set([
   '.yaml',
   '.yml',
 ]);
+const proseExtensions = new Set(['.md', '.mdx', '.txt']);
 
 function verifyProse() {
   const tracked = spawnSync('git', ['ls-files', '-z'], {
@@ -40,12 +41,30 @@ function verifyProse() {
     .split('\0')
     .filter(Boolean)
     .filter((path) => path !== 'package-lock.json' && textExtensions.has(posix.extname(path)));
+  /** @type {string[]} */
   const failures = [];
 
   for (const path of checked) {
     const lines = readFileSync(path, 'utf8').split('\n');
+    const prose = proseExtensions.has(posix.extname(path));
+    let inFence = false;
     lines.forEach((line, index) => {
-      if (line.includes('\u2014')) failures.push(`${path}:${index + 1} contains an em dash.`);
+      const at = `${path}:${index + 1}`;
+      if (line.includes('\u2014')) failures.push(`${at} contains an em dash.`);
+      // The Signal K App Store category keyword is the one spec-required hyphenated form.
+      if (/chart[ -]plotter/iu.test(line.replaceAll('signalk-category-chart-plotters', ''))) {
+        failures.push(`${at} spells "chartplotter" as two words.`);
+      }
+      if (!prose) return;
+      if (/^\s*(?:```|~~~)/u.test(line)) {
+        inFence = !inFence;
+        return;
+      }
+      // Prose files only: in code a bare "&" is legitimate syntax (operators, intersection
+      // types, URL query separators), so flagging it there would drown in false positives.
+      if (!inFence && /(?:^|\s)&(?:\s|$)/u.test(line)) {
+        failures.push(`${at} uses "&" where prose requires "and".`);
+      }
     });
   }
 
@@ -82,6 +101,11 @@ if (!new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm').test
   metadataFailures.push(`CHANGELOG.md is missing a dated ${packageJson.version} release heading.`);
 }
 
+/**
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {string | undefined}
+ */
 function publicMetadataPath(value, label) {
   if (typeof value !== 'string' || value.length === 0) {
     metadataFailures.push(`${label} must be a non-empty string.`);
@@ -142,6 +166,7 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
+/** @type {{ files: { path: string }[], entryCount: number, unpackedSize: number }} */
 const report = JSON.parse(result.stdout)[0];
 const paths = new Set(report.files.map((file) => file.path));
 const required = [

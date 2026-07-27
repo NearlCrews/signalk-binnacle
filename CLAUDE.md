@@ -60,7 +60,8 @@ not have to be corrected after the fact.
   formatting, lint rules, and import organization.
 - Semantic lint: ESLint is deliberately narrow. `eslint-plugin-svelte` owns Svelte-specific rules,
   and typescript-eslint owns `await-thenable`, `no-floating-promises`, and
-  `no-misused-promises` for non-test TypeScript. Do not add general, stylistic, unused-code, or
+  `no-misused-promises` for all TypeScript, tests included (an unawaited async assertion is a
+  test that silently passes). Do not add general, stylistic, unused-code, or
   import-boundary ESLint rules that duplicate Biome, Knip, or dependency-cruiser.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
@@ -80,9 +81,15 @@ not have to be corrected after the fact.
   the template-aware backstop. SVG assets are excluded from Biome (2.5.1 began
   parsing `.svg` and chokes on the XML prolog). Config uses the `linter.rules.preset` form
   (`recommended`), not the deprecated `recommended` boolean.
-- Type-check: `npm run check` runs svelte-check against `tsconfig.app.json`, then TypeScript against
-  `tsconfig.node.json`. The second pass covers Vite, Playwright, Vitest setup, and E2E code, and it
-  requires the direct `@types/node` development dependency.
+- Type-check: `npm run check` runs svelte-check with `--tsgo` against `tsconfig.app.json`, then
+  `tsgo` against `tsconfig.node.json` (Vite, Playwright, Vitest setup, and E2E code; requires the
+  direct `@types/node` development dependency), then `tsgo` against `tsconfig.scripts.json`
+  (`checkJs` over `scripts/*.mjs`). `tsgo` is the `@typescript/native-preview` compiler, used as
+  the check engine only: the `typescript` dependency stays on 6.x because typescript-eslint's peer
+  range does not admit 7.x yet. svelte-check `--tsgo` writes transpiled Svelte files to
+  `.svelte-check/`, which is gitignored and ESLint-ignored. A Svelte file deleted from `src/`
+  leaves a stale transpiled copy there that keeps failing the check; `.svelte-check/` is a
+  disposable cache, so delete it and re-run.
 - Other owners: dependency-cruiser enforces Feature-Sliced Design and cycles, Knip owns unused
   files, exports, and dependencies, markdownlint and cspell own maintained prose, Vitest V8 owns
   the coverage floor, Size Limit owns built asset budgets, and publint plus

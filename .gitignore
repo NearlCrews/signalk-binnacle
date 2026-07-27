@@ -36,6 +36,7 @@ test-results/
 .eslintcache
 .cache/
 .tmp/
+.svelte-check/
 
 # Editors and IDEs
 .vscode/*

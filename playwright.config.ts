@@ -24,6 +24,9 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120000,
   },
+  // Firefox is deliberately absent: Chromium and WebKit cover the engine spread Binnacle
+  // targets (Chrome, Edge, and Safari on helm tablets and phones), and Gecko is not a
+  // default browser on any marine tablet. Revisit if a Firefox-specific defect is reported.
   projects: [
     {
       name: 'webkit-smoke',
