@@ -1,5 +1,5 @@
 import type { RasterLayerSpecification, RasterSourceSpecification } from 'maplibre-gl';
-import type { Bbox, ChartGroup } from 'signalk-chart-sources';
+import type { ChartGroup, LngLatBbox } from 'signalk-chart-sources';
 import { applyRasterTheme } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
 import type { OverlayModule, ZBand } from './types';
@@ -26,7 +26,7 @@ export interface RasterOverlaySource {
   minzoom?: number;
   maxzoom?: number;
   // Optional coverage bounds [west, south, east, north] in WGS84 degrees for a regional source.
-  bounds?: Bbox;
+  bounds?: LngLatBbox;
   attribution: string;
   // An optional parent source id: a facet of another overlay nests under it in the Layers panel and
   // only shows when the parent is on.

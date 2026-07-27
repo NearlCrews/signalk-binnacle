@@ -3,16 +3,16 @@
  * Emits the drawn box as a [minLng, minLat, maxLng, maxLat] tuple on finish. */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { Bbox } from 'signalk-chart-sources';
+import type { LngLatBbox } from 'signalk-chart-sources';
 import { type GeoJSONStoreFeatures, TerraDraw, TerraDrawRectangleMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { bboxFromRectangle, rectangleRingFromBbox } from './estimate.js';
 
 export interface RegionRectangle {
   start(): void;
-  set(bbox: Bbox): void;
+  set(bbox: LngLatBbox): void;
   clear(): void;
-  onFinish(cb: (bbox: Bbox | null) => void): void;
+  onFinish(cb: (bbox: LngLatBbox | null) => void): void;
   destroy(): void;
 }
 
@@ -22,7 +22,7 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
     modes: [new TerraDrawRectangleMode({ drawInteraction: 'click-move-or-drag' })],
   });
 
-  let onFinishCb: (bbox: Bbox | null) => void = () => {};
+  let onFinishCb: (bbox: LngLatBbox | null) => void = () => {};
   let started = false;
 
   const onFinish = (id: string | number): void => {

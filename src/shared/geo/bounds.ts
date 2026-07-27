@@ -68,27 +68,6 @@ export function bboxCenter(bbox: readonly [number, number, number, number]): Lat
   return { latitude: (south + north) / 2, longitude };
 }
 
-// Whether two geographic boxes overlap. Longitude intervals are split at the antimeridian so the
-// west > east crossing convention works for either box.
-export function bboxIntersects(
-  a: readonly [number, number, number, number],
-  b: readonly [number, number, number, number],
-): boolean {
-  if (a[3] < b[1] || b[3] < a[1]) return false;
-  const longitudeIntervals = ([west, , east]: readonly [number, number, number, number]): Array<
-    readonly [number, number]
-  > =>
-    east < west
-      ? [
-          [west, 180],
-          [-180, east],
-        ]
-      : [[west, east]];
-  return longitudeIntervals(a).some(([aWest, aEast]) =>
-    longitudeIntervals(b).some(([bWest, bEast]) => aWest <= bEast && bWest <= aEast),
-  );
-}
-
 // Clamp a box to the world and the Web Mercator latitude limit, the bounds a map fit cannot exceed.
 // Shared by padBbox and the vessel area-of-interest fallback so the limits live in one place. Non-
 // crossing boxes only: it clamps each longitude into [-180, 180], so an antimeridian-crossing box

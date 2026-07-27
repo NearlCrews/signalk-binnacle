@@ -3,7 +3,7 @@
  * Auth uses the browser's Signal K administrator session because every route is protected
  * by the server's administrator middleware. The Binnacle device token must not be attached. */
 
-import type { Bbox } from 'signalk-chart-sources';
+import type { LngLatBbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
 import { readBoundedJson, withTimeout } from '$shared/lib';
 import { adminSessionInit } from '$shared/signalk';
@@ -70,8 +70,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonNegativeSafeInteger = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 
-const isPositiveFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value > 0;
+const isPositiveSafeNumber = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value > 0 &&
+  value <= Number.MAX_SAFE_INTEGER;
 
 const MAX_REGION_COUNT = 10_000;
 const MAX_SOURCE_STATS_COUNT = 10_000;
@@ -122,18 +125,18 @@ function parseCacheStats(value: unknown): CacheStats {
   const perSourceEntries = Object.entries(value.perSourceAvgBytes);
   if (perSourceEntries.length > MAX_SOURCE_STATS_COUNT) throw new InvalidCacheStatsError();
   for (const [source, bytes] of perSourceEntries) {
-    // Chart Locker reports measured averages, so fractional positive values are expected. Totals
-    // remain integers, but rounding an average here would distort planning estimates.
+    // Chart Locker reports fractional measured averages, while the shared estimator requires
+    // positive safe integers. Round up at this boundary to preserve a conservative planning value.
     if (
       !safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH) ||
       source === '__proto__' ||
       source === 'prototype' ||
       source === 'constructor' ||
-      !isPositiveFiniteNumber(bytes)
+      !isPositiveSafeNumber(bytes)
     ) {
       throw new InvalidCacheStatsError();
     }
-    perSourceAvgBytes[source] = bytes;
+    perSourceAvgBytes[source] = Math.ceil(bytes);
   }
 
   const optionalByteFields = [
@@ -198,7 +201,7 @@ function parseCacheStats(value: unknown): CacheStats {
 export interface SavedRegionDto {
   id: string;
   name: string;
-  bbox: Bbox;
+  bbox: LngLatBbox;
   sourceIds: string[];
   minzoom: number;
   maxzoom: number;
@@ -213,7 +216,7 @@ export interface SavedRegionDto {
 }
 
 interface RegionRequest {
-  bbox: Bbox;
+  bbox: LngLatBbox;
   sourceIds: string[];
   minzoom: number;
   maxzoom: number;
@@ -240,7 +243,7 @@ export interface RegionsClient {
   geocode(lat: number, lon: number, signal?: AbortSignal): Promise<string | null>;
 }
 
-function parseBbox(value: unknown): Bbox {
+function parseBbox(value: unknown): LngLatBbox {
   if (
     !Array.isArray(value) ||
     value.length !== 4 ||
@@ -257,7 +260,7 @@ function parseBbox(value: unknown): Bbox {
   ) {
     throw new TypeError('invalid saved region');
   }
-  return [value[0], value[1], value[2], value[3]] as Bbox;
+  return [value[0], value[1], value[2], value[3]] as LngLatBbox;
 }
 
 function parseSavedRegion(value: unknown, response: SavedRegionResponse): SavedRegionDto {

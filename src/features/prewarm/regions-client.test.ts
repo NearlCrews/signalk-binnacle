@@ -176,7 +176,7 @@ describe('regions client', () => {
     });
   });
 
-  it('getCacheStats parses the body on 200', async () => {
+  it('getCacheStats rounds measured averages up for the shared estimator', async () => {
     const stats = {
       rows: 3,
       bytes: 4096,
@@ -188,7 +188,10 @@ describe('regions client', () => {
       'http://h/plugins/signalk-chart-locker',
       fetchImpl as unknown as typeof fetch,
     );
-    expect(await client.getCacheStats()).toEqual(stats);
+    expect(await client.getCacheStats()).toEqual({
+      ...stats,
+      perSourceAvgBytes: { seamark: 566 },
+    });
   });
 
   it('getCacheStats rejects a malformed measured average', async () => {

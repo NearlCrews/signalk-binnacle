@@ -60,6 +60,24 @@ describe('regions estimate', () => {
     expect(DEFAULT_TILE_BYTES_BY_MODE.wmts).toBe(1_000_000);
   });
 
+  it('counts a duplicated source id once', () => {
+    const bbox = [-1, -1, 1, 1] as const;
+    const once = estimateBytes(['seamark'], bbox, [6, 6], {});
+    expect(estimateBytes(['seamark', 'seamark'], bbox, [6, 6], {})).toBe(once);
+  });
+
+  it('uses NOAA ENC catalog coverage for counts and estimates', () => {
+    const source = chartSourceById('depth-noaa-enc');
+    if (!source) throw new Error('missing NOAA ENC fixture');
+    const outsideCoverage = [145, -40, 150, -35] as const;
+    const insideCoverage = [-83.1, 42.2, -82.9, 42.4] as const;
+
+    expect(tileCountInBbox(source, outsideCoverage, [6, 6])).toBe(0);
+    expect(estimateBytes([source.id], outsideCoverage, [6, 6], {})).toBe(0);
+    expect(tileCountInBbox(source, insideCoverage, [6, 6])).toBeGreaterThan(0);
+    expect(estimateBytes([source.id], insideCoverage, [6, 6], {})).toBeGreaterThan(0);
+  });
+
   it('derives a bbox from a drawn rectangle ring', () => {
     const ring: Array<[number, number]> = [
       [10, 50],
@@ -102,6 +120,13 @@ describe('coveringSources', () => {
     // depth-emodnet bounds are [-73.125, 5.625, 45.0, 90.0]; a Pacific bbox has no overlap.
     const pacific: [number, number, number, number] = [-150.0, 20.0, -120.0, 50.0];
     expect(coveringSources(pacific, [6, 12]).some((s) => s.id === 'depth-emodnet')).toBe(false);
+  });
+
+  it('excludes NOAA ENC outside its catalog coverage even within the display envelope', () => {
+    const outsideCoverage = [145, -40, 150, -35] as const;
+    expect(coveringSources(outsideCoverage, [6, 12]).some((s) => s.id === 'depth-noaa-enc')).toBe(
+      false,
+    );
   });
 });
 

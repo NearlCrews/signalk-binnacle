@@ -250,7 +250,7 @@ test('offline charts stays discoverable when Chart Locker is not installed', asy
   await expect(menu.locator('.blocked-note')).toContainText('signalk-chart-locker');
 });
 
-test('offline area review shows a planning estimate and conservative chart defaults', async ({
+test('offline area review shows a planning estimate and catalog chart defaults', async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.clear());
@@ -283,8 +283,12 @@ test('offline area review shows a planning estimate and conservative chart defau
   await expect(panel.getByText('Area set. Draw again to change it.')).toBeVisible();
   await expect(panel.getByText('Estimated download')).toBeVisible();
   await expect(panel.getByText('Maximum download')).toHaveCount(0);
+  await expect(
+    panel.getByText('Could not calculate the download estimate.', { exact: false }),
+  ).toHaveCount(0);
   await panel.getByRole('button', { name: 'Customize included charts' }).click();
-  await expect(panel.getByRole('checkbox', { name: 'NOAA ENC' })).not.toBeChecked();
+  await expect(panel.getByRole('checkbox', { name: 'EMODnet bathymetry' })).toBeChecked();
+  await expect(panel.getByRole('checkbox', { name: 'NOAA ENC' })).toHaveCount(0);
 });
 
 test('offline areas explain removed chart sources before re-download', async ({ page }) => {

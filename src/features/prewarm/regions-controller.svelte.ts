@@ -1,5 +1,5 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { Bbox } from 'signalk-chart-sources';
+import type { LngLatBbox } from 'signalk-chart-sources';
 import { bboxCenter, normalizeBounds } from '$shared/geo';
 import {
   clampInt,
@@ -43,7 +43,7 @@ import {
 } from './settings-payload.js';
 import { coveringGroups, includedSummary } from './source-summary.js';
 
-const WORLD_BBOX: Bbox = [-180, -90, 180, 90];
+const WORLD_BBOX: LngLatBbox = [-180, -90, 180, 90];
 const POLL_FAIL_CAP = 5;
 const DEFAULT_POLL_MS = 2000;
 
@@ -94,7 +94,7 @@ export class RegionsController {
   statsError = $state<string | null>(null);
   regions = $state<SavedRegionDto[] | null>(null);
   loadError = $state<string | null>(null);
-  bbox = $state<Bbox | null>(null);
+  bbox = $state<LngLatBbox | null>(null);
   selectedSources = $state<string[]>([]);
   minzoom = $state(6);
   maxzoom = $state(12);
@@ -168,9 +168,7 @@ export class RegionsController {
     rectangle.onFinish((next) => {
       this.bbox = next;
       this.selectedSources =
-        next === null
-          ? []
-          : defaultSelection(coveringSources(next, [this.minzoom, this.maxzoom]), next);
+        next === null ? [] : defaultSelection(coveringSources(next, [this.minzoom, this.maxzoom]));
       this.namePrep = false;
       this.drawing = false;
       this.panelCollapsed = false;
@@ -691,7 +689,7 @@ export class RegionsController {
   }
 
   useRegionAsTemplate(region: SavedRegionDto): void {
-    this.bbox = [...region.bbox] as Bbox;
+    this.bbox = [...region.bbox] as LngLatBbox;
     this.selectedSources = [...region.sourceIds];
     this.minzoom = region.minzoom;
     this.maxzoom = region.maxzoom;
@@ -775,7 +773,7 @@ export class RegionsController {
     return list.filter((value) => value !== id);
   }
 
-  #coordName(box: Bbox): string {
+  #coordName(box: LngLatBbox): string {
     const { latitude, longitude } = bboxCenter(box);
     return `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
   }

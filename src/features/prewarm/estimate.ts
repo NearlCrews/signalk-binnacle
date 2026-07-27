@@ -4,10 +4,10 @@
  * byte limits while saving. */
 
 import {
-  type Bbox,
   CHART_SOURCES,
   type ChartSource,
   estimateBytes,
+  type LngLatBbox,
   tileCountInBbox,
   type ZoomRange,
 } from 'signalk-chart-sources';
@@ -37,7 +37,7 @@ export function positionWarmSources(): ChartSource[] {
 /** Sources that cover the drawn bbox: region sources where tileCountInBbox > 0. Sources with no
  * bounds are global and always included for a non-empty bbox; the basemap (global, no bounds) covers
  * any non-empty box. */
-export function coveringSources(bbox: Bbox, zoomRange: ZoomRange): ChartSource[] {
+export function coveringSources(bbox: LngLatBbox, zoomRange: ZoomRange): ChartSource[] {
   return regionSources().filter((s) => tileCountInBbox(s, bbox, zoomRange) > 0);
 }
 
@@ -74,7 +74,7 @@ export type DownloadGateReason =
  * workflow. Keeping this decision pure prevents a disabled Download button from drifting away from
  * its explanation as new gates are added. */
 export function downloadGateReason(opts: {
-  bbox: Bbox | null;
+  bbox: LngLatBbox | null;
   sources: string[];
   accessBlocked: boolean;
   stats: CacheStats | null;
@@ -91,7 +91,7 @@ export function downloadGateReason(opts: {
 
 /** The bbox of a drawn rectangle ring. Longitude is wrapped before finding its shortest enclosing
  * interval, so a rectangle spanning 170 through 190 degrees returns [170, ..., -170, ...]. */
-export function bboxFromRectangle(ring: Array<[number, number]>): Bbox {
+export function bboxFromRectangle(ring: Array<[number, number]>): LngLatBbox {
   if (ring.length === 0) throw new RangeError('rectangle ring must not be empty');
   const points: Array<{ latitude: number; longitude: number }> = [];
   for (const [lng, lat] of ring) {
@@ -109,7 +109,7 @@ export function bboxFromRectangle(ring: Array<[number, number]>): Bbox {
 
 /** A GeoJSON rectangle ring for a bbox. East is unwrapped when the box crosses the antimeridian so
  * Terra Draw seeds the short rectangle instead of drawing nearly the whole world. */
-export function rectangleRingFromBbox(bbox: Bbox): Array<[number, number]> {
+export function rectangleRingFromBbox(bbox: LngLatBbox): Array<[number, number]> {
   const [west, south, east, north] = bbox;
   const drawEast = east < west ? east + 360 : east;
   return [
@@ -126,7 +126,7 @@ export type EstimateResult = { ok: true; bytes: number } | { ok: false; message:
 /** Convert strict package estimate failures into a render-safe state at the panel boundary. */
 export function estimateRegionBytes(
   sources: readonly string[],
-  bbox: Bbox,
+  bbox: LngLatBbox,
   zoomRange: ZoomRange,
   perSourceAvgBytes: Readonly<Record<string, number>>,
 ): EstimateResult {
@@ -146,7 +146,7 @@ export function estimateRegionBytes(
  * drawn, at least one source is selected, administrator access is available, and the estimate fits
  * the regions-free budget. */
 export function canDownloadRegion(opts: {
-  bbox: Bbox | null;
+  bbox: LngLatBbox | null;
   sources: string[];
   accessBlocked: boolean;
   stats: CacheStats;

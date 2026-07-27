@@ -3,7 +3,6 @@ export {
   bboxCenter,
   bboxContains,
   bboxContainsPoint,
-  bboxIntersects,
   boundsOfPoints,
   formatBounds,
   isBbox4,

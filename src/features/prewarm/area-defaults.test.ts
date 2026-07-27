@@ -19,35 +19,38 @@ describe('defaultSelection', () => {
       'mpa-noaa',
       'basemap',
     );
-    expect(defaultSelection(covering, [-123, 37, -122, 38])).toEqual([
-      'depth-noaa-enc',
-      'seamark',
-      'basemap',
-    ]);
+    expect(defaultSelection(covering)).toEqual(['depth-noaa-enc', 'seamark', 'basemap']);
   });
 
   it('picks the EU chart, seamarks, and the base map', () => {
     const bbox = [2, 48, 3, 49] as const;
     const covering = coveringSources(bbox, [6, 12]);
-    expect(covering.some((source) => source.id === 'depth-noaa-enc')).toBe(true);
-    const selected = defaultSelection(covering, bbox);
+    expect(covering.some((source) => source.id === 'depth-noaa-enc')).toBe(false);
+    const selected = defaultSelection(covering);
     expect(selected).toEqual(expect.arrayContaining(['depth-emodnet', 'seamark', 'basemap']));
     expect(selected).not.toContain('depth-noaa-enc');
   });
 
   it('offshore with only coarse depth defaults to seamarks and the base map, no depth', () => {
     const covering = pick('depth-gebco', 'seamark', 'bound-eez', 'basemap');
-    expect(defaultSelection(covering, [100, -30, 110, -20])).toEqual(['seamark', 'basemap']);
+    expect(defaultSelection(covering)).toEqual(['seamark', 'basemap']);
   });
 
-  it('does not select NOAA ENC from its service envelope in non-US waters', () => {
-    const covering = pick('depth-noaa-enc', 'seamark', 'basemap');
-    expect(defaultSelection(covering, [139, 34, 141, 36])).toEqual(['seamark', 'basemap']);
+  it('does not offer NOAA ENC where only its display envelope covers the area', () => {
+    const bbox = [139, 34, 141, 36] as const;
+    const covering = coveringSources(bbox, [6, 12]);
+    expect(covering.some((source) => source.id === 'depth-noaa-enc')).toBe(false);
+    expect(defaultSelection(covering)).toEqual(expect.arrayContaining(['seamark', 'basemap']));
+  });
+
+  it('selects NOAA ENC in catalog coverage outside the old local US defaults', () => {
+    const bbox = [-79.9, 8.9, -79.7, 9.1] as const;
+    expect(defaultSelection(coveringSources(bbox, [6, 12]))).toContain('depth-noaa-enc');
   });
 
   it('selects NOAA ENC for an Alaska box crossing the antimeridian', () => {
     const bbox = [170, 50, -170, 60] as const;
-    expect(defaultSelection(coveringSources(bbox, [6, 12]), bbox)).toContain('depth-noaa-enc');
+    expect(defaultSelection(coveringSources(bbox, [6, 12]))).toContain('depth-noaa-enc');
   });
 });
 

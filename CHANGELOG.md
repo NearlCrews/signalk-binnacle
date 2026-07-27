@@ -6,6 +6,16 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Offline chart areas now use the shared chart catalog's disjoint NOAA ENC coverage regions, so
+  availability and download estimates exclude waters without NOAA chart cells.
+
+### Fixed
+
+- Fractional measured tile averages from Chart Locker are rounded up at the estimate boundary, so
+  valid cache statistics no longer prevent an offline-area download estimate.
+
 <a id="v0170"></a>
 
 ## [0.17.0] - 2026-07-27
