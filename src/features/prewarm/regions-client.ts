@@ -476,8 +476,10 @@ export function createRegionsClient(
           init({ signal }),
         );
         if (!r.ok) return null;
-        const data = await json<Record<string, unknown>>(r);
-        return safeText(data.display_name, MAX_NAME_LENGTH) ? data.display_name : null;
+        const data = await json<unknown>(r);
+        return isRecord(data) && safeText(data.display_name, MAX_NAME_LENGTH)
+          ? data.display_name
+          : null;
       } catch {
         return null;
       }

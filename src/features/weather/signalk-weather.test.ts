@@ -304,6 +304,30 @@ describe('point endpoint outcomes', () => {
       ).resolves.toEqual({ status: 'failure' });
     }
   });
+
+  it('rejects a forecast list holding an entry that is not a weather record', async () => {
+    const valid = { date: '2026-06-03T12:00:00Z' };
+    for (const entry of ['a string', 42, null, [], {}, { date: '' }]) {
+      await expect(
+        fetchPointForecastsResult(ORIGIN, 'p', 0, 0, 12, undefined, mockFetch([valid, entry])),
+      ).resolves.toEqual({ status: 'failure' });
+    }
+  });
+
+  it('rejects a warning list holding an entry that is not a warning record', async () => {
+    const valid = {
+      startTime: '2026-06-03T12:00:00Z',
+      endTime: '2026-06-03T18:00:00Z',
+      details: 'Gale warning',
+      source: 'Provider',
+      type: 'gale',
+    };
+    for (const entry of ['a string', null, { startTime: valid.startTime }]) {
+      await expect(
+        fetchWeatherWarningsResult(ORIGIN, 'p', 0, 0, undefined, mockFetch([valid, entry])),
+      ).resolves.toEqual({ status: 'failure' });
+    }
+  });
 });
 
 describe('Signal K adapter', () => {

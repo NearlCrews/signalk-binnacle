@@ -42,13 +42,17 @@ export function mergePointReadouts(
   grid: WeatherReadout | undefined,
   providerName: string,
 ): { value: WeatherReadout; source: string } | undefined {
-  const providerValues = provider
-    ? Object.entries(provider).filter(([, value]) => value !== undefined)
-    : [];
-  const merged = { ...grid, ...Object.fromEntries(providerValues) } as Partial<WeatherReadout>;
-  if (merged.speedMs === undefined || merged.fromRad === undefined) return undefined;
-  const value = merged as WeatherReadout;
-  if (providerValues.length === 0) return { value, source: GRID_SOURCE_LABEL };
+  const merged: Partial<WeatherReadout> = { ...grid };
+  let providerFields = 0;
+  for (const [key, contribution] of Object.entries(provider ?? {})) {
+    if (contribution === undefined) continue;
+    providerFields += 1;
+    Object.assign(merged, { [key]: contribution });
+  }
+  const { speedMs, fromRad } = merged;
+  if (speedMs === undefined || fromRad === undefined) return undefined;
+  const value: WeatherReadout = { ...merged, speedMs, fromRad };
+  if (providerFields === 0) return { value, source: GRID_SOURCE_LABEL };
   const gridContributed = grid
     ? Object.keys(grid).some((key) => provider?.[key as keyof WeatherReadout] === undefined)
     : false;

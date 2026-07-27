@@ -62,4 +62,29 @@ describe('fetchPathMeta', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, 3)));
     expect(await fetchPathMeta('http://pi', undefined, 'a.b')).toBeUndefined();
   });
+
+  it('drops zones that are not shaped like a zone', async () => {
+    const zones = [
+      { upper: 3, state: 'alarm', message: 'Shallow' },
+      'not a zone',
+      null,
+      { lower: 3, upper: 5 },
+      { lower: '3', upper: 5, state: 'warn' },
+      { lower: 3, upper: Number.NaN, state: 'warn' },
+      { lower: 5, state: 'warn', message: 7 },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, { zones })));
+    const meta = await fetchPathMeta('http://pi', undefined, 'a.b');
+    expect(meta?.zones).toEqual([{ upper: 3, state: 'alarm', message: 'Shallow' }]);
+  });
+
+  it('keeps banding correct when the server mixes valid and malformed zones', async () => {
+    const zones = [
+      { lower: 0, upper: 10, state: 'warn' },
+      { lower: '2', upper: 4, state: 'alarm' },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, { zones })));
+    const meta = await fetchPathMeta('http://pi', undefined, 'a.b');
+    expect(zoneStateFor(3, meta?.zones)).toBe('warning');
+  });
 });

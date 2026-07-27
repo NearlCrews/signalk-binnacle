@@ -13,6 +13,7 @@ import type {
 } from './profile-types';
 import { PORTABLE_PROFILE_SETTING_KEYS } from './profile-types';
 import {
+  cleanProfileId,
   cleanProfileName,
   isProfileSettings,
   isProfileTombstone,
@@ -70,29 +71,28 @@ class LocalProfileAdapter implements ProfileAdapter {
       return undefined;
     }
     if (raw == null && deviceRaw == null) return undefined;
-    let library: ProfilesState | undefined;
-    let device: Pick<ProfilesState, 'activeId' | 'applied'> | undefined;
+    let library: Record<string, unknown> | undefined;
+    let device: Record<string, unknown> | undefined;
     try {
-      const parsedLibrary = raw == null ? {} : JSON.parse(raw);
-      if (isRecord(parsedLibrary)) library = parsedLibrary as unknown as ProfilesState;
+      const parsedLibrary: unknown = raw == null ? {} : JSON.parse(raw);
+      if (isRecord(parsedLibrary)) library = parsedLibrary;
     } catch {
       // A corrupt shared library cannot be recovered from device-only selection state.
     }
     try {
-      const parsedDevice = deviceRaw == null ? undefined : JSON.parse(deviceRaw);
-      if (isRecord(parsedDevice)) {
-        device = parsedDevice as Pick<ProfilesState, 'activeId' | 'applied'>;
-      }
+      const parsedDevice: unknown = deviceRaw == null ? undefined : JSON.parse(deviceRaw);
+      if (isRecord(parsedDevice)) device = parsedDevice;
     } catch {
       // Keep the valid shared profile library and reset only this device's selection state.
     }
     if (!library) return undefined;
     return {
-      ...library,
-      profiles: Array.isArray(library.profiles) ? library.profiles : [],
-      activeId: device?.activeId ?? library.activeId,
-      defaultId: library.defaultId,
-      applied: device?.applied ?? library.applied,
+      profiles: validProfiles(library.profiles),
+      activeId: validStoredId(device?.activeId ?? library.activeId),
+      defaultId: validStoredId(library.defaultId),
+      applied: validApplied(device?.applied ?? library.applied),
+      tombstones: validTombstones(library.tombstones),
+      pending: validPending(library.pending),
     };
   }
 
@@ -109,6 +109,18 @@ class LocalProfileAdapter implements ProfileAdapter {
       // A failed persist must not break the in-memory profile currently running the chart.
     }
   }
+}
+
+function validStoredId(value: unknown): string | undefined {
+  return typeof value === 'string' && cleanProfileId(value) === value ? value : undefined;
+}
+
+function validApplied(value: unknown): ProfilesState['applied'] {
+  if (!isRecord(value)) return undefined;
+  const profileId = validStoredId(value.profileId);
+  return profileId !== undefined && isProfileSettings(value.settings)
+    ? { profileId, settings: value.settings }
+    : undefined;
 }
 
 function validProfiles(value: unknown): Profile[] {

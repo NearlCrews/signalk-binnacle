@@ -4,7 +4,7 @@ import {
   type WeatherGrid,
   type WeatherSourceMetadata,
 } from '$entities/weather';
-import { DEG_TO_RAD, PA_PER_HPA, readBoundedJson, withTimeout } from '$shared/lib';
+import { DEG_TO_RAD, isRecord, PA_PER_HPA, readBoundedJson, withTimeout } from '$shared/lib';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
@@ -153,8 +153,14 @@ async function fetchGridLocations<T>(
     const locs: T[] = [];
     for (const r of responses) {
       if (!r.ok) return undefined;
-      const body = await readBoundedJson<T | T[]>(r, 16 * 1024 * 1024);
-      for (const l of Array.isArray(body) ? body : [body]) locs.push(l);
+      const body = await readBoundedJson<unknown>(r, 16 * 1024 * 1024);
+      for (const l of Array.isArray(body) ? body : [body]) {
+        // Every field below is read through parseHourlyTimes or finite(), so the per-location type is
+        // an assertion over the optional fields only. Reject a non-object location outright so that
+        // assertion never covers a primitive or null.
+        if (!isRecord(l)) return undefined;
+        locs.push(l as T);
+      }
     }
     return { locs, lats, lons };
   } catch (error) {

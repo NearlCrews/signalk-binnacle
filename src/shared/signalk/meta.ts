@@ -1,4 +1,4 @@
-import { isRecord } from '$shared/lib';
+import { isFiniteNumber, isRecord } from '$shared/lib';
 import { fetchAuthedJson } from './resource';
 
 // The display states a tile renders. alert and warn collapse to warning; alarm and emergency to
@@ -20,6 +20,18 @@ export interface PathMeta {
 }
 
 const STATE_RANK: Record<ZoneState, number> = { normal: 0, warning: 1, alarm: 2 };
+
+// Bounds must be finite numbers or absent: a string or NaN bound silently mis-bands every value it
+// is compared against, so a malformed zone is dropped rather than carried into the banding.
+function isMetaZone(value: unknown): value is MetaZone {
+  return (
+    isRecord(value) &&
+    typeof value.state === 'string' &&
+    (value.lower === undefined || isFiniteNumber(value.lower)) &&
+    (value.upper === undefined || isFiniteNumber(value.upper)) &&
+    (value.message === undefined || typeof value.message === 'string')
+  );
+}
 
 function displayState(state: string): ZoneState {
   if (state === 'alarm' || state === 'emergency') return 'alarm';
@@ -57,9 +69,7 @@ export async function fetchPathMeta(
   const url = `${base}/signalk/v1/api/vessels/self/${path.replaceAll('.', '/')}/meta`;
   const body = await fetchAuthedJson<unknown>(url, token);
   if (!isRecord(body)) return undefined;
-  const zones = Array.isArray(body.zones)
-    ? (body.zones.filter(isRecord) as unknown as MetaZone[])
-    : undefined;
+  const zones = Array.isArray(body.zones) ? body.zones.filter(isMetaZone) : undefined;
   return {
     zones,
     units: typeof body.units === 'string' ? body.units : undefined,

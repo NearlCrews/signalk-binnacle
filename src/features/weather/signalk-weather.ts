@@ -195,18 +195,18 @@ function validNumericRecord(value: unknown, fields: readonly string[]): boolean 
   return value === undefined || (isRecord(value) && hasOnlyFiniteNumbers(value, fields));
 }
 
-function cleanWeatherEntry(value: unknown): SignalKWeatherData | undefined {
-  if (!isRecord(value)) return undefined;
+function isSignalKWeatherData(value: unknown): value is SignalKWeatherData {
+  if (!isRecord(value)) return false;
   const date = boundedText(value.date, 64);
-  if (!date) return undefined;
+  if (!date) return false;
   if (
     value.description !== undefined &&
     boundedText(value.description, MAX_WEATHER_TEXT_LENGTH) === undefined
   ) {
-    return undefined;
+    return false;
   }
   for (const field of ['outside', 'wind', 'water', 'current', 'sun'] as const) {
-    if (value[field] !== undefined && !isRecord(value[field])) return undefined;
+    if (value[field] !== undefined && !isRecord(value[field])) return false;
   }
   const outside = isRecord(value.outside) ? value.outside : undefined;
   const wind = isRecord(value.wind) ? value.wind : undefined;
@@ -221,13 +221,13 @@ function cleanWeatherEntry(value: unknown): SignalKWeatherData | undefined {
     !validNumericRecord(water?.swell, WAVE_NUMBER_FIELDS) ||
     !validNumericRecord(water?.current, CURRENT_NUMBER_FIELDS)
   ) {
-    return undefined;
+    return false;
   }
   if (
     outside?.precipitationType !== undefined &&
     boundedText(outside.precipitationType, 128) === undefined
   ) {
-    return undefined;
+    return false;
   }
   if (outside?.pressureTendency !== undefined) {
     const tendency = outside.pressureTendency;
@@ -237,14 +237,14 @@ function cleanWeatherEntry(value: unknown): SignalKWeatherData | undefined {
         boundedText(tendency, 128) !== undefined
       )
     ) {
-      return undefined;
+      return false;
     }
   }
   const sun = isRecord(value.sun) ? value.sun : undefined;
   for (const field of ['sunrise', 'sunset'] as const) {
-    if (sun?.[field] !== undefined && boundedText(sun[field], 64) === undefined) return undefined;
+    if (sun?.[field] !== undefined && boundedText(sun[field], 64) === undefined) return false;
   }
-  return value as unknown as SignalKWeatherData;
+  return true;
 }
 
 function cleanWarning(value: unknown): WeatherWarning | undefined {
@@ -364,17 +364,18 @@ async function fetchWeatherListResult(
 ): Promise<EndpointOutcome<SignalKWeatherData[]>> {
   const result = await fetchOutcome<unknown>(url, token, fetchFn);
   if (result.status !== 'success') return result;
-  const list = Array.isArray(result.value)
+  const list: unknown[] = Array.isArray(result.value)
     ? result.value
     : result.value && typeof result.value === 'object'
       ? [result.value]
       : [];
   if (list.length > maxEntries) return { status: 'failure' };
-  const cleaned = list.map(cleanWeatherEntry);
-  if (cleaned.some((entry) => entry === undefined)) return { status: 'failure' };
-  return cleaned.length > 0
-    ? { status: 'success', value: cleaned as SignalKWeatherData[] }
-    : { status: 'empty' };
+  const entries: SignalKWeatherData[] = [];
+  for (const entry of list) {
+    if (!isSignalKWeatherData(entry)) return { status: 'failure' };
+    entries.push(entry);
+  }
+  return entries.length > 0 ? { status: 'success', value: entries } : { status: 'empty' };
 }
 
 function entryMs(entry: SignalKWeatherData | undefined): number {
@@ -450,11 +451,13 @@ export async function fetchWeatherWarningsResult(
   if (result.status !== 'success') return result;
   if (!Array.isArray(result.value)) return { status: 'failure' };
   if (result.value.length > MAX_WEATHER_WARNINGS) return { status: 'failure' };
-  const warnings = result.value.map(cleanWarning);
-  if (warnings.some((warning) => warning === undefined)) return { status: 'failure' };
-  return warnings.length > 0
-    ? { status: 'success', value: warnings as WeatherWarning[] }
-    : { status: 'empty' };
+  const warnings: WeatherWarning[] = [];
+  for (const entry of result.value) {
+    const warning = cleanWarning(entry);
+    if (!warning) return { status: 'failure' };
+    warnings.push(warning);
+  }
+  return warnings.length > 0 ? { status: 'success', value: warnings } : { status: 'empty' };
 }
 
 export async function fetchObservations(

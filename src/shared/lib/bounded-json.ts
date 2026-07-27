@@ -76,6 +76,10 @@ export async function readBoundedText(response: Response, maxBytes: number): Pro
 // The Content-Length check rejects oversized declared bodies early, while the streaming count covers
 // chunked responses and dishonest or absent length headers. A body-less Response-like test double
 // keeps using json(), after the same declared-length check.
+//
+// T is a caller assertion, NOT a validation: this helper bounds the number of bytes it reads and
+// nothing else. Prefer readBoundedJson<unknown> and a type guard at the call site. A concrete T is
+// only justified where the caller validates every field it goes on to read.
 export async function readBoundedJson<T>(
   response: Response,
   maxBytes: number = DEFAULT_JSON_RESPONSE_BYTES,

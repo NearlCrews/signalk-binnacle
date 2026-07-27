@@ -336,6 +336,61 @@ describe('ProfileStore local behavior', () => {
     }
   });
 
+  it('starts empty rather than trusting a stored library of the wrong shape', () => {
+    const values = new Map<string, string>([
+      [
+        'binnacle:profiles',
+        JSON.stringify({
+          schemaVersion: 'two',
+          profiles: 'not an array',
+          defaultId: 42,
+          tombstones: { id: 'x' },
+          pending: 'not a journal',
+        }),
+      ],
+      ['binnacle:profile-device', JSON.stringify({ activeId: 7, applied: 'not an object' })],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    try {
+      const store = new ProfileStore();
+
+      expect(store.profiles).toEqual([]);
+      expect(store.activeId).toBeUndefined();
+      expect(store.defaultId).toBeUndefined();
+      expect(store.hasPendingChanges).toBe(false);
+      expect(store.appliedSettings).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reseeds applied settings from the active profile when stored device state is corrupt', () => {
+    const valid = profile('valid', 'Valid library', 1);
+    const values = new Map<string, string>([
+      ['binnacle:profiles', JSON.stringify({ schemaVersion: 2, profiles: [valid] })],
+      [
+        'binnacle:profile-device',
+        JSON.stringify({ activeId: valid.id, applied: { profileId: valid.id, settings: 'junk' } }),
+      ],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    try {
+      const store = new ProfileStore();
+
+      expect(store.activeId).toBe(valid.id);
+      expect(store.appliedSettings).toEqual(valid.settings);
+      expect(store.remoteUpdateAvailable).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('starts with an empty profile library when browser storage access is blocked', () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
