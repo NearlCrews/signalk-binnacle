@@ -3,6 +3,7 @@ import {
   formatFixed,
   formatPressureOr,
   HOUR_MS,
+  knotsToMetersPerSecond,
   PA_PER_HPA,
   pressureUnit,
   type UnitsMode,
@@ -19,8 +20,8 @@ const FORECAST_STEPS = 6;
 const FREE_STEP_MS = 6 * HOUR_MS;
 const COMPATIBLE_VALID_TIME_MS = 3 * HOUR_MS;
 const PRESSURE_TREND_WINDOW_H = PRESSURE_TREND_WINDOW_MS / HOUR_MS;
-const GALE_MS = 34 * 0.514444;
-const STORM_MS = 48 * 0.514444;
+const GALE_MS = knotsToMetersPerSecond(34);
+const STORM_MS = knotsToMetersPerSecond(48);
 const DENSE_FOG_VISIBILITY_M = 1000;
 const RAPID_PRESSURE_FALL_PA_3H = -600;
 const ROUGH_SEA_HEIGHT_M = 2.5;

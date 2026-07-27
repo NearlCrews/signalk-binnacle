@@ -30,7 +30,8 @@ export interface Reorder {
 // window listeners, addressing rows by their index in the movable list, and commits a drop through
 // options.commit. getItems and getListEl are getters so the controller always reads the caller's
 // current list and list element rather than capturing stale refs, and so the movable list has a
-// single owner that cannot drift from the controller's copy.
+// single owner that cannot drift from the controller's copy. Construct it during a component's
+// initialization: it owns an effect that cancels a queued refocus frame when that component tears down.
 export function createReorder(options: ReorderOptions): Reorder {
   // The movable rows: read through the caller's getter so there is one owner of the list and the
   // controller cannot drift from it.
@@ -52,6 +53,15 @@ export function createReorder(options: ReorderOptions): Reorder {
   let reorderAnnouncement = $state('');
 
   const clamp = options.clampSlot ?? ((_items: ReorderItem[], _id: string, s: number) => s);
+
+  // The pending post-commit refocus frame. A quick second keyboard move supersedes the first, and
+  // the owner's teardown cancels whatever is still queued, so no frame runs against a torn-down list.
+  let refocusFrame: number | null = null;
+  $effect(() => {
+    return () => {
+      if (refocusFrame !== null) cancelAnimationFrame(refocusFrame);
+    };
+  });
 
   function movableIndex(id: string): number {
     return movable.findIndex((item) => item.id === id);
@@ -159,7 +169,9 @@ export function createReorder(options: ReorderOptions): Reorder {
     options.commit(id, to);
     reorderAnnouncement = `Moved ${title} to position ${to + 1} of ${movable.length}.`;
     // Keep focus on the moved handle as it follows the row to its new position.
-    requestAnimationFrame(() => {
+    if (refocusFrame !== null) cancelAnimationFrame(refocusFrame);
+    refocusFrame = requestAnimationFrame(() => {
+      refocusFrame = null;
       const moved = options
         .getListEl()
         ?.querySelector<HTMLElement>(

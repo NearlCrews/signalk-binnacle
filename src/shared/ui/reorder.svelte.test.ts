@@ -1,13 +1,27 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReorder, type ReorderItem } from './reorder.svelte';
 
-// requestAnimationFrame is not available in the Node test environment; stub it so the refocus
-// call inside handleKeydown does not throw (focus behavior is not asserted here).
+// The animation-frame pair is not available in the Node test environment; stub both so the refocus
+// scheduling inside handleKeydown does not throw, recording the handles rather than running the
+// callback (focus behavior is not asserted here).
+const scheduled: number[] = [];
+const cancelled: number[] = [];
+let nextFrame = 0;
+
 beforeAll(() => {
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    cb(0);
-    return 0;
+  vi.stubGlobal('requestAnimationFrame', () => {
+    nextFrame += 1;
+    scheduled.push(nextFrame);
+    return nextFrame;
   });
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+    cancelled.push(handle);
+  });
+});
+
+beforeEach(() => {
+  scheduled.length = 0;
+  cancelled.length = 0;
 });
 
 afterAll(() => {
@@ -75,5 +89,23 @@ describe('createReorder', () => {
     r.handleKeydown('item-0', fakeKey('ArrowDown'));
 
     expect(committed).toHaveLength(0);
+  });
+
+  it('cancels the pending refocus frame when a second move supersedes it', () => {
+    const items = makeItems(3);
+    const r = createReorder({
+      getItems: () => items,
+      getListEl: () => undefined,
+      commit: () => {},
+      rowAttribute: 'data-row',
+      handleSelector: '.handle',
+      itemNoun: 'Item',
+    });
+
+    r.handleKeydown('item-0', fakeKey('ArrowDown'));
+    r.handleKeydown('item-1', fakeKey('ArrowDown'));
+
+    expect(scheduled).toHaveLength(2);
+    expect(cancelled).toEqual([scheduled[0]]);
   });
 });

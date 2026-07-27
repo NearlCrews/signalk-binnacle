@@ -100,6 +100,9 @@ let listMaxHeight = $state(256);
 let pickerEl: HTMLElement | undefined;
 let triggerEl: HTMLButtonElement | undefined;
 const optionEls: (HTMLElement | null)[] = [];
+// The pending placement frame, so closing or unmounting the picker cannot leave a frame that reads
+// a detached trigger.
+let placeFrame: number | null = null;
 
 $effect(() => {
   if (!isOpen) return;
@@ -114,6 +117,10 @@ $effect(() => {
   return () => {
     window.removeEventListener('click', close, { capture: true });
     unregister();
+    if (placeFrame !== null) {
+      cancelAnimationFrame(placeFrame);
+      placeFrame = null;
+    }
   };
 });
 
@@ -135,8 +142,11 @@ function openAndFocus(): void {
   isOpen = true;
   const idx = options.findIndex((o) => o.value === value);
   const target = idx >= 0 ? idx : 0;
-  // After the list paints, place it in the roomier direction and focus the active row.
-  requestAnimationFrame(() => {
+  // After the list paints, place it in the roomier direction and focus the active row. Reopening
+  // while a frame is still queued supersedes it, so the older target cannot steal the focus.
+  if (placeFrame !== null) cancelAnimationFrame(placeFrame);
+  placeFrame = requestAnimationFrame(() => {
+    placeFrame = null;
     const rect = triggerEl?.getBoundingClientRect();
     if (rect) {
       const below = window.innerHeight - rect.bottom - 8;

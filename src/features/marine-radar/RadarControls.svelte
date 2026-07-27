@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatLengthOr,
   lengthUnit,
+  METERS_PER_FOOT,
   PLACEHOLDER,
   RAD_TO_DEG,
   type UnitsMode,
@@ -103,7 +104,7 @@ const isTransmitting = $derived(operational === 'transmit');
 // until a value arrives. Radar API controls stay in SI and convert at this display boundary.
 function displayNumber(def: ControlDefinition, value: number): number {
   if (def.range?.unit === 'rad') return value * RAD_TO_DEG;
-  if (def.range?.unit === 'm' && unitsMode === 'imperial') return value / 0.3048;
+  if (def.range?.unit === 'm' && unitsMode === 'imperial') return value / METERS_PER_FOOT;
   return value;
 }
 

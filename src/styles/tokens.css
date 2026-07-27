@@ -196,7 +196,11 @@
      overlay and large shadows already dropped above. */
   --shadow-side: none;
   /* No black shadow and no white edge highlight at night: both are invisible or off-contract on true
-     black. The deeper red --border is the only surface separation, by design. */
+     black. The deeper red --border is the only surface separation, by design.
+     These tokens are composed pairwise into single box-shadow lists (--shadow-lg with --edge-light,
+     --shadow-side with --edge-light), and a list containing the none keyword is invalid CSS that
+     drops the whole declaration, so the tokens of a composed pair must stay none together or
+     become real together. */
   --shadow-lg: none;
   --edge-light: none;
   /* Red mixed into near-black: a faint warm fill that reads as "active" without lifting the

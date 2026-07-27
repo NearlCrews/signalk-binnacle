@@ -2034,7 +2034,9 @@ const plotterActions = {
   {#if activePanel === 'profiles'}
     <div class="panel-slot" id="profiles-panel">
       {#await profilesPanelForAttempt()}
-        <div class="panel-loading" role="status">Loading profiles…</div>
+        <div class="slide-over slide-over--dock-left panel-loading" role="status">
+          Loading profiles…
+        </div>
       {:then module}
         <module.default
           {auth}
@@ -2059,13 +2061,9 @@ const plotterActions = {
           onBack={backToMenu}
         />
       {:catch}
-        <div class="panel-load-error" role="alert">
+        <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
           Profiles could not load.
-          <button
-            type="button"
-            class="btn btn-secondary"
-            onclick={() => (profilesPanelAttempt += 1)}
-          >
+          <button type="button" class="btn btn-ghost" onclick={() => (profilesPanelAttempt += 1)}>
             Retry
           </button>
         </div>

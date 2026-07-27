@@ -125,7 +125,7 @@ export function formatNmOr(meters: number | null | undefined, digits = 2): strin
 // argument so the formatters stay pure.
 export type UnitsMode = 'metric' | 'imperial';
 
-const METERS_PER_FOOT = 0.3048;
+export const METERS_PER_FOOT = 0.3048;
 const MM_PER_INCH = 25.4;
 const PA_PER_INHG = 3386.389;
 export const METERS_PER_MILE = 1609.344;

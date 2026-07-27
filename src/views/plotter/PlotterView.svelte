@@ -759,7 +759,9 @@ $effect(() => {
         />
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         {#await regionsPanelForAttempt()}
-          <div class="panel-loading" role="status">Loading offline charts…</div>
+          <div class="slide-over slide-over--dock-left panel-loading" role="status">
+            Loading offline charts…
+          </div>
         {:then module}
           <module.default
             adminAccess={chartLockerAdminAccess}
@@ -774,14 +776,16 @@ $effect(() => {
             onRetryAccess={onRetryChartLocker}
           />
         {:catch}
-          <div class="panel-load-error" role="alert">
+          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
             Offline charts could not load.
-            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
           </div>
         {/await}
       {:else if activePanel === 'charts-management' && companionBase !== null}
         {#await chartsPanelForAttempt()}
-          <div class="panel-loading" role="status">Loading installed charts…</div>
+          <div class="slide-over slide-over--dock-left panel-loading" role="status">
+            Loading installed charts…
+          </div>
         {:then module}
           <module.default
             adminAccess={chartLockerAdminAccess}
@@ -793,9 +797,9 @@ $effect(() => {
             onRetryAccess={onRetryChartLocker}
           />
         {:catch}
-          <div class="panel-load-error" role="alert">
+          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
             Installed charts could not load.
-            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
           </div>
         {/await}
       {/if}
@@ -837,7 +841,7 @@ $effect(() => {
         {:catch}
           <div class="panel-load-error" role="alert">
             Radar controls could not load.
-            <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
           </div>
         {/await}
       </SlideOver>
@@ -845,7 +849,7 @@ $effect(() => {
   {/if}
   {#if weatherPanelOpen}
     {#await weatherMapForAttempt()}
-      <div class="weather-loading" role="status">Loading weather…</div>
+      <div class="panel-loading panel-loading--cover" role="status">Loading weather…</div>
     {:then module}
       <module.default
         store={weather}
@@ -870,10 +874,10 @@ $effect(() => {
         }}
       />
     {:catch}
-      <div class="weather-load-error" role="alert">
+      <div class="panel-load-error panel-load-error--cover" role="alert">
         Weather view could not load.
-        <button type="button" class="btn btn-secondary" onclick={retryLazyPanel}>Retry</button>
-        <button type="button" class="btn btn-secondary" onclick={() => (weatherPanelOpen = false)}>
+        <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
+        <button type="button" class="btn btn-ghost" onclick={() => (weatherPanelOpen = false)}>
           Close
         </button>
       </div>
@@ -891,27 +895,6 @@ $effect(() => {
   inset-block-start: 0;
   inset-inline: 0;
   z-index: var(--z-overlay);
-}
-.panel-loading,
-.panel-load-error,
-.weather-loading,
-.weather-load-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  min-block-size: 8rem;
-  padding: var(--space-4);
-  color: var(--danger);
-  text-align: center;
-}
-.weather-loading,
-.weather-load-error {
-  position: absolute;
-  inset: 0;
-  background: var(--surface);
-  z-index: var(--z-panel);
 }
 /* Positions the arrival banner and the toast in the same top-center slot, stacked when both are
    showing at once. The wrapper spans the full width so it can center either child, but stays

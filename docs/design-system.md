@@ -205,7 +205,12 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Panels (`panels.css`): `.slide-over` and `.slide-over--dock-{left,right}` (the docked panel frame),
   `.panel-header`, `.panel-body`, `.panel-body--flex` (the bodyFlex column), `.panel-footer`, and
   `.panel-slot` plus its `--end` modifier (the absolute-positioned dock slot for a docked panel,
-  shared by App.svelte and PlotterView.svelte).
+  shared by App.svelte and PlotterView.svelte), and `.panel-loading` and `.panel-load-error` (what a
+  lazily-loaded panel shows in place of its module, the error block in the alarm color). Those two
+  carry layout only, so the surface comes from where the placeholder sits: inside an open panel's
+  body it needs nothing, standing in a bare `.panel-slot` it composes `.slide-over` and the dock
+  modifier of the panel it replaces so it holds the same frame, and the `--cover` modifier fills the
+  chart area for a panel that owns the whole viewport.
 - Overlays, modals: `.modal-card`.
 
 ## 6. Shared UI primitives (`$shared/ui`)

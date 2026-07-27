@@ -120,6 +120,38 @@
   font-size: var(--text-xs);
 }
 
+/* What a lazily-loaded panel shows in place of its module: the centered line while the chunk
+   resolves, and the failure block with its retry button. Shared by the docked panels and the weather
+   view so the two cannot drift. These carry layout and the error color only, so the surface comes
+   from where the placeholder sits: one rendered inside an open panel's body needs nothing, one
+   standing in a bare .panel-slot composes .slide-over and its dock modifier so it holds the frame of
+   the panel it replaces instead of painting text onto the chart, and the --cover modifier fills the
+   chart area for a panel that owns the whole viewport. The rules follow .slide-over in this module
+   so the error color beats the shell's --text at equal specificity. */
+.panel-loading,
+.panel-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-block-size: 8rem;
+  padding: var(--space-4);
+  text-align: center;
+}
+/* The failure block carries the alarm color the severity vocabulary uses, so a panel that could not
+   load reads as an error; the loading line stays ordinary body text. */
+.panel-load-error {
+  color: var(--alarm);
+}
+.panel-loading--cover,
+.panel-load-error--cover {
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  z-index: var(--z-panel);
+}
+
 /* The absolute-positioned slot for a docked panel, shared by App.svelte and PlotterView.svelte so
    the two never drift on position or the phone breakpoint collapse. The --end modifier docks the
    note detail panel to the trailing edge instead, opposite every other panel. */
