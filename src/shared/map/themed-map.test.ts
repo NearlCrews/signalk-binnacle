@@ -35,18 +35,31 @@ vi.mock('maplibre-gl', () => {
     canvas = new FakeCanvas();
     options: Record<string, unknown>;
     controls: { control: unknown; position?: string }[] = [];
-    keyboard = { disableRotation: vi.fn() };
-    touchZoomRotate = { disableRotation: vi.fn() };
+    painter: Record<string, never> | undefined = {};
+    keyboard: { disableRotation: ReturnType<typeof vi.fn> } | undefined = {
+      disableRotation: vi.fn(),
+    };
+    touchZoomRotate: { disableRotation: ReturnType<typeof vi.fn> } | undefined = {
+      disableRotation: vi.fn(),
+    };
     // A stand-in for the real maplibregl-ctrl-attrib <details> element, so a test can assert
     // createThemedMap's collapse call actually reaches it, not just that the no-op path
     // (selector finds nothing) is safe.
     attribElement = { classList: { remove: vi.fn() } };
-    // Lets a test exercise the cannot-construct path (a browser without WebGL2 throws here).
+    // Lets a test exercise an ordinary constructor exception independently of the partial-map path.
     static throwOnConstruct = false;
+    // MapLibre 6 reports GPU initialization through its error event, then returns a partial Map
+    // before assigning the renderer or public interaction handlers.
+    static returnWithoutRenderer = false;
     constructor(opts: Record<string, unknown> = {}) {
       if (FakeMap.throwOnConstruct) throw new Error('WebGL2 unavailable');
       FakeMap.instances.push(this);
       this.options = opts;
+      if (FakeMap.returnWithoutRenderer) {
+        this.painter = undefined;
+        this.keyboard = undefined;
+        this.touchZoomRotate = undefined;
+      }
     }
     on(event: string, fn: (e?: unknown) => void): void {
       const set = this.handlers.get(event) ?? new Set();
@@ -133,8 +146,9 @@ interface FakeMapInstance {
   fire(event: string, e?: unknown): void;
   options: Record<string, unknown>;
   controls: { control: { options: Record<string, unknown> }; position?: string }[];
-  keyboard: { disableRotation: ReturnType<typeof vi.fn> };
-  touchZoomRotate: { disableRotation: ReturnType<typeof vi.fn> };
+  painter?: Record<string, never>;
+  keyboard?: { disableRotation: ReturnType<typeof vi.fn> };
+  touchZoomRotate?: { disableRotation: ReturnType<typeof vi.fn> };
   attribElement: { classList: { remove: ReturnType<typeof vi.fn> } };
   remove: ReturnType<typeof vi.fn>;
   addedImages: string[];
@@ -426,8 +440,8 @@ describe('createThemedMap navigation controls', () => {
     createThemedMap({ container, onLoad: () => {} });
     const map = await lastMap();
     expect(map.options.dragRotate).toBe(false);
-    expect(map.touchZoomRotate.disableRotation).toHaveBeenCalledOnce();
-    expect(map.keyboard.disableRotation).toHaveBeenCalledOnce();
+    expect(map.touchZoomRotate?.disableRotation).toHaveBeenCalledOnce();
+    expect(map.keyboard?.disableRotation).toHaveBeenCalledOnce();
     expect(map.controls).toEqual([
       {
         control: { options: { showCompass: false, showZoom: true, visualizePitch: false } },
@@ -465,6 +479,151 @@ describe('createThemedMap transformRequest', () => {
 });
 
 describe('createThemedMap when the map cannot construct', () => {
+  it('shows the notice before constructing MapLibre when the WebGL2 probe fails', async () => {
+    const maplibregl = await import('maplibre-gl');
+    const instances = (maplibregl.Map as unknown as { instances: FakeMapInstance[] }).instances;
+    const probe = { width: 300, height: 150, getContext: vi.fn(() => null) };
+    const notice = { className: '', textContent: '', remove: vi.fn() };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn((tag: string) => (tag === 'canvas' ? probe : notice)),
+    });
+    const failingContainer = {
+      classList: { remove: vi.fn() },
+      replaceChildren: vi.fn(),
+    } as unknown as HTMLElement;
+
+    const handle = createThemedMap({ container: failingContainer, onLoad: () => {} });
+    const secondHandle = createThemedMap({ container: failingContainer, onLoad: () => {} });
+
+    expect(probe.getContext).toHaveBeenCalledWith('webgl2', {
+      alpha: true,
+      antialias: false,
+      depth: true,
+      desynchronized: false,
+      failIfMajorPerformanceCaveat: false,
+      powerPreference: 'high-performance',
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      stencil: true,
+    });
+    expect(probe.width).toBe(0);
+    expect(probe.height).toBe(0);
+    expect(instances).toHaveLength(0);
+    expect(failingContainer.replaceChildren).toHaveBeenCalledWith(notice);
+    expect(probe.getContext).toHaveBeenCalledOnce();
+
+    handle.destroy();
+    handle.destroy();
+    secondHandle.destroy();
+    expect(notice.remove).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases and caches a successful WebGL2 probe before constructing MapLibre', async () => {
+    const loseContext = vi.fn();
+    const getExtension = vi.fn(() => ({ loseContext }));
+    const isContextLost = vi.fn(() => false);
+    const probe = {
+      width: 300,
+      height: 150,
+      getContext: vi.fn(() => ({ getExtension, isContextLost })),
+    };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn(() => probe),
+    });
+
+    const handle = createThemedMap({ container, onLoad: () => {} });
+    const secondHandle = createThemedMap({ container, onLoad: () => {} });
+    const map = await lastMap();
+
+    expect(getExtension).toHaveBeenCalledWith('WEBGL_lose_context');
+    expect(loseContext).toHaveBeenCalledOnce();
+    expect(isContextLost).not.toHaveBeenCalled();
+    expect(probe.getContext).toHaveBeenCalledOnce();
+    expect(probe.width).toBe(0);
+    expect(probe.height).toBe(0);
+    expect(map.options.canvasContextAttributes).toEqual(
+      expect.objectContaining({ powerPreference: 'high-performance', stencil: true }),
+    );
+
+    handle.destroy();
+    secondHandle.destroy();
+  });
+
+  it('constructs MapLibre when the optional probe cleanup extension is unavailable', async () => {
+    const maplibregl = await import('maplibre-gl');
+    const instances = (maplibregl.Map as unknown as { instances: FakeMapInstance[] }).instances;
+    const getExtension = vi.fn(() => null);
+    const isContextLost = vi.fn(() => false);
+    const probe = {
+      width: 300,
+      height: 150,
+      getContext: vi.fn(() => ({
+        getExtension,
+        isContextLost,
+      })),
+    };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn(() => probe),
+    });
+    const usableContainer = {
+      classList: { remove: vi.fn() },
+      replaceChildren: vi.fn(),
+    } as unknown as HTMLElement;
+
+    const handle = createThemedMap({ container: usableContainer, onLoad: () => {} });
+
+    expect(instances).toHaveLength(1);
+    expect(getExtension).toHaveBeenCalledWith('WEBGL_lose_context');
+    expect(isContextLost).not.toHaveBeenCalled();
+    expect(probe.width).toBe(0);
+    expect(probe.height).toBe(0);
+    expect(usableContainer.replaceChildren).not.toHaveBeenCalled();
+    handle.destroy();
+  });
+
+  it('constructs MapLibre when best-effort probe cleanup throws', async () => {
+    const maplibregl = await import('maplibre-gl');
+    const instances = (maplibregl.Map as unknown as { instances: FakeMapInstance[] }).instances;
+    const loseContext = vi.fn(() => {
+      throw new Error('cleanup unavailable');
+    });
+    const probe = {
+      width: 300,
+      height: 150,
+      getContext: vi.fn(() => ({
+        getExtension: vi.fn(() => ({ loseContext })),
+      })),
+    };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn(() => probe),
+    });
+    const usableContainer = {
+      classList: { remove: vi.fn() },
+      replaceChildren: vi.fn(),
+    } as unknown as HTMLElement;
+
+    const handle = createThemedMap({ container: usableContainer, onLoad: () => {} });
+
+    expect(instances).toHaveLength(1);
+    expect(loseContext).toHaveBeenCalledOnce();
+    expect(probe.width).toBe(0);
+    expect(probe.height).toBe(0);
+    expect(usableContainer.replaceChildren).not.toHaveBeenCalled();
+    handle.destroy();
+  });
+
   it('shows the cannot-start notice and clears it on destroy', async () => {
     const maplibregl = await import('maplibre-gl');
     const MapClass = maplibregl.Map as unknown as { throwOnConstruct: boolean };
@@ -477,7 +636,10 @@ describe('createThemedMap when the map cannot construct', () => {
       removeEventListener: vi.fn(),
       createElement: vi.fn(() => notice),
     });
-    const failingContainer = { replaceChildren: vi.fn() } as unknown as HTMLElement;
+    const failingContainer = {
+      classList: { remove: vi.fn() },
+      replaceChildren: vi.fn(),
+    } as unknown as HTMLElement;
     try {
       const handle = createThemedMap({ container: failingContainer, onLoad: () => {} });
       expect(notice.className).toContain('chart-start-error');
@@ -485,9 +647,73 @@ describe('createThemedMap when the map cannot construct', () => {
       expect(failingContainer.replaceChildren).toHaveBeenCalledWith(notice);
       expect(consoleError).toHaveBeenCalled();
       handle.destroy();
+      handle.destroy();
       expect(notice.remove).toHaveBeenCalled();
     } finally {
       MapClass.throwOnConstruct = false;
+    }
+  });
+
+  it('shows the cannot-start notice when MapLibre returns without a renderer', async () => {
+    const maplibregl = await import('maplibre-gl');
+    const MapClass = maplibregl.Map as unknown as { returnWithoutRenderer: boolean };
+    MapClass.returnWithoutRenderer = true;
+    const loseContext = vi.fn();
+    const isContextLost = vi.fn(() => true);
+    const probe = {
+      width: 300,
+      height: 150,
+      getContext: vi.fn(() => ({
+        getExtension: vi.fn(() => ({ loseContext })),
+        isContextLost,
+      })),
+    };
+    const notice = { className: '', textContent: '', remove: vi.fn() };
+    vi.stubGlobal('document', {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      createElement: vi.fn((tag: string) => (tag === 'canvas' ? probe : notice)),
+    });
+    const failingContainer = {
+      classList: { remove: vi.fn() },
+      replaceChildren: vi.fn(),
+    } as unknown as HTMLElement;
+    const onLoad = vi.fn();
+
+    try {
+      const handle = createThemedMap({
+        container: failingContainer,
+        cannotStartNotice: 'Weather cannot start without WebGL2.',
+        onLoad,
+      });
+      const partialMap = await lastMap();
+      const secondHandle = createThemedMap({
+        container: failingContainer,
+        cannotStartNotice: 'Weather cannot start without WebGL2.',
+        onLoad,
+      });
+
+      expect(partialMap.painter).toBeUndefined();
+      expect(partialMap.keyboard).toBeUndefined();
+      expect(partialMap.touchZoomRotate).toBeUndefined();
+      expect(loseContext).toHaveBeenCalledOnce();
+      expect(notice.className).toContain('chart-start-error');
+      expect(notice.textContent).toBe('Weather cannot start without WebGL2.');
+      expect(failingContainer.classList.remove).toHaveBeenCalledWith('maplibregl-map');
+      expect(failingContainer.replaceChildren).toHaveBeenCalledWith(notice);
+      expect(onLoad).not.toHaveBeenCalled();
+      expect(
+        (maplibregl.Map as unknown as { instances: FakeMapInstance[] }).instances,
+      ).toHaveLength(1);
+      expect(probe.getContext).toHaveBeenCalledOnce();
+
+      handle.destroy();
+      handle.destroy();
+      secondHandle.destroy();
+      expect(notice.remove).toHaveBeenCalledTimes(2);
+    } finally {
+      MapClass.returnWithoutRenderer = false;
     }
   });
 });

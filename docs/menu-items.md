@@ -64,8 +64,10 @@ source, and surrounding traffic before relying on it.
   stay available. Conflicting actions are locked until completion.
 - **Alarms** lists bounded, validated Signal K notifications by severity. Silence and acknowledge are
   locked while pending and require server write access. A disconnected stream is labeled because
-  displayed alarm state may be stale. Collision and shallow-water settings stay in safe numeric
-  bounds, in SI internally, with conversion only at display inputs.
+  displayed alarm state may be stale. Collision warnings publish as visual-only Signal K deltas,
+  while danger alarms use the Notifications API with visual and sound methods. Collision and
+  shallow-water settings stay in safe numeric bounds, in SI internally, with conversion only at
+  display inputs.
 
 ## Weather
 

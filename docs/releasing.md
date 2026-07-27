@@ -15,12 +15,13 @@ release, or npm publication. Obtain explicit owner approval immediately before c
    contributor, and operational guide. Keep navigation advice explicitly advisory.
 5. Confirm `signalk.appIcon`, `signalk.displayName`, `signalk.screenshots`, keywords, repository,
    homepage, license, Node engine, dependency ranges, and the `files` allowlist in `package.json`.
-6. Confirm every screenshot path exists in the built `public/` tree. Capture replacements from a
-   controlled demo session at a location unrelated to the maintainer, clear browser storage first,
-   and do not supply an own-vessel position. Visually inspect the instrument dock and trailing status
-   cluster for coordinates, inspect every image for recognizable private locations, and confirm the
-   PNG files contain no EXIF, GPS, or text metadata. Do not replace screenshots as an unrelated side
-   effect of release preparation.
+6. Confirm every screenshot path exists in the built `public/` tree. The App Store accepts up to six
+   images, uses the first as the hero image, and recommends 1280 by 800 pixels (16:10) at about 500 KB
+   or less per file. Capture replacements from a controlled demo session at a location unrelated to
+   the maintainer, clear browser storage first, and do not supply an own-vessel position. Visually
+   inspect the instrument dock and trailing status cluster for coordinates, inspect every image for
+   recognizable private locations, and confirm the PNG files contain no EXIF, GPS, or text metadata.
+   Do not replace screenshots as an unrelated side effect of release preparation.
 
 ## Run the release gate
 

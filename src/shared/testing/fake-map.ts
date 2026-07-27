@@ -40,14 +40,23 @@ export function createFakeMap() {
     ) => {
       // A real MapLibre source carries only its own type's mutator, so attach just that one: a
       // wrong-type call then throws in tests as in the browser instead of silently succeeding.
-      const source: FakeSource = { data: spec.data, maxzoom: spec.maxzoom, tiles: spec.tiles };
+      const isTileSource =
+        spec.type === 'raster' || spec.type === 'vector' || spec.type === 'raster-dem';
+      // MapLibre's runtime tile source begins at the constructor default, even when the source
+      // specification declares another maxzoom. The declared option or remote TileJSON metadata is
+      // applied asynchronously, so tests must not make an immediate runtime read look authoritative.
+      const source: FakeSource = {
+        data: spec.data,
+        maxzoom: isTileSource ? 22 : spec.maxzoom,
+        tiles: spec.tiles,
+      };
       if (spec.type === 'geojson') {
         source.setData = (data: unknown) => {
           source.data = data;
         };
       } else if (spec.type === 'canvas' || spec.type === 'image') {
         source.setCoordinates = vi.fn();
-      } else if (spec.type === 'raster' || spec.type === 'vector' || spec.type === 'raster-dem') {
+      } else if (isTileSource) {
         source.setTiles = vi.fn();
       }
       sources.set(id, source);

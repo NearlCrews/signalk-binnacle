@@ -132,7 +132,10 @@ describe('chart overlay', () => {
     );
     const map = createFakeMap();
     overlay.add(fakeOverlayContext(map));
-    // A spec-declared maxzoom is final at construction: nothing to wait for.
+    const chartSource = [...map.sources.keys()][0];
+    // MapLibre exposes its constructor default until source options are applied asynchronously.
+    // The cap must still use the declared value rather than the temporary runtime value.
+    expect(map.sources.get(chartSource)?.maxzoom).toBe(22);
     expect(map.setLayerZoomRange).toHaveBeenCalledWith(
       expect.stringContaining('chart-noaa'),
       0,
@@ -176,7 +179,7 @@ describe('chart overlay', () => {
       if (!fakeSource) throw new Error('chart source missing');
       // A tile source reports the default maxzoom (22) from construction; a timed fallback
       // would cap against it and stop listening, so no amount of waiting may trigger a cap.
-      fakeSource.maxzoom = 22;
+      expect(fakeSource.maxzoom).toBe(22);
       vi.advanceTimersByTime(60_000);
       expect(map.setLayerZoomRange).not.toHaveBeenCalled();
       // The real metadata arrives late (a slow satellite link): the cap uses the real value.

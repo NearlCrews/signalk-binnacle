@@ -68,6 +68,30 @@ test('app shell renders the brand and a connection status', async ({ page }) => 
   await expect(page.getByText('SOG')).toBeVisible();
 });
 
+test('app shell stays usable and explains when WebGL2 is unavailable', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      contextId: string,
+      ...args: unknown[]
+    ) {
+      if (contextId === 'webgl2') return null;
+      return Reflect.apply(getContext, this, [contextId, ...args]);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.chart-start-error')).toContainText('WebGL2');
+  await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
+  await expect(page.getByText('SOG')).toBeVisible();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await expect(page.locator('#app-menu-launcher')).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 test('center and follow explain when no GPS fix is available', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {

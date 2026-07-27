@@ -6,13 +6,17 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0170"></a>
+
+## [0.17.0] - 2026-07-27
+
 ### Changed
 
-- The map engine is MapLibre GL JS 6 and now requires WebGL2, including Safari 15 and later. A
-  device without WebGL2 sees a clear notice in the affected map surface while instruments, alarms,
-  and panels keep working. Provided symbol anchors stay pinned under v6's changed icon-offset
-  scaling, and bundled builds explicitly emit and configure the map worker so vector maps start
-  reliably.
+- The map engine is MapLibre GL JS 6 and now requires WebGL2. The shipped ES2023 bundle requires
+  Safari 16.4 or later. A device without WebGL2 sees a clear notice in the affected map surface
+  while instruments, alarms, and panels keep working. Provided symbol anchors stay pinned under
+  v6's changed icon-offset scaling, and bundled builds explicitly emit and configure the map worker
+  so vector maps start reliably.
 - Collision warnings now publish over the delta stream only, so a warning stays visual instead of
   sounding boat-wide through the server's REST raise, which hardcodes an audible method. Danger
   alarms still raise through the Notifications API, and a successful raise or update now retracts
@@ -36,6 +40,11 @@ All notable changes to Binnacle are documented here. The format follows
 - Patched transitive development dependencies remove the current
   `brace-expansion` and `js-yaml` advisories, and the PWA build now uses the
   maintained off-main-thread plugin line without the vulnerable EJS toolchain.
+- WebGL2 startup now treats optional context cleanup as best effort and recovers from MapLibre's
+  partial GPU-initialization result, so a valid renderer is not rejected and an actual failure
+  leaves instruments, alarms, and panels usable.
+- A chart's declared native zoom cap now remains authoritative while MapLibre applies source options
+  asynchronously, instead of being replaced by the runtime source's temporary default of 22.
 - A locally cached profile applies at startup again. The startup apply ran before the map command
   bindings it pushes settings into existed, so any saved profile made boot fail its apply with an
   initialization error whenever profiles were stored locally.

@@ -80,6 +80,75 @@ export interface ThemedMapHandle {
 const DEFAULT_CENTER: [number, number] = [0, 30];
 const DEFAULT_ZOOM = 2;
 const STYLE_ARRIVAL_TIMEOUT_MS = 8_000;
+const MAP_CONTEXT_ATTRIBUTES = {
+  alpha: true,
+  antialias: false,
+  depth: true,
+  desynchronized: false,
+  failIfMajorPerformanceCaveat: false,
+  powerPreference: 'high-performance',
+  premultipliedAlpha: true,
+  preserveDrawingBuffer: false,
+  stencil: true,
+} satisfies WebGLContextAttributes;
+const mapContextSupport = new WeakMap<Document, boolean>();
+
+function canCreateMapContext(): boolean {
+  // MapLibre 6 registers global request-throttling state and DOM listeners before it discovers
+  // that WebGL2 initialization failed. Its public remove() assumes a renderer exists, so that
+  // partial Map cannot be cleaned up safely. Probe with the same effective default attributes
+  // first, then release the throwaway context when the optional cleanup extension is available.
+  const cached = mapContextSupport.get(document);
+  if (cached !== undefined) return cached;
+  if (typeof document.createElement !== 'function') return true;
+  const canvas = document.createElement('canvas');
+  if (typeof canvas.getContext !== 'function') return true;
+
+  let context: WebGL2RenderingContext | null = null;
+  const finishProbe = (supported: boolean) => {
+    canvas.width = 0;
+    canvas.height = 0;
+    mapContextSupport.set(document, supported);
+    return supported;
+  };
+  try {
+    context = canvas.getContext('webgl2', MAP_CONTEXT_ATTRIBUTES) as WebGL2RenderingContext | null;
+  } catch {
+    return finishProbe(false);
+  }
+  if (!context) return finishProbe(false);
+
+  try {
+    context.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch {
+    // Cleanup is best effort. Extension support and loss timing are not WebGL2 capabilities.
+  }
+  return finishProbe(true);
+}
+
+function cannotStartHandle(opts: ThemedMapOptions, error?: unknown): ThemedMapHandle {
+  if (error !== undefined) console.error('Map failed to initialize', error);
+
+  // A dead handle alone would leave a silent blank map surface. Say so where the map would be:
+  // the usual cause is a browser without the WebGL2 support MapLibre requires. A surface with
+  // different framing (the weather mini-map) overrides the copy through cannotStartNotice.
+  const notice = document.createElement('p');
+  notice.className = 'alert-note chart-start-error';
+  notice.textContent =
+    opts.cannotStartNotice ??
+    'The chart cannot start on this device. The usual cause is a browser without WebGL2 support. Instruments, alarms, and panels keep working.';
+  opts.container.classList.remove('maplibregl-map');
+  opts.container.replaceChildren(notice);
+
+  let destroyed = false;
+  return {
+    destroy: () => {
+      if (destroyed) return;
+      destroyed = true;
+      notice.remove();
+    },
+  };
+}
 
 // The shared MapLibre bootstrap for both map widgets (the navigation chart and the weather mini-map):
 // map creation, a ResizeObserver, the per-frame view-emit coalescer, sentinels, the LayerManager, the
@@ -87,6 +156,8 @@ const STYLE_ARRIVAL_TIMEOUT_MS = 8_000;
 // Each widget supplies only its overlay set and its own wiring via onLoad. One source of truth so the
 // two never drift.
 export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
+  if (!canCreateMapContext()) return cannotStartHandle(opts);
+
   let map: maplibregl.Map;
   try {
     const center: [number, number] = opts.view
@@ -101,6 +172,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       minZoom: opts.minZoom,
       maxZoom: opts.maxZoom,
       pixelRatio: opts.pixelRatio,
+      canvasContextAttributes: MAP_CONTEXT_ATTRIBUTES,
       // MapLibre 6 defaults to 4. Undefined preserves v5 vector rendering and query behavior.
       zoomLevelsToOverscale: undefined,
       dragRotate: false,
@@ -136,21 +208,24 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       },
     });
   } catch (error) {
-    console.error('Map failed to initialize', error);
-    // A dead handle alone would leave a silent blank map surface. Say so where the map would be:
-    // the usual cause is a browser without the WebGL2 support MapLibre requires. A surface with
-    // different framing (the weather mini-map) overrides the copy through cannotStartNotice.
-    const notice = document.createElement('p');
-    notice.className = 'alert-note chart-start-error';
-    notice.textContent =
-      opts.cannotStartNotice ??
-      'The chart cannot start on this device. The usual cause is a browser without WebGL2 support. Instruments, alarms, and panels keep working.';
-    opts.container.replaceChildren(notice);
-    return {
-      destroy: () => {
-        notice.remove();
-      },
-    };
+    return cannotStartHandle(opts, error);
+  }
+
+  // A context can still disappear between the probe and construction. MapLibre 6 then emits
+  // GPUInitializationError and returns before assigning its renderer and interaction handlers.
+  // Its static Map type cannot represent that early return, so validate the exported surface before
+  // using it. MapLibre's remove() assumes these fields exist too, so only recover the visible surface.
+  const initializedSurface = map as Partial<
+    Pick<maplibregl.Map, 'painter' | 'touchZoomRotate' | 'keyboard'>
+  >;
+  if (
+    !initializedSurface.painter ||
+    !initializedSurface.touchZoomRotate ||
+    !initializedSurface.keyboard
+  ) {
+    // Do not repeat a probe-success and real-context-failure race in another map surface.
+    mapContextSupport.set(document, false);
+    return cannotStartHandle(opts);
   }
 
   // Keep pinch zoom, arrow-key pan, and keyboard zoom available while disabling only rotation.

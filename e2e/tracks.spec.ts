@@ -43,7 +43,7 @@ test('tracks loads saved resources without a live stream and fits a narrow scree
   await expect(panel.getByText('1h 00m')).toBeVisible();
   await panel.getByRole('button', { name: 'Delete track' }).click();
   await expect(panel.getByText('Delete this track?')).toBeVisible();
-  await expect
-    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  );
 });

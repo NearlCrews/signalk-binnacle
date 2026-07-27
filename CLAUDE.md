@@ -105,8 +105,20 @@ not have to be corrected after the fact.
   failure is tracked upstream as maplibre/maplibre-gl-js#8018. MapLibre 6 requires WebGL2, so the
   chart and weather cannot-start notices must remain. Explicit worker wiring restored the real
   load event, and the synthetic-ready race was removed after the worker-backed path was proven.
-  The independent style-arrival watchdog and chart source-metadata lifecycle gate remain. Radar
-  and wind custom layers use `defaultProjectionData.mainMatrix` for normalized Mercator
+  The ES2023 production bundle requires Safari 16.4 or later. Before construction,
+  `createThemedMap` probes a WebGL2 context with the same effective attributes and releases it when
+  the optional cleanup extension is available. Only context creation determines support. MapLibre 6
+  otherwise installs global and DOM side effects before reporting GPU initialization failure, then
+  returns a partial Map that its public `remove()` cannot safely clean up. Preserve that probe and
+  the chart and weather cannot-start notices. Keep `zoomLevelsToOverscale`
+  explicitly `undefined`: MapLibre 6 defaults it to 4, while Binnacle preserves the v5 vector
+  rendering and query behavior. Supply on-demand style images through
+  `setMissingStyleImageResolver`; `styleimagemissing` is notification-only in v6. For a chart
+  source with declared `maxzoom`, cap from the source specification rather than an immediate
+  `getSource()` read because MapLibre temporarily reports its default 22 until asynchronous source
+  loading applies the option. URL-backed sources without a declaration continue to wait for
+  metadata. The independent style-arrival watchdog and chart source-metadata lifecycle gate remain.
+  Radar and wind custom layers use `defaultProjectionData.mainMatrix` for normalized Mercator
   coordinates.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).

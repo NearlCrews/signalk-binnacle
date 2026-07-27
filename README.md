@@ -14,27 +14,29 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.16.0
+## What's new in 0.17.0
 
-This release hardens chart imports, provider data, navigation state, and asynchronous map lifecycle
-handling.
+This release moves Binnacle to MapLibre GL JS 6 and strengthens chart rendering, collision
+signaling, accessibility, and long-running-session recovery.
 
-- **Private chart URLs.** Every query-bearing URL stays device-only by default, query values are
-  redacted in displays and errors, and sending the complete URL to Signal K requires an explicit
-  choice.
-- **Resilient chart loading.** Chart discovery uses `signalk-chart-sources` 0.4.0, signed PMTiles URLs
-  work without losing their queries, canceled imports stop promptly, and stale same-id overlays
-  cannot replace the user's latest action.
-- **Bounded provider data.** Signal K history and weather, Open-Meteo, RainViewer, marine radar, NOAA
-  CO-OPS, GPX, chart metadata, profiles, symbols, and companion responses are validated and bounded
-  before use.
-- **Safer long-running sessions.** Server chart writes are ordered, radar polling stops on teardown,
-  blocked IndexedDB opens cannot leak connections, and track recording survives RTC or NTP rollback
-  without joining separate segments.
-- **Stronger release gates.** WebKit functional coverage, direct alarm tests, CodeQL, current Svelte
-  and Vite tooling, and stricter package validation now protect the published build.
+- **MapLibre GL JS 6.** The map now uses MapLibre GL JS 6 with an explicitly emitted worker bundle.
+  It requires WebGL2, and the shipped ES2023 bundle requires Safari 16.4 or later. If WebGL2 is
+  unavailable, the affected map explains the problem while instruments, alarms, and panels remain
+  usable.
+- **Stable map behavior.** Provided symbol anchors stay aligned, declared chart zoom limits remain
+  intact, and lines crossing the antimeridian split cleanly across trails, vectors, rings, tracks,
+  routes, and measurements.
+- **Safer collision signaling.** Warnings remain visual through the delta stream, danger alarms
+  continue through the Notifications API, and stale notices are retracted after clears and API
+  recovery.
+- **Smoother long-running sessions.** Steady AIS contacts and unchanged radar rings avoid
+  unnecessary rebuilds, time-travel lookups use binary search, and service-worker activation cannot
+  trap the app in a reload loop.
+- **Clearer recovery and keyboard flows.** Cached profiles apply at startup again, concurrent note
+  loads stay independent, access requests explain why an upgrade did not complete, and menus share
+  consistent focus and keyboard behavior.
 
-See the [changelog](CHANGELOG.md#v0160) and [design system](docs/design-system.md) for the full details.
+See the [changelog](CHANGELOG.md#v0170) and [design system](docs/design-system.md) for the full details.
 
 ## What it does
 
@@ -152,9 +154,9 @@ Binnacle is built on a current web stack and engineered to run on modest helm ha
   import boundaries enforced by the build through a dependency-cruiser gate, a modular stylesheet
   assembled one concern per file, and shared UI primitives and helpers, so a new feature drops in
   against stable interfaces rather than by surgery on the core.
-- **GPU rendering.** MapLibre GL JS draws the vector base map and chart layers on the GPU. The own
-  vessel and every AIS target render as GPU symbol layers, and wind draws as a WebGL particle field
-  advected through the forecast on the graphics card.
+- **GPU rendering.** MapLibre GL JS 6 draws the vector base map and chart layers through WebGL2. The
+  own vessel and every AIS target render as GPU symbol layers, and wind draws as a WebGL particle
+  field advected through the forecast on the graphics card.
 - **Off-main-thread real-time pipeline.** A dedicated Web Worker hosts the Signal K WebSocket client;
   deltas are coalesced into frame-rate batches on a worker timer and fed into a path-keyed reactive
   store, so a busy AIS anchorage updates the readouts without stalling the chart render, and data and
@@ -174,7 +176,7 @@ Binnacle is built on a current web stack and engineered to run on modest helm ha
 
 - Signal K server 2.x.
 - Node.js >= 22.18 (for building from source).
-- A browser on the helm display, tablet, or phone.
+- A WebGL2-capable browser that supports the shipped ES2023 bundle. Safari 16.4 or later is required.
 - Optional: `signalk-chart-locker` for server-managed saved areas, automatic caching, shared storage,
   and installed PMTiles chart management.
 - Optional: a Signal K Radar API provider, such as Mayara, for the marine radar overlay and controls.

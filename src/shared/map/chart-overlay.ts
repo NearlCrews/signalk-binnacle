@@ -93,9 +93,12 @@ export function createChartOverlay(
   // The native max zoom lives in the source's TileJSON, which a PMTiles archive reports
   // only once it has loaded, so this is applied after the source is loaded. Each layer's
   // own minzoom is preserved (e.g. landuse is held back from low zoom for performance).
-  const capToNativeZoom = (map: MapLibreMap): boolean => {
+  const capToNativeZoom = (map: MapLibreMap, declaredMax?: number): boolean => {
     const source = map.getSource(chartSource) as { maxzoom?: number } | undefined;
-    const nativeMax = source?.maxzoom;
+    // MapLibre constructs tile sources with its default maxzoom before applying source options
+    // asynchronously. Use a declared value directly so an explicit maxzoom cannot be mistaken for
+    // the temporary default. URL-backed sources without one still wait for loaded metadata below.
+    const nativeMax = declaredMax ?? source?.maxzoom;
     if (nativeMax === undefined) return false;
     for (const layer of layers) {
       if (map.getLayer(layer.id)) {
@@ -150,7 +153,7 @@ export function createChartOverlay(
       // its metadata loads; reading earlier would see MapLibre's default instead.
       const specSource = specs.sources[chartSource] as { maxzoom?: number } | undefined;
       if (specSource?.maxzoom !== undefined) {
-        capToNativeZoom(ctx.map);
+        capToNativeZoom(ctx.map, specSource.maxzoom);
         return;
       }
       // A URL-backed source's native maxzoom becomes authoritative when its metadata arrives, so
