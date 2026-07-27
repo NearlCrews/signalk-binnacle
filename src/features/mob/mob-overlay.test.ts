@@ -23,16 +23,16 @@ function setup() {
 }
 
 describe('mob overlay', () => {
-  it('renders nothing without a mark', () => {
+  it('renders nothing without a mark', async () => {
     const { overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(sourceFeatures(map, 'binnacle-mob')).toHaveLength(0);
   });
 
-  it('renders the mark and the line back from the boat', () => {
+  it('renders the mark and the line back from the boat', async () => {
     const { store, mob, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     store.applyFrame(frame({ 'navigation.position': { latitude: 1, longitude: 2 } }));
     mob.trigger();
     overlay.sync(ctx);
@@ -43,9 +43,9 @@ describe('mob overlay', () => {
     ).toEqual(['LineString', 'Point']);
   });
 
-  it('splits the return line when the boat crosses the antimeridian', () => {
+  it('splits the return line when the boat crosses the antimeridian', async () => {
     const { store, mob, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     store.applyFrame(frame({ 'navigation.position': { latitude: 10, longitude: 179 } }));
     mob.trigger();
     store.applyFrame(frame({ 'navigation.position': { latitude: 12, longitude: -179 } }));
@@ -57,9 +57,9 @@ describe('mob overlay', () => {
     expect(line?.geometry.type).toBe('MultiLineString');
   });
 
-  it('clears once the mark is cancelled', () => {
+  it('clears once the mark is cancelled', async () => {
     const { store, mob, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     store.applyFrame(frame({ 'navigation.position': { latitude: 1, longitude: 2 } }));
     mob.trigger();
     overlay.sync(ctx);

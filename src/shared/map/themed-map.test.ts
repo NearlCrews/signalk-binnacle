@@ -723,7 +723,7 @@ describe('createThemedMap missing style images', () => {
     createThemedMap({ container, onLoad: () => {} });
     const map = await lastMap();
     expect(map.missingImageResolver).toBeTruthy();
-    map.missingImageResolver?.('office');
+    await map.missingImageResolver?.('office');
     expect(map.addedImages).toContain('office');
   });
 });

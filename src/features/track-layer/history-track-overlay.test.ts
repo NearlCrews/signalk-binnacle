@@ -25,7 +25,7 @@ describe('createHistoryTrackOverlay', () => {
     );
     const map = createFakeMap();
     const context = fakeOverlayContext(map);
-    overlay.add(context);
+    await overlay.add(context);
 
     overlay.sync(context);
 

@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe('tides overlay', () => {
-  it('refreshes the marker label when the minute turns over', () => {
+  it('refreshes the marker label when the minute turns over', async () => {
     vi.useFakeTimers();
     const t0 = Date.UTC(2026, 5, 8, 12, 0, 30);
     vi.setSystemTime(t0);
@@ -36,7 +36,7 @@ describe('tides overlay', () => {
     const overlay = createTidesOverlay(store, units as unknown as UnitsStore);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const label = () =>
       sourceFeatures<{ properties: { label: string } }>(map, 'binnacle-tides')[0].properties.label;
@@ -52,11 +52,11 @@ describe('tides overlay', () => {
     expect(label()).toContain('Low');
   });
 
-  it('dims the circle stroke along with the rest of the layer opacity', () => {
+  it('dims the circle stroke along with the rest of the layer opacity', async () => {
     const overlay = createTidesOverlay(new TidesStore(), unitsStub() as unknown as UnitsStore);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-tides-circle',

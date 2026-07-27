@@ -23,21 +23,21 @@ function storeWithGrid(): WeatherStore {
 }
 
 describe('wind overlay', () => {
-  it('adds a source and a line layer in the weather band', () => {
+  it('adds a source and a line layer in the weather band', async () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
     Object.assign(map, { triggerRepaint: vi.fn() });
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
   });
 
-  it('syncs the arrow features from the grid', () => {
+  it('syncs the arrow features from the grid', async () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
     Object.assign(map, { triggerRepaint: vi.fn() });
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     const hidden = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
     expect(hidden.features).toHaveLength(0);
@@ -50,19 +50,19 @@ describe('wind overlay', () => {
     expect(source.data).toBe(fc);
   });
 
-  it('removes its layer and source', () => {
+  it('removes its layer and source', async () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
 
-  it('recolors for the theme without throwing', () => {
+  it('recolors for the theme without throwing', async () => {
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() =>
       overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
     ).not.toThrow();

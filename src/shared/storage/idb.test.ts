@@ -133,7 +133,9 @@ describe('openIdbStore', () => {
     const { request, transaction, runner } = storeHarness();
     let settled = false;
     const pending = runner.run<string>('readwrite', () => request as unknown as IDBRequest);
-    pending.finally(() => {
+    // Not awaited on purpose: the assertion below is that `pending` is still unsettled before the
+    // transaction commits, so awaiting here would block until the very thing under test happens.
+    void pending.finally(() => {
       settled = true;
     });
     await Promise.resolve();

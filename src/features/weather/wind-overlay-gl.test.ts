@@ -45,7 +45,7 @@ describe('wind overlay WebGL field', () => {
     vi.unstubAllGlobals();
   });
 
-  it('suppresses hidden texture generation and pushes one texture when shown', () => {
+  it('suppresses hidden texture generation and pushes one texture when shown', async () => {
     vi.stubGlobal('document', Object.assign(new EventTarget(), { hidden: false }));
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
@@ -61,7 +61,7 @@ describe('wind overlay WebGL field', () => {
     }) as typeof map.addLayer;
     const ctx = fakeOverlayContext(map);
 
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(windParticles.setWind).not.toHaveBeenCalled();
 
@@ -71,7 +71,7 @@ describe('wind overlay WebGL field', () => {
     expect(windParticles.setWind).toHaveBeenCalledTimes(1);
   });
 
-  it('passes the default projection matrix to the renderer without early conversion', () => {
+  it('passes the default projection matrix to the renderer without early conversion', async () => {
     vi.stubGlobal('document', Object.assign(new EventTarget(), { hidden: false }));
     const overlay = createWindOverlay(storeWithGrid());
     const map = createFakeMap();
@@ -95,7 +95,7 @@ describe('wind overlay WebGL field', () => {
     }) as typeof map.addLayer;
     const ctx = fakeOverlayContext(map);
 
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.setVisible(ctx, true);
 
     const matrix = new Float64Array(Array.from({ length: 16 }, (_, index) => index + 0.123456789));

@@ -48,7 +48,7 @@ describe('createMarineRadarController', () => {
     });
     await controller.start();
     expect(controller.store.radars).toHaveLength(0);
-    controller.dispose();
+    await controller.dispose();
   });
 
   it('discovers radars and selects the first when available', async () => {
@@ -68,7 +68,7 @@ describe('createMarineRadarController', () => {
     });
     await controller.start();
     expect(controller.store.selectedId).toBe('a');
-    controller.dispose();
+    await controller.dispose();
   });
 
   it('setControl optimistically updates the store and writes the value', async () => {
@@ -115,7 +115,7 @@ describe('createMarineRadarController', () => {
 
     await controller.setControl('gain', { auto: true });
     expect(controller.store.controlAuto.gain).toBe(true);
-    controller.dispose();
+    await controller.dispose();
   });
 
   it('refresh removes a provider that disappeared and clears the selection', async () => {

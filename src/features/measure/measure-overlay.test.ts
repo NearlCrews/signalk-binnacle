@@ -13,16 +13,16 @@ function setup(mode: UnitsMode = 'metric') {
 }
 
 describe('measure overlay', () => {
-  it('renders nothing while no measurement is in progress', () => {
+  it('renders nothing while no measurement is in progress', async () => {
     const { overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(0);
   });
 
-  it('renders vertices, the line, and the total label on the last point', () => {
+  it('renders vertices, the line, and the total label on the last point', async () => {
     const { measure, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     measure.start();
     measure.add({ latitude: 0, longitude: 0 });
     measure.add({ latitude: 0.001, longitude: 0 });
@@ -34,9 +34,9 @@ describe('measure overlay', () => {
     expect(labeled?.properties?.label).toBe('111 m');
   });
 
-  it('redraws after each accepted point, not only the first one', () => {
+  it('redraws after each accepted point, not only the first one', async () => {
     const { measure, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     measure.start();
     measure.add({ latitude: 0, longitude: 0 });
     overlay.sync(ctx);
@@ -46,9 +46,9 @@ describe('measure overlay', () => {
     expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(3);
   });
 
-  it('unwraps an antimeridian crossing into the short visual leg', () => {
+  it('unwraps an antimeridian crossing into the short visual leg', async () => {
     const { measure, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     measure.start();
     measure.add({ latitude: 0, longitude: 179 });
     measure.add({ latitude: 0, longitude: -179 });
@@ -71,9 +71,9 @@ describe('measure overlay', () => {
     });
   });
 
-  it('relabels the total when the unit preference flips', () => {
+  it('relabels the total when the unit preference flips', async () => {
     const { measure, overlay, map, units, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     measure.start();
     measure.add({ latitude: 0, longitude: 0 });
     measure.add({ latitude: 0.001, longitude: 0 });
@@ -84,9 +84,9 @@ describe('measure overlay', () => {
     expect(labeled?.properties?.label).toMatch(/ ft$/);
   });
 
-  it('scales the line, the vertices, and the label with the overlay opacity', () => {
+  it('scales the line, the vertices, and the label with the overlay opacity', async () => {
     const { overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith('binnacle-measure-line', 'line-opacity', 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith(
@@ -106,9 +106,9 @@ describe('measure overlay', () => {
     );
   });
 
-  it('clears once the tool stops', () => {
+  it('clears once the tool stops', async () => {
     const { measure, overlay, map, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     measure.start();
     measure.add({ latitude: 0, longitude: 0 });
     overlay.sync(ctx);

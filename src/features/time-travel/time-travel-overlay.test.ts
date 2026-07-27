@@ -30,15 +30,15 @@ function store() {
 }
 
 describe('time-travel overlay', () => {
-  it('adds a marker source and circle layer', () => {
+  it('adds a marker source and circle layer', async () => {
     const { ctx, sources, layers } = fakeCtx();
     const overlay = createTimeTravelOverlay(store());
-    overlay.add(ctx);
+    await overlay.add(ctx);
     expect(sources.has('binnacle-time-travel-marker')).toBe(true);
     expect(layers.has('binnacle-time-travel-marker-circle')).toBe(true);
   });
 
-  it('sync sets marker data only when the marker sample changes', () => {
+  it('sync sets marker data only when the marker sample changes', async () => {
     const { ctx, sources } = fakeCtx();
     const s = store();
     s.active = true;
@@ -47,7 +47,7 @@ describe('time-travel overlay', () => {
     s.to = 0;
     s.scrubMs = 0;
     const overlay = createTimeTravelOverlay(s);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     const src = sources.get('binnacle-time-travel-marker');
     overlay.sync(ctx);
     expect(src?.setData).toHaveBeenCalledTimes(1);
@@ -58,10 +58,10 @@ describe('time-travel overlay', () => {
     expect(src?.setData).toHaveBeenCalledTimes(2);
   });
 
-  it('remove cleans up the source and layer', () => {
+  it('remove cleans up the source and layer', async () => {
     const { ctx, sources, layers } = fakeCtx();
     const overlay = createTimeTravelOverlay(store());
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.remove(ctx);
     expect(sources.size).toBe(0);
     expect(layers.size).toBe(0);

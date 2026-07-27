@@ -28,10 +28,10 @@ function dangerCollision(): CollisionAssessment {
 }
 
 describe('collision overlay', () => {
-  it('adds a source and a ring layer in the safety band with the danger contact', () => {
+  it('adds a source and a ring layer in the safety band with the danger contact', async () => {
     const overlay = createCollisionOverlay(dangerCollision());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('safety');
     // Pinned safety ring: an active alarm must never be user-dimmable.
     expect(overlay.supportsOpacity).toBe(false);
@@ -42,10 +42,10 @@ describe('collision overlay', () => {
     expect((source.data as { features: unknown[] }).features).toHaveLength(1);
   });
 
-  it('applyTheme recolors the ring stroke', () => {
+  it('applyTheme recolors the ring stroke', async () => {
     const overlay = createCollisionOverlay(dangerCollision());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-collision-ring',

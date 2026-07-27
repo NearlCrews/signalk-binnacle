@@ -13,6 +13,7 @@ export default tseslint.config(
       '.cave/**',
       '.claude/**',
       '.remember/**',
+      '.svelte-check/**',
       'coverage/**',
       'docs/superpowers/**',
       'playwright-report/**',
@@ -30,7 +31,6 @@ export default tseslint.config(
   },
   {
     files: ['**/*.ts'],
-    ignores: ['**/*.{test,spec}.ts'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {

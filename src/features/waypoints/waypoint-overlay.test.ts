@@ -49,10 +49,10 @@ function symbolsStore(symbol: SkSymbol): SymbolsStore {
 describe('waypoint overlay', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('adds the marker, symbol, and label layers and syncs the waypoints', () => {
+  it('adds the marker, symbol, and label layers and syncs the waypoints', async () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
     expect(map.getLayer('binnacle-waypoint-marker')).toBeTruthy();
@@ -65,29 +65,29 @@ describe('waypoint overlay', () => {
     expect(fc.features[0].properties).toEqual({ name: 'Anchorage' });
   });
 
-  it('sync is a no-op when the store version is unchanged', () => {
+  it('sync is a no-op when the store version is unchanged', async () => {
     const store = storeWith();
     const overlay = createWaypointOverlay(store);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     map.sources.get('binnacle-waypoints')?.setData?.('marker');
     overlay.sync(fakeOverlayContext(map));
     expect(map.sources.get('binnacle-waypoints')?.data).toBe('marker');
   });
 
-  it('applyTheme recolors the layers', () => {
+  it('applyTheme recolors the layers', async () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
-  it('remove tears down layers and sources', () => {
+  it('remove tears down layers and sources', async () => {
     const overlay = createWaypointOverlay(storeWith());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
@@ -105,7 +105,7 @@ describe('waypoint overlay', () => {
     // No explicit icon: the binnacle:waypoint symbol is the host built-in for 'waypoint'.
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(waypointSymbol()));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     // Before the image loads the waypoint stays a disc (no iconImage).
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
     await settle();
@@ -128,17 +128,17 @@ describe('waypoint overlay', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(waypointSymbol()));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     await settle();
     expect(map.hasImage(symbolIconId('w9'))).toBe(false);
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
   });
 
-  it('leaves a waypoint as a disc when no symbol matches its role', () => {
+  it('leaves a waypoint as a disc when no symbol matches its role', async () => {
     const noteOnly = waypointSymbol({ roles: ['note'] });
     const overlay = createWaypointOverlay(storeWith(), symbolsStore(noteOnly));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(map.getLayer('binnacle-waypoint-symbol')).toBeTruthy();
     expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
   });
@@ -163,7 +163,7 @@ describe('waypoint overlay', () => {
     const overlay = createWaypointOverlay(storeWith(), symbols);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     await settle();
 
     overlay.remove(ctx);

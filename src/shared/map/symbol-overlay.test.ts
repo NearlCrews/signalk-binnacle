@@ -26,41 +26,41 @@ function config(): SymbolOverlayConfig {
 }
 
 describe('createSymbolOverlay', () => {
-  it('adds the icon, source, and layer', () => {
+  it('adds the icon, source, and layer', async () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(map.images.has('binnacle-ais-icon')).toBe(true);
     expect(map.getSource('binnacle-ais-source')).toBeTruthy();
     expect(map.getLayer('binnacle-ais-symbol')).toBeTruthy();
   });
 
-  it('add is idempotent when the source and layer already exist (the reattach path)', () => {
+  it('add is idempotent when the source and layer already exist (the reattach path)', async () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     expect(() => overlay.add(ctx)).not.toThrow();
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
   });
 
-  it('remove deletes the layer, source, and icon image', () => {
+  it('remove deletes the layer, source, and icon image', async () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
     expect(map.images.has('binnacle-ais-icon')).toBe(false);
   });
 
-  it('remove tolerates an icon that is already gone', () => {
+  it('remove tolerates an icon that is already gone', async () => {
     const overlay = createSymbolOverlay(config());
     const map = fakeSymbolMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     map.images.delete('binnacle-ais-icon');
     expect(() => overlay.remove(ctx)).not.toThrow();
   });

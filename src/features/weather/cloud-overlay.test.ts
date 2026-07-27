@@ -23,35 +23,35 @@ function storeWithGrid(): WeatherStore {
 }
 
 describe('cloud overlay', () => {
-  it('adds a field source and layer in the weather band', () => {
+  it('adds a field source and layer in the weather band', async () => {
     const overlay = createCloudOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
   });
 
-  it('syncs without throwing', () => {
+  it('syncs without throwing', async () => {
     const overlay = createCloudOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() => overlay.sync(fakeOverlayContext(map))).not.toThrow();
   });
 
-  it('removes its layer and source', () => {
+  it('removes its layer and source', async () => {
     const overlay = createCloudOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
 
-  it('recolors for the theme without throwing', () => {
+  it('recolors for the theme without throwing', async () => {
     const overlay = createCloudOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() =>
       overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
     ).not.toThrow();

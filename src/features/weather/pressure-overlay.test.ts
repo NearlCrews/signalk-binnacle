@@ -20,19 +20,19 @@ function storeWithGrid(): WeatherStore {
 }
 
 describe('pressure overlay', () => {
-  it('adds a line and a label layer in the weather band', () => {
+  it('adds a line and a label layer in the weather band', async () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(2);
     expect(map.layers.size).toBe(2);
   });
 
-  it('syncs isobar features from the grid', () => {
+  it('syncs isobar features from the grid', async () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     const hidden = [...map.sources.values()][0].data as GeoJSON.FeatureCollection;
     expect(hidden.features).toHaveLength(0);
@@ -43,19 +43,19 @@ describe('pressure overlay', () => {
     expect(fc.features.length).toBeGreaterThan(0);
   });
 
-  it('removes its layers and sources', () => {
+  it('removes its layers and sources', async () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
 
-  it('recolors for the theme without throwing', () => {
+  it('recolors for the theme without throwing', async () => {
     const overlay = createPressureOverlay(storeWithGrid());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() =>
       overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
     ).not.toThrow();

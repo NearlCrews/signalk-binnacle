@@ -46,7 +46,7 @@ describe('course overlay', () => {
     expect(overlay.layerIds).toEqual([LINE_LAYER, POINT_LAYER]);
   });
 
-  it('add creates both sources and both layers', () => {
+  it('add creates both sources and both layers', async () => {
     const guidance: FakeGuidance = {
       active: false,
       nextPosition: undefined,
@@ -56,7 +56,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     expect(map.sources.has(LINE_SRC)).toBe(true);
     expect(map.sources.has(POINT_SRC)).toBe(true);
     expect(map.layers.has(LINE_LAYER)).toBe(true);
@@ -65,7 +65,7 @@ describe('course overlay', () => {
     expect(pointFeatures(map)).toHaveLength(0);
   });
 
-  it('sync draws a line from the vessel to the destination and a point at the destination when active', () => {
+  it('sync draws a line from the vessel to the destination and a point at the destination when active', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -78,7 +78,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
 
     const lines = lineFeatures(map);
@@ -98,7 +98,7 @@ describe('course overlay', () => {
     expect(point.coordinates).toEqual([20, 10]);
   });
 
-  it('splits a course across the antimeridian into the short visual leg', () => {
+  it('splits a course across the antimeridian into the short visual leg', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 12, longitude: -179 },
@@ -111,7 +111,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
 
     expect(lineFeatures(map)[0].geometry).toEqual({
@@ -133,7 +133,7 @@ describe('course overlay', () => {
     });
   });
 
-  it('sync clears both sources when not active', () => {
+  it('sync clears both sources when not active', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -143,7 +143,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(1);
 
@@ -154,7 +154,7 @@ describe('course overlay', () => {
     expect(pointFeatures(map)).toHaveLength(0);
   });
 
-  it('sync clears both sources when the vessel has no position fix', () => {
+  it('sync clears both sources when the vessel has no position fix', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -164,13 +164,13 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(0);
     expect(pointFeatures(map)).toHaveLength(0);
   });
 
-  it('sync clears both sources when the vessel position is stale', () => {
+  it('sync clears both sources when the vessel position is stale', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -180,7 +180,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(lineFeatures(map)).toHaveLength(1);
     vessel.positionStale = true;
@@ -189,7 +189,7 @@ describe('course overlay', () => {
     expect(pointFeatures(map)).toHaveLength(0);
   });
 
-  it('sync is a no-op when neither the vessel nor the destination has moved', () => {
+  it('sync is a no-op when neither the vessel nor the destination has moved', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -199,7 +199,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
 
     // Capture the source object and spy on setData to confirm it is not called again.
@@ -214,7 +214,7 @@ describe('course overlay', () => {
     expect(pointSpy).not.toHaveBeenCalled();
   });
 
-  it('sync redraws when the vessel moves', () => {
+  it('sync redraws when the vessel moves', async () => {
     const guidance: FakeGuidance = {
       active: true,
       nextPosition: { latitude: 10, longitude: 20 },
@@ -224,7 +224,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
 
     vessel.position = { latitude: 5.001, longitude: 15.001 };
@@ -234,7 +234,7 @@ describe('course overlay', () => {
     expect(line.coordinates[0]).toEqual([15.001, 5.001]);
   });
 
-  it('applyTheme recolors the line and point layers with the new select paint', () => {
+  it('applyTheme recolors the line and point layers with the new select paint', async () => {
     const guidance: FakeGuidance = {
       active: false,
       nextPosition: undefined,
@@ -244,7 +244,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     const nightPaint = mapThemePaint('night-red');
     overlay.applyTheme?.(ctx, nightPaint);
     expect(map.setPaintProperty).toHaveBeenCalledWith(LINE_LAYER, 'line-color', nightPaint.select);
@@ -255,7 +255,7 @@ describe('course overlay', () => {
     );
   });
 
-  it('remove tears down both layers and both sources', () => {
+  it('remove tears down both layers and both sources', async () => {
     const guidance: FakeGuidance = {
       active: false,
       nextPosition: undefined,
@@ -265,7 +265,7 @@ describe('course overlay', () => {
     const overlay = createCourseOverlay(guidance as never, vessel as never);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);

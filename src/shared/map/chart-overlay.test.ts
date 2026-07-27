@@ -9,13 +9,13 @@ vi.mock('./pmtiles', () => ({
 }));
 
 describe('chart overlay', () => {
-  it('adds the chart source and layer in the basemap band', () => {
+  it('adds the chart source and layer in the basemap band', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('basemap');
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
@@ -54,25 +54,25 @@ describe('chart overlay', () => {
     expect(overlay.chart?.kind).toBe('vector');
   });
 
-  it('remove deletes the layer and source', () => {
+  it('remove deletes the layer and source', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
 
-  it('setOpacity uses raster-opacity for a raster chart', () => {
+  it('setOpacity uses raster-opacity for a raster chart', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setOpacity?.(fakeOverlayContext(map), 0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       expect.stringContaining('chart-noaa'),
@@ -81,31 +81,31 @@ describe('chart overlay', () => {
     );
   });
 
-  it('setOpacity uses fill-opacity and line-opacity for a vector chart', () => {
+  it('setOpacity uses fill-opacity and line-opacity for a vector chart', async () => {
     const overlay = createChartOverlay(
       { identifier: 'vec', name: 'Vec', type: 'tileJSON', url: '/v/tilejson.json', layers: [] },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setOpacity?.(fakeOverlayContext(map), 0.5);
     expect(map.setPaintProperty).toHaveBeenCalledWith('chart-vec-water', 'fill-opacity', 0.5);
     expect(map.setPaintProperty).toHaveBeenCalledWith('chart-vec-roads', 'line-opacity', 0.5);
   });
 
-  it('registers a PMTiles archive on add and unregisters it on remove', () => {
+  it('registers a PMTiles archive on add and unregisters it on remove', async () => {
     const overlay = createChartOverlay(
       { identifier: 'pm', name: 'PM', type: 'tileJSON', url: 'https://x/c.pmtiles', layers: [] },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(registerPmtilesArchive).toHaveBeenCalledWith('https://x/c.pmtiles', undefined);
     overlay.remove(fakeOverlayContext(map));
     expect(unregisterPmtilesArchive).toHaveBeenCalledWith('https://x/c.pmtiles');
   });
 
-  it('does not touch the PMTiles registry for a plain tile-server chart', () => {
+  it('does not touch the PMTiles registry for a plain tile-server chart', async () => {
     vi.mocked(registerPmtilesArchive).mockClear();
     vi.mocked(unregisterPmtilesArchive).mockClear();
     const overlay = createChartOverlay(
@@ -113,13 +113,13 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(registerPmtilesArchive).not.toHaveBeenCalled();
     expect(unregisterPmtilesArchive).not.toHaveBeenCalled();
   });
 
-  it('caps chart layers immediately when the spec declares the native max zoom', () => {
+  it('caps chart layers immediately when the spec declares the native max zoom', async () => {
     const overlay = createChartOverlay(
       {
         identifier: 'noaa',
@@ -131,7 +131,7 @@ describe('chart overlay', () => {
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     const chartSource = [...map.sources.keys()][0];
     // MapLibre exposes its constructor default until source options are applied asynchronously.
     // The cap must still use the declared value rather than the temporary runtime value.
@@ -143,13 +143,13 @@ describe('chart overlay', () => {
     );
   });
 
-  it('caps a TileJSON-backed chart when its metadata arrives before the whole source loads', () => {
+  it('caps a TileJSON-backed chart when its metadata arrives before the whole source loads', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     // The native max zoom is unknown until the TileJSON loads, so nothing is capped yet.
     expect(map.setLayerZoomRange).not.toHaveBeenCalled();
     const chartSource = [...map.sources.keys()][0];
@@ -165,7 +165,7 @@ describe('chart overlay', () => {
     );
   });
 
-  it('keeps waiting for metadata instead of capping against the constructor default maxzoom', () => {
+  it('keeps waiting for metadata instead of capping against the constructor default maxzoom', async () => {
     vi.useFakeTimers();
     try {
       const overlay = createChartOverlay(
@@ -173,7 +173,7 @@ describe('chart overlay', () => {
         'http://pi.local',
       );
       const map = createFakeMap();
-      overlay.add(fakeOverlayContext(map));
+      await overlay.add(fakeOverlayContext(map));
       const chartSource = [...map.sources.keys()][0];
       const fakeSource = map.sources.get(chartSource);
       if (!fakeSource) throw new Error('chart source missing');
@@ -195,13 +195,13 @@ describe('chart overlay', () => {
     }
   });
 
-  it('remove detaches the metadata listener so a removed chart is never capped later', () => {
+  it('remove detaches the metadata listener so a removed chart is never capped later', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },
       'http://pi.local',
     );
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     const chartSource = [...map.sources.keys()][0];
     overlay.remove(fakeOverlayContext(map));
     const fakeSource = map.sources.get(chartSource);

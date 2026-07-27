@@ -17,10 +17,10 @@ function storeWithRadar(): WeatherStore {
 }
 
 describe('radar overlay', () => {
-  it('creates the source and layer in the weather band once a frame is available', () => {
+  it('creates the source and layer in the weather band once a frame is available', async () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     // Nothing is created until a frame lands: a raster source has no usable empty placeholder.
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
@@ -32,10 +32,10 @@ describe('radar overlay', () => {
     expect(map.layers.size).toBe(1);
   });
 
-  it('creates the source pointed at the latest frame, never empty', () => {
+  it('creates the source pointed at the latest frame, never empty', async () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     const source = [...map.sources.values()][0];
     expect(source.tiles).toEqual([
@@ -43,21 +43,21 @@ describe('radar overlay', () => {
     ]);
   });
 
-  it('creates nothing while there is no radar data, even when shown', () => {
+  it('creates nothing while there is no radar data, even when shown', async () => {
     const overlay = createRadarOverlay(new WeatherStore());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     overlay.sync(fakeOverlayContext(map));
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
   });
 
-  it('creates the layer once radar data arrives after being toggled on', () => {
+  it('creates the layer once radar data arrives after being toggled on', async () => {
     const store = new WeatherStore();
     const overlay = createRadarOverlay(store);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     expect(map.layers.size).toBe(0);
 
@@ -69,7 +69,7 @@ describe('radar overlay', () => {
     expect(map.layers.size).toBe(1);
   });
 
-  it('defers layer creation when toggled on while the slider is scrubbed away', () => {
+  it('defers layer creation when toggled on while the slider is scrubbed away', async () => {
     const store = storeWithRadar();
     store.setSelectedTime(2 * 60 * 60 * 1000); // two hours from "now" (wallNow = 0): scrubbed away
     const overlay = createRadarOverlay(
@@ -84,16 +84,16 @@ describe('radar overlay', () => {
       added.push(layer as (typeof added)[number]);
       return addLayer(layer);
     };
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     expect(map.layers.size).toBe(0);
     expect(added).toHaveLength(0);
   });
 
-  it('removes its layer and source', () => {
+  it('removes its layer and source', async () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     overlay.sync(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
@@ -101,10 +101,10 @@ describe('radar overlay', () => {
     expect(map.sources.size).toBe(0);
   });
 
-  it('recolors for the theme without throwing, before and after the layer exists', () => {
+  it('recolors for the theme without throwing, before and after the layer exists', async () => {
     const overlay = createRadarOverlay(storeWithRadar());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() =>
       overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
     ).not.toThrow();

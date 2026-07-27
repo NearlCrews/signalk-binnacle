@@ -25,19 +25,19 @@ function storeWithGrid(): WeatherStore {
 }
 
 describe('waves overlay', () => {
-  it('adds a field source and layer and an arrow source and layer in the weather band', () => {
+  it('adds a field source and layer and an arrow source and layer in the weather band', async () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('weather');
     expect(map.sources.size).toBe(2);
     expect(map.layers.size).toBe(2);
   });
 
-  it('syncs the arrow features from the grid', () => {
+  it('syncs the arrow features from the grid', async () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     const arrowSource = map.sources.get('binnacle-weather-waves-arrows');
     const hidden = arrowSource?.data as GeoJSON.FeatureCollection;
@@ -48,7 +48,7 @@ describe('waves overlay', () => {
     expect(fc.features.length).toBeGreaterThan(0);
   });
 
-  it('clears the field canvas when a new grid lacks the wave field', () => {
+  it('clears the field canvas when a new grid lacks the wave field', async () => {
     const store = storeWithGrid();
     const ctx2d = {
       createImageData: (w: number, h: number) => ({ data: { set: () => {} }, width: w, height: h }),
@@ -58,7 +58,7 @@ describe('waves overlay', () => {
     const canvas = { width: 0, height: 0, getContext: () => ctx2d } as unknown as HTMLCanvasElement;
     const overlay = createWavesOverlay(store, () => canvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.setVisible(fakeOverlayContext(map), true);
     expect(canvas.width).toBeGreaterThan(1); // the wave field was drawn
 
@@ -76,19 +76,19 @@ describe('waves overlay', () => {
     expect(ctx2d.clearRect).toHaveBeenCalled();
   });
 
-  it('removes its layers and sources', () => {
+  it('removes its layers and sources', async () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);
   });
 
-  it('recolors for the theme without throwing', () => {
+  it('recolors for the theme without throwing', async () => {
     const overlay = createWavesOverlay(storeWithGrid(), fakeCanvas);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(() =>
       overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red')),
     ).not.toThrow();

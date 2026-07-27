@@ -21,10 +21,10 @@ function storeWithShownRoute(): RouteStore {
 }
 
 describe('route overlay', () => {
-  it('adds the route, waypoint, and label layers and syncs shown routes', () => {
+  it('adds the route, waypoint, and label layers and syncs shown routes', async () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
     expect(map.getLayer('binnacle-route-line-casing')).toBeTruthy();
@@ -37,29 +37,29 @@ describe('route overlay', () => {
     expect(wptFc.features).toHaveLength(2);
   });
 
-  it('sync is a no-op when the store version is unchanged', () => {
+  it('sync is a no-op when the store version is unchanged', async () => {
     const store = storeWithShownRoute();
     const overlay = createRouteOverlay(store);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.sync(fakeOverlayContext(map));
     map.sources.get('binnacle-route-lines')?.setData?.('marker');
     overlay.sync(fakeOverlayContext(map));
     expect(map.sources.get('binnacle-route-lines')?.data).toBe('marker');
   });
 
-  it('applyTheme recolors the layers', () => {
+  it('applyTheme recolors the layers', async () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
-  it('remove tears down layers and sources', () => {
+  it('remove tears down layers and sources', async () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.remove(fakeOverlayContext(map));
     expect(map.layers.size).toBe(0);
     expect(map.sources.size).toBe(0);

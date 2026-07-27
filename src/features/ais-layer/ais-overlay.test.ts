@@ -30,22 +30,22 @@ beforeEach(() => vi.stubGlobal('ImageData', FakeImageData));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('ais overlay', () => {
-  it('adds an image, a source, and a symbol layer in the traffic band', () => {
+  it('adds an image, a source, and a symbol layer in the traffic band', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('traffic');
     expect(map.images.size).toBe(1);
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(1);
   });
 
-  it('syncs one feature per positioned target', () => {
+  it('syncs one feature per positioned target', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -64,11 +64,11 @@ describe('ais overlay', () => {
     expect(fc.features).toHaveLength(1);
   });
 
-  it('retains stale targets for pruning but does not render a stale position', () => {
+  it('retains stale targets for pruning but does not render a stale position', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -89,11 +89,11 @@ describe('ais overlay', () => {
     expect(store.aisTargets.size).toBe(1);
   });
 
-  it('skips setData when the ais version is unchanged', () => {
+  it('skips setData when the ais version is unchanged', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     store.applyFrame({
       self: new Map(),
       ais: new Map([
@@ -112,12 +112,12 @@ describe('ais overlay', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('throttles steady-state position churn to about 1 Hz and paints the latest data', () => {
+  it('throttles steady-state position churn to about 1 Hz and paints the latest data', async () => {
     const store = new SignalKStore();
     let t = 0;
     const overlay = createAisOverlay(new AisTargets(store), () => t);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
     overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
@@ -139,12 +139,12 @@ describe('ais overlay', () => {
     expect(point.coordinates[1]).toBe(1.002);
   });
 
-  it('paints a new target immediately even inside the throttle window', () => {
+  it('paints a new target immediately even inside the throttle window', async () => {
     const store = new SignalKStore();
     let t = 0;
     const overlay = createAisOverlay(new AisTargets(store), () => t);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
     overlay.sync(fakeOverlayContext(map));
     const source = [...map.sources.values()][0];
@@ -158,11 +158,11 @@ describe('ais overlay', () => {
     expect(fc.features).toHaveLength(2);
   });
 
-  it('applyTheme recolors the icon image', () => {
+  it('applyTheme recolors the icon image', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.updatedImages).toContain('binnacle-ais-icon');
   });
