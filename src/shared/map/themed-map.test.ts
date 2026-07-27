@@ -739,4 +739,49 @@ describe('createThemedMap style watchdog', () => {
     expect(map.styles).toHaveLength(1);
     expect(info).toHaveBeenCalledWith(expect.stringContaining('did not arrive'));
   });
+
+  it('gives the direct base a full timeout after a late companion failure', async () => {
+    vi.useFakeTimers();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    createThemedMap({
+      container,
+      companionBase: 'http://localhost/plugins/signalk-chart-locker',
+      onLoad: () => {},
+    });
+    const map = await lastMap();
+
+    vi.advanceTimersByTime(7_900);
+    map.fire('error', { error: new Error('companion style failed') });
+    expect(map.styles).toHaveLength(1);
+    expect(map.styles[0]).toEqual(expect.stringContaining('openfreemap'));
+
+    // Cross the original request's deadline. The new direct request must still be live.
+    vi.advanceTimersByTime(200);
+    expect(map.styles).toHaveLength(1);
+    expect(info).not.toHaveBeenCalledWith(expect.stringContaining('did not arrive'));
+
+    map.fire('styledata');
+    vi.advanceTimersByTime(8_000);
+    expect(map.styles).toHaveLength(1);
+  });
+
+  it('tries the direct base after a silent companion stall before falling back offline', async () => {
+    vi.useFakeTimers();
+    createThemedMap({
+      container,
+      companionBase: 'http://localhost/plugins/signalk-chart-locker',
+      onLoad: () => {},
+    });
+    const map = await lastMap();
+
+    vi.advanceTimersByTime(8_000);
+    expect(map.styles).toHaveLength(1);
+    expect(map.styles[0]).toEqual(expect.stringContaining('openfreemap'));
+
+    vi.advanceTimersByTime(7_999);
+    expect(map.styles).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(map.styles).toHaveLength(2);
+    expect(map.styles[1]).toMatchObject({ name: 'binnacle-offline-fallback' });
+  });
 });

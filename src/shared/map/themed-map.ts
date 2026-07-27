@@ -274,44 +274,62 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
 
   // If the base style JSON itself never arrives (plain http at sea: no service worker, no
   // internet), the map can never fire 'load' and nothing mounts, including the charts already
-  // sitting in the IndexedDB block cache. Swap in the one-layer fallback style so 'load' fires
-  // and every overlay mounts. The gate is precise: 'styledata' fires once the style JSON parses,
-  // so sprite, glyph, and tile failures (which all come after it) can never trip this. One shot;
-  // the real style returns on the next load with connectivity.
+  // sitting in the IndexedDB block cache. If a companion base was attempted, give the direct base
+  // its own bounded attempt, then swap in the one-layer fallback style so 'load' fires and every
+  // overlay mounts. The gate is precise: 'styledata' fires once the style JSON parses, so sprite,
+  // glyph, and tile failures (which all come after it) can never trip this. The real style returns
+  // on the next load with connectivity.
   let styleArrived = false;
   let triedDirectBase = false;
-  void mapInstance.once('styledata', () => {
-    styleArrived = true;
+  let styleWatchdog: ReturnType<typeof setTimeout> | undefined;
+  function stopStyleWatchdog(): void {
+    if (styleWatchdog === undefined) return;
     clearTimeout(styleWatchdog);
-  });
-  // A style request that neither completes nor errors (a stalled connection can hang far past any
-  // usefulness at sea) would otherwise leave a permanently blank map with nothing logged: the
-  // error path below reacts only to an 'error' event. After the bounded wait with neither
-  // styledata nor an error, fall back exactly like the terminal error branch.
-  const styleWatchdog = setTimeout(() => {
+    styleWatchdog = undefined;
+  }
+  function armStyleWatchdog(): void {
+    stopStyleWatchdog();
+    styleWatchdog = setTimeout(() => {
+      styleWatchdog = undefined;
+      handleStyleFailure('timeout');
+    }, STYLE_ARRIVAL_TIMEOUT_MS);
+  }
+  function handleStyleFailure(reason: 'error' | 'timeout'): void {
     if (styleArrived || destroyed) return;
-    styleArrived = true;
-    console.info(
-      '[map] the base map style did not arrive; starting on the offline fallback base. Cached charts and overlays still load.',
-    );
-    mapInstance.setStyle(fallbackBaseStyle());
-  }, STYLE_ARRIVAL_TIMEOUT_MS);
-  mapInstance.on('error', () => {
-    if (styleArrived || destroyed) return;
-    // A companion-proxied base style that fails while the device is online should not drop straight to
-    // the blank fallback: try the direct openfreemap style first (the proxy made a broken base more
-    // likely than the CDN was), and reserve the one-layer offline fallback for a second failure.
     if (opts.companionBase && !triedDirectBase) {
       triedDirectBase = true;
-      console.info('[map] the companion base style is unreachable; trying the direct base style.');
+      console.info(
+        reason === 'timeout'
+          ? '[map] the companion base style did not arrive; trying the direct base style.'
+          : '[map] the companion base style is unreachable; trying the direct base style.',
+      );
+      armStyleWatchdog();
       mapInstance.setStyle(baseStyleUrl());
       return;
     }
     styleArrived = true;
+    stopStyleWatchdog();
     console.info(
-      '[map] the base map style is unreachable; starting on the offline fallback base. Cached charts and overlays still load.',
+      reason === 'timeout'
+        ? '[map] the base map style did not arrive; starting on the offline fallback base. Cached charts and overlays still load.'
+        : '[map] the base map style is unreachable; starting on the offline fallback base. Cached charts and overlays still load.',
     );
     mapInstance.setStyle(fallbackBaseStyle());
+  }
+  void mapInstance.once('styledata', () => {
+    styleArrived = true;
+    stopStyleWatchdog();
+  });
+  // A style request that neither completes nor errors (a stalled connection can hang far past any
+  // usefulness at sea) would otherwise leave a permanently blank map with nothing logged: the
+  // error path below reacts only to an 'error' event. Each attempted style gets the full bounded
+  // wait: a late companion failure re-arms this before starting the direct base request.
+  armStyleWatchdog();
+  mapInstance.on('error', () => {
+    // A companion-proxied base style that fails while the device is online should not drop straight
+    // to the blank fallback. Try the direct OpenFreeMap style first, then reserve the one-layer
+    // offline fallback for the direct attempt's error or timeout.
+    handleStyleFailure('error');
   });
 
   // The OpenFreeMap "liberty" base style references a handful of sprite icons and landuse
@@ -420,7 +438,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
-      clearTimeout(styleWatchdog);
+      stopStyleWatchdog();
       cancelLongPress();
       removeCanvasListeners();
       stopTick();

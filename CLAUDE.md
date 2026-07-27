@@ -117,9 +117,9 @@ not have to be corrected after the fact.
   source with declared `maxzoom`, cap from the source specification rather than an immediate
   `getSource()` read because MapLibre temporarily reports its default 22 until asynchronous source
   loading applies the option. URL-backed sources without a declaration continue to wait for
-  metadata. The independent style-arrival watchdog and chart source-metadata lifecycle gate remain.
-  Radar and wind custom layers use `defaultProjectionData.mainMatrix` for normalized Mercator
-  coordinates.
+  metadata. The independent style-arrival watchdog gives the companion and direct base-style
+  attempts a full bounded timeout each, and the chart source-metadata lifecycle gate remains. Radar
+  and wind custom layers use `defaultProjectionData.mainMatrix` for normalized Mercator coordinates.
   `@signalk/server-api` is never a dependency: the few wire types are mirrored from its 2.x shapes in
   `src/shared/signalk/types.ts`, since importing the package crashes the worker (see the worker note below).
 

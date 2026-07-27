@@ -42,7 +42,9 @@ All notable changes to Binnacle are documented here. The format follows
   maintained off-main-thread plugin line without the vulnerable EJS toolchain.
 - WebGL2 startup now treats optional context cleanup as best effort and recovers from MapLibre's
   partial GPU-initialization result, so a valid renderer is not rejected and an actual failure
-  leaves instruments, alarms, and panels usable.
+  leaves instruments, alarms, and panels usable. A late companion base-style failure or silent
+  stall now starts a fresh bounded watchdog for the direct OpenFreeMap retry before the offline
+  fallback takes over.
 - A chart's declared native zoom cap now remains authoritative while MapLibre applies source options
   asynchronously, instead of being replaced by the runtime source's temporary default of 22.
 - A locally cached profile applies at startup again. The startup apply ran before the map command
