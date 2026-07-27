@@ -341,7 +341,12 @@ must not be repeatable.
   `signalk-category-chart-plotters`, a `signalk` manifest with `appIcon`, `displayName`, and
   `screenshots`, the build emitted into the served directory, and `files` shipping it. No
   server plugin is required for the foundation.
-- README image paths must resolve in the Signal K admin UI README view, which resolves relative
+- The README must contain no relative file links at all (docs/*.md, CHANGELOG.md, LICENSE,
+  .github/*): the admin UI App Store README view renders link targets unmodified and rewrites only
+  image paths, so relative links are dead there (verified in server-admin-ui ReadmeTab.tsx; cost
+  the 0.17.1 patch to strip them). Name shipped guides as plain text and use absolute URLs only
+  where a working link is essential. README image paths must resolve in the Signal K admin UI
+  README view, which resolves relative
   image paths against the package root (the shipped npm tarball). Binnacle ships only `public/`
   (the Vite build output), not `static/` (the Vite `publicDir` source), so a README image
   reference must never point at `static/`: it 404s in the admin UI even though it renders on

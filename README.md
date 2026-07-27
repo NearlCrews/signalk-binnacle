@@ -14,32 +14,12 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.17.0
+## What's new in 0.17.1
 
-This release moves Binnacle to MapLibre GL JS 6 and strengthens chart rendering, collision
-signaling, accessibility, and long-running-session recovery.
-
-- **MapLibre GL JS 6.** The map now uses MapLibre GL JS 6 with an explicitly emitted worker bundle.
-  It requires WebGL2, and the shipped ES2023 bundle requires Safari 16.4 or later. If WebGL2 is
-  unavailable, the affected map explains the problem while instruments, alarms, and panels remain
-  usable.
-- **Stable map behavior.** Provided symbol anchors stay aligned, declared chart zoom limits remain
-  intact, and lines crossing the antimeridian split cleanly across trails, vectors, rings, tracks,
-  routes, and measurements.
-- **Safer collision signaling.** Warnings remain visual through the delta stream, danger alarms
-  continue through the Notifications API, and stale notices are retracted after clears and API
-  recovery.
-- **Smoother long-running sessions.** Steady AIS contacts and unchanged radar rings avoid
-  unnecessary rebuilds, time-travel lookups use binary search, and service-worker activation cannot
-  trap the app in a reload loop.
-- **Clearer recovery and keyboard flows.** Cached profiles apply at startup again, concurrent note
-  loads stay independent, access requests explain why an upgrade did not complete, and menus share
-  consistent focus and keyboard behavior.
-- **Hardened validation and error surfaces.** Malformed server metadata zones no longer mis-band
-  instrument readings, overlay theme and opacity changes no longer race a layer add, and panel
-  loading and error states sit on a proper panel surface with alarm-colored errors.
-
-See the [changelog](CHANGELOG.md#v0170) and [design system](docs/design-system.md) for the full details.
+The README no longer uses file links. The Signal K App Store's README view renders links
+unmodified, so links to the shipped guides could never resolve there; guide references are plain
+text now and read correctly everywhere the README appears. See the changelog for the full details
+of this release and of 0.17.0, which moved Binnacle to MapLibre GL JS 6.
 
 ## What it does
 
@@ -76,7 +56,7 @@ Binnacle ships its full feature set as a Signal K webapp:
   with range rings, a heading line, strict night-red colors, confirmed transmit, immediate standby,
   direct overlay settings, and the tuning controls reported by the radar. Provider, stream,
   stale-data, access, and renderer failures remain distinct so an old picture is never presented as
-  live. See [Marine radar](docs/marine-radar.md).
+  live.
 - **Routing:** draw and save routes as Signal K resources, or tap **Go to here** (long-press or
   right-click the chart) to navigate straight to a point. Follow a route with a nav strip (cross-track,
   distance, bearing, velocity made good, and time to go) over the v2 Course API, with an arrival alarm
@@ -90,8 +70,7 @@ Binnacle ships its full feature set as a Signal K webapp:
   edits sync through Signal K when you are logged in, while each browser keeps its own active choice
   and chart view. Concurrent edits merge by setting instead of replacing the whole profile. Signal K
   2.23.0 and later provide the strongest atomic cross-station revision protection, while older
-  servers retain local saves and best-effort synchronization. See [Profiles and
-  settings](docs/profiles.md).
+  servers retain local saves and best-effort synchronization.
 - **Instruments:** tap the Instruments pill and the chart slides left for a gauge dock (SOG,
   heading, depth, apparent wind, and more from a curated catalog you pick and reorder); on a phone
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
@@ -123,15 +102,15 @@ Binnacle ships its full feature set as a Signal K webapp:
   marks the spot, publishes the boat-wide Signal K alarm, and raises a recovery strip with live
   bearing, range, and elapsed time, plus an opt-in **Steer to MOB** handoff to the course system. An
   MOB raised by another station shows here too.
-- **[Measure](docs/measure.md):** tap points on the chart for rhumb-line leg range, true bearing, and
+- **Measure:** tap points on the chart for rhumb-line leg range, true bearing, and
   a running total. The active strip guides each next tap, Undo and Clear keep the tool active, and
   Done removes its temporary session-only points.
-- **[Tracks](docs/tracks.md):** record, pause, save, show, and export segmented voyage tracks as
+- **Tracks:** record, pause, save, show, and export segmented voyage tracks as
   GeoJSON. GPS gaps never become invented route legs. Save the latest continuous segment as a reusable
   route, or confirm a retrace to navigate home along it. The panel explains persistence, access,
   loading, and refresh failures instead of silently losing state. The active trail survives reloads in
   IndexedDB, while completed tracks live in Signal K resources and can be shared with other clients.
-- **[Waypoints](docs/waypoints.md):** drop one from a long press, see it as a named marker, and locate,
+- **Waypoints:** drop one from a long press, see it as a named marker, and locate,
   navigate to, rename, or delete it from the Waypoints panel. Loading and failures stay explicit,
   accepted writes survive refresh failures, and navigation requires confirmation. Marks live in the
   server's waypoint resources, so they interoperate with other Signal K clients.
@@ -141,12 +120,12 @@ Binnacle ships its full feature set as a Signal K webapp:
   category, or provider; sort them by name, category, distance, or true bearing; preview and select a
   result on the chart; and open its structured detail. Loading, zoom-limit, cached-offline, empty, and
   provider-error states remain distinct. Custom chart symbols are supported through the
-  signalk-symbol-manager plugin. See [Find places](docs/find-places.md).
+  signalk-symbol-manager plugin.
 - **Your units:** every readout follows the server's imperial-or-metric unit preference; knots,
   nautical miles, and bearings stay nautical.
 - **Themes:** day, dusk, and night-red, with true red on black for a dark-adapted watch.
 
-See the [changelog](CHANGELOG.md) for the full list.
+See the changelog for the full list.
 
 ## Architecture
 
@@ -213,7 +192,7 @@ failure does not mislabel an authenticated administrator as signed out.
 `/signalk/v2/api/vessels/self/radars`. Mayara is the reference provider. Binnacle discovers radars,
 hydrates `/controls`, listens for `radars.*.controls.*` Signal K deltas, and opens the selected radar's
 reported spoke stream. Read access is sufficient for the picture; transmit, standby, and tuning writes
-require read-write approval. See [Marine radar setup and behavior](docs/marine-radar.md).
+require read-write approval.
 
 ## Usage
 
@@ -271,11 +250,10 @@ local network.
 For caching behavior, storage, and HTTPS requirements, see
 [Offline charts, Chart Locker, and SSL](#offline-charts-chart-locker-and-ssl-optional) below.
 
-For behavior, availability, recovery states, and safety rules for every menu action, see
-[Menu items](docs/menu-items.md). Detailed guides also cover [Tracks](docs/tracks.md),
-[Waypoints](docs/waypoints.md), [Find places](docs/find-places.md), [Measure](docs/measure.md), and
-[Marine radar](docs/marine-radar.md). Offline preparation and administrator-session troubleshooting
-are covered in [Offline charts](docs/offline-charts.md).
+For behavior, availability, recovery states, and safety rules for every menu action, see the menu
+items guide in the repository's docs directory. Detailed guides there also cover tracks, waypoints,
+find places, measure, marine radar, and offline charts, including offline preparation and
+administrator-session troubleshooting. The guides ship inside the installed package as well.
 
 ## Offline charts, Chart Locker, and SSL (optional)
 
@@ -288,8 +266,8 @@ The sign-in flow stays in the PWA window and redirects back to the current Binna
 already reports an administrator session but Chart Locker refuses it, Binnacle reports an access
 error and offers a retry instead of asking the administrator to sign in again.
 
-For the full setup, access, troubleshooting, download, and storage workflow, see
-[Offline charts](docs/offline-charts.md).
+The offline charts guide in the repository's docs directory covers the full setup, access,
+troubleshooting, download, and storage workflow.
 
 The Offline charts landing page has four jobs:
 
@@ -389,8 +367,8 @@ push. The hooks live in `.githooks/` and are opt-in via `core.hooksPath`, never 
 script. The E2E commands build first, while the pre-push
 `test:e2e:gate` reuses the existing `public/` build from `verify` so a push does not rebuild.
 
-Maintainers preparing a version should follow the [release checklist](docs/releasing.md). Preparation
-does not authorize a tag, GitHub release, or npm publication.
+Maintainers preparing a version should follow the release checklist in `docs/releasing.md`.
+Preparation does not authorize a tag, GitHub release, or npm publication.
 
 To run a local build inside your own Signal K server, link it into the server's module directory and
 add it to the server config so it loads:
@@ -411,7 +389,7 @@ Restart Signal K, then open `http://your-sk-server:3000/signalk-binnacle/` in a 
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) for the full text. The software is provided "AS IS", without
+Apache-2.0. See the LICENSE file for the full text. The software is provided "AS IS", without
 warranty of any kind. It has not been field-tested at scale and is not certified for navigation.
 Treat all on-screen information as advisory, and always carry independent means of position-fixing.
 
@@ -454,4 +432,4 @@ Find this project useful? You can support its continued development by
 
 - [Report a bug](https://github.com/NearlCrews/signalk-binnacle/issues/new?template=bug_report.yml)
 - [Request a feature](https://github.com/NearlCrews/signalk-binnacle/issues/new?template=feature_request.yml)
-- [Security issues](.github/SECURITY.md)
+- [Security issues](https://github.com/NearlCrews/signalk-binnacle/security/policy)
