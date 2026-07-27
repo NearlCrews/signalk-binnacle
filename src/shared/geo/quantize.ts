@@ -1,4 +1,4 @@
-import type { LatLon } from './geo-guards';
+import { isLatitude, isLongitude, type LatLon } from './geo-guards';
 
 // A tenth of a degree (about 11 km): position-keyed caches treat a cell as one spot, so GPS
 // drift at anchor or a small pan maps to one key instead of refetching per fix.
@@ -15,9 +15,16 @@ export function quantizeLatLonKey(pos: LatLon, decimals = 3): string {
   return `${pos.latitude.toFixed(decimals)},${pos.longitude.toFixed(decimals)}`;
 }
 
-// The inverse of quantizeLatLonKey: a "lat,lon" key back to its numbers, for a caller that keys a
-// cache by the string and later needs the position it stood for.
-export function parseLatLonKey(key: string): { lat: number; lon: number } {
-  const [lat, lon] = key.split(',').map(Number);
-  return { lat, lon };
+// The inverse of quantizeLatLonKey: a "lat,lon" key back to the position it stood for, for a caller
+// that keys a cache by the string. Undefined unless the key holds exactly two in-range coordinates,
+// so a truncated or non-numeric key yields no position instead of a NaN or half-missing one.
+export function parseLatLonKey(key: string): LatLon | undefined {
+  const parts = key.split(',');
+  if (parts.length !== 2) return undefined;
+  // Number('') and Number(' ') are both 0, so an empty component would otherwise parse as Null Island.
+  if (parts.some((part) => part.trim() === '')) return undefined;
+  const latitude = Number(parts[0]);
+  const longitude = Number(parts[1]);
+  if (!isLatitude(latitude) || !isLongitude(longitude)) return undefined;
+  return { latitude, longitude };
 }

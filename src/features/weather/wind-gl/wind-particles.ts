@@ -99,6 +99,13 @@ export class WindParticles {
   #screen1!: WebGLTexture;
   #screenW = 0;
   #screenH = 0;
+  // The viewport the trail size was last derived from, and the result. #resizeScreen runs on every
+  // frame, so an unchanged viewport returns the cached size rather than deriving and allocating a
+  // fresh one. -1 is a size no real viewport takes, so the first call after construction or after a
+  // context-loss rebuild always recomputes.
+  #viewportW = -1;
+  #viewportH = -1;
+  #trailSize: WindTrailSize = { width: 0, height: 0 };
   #res: number;
   #count: number;
   #speedFactor: number;
@@ -168,6 +175,8 @@ export class WindParticles {
     this.#wind = undefined;
     this.#screenW = 0;
     this.#screenH = 0;
+    this.#viewportW = -1;
+    this.#viewportH = -1;
   }
 
   // Rebuild every GL resource after a WebGL context-loss/restore, then re-push the last theme ramp
@@ -236,8 +245,14 @@ export class WindParticles {
   }
 
   #resizeScreen(viewportWidth: number, viewportHeight: number): WindTrailSize {
+    if (viewportWidth === this.#viewportW && viewportHeight === this.#viewportH) {
+      return this.#trailSize;
+    }
+    this.#viewportW = viewportWidth;
+    this.#viewportH = viewportHeight;
     const { width, height } = windTrailSize(viewportWidth, viewportHeight);
-    if (width === this.#screenW && height === this.#screenH) return { width, height };
+    this.#trailSize = { width, height };
+    if (width === this.#screenW && height === this.#screenH) return this.#trailSize;
     const gl = this.#gl;
     gl.deleteTexture(this.#screen0);
     gl.deleteTexture(this.#screen1);
@@ -247,7 +262,7 @@ export class WindParticles {
     this.#screen1 = createTexture(gl, gl.NEAREST, null, width, height);
     this.#screenW = width;
     this.#screenH = height;
-    return { width, height };
+    return this.#trailSize;
   }
 
   #bindAttribute(buffer: WebGLBuffer, location: number, size: number): void {

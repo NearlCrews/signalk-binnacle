@@ -187,7 +187,9 @@ export function createTrackOverlay(
         lastT = tail;
         setActiveData(ctx);
       }
-      if (mode !== lastMode) {
+      // Commit lastMode only once the recolor lands, so a sync that beats add() re-applies on the
+      // next tick instead of recording a color the layer never received.
+      if (mode !== lastMode && ctx.map.getLayer(ACTIVE_LAYER)) {
         lastMode = mode;
         ctx.map.setPaintProperty(ACTIVE_LAYER, 'line-color', lineColor(paint, mode));
       }
@@ -197,21 +199,32 @@ export function createTrackOverlay(
         setSourceData(ctx.map, SAVED_SOURCE, saved.features());
       }
     },
+    // Guarded on getLayer: a theme or opacity change can land before add() attaches the layers, and
+    // setPaintProperty throws on a missing one. add() bakes the current theme into the layer
+    // specification, and the LayerManager re-applies both once add() resolves.
     applyTheme(ctx, next) {
       paint = next;
-      ctx.map.setPaintProperty(
-        ACTIVE_LAYER,
-        'line-color',
-        lineColor(paint, settings.value.colorMode),
-      );
-      ctx.map.setPaintProperty(SAVED_LAYER, 'line-color', paint.trackSolid);
+      if (ctx.map.getLayer(ACTIVE_LAYER)) {
+        ctx.map.setPaintProperty(
+          ACTIVE_LAYER,
+          'line-color',
+          lineColor(paint, settings.value.colorMode),
+        );
+      }
+      if (ctx.map.getLayer(SAVED_LAYER)) {
+        ctx.map.setPaintProperty(SAVED_LAYER, 'line-color', paint.trackSolid);
+      }
     },
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, [ACTIVE_LAYER, SAVED_LAYER], visible);
     },
     setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(ACTIVE_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(SAVED_LAYER, 'line-opacity', opacity);
+      if (ctx.map.getLayer(ACTIVE_LAYER)) {
+        ctx.map.setPaintProperty(ACTIVE_LAYER, 'line-opacity', opacity);
+      }
+      if (ctx.map.getLayer(SAVED_LAYER)) {
+        ctx.map.setPaintProperty(SAVED_LAYER, 'line-opacity', opacity);
+      }
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, [ACTIVE_LAYER, SAVED_LAYER], [ACTIVE_SOURCE, SAVED_SOURCE]);

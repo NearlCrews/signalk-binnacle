@@ -223,6 +223,10 @@ export class LayerManager {
           this.#disposed ? 'layer manager is disposed' : 'overlay registration canceled',
         );
       }
+      // `state` is the exact object held in #state, and the visibility and opacity setters mutate
+      // it in place, so this re-apply picks up changes made while add() was awaited. Overlays skip
+      // paint updates until their layers exist, and this pass is what recovers those skips; if
+      // #state ever moves to replace-on-write, this must re-read the current entry instead.
       module.setVisible(this.#ctx, state.visible);
       module.setOpacity?.(this.#ctx, state.opacity);
       if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);

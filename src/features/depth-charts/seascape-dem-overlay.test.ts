@@ -55,24 +55,24 @@ describe('createSeascapeDemOverlay', () => {
     expect(hillshade.group).toEqual({ id: 'seascape', title: 'Seascape bathymetry' });
   });
 
-  it('both rows share one raster-dem source, created once', () => {
+  it('both rows share one raster-dem source, created once', async () => {
     const map = fakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
-    depthShading.add(ctx(map));
+    await depthShading.add(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(true);
     expect(map.layers.has('seascape-depth-shading-layer')).toBe(true);
-    hillshade.add(ctx(map));
+    await hillshade.add(ctx(map));
     expect(map.layers.has('seascape-hillshade-layer')).toBe(true);
     // Hillshade's own add guard-adds the source too, but finds it already present from
     // depthShading.add, so it never creates a second one.
     expect(map.sources.size).toBe(1);
   });
 
-  it('removing one row does not remove the shared source out from under the other', () => {
+  it('removing one row does not remove the shared source out from under the other', async () => {
     const map = fakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
-    depthShading.add(ctx(map));
-    hillshade.add(ctx(map));
+    await depthShading.add(ctx(map));
+    await hillshade.add(ctx(map));
     depthShading.remove(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(true);
     expect(map.layers.has('seascape-hillshade-layer')).toBe(true);
@@ -80,11 +80,11 @@ describe('createSeascapeDemOverlay', () => {
     expect(map.sources.has('seascape-dem')).toBe(false);
   });
 
-  it('removing rows in reverse order also preserves the shared source until both are gone', () => {
+  it('removing rows in reverse order also preserves the shared source until both are gone', async () => {
     const map = fakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
-    depthShading.add(ctx(map));
-    hillshade.add(ctx(map));
+    await depthShading.add(ctx(map));
+    await hillshade.add(ctx(map));
     hillshade.remove(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(true);
     expect(map.layers.has('seascape-depth-shading-layer')).toBe(true);
@@ -98,10 +98,10 @@ describe('createSeascapeDemOverlay', () => {
     expect(hillshade.supportsOpacity).toBe(false);
   });
 
-  it('depth shading applyTheme with different themes produces different color-relief-color expressions', () => {
+  it('depth shading applyTheme with different themes produces different color-relief-color expressions', async () => {
     const map = fakeMap();
     const { depthShading } = createSeascapeDemOverlay(SOURCE);
-    depthShading.add(ctx(map));
+    await depthShading.add(ctx(map));
 
     const dayPaint = mapThemePaint('day');
     depthShading.applyTheme?.(ctx(map), dayPaint);
@@ -117,10 +117,10 @@ describe('createSeascapeDemOverlay', () => {
     expect(dayColorExpr).not.toEqual(duskColorExpr);
   });
 
-  it('depth shading applyTheme with same theme reuses the memoized color-relief-color expression', () => {
+  it('depth shading applyTheme with same theme reuses the memoized color-relief-color expression', async () => {
     const map = fakeMap();
     const { depthShading } = createSeascapeDemOverlay(SOURCE);
-    depthShading.add(ctx(map));
+    await depthShading.add(ctx(map));
 
     const dayPaint = mapThemePaint('day');
 
@@ -136,10 +136,10 @@ describe('createSeascapeDemOverlay', () => {
     expect(firstColorExpr).toBe(secondColorExpr);
   });
 
-  it('hillshade applyTheme with different themes produces different shadow and highlight colors', () => {
+  it('hillshade applyTheme with different themes produces different shadow and highlight colors', async () => {
     const map = fakeMap();
     const { hillshade } = createSeascapeDemOverlay(SOURCE);
-    hillshade.add(ctx(map));
+    await hillshade.add(ctx(map));
 
     const dayPaint = mapThemePaint('day');
     hillshade.applyTheme?.(ctx(map), dayPaint);
@@ -166,10 +166,10 @@ describe('createSeascapeDemOverlay', () => {
     expect(dayHighlightColor).not.toEqual(nightHighlightColor);
   });
 
-  it('hillshade applyTheme with same theme reuses memoized shadow and highlight colors', () => {
+  it('hillshade applyTheme with same theme reuses memoized shadow and highlight colors', async () => {
     const map = fakeMap();
     const { hillshade } = createSeascapeDemOverlay(SOURCE);
-    hillshade.add(ctx(map));
+    await hillshade.add(ctx(map));
 
     const dayPaint = mapThemePaint('day');
 

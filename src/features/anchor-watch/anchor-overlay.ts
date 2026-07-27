@@ -271,21 +271,39 @@ export function createAnchorOverlay(
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, LAYERS, visible);
     },
+    // Both mutators guard on getLayer: an opacity or theme change can land in the window before
+    // add() has attached the layers, and setPaintProperty throws on a missing layer. Skipping is
+    // safe because the new value is kept here and add() bakes it into the layer specification, and
+    // the LayerManager re-applies both right after add() resolves.
     setOpacity(ctx, next) {
       opacity = next;
-      ctx.map.setPaintProperty(FILL_LAYER, 'fill-opacity', FILL_OPACITY * opacity);
-      ctx.map.setPaintProperty(RING_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(RODE_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-opacity', opacity);
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-stroke-opacity', opacity);
+      const { map } = ctx;
+      if (map.getLayer(FILL_LAYER)) {
+        map.setPaintProperty(FILL_LAYER, 'fill-opacity', FILL_OPACITY * opacity);
+      }
+      if (map.getLayer(RING_LAYER)) map.setPaintProperty(RING_LAYER, 'line-opacity', opacity);
+      if (map.getLayer(RODE_LAYER)) map.setPaintProperty(RODE_LAYER, 'line-opacity', opacity);
+      if (map.getLayer(MARKER_LAYER)) {
+        map.setPaintProperty(MARKER_LAYER, 'circle-opacity', opacity);
+        map.setPaintProperty(MARKER_LAYER, 'circle-stroke-opacity', opacity);
+      }
     },
     applyTheme(ctx, next) {
       paint = next;
-      ctx.map.setPaintProperty(FILL_LAYER, 'fill-color', watchColor(paint));
-      ctx.map.setPaintProperty(RING_LAYER, 'line-color', watchColor(paint));
-      ctx.map.setPaintProperty(RODE_LAYER, 'line-color', watchColor(paint));
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-color', watchColor(paint));
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-stroke-color', paint.markerGlyph);
+      const { map } = ctx;
+      if (map.getLayer(FILL_LAYER)) {
+        map.setPaintProperty(FILL_LAYER, 'fill-color', watchColor(paint));
+      }
+      if (map.getLayer(RING_LAYER)) {
+        map.setPaintProperty(RING_LAYER, 'line-color', watchColor(paint));
+      }
+      if (map.getLayer(RODE_LAYER)) {
+        map.setPaintProperty(RODE_LAYER, 'line-color', watchColor(paint));
+      }
+      if (map.getLayer(MARKER_LAYER)) {
+        map.setPaintProperty(MARKER_LAYER, 'circle-color', watchColor(paint));
+        map.setPaintProperty(MARKER_LAYER, 'circle-stroke-color', paint.markerGlyph);
+      }
     },
     remove(ctx) {
       detachMarkerDrag?.();

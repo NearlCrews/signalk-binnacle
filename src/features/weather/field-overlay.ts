@@ -4,7 +4,12 @@ import type {
   RasterLayerSpecification,
 } from 'maplibre-gl';
 import type { TimeBracket, WeatherGrid, WeatherStore } from '$entities/weather';
-import { type OverlayContext, type OverlayModule, removeLayersAndSources } from '$shared/map';
+import {
+  type OverlayContext,
+  type OverlayModule,
+  removeLayersAndSources,
+  setLayersVisibility,
+} from '$shared/map';
 import type { Theme } from '$shared/ui';
 import type { FieldBitmap } from './field-rgba';
 import { gridTimeGate } from './grid-time-gate';
@@ -184,10 +189,13 @@ export function createFieldOverlay(
       cancelRefresh();
       removeLayersAndSources(ctx.map, [layerId], [sourceId]);
     },
+    // Both mutators tolerate a missing layer: a visibility or opacity change can land before add()
+    // attaches it, and MapLibre throws on a missing layer. The LayerManager re-applies both once
+    // add() resolves, and sync() is separately gated on `active`.
     setVisible(ctx, value) {
       const becameVisible = value && !visible;
       visible = value;
-      ctx.map.setLayoutProperty(layerId, 'visibility', value ? 'visible' : 'none');
+      setLayersVisibility(ctx.map, [layerId], value);
       if (becameVisible) {
         gate.reset();
         lastTheme = undefined;
@@ -195,7 +203,7 @@ export function createFieldOverlay(
       }
     },
     setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(layerId, 'raster-opacity', opacity);
+      if (ctx.map.getLayer(layerId)) ctx.map.setPaintProperty(layerId, 'raster-opacity', opacity);
     },
     applyTheme(_ctx, paint) {
       theme = paint.theme;

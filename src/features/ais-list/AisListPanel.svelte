@@ -52,14 +52,7 @@ const SORTS: { id: AisSort; label: string }[] = [
 const ownCellKey = $derived(
   vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
 );
-const parsedOwn = $derived<LatLon | undefined>(
-  ownCellKey
-    ? (() => {
-        const { lat, lon } = parseLatLonKey(ownCellKey);
-        return { latitude: lat, longitude: lon };
-      })()
-    : undefined,
-);
+const parsedOwn = $derived<LatLon | undefined>(ownCellKey ? parseLatLonKey(ownCellKey) : undefined);
 // list() reads aisVersion, so the rows re-derive as traffic moves; the own cell re-sorts by range.
 const targetCount = $derived(aisTargets.list().length);
 const rows = $derived(

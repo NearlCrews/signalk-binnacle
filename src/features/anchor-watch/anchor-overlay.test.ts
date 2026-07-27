@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AnchorWatch } from '$entities/anchor';
 import { OwnVessel } from '$entities/vessel';
+import { mapThemePaint } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
 import {
   createFakeMap,
@@ -24,9 +25,9 @@ function setup() {
 }
 
 describe('anchor overlay', () => {
-  it('adds its sources and layers', () => {
+  it('adds its sources and layers', async () => {
     const { map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     expect(map.sources.has('binnacle-anchor-shapes')).toBe(true);
     expect(map.sources.has('binnacle-anchor-point')).toBe(true);
     for (const id of overlay.layerIds) {
@@ -34,17 +35,17 @@ describe('anchor overlay', () => {
     }
   });
 
-  it('renders nothing while no anchor is down', () => {
+  it('renders nothing while no anchor is down', async () => {
     const { map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     expect(sourceFeatures(map, 'binnacle-anchor-shapes')).toHaveLength(0);
     expect(sourceFeatures(map, 'binnacle-anchor-point')).toHaveLength(0);
   });
 
-  it('renders the swing circle, rode line, and marker for a watch', () => {
+  it('renders the swing circle, rode line, and marker for a watch', async () => {
     const { store, anchor, map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
     store.applyFrame(frame({ 'navigation.position': { latitude: 0.0002, longitude: 0 } }));
     overlay.sync(ctx);
@@ -53,9 +54,9 @@ describe('anchor overlay', () => {
     expect(sourceFeatures(map, 'binnacle-anchor-point')).toHaveLength(1);
   });
 
-  it('splits a rode line that crosses the antimeridian', () => {
+  it('splits a rode line that crosses the antimeridian', async () => {
     const { store, anchor, map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     anchor.dropLocal({ latitude: 10, longitude: 179 }, 50);
     store.applyFrame(frame({ 'navigation.position': { latitude: 12, longitude: -179 } }));
     overlay.sync(ctx);
@@ -66,9 +67,9 @@ describe('anchor overlay', () => {
     expect(rode?.geometry.type).toBe('MultiLineString');
   });
 
-  it('skips the redraw when nothing changed, and clears after a raise', () => {
+  it('skips the redraw when nothing changed, and clears after a raise', async () => {
     const { anchor, map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
     overlay.sync(ctx);
     const source = map.sources.get('binnacle-anchor-shapes');
@@ -81,9 +82,9 @@ describe('anchor overlay', () => {
     expect(sourceFeatures(map, 'binnacle-anchor-shapes')).toHaveLength(0);
   });
 
-  it('marks the features as dragging once the watch latches', () => {
+  it('marks the features as dragging once the watch latches', async () => {
     const { store, anchor, map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
     const outside = { latitude: 0.001, longitude: 0 };
     for (let i = 0; i < 3; i += 1) {
@@ -94,12 +95,31 @@ describe('anchor overlay', () => {
     expect(sourceFeatures(map, 'binnacle-anchor-point')[0]?.properties?.dragging).toBe(true);
   });
 
-  it('toggles visibility across all of its layers', () => {
+  it('toggles visibility across all of its layers', async () => {
     const { map, overlay, ctx } = setup();
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.setVisible(ctx, false);
     const hidden = map.setLayoutProperty.mock.calls.filter((call) => call[2] === 'none');
     expect(hidden).toHaveLength(overlay.layerIds.length);
+  });
+
+  it('absorbs an opacity or theme change that lands before add attaches the layers', async () => {
+    const { map, overlay, ctx } = setup();
+    expect(() => overlay.setOpacity?.(ctx, 0.5)).not.toThrow();
+    expect(() => overlay.applyTheme?.(ctx, mapThemePaint('night-red'))).not.toThrow();
+    expect(map.setPaintProperty).not.toHaveBeenCalled();
+
+    await overlay.add(ctx);
+    overlay.setOpacity?.(ctx, 0.5);
+    overlay.applyTheme?.(ctx, mapThemePaint('night-red'));
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-anchor-swing-ring',
+      'line-opacity',
+      0.5,
+    );
+    expect(map.setPaintProperty.mock.calls.some((call) => call[1] === 'circle-stroke-color')).toBe(
+      true,
+    );
   });
 });
 
@@ -154,7 +174,7 @@ function markerCoords(map: ReturnType<typeof eventfulMap>): unknown {
   return geometry?.coordinates;
 }
 
-function dragSetup() {
+async function dragSetup() {
   const store = new SignalKStore();
   const vessel = new OwnVessel(store);
   const anchor = new AnchorWatch(store, vessel, createFakeStorage());
@@ -163,14 +183,14 @@ function dragSetup() {
   const overlay = createAnchorOverlay(anchor, vessel, onMoved);
   const map = eventfulMap();
   const ctx = fakeOverlayContext(map);
-  overlay.add(ctx);
+  await overlay.add(ctx);
   overlay.sync(ctx);
   return { map, overlay, ctx, onMoved };
 }
 
 describe('anchor overlay marker drag', () => {
-  it('commits the drag preview on touchend, once', () => {
-    const { map, overlay, ctx, onMoved } = dragSetup();
+  it('commits the drag preview on touchend, once', async () => {
+    const { map, overlay, ctx, onMoved } = await dragSetup();
     map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
     map.fire('touchmove', touchEvent(2, 2));
     overlay.sync(ctx);
@@ -184,8 +204,8 @@ describe('anchor overlay marker drag', () => {
     expect(onMoved).toHaveBeenCalledTimes(1);
   });
 
-  it('abandons the drag on touchcancel without relocating the anchor', () => {
-    const { map, overlay, ctx, onMoved } = dragSetup();
+  it('abandons the drag on touchcancel without relocating the anchor', async () => {
+    const { map, overlay, ctx, onMoved } = await dragSetup();
     map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
     map.fire('touchmove', touchEvent(2, 2));
     map.fire('touchcancel', touchEvent(2, 2));

@@ -191,16 +191,22 @@ export function createAisTrailsOverlay(
           fetching = false;
         });
     },
+    // Guarded on getLayer: a theme or opacity change can land before add() attaches the layer, and
+    // setPaintProperty throws on a missing one. The LayerManager re-applies both once add() resolves.
     applyTheme(ctx, next) {
       paint = next;
-      ctx.map.setPaintProperty(LAYER_ID, 'line-color', rgbaCss(paint.aisTarget));
+      if (ctx.map.getLayer(LAYER_ID)) {
+        ctx.map.setPaintProperty(LAYER_ID, 'line-color', rgbaCss(paint.aisTarget));
+      }
     },
     setVisible(ctx, isVisible) {
       visible = isVisible;
       setLayersVisibility(ctx.map, [LAYER_ID], isVisible);
     },
     setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(LAYER_ID, 'line-opacity', opacity * TRAIL_OPACITY);
+      if (ctx.map.getLayer(LAYER_ID)) {
+        ctx.map.setPaintProperty(LAYER_ID, 'line-opacity', opacity * TRAIL_OPACITY);
+      }
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, [LAYER_ID], [SOURCE_ID]);

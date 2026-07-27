@@ -99,6 +99,13 @@ export function createPpiLayer(
   // The last reason the echo render was a no-op, logged only on a transition (render runs every repaint)
   // and only in dev, so "Live but blank" is traceable to no fix, no frame, or zero range.
   let lastSuppress = '';
+  // The echo center projected to mercator, cached across frames. render() runs on every repaint while
+  // the echo streams, and MercatorCoordinate.fromLngLat allocates, so the projection is recomputed only
+  // when the fix actually moves. NaN seeds guarantee the first frame projects.
+  let mercLat = Number.NaN;
+  let mercLon = Number.NaN;
+  let mercX = 0;
+  let mercY = 0;
 
   // The display range to draw at: the integrated frame's range, or the discovered RadarInfo.range when a
   // frame has not yet reported a positive range, so a warmup or a range-omitting spoke does not collapse
@@ -206,11 +213,17 @@ export function createPpiLayer(
           gl.setSweep(frame.sweep);
           dirty = false;
         }
-        const mc = maplibregl.MercatorCoordinate.fromLngLat({
-          lng: center.longitude,
-          lat: center.latitude,
-        });
-        gl.render(matrix, mc.x, mc.y, rangeQuadHalfExtent(center.latitude, range));
+        if (center.latitude !== mercLat || center.longitude !== mercLon) {
+          mercLat = center.latitude;
+          mercLon = center.longitude;
+          const mc = maplibregl.MercatorCoordinate.fromLngLat({
+            lng: center.longitude,
+            lat: center.latitude,
+          });
+          mercX = mc.x;
+          mercY = mc.y;
+        }
+        gl.render(matrix, mercX, mercY, rangeQuadHalfExtent(center.latitude, range));
         lastSuppress = '';
       },
       onRemove() {

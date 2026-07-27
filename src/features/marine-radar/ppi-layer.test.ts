@@ -38,7 +38,7 @@ describe('createPpiLayer', () => {
     expect(layer.layerIds).not.toContain('weather-radar');
   });
 
-  it('reuses the cached ring and label features when only the heading changes', () => {
+  it('reuses the cached ring and label features when only the heading changes', async () => {
     const store = new MarineRadarStore();
     let heading = 0;
     const layer = createPpiLayer(
@@ -48,7 +48,7 @@ describe('createPpiLayer', () => {
     );
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    layer.add(ctx);
+    await layer.add(ctx);
     layer.pushFrame(frameOf());
     layer.sync(ctx);
     const before = sourceFeatures(map, RINGS_SOURCE_ID);
@@ -64,7 +64,7 @@ describe('createPpiLayer', () => {
     expect(after[RING_AND_LABEL_COUNT]).not.toBe(before[RING_AND_LABEL_COUNT]);
   });
 
-  it('skips the rings write entirely when position, range, and heading hold still', () => {
+  it('skips the rings write entirely when position, range, and heading hold still', async () => {
     const store = new MarineRadarStore();
     const layer = createPpiLayer(
       store,
@@ -73,7 +73,7 @@ describe('createPpiLayer', () => {
     );
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    layer.add(ctx);
+    await layer.add(ctx);
     layer.pushFrame(frameOf());
     layer.sync(ctx);
     const source = map.sources.get(RINGS_SOURCE_ID);
@@ -83,7 +83,7 @@ describe('createPpiLayer', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('rebuilds the rings when the vessel position changes', () => {
+  it('rebuilds the rings when the vessel position changes', async () => {
     const store = new MarineRadarStore();
     let latitude = 10;
     const layer = createPpiLayer(
@@ -93,7 +93,7 @@ describe('createPpiLayer', () => {
     );
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    layer.add(ctx);
+    await layer.add(ctx);
     layer.pushFrame(frameOf());
     layer.sync(ctx);
     const before = sourceFeatures(map, RINGS_SOURCE_ID);

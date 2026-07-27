@@ -50,7 +50,8 @@ function demSourceSpec(source: SeascapeDemSource): RasterDEMSourceSpecification 
 // Theme is a closed three-value set (day, dusk, night-red; see map-theme.ts), so the derived
 // depth-shading gradient and hillshade colors for a given theme never change once computed. These
 // two caches compute each lazily on first use per theme and read thereafter, instead of re-deriving
-// colors from the same water and land hex on every add() and every theme switch.
+// colors from the same water and land hex on every add() and every theme switch. Module-scoped on
+// purpose: the derivation is per theme, not per overlay instance, so keep it out of instance state.
 const depthShadingColorCache = new Map<Theme, ExpressionSpecification>();
 const hillshadeColorCache = new Map<Theme, { shadow: string; highlight: string }>();
 

@@ -157,11 +157,11 @@ describe('createAisVectorsOverlay', () => {
     };
   }
 
-  it('adds an empty line source and layer in the traffic band', () => {
+  it('adds an empty line source and layer in the traffic band', async () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
-    overlay.add(fakeOverlayContext(map));
+    await overlay.add(fakeOverlayContext(map));
     expect(overlay.id).toBe('ais-vectors');
     expect(overlay.title).toBe('AIS course vectors');
     expect(overlay.band).toBe('traffic');
@@ -170,27 +170,27 @@ describe('createAisVectorsOverlay', () => {
     expect(map.sources.has(SOURCE_ID)).toBe(true);
   });
 
-  it('sync populates features for moving targets on the first call', () => {
+  it('sync populates features for moving targets on the first call', async () => {
     const target = movingTarget({ cogRad: 0, sogMps: 5 });
     const targets = makeTargets([target]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
     const fc = source?.data as GeoJSON.FeatureCollection;
     expect(fc.features).toHaveLength(1);
   });
 
-  it('sync skips rebuild when version and contacts are unchanged', () => {
+  it('sync skips rebuild when version and contacts are unchanged', async () => {
     const target = movingTarget({ cogRad: 0, sogMps: 5 });
     const targets = makeTargets([target]);
     const assessment = emptyAssessment;
     const overlay = createAisVectorsOverlay(targets as never, assessment);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
     if (!source) throw new Error(`${SOURCE_ID} not added`);
@@ -199,13 +199,13 @@ describe('createAisVectorsOverlay', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('throttles version-only churn to about 1 Hz and repaints immediately on a count change', () => {
+  it('throttles version-only churn to about 1 Hz and repaints immediately on a count change', async () => {
     let t = 0;
     const targets = makeTargets([movingTarget()]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment, () => t);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
     if (!source) throw new Error(`${SOURCE_ID} not added`);
@@ -226,7 +226,7 @@ describe('createAisVectorsOverlay', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it('repaints immediately when a contact severity changes', () => {
+  it('repaints immediately when a contact severity changes', async () => {
     let t = 0;
     const target = movingTarget();
     const targets = makeTargets([target]);
@@ -238,7 +238,7 @@ describe('createAisVectorsOverlay', () => {
     );
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
     if (!source) throw new Error(`${SOURCE_ID} not added`);
@@ -252,7 +252,7 @@ describe('createAisVectorsOverlay', () => {
     expect(fc.features[0].properties?.severity).toBe('danger');
   });
 
-  it('does not treat an identical severity set with a fresh identity as a change', () => {
+  it('does not treat an identical severity set with a fresh identity as a change', async () => {
     let t = 0;
     const target = movingTarget();
     const targets = makeTargets([target]);
@@ -264,7 +264,7 @@ describe('createAisVectorsOverlay', () => {
     );
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.sync(ctx);
     const source = map.sources.get(SOURCE_ID);
     if (!source) throw new Error(`${SOURCE_ID} not added`);
@@ -283,12 +283,12 @@ describe('createAisVectorsOverlay', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('applyTheme resets the line-color paint property', () => {
+  it('applyTheme resets the line-color paint property', async () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     const paint = mapThemePaint('night-red');
     overlay.applyTheme?.(ctx, paint);
     const calls = vi.mocked(map.setPaintProperty).mock.calls;
@@ -296,12 +296,12 @@ describe('createAisVectorsOverlay', () => {
     expect(recolor).toBeDefined();
   });
 
-  it('setOpacity scales the base opacity', () => {
+  it('setOpacity scales the base opacity', async () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.5);
     const calls = vi.mocked(map.setPaintProperty).mock.calls;
     const opCall = calls.find(([, prop]) => prop === 'line-opacity') as [string, string, number];
@@ -309,14 +309,29 @@ describe('createAisVectorsOverlay', () => {
     expect(opCall[2]).toBeCloseTo(0.5 * 0.8);
   });
 
-  it('remove cleans up the layer and source', () => {
+  it('remove cleans up the layer and source', async () => {
     const targets = makeTargets([]);
     const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
     const map = createFakeMap();
     const ctx = fakeOverlayContext(map);
-    overlay.add(ctx);
+    await overlay.add(ctx);
     overlay.remove(ctx);
     expect(map.layers.has(LAYER_ID)).toBe(false);
     expect(map.sources.has(SOURCE_ID)).toBe(false);
+  });
+
+  it('absorbs an opacity or theme change that lands before add attaches the layer', async () => {
+    const targets = makeTargets([]);
+    const overlay = createAisVectorsOverlay(targets as never, emptyAssessment);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    expect(() => overlay.setOpacity?.(ctx, 0.5)).not.toThrow();
+    expect(() => overlay.applyTheme?.(ctx, mapThemePaint('night-red'))).not.toThrow();
+    expect(map.setPaintProperty).not.toHaveBeenCalled();
+
+    await overlay.add(ctx);
+    overlay.setOpacity?.(ctx, 0.5);
+    const calls = vi.mocked(map.setPaintProperty).mock.calls;
+    expect(calls.some(([id, prop]) => id === LAYER_ID && prop === 'line-opacity')).toBe(true);
   });
 });
