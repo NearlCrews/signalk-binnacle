@@ -71,20 +71,17 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@lucide/svelte": "^1.25.0",
+    "@lucide/svelte": "^1.27.0",
     "comlink": "^4.4.2",
     "maplibre-gl": "6.0.0",
-    "pbf": "^5.1.1",
+    "pbf": "^5.1.2",
     "pmtiles": "^4.4.1",
     "signalk-chart-sources": "^0.4.0",
-    "terra-draw": "^1.31.0",
+    "terra-draw": "^1.32.2",
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "uplot": "^1.6.32"
   },
   "overrides": {
-    "markdownlint-cli2": {
-      "js-yaml": "5.2.2"
-    },
     "workbox-build": {
       "@trickfilm400/rollup-plugin-off-main-thread": "4.0.0-pre2"
     }
@@ -150,22 +147,22 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "2.5.5",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.0",
     "@size-limit/file": "13.0.1",
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "26.1.1",
     "@vitest/browser-playwright": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "cspell": "10.0.1",
-    "dependency-cruiser": "^18.0.0",
+    "dependency-cruiser": "^18.1.0",
     "eslint": "10.8.0",
     "eslint-plugin-svelte": "3.22.0",
     "knip": "6.29.0",
-    "markdownlint-cli2": "0.23.1",
+    "markdownlint-cli2": "0.23.2",
     "publint": "0.3.22",
     "size-limit": "13.0.1",
-    "svelte": "^5.56.6",
+    "svelte": "^5.56.8",
     "svelte-check": "^4.7.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "8.65.0",

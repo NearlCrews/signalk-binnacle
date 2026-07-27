@@ -70,10 +70,15 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Development
 
-- The build tooling moved to rolldown code splitting, per-icon lucide imports, MapLibre GL JS 6.0.0
-  with an explicitly emitted worker bundle, @types/node 26.1.1, and refreshed lint and test
-  dependencies (eslint 10.8, knip 6.29, publint 0.3.22, size-limit 13). TypeScript 7 remains
-  deferred until typescript-eslint supports it.
+- The build tooling moved to rolldown code splitting, per-icon Lucide 1.27 imports, MapLibre GL JS
+  6.0.0 with an explicitly emitted worker bundle, PBF 5.1.2, Terra Draw 1.32.2, Svelte 5.56.8,
+  Playwright 1.62, the Svelte Vite plugin 7.2, dependency-cruiser 18.1, markdownlint-cli2 0.23.2,
+  @types/node 26.1.1, and refreshed lint and test dependencies (eslint 10.8, knip 6.29, publint
+  0.3.22, and size-limit 13).
+- TypeScript 7.0.2 remains deferred because the latest typescript-eslint 8.65.0 supports TypeScript
+  versions below 6.1. TypeScript 6.0.3 is the newest compatible compiler for the current lint
+  toolchain. npm 12.0.1 also remains deferred because its Node 22.22.2 minimum is above Binnacle's
+  supported Node 22.18 runtime floor; npm 11.18.0 is the newest compatible package manager.
 - Overlay tests build their map context through one shared helper, and SKFrame test factories can
   carry AIS vessels.
 
