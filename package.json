@@ -81,6 +81,14 @@
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "uplot": "^1.6.32"
   },
+  "overrides": {
+    "markdownlint-cli2": {
+      "js-yaml": "5.2.2"
+    },
+    "workbox-build": {
+      "@trickfilm400/rollup-plugin-off-main-thread": "4.0.0-pre2"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -24,6 +24,13 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Cross-platform webapp CI now installs the Chromium revision required by the
+  Vitest browser project before running tests. The no-storage PWA reload test
+  also models unavailable storage explicitly on Node 26, where
+  `sessionStorage` is globally available.
+- Patched transitive development dependencies remove the current
+  `brace-expansion` and `js-yaml` advisories, and the PWA build now uses the
+  maintained off-main-thread plugin line without the vulnerable EJS toolchain.
 - A locally cached profile applies at startup again. The startup apply ran before the map command
   bindings it pushes settings into existed, so any saved profile made boot fail its apply with an
   initialization error whenever profiles were stored locally.

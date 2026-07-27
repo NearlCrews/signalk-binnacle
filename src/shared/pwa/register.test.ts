@@ -96,9 +96,9 @@ describe('createReloadCoordinator', () => {
 
   it('degrades to reload-always without storage', () => {
     const reload = vi.fn();
-    const coordinator = createReloadCoordinator(() => 1_000, undefined, reload);
+    const coordinator = createReloadCoordinator(() => 1_000, null, reload);
     coordinator.onNeedReload();
-    const second = createReloadCoordinator(() => 1_001, undefined, reload);
+    const second = createReloadCoordinator(() => 1_001, null, reload);
     second.onNeedReload();
     expect(reload).toHaveBeenCalledTimes(2);
   });

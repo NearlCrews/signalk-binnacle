@@ -38,7 +38,8 @@ export interface ReloadCoordinator {
 // and survives the reload itself.
 export function createReloadCoordinator(
   now: () => number = Date.now,
-  storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof sessionStorage === 'undefined'
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null | undefined = typeof sessionStorage ===
+  'undefined'
     ? undefined
     : sessionStorage,
   reload: () => void = () => window.location.reload(),
