@@ -35,6 +35,9 @@ signaling, accessibility, and long-running-session recovery.
 - **Clearer recovery and keyboard flows.** Cached profiles apply at startup again, concurrent note
   loads stay independent, access requests explain why an upgrade did not complete, and menus share
   consistent focus and keyboard behavior.
+- **Hardened validation and error surfaces.** Malformed server metadata zones no longer mis-band
+  instrument readings, overlay theme and opacity changes no longer race a layer add, and panel
+  loading and error states sit on a proper panel surface with alarm-colored errors.
 
 See the [changelog](CHANGELOG.md#v0170) and [design system](docs/design-system.md) for the full details.
 

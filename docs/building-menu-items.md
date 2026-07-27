@@ -23,7 +23,7 @@ reuse-or-rebuild decisions, the pitfalls we keep correcting, and the gate. When 
 During edits, the fast per-file loop:
 
 1. `npx @biomejs/biome check --write <files>` (format, lint, and organize imports, with autofix)
-2. `npm run check` (svelte-check plus tooling TypeScript)
+2. `npm run check` (svelte-check plus the tsgo TypeScript passes)
 3. `npx @biomejs/biome ci <files>` (no-write verify, the same engine the commit hook runs)
 
 Then run `npm run verify:commit` before committing. The pre-push hook runs

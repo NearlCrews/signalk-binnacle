@@ -4,24 +4,14 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- Offline chart areas now use the shared chart catalog's disjoint NOAA ENC coverage regions, so
-  availability and download estimates exclude waters without NOAA chart cells.
-
-### Fixed
-
-- Fractional measured tile averages from Chart Locker are rounded up at the estimate boundary, so
-  valid cache statistics no longer prevent an offline-area download estimate.
-
 <a id="v0170"></a>
 
 ## [0.17.0] - 2026-07-27
 
 ### Changed
 
+- Offline chart areas now use the shared chart catalog's disjoint NOAA ENC coverage regions, so
+  availability and download estimates exclude waters without NOAA chart cells.
 - The map engine is MapLibre GL JS 6 and now requires WebGL2. The shipped ES2023 bundle requires
   Safari 16.4 or later. A device without WebGL2 sees a clear notice in the affected map surface
   while instruments, alarms, and panels keep working. Provided symbol anchors stay pinned under
@@ -40,6 +30,8 @@ All notable changes to Binnacle are documented here. The format follows
   moves past its controls.
 - Line geometry that crosses the antimeridian now splits into canonical date-line segments across
   every overlay (trails, vectors, rings, tracks, routes, and measurements).
+- The radar sweep and wind particle renderers reuse their per-frame center and viewport values
+  instead of allocating new ones on every frame.
 
 ### Fixed
 
@@ -77,13 +69,24 @@ All notable changes to Binnacle are documented here. The format follows
   API outage; the orphaned alert is now resolved once the API answers again.
 - Concurrent note loads for different viewports no longer share one in-flight slot, so the notes
   overlay cannot report ready or failed while a fetch is still running.
+- Fractional measured tile averages from Chart Locker are rounded up at the estimate boundary, so
+  valid cache statistics no longer prevent an offline-area download estimate.
+- Instrument zone banding drops malformed server metadata zones, so a zone with a non-numeric
+  bound can no longer mis-band a reading.
+- A theme or opacity change arriving while an overlay's layers were still being added could throw;
+  overlays now apply the change once the add completes.
+- Panel loading and error placeholders render on the panel surface instead of as bare text over
+  the moving chart, load errors show in the alarm color, and their Retry buttons no longer
+  reference an undefined button style.
+- The AIS target list rejects a malformed own-position cell key instead of reading an empty
+  coordinate as zero.
 
 ### Development
 
 - The build tooling moved to rolldown code splitting, per-icon Lucide 1.27 imports, MapLibre GL JS
   6.0.0 with an explicitly emitted worker bundle, PBF 5.1.2, Terra Draw 1.32.2, Svelte 5.56.8,
   Playwright 1.62, the Svelte Vite plugin 7.2, dependency-cruiser 18.1, markdownlint-cli2 0.23.2,
-  @types/node 26.1.1, and refreshed lint and test dependencies (eslint 10.8, knip 6.29, publint
+  @types/node 26.1.2, and refreshed lint and test dependencies (eslint 10.8, knip 6.29, publint
   0.3.22, and size-limit 13).
 - TypeScript 7.0.2 remains deferred because the latest typescript-eslint 8.65.0 supports TypeScript
   versions below 6.1. TypeScript 6.0.3 is the newest compatible compiler for the current lint
@@ -91,6 +94,11 @@ All notable changes to Binnacle are documented here. The format follows
   supported Node 22.18 runtime floor; npm 11.18.0 is the newest compatible package manager.
 - Overlay tests build their map context through one shared helper, and SKFrame test factories can
   carry AIS vessels.
+- Type-checking runs on the TypeScript native preview (tsgo, via svelte-check 4.7.4) for the app,
+  the tooling config, and now the repository scripts, while the compiler dependency stays on
+  TypeScript 6.0.3 for the lint toolchain above.
+- The typed promise lint rules cover test files, with every async overlay call in tests awaited,
+  and the prose gate flags standalone ampersands in prose and two-word chartplotter spellings.
 
 <a id="v0160"></a>
 
