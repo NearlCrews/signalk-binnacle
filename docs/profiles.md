@@ -29,6 +29,12 @@ A profile contains:
 
 Stored settings remain in SI units. Conversion happens only at the display boundary.
 
+The Data trends selection is independent from the instrument dock selection. New starter profiles
+and legacy profiles without a stored trends selection resolve to Depth, Apparent wind, Barometer,
+and Speed over ground in that order. A profile can deliberately save no trends. Saved dynamic
+instrument IDs remain in the profile when their sensor is offline, so the selection returns when
+the instrument is discovered again.
+
 ## What stays on this device
 
 Each browser keeps its own active profile. Selecting a profile on a tablet does not switch the helm

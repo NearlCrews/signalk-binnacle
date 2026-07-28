@@ -203,10 +203,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   never populate a live instrument tile.
 - Data trends uses the same instrument catalog through neutral trend descriptors. Only readings with
   explicit aggregate, fallback, display, and precision semantics are eligible. A profile owns zero to
-  eight trend ids independently of the instrument dock. Customize keeps the saved order, groups
-  options by instrument category, leaves unavailable saved ids removable, and uses the shared
+  eight trend IDs independently of the instrument dock. Customize keeps the saved order, groups
+  options by instrument category, leaves unavailable saved IDs removable, and uses the shared
   `createReorder` pointer and keyboard behavior. At eight selections, every unselected option stays
   visible and disabled with the instruction to remove a trend first.
+  Opening Data trends triggers live and historical discovery even when the instrument dock has never
+  opened. Rescan retains previously accepted live and historical-only options while reporting
+  provider degradation. Only the eight saved descriptors and one optional focused descriptor keep
+  stream demand and recorder buffers.
   Each chart selects one candidate path for its whole history series and one provider for that chart.
   An empty history column falls back to the bounded session recorder instead of hiding useful live
   data. The recorder samples selected instruments, plus one focused instrument, every 30 seconds,

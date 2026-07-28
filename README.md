@@ -65,12 +65,12 @@ Binnacle ships its full feature set as a Signal K webapp:
   Binnacle and other chartplotters and MFDs, and saving an active route refreshes the server's Course
   API without dropping the current route list during a transient read failure.
 - **Profiles:** keep named helm setups containing the theme, chart and weather layers, collision
-  thresholds, track and planning settings, unit fallback, toolbar pins, instrument selection, and
-  preferred anchor radius. Changes to the active profile save automatically. Profiles, defaults, and
-  edits sync through Signal K when you are logged in, while each browser keeps its own active choice
-  and chart view. Concurrent edits merge by setting instead of replacing the whole profile. Signal K
-  2.23.0 and later provide the strongest atomic cross-station revision protection, while older
-  servers retain local saves and best-effort synchronization.
+  thresholds, track and planning settings, unit fallback, toolbar pins, instrument and Data trends
+  selections, and preferred anchor radius. Changes to the active profile save automatically.
+  Profiles, defaults, and edits sync through Signal K when you are logged in, while each browser
+  keeps its own active choice and chart view. Concurrent edits merge by setting instead of replacing
+  the whole profile. Signal K 2.23.0 and later provide the strongest atomic cross-station revision
+  protection, while older servers retain local saves and best-effort synchronization.
 - **Instruments:** tap the Instruments pill and the chart slides left for a gauge dock (SOG,
   heading, depth, apparent wind, and more from a curated catalog you pick and reorder); on a phone
   the tiles take the full screen, KIP-style. Values color by your server's configured meta.zones
@@ -122,8 +122,12 @@ Binnacle ships its full feature set as a Signal K webapp:
   waypoint's resource reference so the destination name reaches the navigation strip and other
   stations. Marks live in the server's waypoint resources, so they interoperate with other Signal K
   clients.
-- **Trends:** depth, apparent wind, barometric pressure, and speed over the last 24 hours as themed
-  graphs from the server's v2 History API, or live session sampling without a history provider.
+- **Data trends:** choose and reorder up to eight supported navigation, weather,
+  electrical, propulsion, tank, or cabin readings independently for each profile. Each themed chart
+  uses one source and one provider for its 24-hour Signal K History API series, falling back to
+  bounded live-session samples on a stock server. Touch and keyboard timeline scrubbing and a
+  textual summary make the charts usable without hover. Eligible instrument details can open one
+  focused recent trend without changing the saved overview.
 - **Find places and points of interest:** search the notes in the current chart view by name,
   category, or provider; sort them by name, category, distance, or true bearing; preview and select a
   result on the chart; and open its structured detail. Loading, zoom-limit, cached-offline, empty, and

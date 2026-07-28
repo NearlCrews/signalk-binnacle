@@ -256,10 +256,12 @@ split panels without a matching product case; overlays stay the default.
 Data trends is a normal SlideOver, not another split. Its overview selection is profile-owned and
 independent from the instrument dock. It renders zero to eight explicit trend descriptors in saved
 order and uses `CustomizeToggle` plus `createReorder` for touch and keyboard editing. Preserve
-unavailable saved ids until the navigator removes them. Opening a focused chart from an eligible
-instrument detail adds one transient recorder and subscription slot without changing that overview.
-Back restores the same detail and focus, while Close clears the transient context and returns to the
-chart.
+unavailable saved IDs until the navigator removes them. Opening Data trends must trigger live and
+historical discovery without depending on the instrument dock having opened. Retain the eight saved
+stream demands and recorder buffers plus one optional focused slot, and release removed demands.
+Opening a focused chart from an eligible instrument detail adds that transient slot without changing
+the overview. Back restores the same detail and focus, while Close clears the transient context and
+returns to the chart.
 
 History loading for Data trends is chart-specific. Batch deduplicated `path:aggregate` requests
 within the Signal K History API limit, query each registered provider once per batch, and resolve by

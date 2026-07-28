@@ -269,14 +269,15 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   freezes the initial one, which is a real stale-value bug (a stale-token regression came from exactly
   this). The existing ones: `createMobController`, `createAnchorController`,
   `createMarineRadarController` (the first to own a Web Worker, the radar spokes stream),
-  `createInstrumentsController`, `createRouteController`, `createWaypointsController`,
-  `createTrackController`, and `createUserChartsController`. App-wide stream connection and
-  notification effects live in `createStreamController` and `createNotificationsController`, which
-  keep worker recovery and safety announcements out of the composition root. The panel layer lives in
-  `src/views/plotter/PlotterView.svelte` behind the `$views` index (one root `section.chart-host`,
-  placed explicitly in the shell grid by App). App passes Plotter four stable dependency groups,
-  services, controllers, entity stores, and actions, alongside reactive view state and bindable panel
-  state. This keeps `App.svelte` focused on construction and shell chrome without adding a singleton.
+  `createInstrumentsController`, `createTrendsController`, `createRouteController`,
+  `createWaypointsController`, `createTrackController`, and `createUserChartsController`. App-wide
+  stream connection and notification effects live in `createStreamController` and
+  `createNotificationsController`, which keep worker recovery and safety announcements out of the
+  composition root. The panel layer lives in `src/views/plotter/PlotterView.svelte` behind the
+  `$views` index (one root `section.chart-host`, placed explicitly in the shell grid by App). App
+  passes Plotter four stable dependency groups, services, controllers, entity stores, and actions,
+  alongside reactive view state and bindable panel state. This keeps `App.svelte` focused on
+  construction and shell chrome without adding a singleton.
 - Whole-document settings that can be changed again while a request is in flight use
   `createLatestWriter`. It serializes requests, coalesces queued snapshots to the newest value, and
   exposes idle, saving, saved, and error states with retry. Do not fire independent writes for two

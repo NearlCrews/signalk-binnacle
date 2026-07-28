@@ -20,6 +20,11 @@ All notable changes to Binnacle are documented here. The format follows
   how many matches are hidden.
 - Instrument tiles and their detail view now show the server's meta display name for a path when
   the boat has renamed it, falling back to the catalog label otherwise.
+- Data trends can now show zero to eight profile-owned instrument readings in saved order.
+  Customize groups static and discovered readings by category, supports touch and keyboard
+  reordering, preserves temporarily unavailable selections, and keeps a ninth option visible with
+  an explanation. Eligible instrument details add a focused recent-trend action that leaves the
+  saved overview unchanged and returns to the same detail and control.
 - Tracks now detect a server with no track storage (tracks are not a standard Signal K resource
   type) and say so directly, naming the one administrator step to enable it, with a Check again
   action, instead of only reporting the collection as reachable and empty.
@@ -48,6 +53,11 @@ All notable changes to Binnacle are documented here. The format follows
   both a pointer gesture and a keydown so a keyboard-only operator gets audible alarms too, and a
   second alarm raised while one is already sounding is now heard rather than absorbed into the
   running tone.
+- Data trends now resolves each chart from one ordered Signal K path and one registered history
+  provider instead of combining fallback sources. Nonempty 24-hour history wins per chart, while an
+  empty or unavailable provider falls back to bounded in-memory session samples. Charts identify
+  their source and provider, retain accepted data during retries, and add touch and keyboard timeline
+  scrubbing plus textual latest, minimum, maximum, start, and end values.
 
 <a id="v0171"></a>
 
