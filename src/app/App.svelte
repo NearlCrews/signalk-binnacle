@@ -101,7 +101,7 @@ import {
   SIGNALK_TIDES_PLUGIN_ID,
   type TideStationSelectionEvent,
 } from '$features/tides';
-import { TimeTravelStore } from '$features/time-travel';
+import { createTimeTravelController } from '$features/time-travel';
 import { createTrackController } from '$features/tracks';
 import { createTrendsController } from '$features/trends';
 import { createWaypointsController, WaypointDialog } from '$features/waypoints';
@@ -655,9 +655,9 @@ function refreshCompanionProbe(): void {
 // session rather than Binnacle's device token.
 const companionStatus = new CompanionStatus(() => companionBase);
 
-// Time-travel review: scrubs the last 24 h of recorded history, reading the same token and provider
-// list as the other history clients, and degrading to an honest empty state when no provider runs.
-const timeTravel = new TimeTravelStore(
+// Time-travel review: one accepted provider snapshot drives the replay track, marker, and readouts.
+// The controller owns bounded range requests, playback, and browser lifecycle cleanup.
+const timeTravel = createTimeTravelController(
   origin,
   () => chartsToken,
   () => historyProviders,
@@ -1916,6 +1916,7 @@ onDestroy(() => {
   streamController.dispose();
   notificationsController.dispose();
   trends.dispose();
+  timeTravel.dispose();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
   if (privacyReloadTimer) clearTimeout(privacyReloadTimer);

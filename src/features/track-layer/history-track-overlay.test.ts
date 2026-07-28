@@ -21,6 +21,7 @@ describe('createHistoryTrackOverlay', () => {
       'http://sk',
       () => 'token',
       () => ({ ids: ['history'] }),
+      () => false,
       { fetchValues, now: () => 1 },
     );
     const map = createFakeMap();
@@ -44,5 +45,39 @@ describe('createHistoryTrackOverlay', () => {
         ],
       }),
     );
+  });
+
+  it('hides during time travel without changing its accepted visibility', async () => {
+    let reviewing = false;
+    const fetchValues = vi.fn(async () => undefined);
+    const overlay = createHistoryTrackOverlay(
+      'http://sk',
+      () => 'token',
+      () => ({ ids: ['history'] }),
+      () => reviewing,
+      { fetchValues, now: () => 1 },
+    );
+    const map = createFakeMap();
+    const context = fakeOverlayContext(map);
+    await overlay.add(context);
+    overlay.setVisible(context, true);
+
+    reviewing = true;
+    overlay.sync(context);
+    expect(map.setLayoutProperty).toHaveBeenLastCalledWith(
+      'binnacle-track-history-line',
+      'visibility',
+      'none',
+    );
+    expect(fetchValues).not.toHaveBeenCalled();
+
+    reviewing = false;
+    overlay.sync(context);
+    expect(map.setLayoutProperty).toHaveBeenLastCalledWith(
+      'binnacle-track-history-line',
+      'visibility',
+      'visible',
+    );
+    expect(fetchValues).toHaveBeenCalledOnce();
   });
 });

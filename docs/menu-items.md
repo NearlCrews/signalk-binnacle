@@ -143,10 +143,13 @@ source, and surrounding traffic before relying on it.
 - **Open KIP** opens the installed KIP webapp in a new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
-- **Time travel** replays the last 24 hours from an available history provider. Loading, no-provider,
-  empty, and failed states are distinct. Retry handles thrown or failed history requests, Now moves
-  the scrubber to the newest loaded sample without another network query, and range buttons disable
-  at their endpoints.
+- **Time travel** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
+  history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
+  scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
+  offer 0.5x, 1x, and 2x speeds, pause when the document is hidden, and stay disabled for reduced
+  motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
+  correctly labels the accepted range, Retry repeats the failed request, and Now moves to its newest
+  loaded sample without another network query.
 
 ## Offline charts
 

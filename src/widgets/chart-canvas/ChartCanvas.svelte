@@ -33,7 +33,7 @@ import type { RouteEditor } from '$features/route-edit';
 import { createWorkingRouteOverlay, type WorkingRouteOverlay } from '$features/route-layer';
 import { createSeamarkOverlay, SEAMARK_SOURCES } from '$features/seamark-overlay';
 import type { TideStationSelectionEvent } from '$features/tides';
-import type { TimeTravelStore } from '$features/time-travel';
+import type { TimeTravelController } from '$features/time-travel';
 import type { SavedTracksSource } from '$features/track-layer';
 import { OWN_VESSEL_OVERLAY_ID } from '$features/vessel-layer';
 import type { LatLon } from '$shared/geo';
@@ -43,7 +43,6 @@ import {
   createChartOverlay,
   createThemedMap,
   detectCompanion,
-  type LayerManager,
   type LayerSettings,
   proxiedSources,
   type ThemedMapHandle,
@@ -141,9 +140,9 @@ interface Props {
   isOnline?: () => boolean;
   // The known history providers, for the 24 h track history overlay; undefined gates its fetches.
   historyProviders?: () => HistoryProviders | undefined;
-  // The time-travel store, drawn as the scrub marker and read by the review-mode effect that dims
-  // the live vessel and forces the history track on while scrubbing.
-  timeTravel: TimeTravelStore;
+  // The time-travel controller drives its own synchronized track and marker. Dynamic overlays read
+  // its active state to dim the live vessel and hide the separate 24-hour history layer transiently.
+  timeTravel: TimeTravelController;
   // Commit a drag-to-adjust of the anchor marker (the app PUTs it server-side or moves it locally).
   onAnchorMoved?: (position: LatLon) => void;
   // The marine radar echo layer, built by its controller in the host and woven into the overlay stack.
@@ -224,10 +223,7 @@ let workingRouteOverlay: WorkingRouteOverlay | undefined;
 // Bumped on every start and stop so a route edit canceled before the lazily-loaded editor resolves
 // does not start on a route that is no longer current.
 let editGeneration = 0;
-// The layer manager, captured from onLoad so the time-travel review effect can dim the live vessel
-// and force the history track on while scrubbing. $state so the effect re-runs once it is assigned.
-let manager = $state<LayerManager | undefined>();
-// Captured from onLoad alongside manager, so the units effect below can reach
+// Captured from onLoad so the units effect below can reach
 // map.setGlobalStateProperty once the map exists. $state so the effect re-runs once it is assigned.
 let mapRef = $state<MapLibreMap | undefined>();
 // Captured from onLoad alongside mapRef, so the off-screen vessel indicator can reuse the exact
@@ -279,28 +275,6 @@ $effect(() => {
   canvas.style.cursor = 'crosshair';
   return () => {
     if (canvas.style.cursor === 'crosshair') canvas.style.cursor = prior;
-  };
-});
-
-// The live vessel dims to this opacity during time-travel review so the scrub marker stands out.
-const REVIEW_DIM_OPACITY = 0.35;
-
-// Time-travel review mode: dim the live vessel and force the 24 h history track on while scrubbing.
-// The prior state is captured as closure locals and restored in the teardown, which Svelte runs on
-// exit, on a manager swap, and on unmount, so review can never leave the vessel dimmed or the track
-// forced on. The active guard means the initial inactive run registers no teardown and touches
-// nothing.
-$effect(() => {
-  const mgr = manager;
-  if (!mgr || !timeTravel.active) return;
-  const layers = mgr.layers();
-  const priorTrackVisible = layers.find((l) => l.id === 'track-history')?.visible ?? false;
-  const priorVesselOpacity = layers.find((l) => l.id === OWN_VESSEL_OVERLAY_ID)?.opacity ?? 1;
-  mgr.toggle('track-history', true);
-  mgr.setOpacity(OWN_VESSEL_OVERLAY_ID, REVIEW_DIM_OPACITY);
-  return () => {
-    mgr.toggle('track-history', priorTrackVisible);
-    mgr.setOpacity(OWN_VESSEL_OVERLAY_ID, priorVesselOpacity);
   };
 });
 
@@ -511,9 +485,7 @@ onMount(async () => {
           console.warn(`Could not register overlay "${result.id}".`, result.error);
         }
       }
-      // Capture the manager so the time-travel review effect can dim the vessel and toggle history.
       if (isDestroyed()) return;
-      manager = mgr;
       mapRef = map;
 
       // The Terra Draw route editor draws into its own layers anchored in the routes band. It writes

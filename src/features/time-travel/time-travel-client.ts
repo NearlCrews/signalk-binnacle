@@ -1,16 +1,19 @@
-import {
-  fetchHistoryValuesAcrossProviders,
-  HISTORY_RESOLUTION_SECONDS,
-  HISTORY_WINDOW_SECONDS,
-  type HistoryProviders,
-  SK_PATHS,
-} from '$shared/signalk';
+import { fetchHistoryValues, type HistoryProviders, SK_PATHS } from '$shared/signalk';
+import type { TimeTravelPreset } from './time-travel-presets';
 import { type HistorySample, toSamples } from './time-travel-timeline';
 
 export interface TimeTravelData {
   samples: HistorySample[];
   from: number;
   to: number;
+  provider: string;
+  preset: TimeTravelPreset;
+}
+
+export interface TimeTravelRequest {
+  preset: TimeTravelPreset;
+  preferredProvider?: string;
+  signal?: AbortSignal;
 }
 
 // Position is sent bare: the server defaults it to the `first` aggregate and the provider reads a
@@ -25,31 +28,53 @@ const PATHS: readonly string[] = [
 ];
 
 interface Deps {
-  fetchValues: typeof fetchHistoryValuesAcrossProviders;
+  fetchValues: typeof fetchHistoryValues;
 }
 
 export async function loadTimeTravelHistory(
   origin: string,
   token: string | undefined,
   providers: HistoryProviders,
-  deps: Deps = { fetchValues: fetchHistoryValuesAcrossProviders },
+  request: TimeTravelRequest,
+  deps: Deps = { fetchValues: fetchHistoryValues },
 ): Promise<TimeTravelData | undefined> {
-  const got = await deps.fetchValues(origin, token, providers, {
-    paths: PATHS,
-    durationSeconds: HISTORY_WINDOW_SECONDS,
-    resolutionSeconds: HISTORY_RESOLUTION_SECONDS,
-  });
-  if (!got) return undefined;
-  const samples = toSamples(got.values);
-  const parsedFrom = Date.parse(got.values.from);
-  const parsedTo = Date.parse(got.values.to);
-  const first = samples[0]?.t ?? 0;
-  const last = samples[samples.length - 1]?.t ?? first;
-  const from = Number.isFinite(parsedFrom) ? parsedFrom : first;
-  const to = Number.isFinite(parsedTo) && parsedTo >= from ? parsedTo : Math.max(from, last);
-  return {
-    samples,
-    from,
-    to,
-  };
+  const ordered = [
+    ...(request.preferredProvider && providers.ids.includes(request.preferredProvider)
+      ? [request.preferredProvider]
+      : []),
+    ...providers.ids.filter((provider) => provider !== request.preferredProvider),
+  ];
+  let firstEmpty: TimeTravelData | undefined;
+  let firstWithoutPosition: TimeTravelData | undefined;
+  for (const provider of ordered) {
+    if (request.signal?.aborted) return undefined;
+    const values = await deps.fetchValues(origin, token, {
+      paths: PATHS,
+      durationSeconds: request.preset.durationSeconds,
+      resolutionSeconds: request.preset.resolutionSeconds,
+      provider,
+      signal: request.signal,
+    });
+    if (request.signal?.aborted) return undefined;
+    if (!values) continue;
+    const parsedFrom = Date.parse(values.from);
+    const parsedTo = Date.parse(values.to);
+    const samples = toSamples(values, {
+      fromMs: parsedFrom,
+      toMs: parsedTo,
+      maxRows: request.preset.maxRows,
+    });
+    if (!samples) continue;
+    const data: TimeTravelData = {
+      samples,
+      from: parsedFrom,
+      to: parsedTo,
+      provider,
+      preset: request.preset,
+    };
+    if (samples.some((sample) => sample.lon !== undefined && sample.lat !== undefined)) return data;
+    if (samples.length > 0) firstWithoutPosition ??= data;
+    else firstEmpty ??= data;
+  }
+  return firstWithoutPosition ?? firstEmpty;
 }

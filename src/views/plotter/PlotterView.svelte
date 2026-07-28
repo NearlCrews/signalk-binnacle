@@ -37,7 +37,7 @@ import {
   type TideStationSelectionEvent,
   type TidesController,
 } from '$features/tides';
-import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
+import { loadHistoryStrip, type TimeTravelController } from '$features/time-travel';
 import { TracksPanel } from '$features/tracks';
 import { loadTrendsPanel } from '$features/trends';
 import { WaypointsPanel } from '$features/waypoints';
@@ -53,7 +53,13 @@ import type {
   SignalKStore,
 } from '$shared/signalk';
 import { isInsecureTransportOrigin } from '$shared/signalk';
-import { type PanelId, SlideOver, type Theme, type ThemeController } from '$shared/ui';
+import {
+  type PanelId,
+  registerDismiss,
+  SlideOver,
+  type Theme,
+  type ThemeController,
+} from '$shared/ui';
 import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
 import { loadWeatherMap } from '$widgets/weather-map';
 
@@ -101,7 +107,7 @@ interface FlatProps {
   symbolsStore: SymbolsStore;
   userCharts: UserCharts;
   weather: WeatherStore;
-  timeTravel: TimeTravelStore;
+  timeTravel: TimeTravelController;
   notificationsStore: NotificationsStore;
 
   // Additional services and loaders
@@ -510,6 +516,11 @@ function aisListPanelForAttempt() {
   return loadAisListPanel();
 }
 
+function historyStripForAttempt() {
+  void lazyPanelAttempt;
+  return loadHistoryStrip();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
@@ -528,6 +539,10 @@ $effect(() => {
 
 $effect(() => {
   if (mapCommands) onCommandsReady(mapCommands);
+});
+
+$effect(() => {
+  if (timeTravel.active) return registerDismiss(() => timeTravel.exit());
 });
 </script>
 
@@ -613,7 +628,29 @@ $effect(() => {
   </div>
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
     <div class="secondary-strips">
-      <HistoryStrip store={timeTravel} {units} onExit={() => timeTravel.exit()} />
+      {#if timeTravel.active}
+        {#await historyStripForAttempt()}
+          <div class="bottom-strip bottom-strip--accent">
+            <div class="head">
+              <span class="title">Time travel</span>
+              <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+            </div>
+            <div class="row">
+              <span class="muted-note" role="status">Loading time travel controls…</span>
+            </div>
+          </div>
+        {:then module}
+          <module.default controller={timeTravel} {units} onExit={() => timeTravel.exit()} />
+        {:catch}
+          <div class="bottom-strip bottom-strip--accent" role="alert">
+            <div class="row">
+              <span class="alert-note">Time travel controls could not load.</span>
+              <button type="button" class="ack" onclick={retryLazyPanel}>Retry</button>
+              <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+            </div>
+          </div>
+        {/await}
+      {/if}
       <NavStrip
         guidance={courseGuidance}
         {routeProgress}
@@ -1036,8 +1073,7 @@ $effect(() => {
   position: absolute;
   inset-block-end: var(--space-3);
   inset-inline: var(--space-3);
-  inline-size: fit-content;
-  max-inline-size: calc(100% - 2 * var(--space-3));
+  inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
   margin-inline: auto;
   max-block-size: min(60dvh, calc(100% - 2 * var(--space-3)));
   display: flex;

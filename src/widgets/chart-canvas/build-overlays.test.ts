@@ -19,14 +19,24 @@ const factories = vi.hoisted(() => {
     createAnchorOverlay: vi.fn(() => marker('anchor')),
     createCollisionOverlay: vi.fn(() => marker('collision')),
     createCourseOverlay: vi.fn(() => marker('course')),
-    createHistoryTrackOverlay: vi.fn(() => marker('history-track')),
+    createHistoryTrackOverlay: vi.fn(
+      (
+        _origin: string,
+        _getToken: () => string | undefined,
+        _providers: () => unknown,
+        _reviewActive: () => boolean,
+      ) => marker('history-track'),
+    ),
     createMeasureOverlay: vi.fn(() => marker('measure')),
     createMobOverlay: vi.fn(() => marker('mob')),
     createRouteOverlay: vi.fn(() => marker('route')),
     createTidesOverlay: vi.fn(() => marker('tides')),
     createTimeTravelOverlay: vi.fn(() => marker('time-travel')),
+    createTimeTravelTrackOverlay: vi.fn(() => marker('time-travel-track')),
     createTrackOverlay: vi.fn(() => marker('track')),
-    createVesselOverlay: vi.fn(() => marker('vessel')),
+    createVesselOverlay: vi.fn((_vessel: unknown, _reviewActive: () => boolean) =>
+      marker('vessel'),
+    ),
     createWaypointOverlay: vi.fn(() => marker('waypoints')),
   };
 });
@@ -47,6 +57,7 @@ vi.mock('$features/route-layer', () => ({
 vi.mock('$features/tides', () => ({ createTidesOverlay: factories.createTidesOverlay }));
 vi.mock('$features/time-travel', () => ({
   createTimeTravelOverlay: factories.createTimeTravelOverlay,
+  createTimeTravelTrackOverlay: factories.createTimeTravelTrackOverlay,
 }));
 vi.mock('$features/track-layer', () => ({
   createHistoryTrackOverlay: factories.createHistoryTrackOverlay,
@@ -83,7 +94,7 @@ function setup(marineRadarLayer?: { id: string }) {
     onAnchorMoved: vi.fn(),
     aisTrailsAvailable: vi.fn(() => true),
     historyProviders: vi.fn(() => ({ providers: [] })),
-    timeTravel: { name: 'time-travel' },
+    timeTravel: { name: 'time-travel', active: false },
     marineRadarLayer,
   };
   return { deps, overlays: buildDynamicOverlays(deps as never) };
@@ -113,6 +124,7 @@ describe('buildDynamicOverlays', () => {
       'mob',
       'history-track',
       'track',
+      'time-travel-track',
       'vessel',
       'time-travel',
       'marine-radar',
@@ -136,6 +148,7 @@ describe('buildDynamicOverlays', () => {
       'mob',
       'history-track',
       'track',
+      'time-travel-track',
       'vessel',
       'time-travel',
     ]);
@@ -181,7 +194,9 @@ describe('buildDynamicOverlays', () => {
       deps.origin,
       deps.getToken,
       deps.historyProviders,
+      expect.any(Function),
     );
+    const historyReviewActive = factories.createHistoryTrackOverlay.mock.calls[0]?.[3];
     expect(factories.createTrackOverlay).toHaveBeenCalledWith(
       deps.recorder,
       deps.trackSettings,
@@ -190,7 +205,14 @@ describe('buildDynamicOverlays', () => {
     expect(factories.createCourseOverlay).toHaveBeenCalledWith(deps.guidance, deps.vessel);
     expect(factories.createCollisionOverlay).toHaveBeenCalledWith(deps.collision);
     expect(factories.createMobOverlay).toHaveBeenCalledWith(deps.mob, deps.vessel);
-    expect(factories.createVesselOverlay).toHaveBeenCalledWith(deps.vessel);
+    expect(factories.createVesselOverlay).toHaveBeenCalledWith(deps.vessel, expect.any(Function));
+    const reviewActive = factories.createVesselOverlay.mock.calls[0]?.[1];
+    expect(reviewActive?.()).toBe(false);
+    expect(historyReviewActive?.()).toBe(false);
+    deps.timeTravel.active = true;
+    expect(reviewActive?.()).toBe(true);
+    expect(historyReviewActive?.()).toBe(true);
+    expect(factories.createTimeTravelTrackOverlay).toHaveBeenCalledWith(deps.timeTravel);
     expect(factories.createTimeTravelOverlay).toHaveBeenCalledWith(deps.timeTravel);
   });
 });

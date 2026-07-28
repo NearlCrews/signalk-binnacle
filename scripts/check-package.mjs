@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
 const proseOnly = process.argv.includes('--prose-only');
@@ -28,18 +28,23 @@ const textExtensions = new Set([
 const proseExtensions = new Set(['.md', '.mdx', '.txt']);
 
 function verifyProse() {
-  const tracked = spawnSync('git', ['ls-files', '-z'], {
-    encoding: 'utf8',
-  });
-  if (tracked.error || tracked.status !== 0) {
-    const detail = tracked.error?.message ?? tracked.stderr.trim() ?? 'git ls-files failed';
-    console.error(`Unable to enumerate tracked prose: ${detail}`);
+  const workingTree = spawnSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    {
+      encoding: 'utf8',
+    },
+  );
+  if (workingTree.error || workingTree.status !== 0) {
+    const detail = workingTree.error?.message ?? workingTree.stderr.trim() ?? 'git ls-files failed';
+    console.error(`Unable to enumerate working-tree prose: ${detail}`);
     process.exit(1);
   }
 
-  const checked = tracked.stdout
+  const checked = workingTree.stdout
     .split('\0')
     .filter(Boolean)
+    .filter(existsSync)
     .filter((path) => path !== 'package-lock.json' && textExtensions.has(posix.extname(path)));
   /** @type {string[]} */
   const failures = [];
@@ -73,7 +78,7 @@ function verifyProse() {
     process.exit(1);
   }
 
-  console.log(`Prose policy verified: ${checked.length} tracked text files.`);
+  console.log(`Prose policy verified: ${checked.length} working-tree text files.`);
 }
 
 verifyProse();

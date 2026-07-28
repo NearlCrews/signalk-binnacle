@@ -366,6 +366,14 @@ or emergency grade notification outside the four dedicated hazards (MOB, anchor 
 danger, and shallow water), with the same worst-first ordering, quieted-dims state, and a device-local
 Mute here fallback for when the server cannot silence it.
 
+`HistoryStrip` (`features/time-travel`, composed by `PlotterView`) is a transient review surface, not
+a persisted layer setting. Its range segments, playback controls, slider, full local timestamp,
+provider attribution, and four metrics all describe one accepted history snapshot. A pending or
+failed request does not relabel or erase that snapshot. Automatic playback pauses for manual
+interaction, range changes, refresh, Exit, a hidden document, and reduced motion, and never resumes
+without another explicit Play action. Its temporary track and vessel dimming must not write to the
+profile-owned layer manager.
+
 `createPathMetaCache` (`$shared/signalk`): the shared per-session cache of `meta.zones` and related
 path metadata, with a null in-flight sentinel and a retry on the next reactive visit after any failed
 fetch. The instruments controller and the shallow monitor both read through it, so a path's meta is
@@ -501,7 +509,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised notifications, are the
   two sanctioned exceptions).
 - Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
-  `prefers-reduced-motion`.
+  `prefers-reduced-motion`, and Time travel disables automatic playback while keeping manual
+  stepping and scrubbing available.
 
 ## 10. Icons
 

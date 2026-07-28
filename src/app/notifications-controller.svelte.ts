@@ -7,7 +7,7 @@ import type { ActiveNotification, NotificationsStore } from '$entities/notificat
 import type { CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
 import { CollisionNotifier, notificationLabel, selectGenericAlarms } from '$features/lookout';
 import type { CompanionStatus } from '$features/prewarm';
-import type { TimeTravelStore } from '$features/time-travel';
+import type { TimeTravelController } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
 import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
 import { acknowledgeNotification, SELF_CONTEXT, silenceNotification } from '$shared/signalk';
@@ -25,7 +25,7 @@ interface NotificationsControllerDeps {
   anchor: AnchorWatch;
   notificationsStore: NotificationsStore;
   companionStatus: CompanionStatus;
-  timeTravel: TimeTravelStore;
+  timeTravel: TimeTravelController;
   mob: MobStore;
   genericAlarm: GenericAlarm;
   // The one depth notification path the shallow monitor currently sounds itself, or undefined. A

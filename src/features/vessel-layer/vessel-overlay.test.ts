@@ -61,6 +61,35 @@ describe('vessel overlay', () => {
     expect(map.updatedImages).toContain('binnacle-vessel');
   });
 
+  it('dims review rendering without changing the accepted layer opacity', async () => {
+    const store = new SignalKStore();
+    let reviewing = false;
+    const overlay = createVesselOverlay(new OwnVessel(store), () => reviewing);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.setOpacity?.(ctx, 0.8);
+    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+      'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8,
+    );
+    reviewing = true;
+    overlay.sync(ctx);
+    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+      'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8 * 0.35,
+    );
+    reviewing = false;
+    overlay.sync(ctx);
+    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+      'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8,
+    );
+  });
+
   it('remove deletes the layer and source', async () => {
     const store = new SignalKStore();
     const overlay = createVesselOverlay(new OwnVessel(store));

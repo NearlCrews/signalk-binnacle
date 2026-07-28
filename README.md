@@ -80,6 +80,11 @@ Binnacle ships its full feature set as a Signal K webapp:
   and source, while a catalog-level fallback keeps future repeated labels distinct. Open KIP launches
   the installed KIP webapp; when KIP is absent, the item stays visible but unavailable and explains
   how to add it.
+- **Time travel:** review 1 hour, 6 hours, 24 hours, or 7 days from one registered Signal K history
+  provider. Scrub or replay the synchronized recorded track, vessel position, depth, apparent wind,
+  barometer, and speed over ground at 0.5x, 1x, or 2x. Full local dates identify day transitions,
+  Now returns to the newest loaded sample without another query, and a failed range keeps the last
+  accepted history visible.
 - **Weather:** a zoom-capped mini-map with animated WebGL wind, pressure isobars, waves,
   precipitation, cloud, and radar, plus time-aware point readouts, marine forecasts, source and age
   labels, deterministic risk cues, and official warnings when a Signal K weather provider supplies

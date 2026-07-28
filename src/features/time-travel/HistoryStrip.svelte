@@ -1,107 +1,204 @@
 <script lang="ts">
 import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 import ChevronRight from '@lucide/svelte/icons/chevron-right';
+import Pause from '@lucide/svelte/icons/pause';
+import Play from '@lucide/svelte/icons/play';
 import type { UnitsStore } from '$entities/units';
 import {
-  formatClockTime,
+  DAY_MS,
   formatKnotsOr,
   formatLengthOr,
   formatPressureOr,
+  HOUR_MS,
   lengthUnit,
-  MINUTE_MS,
   pressureUnit,
 } from '$shared/lib';
-import { HISTORY_RESOLUTION_SECONDS } from '$shared/signalk';
-import { registerDismiss } from '$shared/ui';
-import type { TimeTravelStore } from './time-travel-store.svelte';
-import { relativeHours, scrubValueText } from './time-travel-timeline';
+import type { TimeTravelController } from './time-travel-controller.svelte';
+import { TIME_TRAVEL_PRESETS, TIME_TRAVEL_SPEEDS, timeTravelPreset } from './time-travel-presets';
+import {
+  formatTimeTravelTimestamp,
+  relativeTimeText,
+  scrubValueText,
+} from './time-travel-timeline';
 
 interface Props {
-  store: TimeTravelStore;
+  controller: TimeTravelController;
   units: UnitsStore;
   onExit: () => void;
 }
 
-const { store, units, onExit }: Props = $props();
+const { controller, units, onExit }: Props = $props();
 
-// Coarse button step: a quarter-hour nudge keeps gloved-hand stepping useful across the 24 h
-// window, while the slider's fine 60 s step (keyboard arrows) still allows precise scrubbing.
-const STEP_MS = 15 * MINUTE_MS;
-
-$effect(() => {
-  if (store.active) return registerDismiss(onExit);
-});
-
-const current = $derived(store.current);
+const current = $derived(controller.current);
+const acceptedPreset = $derived(controller.accepted?.preset);
+const selectedRangeId = $derived(controller.requestedRangeId ?? controller.rangeId);
 const depthUnit = $derived(lengthUnit(units.mode));
 const baroUnit = $derived(pressureUnit(units.mode));
-const clock = $derived(current ? formatClockTime(current.t) : '');
-const hoursAgo = $derived(current ? relativeHours(store.to, current.t) : 0);
-const valueText = $derived(current ? scrubValueText(clock, hoursAgo) : 'No data');
-
-// One live-region message for the whole strip: the scrub time when ready, otherwise the state.
-const liveMessage = $derived(
-  store.status === 'ready'
-    ? valueText
-    : store.status === 'loading'
-      ? 'Loading history'
-      : store.status === 'no-provider'
-        ? 'Time travel needs a history provider on the server'
-        : store.status === 'empty'
-          ? 'No recorded history yet'
-          : store.status === 'failed'
-            ? 'Could not load history'
-            : '',
+const timestamp = $derived(formatTimeTravelTimestamp(controller.scrubMs));
+const relative = $derived(relativeTimeText(controller.to, controller.scrubMs));
+const valueText = $derived(
+  scrubValueText(timestamp, relative, controller.markerSample !== undefined),
 );
+
+function compactDuration(durationMs: number): string {
+  if (durationMs >= DAY_MS) {
+    const days = Math.max(1, Math.round(durationMs / DAY_MS));
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  if (durationMs < HOUR_MS) return 'less than 1 hour';
+  const hours = Math.max(1, Math.round(durationMs / HOUR_MS));
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
+const coverageNote = $derived.by(() => {
+  const accepted = controller.accepted;
+  const first = accepted?.samples[0];
+  const last = accepted?.samples.at(-1);
+  if (!accepted || !first || !last) return undefined;
+  const recordedMs = last.t - first.t;
+  const requestedMs = accepted.preset.durationSeconds * 1000;
+  const resolutionMs = accepted.preset.resolutionSeconds * 1000;
+  if (recordedMs + resolutionMs >= requestedMs) return undefined;
+  return `Recorded samples cover ${compactDuration(recordedMs)} of the requested ${accepted.preset.name}.`;
+});
+
+const errorText = $derived.by(() => {
+  const loadError = controller.error;
+  if (!loadError || controller.samples.length === 0) return undefined;
+  const requested = timeTravelPreset(loadError.rangeId);
+  const showing = acceptedPreset;
+  if (loadError.kind === 'no-provider') {
+    return `The history provider is unavailable. Showing the accepted ${showing?.name ?? 'history'}.`;
+  }
+  if (loadError.kind === 'empty') {
+    return `No recorded data was found in ${requested.name}. Showing ${showing?.name ?? 'the accepted range'}.`;
+  }
+  return `Could not load ${requested.name}. Showing ${showing?.name ?? 'the accepted range'}. Retry, or choose a shorter range.`;
+});
+
+const liveMessage = $derived.by(() => {
+  if (controller.playing) return '';
+  if (controller.refreshing) {
+    return `Loading ${timeTravelPreset(controller.requestedRangeId ?? controller.rangeId).name}. Accepted history remains visible.`;
+  }
+  if (errorText) return errorText;
+  if (controller.status === 'ready') return valueText;
+  if (controller.status === 'loading') return 'Loading history';
+  if (controller.status === 'no-provider') {
+    return 'Time travel needs a history provider on the server';
+  }
+  if (controller.status === 'empty') return 'No recorded history in this range';
+  if (controller.status === 'failed') return 'Could not load history';
+  return '';
+});
 </script>
 
-{#if store.active}
-  <aside class="bottom-strip bottom-strip--accent" aria-label="Time travel">
+{#if controller.active}
+  <aside class="bottom-strip bottom-strip--accent history-strip" aria-label="Time travel">
     <div class="head">
       <span class="title">Time travel</span>
-      {#if store.status === 'ready'}
-        <span class="note num" aria-hidden="true">{clock} ({hoursAgo}h ago)</span>
+      {#if controller.samples.length > 0}
+        <span class="note num" aria-hidden="true">{timestamp} · {relative}</span>
       {/if}
       <div class="actions">
-        {#if store.status === 'ready'}
-          <button type="button" class="ack" onclick={() => store.goToLatest()}>Now</button>
+        {#if controller.samples.length > 0}
+          <button
+            type="button"
+            class="ack"
+            disabled={controller.refreshing}
+            onclick={() => void controller.reload()}
+          >
+            Refresh
+          </button>
+          <button type="button" class="ack" onclick={() => controller.goToLatest()}>Now</button>
         {/if}
         <button type="button" class="ack" onclick={onExit}>Exit</button>
       </div>
     </div>
 
-    {#if store.status === 'loading'}
+    <div class="range-row">
+      <span class="control-label" id="time-travel-range-label">Range</span>
+      <div class="segmented range-options" role="group" aria-labelledby="time-travel-range-label">
+        {#each TIME_TRAVEL_PRESETS as preset (preset.id)}
+          <button
+            type="button"
+            class="btn"
+            class:is-on={selectedRangeId === preset.id}
+            aria-pressed={selectedRangeId === preset.id}
+            onclick={() => void controller.setRange(preset.id)}
+          >
+            {preset.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    {#if controller.refreshing}
+      <p class="muted-note load-note" role="status">
+        Loading {timeTravelPreset(controller.requestedRangeId ?? controller.rangeId).name}. Showing
+        {acceptedPreset?.name ?? 'accepted history'}
+        until it finishes.
+      </p>
+    {/if}
+
+    {#if errorText}
+      <div class="alert-note load-error" role="alert">
+        <span>{errorText}</span>
+        <button type="button" class="btn btn-ghost" onclick={() => void controller.retry()}>
+          Retry
+        </button>
+      </div>
+    {/if}
+
+    {#if controller.status === 'loading' && controller.samples.length === 0}
       <div class="row"><span class="muted-note">Loading history…</span></div>
-    {:else if store.status === 'no-provider'}
+    {:else if controller.status === 'no-provider' && controller.samples.length === 0}
       <div class="row">
         <span class="muted-note">
-          A history provider on the server (for example signalk-questdb) unlocks time travel.
+          A history provider on the server, for example signalk-questdb, unlocks time travel.
         </span>
       </div>
-    {:else if store.status === 'empty'}
-      <div class="row"><span class="muted-note">No recorded history yet.</span></div>
-    {:else if store.status === 'failed'}
+    {:else if controller.status === 'empty' && controller.samples.length === 0}
       <div class="row">
-        <span class="muted-note">Could not load history.</span>
-        <button type="button" class="ack" onclick={() => void store.reload()}>Retry</button>
+        <span class="muted-note"
+          >No recorded data was found in {acceptedPreset?.name ?? 'this range'}.</span
+        >
       </div>
-    {:else}
-      <div class="scrubber" role="group" aria-label="Scrub history">
+    {:else if controller.status === 'failed' && controller.samples.length === 0}
+      <div class="row load-failed">
+        <span class="alert-note" role="alert">Could not load history.</span>
+        <button type="button" class="ack" onclick={() => void controller.retry()}>Retry</button>
+      </div>
+    {:else if controller.samples.length > 0}
+      <div class="scrubber" role="group" aria-label="History playback">
         <button
           type="button"
           class="icon-btn step"
           aria-label="Earlier"
-          disabled={store.scrubMs <= store.from}
-          onclick={() => store.setScrub(store.scrubMs - STEP_MS)}
+          disabled={controller.scrubMs <= controller.from}
+          onclick={() => controller.step(-1)}
         >
           <ChevronLeft size={16} aria-hidden="true" />
         </button>
         <button
           type="button"
           class="icon-btn step"
+          aria-label={controller.playing ? 'Pause history playback' : 'Play history'}
+          disabled={controller.samples.length < 2 || controller.reducedMotion || controller.refreshing}
+          onclick={() => (controller.playing ? controller.pause() : controller.play())}
+        >
+          {#if controller.playing}
+            <Pause size={16} aria-hidden="true" />
+          {:else}
+            <Play size={16} aria-hidden="true" />
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="icon-btn step"
           aria-label="Later"
-          disabled={store.scrubMs >= store.to}
-          onclick={() => store.setScrub(store.scrubMs + STEP_MS)}
+          disabled={controller.scrubMs >= controller.to}
+          onclick={() => controller.step(1)}
         >
           <ChevronRight size={16} aria-hidden="true" />
         </button>
@@ -109,28 +206,147 @@ const liveMessage = $derived(
           <input
             class="track range"
             type="range"
-            min={store.from}
-            max={store.to}
-            step={HISTORY_RESOLUTION_SECONDS * 1000}
-            value={store.scrubMs}
+            min={controller.from}
+            max={controller.to}
+            step={(acceptedPreset?.resolutionSeconds ?? 60) * 1000}
+            value={controller.scrubMs}
             aria-label="History time"
             aria-valuetext={valueText}
-            oninput={(e) => store.setScrub(e.currentTarget.valueAsNumber)}
+            oninput={(event) => controller.setScrub(event.currentTarget.valueAsNumber)}
           >
         </span>
+        <span class="time">{timestamp}</span>
       </div>
-      <div class="row">
-        <span class="metric"
-          >Depth <b>{formatLengthOr(current?.depth ?? null, units.mode)}</b> {depthUnit}</span
-        >
-        <span class="metric">Wind <b>{formatKnotsOr(current?.windApparent ?? null)}</b> kn</span>
-        <span class="metric"
-          >Baro <b>{formatPressureOr(current?.pressure ?? null, units.mode)}</b> {baroUnit}</span
-        >
-        <span class="metric">SOG <b>{formatKnotsOr(current?.sog ?? null)}</b> kn</span>
+
+      <div class="speed-row">
+        <span class="control-label" id="time-travel-speed-label">Playback speed</span>
+        <div class="segmented speed-options" role="group" aria-labelledby="time-travel-speed-label">
+          {#each TIME_TRAVEL_SPEEDS as speed (speed)}
+            <button
+              type="button"
+              class="btn"
+              class:is-on={controller.speed === speed}
+              aria-pressed={controller.speed === speed}
+              disabled={controller.reducedMotion}
+              onclick={() => controller.setSpeed(speed)}
+            >
+              {speed}×
+            </button>
+          {/each}
+        </div>
       </div>
+
+      {#if controller.reducedMotion}
+        <p class="muted-note" role="status">
+          Automatic playback is off because reduced motion is enabled. Manual stepping and scrubbing
+          remain available.
+        </p>
+      {/if}
+
+      <p class="source-note muted-note">
+        Source: <span class="num">{controller.accepted?.provider}</span>. {acceptedPreset?.name}
+        loaded.
+      </p>
+      {#if coverageNote}
+        <p class="muted-note">{coverageNote}</p>
+      {/if}
+      {#if !current}
+        <p class="muted-note" role="status">No recorded sample is available near this time.</p>
+      {:else}
+        {#if controller.markerSample === undefined}
+          <p class="muted-note" role="status">
+            Position unavailable near this time. The replay marker is hidden.
+          </p>
+        {/if}
+        <div class="row">
+          <span class="metric"
+            >Depth <b>{formatLengthOr(current.depth ?? null, units.mode)}</b> {depthUnit}</span
+          >
+          <span class="metric">Wind <b>{formatKnotsOr(current.windApparent ?? null)}</b> kn</span>
+          <span class="metric"
+            >Baro <b>{formatPressureOr(current.pressure ?? null, units.mode)}</b> {baroUnit}</span
+          >
+          <span class="metric">SOG <b>{formatKnotsOr(current.sog ?? null)}</b> kn</span>
+        </div>
+      {/if}
     {/if}
 
     <span class="visually-hidden" role="status">{liveMessage}</span>
   </aside>
 {/if}
+
+<style>
+.history-strip {
+  container-type: inline-size;
+}
+
+.range-row,
+.speed-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+}
+
+.control-label {
+  flex: 0 0 auto;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.range-options,
+.speed-options {
+  flex: 1;
+}
+
+.range-options .btn,
+.speed-options .btn {
+  flex: 1 1 0;
+  min-inline-size: var(--control-size);
+  padding-inline: var(--space-2);
+}
+
+.load-note,
+.source-note {
+  margin: var(--space-1) 0;
+}
+
+.load-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+}
+
+.load-error span {
+  flex: 1;
+}
+
+.load-failed {
+  align-items: center;
+}
+
+@container (max-width: 26rem) {
+  .range-row,
+  .speed-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .range-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(var(--control-size), 1fr));
+  }
+
+  .speed-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(var(--control-size), 1fr));
+  }
+
+  .load-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+</style>

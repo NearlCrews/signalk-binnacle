@@ -20,8 +20,12 @@ const DEFAULT_COLOR: Rgba = mapThemePaint('day').ownVessel;
 // The overlay id. The chart pins this on top so a chart or traffic can never hide the boat; exported
 // so the pinned list references the same constant instead of a literal that could drift on a rename.
 export const OWN_VESSEL_OVERLAY_ID = 'own-vessel';
+const REVIEW_DIM_OPACITY = 0.35;
 
-export function createVesselOverlay(vessel: OwnVessel): SymbolOverlay {
+export function createVesselOverlay(
+  vessel: OwnVessel,
+  reviewActive: () => boolean = () => false,
+): SymbolOverlay {
   let lastLon: number | undefined;
   let lastLat: number | undefined;
   let lastHeading: number | undefined;
@@ -53,7 +57,7 @@ export function createVesselOverlay(vessel: OwnVessel): SymbolOverlay {
     return true;
   }
 
-  return createSymbolOverlay({
+  const overlay = createSymbolOverlay({
     id: OWN_VESSEL_OVERLAY_ID,
     title: 'Own vessel',
     band: 'vessel',
@@ -67,4 +71,29 @@ export function createVesselOverlay(vessel: OwnVessel): SymbolOverlay {
     features: buildFeatures,
     shouldRefresh,
   });
+  let acceptedOpacity = 1;
+  let lastReviewActive: boolean | undefined;
+
+  function applyOpacity(ctx: Parameters<NonNullable<SymbolOverlay['setOpacity']>>[0]): void {
+    overlay.setOpacity?.(ctx, acceptedOpacity * (reviewActive() ? REVIEW_DIM_OPACITY : 1));
+  }
+
+  return {
+    ...overlay,
+    sync(ctx) {
+      overlay.sync(ctx);
+      const reviewing = reviewActive();
+      if (reviewing === lastReviewActive) return;
+      lastReviewActive = reviewing;
+      applyOpacity(ctx);
+    },
+    setOpacity(ctx, opacity) {
+      acceptedOpacity = opacity;
+      applyOpacity(ctx);
+    },
+    reset() {
+      lastReviewActive = undefined;
+      overlay.reset?.();
+    },
+  };
 }

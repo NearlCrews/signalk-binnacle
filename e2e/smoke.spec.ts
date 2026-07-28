@@ -21,6 +21,14 @@ async function openTrends(page: Page): Promise<void> {
     .click();
 }
 
+async function openTimeTravel(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Time travel', exact: true })
+    .click();
+}
+
 async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<void> {
   await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -98,6 +106,152 @@ test('app shell stays usable and explains when WebGL2 is unavailable', async ({ 
   await page.getByRole('button', { name: 'Menu' }).click();
   await expect(page.locator('#app-menu-launcher')).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+test('time travel changes bounded ranges, replays history, and retains accepted data', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ 'signalk-questdb': { isDefault: true } }),
+    }),
+  );
+  const requests: Array<{ duration: string | null; resolution: string | null }> = [];
+  await page.route(/\/signalk\/v2\/api\/history\/values/, async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const duration = params.get('duration');
+    const resolution = params.get('resolution');
+    requests.push({ duration, resolution });
+    if (duration === '21600') {
+      await route.fulfill({ status: 500, body: 'range unavailable' });
+      return;
+    }
+    const durationSeconds = Number(duration);
+    const toMs = Date.UTC(2026, 6, 28, 12);
+    const fromMs = toMs - durationSeconds * 1000;
+    const columns = (params.get('paths') ?? '')
+      .split(',')
+      .filter(Boolean)
+      .map((requestPath) => {
+        const aggregateAt = requestPath.lastIndexOf(':');
+        return aggregateAt > 0
+          ? {
+              path: requestPath.slice(0, aggregateAt),
+              method: requestPath.slice(aggregateAt + 1),
+            }
+          : { path: requestPath, method: 'average' };
+      });
+    const row = (timeMs: number, offset: number) => [
+      new Date(timeMs).toISOString(),
+      ...columns.map((column) =>
+        column.path === 'navigation.position'
+          ? { longitude: -82.7 + offset * 0.01, latitude: 27.7 + offset * 0.01 }
+          : offset + 1,
+      ),
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        range: {
+          from: new Date(fromMs).toISOString(),
+          to: new Date(toMs).toISOString(),
+        },
+        values: columns,
+        data: [row(fromMs, 0), row((fromMs + toMs) / 2, 1), row(toMs, 2)],
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await openTimeTravel(page);
+  const strip = page.getByRole('complementary', { name: 'Time travel' });
+  await expect(strip).toBeVisible();
+  await expect.poll(() => requests.at(-1)).toEqual({ duration: '86400', resolution: '60' });
+  await expect(strip.getByText('Source: signalk-questdb. 24 hours loaded.')).toBeVisible();
+  await expect(strip.getByText('2026', { exact: false }).first()).toBeVisible();
+
+  await strip.getByRole('button', { name: '7 d', exact: true }).click();
+  await expect.poll(() => requests.at(-1)).toEqual({ duration: '604800', resolution: '300' });
+  await expect(strip.getByText('Source: signalk-questdb. 7 days loaded.')).toBeVisible();
+
+  await strip.getByRole('button', { name: 'Play history' }).click();
+  await expect(strip.getByRole('button', { name: 'Pause history playback' })).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(strip.getByRole('button', { name: 'Play history' })).toBeVisible();
+
+  await strip.getByRole('button', { name: '6 h', exact: true }).click();
+  await expect.poll(() => requests.at(-1)).toEqual({ duration: '21600', resolution: '15' });
+  await expect(strip.getByRole('alert')).toContainText('Could not load 6 hours. Showing 7 days.');
+  await expect(strip.getByText('Source: signalk-questdb. 7 days loaded.')).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+  });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(
+    strip.getByText('Automatic playback is off because reduced motion is enabled.'),
+  ).toBeVisible();
+  await expect(strip.getByRole('button', { name: 'Play history' })).toBeDisabled();
+
+  const rangeButton = strip.getByRole('button', { name: '24 h', exact: true });
+  const rangeBox = await rangeButton.boundingBox();
+  if (!rangeBox) throw new Error('time travel range button did not lay out');
+  expect(rangeBox.height).toBeGreaterThanOrEqual(44);
+  expect(await strip.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+test('time travel can exit while its lazy controls are still loading', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ 'signalk-questdb': { isDefault: true } }),
+    }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/values/, (route) =>
+    route.fulfill({ status: 500, body: 'history unavailable' }),
+  );
+  let releaseChunk = () => {};
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunk = resolve;
+  });
+  await page.route(/\/assets\/HistoryStrip-[^/]+\.js$/, async (route) => {
+    await chunkGate;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/');
+    await openTimeTravel(page);
+    const pending = page
+      .locator('.bottom-strip')
+      .filter({ hasText: 'Loading time travel controls' });
+    await expect(pending).toBeVisible();
+    await pending.getByRole('button', { name: 'Exit' }).click();
+    await expect(pending).not.toBeVisible();
+
+    await openTimeTravel(page);
+    await expect(pending).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pending).not.toBeVisible();
+  } finally {
+    releaseChunk();
+  }
 });
 
 test('center and follow explain when no GPS fix is available', async ({ page }) => {

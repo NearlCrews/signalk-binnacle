@@ -24,7 +24,11 @@ import { createMobOverlay } from '$features/mob';
 import type { NotesOverlay } from '$features/notes';
 import { createCourseOverlay, createRouteOverlay } from '$features/route-layer';
 import { createTidesOverlay, type TideStationSelectionEvent } from '$features/tides';
-import { createTimeTravelOverlay, type TimeTravelStore } from '$features/time-travel';
+import {
+  createTimeTravelOverlay,
+  createTimeTravelTrackOverlay,
+  type TimeTravelController,
+} from '$features/time-travel';
 import {
   createHistoryTrackOverlay,
   createTrackOverlay,
@@ -66,7 +70,7 @@ export interface DynamicOverlaysDeps {
   onAnchorMoved?: (position: LatLon) => void;
   aisTrailsAvailable: () => boolean;
   historyProviders: () => HistoryProviders | undefined;
-  timeTravel: TimeTravelStore;
+  timeTravel: TimeTravelController;
   // The marine radar echo layer, built by its controller (which owns the spokes worker) and woven in
   // at its traffic-band position. Absent until the controller is wired; the layer itself stays inert
   // until a radar provider is detected and streaming.
@@ -123,9 +127,10 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     }),
     createCollisionOverlay(collision),
     createMobOverlay(mob, vessel),
-    createHistoryTrackOverlay(origin, getToken, historyProviders),
+    createHistoryTrackOverlay(origin, getToken, historyProviders, () => timeTravel.active),
     createTrackOverlay(recorder, trackSettings, savedTracks),
-    createVesselOverlay(vessel),
+    createTimeTravelTrackOverlay(timeTravel),
+    createVesselOverlay(vessel, () => timeTravel.active),
     createTimeTravelOverlay(timeTravel),
     ...(marineRadarLayer ? [marineRadarLayer] : []),
   ];

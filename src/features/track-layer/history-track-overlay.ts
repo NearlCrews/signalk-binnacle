@@ -51,12 +51,21 @@ export function createHistoryTrackOverlay(
   origin: string,
   getToken: () => string | undefined,
   providers: () => HistoryProviders | undefined,
+  reviewActive: () => boolean = () => false,
   deps: Deps = { fetchValues: fetchHistoryValuesAcrossProviders, now: Date.now },
 ): HistoryTrackOverlay {
   let paint = mapThemePaint('day');
   let visible = true;
+  let renderedVisible: boolean | undefined;
   let fetching = false;
   let nextFetchAt = 0;
+
+  function applyVisibility(ctx: OverlayContext, reviewing = reviewActive()): void {
+    const next = visible && !reviewing;
+    if (next === renderedVisible) return;
+    renderedVisible = next;
+    setLayersVisibility(ctx.map, [LAYER_ID], next);
+  }
 
   function toFeature(values: HistoryValues): GeoJSON.FeatureCollection {
     const iPos = columnIndex(values, SK_PATHS.position);
@@ -117,6 +126,7 @@ export function createHistoryTrackOverlay(
     layerIds: [LAYER_ID],
     add(ctx) {
       nextFetchAt = 0;
+      renderedVisible = undefined;
       ensureGeoJsonSource(ctx.map, SOURCE_ID);
       if (!ctx.map.getLayer(LAYER_ID)) {
         const layer: LineLayerSpecification = {
@@ -135,7 +145,9 @@ export function createHistoryTrackOverlay(
       }
     },
     sync(ctx) {
-      if (!visible) return;
+      const reviewing = reviewActive();
+      applyVisibility(ctx, reviewing);
+      if (!visible || reviewing) return;
       const now = deps.now();
       if (now < nextFetchAt) return;
       nextFetchAt = now + REFRESH_MS;
@@ -143,7 +155,7 @@ export function createHistoryTrackOverlay(
     },
     setVisible(ctx, next) {
       visible = next;
-      setLayersVisibility(ctx.map, [LAYER_ID], next);
+      applyVisibility(ctx);
       // First show fetches immediately rather than waiting out the refresh window.
       if (next) nextFetchAt = 0;
     },

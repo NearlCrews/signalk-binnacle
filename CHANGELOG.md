@@ -8,6 +8,11 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Time travel now offers bounded 1-hour, 6-hour, 24-hour, and 7-day history ranges with adaptive
+  resolution, play and pause, 0.5x, 1x, and 2x speeds, full local dates, provider attribution, and a
+  range-owned track synchronized with the marker and metric readouts. It keeps one provider's
+  accepted data visible during refresh or failure, pauses when the page is hidden, disables
+  automatic playback for reduced motion, and never persists its temporary vessel dimming or track.
 - User-added PMTiles charts can now stage and review a replacement URL, refresh metadata from the
   current URL, and switch between device-only and Signal K sharing. Replacements preserve the chart
   id, name, visibility, opacity, and stacking position, restore the accepted overlay on failure, and
