@@ -31,6 +31,10 @@ export interface MenuItem {
   // Optional section heading. Consecutive items sharing a group render under one caps-label header,
   // so the menu groups itself from data without the menu component knowing the sections.
   group?: string;
+  // How many things are live behind this item right now (active alarms, for example), as a whole
+  // number. Rendered as a count chip on the tile, the bar pill, and the overflow row, so a closed
+  // panel still shows that it has something waiting. Absent or zero renders nothing.
+  count?: number;
   onSelect: () => void;
 }
 
@@ -39,6 +43,15 @@ export interface MenuItem {
 // and the overflow row gate interaction identically.
 export function itemBlocked(item: MenuItem): boolean {
   return item.disabled === true || item.available === false;
+}
+
+// The chip text for an item's live count, or undefined when there is nothing to show. Caps at "99+"
+// so a runaway count cannot widen a bar pill past its neighbors; the spoken suffix beside the chip
+// carries the true number, which has no width to protect.
+export function countBadge(item: MenuItem): string | undefined {
+  const count = item.count;
+  if (count === undefined || Number.isNaN(count) || count < 1) return undefined;
+  return count > 99 ? '99+' : String(count);
 }
 
 // The reason a blocked item is grayed, for its hover tooltip and screen-reader text: the provider-absent

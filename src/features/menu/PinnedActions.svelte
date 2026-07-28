@@ -8,6 +8,7 @@ import {
   initializeMenuFocus,
   UnavailableHint,
 } from '$shared/ui';
+import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import { MAX_BAR_PILLS, splitBarActions } from './pinned-actions';
@@ -95,6 +96,7 @@ $effect(() => {
       <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
       <MenuItemIcon item={action} size={16} />
       {action.shortLabel ?? action.label}
+      <MenuItemCount item={action} />
     </button>
   {/each}
   {#if split.overflow.length > 0}
@@ -150,6 +152,7 @@ $effect(() => {
             />
             <MenuItemIcon item={action} size={16} />
             {action.label}
+            <MenuItemCount item={action} />
           </button>
         {/each}
       </AnchoredMenu>
@@ -179,13 +182,6 @@ $effect(() => {
 }
 .more-wrap {
   position: relative;
-}
-.pill-count {
-  font-size: var(--text-xs);
-  background: var(--accent-tint);
-  border-radius: var(--radius-pill);
-  padding: 0 0.3rem;
-  color: var(--accent);
 }
 .blocked-pill-note {
   position: absolute;

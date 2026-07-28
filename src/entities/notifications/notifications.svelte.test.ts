@@ -67,6 +67,61 @@ describe('NotificationsStore', () => {
     expect(n.acknowledged).toBeUndefined();
   });
 
+  it('distinguishes an absent or malformed method from an explicitly empty one', () => {
+    // Only an explicitly empty array asks for no delivery method. Every malformed shape parses to
+    // undefined, which the audible-alarm predicate reads as the safe default: sound it. An array
+    // of only unrecognized entries is the trap, since filtering it to [] would mute a real alarm.
+    const { notifications } = setup({
+      'notifications.absent': { state: 'alarm', message: 'No method field' },
+      'notifications.empty': { state: 'alarm', method: [], message: 'Explicitly empty' },
+      'notifications.junk': { state: 'alarm', method: 'sound', message: 'Not an array' },
+      'notifications.unknown': { state: 'alarm', method: ['audio'], message: 'Unrecognized entry' },
+      'notifications.partial': {
+        state: 'alarm',
+        method: ['audio', 'sound'],
+        message: 'One recognized entry',
+      },
+    });
+    const byPath = new Map(notifications.list().map((n) => [n.path, n.method]));
+    expect(byPath.get('notifications.absent')).toBeUndefined();
+    expect(byPath.get('notifications.empty')).toEqual([]);
+    expect(byPath.get('notifications.junk')).toBeUndefined();
+    expect(byPath.get('notifications.unknown')).toBeUndefined();
+    expect(byPath.get('notifications.partial')).toEqual(['sound']);
+  });
+
+  it('carries the store activation counter, which only a sounding grade advances', () => {
+    const { notifications } = setup({
+      'notifications.loud': { state: 'alarm', method: ['sound'], message: 'Alarmed' },
+      'notifications.quiet': { state: 'warn', method: ['visual'], message: 'Warned' },
+    });
+    const byPath = new Map(notifications.list().map((n) => [n.path, n.activation]));
+    expect(byPath.get('notifications.loud')).toBe(1);
+    expect(byPath.get('notifications.quiet')).toBe(0);
+  });
+
+  it('cannot advance an activation without moving the list version', () => {
+    // The generic alarm re-articulates on the activation sum, and list() is memoized on the store
+    // version, so an activation that could move without the version moving would silently strand
+    // the memoized list one raise behind. This pins that invariant against a store refactor.
+    const store = new SignalKStore();
+    const notifications = new NotificationsStore(store);
+    const raised = { state: 'alarm', method: ['sound'], message: 'Shoal ahead' };
+    store.applyFrame(frame({ 'notifications.x': { ...raised } }));
+    const afterFirstRaise = store.notificationsVersion;
+    expect(notifications.list()[0].activation).toBe(1);
+    // An identical republish neither re-articulates nor rebuilds the list.
+    store.applyFrame(frame({ 'notifications.x': { ...raised } }));
+    expect(store.cell('notifications.x').activation).toBe(1);
+    expect(store.notificationsVersion).toBe(afterFirstRaise);
+    // A clear and a re-raise advance the activation, and the version moves with it.
+    store.applyFrame(frame({ 'notifications.x': { state: 'normal', method: [] } }));
+    store.applyFrame(frame({ 'notifications.x': { ...raised } }));
+    expect(store.cell('notifications.x').activation).toBe(2);
+    expect(store.notificationsVersion).toBeGreaterThan(afterFirstRaise);
+    expect(notifications.list()[0].activation).toBe(2);
+  });
+
   it('skips malformed values without throwing', () => {
     const { notifications } = setup({
       'notifications.bogus': { state: 42, method: 'sound' },

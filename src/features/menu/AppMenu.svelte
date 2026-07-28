@@ -3,6 +3,7 @@ import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
 import { AnchoredMenu, CustomizeToggle, UnavailableHint } from '$shared/ui';
+import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import { resolvePinned } from './pinned-actions';
@@ -194,6 +195,7 @@ function onCardFocusOut(event: FocusEvent): void {
               <UnavailableHint hint={item.available === false ? item.unavailableHint : undefined} />
               <MenuItemIcon {item} size={28} />
               <span class="tile-label">{item.label}</span>
+              <MenuItemCount {item} />
             </button>
           {/each}
         </div>

@@ -11,6 +11,7 @@ import type { UnitsStore } from '$entities/units';
 import {
   feetToMeters,
   formatClockTime,
+  formatLengthOr,
   lengthUnit,
   metersToFeet,
   metersToNauticalMiles,
@@ -26,6 +27,12 @@ import {
 } from '$shared/settings';
 import type { AuthController, ConnectionPhase } from '$shared/signalk';
 import { Disclosure, SlideOver, UnitField } from '$shared/ui';
+import {
+  canAcknowledgeNotification,
+  canSilenceNotification,
+  notificationLabel,
+} from './notification-actions';
+import type { ShallowMonitorState, ShallowThresholdSource } from './shallow-monitor.svelte';
 import { thresholdsCaution } from './thresholds-caution';
 
 // Humanize the raw Signal K alert state so a novice does not read truncated words like "WARN".
@@ -48,6 +55,13 @@ interface Props {
   onAcknowledge?: (n: ActiveNotification) => void;
   thresholds: PersistedValue<Thresholds>;
   units: UnitsStore;
+  // The shallow monitor's live state. Absent (an older caller, or SSR) leaves the section on the
+  // locally configured threshold, which is what it did before the monitor existed.
+  shallow?: {
+    monitorState: ShallowMonitorState;
+    thresholdSource: ShallowThresholdSource;
+    effectiveLimitMeters: number | undefined;
+  };
   collisionMuted: boolean;
   collisionMuteRemainingMin: number | undefined;
   onToggleCollisionMute: () => void;
@@ -66,6 +80,7 @@ const {
   onAcknowledge,
   thresholds,
   units,
+  shallow,
   collisionMuted,
   collisionMuteRemainingMin,
   onToggleCollisionMute,
@@ -79,25 +94,10 @@ const t = $derived(thresholds.value);
 const alerts = $derived(notifications.list());
 let pendingAction = $state<string | undefined>();
 
-// The path tail identifies an alert that arrived without a message.
-const alertLabel = (n: ActiveNotification): string =>
-  n.message || n.path.replace(/^notifications\./, '');
-
 const alertTime = (n: ActiveNotification): string | undefined => {
   const ms = n.timestamp ? Date.parse(n.timestamp) : Number.NaN;
   return Number.isFinite(ms) ? formatClockTime(ms) : undefined;
 };
-
-// The v2 silence and acknowledge routes need a server-assigned id and an explicit capability flag.
-const canSilence = (n: ActiveNotification): boolean =>
-  n.id !== undefined &&
-  n.state !== 'emergency' &&
-  n.canSilence === true &&
-  !n.silenced &&
-  !n.acknowledged;
-
-const canAcknowledge = (n: ActiveNotification): boolean =>
-  n.id !== undefined && n.canAcknowledge === true && !n.acknowledged;
 
 // Stored values are SI (meters, seconds); the editor works in nautical miles and minutes and
 // converts at this edge. UnitField commits on blur, so typing is not reformatted mid-keystroke,
@@ -130,6 +130,13 @@ function setShallowDepth(value: number): void {
   thresholds.set({ ...thresholds.value, shallowDepthMeters: meters });
 }
 
+// The server's depth zones outrank the local threshold, so the editor gives way to a read-only
+// reading of the bound the server set.
+const serverOwnsShallow = $derived(shallow?.thresholdSource === 'server');
+const serverShallowBound = $derived(
+  shallow?.thresholdSource === 'server' ? shallow.effectiveLimitMeters : undefined,
+);
+
 const caution = $derived(thresholdsCaution(t));
 const maxCpaNm = cpaNm(MAX_COLLISION_CPA_METERS);
 const maxTcpaMin = MAX_COLLISION_TCPA_SECONDS / 60;
@@ -158,7 +165,9 @@ $effect(() => {
   if (
     currentError ||
     !notification ||
-    (kind === 'silence' ? !canSilence(notification) : !canAcknowledge(notification))
+    (kind === 'silence'
+      ? !canSilenceNotification(notification)
+      : !canAcknowledgeNotification(notification))
   ) {
     untrack(() => (pendingAction = undefined));
   }
@@ -191,7 +200,7 @@ $effect(() => {
       <div class="alert-row card-frame">
         <span class="state-tag caps-label {n.state}">{stateLabel(n.state)}</span>
         <div class="alert-main">
-          <span class="alert-message">{alertLabel(n)}</span>
+          <span class="alert-message">{notificationLabel(n)}</span>
           {#if time}
             <span class="alert-time muted-note">{time}</span>
           {/if}
@@ -199,7 +208,7 @@ $effect(() => {
         <div class="alert-actions">
           {#if n.silenced}
             <span class="flag-tag muted-note">Silenced</span>
-          {:else if onSilence && canSilence(n)}
+          {:else if onSilence && canSilenceNotification(n)}
             <button
               type="button"
               class="btn btn-ghost"
@@ -212,7 +221,7 @@ $effect(() => {
           {/if}
           {#if n.acknowledged}
             <span class="flag-tag muted-note">Acknowledged</span>
-          {:else if onAcknowledge && canAcknowledge(n)}
+          {:else if onAcknowledge && canAcknowledgeNotification(n)}
             <button
               type="button"
               class="btn btn-ghost"
@@ -342,17 +351,38 @@ $effect(() => {
   </section>
   <section class="panel-section" aria-label="Shallow water threshold">
     <h3 class="caps-label">Shallow water alarm</h3>
-    <p class="muted-note">Warn me when the depth below the transducer reads under this much.</p>
-    <UnitField
-      label="Shallow depth"
-      unit={lengthUnit(units.mode)}
-      min={0}
-      max={maxShallowDepth}
-      step={units.mode === 'imperial' ? 1 : 0.5}
-      ariaLabel="Shallow water depth threshold"
-      value={shallowDepthDisplay}
-      onCommit={setShallowDepth}
-    />
+    <p class="muted-note">
+      Warn me when the depth under the boat reads under this much. Binnacle uses depth below the
+      keel when the server provides it.
+    </p>
+    {#if shallow?.monitorState === 'no-source'}
+      <p class="muted-note" role="status">
+        No depth source is publishing. The shallow alarm cannot monitor.
+      </p>
+    {/if}
+    {#if serverOwnsShallow}
+      <p class="muted-note">
+        {#if serverShallowBound !== undefined}
+          The server's depth zones set the shallow alarm at
+          <span class="num">{formatLengthOr(serverShallowBound, units.mode)}</span>
+          {lengthUnit(units.mode)}.
+        {:else}
+          The server's depth zones set the shallow alarm.
+        {/if}
+      </p>
+      <p class="muted-note">Edit the depth zones on the Signal K server to change it.</p>
+    {:else}
+      <UnitField
+        label="Shallow depth"
+        unit={lengthUnit(units.mode)}
+        min={0}
+        max={maxShallowDepth}
+        step={units.mode === 'imperial' ? 1 : 0.5}
+        ariaLabel="Shallow water depth threshold"
+        value={shallowDepthDisplay}
+        onCommit={setShallowDepth}
+      />
+    {/if}
   </section>
 </SlideOver>
 

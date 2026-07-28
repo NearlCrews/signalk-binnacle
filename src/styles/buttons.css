@@ -112,6 +112,18 @@
   border-radius: var(--radius-pill);
 }
 
+/* A small count chip riding inside a pill, a menu tile, or an overflow row: the bar's collapsed
+   "More" count and a menu item's live count (active alarms). Accent-tinted rather than alarm-red,
+   so a count reads as information at a glance and the alarm hue stays reserved for the strips and
+   state tags that mean danger. */
+.pill-count {
+  font-size: var(--text-xs);
+  background: var(--accent-tint);
+  border-radius: var(--radius-pill);
+  padding: 0 0.3rem;
+  color: var(--accent);
+}
+
 /* A compact pill toggle (the weather layer bar): control-height for touch but a tighter inline
    box and a muted resting label, lighting up through the shared .is-on. */
 .btn-compact {

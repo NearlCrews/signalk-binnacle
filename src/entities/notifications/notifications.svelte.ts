@@ -35,7 +35,14 @@ export interface ActiveNotification {
   path: string;
   state: RaisedNotificationState;
   message: string;
-  method: NotificationMethod[];
+  // The delivery methods the producer asked for, or undefined when the value carried no usable
+  // method field. Absent and explicitly empty are different answers: a producer that never said
+  // anything leaves the audible default to the consumer, while an explicit [] or ['visual'] is a
+  // deliberate request to stay quiet.
+  method?: NotificationMethod[];
+  // The store's quiet-to-sounding counter for this path. A consumer re-articulates an alarm on an
+  // increase, so a second raise of an already-sounding condition is heard.
+  activation: number;
   // ISO 8601, from the value's createdAt when the producer included it.
   timestamp?: string;
   // The v2 notification id the server stamps on the value; absent on pre-2.28 servers,
@@ -49,7 +56,22 @@ export interface ActiveNotification {
 
 const boolField = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
 
-function parseNotification(path: string, value: unknown): ActiveNotification | undefined {
+// Every malformed shape resolves to undefined, which consumers read as the audible default. An
+// array carrying only unrecognized entries (['audio']) is malformed, not a request for silence:
+// treating it as an explicit empty list would quietly mute a real alarm. Only a genuinely empty
+// array is the producer asking for no delivery method at all.
+function parseMethods(value: unknown): NotificationMethod[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  if (value.length === 0) return [];
+  const known = value.filter((m): m is NotificationMethod => m === 'visual' || m === 'sound');
+  return known.length > 0 ? known : undefined;
+}
+
+function parseNotification(
+  path: string,
+  value: unknown,
+  activation: number,
+): ActiveNotification | undefined {
   if (!isRecord(value)) return undefined;
   const safePath = cleanString(path, MAX_NOTIFICATION_PATH_LENGTH);
   if (!safePath) return undefined;
@@ -57,9 +79,7 @@ function parseNotification(path: string, value: unknown): ActiveNotification | u
   const state = notificationState(value);
   // Object.hasOwn, not `in`: a junk state like 'constructor' must not match the prototype.
   if (state === undefined || !Object.hasOwn(SEVERITY_RANK, state)) return undefined;
-  const method = Array.isArray(raw.method)
-    ? raw.method.filter((m): m is NotificationMethod => m === 'visual' || m === 'sound')
-    : [];
+  const method = parseMethods(raw.method);
   const status = isRecord(raw.status) ? raw.status : {};
   const message = cleanString(raw.message, MAX_NOTIFICATION_MESSAGE_LENGTH) ?? '';
   return {
@@ -67,6 +87,7 @@ function parseNotification(path: string, value: unknown): ActiveNotification | u
     state: state as RaisedNotificationState,
     message,
     method,
+    activation,
     timestamp: cleanString(raw.createdAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
     id: cleanString(raw.id, MAX_NOTIFICATION_ID_LENGTH),
     silenced: boolField(status.silenced),
@@ -98,7 +119,7 @@ export class NotificationsStore {
     if (this.#cache && this.#cacheVersion === version) return this.#cache;
     const out: ActiveNotification[] = [];
     for (const [path, value] of this.#store.notifications) {
-      const parsed = parseNotification(path, value);
+      const parsed = parseNotification(path, value, this.#store.cell(path).activation);
       if (parsed) out.push(parsed);
     }
     out.sort(
