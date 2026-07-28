@@ -5,8 +5,8 @@ import { categoryLabel, poiInlineIconSvg } from '$entities/poi-icons';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
-import { type NavSortState, toggleSort } from '$shared/nav';
-import { createPanelMinimize, ShowOnChartToggle, SlideOver } from '$shared/ui';
+import { MAX_NAV_ROWS, type NavSortState, toggleSort } from '$shared/nav';
+import { createPanelMinimize, NavSortControl, ShowOnChartToggle, SlideOver } from '$shared/ui';
 import {
   defaultSort,
   filterRows,
@@ -57,8 +57,7 @@ const vesselPosition = $derived(vessel.positionStale ? undefined : vessel.positi
 const allRows = $derived(
   sortRows(filterRows(toRows(pois, vesselPosition), query), sortState.key, sortState.dir),
 );
-const MAX_RESULTS = 250;
-const rows = $derived(allRows.slice(0, MAX_RESULTS));
+const rows = $derived(allRows.slice(0, MAX_NAV_ROWS));
 
 const subtitle = $derived(
   allRows.length === pois.length
@@ -140,28 +139,12 @@ onDestroy(() => onHover(undefined));
     aria-label="Search places by name, category, or source"
     bind:value={query}
   >
-  <div class="nav-sort">
-    <span class="caps-label">Sort by</span>
-    <div class="segmented" role="group" aria-label="Sort places by">
-      {#each SORTS as option (option.key)}
-        <button
-          type="button"
-          class="btn"
-          class:is-on={sortState.key === option.key}
-          aria-pressed={sortState.key === option.key}
-          onclick={() => chooseSort(option.key)}
-        >
-          {option.label}
-          {#if sortState.key === option.key}
-            <span aria-hidden="true">{sortState.dir === 'asc' ? '▲' : '▼'}</span>
-            <span class="visually-hidden">
-              {sortState.dir === 'asc' ? 'ascending' : 'descending'}
-            </span>
-          {/if}
-        </button>
-      {/each}
-    </div>
-  </div>
+  <NavSortControl
+    sorts={SORTS}
+    state={sortState}
+    onChoose={chooseSort}
+    ariaLabel="Sort places by"
+  />
   {#if rows.length === 0}
     {#if pois.length > 0}
       <p class="muted-note" role="status">
@@ -237,10 +220,10 @@ onDestroy(() => onHover(undefined));
         </li>
       {/each}
     </ul>
-    {#if allRows.length > MAX_RESULTS}
+    {#if allRows.length > MAX_NAV_ROWS}
       <p class="muted-note" role="status">
-        Showing the first {MAX_RESULTS} of {allRows.length} matches. Search or zoom in to narrow the
-        results.
+        Showing the first {MAX_NAV_ROWS} of {allRows.length} matches. Search or zoom in to narrow
+        the results.
       </p>
     {/if}
   {/if}

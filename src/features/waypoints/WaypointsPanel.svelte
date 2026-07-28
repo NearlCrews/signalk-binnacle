@@ -6,9 +6,22 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
 import { formatBearingOr, formatLatitude, formatLongitude, formatMetersOrNm } from '$shared/lib';
-import { defaultNavSort, type NavSortKey, type NavSortState, toggleSort } from '$shared/nav';
+import {
+  defaultNavSort,
+  MAX_NAV_ROWS,
+  type NavSortKey,
+  type NavSortState,
+  toggleSort,
+} from '$shared/nav';
 import type { AuthController } from '$shared/signalk';
-import { ArmedRow, createPanelMinimize, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
+import {
+  ArmedRow,
+  createPanelMinimize,
+  InlineConfirm,
+  NavSortControl,
+  SavedList,
+  SlideOver,
+} from '$shared/ui';
 import type { WaypointLoadState } from './waypoint-controller.svelte';
 import { filterWaypointRows, sortWaypointRows, toWaypointRows } from './waypoint-rows';
 import { MAX_WAYPOINTS } from './waypoints-client';
@@ -66,17 +79,14 @@ let sortTouched = $state(false);
 const minimize = createPanelMinimize();
 
 const vesselPosition = $derived(vessel.positionStale ? undefined : vessel.position);
+// The metrics stage stands alone: computing rhumb distance and bearing for thousands of marks is
+// the expensive part, and it depends only on the collection and the fix, so a keystroke in the
+// search box or a sort tap re-runs just the cheap filter and sort below.
+const metricRows = $derived(toWaypointRows(waypoints, vesselPosition));
 const allRows = $derived(
-  sortWaypointRows(
-    filterWaypointRows(toWaypointRows(waypoints, vesselPosition), query),
-    sortState.key,
-    sortState.dir,
-  ),
+  sortWaypointRows(filterWaypointRows(metricRows, query), sortState.key, sortState.dir),
 );
-// Cap the rendered cards: a full collection is thousands of marks, and each card carries three
-// actions, so rendering them all would cost far more than the navigator can read at once.
-const MAX_RESULTS = 250;
-const rows = $derived(allRows.slice(0, MAX_RESULTS));
+const rows = $derived(allRows.slice(0, MAX_NAV_ROWS));
 
 const SORTS: { key: NavSortKey; label: string }[] = [
   { key: 'name', label: 'Name' },
@@ -84,15 +94,16 @@ const SORTS: { key: NavSortKey; label: string }[] = [
   { key: 'bearing', label: 'Bearing' },
 ];
 
-const emptyMessage = $derived(
-  loadState === 'loading'
-    ? 'Loading waypoints…'
-    : loadState === 'error'
-      ? 'Waypoints are unavailable.'
-      : waypoints.length > 0
-        ? 'No waypoints match your search. Clear it to see all saved waypoints.'
-        : 'No waypoints yet. Press and hold the chart to drop one.',
-);
+// An empty card list means something different in each state: still reading, failed, filtered down
+// to nothing, or genuinely nothing saved yet.
+function emptyText(state: WaypointLoadState, hasWaypoints: boolean): string {
+  if (state === 'loading') return 'Loading waypoints…';
+  if (state === 'error') return 'Waypoints are unavailable.';
+  if (hasWaypoints) return 'No waypoints match your search. Clear it to see all saved waypoints.';
+  return 'No waypoints yet. Press and hold the chart to drop one.';
+}
+
+const emptyMessage = $derived(emptyText(loadState, waypoints.length > 0));
 
 function chooseSort(key: NavSortKey): void {
   sortTouched = true;
@@ -173,28 +184,12 @@ $effect(() => {
       aria-label="Search waypoints by name or description"
       bind:value={query}
     >
-    <div class="nav-sort">
-      <span class="caps-label">Sort by</span>
-      <div class="segmented" role="group" aria-label="Sort waypoints by">
-        {#each SORTS as option (option.key)}
-          <button
-            type="button"
-            class="btn"
-            class:is-on={sortState.key === option.key}
-            aria-pressed={sortState.key === option.key}
-            onclick={() => chooseSort(option.key)}
-          >
-            {option.label}
-            {#if sortState.key === option.key}
-              <span aria-hidden="true">{sortState.dir === 'asc' ? '▲' : '▼'}</span>
-              <span class="visually-hidden">
-                {sortState.dir === 'asc' ? 'ascending' : 'descending'}
-              </span>
-            {/if}
-          </button>
-        {/each}
-      </div>
-    </div>
+    <NavSortControl
+      sorts={SORTS}
+      state={sortState}
+      onChoose={chooseSort}
+      ariaLabel="Sort waypoints by"
+    />
   {/if}
 
   <SavedList heading="Saved waypoints" items={rows} empty={emptyMessage} key={(row) => row.id}>
@@ -284,9 +279,9 @@ $effect(() => {
     {/snippet}
   </SavedList>
 
-  {#if allRows.length > MAX_RESULTS}
+  {#if allRows.length > MAX_NAV_ROWS}
     <p class="muted-note" role="status">
-      Showing the first {MAX_RESULTS} of {allRows.length} matches. Search to narrow the results.
+      Showing the first {MAX_NAV_ROWS} of {allRows.length} matches. Search to narrow the results.
     </p>
   {/if}
   {#if waypoints.length === MAX_WAYPOINTS}

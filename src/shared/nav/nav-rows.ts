@@ -6,6 +6,10 @@ import { rhumbBearingRad, rhumbDistanceMeters } from './route-geometry';
 // normalization, one collation, one metric pair, and one tie-break, so two panels that show the same
 // columns can never order or match them differently.
 
+// Cap the rendered rows: rendering thousands of action-bearing cards costs more than a navigator
+// can read, so both nav panels show a first page and say how many matches were left out.
+export const MAX_NAV_ROWS = 250;
+
 export type NavSortKey = 'name' | 'distance' | 'bearing';
 export type SortDir = 'asc' | 'desc';
 

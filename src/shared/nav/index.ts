@@ -10,6 +10,7 @@ export {
   compareNavIdentity,
   defaultNavSort,
   filterNavRows,
+  MAX_NAV_ROWS,
   type NavSortKey,
   type NavSortState,
   navMetrics,
