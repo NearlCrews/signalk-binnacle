@@ -73,7 +73,7 @@ describe('TracksPanel', () => {
   it('names the admin step and offers a re-check when the server has no track storage', () => {
     const body = renderPanel({ provisioning: 'unprovisioned' });
     expect(body).toContain('This Signal K server has no track storage');
-    expect(body).toContain('add a custom resource type named tracks');
+    expect(body).toContain('add tracks under Resources (custom)');
     expect(body).toContain('Check again');
   });
 

@@ -26,9 +26,9 @@ export const DANGER_TONE: AlarmTone = {
   volume: 0.18,
 };
 
-// The surface a consumer drives; the real Alarm implements it and tests can fake it.
+// The surface a consumer drives; the real Alarm implements it and tests can fake it. Gesture
+// priming is not part of it: the app resumes the one shared context through primeAlarmAudio().
 export interface AlarmControl {
-  prime(): void;
   start(tone: AlarmTone): void;
   stop(): void;
 }
@@ -71,11 +71,6 @@ export class Alarm implements AlarmControl {
   // Oscillators scheduled but not yet finished, so stop() can cut a burst that is still sounding
   // rather than letting the rest of it play out after the danger has cleared.
   #active = new Set<OscillatorNode>();
-
-  // Create and resume the audio context. Must run from a user gesture (autoplay policy).
-  prime(): void {
-    primeAlarmAudio();
-  }
 
   start(tone: AlarmTone): void {
     // Already sounding this tone: leave the running burst loop alone. Compare by the fields that

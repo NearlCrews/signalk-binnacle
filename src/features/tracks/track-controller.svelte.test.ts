@@ -71,6 +71,24 @@ describe('createTrackController', () => {
     expect(toast.show).not.toHaveBeenCalled();
   });
 
+  it('widens the save-failure copy while provisioning is unconfirmed', async () => {
+    // On a server whose probe route never answered, a missing tracks provider is as likely as a
+    // connection problem, so the toast must not point at only the wrong causes.
+    const { controller, toast } = makeController();
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue(false);
+    await controller.onSaveTrack('Passage');
+    expect(toast.show).toHaveBeenCalledWith(
+      'Could not save the track. Check the connection and access, and whether this server has track storage.',
+    );
+
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue(false);
+    await controller.refreshSavedTracks();
+    await controller.onSaveTrack('Passage two');
+    expect(toast.show).toHaveBeenLastCalledWith(
+      'Could not save the track. Check the connection and access.',
+    );
+  });
+
   it('blocks overlapping saves', async () => {
     const { controller } = makeController();
     let resolveSave!: (ok: boolean) => void;

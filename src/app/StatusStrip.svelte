@@ -1,7 +1,12 @@
 <script lang="ts">
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
-import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
+import {
+  DEPTH_SOURCE_LABELS,
+  DEPTH_SOURCE_TITLES,
+  type DepthReading,
+  type OwnVessel,
+} from '$entities/vessel';
 import { type MenuItem, PinnedActions } from '$features/menu';
 import {
   formatBearingOr,
@@ -53,6 +58,14 @@ const COG_MIN_SOG_MPS = 0.15;
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
 
 const depth = $derived(vessel.safetyDepth);
+
+// The depth chip's hover and accessible title, one branch per state, so the template stays flat.
+function depthTitle(reading: DepthReading, alarming: boolean): string {
+  if (reading.stale) return 'Depth data is stale';
+  if (alarming) return 'Shallow water: depth below the alarm threshold';
+  if (reading.source) return DEPTH_SOURCE_TITLES[reading.source];
+  return 'No depth source is publishing';
+}
 </script>
 
 <footer class="status-strip" class:editing>
@@ -133,13 +146,7 @@ const depth = $derived(vessel.safetyDepth);
       class="readout depth-readout"
       class:depth-alarm={shallowAlarming}
       class:fix-lost={depth.stale}
-      title={depth.stale
-        ? 'Depth data is stale'
-        : shallowAlarming
-          ? 'Shallow water: depth below the alarm threshold'
-          : depth.source
-            ? DEPTH_SOURCE_TITLES[depth.source]
-            : 'No depth source is publishing'}
+      title={depthTitle(depth, shallowAlarming)}
       >{shallowAlarming ? 'Shallow' : depth.stale ? 'Depth stale' : 'Depth'}
       <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
       {lengthUnit(units.mode)}

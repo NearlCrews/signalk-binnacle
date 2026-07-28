@@ -70,10 +70,4 @@ describe('GatedAlarm', () => {
     alarm.restart();
     expect(events).toEqual(['start', 'stop']);
   });
-
-  it('forwards prime to the control', () => {
-    const { control, events } = createFakeAlarmControl();
-    new GatedAlarm(TONE, control).prime();
-    expect(events).toEqual(['prime']);
-  });
 });

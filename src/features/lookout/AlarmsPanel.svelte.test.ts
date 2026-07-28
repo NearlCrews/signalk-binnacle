@@ -6,9 +6,7 @@ import type { UnitsStore } from '$entities/units';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import AlarmsPanel from './AlarmsPanel.svelte';
-
-const ACTION_BUTTON = (label: string): RegExp =>
-  new RegExp(`<button[^>]*>\\s*${label}\\s*</button>`);
+import { ACTION_BUTTON } from './test-helpers';
 
 type ShallowProps = ComponentProps<typeof AlarmsPanel>['shallow'];
 
@@ -88,39 +86,53 @@ describe('AlarmsPanel shallow water section', () => {
       {},
       {
         monitorState: 'monitoring',
-        thresholdSource: 'local',
-        effectiveLimitMeters: 3,
+        serverLimitMeters: undefined,
+        serverZonesActive: false,
       },
     );
     expect(body).toContain(THRESHOLD_FIELD);
     expect(body).not.toContain('depth zones');
   });
 
-  it('shows the server bound read-only when the server zones are in force', () => {
+  it('keeps the editor and names the server bound when the server publishes zones', () => {
     const body = renderPanel(
       {},
       {
         monitorState: 'monitoring',
-        thresholdSource: 'server',
-        effectiveLimitMeters: 2.5,
+        serverLimitMeters: 2.5,
+        serverZonesActive: true,
       },
     );
-    expect(body).not.toContain(THRESHOLD_FIELD);
-    expect(body).toContain("The server's depth zones set the shallow alarm at");
+    expect(body).toContain(THRESHOLD_FIELD);
+    expect(body).toContain("The server's depth zones also alarm at");
     expect(body).toContain('2.5');
-    expect(body).toContain('Edit the depth zones on the Signal K server to change it.');
+    expect(body).toContain('The deeper of that bound and this setting fires the alarm');
   });
 
-  it('names no bound when the server alarm zone is open at the top', () => {
+  it('says the zones arm the alarm when they name no single bound', () => {
     const body = renderPanel(
       {},
       {
         monitorState: 'monitoring',
-        thresholdSource: 'server',
-        effectiveLimitMeters: undefined,
+        serverLimitMeters: undefined,
+        serverZonesActive: true,
       },
     );
-    expect(body).toContain("The server's depth zones set the shallow alarm.");
+    expect(body).toContain(THRESHOLD_FIELD);
+    expect(body).toContain("The server's depth zones also arm the alarm alongside this setting");
+  });
+
+  it('shows only the editor when the server publishes no zones at all', () => {
+    const body = renderPanel(
+      {},
+      {
+        monitorState: 'monitoring',
+        serverLimitMeters: undefined,
+        serverZonesActive: false,
+      },
+    );
+    expect(body).toContain(THRESHOLD_FIELD);
+    expect(body).not.toContain("The server's depth zones");
   });
 
   it('says so when no depth source has ever published', () => {
@@ -128,10 +140,24 @@ describe('AlarmsPanel shallow water section', () => {
       {},
       {
         monitorState: 'no-source',
-        thresholdSource: 'local',
-        effectiveLimitMeters: 3,
+        serverLimitMeters: undefined,
+        serverZonesActive: false,
       },
     );
     expect(body).toContain('No depth source is publishing. The shallow alarm cannot monitor.');
+  });
+
+  it('says so when the sounder streams no usable reading', () => {
+    const body = renderPanel(
+      {},
+      {
+        monitorState: 'no-reading',
+        serverLimitMeters: undefined,
+        serverZonesActive: false,
+      },
+    );
+    expect(body).toContain(
+      'The sounder is publishing no usable depth reading. The shallow alarm cannot monitor.',
+    );
   });
 });

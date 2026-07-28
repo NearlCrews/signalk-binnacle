@@ -35,6 +35,7 @@ function setup(
     writeBlocked?: boolean;
     timeTravelActive?: boolean;
     mobActive?: boolean;
+    ownedDepthPath?: string;
   } = {},
 ) {
   const assessment = options.assessment ?? DANGER;
@@ -74,6 +75,8 @@ function setup(
     timeTravel: timeTravel as never,
     mob: mob as never,
     genericAlarm: genericAlarm as never,
+    ownedDepthNotificationPath: () => options.ownedDepthPath,
+    anchorNotificationCovered: () => true,
   });
   return {
     client,

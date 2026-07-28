@@ -10,7 +10,7 @@ export { LookoutAlarm } from './lookout-alarm';
 export { notificationLabel } from './notification-actions';
 export { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
 export type {
-  ShallowController,
+  ShallowMonitorSnapshot,
   ShallowMonitorState,
   ShallowThresholdSource,
 } from './shallow-monitor.svelte';

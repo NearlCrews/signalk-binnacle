@@ -13,7 +13,11 @@ const NO_DEPTH: DepthReading = {
   stale: false,
 };
 
-function renderPanel(mode: 'imperial' | 'metric', anchorDepth: DepthReading = NO_DEPTH): string {
+function renderPanel(
+  mode: 'imperial' | 'metric',
+  anchorDepth: DepthReading = NO_DEPTH,
+  safetyDepth: DepthReading = NO_DEPTH,
+): string {
   return render(AnchorPanel, {
     props: {
       auth: { writeBlocked: false } as AuthController,
@@ -31,6 +35,7 @@ function renderPanel(mode: 'imperial' | 'metric', anchorDepth: DepthReading = NO
         position: { latitude: 42, longitude: -83 },
         positionStale: false,
         anchorDepth,
+        safetyDepth,
       } as OwnVessel,
       units: { mode } as UnitsStore,
       onDrop: vi.fn(),
@@ -72,5 +77,17 @@ describe('AnchorPanel', () => {
 
   it('omits the depth row until a depth source reports', () => {
     expect(renderPanel('metric')).not.toContain('Depth (');
+  });
+
+  it('explains the missing depth row on a keel-only sounder', () => {
+    const keelOnly: DepthReading = {
+      meters: 4,
+      source: 'keel',
+      path: 'environment.depth.belowKeel',
+      stale: false,
+    };
+    const body = renderPanel('metric', NO_DEPTH, keelOnly);
+    expect(body).not.toContain('Depth (');
+    expect(body).toContain('The sounder publishes keel depth only');
   });
 });

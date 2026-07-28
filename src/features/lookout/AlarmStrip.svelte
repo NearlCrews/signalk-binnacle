@@ -85,11 +85,12 @@ function acknowledge(): void {
         {#if silenceOffered}
           <button type="button" class="ack" onclick={silence}>Silence</button>
         {/if}
-        <!-- Device-local mute wherever the boat-wide Silence is not on offer, so the two controls
-             are exact complements and a sounding alarm always has one of them. It acts on the
-             sound, so it appears only while there is a sound to act on. The title spells out the
-             narrower scope, which the two similar labels do not. -->
-        {#if sounding && !silenceOffered}
+        <!-- Device-local mute wherever the boat-wide Silence does not cover everything sounding:
+             Silence acts on the worst alert only, so with a second unsilenced alert up, both
+             controls offer, and a sounding alarm always has at least one. It acts on the sound, so
+             it appears only while there is a sound to act on. The title spells out the narrower
+             scope, which the two similar labels do not. -->
+        {#if sounding && (!silenceOffered || raised.filter((n) => n.silenced !== true).length > 1)}
           <button
             type="button"
             class="ack"

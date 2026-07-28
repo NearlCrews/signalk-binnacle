@@ -81,7 +81,14 @@ export function createTrackController(deps: TrackControllerDeps) {
     const id = uuidv4();
     try {
       if (!(await saveTrack(origin, deps.getToken(), id, name, points))) {
-        deps.toast.show('Could not save the track. Check the connection and access.');
+        // With provisioning unconfirmed (an older server whose probe route never answered), a
+        // missing tracks provider is just as likely as a connection problem, so the copy must not
+        // point at only the wrong causes.
+        deps.toast.show(
+          provisioning === 'provisioned'
+            ? 'Could not save the track. Check the connection and access.'
+            : 'Could not save the track. Check the connection and access, and whether this server has track storage.',
+        );
         return;
       }
       const saved = savedTrackFromPoints(id, name, points);

@@ -1,9 +1,8 @@
 import { hasControlCharacters } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import {
-  fetchPathMeta,
+  createPathMetaCache,
   type HistoryProviders,
-  type PathMeta,
   type SignalKStore,
   type SubscribeEntry,
   type ZoneState,
@@ -78,11 +77,8 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   const MAX_SELECTED_TILES = 100;
   deps.store.ensureCells(ALL_CATALOG_PATHS);
 
-  // Per-zonesPath meta cache: null means "fetch attempted, no zones found"; absent means "not yet fetched".
-  const metaCache = new Map<string, PathMeta | null>();
+  const metaCache = createPathMetaCache(deps.origin, deps.getToken);
   const dynamicDefCache = new Map<string, TileDef[]>();
-  // Bumped after each fetch resolves so a reactive caller of zoneState re-evaluates.
-  let metaVersion = $state(0);
 
   // Dynamic definitions discovered from the live model and the optional history path catalog.
   // Replace-only (assigned wholesale, never mutated in place), so raw state skips deep proxy wrapping.
@@ -155,28 +151,8 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     }
   }
 
-  // Token is read at call time so a rotating token is always current.
   function fetchMetaForSelected(): void {
-    for (const def of resolveTiles()) {
-      const { zonesPath } = def;
-      if (metaCache.has(zonesPath)) continue;
-      const token = deps.getToken();
-      // Sentinel before the async call: prevents a second fetch while the first is in flight.
-      metaCache.set(zonesPath, null);
-      void fetchPathMeta(deps.origin, token, zonesPath).then((result) => {
-        if (result !== undefined) {
-          metaCache.set(zonesPath, result);
-        } else if (token !== undefined) {
-          // Fetched with a token and still got nothing: permanently cache the null sentinel.
-          metaCache.set(zonesPath, null);
-        } else {
-          // Fetched without a token (likely a 401 before auth). Remove the sentinel so a later
-          // open after the user grants access can retry.
-          metaCache.delete(zonesPath);
-        }
-        metaVersion += 1;
-      });
-    }
+    for (const def of resolveTiles()) metaCache.load(def.zonesPath);
   }
 
   // Runs once per controller construction when the dock is first opened and remains user-refreshable.
@@ -357,7 +333,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   function resolvedLabel(def: TileDef): string {
     // Read the version counter first so a reactive caller re-evaluates once a fetch resolves; the
     // meta cache itself is a plain Map.
-    void metaVersion;
+    void metaCache.version;
     const name = metaCache.get(def.zonesPath)?.displayName?.trim();
     if (!name || name.length > MAX_LABEL_LENGTH || hasControlCharacters(name)) return def.label;
     return name;
@@ -365,20 +341,17 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   function zoneState(def: TileDef, value: number | undefined): ZoneState {
     // Read reactive version counters so a template $derived re-evaluates after fetches and notifications.
-    void metaVersion;
+    void metaCache.version;
     void deps.store.notificationsVersion;
     const notification = deps.store.notifications.get(`notifications.${def.zonesPath}`);
     if (notification !== undefined) return 'alarm';
     const cached = metaCache.get(def.zonesPath);
     if (cached?.zones?.length) return zoneStateFor(value, cached.zones);
-    // Server zones always win. The client defaults (shallow-depth safety bands for a stock server
-    // with no configured zones) apply only while the path has a meta-cache entry: resolved with no
-    // zones, or in flight. A path awaiting an authorized retry (the token-less failure path, where
-    // the entry is removed) stays neutral until the retry lands.
-    if (metaCache.has(def.zonesPath)) {
-      return zoneStateFor(value, CLIENT_DEFAULT_ZONES.get(def.zonesPath));
-    }
-    return 'normal';
+    // Server zones win whenever they are known. In every other state, never fetched, in flight,
+    // awaiting a retry, or given up, the client defaults (shallow-depth safety bands for a stock
+    // server with no configured zones) stand in: a transient fetch failure must not strip a depth
+    // tile of its safety banding.
+    return zoneStateFor(value, CLIENT_DEFAULT_ZONES.get(def.zonesPath));
   }
 
   function dispose(): void {

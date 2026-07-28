@@ -22,7 +22,7 @@ import { AnchorPanel, AnchorStrip } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
-import type { ShallowMonitorState, ShallowThresholdSource } from '$features/lookout';
+import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { AlarmStrip, AlarmsPanel, DangerStrip } from '$features/lookout';
 import { loadRadarControls } from '$features/marine-radar';
 import { MeasureStrip } from '$features/measure';
@@ -152,11 +152,7 @@ interface FlatProps {
   genericAlarms: ActiveNotification[];
   genericSounding: boolean;
   genericLocallyMuted: boolean;
-  shallowMonitor: {
-    monitorState: ShallowMonitorState;
-    thresholdSource: ShallowThresholdSource;
-    effectiveLimitMeters: number | undefined;
-  };
+  shallowMonitor: ShallowMonitorSnapshot;
   arrivalMuted: import('$shared/settings').PersistedValue<boolean>;
 
   // Callbacks for state mutations

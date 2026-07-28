@@ -2,49 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PersistedValue } from '$shared/settings';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
 import { jsonResponse } from '$shared/testing';
+import { flushPromises, makeDeps, mustTile } from './controller-test-helpers';
 import { createInstrumentsController } from './instruments-controller.svelte';
-import { ALL_CATALOG_PATHS, DEFAULT_TILES, minPeriodFor, tileById } from './tile-catalog';
+import { ALL_CATALOG_PATHS, DEFAULT_TILES, minPeriodFor } from './tile-catalog';
 
 // --- Helpers ---
-
-function mustTile(id: string) {
-  const def = tileById(id);
-  if (!def) throw new Error(`Unknown tile id: ${id}`);
-  return def;
-}
-
-function fakeStorage() {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => {
-      map.set(k, v);
-    },
-  };
-}
-
-function makeDeps(opts: { tiles?: string[] } = {}) {
-  const store = new SignalKStore();
-  const subscribe = vi.fn();
-  const unsubscribe = vi.fn();
-  const tilesStore = new PersistedValue<string[]>(
-    'binnacle:instrument-tiles',
-    opts.tiles ?? [...DEFAULT_TILES],
-    fakeStorage(),
-  );
-  const openStore = new PersistedValue<boolean>('binnacle:instruments-open', false, fakeStorage());
-  return {
-    store,
-    origin: 'http://sk',
-    getToken: (): string | undefined => undefined,
-    getHistoryProviders: () => undefined,
-    getHistoryProviderState: () => 'absent' as const,
-    subscribe,
-    unsubscribe,
-    tilesStore,
-    openStore,
-  };
-}
 
 function selfFrame(self: Record<string, unknown>): SKFrame {
   return {
@@ -53,9 +15,6 @@ function selfFrame(self: Record<string, unknown>): SKFrame {
     epoch: Date.now(),
   };
 }
-
-// Advances past all pending microtasks (fetchPathMeta has several await hops).
-const flushPromises = () => new Promise<void>((r) => setTimeout(r, 0));
 
 // --- Tests ---
 
@@ -335,9 +294,11 @@ describe('createInstrumentsController', () => {
     ctrl.dispose();
   });
 
-  it('meta fetch with no token removes sentinel so a later open with token retries', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse(401, {}));
+  it('a failed meta fetch retries on later opens up to the attempt cap', async () => {
+    const fetchMock = vi.fn(async (..._args: unknown[]) => jsonResponse(401, {}));
     vi.stubGlobal('fetch', fetchMock);
+    const metaCalls = () =>
+      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/meta')).length;
 
     let token: string | undefined;
     const deps = { ...makeDeps(), getToken: () => token };
@@ -346,15 +307,18 @@ describe('createInstrumentsController', () => {
 
     ctrl.setOpen(true);
     await flushPromises();
-    const callsAfterFirst = fetchMock.mock.calls.length;
-    expect(callsAfterFirst).toBeGreaterThan(0);
+    expect(metaCalls()).toBeGreaterThan(0);
 
-    ctrl.setOpen(false);
-
+    // A failure is transient (a restarting server, a dropped link), so later visits try again
+    // rather than pinning the whole session to a meta-less tile; the cache's per-path attempt cap
+    // then stops a dead endpoint from being hammered on every open.
     token = 'valid-token';
-    ctrl.setOpen(true);
-    await flushPromises();
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    for (let round = 0; round < 4; round += 1) {
+      ctrl.setOpen(false);
+      ctrl.setOpen(true);
+      await flushPromises();
+    }
+    expect(metaCalls()).toBe(3);
 
     ctrl.dispose();
   });
@@ -702,9 +666,9 @@ describe('createInstrumentsController', () => {
     ctrl.dispose();
   });
 
-  it('zoneState stays normal when the token-less meta fetch failed and awaits a retry', async () => {
-    // A 404 without a token removes the cache entry so a later authorized open can retry;
-    // until then the client defaults are withheld.
+  it('zoneState falls back to the client default bands while a failed fetch awaits retry', async () => {
+    // A failed fetch removes the cache entry so a later open can retry; the client default depth
+    // bands stand in meanwhile, so a transient blip never strips a depth tile of safety banding.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(404, {})),
@@ -717,7 +681,7 @@ describe('createInstrumentsController', () => {
     ctrl.setOpen(true);
     await flushPromises();
 
-    expect(ctrl.zoneState(mustTile('depth'), 1.5)).toBe('normal');
+    expect(ctrl.zoneState(mustTile('depth'), 1.5)).toBe('alarm');
 
     ctrl.dispose();
   });

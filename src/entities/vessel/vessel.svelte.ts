@@ -39,10 +39,14 @@ export const DEPTH_SOURCE_TITLES: Record<DepthSource, string> = {
 };
 
 // One priority order per purpose, side by side so the differences are visible. Safety wants the
-// most corrected reading of the water under the boat. Anchor scope wants the whole water column
-// the rode spans, so it never reads the keel-corrected path. The trend latches its source for the
-// session, so it takes the raw transducer first: the reading least likely to appear mid-session.
-const SAFETY_DEPTH_PRIORITY: readonly DepthSource[] = ['keel', 'surface', 'transducer'];
+// most PROTECTIVE reading, the smallest number for the same water: keel (draft removed), then the
+// raw transducer, then surface last, because belowSurface is belowTransducer plus the transducer's
+// submersion and always reads deeper. A positive-offset sounder publishes transducer and surface
+// together, so surface-before-transducer would fire the shallow alarm late by the offset. Anchor
+// scope wants the whole water column the rode spans, so it never reads the keel-corrected path.
+// The trend latches its source for the session, so it takes the raw transducer first: the reading
+// least likely to appear mid-session.
+const SAFETY_DEPTH_PRIORITY: readonly DepthSource[] = ['keel', 'transducer', 'surface'];
 const ANCHOR_DEPTH_PRIORITY: readonly DepthSource[] = ['surface', 'transducer'];
 const TREND_DEPTH_PRIORITY: readonly DepthSource[] = ['transducer', 'surface', 'keel'];
 

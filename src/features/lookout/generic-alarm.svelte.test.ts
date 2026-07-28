@@ -60,12 +60,34 @@ describe('selectGenericAlarms', () => {
       raised({ path: `${SK_PATHS.mobNotification}.7f3c-uuid` }),
       raised({ path: SK_PATHS.anchorNotification }),
       raised({ path: NOTIFICATION_PATH }),
-      raised({ path: 'notifications.environment.depth.belowTransducer' }),
-      raised({ path: 'notifications.environment.depth.belowKeel' }),
     ];
     expect(selectGenericAlarms(list).map((n) => n.path)).toEqual([
       'notifications.environment.fire',
     ]);
+  });
+
+  it('drops only the one depth path the shallow monitor is sounding itself', () => {
+    // Depth notifications stay generic by default: a plugin detector, or zones on a path the
+    // safety depth did not resolve to, must never go silent. Only the exact path the shallow
+    // monitor claims (server zones on the winning path) is excluded, and only while claimed.
+    const list = [
+      raised({ path: 'notifications.environment.depth.belowTransducer' }),
+      raised({ path: 'notifications.environment.depth.belowKeel' }),
+    ];
+    expect(selectGenericAlarms(list)).toHaveLength(2);
+    expect(
+      selectGenericAlarms(list, {
+        ownedDepthPath: 'notifications.environment.depth.belowTransducer',
+      }).map((n) => n.path),
+    ).toEqual(['notifications.environment.depth.belowKeel']);
+  });
+
+  it('keeps the anchor path when the anchor entity is not consuming it', () => {
+    // With the watch off or client-side, nothing else sounds a foreign producer's anchor
+    // notification, so the generic surface must.
+    const list = [raised({ path: SK_PATHS.anchorNotification })];
+    expect(selectGenericAlarms(list, { anchorCovered: false })).toHaveLength(1);
+    expect(selectGenericAlarms(list, { anchorCovered: true })).toHaveLength(0);
   });
 
   it('keeps a path that merely reads like an owned one', () => {
@@ -180,13 +202,12 @@ describe('GenericAlarm', () => {
     expect(events).toEqual(['start']);
   });
 
-  it('forwards prime and silences outright on stop', () => {
+  it('silences outright on stop', () => {
     const { control, events } = createFakeAlarmControl();
     const alarm = new GenericAlarm(control);
-    alarm.prime();
     alarm.update([at('notifications.a', 1)]);
     alarm.stop();
-    expect(events).toEqual(['prime', 'start', 'stop']);
+    expect(events).toEqual(['start', 'stop']);
     expect(alarm.sounding).toBe(false);
   });
 });

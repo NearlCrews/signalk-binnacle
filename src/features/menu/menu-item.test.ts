@@ -80,6 +80,10 @@ describe('countBadge', () => {
     expect(countBadge(item({ count: 4_321 }))).toBe('99+');
   });
 
+  it('floors a fractional count to honor the whole-number contract', () => {
+    expect(countBadge(item({ count: 1.5 }))).toBe('1');
+  });
+
   it('ignores a negative or non-finite count', () => {
     expect(countBadge(item({ count: -3 }))).toBeUndefined();
     expect(countBadge(item({ count: Number.NaN }))).toBeUndefined();

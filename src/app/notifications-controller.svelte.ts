@@ -28,6 +28,12 @@ interface NotificationsControllerDeps {
   timeTravel: TimeTravelStore;
   mob: MobStore;
   genericAlarm: GenericAlarm;
+  // The one depth notification path the shallow monitor currently sounds itself, or undefined. A
+  // getter because the claim moves with the winning depth path and the server's zones.
+  ownedDepthNotificationPath: () => string | undefined;
+  // Whether the anchor entity sounds the anchor notification itself (server mode). A getter
+  // because the mode changes over the session.
+  anchorNotificationCovered: () => boolean;
 }
 
 // Owns collision publication, alarm actions, safety live-region text, and the effects that tie an
@@ -131,7 +137,12 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     return `${lead}: ${who}. Open Nearby vessels for closest-pass details.`;
   });
 
-  const genericNotifications = $derived(selectGenericAlarms(deps.notificationsStore.list()));
+  const genericNotifications = $derived(
+    selectGenericAlarms(deps.notificationsStore.list(), {
+      ownedDepthPath: deps.ownedDepthNotificationPath(),
+      anchorCovered: deps.anchorNotificationCovered(),
+    }),
+  );
   $effect(() => {
     deps.genericAlarm.update(genericNotifications);
   });

@@ -6,7 +6,6 @@ export function createFakeAlarmControl() {
   const events: string[] = [];
   let tone: AlarmTone | undefined;
   const control: AlarmControl = {
-    prime: () => void events.push('prime'),
     start: (next) => {
       events.push('start');
       tone = next;

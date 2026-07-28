@@ -133,26 +133,68 @@ describe('createShallowController', () => {
     expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(1);
   });
 
-  it('makes the server zones authoritative over the local threshold', async () => {
-    // The local threshold would alarm at 2.5 m; the server's alarm band starts under 2 m.
+  it('keeps the deeper local threshold when the server bound is shallower', async () => {
+    // The skipper set 3 m (the default); the server's alarm band starts under 2 m. The deeper
+    // bound governs: the server must never quietly loosen a limit the skipper set.
     const test = mount({ token: 'tok-1', zones: [{ upper: 2, state: 'alarm' }] });
     await flushPromises();
     flushSync();
 
-    expect(test.controller.thresholdSource).toBe('server');
-    expect(test.controller.effectiveLimitMeters).toBe(2);
+    expect(test.controller.thresholdSource).toBe('local');
+    expect(test.controller.serverLimitMeters).toBe(2);
+    expect(test.controller.effectiveLimitMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
     expect(test.thresholds.value.shallowDepthMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
 
     test.setDepth(reading({ meters: 2.5 }));
-    expect(test.controller.alarming).toBe(false);
-    expect(test.events).toEqual([]);
-
-    test.setDepth(reading({ meters: 1.5 }));
     expect(test.controller.alarming).toBe(true);
     expect(test.events).toEqual(['start']);
   });
 
-  it('resolves a multi-zone configuration to the alarm band', async () => {
+  it('lets a deeper server bound tighten the alarm and claims the path only while alarming', async () => {
+    // The server's alarm band reaches 4 m, deeper than the 3 m local default, so it governs. The
+    // notification-path claim exists only while this monitor is actually sounding: that is the
+    // only moment a double tone is possible, and any divergence must reach the generic surface.
+    const test = mount({ token: 'tok-1', zones: [{ upper: 4, state: 'alarm' }] });
+    await flushPromises();
+    flushSync();
+
+    expect(test.controller.thresholdSource).toBe('server');
+    expect(test.controller.serverLimitMeters).toBe(4);
+    expect(test.controller.effectiveLimitMeters).toBe(4);
+    expect(test.controller.ownedNotificationPath).toBeUndefined();
+
+    test.setDepth(reading({ meters: 4.5 }));
+    expect(test.controller.alarming).toBe(false);
+    test.setDepth(reading({ meters: 3.5 }));
+    expect(test.controller.alarming).toBe(true);
+    expect(test.controller.ownedNotificationPath).toBe(`notifications.${KEEL_PATH}`);
+  });
+
+  it('releases the notification-path claim when the reading goes stale or unusable', async () => {
+    // A monitor that cannot sound (stale sounder, or fresh null values after bottom-lock loss)
+    // must hand the server's still-raised depth notification back to the generic surface instead
+    // of keeping it silenced everywhere.
+    const test = mount({ token: 'tok-1', zones: [{ upper: 4, state: 'alarm' }] });
+    await flushPromises();
+    flushSync();
+    test.setDepth(reading({ meters: 3.5 }));
+    expect(test.controller.ownedNotificationPath).toBe(`notifications.${KEEL_PATH}`);
+
+    test.setDepth(reading({ meters: 3.5, stale: true }));
+    expect(test.controller.alarming).toBe(false);
+    expect(test.controller.ownedNotificationPath).toBeUndefined();
+    expect(test.controller.monitorState).toBe('stale');
+
+    test.setDepth(reading({ meters: undefined }));
+    expect(test.controller.alarming).toBe(false);
+    expect(test.controller.ownedNotificationPath).toBeUndefined();
+    expect(test.controller.monitorState).toBe('no-reading');
+    expect(test.controller.alert).toBe(
+      'Depth reading unavailable. Shallow-water monitoring is paused.',
+    );
+  });
+
+  it('resolves a multi-zone configuration to the alarm band, merged with the local bound', async () => {
     const test = mount({
       token: 'tok-1',
       zones: [
@@ -163,7 +205,10 @@ describe('createShallowController', () => {
     await flushPromises();
     flushSync();
 
-    expect(test.controller.effectiveLimitMeters).toBe(2);
+    // The warn band never sets the server bound; the 2 m alarm band does, and the deeper 3 m
+    // local default remains the governing limit.
+    expect(test.controller.serverLimitMeters).toBe(2);
+    expect(test.controller.effectiveLimitMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
     test.setDepth(reading({ meters: 4 }));
     expect(test.controller.alarming).toBe(false);
     test.setDepth(reading({ meters: 1 }));
@@ -187,18 +232,22 @@ describe('createShallowController', () => {
   });
 
   it('resumes the local threshold when a path without zones wins', async () => {
-    const test = mount({ token: 'tok-1', zones: [{ upper: 2, state: 'alarm' }] });
+    const test = mount({ token: 'tok-1', zones: [{ upper: 4, state: 'alarm' }] });
     await flushPromises();
     flushSync();
     expect(test.controller.thresholdSource).toBe('server');
 
-    // The keel path stops publishing, so the transducer path wins and the server has no zones for
-    // it: the persisted local threshold takes over rather than leaving the boat unmonitored.
+    // The fake hands the controller a transducer-won reading directly. In the entity a resolved
+    // winner never falls back down (epoch is monotonic); the reachable real transitions are a keel
+    // path appearing and taking the win, or a restart without the keel source. Either way a
+    // zoneless winner means the persisted local threshold takes over rather than leaving the boat
+    // unmonitored, and the notification-path claim is released with it.
     test.setDepth(reading({ meters: 2.5, source: 'transducer', path: TRANSDUCER_PATH }));
     await flushPromises();
     flushSync();
     expect(test.controller.thresholdSource).toBe('local');
     expect(test.controller.effectiveLimitMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
+    expect(test.controller.ownedNotificationPath).toBeUndefined();
     expect(test.controller.alarming).toBe(true);
   });
 
@@ -226,24 +275,42 @@ describe('createShallowController', () => {
     expect(metaCalls(test.fetchMock, TRANSDUCER_PATH)).toHaveLength(0);
   });
 
-  it('retries a tokenless zone fetch but caches a failure that had a token', async () => {
-    const tokenless = mount({ status: 401 });
-    await flushPromises();
-    expect(metaCalls(tokenless.fetchMock, KEEL_PATH)).toHaveLength(1);
-    // Leaving and returning to the path retries, so granting access later still finds the zones.
-    tokenless.setDepth(reading({ source: 'transducer', path: TRANSDUCER_PATH }));
-    await flushPromises();
-    tokenless.setDepth(reading());
-    await flushPromises();
-    expect(metaCalls(tokenless.fetchMock, KEEL_PATH)).toHaveLength(2);
+  it('retries a failed zone fetch up to the cap, then settles for the session', async () => {
+    // A transient failure must not pin the whole session to the local threshold: each settle
+    // re-triggers one retry through the version-reactive effect. The cache's per-path attempt cap
+    // then stops a dead endpoint from being hammered forever.
+    const test = mount({ token: 'tok-1', status: 500 });
+    for (let round = 0; round < 6; round += 1) {
+      await flushPromises();
+      flushSync();
+    }
+    expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
 
-    const authed = mount({ token: 'tok-1', status: 401 });
+    // Settled: revisiting the path does not spend more attempts.
+    test.setDepth(reading({ source: 'transducer', path: TRANSDUCER_PATH }));
     await flushPromises();
-    authed.setDepth(reading({ source: 'transducer', path: TRANSDUCER_PATH }));
+    flushSync();
+    test.setDepth(reading());
+    for (let round = 0; round < 3; round += 1) {
+      await flushPromises();
+      flushSync();
+    }
+    expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
+  });
+
+  it('phrases the alert as a zone hit when the depth is not under the displayed limit', async () => {
+    // An open-topped alarm band has no nameable bound: the local number is the displayed limit,
+    // but the zone can fire above it, and the sentence must not claim the depth is under a limit
+    // it is not under.
+    const test = mount({ token: 'tok-1', zones: [{ lower: 0, state: 'alarm' }] });
     await flushPromises();
-    authed.setDepth(reading());
-    await flushPromises();
-    expect(metaCalls(authed.fetchMock, KEEL_PATH)).toHaveLength(1);
+    flushSync();
+    expect(test.controller.serverLimitMeters).toBeUndefined();
+    test.setDepth(reading({ meters: 8 }));
+    expect(test.controller.alarming).toBe(true);
+    expect(test.controller.alert).toBe(
+      "Shallow water: depth 8.0 m, inside the server's depth alarm zone.",
+    );
   });
 
   it('announces the depth and the threshold that fired, in the display unit', async () => {

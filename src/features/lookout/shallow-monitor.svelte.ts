@@ -3,15 +3,22 @@ import type { DepthReading } from '$entities/vessel';
 import { type AlarmControl, GatedAlarm } from '$shared/audio';
 import { formatLengthOr, lengthUnit } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
-import { fetchPathMeta, type MetaZone, type PathMeta, zoneStateFor } from '$shared/signalk';
+import {
+  createPathMetaCache,
+  type MetaZone,
+  NOTIFICATIONS_PREFIX,
+  zoneStateFor,
+} from '$shared/signalk';
 import { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
 
 // Whether the shallow alarm is actually watching the water. A tone that cannot fire is worth saying
-// out loud: a boat with no sounder, or one whose sounder just dropped out, is not being monitored.
-export type ShallowMonitorState = 'monitoring' | 'stale' | 'no-source';
+// out loud: a boat with no sounder, one whose sounder just dropped out, and one whose sounder is
+// streaming fresh but unusable values (bottom-lock loss publishes nulls) are all unmonitored.
+export type ShallowMonitorState = 'monitoring' | 'stale' | 'no-reading' | 'no-source';
 
-// Where the bound that fires the alarm comes from. The server wins when it publishes depth zones,
-// so one boat cannot be told two different shallow limits.
+// Which source sets the bound that currently governs the alarm. Server zones and the local
+// threshold merge conservatively: the deeper bound fires first, so the server can tighten the
+// alarm but never quietly loosen a limit the skipper set deeper.
 export type ShallowThresholdSource = 'server' | 'local';
 
 interface ShallowControllerDeps {
@@ -43,11 +50,9 @@ function alarmBound(zones: readonly MetaZone[]): number | undefined {
 // vessel entity, so this and the depth chip can never disagree about which path won.
 export function createShallowController(deps: ShallowControllerDeps) {
   const alarm = new GatedAlarm(SHALLOW_TONE, deps.alarm);
-  // Zones are near-static, so they are fetched once per path per session. A null entry is the
-  // in-flight and known-empty sentinel; it is deleted again after a tokenless failure so granting
-  // access later still finds the zones.
-  const metaCache = new Map<string, PathMeta | null>();
-  let metaVersion = $state(0);
+  // Zones are near-static, so a resolved fetch holds for the session; a failed one retries on the
+  // next reactive visit (token arriving, path changing) via the shared cache semantics.
+  const metaCache = createPathMetaCache(deps.origin, deps.getToken);
 
   const depth = $derived(deps.getSafetyDepth());
   // Only a source that has actually published has a winning path worth asking the server about.
@@ -56,10 +61,10 @@ export function createShallowController(deps: ShallowControllerDeps) {
     deps.thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters,
   );
 
-  // Server zones take over only when they carry an alarm band. A warning-only zone set would
+  // Server zones join in only when they carry an alarm band. A warning-only zone set would
   // otherwise disarm the alarm entirely, which is a silent safety regression.
   const serverZones = $derived.by<MetaZone[] | undefined>(() => {
-    void metaVersion;
+    void metaCache.version;
     if (winningPath === undefined) return undefined;
     const zones = metaCache.get(winningPath)?.zones;
     if (!zones || zones.length === 0) return undefined;
@@ -68,53 +73,70 @@ export function createShallowController(deps: ShallowControllerDeps) {
       : undefined;
   });
 
-  const thresholdSource = $derived<ShallowThresholdSource>(serverZones ? 'server' : 'local');
-  const effectiveLimitMeters = $derived(serverZones ? alarmBound(serverZones) : localLimit);
-
-  const monitorState = $derived<ShallowMonitorState>(
-    depth.source === undefined ? 'no-source' : depth.stale ? 'stale' : 'monitoring',
+  // The server's deepest alarm bound, when its zones publish one.
+  const serverLimitMeters = $derived(serverZones ? alarmBound(serverZones) : undefined);
+  // The governing bound is the DEEPER of the server bound and the local threshold: for a shallow
+  // alarm, firing earlier is the safe merge, so the server can never quietly loosen a limit the
+  // skipper set deeper. An open-topped server alarm zone has no bound; the local number then
+  // stands as the displayed limit while the zones still contribute to alarming below.
+  const effectiveLimitMeters = $derived(
+    serverLimitMeters === undefined ? localLimit : Math.max(serverLimitMeters, localLimit),
   );
+  const thresholdSource = $derived<ShallowThresholdSource>(
+    serverLimitMeters !== undefined && serverLimitMeters >= localLimit ? 'server' : 'local',
+  );
+
+  const monitorState = $derived.by<ShallowMonitorState>(() => {
+    if (depth.source === undefined) return 'no-source';
+    if (depth.stale) return 'stale';
+    // Fresh frames carrying no usable number (bottom-lock loss) keep the cell live but the alarm
+    // blind; claiming 'monitoring' then would hide exactly the blindness that matters.
+    if (depth.meters === undefined) return 'no-reading';
+    return 'monitoring';
+  });
 
   const alarming = $derived.by(() => {
     const { meters, stale } = depth;
     if (stale) return false;
-    return serverZones
-      ? zoneStateFor(meters, serverZones) === 'alarm'
-      : isShallowAlarmActive(meters, stale, localLimit);
+    // Either bound fires: the server's zone bands or the skipper's local threshold, whichever
+    // reaches deeper. Without server zones the local predicate stands alone.
+    if (isShallowAlarmActive(meters, stale, localLimit)) return true;
+    return serverZones !== undefined && zoneStateFor(meters, serverZones) === 'alarm';
   });
+
+  // The one depth notification the generic alarm should not double-sound: claimed only WHILE THIS
+  // MONITOR IS ACTUALLY ALARMING, because that is the only moment two tones for one shoaling are
+  // possible. Any divergence, a stale or null reading, cached zones drifting from the server's, a
+  // threshold disagreement, leaves the claim released so the server's still-raised alarm reaches
+  // the generic tone, strip, and badge. Erring to a brief double tone beats erring to silence.
+  const ownedNotificationPath = $derived(
+    serverZones !== undefined && winningPath !== undefined && alarming
+      ? `${NOTIFICATIONS_PREFIX}${winningPath}`
+      : undefined,
+  );
 
   const alert = $derived.by(() => {
     if (monitorState === 'stale')
       return 'Depth data lost. Shallow-water monitoring is unavailable.';
+    if (monitorState === 'no-reading')
+      return 'Depth reading unavailable. Shallow-water monitoring is paused.';
     if (!alarming) return '';
     const unit = lengthUnit(deps.units.mode);
     const shown = formatLengthOr(depth.meters, deps.units.mode);
-    const limit = effectiveLimitMeters;
-    if (limit === undefined) {
+    // A server zone (an open-topped band, most often) can fire while the depth is not under the
+    // displayed limit; naming that limit would then be false on its face.
+    if (!isShallowAlarmActive(depth.meters, depth.stale, localLimit)) {
       return `Shallow water: depth ${shown} ${unit}, inside the server's depth alarm zone.`;
     }
-    return `Shallow water: depth ${shown} ${unit}, under the ${formatLengthOr(limit, deps.units.mode)} ${unit} alarm threshold.`;
+    return `Shallow water: depth ${shown} ${unit}, under the ${formatLengthOr(effectiveLimitMeters, deps.units.mode)} ${unit} alarm threshold.`;
   });
 
-  function loadZones(path: string): void {
-    if (metaCache.has(path)) return;
-    // Token read at call time so a rotating token is always current.
-    const token = deps.getToken();
-    // Sentinel before the async call: prevents a second fetch while the first is in flight.
-    metaCache.set(path, null);
-    void fetchPathMeta(deps.origin, token, path).then((result) => {
-      if (result !== undefined) metaCache.set(path, result);
-      else if (token !== undefined) metaCache.set(path, null);
-      // Fetched without a token (likely a 401 before auth): drop the sentinel so a later visit to
-      // this path retries once the user has granted access.
-      else metaCache.delete(path);
-      metaVersion += 1;
-    });
-  }
-
-  // Keyed on the path alone, so a 1 Hz depth sample does not re-enter the fetch bookkeeping.
+  // Keyed on the path, the cache version, and (through the cache's token read) the auth token, so
+  // a failed fetch re-enters on its own settle while a 1 Hz depth sample never does. The cache's
+  // per-path attempt cap bounds the resulting retries.
   $effect(() => {
-    if (winningPath !== undefined) loadZones(winningPath);
+    void metaCache.version;
+    if (winningPath !== undefined) metaCache.load(winningPath);
   });
 
   $effect(() => {
@@ -134,13 +156,30 @@ export function createShallowController(deps: ShallowControllerDeps) {
     get effectiveLimitMeters() {
       return effectiveLimitMeters;
     },
+    get serverLimitMeters() {
+      return serverLimitMeters;
+    },
+    get serverZonesActive() {
+      return serverZones !== undefined;
+    },
     get thresholdSource() {
       return thresholdSource;
     },
     get monitorState() {
       return monitorState;
     },
+    get ownedNotificationPath() {
+      return ownedNotificationPath;
+    },
   };
 }
 
-export type ShallowController = ReturnType<typeof createShallowController>;
+// The slice of the controller the panel actually renders, grouped so one prop carries it across
+// layers: nothing speculative rides along. serverZonesActive distinguishes zones with no nameable
+// bound (an open-topped alarm band) from no zones at all, so the panel can still say the server is
+// arming the alarm.
+export interface ShallowMonitorSnapshot {
+  monitorState: ShallowMonitorState;
+  serverLimitMeters: number | undefined;
+  serverZonesActive: boolean;
+}

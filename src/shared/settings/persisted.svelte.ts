@@ -362,13 +362,16 @@ export const MAX_COLLISION_CPA_METERS = 1_852_000;
 export const MAX_COLLISION_TCPA_SECONDS = 7 * 24 * 60 * MINUTE_S;
 export const MAX_SHALLOW_DEPTH_METERS = 11_000;
 
-export const DEFAULT_THRESHOLDS: Thresholds = {
+// `satisfies` keeps the interface check while preserving the literal type, so
+// DEFAULT_THRESHOLDS.shallowDepthMeters reads as number and the `value ?? default` idiom stays
+// arithmetic-safe even though the persisted field is optional for back-compat.
+export const DEFAULT_THRESHOLDS = {
   dangerCpaMeters: Math.round(nauticalMilesToMeters(0.5)),
   dangerTcpaSeconds: 10 * MINUTE_S,
   warningCpaMeters: Math.round(nauticalMilesToMeters(1)),
   warningTcpaSeconds: 20 * MINUTE_S,
   shallowDepthMeters: 3,
-};
+} satisfies Thresholds;
 
 // Guards stored collision thresholds against schema drift or corruption: a missing field would
 // otherwise read as NaN and silently disable the CPA/TCPA comparison that raises a collision alarm.

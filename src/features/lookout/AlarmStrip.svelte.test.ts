@@ -3,9 +3,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { ActiveNotification } from '$entities/notifications';
 import AlarmStrip from './AlarmStrip.svelte';
-
-const ACTION_BUTTON = (label: string): RegExp =>
-  new RegExp(`<button[^>]*>\\s*${label}\\s*</button>`);
+import { ACTION_BUTTON } from './test-helpers';
 
 function alert(overrides: Partial<ActiveNotification> = {}): ActiveNotification {
   return {
@@ -125,8 +123,11 @@ describe('AlarmStrip quieted state', () => {
   });
 
   it('stays lit while one raised alarm is still unsilenced', () => {
+    // sounding must be false here or the quieted derivation short-circuits on it and the
+    // every-silenced check is never exercised; the assertion could then not fail.
     const body = renderStrip({
       notifications: [alert({ silenced: true }), alert({ path: 'notifications.b' })],
+      sounding: false,
     });
 
     expect(body).not.toContain('is-ack');
@@ -206,6 +207,18 @@ describe('AlarmStrip actions', () => {
     });
 
     expect(body).not.toMatch(ACTION_BUTTON('Mute here'));
+  });
+
+  // Silence acts on the worst alert only, so a second unsilenced alarm would be left sounding
+  // with no control at all if the two were strict complements.
+  it('offers both Silence and Mute here when a second alarm is beyond the silence', () => {
+    const body = renderStrip({
+      notifications: [alert({ canSilence: true }), alert({ path: 'notifications.b' })],
+      onSilence: () => {},
+    });
+
+    expect(body).toMatch(ACTION_BUTTON('Silence'));
+    expect(body).toMatch(ACTION_BUTTON('Mute here'));
   });
 
   it('hides Mute here when nothing is sounding to mute', () => {

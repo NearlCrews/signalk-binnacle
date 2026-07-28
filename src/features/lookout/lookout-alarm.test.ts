@@ -64,12 +64,6 @@ describe('LookoutAlarm', () => {
     expect(events).toEqual(['start']);
   });
 
-  it('forwards prime to the alarm', () => {
-    const { control, events } = createFakeAlarmControl();
-    new LookoutAlarm(control).prime();
-    expect(events).toEqual(['prime']);
-  });
-
   it('stop() silences the alarm', () => {
     const { control, events } = createFakeAlarmControl();
     new LookoutAlarm(control).stop();

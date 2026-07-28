@@ -16,10 +16,6 @@ export class GatedAlarm {
   }
 
   // Resume the audio context from a user gesture (browser autoplay policy).
-  prime(): void {
-    this.#alarm.prime();
-  }
-
   update(shouldSound: boolean): void {
     if (shouldSound === this.#sounding) return;
     this.#sounding = shouldSound;

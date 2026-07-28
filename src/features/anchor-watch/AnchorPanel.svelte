@@ -140,6 +140,12 @@ function captureFromDistance(): void {
       <dd><span class="num">{depthText}</span><span class="unit">{unit}</span></dd>
     {/if}
   </dl>
+  {#if depth.source === undefined && vessel.safetyDepth.source === 'keel'}
+    <p class="muted-note">
+      The sounder publishes keel depth only, which understates the water column the rode spans, so
+      no depth shows here.
+    </p>
+  {/if}
   <UnitField
     label="Watch radius"
     {unit}

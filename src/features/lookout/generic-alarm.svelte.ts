@@ -16,20 +16,17 @@ export const GENERIC_ALARM_TONE: AlarmTone = {
   volume: 0.18,
 };
 
-// The depth alerts a server raises belong to the shallow-water channel, which owns its own tone,
-// threshold, and panel section. Excluded here so a boat whose server publishes depth zones does not
-// hear two different alarms for one shoaling.
-const DEPTH_NOTIFICATION_BASE = 'notifications.environment.depth';
-
 // Path equality or a real child, never a bare prefix: notifications.mobility must not read as part
 // of the notifications.mob subtree. Matches how the MOB store itself claims its paths.
 const inSubtree = (path: string, base: string): boolean =>
   path === base || path.startsWith(`${base}.`);
 
-// Whether this alert should make a sound. An alarm or emergency grade is the audible bar, and a
-// producer that named no method gets the safe default: an unheard alarm is the failure mode that
-// matters, so only an explicit method list without 'sound' stays visual. A server-side silence
-// stops the sound while the alert stays listed.
+// Whether this alert should make a sound. An alarm or emergency grade is the audible bar: warn and
+// alert stay visual even with an explicit 'sound' method, deliberately, so the audible channel is
+// reserved for the grades a watchkeeper must act on and lower grades cannot train the ear to tune
+// the tone out. Within the bar, a producer that named no method gets the safe default: an unheard
+// alarm is the failure mode that matters, so only an explicit method list without 'sound' stays
+// visual. A server-side silence stops the sound while the alert stays listed.
 export function isAudibleAlarmNotification(n: ActiveNotification): boolean {
   if (n.state !== 'alarm' && n.state !== 'emergency') return false;
   if (n.silenced) return false;
@@ -38,15 +35,33 @@ export function isAudibleAlarmNotification(n: ActiveNotification): boolean {
 
 // The alerts the generic surface owns: everything raised except the ones another surface already
 // renders and sounds. Acknowledged alerts drop out entirely, since acknowledging is how an alert is
-// cleared from this app's view.
-export function selectGenericAlarms(list: readonly ActiveNotification[]): ActiveNotification[] {
+// cleared from this app's view. The anchor exclusion is deliberately an exact match while MOB is a
+// subtree: it mirrors how the anchor entity itself claims its path, and a child id the server files
+// under it errs safe by sounding here rather than being dropped. It also holds only while the
+// anchor entity is actually consuming that notification (server mode): a foreign producer raising
+// the anchor path on a boat whose watch is off or client-side must sound here, not vanish.
+// ownedDepthPath is the ONE depth notification path the shallow monitor is sounding at this moment;
+// every other depth notification, a plugin detector or zones on a path that did not win, stays
+// generic so a grounding alarm can never go silent.
+interface GenericAlarmExclusions {
+  ownedDepthPath?: string;
+  // Whether the anchor entity currently sounds the anchor notification itself. Defaults to true,
+  // the shipped anchor-plugin arrangement.
+  anchorCovered?: boolean;
+}
+
+export function selectGenericAlarms(
+  list: readonly ActiveNotification[],
+  exclusions: GenericAlarmExclusions = {},
+): ActiveNotification[] {
+  const { ownedDepthPath, anchorCovered = true } = exclusions;
   return list.filter(
     (n) =>
       !n.acknowledged &&
       !inSubtree(n.path, SK_PATHS.mobNotification) &&
-      n.path !== SK_PATHS.anchorNotification &&
+      (!anchorCovered || n.path !== SK_PATHS.anchorNotification) &&
       n.path !== NOTIFICATION_PATH &&
-      !inSubtree(n.path, DEPTH_NOTIFICATION_BASE),
+      (ownedDepthPath === undefined || n.path !== ownedDepthPath),
   );
 }
 
@@ -74,11 +89,6 @@ export class GenericAlarm {
 
   constructor(alarm?: AlarmControl) {
     this.#alarm = new GatedAlarm(GENERIC_ALARM_TONE, alarm);
-  }
-
-  // Resume the audio context from a user gesture (browser autoplay policy).
-  prime(): void {
-    this.#alarm.prime();
   }
 
   update(notifications: readonly ActiveNotification[]): void {

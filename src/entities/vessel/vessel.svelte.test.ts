@@ -179,7 +179,7 @@ describe('OwnVessel depth resolution', () => {
     });
   });
 
-  it('prefers the keel, then the surface, then the transducer for the safety depth', () => {
+  it('prefers the keel, then the transducer, then the surface for the safety depth', () => {
     const store = new SignalKStore();
     const vessel = new OwnVessel(store);
     store.applyFrame(
@@ -193,6 +193,26 @@ describe('OwnVessel depth resolution', () => {
       meters: 7,
       source: 'keel',
       path: SK_PATHS.depthBelowKeel,
+      stale: false,
+    });
+  });
+
+  it('keeps the safety depth on the transducer when a positive-offset sounder adds the surface', () => {
+    // A positive transducer offset publishes belowSurface alongside belowTransducer and never
+    // belowKeel. Surface always reads deeper by the offset, so alarming on it would fire late:
+    // the transducer must win this pairing.
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.depthBelowTransducer]: 8,
+        [SK_PATHS.depthBelowSurface]: 8.6,
+      }),
+    );
+    expect(vessel.safetyDepth).toEqual({
+      meters: 8,
+      source: 'transducer',
+      path: SK_PATHS.depthBelowTransducer,
       stale: false,
     });
   });

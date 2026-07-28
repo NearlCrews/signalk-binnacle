@@ -11,10 +11,6 @@ export class LookoutAlarm {
   }
 
   // Resume the audio context from a user gesture (browser autoplay policy).
-  prime(): void {
-    this.#alarm.prime();
-  }
-
   // Sound the alarm for an active danger that is neither acknowledged nor muted. `escalate` is the
   // hard-inner-ring override: a genuinely close, imminent contact sounds regardless of mute,
   // acknowledge, or anchor, so a wide threshold setting or a stale mute can never silence a real

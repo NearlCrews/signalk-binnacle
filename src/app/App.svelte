@@ -1007,6 +1007,8 @@ const notificationsController = createNotificationsController({
   timeTravel,
   mob,
   genericAlarm,
+  ownedDepthNotificationPath: () => shallowController.ownedNotificationPath,
+  anchorNotificationCovered: () => anchor.mode === 'server',
 });
 const collisionAlert = $derived(notificationsController.collisionAlert);
 const genericAlarms = $derived(notificationsController.genericAlarms);
@@ -2042,8 +2044,8 @@ const plotterActions = {
     genericLocallyMuted={notificationsController.genericLocallyMuted}
     shallowMonitor={{
       monitorState: shallowController.monitorState,
-      thresholdSource: shallowController.thresholdSource,
-      effectiveLimitMeters: shallowController.effectiveLimitMeters,
+      serverLimitMeters: shallowController.serverLimitMeters,
+      serverZonesActive: shallowController.serverZonesActive,
     }}
   />
 

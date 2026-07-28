@@ -32,7 +32,7 @@ import {
   canSilenceNotification,
   notificationLabel,
 } from './notification-actions';
-import type { ShallowMonitorState, ShallowThresholdSource } from './shallow-monitor.svelte';
+import type { ShallowMonitorSnapshot } from './shallow-monitor.svelte';
 import { thresholdsCaution } from './thresholds-caution';
 
 // Humanize the raw Signal K alert state so a novice does not read truncated words like "WARN".
@@ -57,11 +57,7 @@ interface Props {
   units: UnitsStore;
   // The shallow monitor's live state. Absent (an older caller, or SSR) leaves the section on the
   // locally configured threshold, which is what it did before the monitor existed.
-  shallow?: {
-    monitorState: ShallowMonitorState;
-    thresholdSource: ShallowThresholdSource;
-    effectiveLimitMeters: number | undefined;
-  };
+  shallow?: ShallowMonitorSnapshot;
   collisionMuted: boolean;
   collisionMuteRemainingMin: number | undefined;
   onToggleCollisionMute: () => void;
@@ -130,12 +126,9 @@ function setShallowDepth(value: number): void {
   thresholds.set({ ...thresholds.value, shallowDepthMeters: meters });
 }
 
-// The server's depth zones outrank the local threshold, so the editor gives way to a read-only
-// reading of the bound the server set.
-const serverOwnsShallow = $derived(shallow?.thresholdSource === 'server');
-const serverShallowBound = $derived(
-  shallow?.thresholdSource === 'server' ? shallow.effectiveLimitMeters : undefined,
-);
+// The server's depth zones merge conservatively with the local threshold: the deeper bound fires
+// the alarm, so the editor always stays and a note names the server's bound when one exists.
+const serverShallowBound = $derived(shallow?.serverLimitMeters);
 
 const caution = $derived(thresholdsCaution(t));
 const maxCpaNm = cpaNm(MAX_COLLISION_CPA_METERS);
@@ -359,30 +352,34 @@ $effect(() => {
       <p class="muted-note" role="status">
         No depth source is publishing. The shallow alarm cannot monitor.
       </p>
-    {/if}
-    {#if serverOwnsShallow}
-      <p class="muted-note">
-        {#if serverShallowBound !== undefined}
-          The server's depth zones set the shallow alarm at
-          <span class="num">{formatLengthOr(serverShallowBound, units.mode)}</span>
-          {lengthUnit(units.mode)}.
-        {:else}
-          The server's depth zones set the shallow alarm.
-        {/if}
+    {:else if shallow?.monitorState === 'no-reading'}
+      <p class="muted-note" role="status">
+        The sounder is publishing no usable depth reading. The shallow alarm cannot monitor.
       </p>
-      <p class="muted-note">Edit the depth zones on the Signal K server to change it.</p>
-    {:else}
-      <UnitField
-        label="Shallow depth"
-        unit={lengthUnit(units.mode)}
-        min={0}
-        max={maxShallowDepth}
-        step={units.mode === 'imperial' ? 1 : 0.5}
-        ariaLabel="Shallow water depth threshold"
-        value={shallowDepthDisplay}
-        onCommit={setShallowDepth}
-      />
     {/if}
+    {#if serverShallowBound !== undefined}
+      <p class="muted-note">
+        The server's depth zones also alarm at
+        <span class="num">{formatLengthOr(serverShallowBound, units.mode)}</span>
+        {lengthUnit(units.mode)}. The deeper of that bound and this setting fires the alarm; edit
+        the depth zones on the Signal K server to change the server's side.
+      </p>
+    {:else if shallow?.serverZonesActive}
+      <p class="muted-note">
+        The server's depth zones also arm the alarm alongside this setting, without naming a single
+        bound; whichever condition reaches deeper fires it.
+      </p>
+    {/if}
+    <UnitField
+      label="Shallow depth"
+      unit={lengthUnit(units.mode)}
+      min={0}
+      max={maxShallowDepth}
+      step={units.mode === 'imperial' ? 1 : 0.5}
+      ariaLabel="Shallow water depth threshold"
+      value={shallowDepthDisplay}
+      onCommit={setShallowDepth}
+    />
   </section>
 </SlideOver>
 

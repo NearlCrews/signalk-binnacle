@@ -49,8 +49,10 @@ export function itemBlocked(item: MenuItem): boolean {
 // so a runaway count cannot widen a bar pill past its neighbors; the spoken suffix beside the chip
 // carries the true number, which has no width to protect.
 export function countBadge(item: MenuItem): string | undefined {
-  const count = item.count;
-  if (count === undefined || Number.isNaN(count) || count < 1) return undefined;
+  if (item.count === undefined || Number.isNaN(item.count) || item.count < 1) return undefined;
+  // Floored so a fractional count can never leak into the chip or the spoken suffix; the prop's
+  // contract is a whole number and every caller passes an array length.
+  const count = Math.floor(item.count);
   return count > 99 ? '99+' : String(count);
 }
 

@@ -18,8 +18,8 @@ export {
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
 } from './history-client';
-export type { MetaZone, PathMeta, ZoneState } from './meta';
-export { fetchPathMeta, zoneStateFor } from './meta';
+export type { MetaZone, ZoneState } from './meta';
+export { zoneStateFor } from './meta';
 export type {
   NotificationActionResult,
   UpdateNotificationResult,
@@ -33,6 +33,7 @@ export {
   updateNotification,
 } from './notifications-client';
 export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
+export { createPathMetaCache } from './path-meta-cache.svelte';
 export { SK_PATHS } from './paths';
 export { fetchProviderIdList, safeProviderId } from './provider-probe';
 export {
@@ -66,6 +67,7 @@ export type {
 export {
   ALL_VESSELS_CONTEXT,
   isSoundingNotification,
+  NOTIFICATIONS_PREFIX,
   notificationState,
   SELF_CONTEXT,
 } from './types';

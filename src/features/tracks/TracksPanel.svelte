@@ -103,15 +103,14 @@ const savedCards = $derived(
 
 // An empty saved list means something different in each state: still reading, failed, nowhere to
 // read from, or genuinely nothing saved yet.
-const savedEmptyText = $derived(
-  loadState === 'loading'
-    ? 'Loading saved tracks…'
-    : loadState === 'error'
-      ? 'Saved tracks are unavailable.'
-      : storageMissing
-        ? 'Saved tracks are unavailable until this server has track storage.'
-        : 'No saved tracks yet. Record a track, then tap Save to keep it.',
-);
+function savedEmptyMessage(state: TrackLoadState, missingStorage: boolean): string {
+  if (state === 'loading') return 'Loading saved tracks…';
+  if (state === 'error') return 'Saved tracks are unavailable.';
+  if (missingStorage) return 'Saved tracks are unavailable until this server has track storage.';
+  return 'No saved tracks yet. Record a track, then tap Save to keep it.';
+}
+
+const savedEmptyText = $derived(savedEmptyMessage(loadState, storageMissing));
 
 // Naming a save happens inline through NameEntry rather than a native prompt; one state drives both
 // the Save and the Save-as-route flows, so only one name form is open at a time.
@@ -152,7 +151,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <p class="alert-note" role="alert">
       This Signal K server has no track storage, so tracks cannot be saved to it. An administrator
       can enable it: open the Signal K admin UI, choose Server, then Plugin Config, then Resources
-      Provider, add a custom resource type named tracks, and submit.
+      Provider (built-in), add tracks under Resources (custom), and submit.
     </p>
     <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
   {/if}

@@ -1,40 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PersistedValue } from '$shared/settings';
-import { SignalKStore } from '$shared/signalk';
-import { createFakeStorage, jsonResponse } from '$shared/testing';
+import { jsonResponse } from '$shared/testing';
+import { flushPromises, makeDeps, mustTile } from './controller-test-helpers';
 import { createInstrumentsController } from './instruments-controller.svelte';
-import { DEFAULT_TILES, tileById } from './tile-catalog';
-
-// fetchPathMeta has several await hops before the cache is written.
-const flushPromises = () => new Promise<void>((r) => setTimeout(r, 0));
-
-function mustTile(id: string) {
-  const def = tileById(id);
-  if (!def) throw new Error(`Unknown tile id: ${id}`);
-  return def;
-}
-
-function makeDeps(tiles: string[] = [...DEFAULT_TILES]) {
-  return {
-    store: new SignalKStore(),
-    origin: 'http://sk',
-    getToken: (): string | undefined => undefined,
-    getHistoryProviders: () => undefined,
-    getHistoryProviderState: () => 'absent' as const,
-    subscribe: vi.fn(),
-    unsubscribe: vi.fn(),
-    tilesStore: new PersistedValue<string[]>(
-      'binnacle:instrument-tiles-test',
-      tiles,
-      createFakeStorage(),
-    ),
-    openStore: new PersistedValue<boolean>(
-      'binnacle:instruments-open-test',
-      false,
-      createFakeStorage(),
-    ),
-  };
-}
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -48,7 +15,7 @@ describe('createInstrumentsController label reactivity', () => {
           : jsonResponse(404, {}),
       ),
     );
-    const deps = makeDeps(['depth']);
+    const deps = makeDeps({ tiles: ['depth'] });
     const depthDef = mustTile('depth');
     let controller!: ReturnType<typeof createInstrumentsController>;
     let label!: () => string;

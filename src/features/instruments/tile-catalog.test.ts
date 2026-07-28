@@ -196,7 +196,7 @@ describe('depth tile', () => {
     expect(Number(reading.value)).toBeCloseTo(3.281, 1);
   });
 
-  it('prefers below-keel, then below-surface, then below-transducer and labels the reference', () => {
+  it('prefers below-keel, then below-transducer, then below-surface and labels the reference', () => {
     const clock = { now: 1000 };
     const deps = makeDeps(clock, 'metric');
     deps.store.applyFrame(
@@ -213,19 +213,21 @@ describe('depth tile', () => {
     expect(reading.value).toBe('7.0');
     expect(reading.referenceLabel).toBe('Keel');
 
-    const surfaceDeps = makeDeps(clock, 'metric');
-    surfaceDeps.store.applyFrame(
+    // A positive-offset sounder publishes transducer and surface together; the safety resolution
+    // keeps the smaller transducer reading so the tile and the shallow alarm agree.
+    const pairedDeps = makeDeps(clock, 'metric');
+    pairedDeps.store.applyFrame(
       skFrame({ [SK_PATHS.depthBelowTransducer]: 8, [SK_PATHS.depthBelowSurface]: 9 }, 1000),
     );
+    reading = readTile('depth', pairedDeps);
+    expect(reading.value).toBe('8.0');
+    expect(reading.referenceLabel).toBe('Xducer');
+
+    const surfaceDeps = makeDeps(clock, 'metric');
+    surfaceDeps.store.applyFrame(skFrame({ [SK_PATHS.depthBelowSurface]: 9 }, 1000));
     reading = readTile('depth', surfaceDeps);
     expect(reading.value).toBe('9.0');
     expect(reading.referenceLabel).toBe('Surface');
-
-    const transducerDeps = makeDeps(clock, 'metric');
-    transducerDeps.store.applyFrame(skFrame({ [SK_PATHS.depthBelowTransducer]: 8 }, 1000));
-    reading = readTile('depth', transducerDeps);
-    expect(reading.value).toBe('8.0');
-    expect(reading.referenceLabel).toBe('Xducer');
   });
 
   it('leaves the reference unlabeled until a depth source reports', () => {
