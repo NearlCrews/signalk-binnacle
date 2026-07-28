@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import type { Map as MapLibreMap } from 'maplibre-gl';
+import { render } from 'svelte/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { UnitsStore } from '$entities/units';
+import type { UnitsMode } from '$shared/lib';
+import { PersistedValue } from '$shared/settings';
+import { createFakeStorage, jsonResponse } from '$shared/testing';
 import { canDownloadRegion, downloadGateReason } from './estimate.js';
+import RegionsPanel from './RegionsPanel.svelte';
 import type { CacheStats } from './regions-client.js';
 
 // Pins the gate predicate the panel uses: Download is enabled only when a box is drawn, at least
@@ -143,6 +150,48 @@ describe('download gate explanation', () => {
         estimate: null,
       }),
     ).toBe('estimate-error');
+  });
+});
+
+describe('offline charts home view', () => {
+  const PLAIN_HTTP_NOTE =
+    "This server uses plain HTTP, so the browser's offline cache for the base map and streamed " +
+    "chart tiles stays off. Charts you have already viewed still reopen offline from the browser's " +
+    "own store, and Chart Locker's saved areas and automatic caching keep working over the boat " +
+    'network. To cache everything, enable SSL on the Signal K server and trust its certificate.';
+
+  // The template wraps the note across source lines, so compare against collapsed whitespace.
+  function renderHome(insecureTransport: boolean): string {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(404, {})),
+    );
+    return render(RegionsPanel, {
+      props: {
+        adminAccess: true,
+        accessUrl: 'http://sk/admin',
+        accessState: 'serving',
+        companionBase: 'http://sk/chart-locker',
+        map: {} as MapLibreMap,
+        units: new UnitsStore(
+          new PersistedValue<UnitsMode>('binnacle:units-test', 'metric', createFakeStorage()),
+        ),
+        insecureTransport,
+        onClose: () => {},
+        onOpenCharts: () => {},
+        onRetryAccess: () => {},
+      },
+    }).body.replaceAll(/\s+/g, ' ');
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('explains what a plain HTTP server cannot cache', () => {
+    expect(renderHome(true)).toContain(PLAIN_HTTP_NOTE);
+  });
+
+  it('stays quiet about transport when the server is reached over HTTPS', () => {
+    expect(renderHome(false)).not.toContain(PLAIN_HTTP_NOTE);
   });
 });
 

@@ -749,4 +749,62 @@ describe('createInstrumentsController', () => {
 
     ctrl.dispose();
   });
+
+  describe('resolvedLabel', () => {
+    async function openWith(displayName: unknown) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          (url as string).includes('belowKeel')
+            ? jsonResponse(200, { displayName })
+            : jsonResponse(404, {}),
+        ),
+      );
+      const deps = makeDeps();
+      deps.tilesStore.set(['depth']);
+      const ctrl = createInstrumentsController(deps);
+      ctrl.setOpen(true);
+      await flushPromises();
+      return ctrl;
+    }
+
+    it('falls back to the catalog label before any meta resolves', () => {
+      const deps = makeDeps();
+      deps.tilesStore.set(['depth']);
+      const ctrl = createInstrumentsController(deps);
+      const depthDef = mustTile('depth');
+
+      expect(ctrl.resolvedLabel(depthDef)).toBe(depthDef.label);
+
+      ctrl.dispose();
+    });
+
+    it("uses the server's display name once the path meta resolves", async () => {
+      const ctrl = await openWith('Sounder');
+
+      expect(ctrl.resolvedLabel(mustTile('depth'))).toBe('Sounder');
+
+      ctrl.dispose();
+    });
+
+    it('keeps the catalog label for a blank, oversized, or control-character display name', async () => {
+      const depthDef = mustTile('depth');
+
+      const blank = await openWith('   ');
+      expect(blank.resolvedLabel(depthDef)).toBe(depthDef.label);
+      blank.dispose();
+
+      const controlChars = await openWith('Depth\u0000sounder');
+      expect(controlChars.resolvedLabel(depthDef)).toBe(depthDef.label);
+      controlChars.dispose();
+
+      const tooLong = await openWith('D'.repeat(81));
+      expect(tooLong.resolvedLabel(depthDef)).toBe(depthDef.label);
+      tooLong.dispose();
+
+      const atCap = await openWith('D'.repeat(80));
+      expect(atCap.resolvedLabel(depthDef)).toBe('D'.repeat(80));
+      atCap.dispose();
+    });
+  });
 });

@@ -5,6 +5,9 @@ import type { TileDef, TileDeps, TileReading } from './tile-catalog';
 
 interface Props {
   def: TileDef;
+  // The name shown on the tile, which the server's meta displayName can replace. Always supplied by
+  // the panel, so the detail heading and the tile it was opened from cannot disagree.
+  label: string;
   deps: TileDeps;
   reading: TileReading;
   zone: ZoneState;
@@ -12,7 +15,7 @@ interface Props {
   onBack: () => void;
 }
 
-const { def, deps, reading, zone, historicalOnly = false, onBack }: Props = $props();
+const { def, label, deps, reading, zone, historicalOnly = false, onBack }: Props = $props();
 
 const valueLine = $derived(
   `${reading.value}${reading.unit ? ` ${reading.unit}` : ''}${
@@ -50,7 +53,7 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
 </script>
 
 <div class="detail">
-  <SubViewHeader title={def.label} backLabel="Back to instruments" {onBack} />
+  <SubViewHeader title={label} backLabel="Back to instruments" {onBack} />
 
   <p class="muted-note">{def.description}</p>
   {#if historicalOnly}

@@ -71,6 +71,12 @@ describe('RoutesPanel', () => {
     expect(body).toContain('aria-label="Start navigation on route"');
   });
 
+  it('offers the active route a stop control that opens a confirmation rather than stopping', () => {
+    const body = renderPanel({ routes: [route], activeId: route.id });
+    expect(body).toContain('aria-label="Stop navigation"');
+    expect(body).not.toContain('Stop navigating Passage?');
+  });
+
   it('disables route writes without write access while keeping read actions available', () => {
     const body = renderPanel({ auth: { writeBlocked: true }, routes: [route] });
     expect(body).toMatch(/aria-label="Start navigation on route"[^>]*disabled/);

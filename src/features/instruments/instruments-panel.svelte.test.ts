@@ -38,6 +38,7 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     reorderTile: () => {},
     refreshCatalog: () => {},
     refreshLiveCatalog: () => {},
+    resolvedLabel: (def) => def.label,
     zoneState: () => 'normal',
     resubscribe: () => {},
     dispose: () => {},
@@ -81,6 +82,22 @@ describe('InstrumentsPanel', () => {
     const deps = makeDeps();
     const { body } = render(InstrumentsPanel, { props: { controller, deps } });
     expect(body).toContain('Customize instruments');
+  });
+
+  it('titles a shown tile with the resolved label while the catalog keeps its own', () => {
+    const controller = makeController({
+      selectedIds: SELECTED_IDS,
+      resolvedLabel: (def) => (def.id === 'sog' ? 'Bottom log' : def.label),
+    });
+    const deps = makeDeps();
+
+    const tiles = render(InstrumentsPanel, { props: { controller, deps } }).body;
+    expect(tiles).toContain('Bottom log');
+
+    // The Customize list names catalog entries, and meta is fetched only for selected tiles, so it
+    // deliberately keeps the catalog label.
+    const customize = render(InstrumentsCustomize, { props: { controller, deps } }).body;
+    expect(customize).not.toContain('Bottom log');
   });
 
   it('renders one labeled row per catalog entry when customizing is true', () => {

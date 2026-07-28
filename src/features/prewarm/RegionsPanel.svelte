@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
+import { isInsecureTransportOrigin, serverOrigin } from '$shared/signalk';
 import {
   AccessRecoveryNote,
   type AccessRecoveryState,
@@ -36,6 +37,10 @@ interface Props {
   companionBase: string;
   map: MapLibreMap;
   units: UnitsStore;
+  // Whether the page reached Signal K over plain HTTP, where the browser withholds the service
+  // worker and its byte-asset cache. Defaulted here, and guarded so a server-rendered test never
+  // touches location.
+  insecureTransport?: boolean;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
@@ -49,6 +54,9 @@ const {
   companionBase,
   map,
   units,
+  // Deliberately the PAGE origin, not the Signal K API origin the app threads through as `origin`:
+  // a service worker is claimed by the origin that served the page, so do not unify these two.
+  insecureTransport = typeof location !== 'undefined' && isInsecureTransportOrigin(serverOrigin()),
   onClose,
   onBack,
   onOpenCharts,
@@ -175,6 +183,15 @@ function chartLabel(id: string): string {
     <p class="muted-note">
       Save the charts needed for a passage, verify their status, and manage offline storage.
     </p>
+    {#if insecureTransport}
+      <p class="muted-note">
+        This server uses plain HTTP, so the browser's offline cache for the base map and streamed
+        chart tiles stays off. Charts you have already viewed still reopen offline from the
+        browser's own store, and Chart Locker's saved areas and automatic caching keep working over
+        the boat network. To cache everything, enable SSL on the Signal K server and trust its
+        certificate.
+      </p>
+    {/if}
     <div class="panel-controls">
       <button
         type="button"

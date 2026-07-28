@@ -1,3 +1,4 @@
+import { hasControlCharacters } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import {
   fetchPathMeta,
@@ -66,6 +67,8 @@ export interface InstrumentsController {
   reorderTile(id: string, slot: number): void;
   refreshCatalog(): void;
   refreshLiveCatalog(): void;
+  // The name to show for a tile: the server's meta displayName when it is usable, else the catalog label.
+  resolvedLabel(def: TileDef): string;
   zoneState(def: TileDef, value: number | undefined): ZoneState;
   resubscribe(): void;
   dispose(): void;
@@ -346,6 +349,20 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     deps.tilesStore.set(next);
   }
 
+  // A boat that renamed a path on the server should see that name on the tile. The value is
+  // provider-controlled, so it is trimmed, rejected when blank or carrying control characters, and
+  // capped: a long name would push the numeric readout out of the tile.
+  const MAX_LABEL_LENGTH = 80;
+
+  function resolvedLabel(def: TileDef): string {
+    // Read the version counter first so a reactive caller re-evaluates once a fetch resolves; the
+    // meta cache itself is a plain Map.
+    void metaVersion;
+    const name = metaCache.get(def.zonesPath)?.displayName?.trim();
+    if (!name || name.length > MAX_LABEL_LENGTH || hasControlCharacters(name)) return def.label;
+    return name;
+  }
+
   function zoneState(def: TileDef, value: number | undefined): ZoneState {
     // Read reactive version counters so a template $derived re-evaluates after fetches and notifications.
     void metaVersion;
@@ -425,6 +442,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     reorderTile,
     refreshCatalog,
     refreshLiveCatalog,
+    resolvedLabel,
     zoneState,
     resubscribe,
     dispose,

@@ -113,13 +113,41 @@ const writesDisabled = $derived(auth.writeBlocked || busy);
 // rather than firing on a single tap where a mis-tap on a rolling deck would lose a saved route.
 const armedDelete = new ArmedRow((id) => onDelete(id));
 let confirmingActivateId = $state<string | undefined>();
+let confirmingStopId = $state<string | undefined>();
 let actionMenuId = $state<string | undefined>();
+
+// One card confirmation at a time: a second question opening elsewhere in the list would leave two
+// destructive answers on screen at once.
+function requestActivation(id: string): void {
+  confirmingStopId = undefined;
+  confirmingActivateId = id;
+}
 
 function confirmActivation(): void {
   const id = confirmingActivateId;
   confirmingActivateId = undefined;
   if (id && !writesDisabled) onActivate(id);
 }
+
+// Stopping ends navigation for the whole boat, so it confirms in the card the way activation and
+// deletion do rather than firing on a single tap.
+function requestStop(id: string): void {
+  actionMenuId = undefined;
+  confirmingActivateId = undefined;
+  confirmingStopId = id;
+}
+
+function confirmStop(): void {
+  const id = confirmingStopId;
+  confirmingStopId = undefined;
+  if (id && !writesDisabled) onStop();
+}
+
+// Navigation can also be stopped from the nav strip or another station while this confirm is open;
+// drop it then, so a stale question can never stop a route the boat is no longer navigating.
+$effect(() => {
+  if (confirmingStopId !== undefined && confirmingStopId !== activeId) confirmingStopId = undefined;
+});
 
 // A failed file read must not look like a quiet cancel: surface it so the navigator knows the import
 // did not happen, not just that nothing changed.
@@ -337,6 +365,13 @@ $effect(() => {
           onConfirm={confirmActivation}
           onCancel={() => (confirmingActivateId = undefined)}
         />
+      {:else if confirmingStopId === route.id}
+        <InlineConfirm
+          question={`Stop navigating ${route.name}?`}
+          confirmLabel="Stop navigation"
+          onConfirm={confirmStop}
+          onCancel={() => (confirmingStopId = undefined)}
+        />
       {:else if armedDelete.isArmed(route.id)}
         <InlineConfirm
           question={route.id === activeId
@@ -358,7 +393,7 @@ $effect(() => {
               aria-label="Stop navigation"
               title="Stop navigation"
               disabled={writesDisabled}
-              onclick={onStop}
+              onclick={() => requestStop(route.id)}
             >
               <Square size={18} aria-hidden="true" />
             </button>
@@ -369,7 +404,7 @@ $effect(() => {
               aria-label="Start navigation on route"
               title="Start navigation on route"
               disabled={working !== undefined || writesDisabled}
-              onclick={() => (confirmingActivateId = route.id)}
+              onclick={() => requestActivation(route.id)}
             >
               <Navigation size={18} aria-hidden="true" />
             </button>

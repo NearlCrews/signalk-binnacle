@@ -94,6 +94,45 @@ viewed charts does not delete saved areas. Setting changes show saving and saved
 fails, the panel keeps the latest choice visible and offers Retry. Rapid changes are serialized so an
 older response cannot replace the newest setting.
 
+## HTTPS and the browser cache
+
+Binnacle caches in two independent layers, and only one of them depends on how the browser reaches
+the server.
+
+Chart Locker's saved areas and automatic caching run on the Signal K server. They work over the
+boat's ordinary Signal K connection, so they never require HTTPS. Inside the browser, the PMTiles
+blocks, the weather forecast, tides, chart notes, and vessel conditions are stored in IndexedDB,
+which is not secure-context gated either. Over plain HTTP a reload still replays the last data, and
+previously viewed PMTiles charts still render offline.
+
+The second layer is the service worker, which caches ordinary byte assets: the base map, tiles
+served by a plugin, and the streaming overlays. Browsers expose the service worker and cache-storage
+APIs only in a secure context, meaning HTTPS or `http://localhost`. The Signal K server serves
+Binnacle over plain HTTP on the local network by default, so that layer stays inert there and every
+live function degrades cleanly to online-only. The Offline charts landing page says so directly when
+the page was loaded over plain HTTP.
+
+There are two good ways to add HTTPS to Signal K:
+
+- The [signalk-ssl](https://www.npmjs.com/package/signalk-ssl) plugin
+  ([source](https://github.com/dirkwa/signalk-ssl)), which generates a local certificate authority,
+  issues the server certificate, and distributes the root to your devices by QR code. The Signal K
+  server's built-in SSL settings (Server, then Settings, then SSL) are a bare-bones alternative.
+- [Tailscale](https://tailscale.com), which adds remote access and publicly trusted certificates,
+  with no trust-store step at all. See
+  [Accessing Signal K remotely with Tailscale](https://gist.github.com/NearlCrews/3f7af717fec853a80e7de1063940382e)
+  for a quick start.
+
+HTTPS alone is not enough: the browser must also **trust** the certificate. A self-signed
+certificate, including one the signalk-ssl plugin generates, is not trusted by default, and browsers
+refuse to register a service worker from an origin whose certificate they do not trust even after
+the certificate warning is clicked through. The symptom is a page that loads normally while offline
+caching never activates, with a console message like "service worker registration failed: an SSL
+certificate error occurred." The fix is environmental, not a Binnacle setting: install the
+certificate authority's root, the QR code or `.pem` file the plugin provides, into the browser or
+operating system trust store, mark it trusted, then reload over HTTPS. The service worker then
+registers, and the base map and chart tiles cache for offline use.
+
 ## Status meanings
 
 - **Cached amount:** Chart Locker is responding, and the header reports current cache use.

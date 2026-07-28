@@ -95,6 +95,7 @@ $effect(() => {
     {@const zone = controller.zoneState(detailDef, reading.siValue)}
     <InstrumentDetail
       def={detailDef}
+      label={controller.resolvedLabel(detailDef)}
       {deps}
       {reading}
       {zone}
@@ -117,7 +118,7 @@ $effect(() => {
         {@const zone = controller.zoneState(def, reading.siValue)}
         {#if def.kind === 'wind'}
           <WindTile
-            label={def.label}
+            label={controller.resolvedLabel(def)}
             {reading}
             {zone}
             sensorGloss={def.sensorGloss}
@@ -127,7 +128,7 @@ $effect(() => {
           />
         {:else}
           <NumericTile
-            label={def.label}
+            label={controller.resolvedLabel(def)}
             {reading}
             {zone}
             sensorGloss={def.sensorGloss}

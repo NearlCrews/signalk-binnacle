@@ -1,6 +1,7 @@
 <script lang="ts">
 import SkipBack from '@lucide/svelte/icons/skip-back';
 import SkipForward from '@lucide/svelte/icons/skip-forward';
+import { onDestroy } from 'svelte';
 import type { CourseGuidance } from '$entities/course';
 import {
   formatBearingOr,
@@ -12,6 +13,7 @@ import {
   PLACEHOLDER,
 } from '$shared/lib';
 import { steerSide } from '$shared/nav';
+import { ConfirmArm } from '$shared/ui';
 import type { RouteProgress } from './route-progress';
 
 interface Props {
@@ -26,6 +28,15 @@ interface Props {
 }
 
 const { guidance, routeProgress, onStop, onSkip }: Props = $props();
+
+// Stop ends navigation for the whole boat, and it sits beside the waypoint-skip pair, so it arms a
+// confirm step instead of firing on a single tap; the arm times out back to plain Stop on its own.
+const stopArm = new ConfirmArm();
+onDestroy(() => stopArm.disarm());
+
+function tapStop(): void {
+  if (stopArm.tap()) onStop();
+}
 
 // The side to steer toward to return to the track. The cross-track sign convention lives in
 // steerSide; absent or zero error yields null (no marker). Shared by the L/R marker and the CDI needle.
@@ -123,7 +134,11 @@ const eta = $derived.by(() => {
           </button>
         </div>
       {/if}
-      <button type="button" class="ack" aria-label="Stop navigation" onclick={onStop}>Stop</button>
+      <!-- The visible text is the whole label: it swaps to the confirm question when armed, and a
+           fixed aria-label would keep announcing the unarmed name. -->
+      <button type="button" class="ack" onclick={tapStop}>
+        {stopArm.armed ? 'Confirm stop?' : 'Stop'}
+      </button>
     </div>
     <div class="row">
       <span class="metric">DTW <b>{dtw}</b> nm</span>
