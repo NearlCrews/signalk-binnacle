@@ -181,6 +181,12 @@ export interface DraftChart {
   source: UserChartSource;
 }
 
+type UserChartReplaceHandler = (
+  previous: UserChartSource,
+  replacement: UserChartSource,
+) => Promise<void>;
+type UserChartTransitionHandler = (previous: UserChartSource, replacement: UserChartSource) => void;
+
 // Build the SignalKChart the existing chart overlay renders, with the tile url already resolved to
 // a remote .pmtiles URL.
 export function userChartToSignalK(source: UserChartSource, url: string): SignalKChart {
@@ -228,6 +234,12 @@ export class UserCharts {
   // Fires with the updated descriptor after a rename, so the app can re-register the overlay
   // under the new title and re-put the server-synced chart's resource.
   #onRename?: (source: UserChartSource) => void;
+  // A replacement first swaps the live overlay through this handler. The local descriptor is
+  // committed only after that succeeds, so a failed archive keeps the accepted chart intact.
+  #onReplace?: UserChartReplaceHandler;
+  // Runs after a replacement or sharing preference is accepted locally. The app translates the
+  // old and new descriptors into the final serialized Signal K server intent.
+  #onTransition?: UserChartTransitionHandler;
 
   constructor(
     persisted: UserChartSource[],
@@ -253,6 +265,14 @@ export class UserCharts {
     this.#onAdd = onAdd;
     this.#onRemove = onRemove;
     this.#onRename = onRename;
+  }
+
+  setReplaceHandler(handler: UserChartReplaceHandler): void {
+    this.#onReplace = handler;
+  }
+
+  setTransitionHandler(handler: UserChartTransitionHandler): void {
+    this.#onTransition = handler;
   }
 
   // Read a remote archive's metadata and stage it as a draft, without saving, so the user can review
@@ -285,6 +305,26 @@ export class UserCharts {
     };
   }
 
+  // Read replacement metadata without changing the accepted chart. The chart id and name remain
+  // stable. A new query-bearing URL defaults to device-only, while refreshing the same URL keeps
+  // the navigator's prior explicit sharing choice.
+  async stageReplacement(id: string, url: string, signal?: AbortSignal): Promise<DraftChart> {
+    const current = this.sources.find((source) => source.id === id);
+    if (!current) throw new Error('That chart is no longer available.');
+    const staged = await this.stageUrl(url, signal);
+    const sameUrl = staged.source.origin.url === current.origin.url;
+    return {
+      source: {
+        ...staged.source,
+        id: current.id,
+        name: current.name,
+        shareWithServer: sameUrl
+          ? shouldShareUserChart(current)
+          : shouldShareUserChart(current) && !userChartUrlHasQuery(staged.source.origin.url),
+      },
+    };
+  }
+
   // Save a staged draft with the reviewed name, which fires onAdd so the map flies to the new chart.
   commit(
     draft: DraftChart,
@@ -312,6 +352,67 @@ export class UserCharts {
     this.sources = this.sources.with(index, renamed);
     this.#persist(this.sources);
     this.#onRename?.(renamed);
+  }
+
+  // Atomically accept staged metadata after the live map replacement succeeds. A switch from a
+  // shared chart to a device-only chart retains an opaque cleanup obligation until the server
+  // confirms its DELETE, without exposing the replacement URL.
+  async replace(
+    draft: DraftChart,
+    shareWithServer = shouldShareUserChart(draft.source),
+  ): Promise<void> {
+    const index = this.sources.findIndex((source) => source.id === draft.source.id);
+    if (index < 0) throw new Error('That chart is no longer available.');
+    const previous = this.sources[index];
+    const replacement = cleanUserChartSource({
+      ...draft.source,
+      id: previous.id,
+      name: previous.name,
+      shareWithServer,
+      serverCleanupRequired:
+        !shareWithServer && userChartNeedsServerDelete(previous) ? true : undefined,
+    });
+    if (!replacement) throw new Error('Chart metadata is invalid.');
+    try {
+      await this.#onReplace?.(previous, replacement);
+    } catch {
+      throw new Error('Could not apply the replacement chart.');
+    }
+    this.#commitUpdate(index, previous, replacement);
+  }
+
+  async setSharing(id: string, shareWithServer: boolean): Promise<void> {
+    const index = this.sources.findIndex((source) => source.id === id);
+    if (index < 0) throw new Error('That chart is no longer available.');
+    const previous = this.sources[index];
+    if (shouldShareUserChart(previous) === shareWithServer) return;
+    const replacement = cleanUserChartSource({
+      ...previous,
+      shareWithServer,
+      serverCleanupRequired:
+        !shareWithServer && userChartNeedsServerDelete(previous) ? true : undefined,
+    });
+    if (!replacement) throw new Error('Chart metadata is invalid.');
+    this.#commitUpdate(index, previous, replacement);
+  }
+
+  // Clear an accepted server-cleanup obligation only after the serialized DELETE succeeds. A newer
+  // choice to share wins, so a late cleanup completion cannot mark a shared chart as device-only.
+  markServerClean(id: string): void {
+    const index = this.sources.findIndex((source) => source.id === id);
+    if (index < 0) return;
+    const current = this.sources[index];
+    if (shouldShareUserChart(current) || current.serverCleanupRequired !== true) return;
+    const cleaned = cleanUserChartSource({ ...current, serverCleanupRequired: undefined });
+    if (!cleaned) return;
+    this.sources = this.sources.with(index, cleaned);
+    this.#persist(this.sources);
+  }
+
+  #commitUpdate(index: number, previous: UserChartSource, replacement: UserChartSource): void {
+    this.sources = this.sources.with(index, replacement);
+    this.#persist(this.sources);
+    this.#onTransition?.(previous, replacement);
   }
 
   remove(id: string): void {

@@ -51,8 +51,10 @@ source, and surrounding traffic before relying on it.
   PMTiles imports accept bounded HTTP or HTTPS URLs, validate metadata, and persist locally. Plain
   URLs may sync when Signal K writes are available. Every query-bearing URL defaults to device-only,
   and explicitly enabling sharing sends the complete URL to Signal K. Closing or superseding an
-  import cancels its metadata request. Overlays remain in their own tab with visibility, opacity,
-  management, and stacking controls.
+  import cancels its metadata request. User chart detail can stage a replacement URL, refresh the
+  current URL's metadata, and change server sharing while retaining the chart id, visibility,
+  opacity, and stack position. A failed replacement restores the accepted chart. Overlays remain in
+  their own tab with visibility, opacity, management, and stacking controls.
 
 ## Safety
 

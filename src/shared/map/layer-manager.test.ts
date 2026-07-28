@@ -234,6 +234,91 @@ describe('LayerManager', () => {
     await expect(manager.register(fakeOverlay('chart'))).resolves.toBeUndefined();
   });
 
+  it('replaces an overlay without changing visibility, opacity, or saved order', async () => {
+    const changes: Array<Record<string, { visible: boolean; opacity: number }>> = [];
+    const orders: string[][] = [];
+    const manager = new LayerManager(fakeCtx(), {
+      onChange: (state) => changes.push(state),
+      onOrderChange: (order) => orders.push(order),
+    });
+    const original = fakeOverlay('chart');
+    const replacement = fakeOverlay('chart');
+    await manager.register(original);
+    await manager.register(fakeOverlay('ais'));
+    manager.toggle('chart', false);
+    manager.setOpacity('chart', 0.4);
+    manager.reorder('chart', 0);
+    changes.length = 0;
+    orders.length = 0;
+
+    await manager.replace(replacement);
+
+    expect(original.events.at(-1)).toBe('remove');
+    expect(replacement.events).toContain('visible:false');
+    expect(replacement.events).toContain('opacity:0.4');
+    expect(manager.layers().find((layer) => layer.id === 'chart')).toMatchObject({
+      visible: false,
+      opacity: 0.4,
+    });
+    expect(manager.layers().map((layer) => layer.id)).toEqual(['chart', 'ais']);
+    expect(changes).toEqual([]);
+    expect(orders).toEqual([]);
+  });
+
+  it('restores the accepted overlay when a same-id replacement fails', async () => {
+    const manager = new LayerManager(fakeCtx());
+    const original = fakeOverlay('chart');
+    await manager.register(original);
+    manager.toggle('chart', false);
+    manager.setOpacity('chart', 0.35);
+    const broken = fakeOverlay('chart');
+    broken.add = () => {
+      throw new Error('replacement source failed');
+    };
+
+    await expect(manager.replace(broken)).rejects.toThrow('replacement source failed');
+
+    expect(original.events.filter((event) => event === 'add')).toHaveLength(2);
+    expect(original.events.at(-2)).toBe('visible:false');
+    expect(original.events.at(-1)).toBe('opacity:0.35');
+    expect(manager.layers()).toEqual([
+      expect.objectContaining({ id: 'chart', visible: false, opacity: 0.35 }),
+    ]);
+  });
+
+  it('restores the accepted overlay when replacement restacking fails', async () => {
+    const ctx = fakeCtx();
+    const map = ctx.map as unknown as ReturnType<typeof createFakeMap>;
+    const mountedOverlay = (title: string): OverlayModule & { events: string[] } => {
+      const overlay = { ...fakeOverlay('chart'), title };
+      overlay.add = (overlayCtx) => {
+        overlay.events.push('add');
+        overlayCtx.map.addLayer({ id: 'chart-layer', type: 'background' });
+      };
+      overlay.remove = (overlayCtx) => {
+        overlay.events.push('remove');
+        if (overlayCtx.map.getLayer('chart-layer')) overlayCtx.map.removeLayer('chart-layer');
+      };
+      return overlay;
+    };
+    const original = mountedOverlay('Accepted chart');
+    const replacement = mountedOverlay('Replacement chart');
+    const manager = new LayerManager(ctx, { savedOrder: ['chart'] });
+    await manager.register(original);
+    map.moveLayer.mockImplementationOnce(() => {
+      throw new Error('restack failed');
+    });
+
+    await expect(manager.replace(replacement)).rejects.toThrow('restack failed');
+
+    expect(replacement.events).toContain('remove');
+    expect(original.events.filter((event) => event === 'add')).toHaveLength(2);
+    expect(manager.layers()).toEqual([
+      expect.objectContaining({ id: 'chart', title: 'Accepted chart' }),
+    ]);
+    expect(map.getLayer('chart-layer')).toBeTruthy();
+  });
+
   it('registerAll registers every module and yields the same band order as sequential register', async () => {
     const manager = new LayerManager(fakeCtx());
     const chart = fakeOverlay('chart', 'basemap');

@@ -6,11 +6,9 @@ import {
   MAX_USER_CHART_URL_LENGTH,
   shouldShareUserChart,
   type UserCharts,
-  userChartUrlHasQuery,
 } from '$entities/user-charts';
 import { TextField } from '$shared/ui';
-import ChartSpecList from './ChartSpecList.svelte';
-import { chartSpecRows } from './chart-spec';
+import ChartSourceReview from './ChartSourceReview.svelte';
 
 interface Props {
   userCharts: UserCharts;
@@ -46,20 +44,6 @@ $effect(() => {
 });
 
 const staged = $derived(draft !== undefined);
-const draftHasQuery = $derived(draft ? userChartUrlHasQuery(draft.source.origin.url) : false);
-
-const draftRows = $derived.by(() => {
-  if (!draft) return [];
-  const spec = chartSpecRows(draft.source);
-  return [
-    spec.type,
-    spec.zoom,
-    {
-      label: 'Stored',
-      value: shareWithServer ? 'This device, and shared to the server' : 'This device only',
-    },
-  ];
-});
 
 // The busy and error envelope shared by the read-to-stage and the commit steps.
 async function withBusy(
@@ -142,27 +126,14 @@ function cancelDraft(): void {
         onInput={(value) => (draftName = value)}
         onCommit={(value) => (draftName = value)}
       />
-      <ChartSpecList rows={draftRows} />
-      <label class="share-choice">
-        <input type="checkbox" bind:checked={shareWithServer} disabled={busy || writeBlocked}>
-        <span>Share the full chart URL with the Signal K server</span>
-      </label>
-      {#if writeBlocked}
-        <p class="privacy-note" role="status">
-          This chart will stay on this device. Read/write Signal K access is needed to share it with
-          the server.
-        </p>
-      {:else if draftHasQuery}
-        <p class:alert-note={shareWithServer} class="privacy-note" role="status">
-          {shareWithServer
-            ? 'Sharing sends the full URL, including every query value, to the Signal K server.'
-            : 'This URL contains query values that may be private. It stays on this device unless you choose to share the full URL.'}
-        </p>
-      {:else}
-        <p class="hint">
-          Sharing lets other Signal K clients discover this chart. Turn it off to keep the full URL
-          on this device.
-        </p>
+      {#if draft}
+        <ChartSourceReview
+          source={draft.source}
+          {shareWithServer}
+          {writeBlocked}
+          disabled={busy}
+          onShareChange={(share) => (shareWithServer = share)}
+        />
       {/if}
       <div class="panel-controls">
         <button
@@ -270,20 +241,5 @@ function cancelDraft(): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-.share-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-.share-choice input {
-  flex: 0 0 auto;
-  margin-block-start: 0.15rem;
-}
-.privacy-note {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 </style>

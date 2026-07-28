@@ -246,16 +246,18 @@ unavailable.
 User-added URL charts are fetched by the browser. Binnacle rejects URLs with embedded usernames or
 passwords, removes URL fragments, redacts every query value in displays and errors, and keeps every
 query-bearing URL on this device unless you explicitly choose to share the complete URL with the
-Signal K server. Use HTTPS for Signal K so device credentials and boat data are encrypted on the
-local network.
+Signal K server. Chart detail can repair a moved or expired URL, refresh archive metadata, and change
+that sharing choice without losing the chart's id or layer settings. Use HTTPS for Signal K so device
+credentials and boat data are encrypted on the local network.
 
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
   navigate straight to that point, or start a route or measurement.
 - **Measure a chart leg.** Open **Measure**, tap a start and destination, then read the latest rhumb
   range, true bearing, and total in the strip. Use **Done** when finished.
-- **Manage charts and overlays.** Open **Charts** to select chart sources or inspect their details.
-  Switch to **Overlays** to toggle overlays, change opacity, and drag rows to reorder their stack.
+- **Manage charts and overlays.** Open **Charts** to select chart sources, inspect their details,
+  repair a saved PMTiles URL, refresh its metadata, or change server sharing. Switch to **Overlays**
+  to toggle overlays, change opacity, and drag rows to reorder their stack.
 - **Prepare offline charts.** Open **Offline charts**, choose **Save a chart area**, draw over the
   passage, review the included charts and detail, and start the download. Confirm the saved area's
   status and update date before relying on it away from coverage.

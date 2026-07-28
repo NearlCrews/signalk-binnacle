@@ -1465,6 +1465,8 @@ const userChartsController = createUserChartsController({
   recolorMap: (t) => recolorMap?.(t),
   getTheme: () => theme.theme,
 });
+userCharts.setReplaceHandler(userChartsController.replaceUserChartOverlay);
+userCharts.setTransitionHandler(userChartsController.handleUserChartTransition);
 
 // Re-list the layers when an availability-gating provider appears or disappears, so a degrade overlay
 // (radar, AIS trails, track history) flips between grayed-out and active without a manual panel reopen.

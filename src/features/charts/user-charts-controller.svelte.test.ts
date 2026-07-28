@@ -181,7 +181,8 @@ describe('createUserChartsController', () => {
       )
       .mockResolvedValue(undefined);
     const unregister = vi.fn<UserChartRegistrar['unregister']>();
-    const registrar = { register, unregister };
+    const replace = vi.fn<UserChartRegistrar['replace']>().mockResolvedValue(undefined);
+    const registrar = { register, replace, unregister };
     controller.onUserChartsReady(registrar);
     await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1));
 
@@ -195,5 +196,111 @@ describe('createUserChartsController', () => {
     await tick();
     expect(unregister).toHaveBeenCalledTimes(1);
     expect(recolorMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces a mounted chart through the registrar without unregistering it first', async () => {
+    const oldChart = source('https://charts.example/old.pmtiles', false);
+    const charts = new UserCharts([oldChart], () => {});
+    const recolorMap = vi.fn();
+    const controller = createUserChartsController({
+      origin: 'http://signalk.local',
+      getToken: () => undefined,
+      canWrite: () => false,
+      userCharts: charts,
+      recolorMap,
+      getTheme: () => 'night-red',
+    });
+    const registrar: UserChartRegistrar = {
+      register: vi.fn().mockResolvedValue(undefined),
+      replace: vi.fn().mockResolvedValue(undefined),
+      unregister: vi.fn(),
+    };
+    controller.onUserChartsReady(registrar);
+    await vi.waitFor(() => expect(registrar.register).toHaveBeenCalledTimes(1));
+    const replacement = {
+      ...oldChart,
+      origin: { type: 'url' as const, url: 'https://charts.example/new.pmtiles' },
+    };
+
+    await controller.replaceUserChartOverlay(oldChart, replacement);
+
+    expect(registrar.replace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identifier: oldChart.id,
+        url: 'https://charts.example/new.pmtiles',
+      }),
+    );
+    expect(registrar.unregister).not.toHaveBeenCalled();
+    expect(recolorMap).toHaveBeenLastCalledWith('night-red');
+  });
+
+  it('queues the final server intent for sharing transitions and clears confirmed cleanup', async () => {
+    const oldChart = source('https://charts.example/old.pmtiles', true);
+    const local = {
+      ...oldChart,
+      origin: {
+        type: 'url' as const,
+        url: 'https://charts.example/new.pmtiles?signature=private',
+      },
+      shareWithServer: false,
+      serverCleanupRequired: true,
+    };
+    const charts = new UserCharts([local], () => {});
+    const controller = createUserChartsController({
+      origin: 'http://signalk.local',
+      getToken: () => 'token',
+      canWrite: () => true,
+      userCharts: charts,
+      recolorMap: vi.fn(),
+      getTheme: () => 'day',
+    });
+
+    controller.handleUserChartTransition(oldChart, local);
+
+    await vi.waitFor(() => expect(chartsClient.deleteChart).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(charts.sources[0].serverCleanupRequired).toBeUndefined());
+    expect(chartsClient.putChart).not.toHaveBeenCalled();
+
+    const shared = { ...local, shareWithServer: true, serverCleanupRequired: undefined };
+    controller.handleUserChartTransition(charts.sources[0], shared);
+    await vi.waitFor(() => expect(chartsClient.putChart).toHaveBeenCalledTimes(1));
+    expect(chartsClient.putChart).toHaveBeenLastCalledWith(
+      'http://signalk.local',
+      'token',
+      expect.objectContaining({
+        identifier: oldChart.id,
+        url: 'https://charts.example/new.pmtiles?signature=private',
+      }),
+    );
+  });
+
+  it('retains cleanup state and reports the remaining server copy after a failed transition', async () => {
+    vi.mocked(chartsClient.deleteChart).mockResolvedValueOnce(false);
+    const report = vi.fn();
+    const oldChart = source('https://charts.example/old.pmtiles', true);
+    const local = {
+      ...oldChart,
+      shareWithServer: false,
+      serverCleanupRequired: true,
+    };
+    const charts = new UserCharts([local], () => {});
+    const controller = createUserChartsController({
+      origin: 'http://signalk.local',
+      getToken: () => 'token',
+      canWrite: () => true,
+      onSyncError: report,
+      userCharts: charts,
+      recolorMap: vi.fn(),
+      getTheme: () => 'day',
+    });
+
+    controller.handleUserChartTransition(oldChart, local);
+
+    await vi.waitFor(() =>
+      expect(report).toHaveBeenCalledWith(
+        'Chart saved on this device, but its previous Signal K server copy may remain.',
+      ),
+    );
+    expect(charts.sources[0].serverCleanupRequired).toBe(true);
   });
 });

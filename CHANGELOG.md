@@ -8,6 +8,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- User-added PMTiles charts can now stage and review a replacement URL, refresh metadata from the
+  current URL, and switch between device-only and Signal K sharing. Replacements preserve the chart
+  id, name, visibility, opacity, and stacking position, restore the accepted overlay on failure, and
+  keep query values redacted from readouts and errors.
 - Nearby vessels now searches reported names and Maritime Mobile Service Identity numbers before the
   500-row display cap, filters collision risks and getting-close targets, opens the same live
   in-panel detail from the list or a generous chart target, highlights the selected target, and

@@ -28,8 +28,19 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   const mountedUserCharts = new Map<string, UserChartRegistrar>();
   const overlayAttempts = new Map<string, { token: symbol; registrar: UserChartRegistrar }>();
   type ServerIntent =
-    | { type: 'put'; source: UserChartSource; token: string | undefined }
-    | { type: 'delete'; token: string | undefined };
+    | {
+        type: 'put';
+        source: UserChartSource;
+        token: string | undefined;
+        failureMessage?: string;
+        onSuccess?: () => void;
+      }
+    | {
+        type: 'delete';
+        token: string | undefined;
+        failureMessage?: string;
+        onSuccess?: () => void;
+      };
   const pendingServerIntents = new Map<string, ServerIntent>();
   const serverWorkers = new Map<string, Promise<void>>();
   let lastSyncKey: string | undefined;
@@ -74,12 +85,19 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
       }
       // A newer intent already supersedes this outcome. Only the final desired server state should
       // surface an error, and the loop still executes that newer PUT or DELETE in order.
-      if (!ok && !pendingServerIntents.has(id)) {
+      const superseded = pendingServerIntents.has(id);
+      if (ok && !superseded) intent.onSuccess?.();
+      if (!ok && !superseded) {
         if (intent.type === 'put') {
           console.warn(`User chart "${id}" did not sync to the server.`);
-          reportSyncError('Chart saved on this device, but server sync failed.');
+          reportSyncError(
+            intent.failureMessage ?? 'Chart saved on this device, but server sync failed.',
+          );
         } else {
-          reportSyncError('Chart removed on this device, but its server copy may remain.');
+          reportSyncError(
+            intent.failureMessage ??
+              'Chart removed on this device, but its server copy may remain.',
+          );
         }
       }
     }
@@ -106,6 +124,43 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
   function deleteUserChartFromServer(source: UserChartSource): void {
     if (!userChartNeedsServerDelete(source) || !deps.canWrite()) return;
     queueServerIntent(source.id, { type: 'delete', token: deps.getToken() });
+  }
+
+  async function replaceUserChartOverlay(
+    previous: UserChartSource,
+    replacement: UserChartSource,
+  ): Promise<void> {
+    if (previous.id !== replacement.id) throw new Error('Chart identifiers do not match.');
+    const registrar = userChartRegistrar;
+    if (!registrar || mountedUserCharts.get(previous.id) !== registrar) return;
+    await registrar.replace(userChartToSignalK(replacement, replacement.origin.url));
+    mountedUserCharts.set(replacement.id, registrar);
+    deps.recolorMap(deps.getTheme());
+  }
+
+  function handleUserChartTransition(
+    previous: UserChartSource,
+    replacement: UserChartSource,
+  ): void {
+    if (!deps.canWrite()) return;
+    if (shouldShareUserChart(replacement)) {
+      queueServerIntent(replacement.id, {
+        type: 'put',
+        source: replacement,
+        token: deps.getToken(),
+        failureMessage:
+          'Chart saved on this device, but the Signal K server still has the previous source.',
+      });
+      return;
+    }
+    if (!userChartNeedsServerDelete(previous)) return;
+    queueServerIntent(replacement.id, {
+      type: 'delete',
+      token: deps.getToken(),
+      failureMessage:
+        'Chart saved on this device, but its previous Signal K server copy may remain.',
+      onSuccess: () => userCharts.markServerClean(replacement.id),
+    });
   }
 
   // Re-sync restored URL charts when access resolves or credentials change. `untrack` keeps source
@@ -190,5 +245,7 @@ export function createUserChartsController(deps: UserChartsControllerDeps) {
     syncUrlChartToServer,
     dropRegisteredUserChart,
     deleteUserChartFromServer,
+    replaceUserChartOverlay,
+    handleUserChartTransition,
   };
 }

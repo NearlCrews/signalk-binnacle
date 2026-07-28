@@ -641,6 +641,21 @@ onMount(async () => {
           if (isDestroyed()) return;
           view.refresh();
         },
+        replace: async (chart) => {
+          if (isDestroyed()) return;
+          try {
+            await mgr.replace(
+              createChartOverlay(chart, origin, 'bathymetry', () => chartsToken, {
+                source: 'user',
+              }),
+            );
+          } catch (error) {
+            if (isDestroyed()) return;
+            throw error;
+          }
+          if (isDestroyed()) return;
+          view.refresh();
+        },
         unregister: (identifier) => {
           if (isDestroyed()) return;
           mgr.unregister(chartSourceId(identifier));

@@ -119,6 +119,76 @@ export class LayerManager {
     this.#applyOrder();
   }
 
+  // Replace one registered overlay without changing its persisted visibility, opacity, or stacking
+  // slot. A failed replacement restores the prior module before rejecting, so editing a saved chart
+  // source cannot turn a working chart into a silent empty layer.
+  async replace(module: OverlayModule): Promise<void> {
+    if (this.#disposed) throw new Error('layer manager is disposed');
+    const pending = this.#registrationTasks.get(module.id);
+    if (pending) await pending;
+    if (this.#disposed) throw new Error('layer manager is disposed');
+    const previousRegistration = this.#registrations.get(module.id);
+    const previous = previousRegistration?.module ?? this.#modules.get(module.id);
+    if (!previous) {
+      await this.register(module);
+      return;
+    }
+    const previousState = this.#state.get(module.id);
+    const retainedState: OverlayState = previousState
+      ? { ...previousState }
+      : { visible: previous.defaultVisible ?? true, opacity: previous.defaultOpacity ?? 1 };
+
+    try {
+      previous.remove(this.#ctx);
+    } catch (error) {
+      throw new Error(`Could not remove overlay "${module.id}" for replacement.`, {
+        cause: error,
+      });
+    }
+    this.#registrations.delete(module.id);
+    this.#modules.delete(module.id);
+    this.#state.delete(module.id);
+
+    try {
+      await this.#addModule(module, retainedState);
+      this.#applyOrder();
+    } catch (replacementError) {
+      let replacementCleanupError: unknown;
+      if (this.#modules.get(module.id) === module) {
+        try {
+          module.remove(this.#ctx);
+        } catch (error) {
+          replacementCleanupError = error;
+        }
+        if (this.#registrations.get(module.id)?.module === module) {
+          this.#registrations.delete(module.id);
+        }
+        this.#modules.delete(module.id);
+        this.#state.delete(module.id);
+      }
+      try {
+        await this.#addModule(previous, retainedState);
+        this.#applyOrder();
+      } catch (restoreError) {
+        throw new AggregateError(
+          [
+            replacementError,
+            ...(replacementCleanupError ? [replacementCleanupError] : []),
+            restoreError,
+          ],
+          `Could not replace or restore overlay "${module.id}".`,
+        );
+      }
+      if (replacementCleanupError) {
+        throw new AggregateError(
+          [replacementError, replacementCleanupError],
+          `Could not cleanly replace overlay "${module.id}".`,
+        );
+      }
+      throw replacementError;
+    }
+  }
+
   // Register many overlays as one batch, applying the stacking order a single time at the end
   // rather than after every module. The initial chart-plus-overlay load registers a dozen or more
   // modules, and a per-register restack is a moveLayer chain over every layer each time, so the
@@ -157,7 +227,7 @@ export class LayerManager {
 
   // Add a single module (state restore, exclusion enforcement, add, visibility, and opacity)
   // without restacking. register and registerAll share this and own when #applyOrder runs.
-  async #addModule(module: OverlayModule): Promise<void> {
+  async #addModule(module: OverlayModule, retainedState?: OverlayState): Promise<void> {
     if (this.#disposed) throw new Error('layer manager is disposed');
     const previous = this.#registrationTasks.get(module.id);
     if (previous) await previous.catch(() => undefined);
@@ -168,7 +238,7 @@ export class LayerManager {
     const registration: ActiveRegistration = { module, canceled: false };
     this.#registrations.set(module.id, registration);
     this.#modules.set(module.id, module);
-    const restored = this.#saved[module.id];
+    const restored = retainedState ?? this.#saved[module.id];
     // Coerce a restored state's shape: a legacy persisted entry missing opacity would otherwise
     // flow undefined into setOpacity and render as NaN.
     const state = restored

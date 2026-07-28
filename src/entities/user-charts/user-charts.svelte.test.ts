@@ -284,3 +284,142 @@ describe('UserCharts stage, commit, and remove', () => {
     expect(snapshots).toHaveLength(2);
   });
 });
+
+describe('UserCharts replacement and sharing', () => {
+  const saved: UserChartSource = {
+    id: 'chart-1',
+    name: 'Harbor chart',
+    kind: 'vector',
+    origin: { type: 'url', url: 'https://example.com/old.pmtiles' },
+    shareWithServer: true,
+    bounds: [-1, -1, 1, 1],
+    minzoom: 1,
+    maxzoom: 8,
+    layers: ['old-layer'],
+  };
+
+  it('stages replacement metadata while preserving the accepted id and name', async () => {
+    const charts = new UserCharts([saved], () => {});
+
+    const draft = await charts.stageReplacement(
+      saved.id,
+      'https://example.com/new.pmtiles?signature=private',
+    );
+
+    expect(draft.source).toMatchObject({
+      id: saved.id,
+      name: saved.name,
+      kind: 'vector',
+      origin: {
+        type: 'url',
+        url: 'https://example.com/new.pmtiles?signature=private',
+      },
+      shareWithServer: false,
+      bounds: [0, 0, 1, 1],
+      minzoom: 0,
+      maxzoom: 10,
+      layers: ['water'],
+    });
+    expect(charts.sources).toEqual([saved]);
+  });
+
+  it('keeps an explicit sharing choice when refreshing the same signed URL', async () => {
+    const signed = {
+      ...saved,
+      origin: {
+        type: 'url' as const,
+        url: 'https://example.com/chart.pmtiles?signature=private',
+      },
+      shareWithServer: true,
+    };
+    const charts = new UserCharts([signed], () => {});
+
+    const draft = await charts.stageReplacement(signed.id, signed.origin.url);
+
+    expect(draft.source.shareWithServer).toBe(true);
+  });
+
+  it('commits replacement metadata only after the live replacement succeeds', async () => {
+    const snapshots: UserChartSource[][] = [];
+    const transitions: Array<[UserChartSource, UserChartSource]> = [];
+    const charts = new UserCharts([saved], (sources) => snapshots.push(sources));
+    const replace = vi.fn(async () => {});
+    charts.setReplaceHandler(replace);
+    charts.setTransitionHandler((previous, replacement) =>
+      transitions.push([previous, replacement]),
+    );
+    const draft = await charts.stageReplacement(saved.id, 'https://example.com/new.pmtiles');
+
+    await charts.replace(draft, true);
+
+    expect(replace).toHaveBeenCalledWith(saved, expect.objectContaining({ id: saved.id }));
+    expect(charts.sources[0]).toMatchObject({
+      id: saved.id,
+      name: saved.name,
+      origin: { type: 'url', url: 'https://example.com/new.pmtiles' },
+      bounds: [0, 0, 1, 1],
+      minzoom: 0,
+      maxzoom: 10,
+      layers: ['water'],
+    });
+    expect(snapshots).toHaveLength(1);
+    expect(transitions).toHaveLength(1);
+  });
+
+  it('keeps the accepted chart when live replacement fails and hides transport details', async () => {
+    const persist = vi.fn();
+    const transition = vi.fn();
+    const charts = new UserCharts([saved], persist);
+    charts.setReplaceHandler(async () => {
+      throw new Error('failed https://example.com/new.pmtiles?access_token=private');
+    });
+    charts.setTransitionHandler(transition);
+    const draft = await charts.stageReplacement(
+      saved.id,
+      'https://example.com/new.pmtiles?access_token=private',
+    );
+
+    await expect(charts.replace(draft, false)).rejects.toThrow(
+      'Could not apply the replacement chart.',
+    );
+
+    expect(charts.sources).toEqual([saved]);
+    expect(persist).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('tracks and clears the server cleanup obligation when sharing is turned off', async () => {
+    const snapshots: UserChartSource[][] = [];
+    const transition = vi.fn();
+    const charts = new UserCharts([saved], (sources) => snapshots.push(sources));
+    charts.setTransitionHandler(transition);
+
+    await charts.setSharing(saved.id, false);
+
+    expect(charts.sources[0]).toMatchObject({
+      shareWithServer: false,
+      serverCleanupRequired: true,
+    });
+    expect(transition).toHaveBeenCalledWith(
+      saved,
+      expect.objectContaining({ shareWithServer: false, serverCleanupRequired: true }),
+    );
+
+    charts.markServerClean(saved.id);
+    expect(charts.sources[0].shareWithServer).toBe(false);
+    expect(charts.sources[0].serverCleanupRequired).toBeUndefined();
+    expect(snapshots).toHaveLength(2);
+  });
+
+  it('does not let a late server cleanup clear a newer sharing choice', async () => {
+    const charts = new UserCharts(
+      [{ ...saved, shareWithServer: false, serverCleanupRequired: true }],
+      () => {},
+    );
+
+    await charts.setSharing(saved.id, true);
+    charts.markServerClean(saved.id);
+
+    expect(charts.sources[0].shareWithServer).toBe(true);
+  });
+});

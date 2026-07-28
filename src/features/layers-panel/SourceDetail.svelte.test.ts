@@ -26,12 +26,12 @@ const item: LayerListItem = {
 };
 const noop = (): void => {};
 
-function body(writeBlocked: boolean): string {
+function body(writeBlocked: boolean, userSource: UserChartSource = source): string {
   return render(SourceDetail, {
     props: {
       item,
       userCharts: {} as UserCharts,
-      userSource: source,
+      userSource,
       writeBlocked,
       onBack: noop,
     },
@@ -50,11 +50,34 @@ describe('SourceDetail', () => {
 
   it('blocks legacy cleanup without write access and enables it after reauthorization', () => {
     const blocked = body(true);
-    expect(blocked).toContain('needed to remove the legacy server copy');
+    expect(blocked).toContain('needed to remove the remaining server copy');
     expect(blocked).toMatch(/<button[^>]+disabled[^>]*>.*Delete chart/s);
 
     const writable = body(false);
-    expect(writable).not.toContain('needed to remove the legacy server copy');
+    expect(writable).not.toContain('needed to remove the remaining server copy');
     expect(writable).not.toMatch(/<button[^>]+disabled[^>]*>.*Delete chart/s);
+  });
+
+  it('offers replacement, metadata refresh, and an explicit sharing preference', () => {
+    const html = body(false);
+
+    expect(html).toContain('Source maintenance');
+    expect(html).toContain('Replace source URL');
+    expect(html).toContain('Refresh metadata');
+    expect(html).toContain('Share the full chart URL with the Signal K server');
+    expect(html).toContain('visibility, opacity, or');
+    expect(html).toContain('stacking position');
+  });
+
+  it('keeps repair available for a device-only chart when server writes are blocked', () => {
+    const deviceOnly = {
+      ...source,
+      serverCleanupRequired: undefined,
+    };
+    const html = body(true, deviceOnly);
+
+    expect(html).toContain('can be repaired locally');
+    expect(html).not.toMatch(/<button[^>]+disabled[^>]*>.*Replace source URL/s);
+    expect(html).toMatch(/<input[^>]+type="checkbox"[^>]+disabled/);
   });
 });

@@ -366,6 +366,63 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
   );
 });
 
+test('saved PMTiles charts expose repair, refresh, and sharing controls', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(/\/test-chart\.pmtiles(?:\?|$)/, async (route) => {
+    await route.fulfill({ status: 404, body: 'not found' });
+  });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      'binnacle:user-charts',
+      JSON.stringify([
+        {
+          id: 'repair-test-chart',
+          name: 'Repair test chart',
+          kind: 'vector',
+          origin: {
+            type: 'url',
+            url: `${window.location.origin}/test-chart.pmtiles?access_token=secret`,
+          },
+          shareWithServer: false,
+          bounds: [-84, 41, -82, 43],
+          minzoom: 2,
+          maxzoom: 12,
+          layers: ['water'],
+        },
+      ]),
+    );
+  });
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  const charts = page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Layers and charts', exact: true });
+  await expect(charts).toBeEnabled({ timeout: 15_000 });
+  await charts.click();
+
+  const panel = page.locator('#layers-panel');
+  await panel.getByRole('button', { name: 'Open Repair test chart chart details' }).click();
+  await expect(panel.getByRole('heading', { name: 'Source maintenance' })).toBeVisible();
+  await expect(panel.getByText('access_token=REDACTED')).toBeVisible();
+  await expect(panel.getByText('access_token=secret')).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Replace source URL' })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Refresh metadata' })).toBeEnabled();
+  await expect(panel.getByText('Share the full chart URL with the Signal K server')).toBeVisible();
+
+  await panel.getByRole('button', { name: 'Refresh metadata' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Could not read chart metadata.');
+  await expect(panel.getByRole('button', { name: 'Replace source URL' })).toBeEnabled();
+
+  await panel.getByRole('button', { name: 'Replace source URL' }).click();
+  await expect(panel.getByRole('textbox', { name: 'Replacement URL' })).toBeFocused();
+  await expect(panel.getByText('current URL remains active')).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel.getByRole('button', { name: 'Refresh metadata' })).toBeVisible();
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
 test('route editing confirms before discarding plotted changes', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');

@@ -34,5 +34,6 @@ export interface MapCommands {
 // from the user-charts entity, resolving each chart's tile url before calling register.
 export interface UserChartRegistrar {
   register: (chart: SignalKChart) => Promise<void>;
+  replace: (chart: SignalKChart) => Promise<void>;
   unregister: (identifier: string) => void;
 }

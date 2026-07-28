@@ -475,8 +475,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - The Layers and charts panel opens on chart sources first. The Charts view lists server and user chart
   sources, opens chart detail from the row gear, shows bounds when known, and keeps "Add a chart" for
   user PMTiles URLs. Every query-bearing URL defaults to device-only, displays redact all query
-  values, and sharing the complete URL with Signal K requires an explicit reviewed choice. The
-  Overlays view is for overlay visibility, opacity, and stacking controls.
+  values, and sharing the complete URL with Signal K requires an explicit reviewed choice. User chart
+  detail stages replacement metadata before save, refreshes metadata through the same review, and
+  changes device or server sharing without changing the chart id or its layer state. The Overlays
+  view is for overlay visibility, opacity, and stacking controls.
 
 ## 9. Interaction and accessibility
 
