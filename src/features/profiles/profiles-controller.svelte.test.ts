@@ -29,6 +29,7 @@ function settings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
     units: 'metric',
     pinnedActionIds: ['center'],
     instrumentTiles: ['depth'],
+    trendInstrumentIds: ['depth', 'wind-apparent'],
     anchorRadiusMeters: 50,
     ...overrides,
   };

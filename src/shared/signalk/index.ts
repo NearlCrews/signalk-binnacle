@@ -13,10 +13,12 @@ export {
   columnIndex,
   fetchHistoryProviderPathCatalogs,
   fetchHistoryProviders,
+  fetchHistoryValues,
   fetchHistoryValuesAcrossProviders,
   fetchPopulatedHistoryPathsForProvider,
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
+  MAX_HISTORY_QUERY_PATHS,
 } from './history-client';
 export type { MetaZone, ZoneState } from './meta';
 export { zoneStateFor } from './meta';

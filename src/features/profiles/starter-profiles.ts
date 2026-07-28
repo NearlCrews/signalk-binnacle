@@ -1,3 +1,4 @@
+import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import type { Profile, ProfileSettings, ProfileStore } from '$entities/profile';
 
 // Seed three starter profiles on a fresh device, so the feature is not empty and teaches the
@@ -21,18 +22,21 @@ export function seedStarterProfiles(store: ProfileStore, base: ProfileSettings):
       theme: 'day',
       pinnedActionIds: ['center', 'follow', 'layers', 'poi-search'],
       instrumentTiles: ['sog', 'heading', 'depth', 'wind-apparent'],
+      trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),
     starter('binnacle-seed-night-passage', 'Night passage', {
       ...base,
       theme: 'night-red',
       pinnedActionIds: ['center', 'follow', 'radar', 'instruments'],
       instrumentTiles: ['heading', 'depth', 'course', 'course-xte'],
+      trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),
     starter('binnacle-seed-at-anchor', 'At anchor', {
       ...base,
       theme: 'dusk',
       pinnedActionIds: ['anchor', 'layers', 'tides', 'instruments'],
       instrumentTiles: ['depth', 'wind-apparent', 'pressure', 'position'],
+      trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),
   ]);
 }

@@ -1,110 +1,174 @@
 <script lang="ts">
-import {
-  formatClockTime,
-  formatFixed,
-  lengthUnit,
-  metersPerSecondToKnots,
-  metersToFeet,
-  pressureUnit,
-  pressureValue,
-  type UnitsMode,
-} from '$shared/lib';
+import { formatClockTime, formatFixed, type UnitsMode } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import TrendChart from './TrendChart.svelte';
-import { TREND_METRICS, type TrendKey, type TrendSeries } from './trend-metrics';
+import { type AttributedTrendSeries, hasTrendSamples, trendDisplayFor } from './trend-metrics';
+import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
 interface Props {
-  // The 24 h history series when a provider answered, otherwise undefined per the panel's note.
-  history: ReadonlyMap<TrendKey, TrendSeries> | undefined;
-  sessionSeries: (key: TrendKey) => TrendSeries;
+  controller: TrendsController;
   mode: UnitsMode;
   theme: Theme;
 }
 
-const { history, sessionSeries, mode, theme }: Props = $props();
-
-interface Display {
-  convert: (si: number) => number | undefined;
-  unit: string;
-  digits: number;
-}
-
-const displays = $derived<Record<TrendKey, Display>>({
-  depth: {
-    convert: (si) => (mode === 'imperial' ? metersToFeet(si) : si),
-    unit: lengthUnit(mode),
-    digits: 1,
-  },
-  wind: { convert: metersPerSecondToKnots, unit: 'kn', digits: 1 },
-  pressure: {
-    convert: (si) => pressureValue(si, mode),
-    unit: pressureUnit(mode),
-    digits: mode === 'imperial' ? 2 : 0,
-  },
-  sog: { convert: metersPerSecondToKnots, unit: 'kn', digits: 1 },
-});
+const { controller, mode, theme }: Props = $props();
 
 interface Section {
-  key: TrendKey;
-  label: string;
+  item: TrendItem;
+  source: 'history' | 'session' | 'none';
+  sourceSeries: AttributedTrendSeries;
   unit: string;
   digits: number;
   times: readonly number[];
   values: ReadonlyArray<number | null>;
-  latest: string;
-}
-
-function converted(series: TrendSeries, display: Display): ReadonlyArray<number | null> {
-  return series.values.map((value) => (value == null ? null : (display.convert(value) ?? null)));
 }
 
 const sections = $derived(
-  TREND_METRICS.map((metric): Section => {
-    const display = displays[metric.key];
-    const series = history?.get(metric.key) ?? sessionSeries(metric.key);
-    const values = converted(series, display);
+  controller.charts.map((item): Section => {
+    const descriptor = item.descriptor;
+    if (!descriptor) {
+      return {
+        item,
+        source: 'none',
+        sourceSeries: { times: [], values: [] },
+        unit: '',
+        digits: 0,
+        times: [],
+        values: [],
+      };
+    }
+    const history = controller.history?.series.get(item.id);
+    const session = controller.sessionSeries(item.id);
+    const historyAvailable = hasTrendSamples(history);
+    const sourceSeries: AttributedTrendSeries = historyAvailable && history ? history : session;
+    const source = historyAvailable ? 'history' : hasTrendSamples(session) ? 'session' : 'none';
+    const display = trendDisplayFor(descriptor, mode);
     return {
-      key: metric.key,
-      label: metric.label,
+      item,
+      source,
+      sourceSeries,
       unit: display.unit,
       digits: display.digits,
-      times: series.times,
-      values,
-      latest: formatFixed(values.findLast((value) => value != null) ?? null, display.digits),
+      times: sourceSeries.times,
+      values: sourceSeries.values.map((value) =>
+        value == null ? null : (display.convert(value) ?? null),
+      ),
     };
   }),
 );
 
-const hasData = (section: Section): boolean => section.values.some((value) => value != null);
+let inspected = $state<Record<string, number>>({});
 
-// The point under the cursor per metric (value already in display units, time in epoch seconds), so
-// the header reads back any past sample on hover and falls back to the latest when the cursor leaves.
-let hovered = $state<Partial<Record<TrendKey, { timeSec: number; value: number | null }>>>({});
+function inspectIndex(section: Section): number {
+  const requested = inspected[section.item.id];
+  if (requested !== undefined && requested >= 0 && requested < section.values.length) {
+    return requested;
+  }
+  return Math.max(
+    0,
+    section.values.findLastIndex((value) => value != null),
+  );
+}
+
+function valueAt(section: Section, index: number): string {
+  return formatFixed(section.values[index] ?? null, section.digits);
+}
+
+function unitSuffix(section: Section): string {
+  return section.unit ? ` ${section.unit}` : '';
+}
+
+function summary(section: Section): string {
+  let first = -1;
+  let last = -1;
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < section.values.length; index += 1) {
+    const value = section.values[index];
+    if (value == null) continue;
+    if (first < 0) first = index;
+    last = index;
+    minimum = Math.min(minimum, value);
+    maximum = Math.max(maximum, value);
+  }
+  if (first < 0 || last < 0) return 'No samples.';
+  return [
+    `Latest ${valueAt(section, last)}${unitSuffix(section)}`,
+    `minimum ${formatFixed(minimum, section.digits)}${unitSuffix(section)}`,
+    `maximum ${formatFixed(maximum, section.digits)}${unitSuffix(section)}`,
+    `start ${valueAt(section, first)}${unitSuffix(section)}`,
+    `end ${valueAt(section, last)}${unitSuffix(section)}`,
+  ].join(', ');
+}
+
+function sourceLabel(section: Section): string {
+  const series = section.sourceSeries;
+  const path = series.path ? ` · ${series.path}` : '';
+  const reference = series.referenceLabel ? ` · ${series.referenceLabel}` : '';
+  if (section.source === 'history') {
+    return `Last 24 hours${series.provider ? ` · ${series.provider}` : ''}${path}${reference}`;
+  }
+  if (section.source === 'session') {
+    return controller.focusedTransient
+      ? `Focused session started when this trend opened${path}${reference}`
+      : `This session${path}${reference}`;
+  }
+  if (controller.focusedTransient) {
+    return 'Focused session started when this trend opened. No samples yet.';
+  }
+  if (section.item.unavailable) return 'Saved selection unavailable on this server.';
+  if (controller.historyState === 'empty') return 'No history or session samples.';
+  return 'No samples for this instrument yet.';
+}
+
+function valueText(section: Section, index: number): string {
+  const time = section.times[index];
+  const timeLabel = Number.isFinite(time) ? formatClockTime(time * 1000) : 'Unknown time';
+  return `${timeLabel}, ${valueAt(section, index)}${unitSuffix(section)}`;
+}
 </script>
 
 <div class="trend-charts">
-  {#each sections as section (section.key)}
-    {@const point = hovered[section.key]}
-    <section class="panel-section" aria-label="{section.label} trend">
+  {#each sections as section (section.item.id)}
+    {@const index = inspectIndex(section)}
+    {@const hasData = section.values.some((value) => value != null)}
+    <section class="panel-section trend-section" aria-label="{section.item.label} trend">
       <div class="head">
-        <h3 class="caps-label">{section.label}</h3>
-        {#if point}
+        <h3 class="caps-label">{section.item.label}</h3>
+        {#if hasData}
           <span class="latest">
-            <b class="num">{formatFixed(point.value, section.digits)}</b>
-            {section.unit}
-            <span class="at">at {formatClockTime(point.timeSec * 1000)}</span>
+            <b class="num">{valueAt(section, index)}</b>{unitSuffix(section)}
+            <span class="at">at {formatClockTime(section.times[index] * 1000)}</span>
           </span>
-        {:else}
-          <span class="latest"><b class="num">{section.latest}</b> {section.unit}</span>
         {/if}
       </div>
-      {#if hasData(section)}
+      <p class="source-note">{sourceLabel(section)}</p>
+      {#if hasData}
         <TrendChart
           times={section.times}
           values={section.values}
           {theme}
-          onHover={(p) => (hovered[section.key] = p)}
+          onHoverIndex={(hoveredIndex) => {
+            if (hoveredIndex !== undefined) inspected[section.item.id] = hoveredIndex;
+          }}
         />
+        <div class="timeline">
+          <input
+            class="range"
+            type="range"
+            min="0"
+            max={Math.max(0, section.times.length - 1)}
+            step="1"
+            value={index}
+            aria-label={`Inspect ${section.item.label} timeline`}
+            aria-valuetext={valueText(section, index)}
+            oninput={(event) => {
+              inspected[section.item.id] = event.currentTarget.valueAsNumber;
+            }}
+          >
+          <output>{valueText(section, index)}</output>
+        </div>
+        <p class="summary">{summary(section)}</p>
       {:else}
         <p class="muted-note">No samples for this instrument yet.</p>
       {/if}
@@ -115,30 +179,62 @@ let hovered = $state<Partial<Record<TrendKey, { timeSec: number; value: number |
 <style>
 .trend-charts {
   display: flex;
+  min-inline-size: 0;
   flex-direction: column;
   gap: var(--space-4);
 }
+.trend-section {
+  min-inline-size: 0;
+}
 .head {
   display: flex;
+  min-inline-size: 0;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
 }
-/* The metric title is an h3 for heading navigation; drop the UA heading margin so it sits on the
-   baseline row with the live value rather than pushing the row taller. */
 .head h3 {
+  min-inline-size: 0;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .latest {
+  min-inline-size: 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 .latest b {
   color: var(--text);
   font-size: var(--text-base);
 }
-/* The hover timestamp trails the value at the fine-print scale so the value stays the loud element. */
 .at {
+  margin-inline-start: var(--space-1);
   font-size: var(--text-xs);
+}
+.source-note,
+.summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.timeline {
+  display: grid;
+  min-inline-size: 0;
+  gap: var(--space-1);
+}
+.timeline input {
+  min-block-size: 44px;
+  inline-size: 100%;
+  margin: 0;
+  touch-action: pan-y;
+}
+.timeline output {
+  min-inline-size: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 </style>

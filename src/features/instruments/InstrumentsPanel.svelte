@@ -12,12 +12,26 @@ import WindTile from './WindTile.svelte';
 interface Props {
   controller: InstrumentsController;
   deps: TileDeps;
+  initialDetailId?: string;
+  restoreTrendFocusId?: string;
+  onViewTrend?: (id: string) => void;
+  onTrendFocusRestored?: () => void;
 }
 
-const { controller, deps }: Props = $props();
+const {
+  controller,
+  deps,
+  initialDetailId,
+  restoreTrendFocusId,
+  onViewTrend,
+  onTrendFocusRestored,
+}: Props = $props();
 
 let customizing = $state(false);
 let detailId = $state<string | undefined>();
+$effect(() => {
+  if (initialDetailId && detailId === undefined) detailId = initialDetailId;
+});
 
 const FULLSCREEN_BREAKPOINT_PX = 900;
 // Paired with the @media (max-width: 900px) block below: mirrors the CSS breakpoint so the
@@ -63,10 +77,12 @@ $effect(() => {
 });
 </script>
 
+<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
 <aside
   class="instruments"
   role={fullscreenQueryMatches ? 'dialog' : undefined}
   aria-label="Instruments"
+  aria-modal={fullscreenQueryMatches ? 'true' : undefined}
   tabindex="-1"
   use:dialog={() => controller.setOpen(false)}
   use:trapFocus={fullscreenQueryMatches}
@@ -102,6 +118,11 @@ $effect(() => {
       historicalOnly={controller.isHistoricalOnly(detailDef.id) &&
         detailDef.paths.every((path) => deps.store.cell(path).epoch === 0)}
       onBack={() => (detailId = undefined)}
+      onViewTrend={controller.trendDescriptor(detailDef.id) && onViewTrend
+        ? () => onViewTrend(detailDef.id)
+        : undefined}
+      restoreTrendFocus={restoreTrendFocusId === detailDef.id}
+      {onTrendFocusRestored}
     />
   {:else if customizing}
     <div class="customize-instruction">

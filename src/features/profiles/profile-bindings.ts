@@ -1,3 +1,4 @@
+import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import type { ProfileSettings } from '$entities/profile';
 import type { UnitsMode } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
@@ -21,6 +22,8 @@ export interface ProfileBindingDeps {
   pinnedActions: PersistedValue<string[]>;
   // The instrument tile selection, in display order.
   instrumentTiles: PersistedValue<string[]>;
+  // The Data trends selection, in display order.
+  trendInstruments: PersistedValue<string[]>;
   // The next anchor drop's preferred radius. This seam deliberately cannot expose or alter the
   // active anchor watch.
   anchorRadius: {
@@ -99,6 +102,18 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
         if (Array.isArray(s.instrumentTiles)) deps.instrumentTiles.set(s.instrumentTiles);
       },
       track: () => void deps.instrumentTiles.value,
+    },
+    trendInstrumentIds: {
+      read: () => ({ trendInstrumentIds: deps.trendInstruments.snapshot() }),
+      // A legacy profile must resolve to its own default. Leaving the current PersistedValue alone
+      // would make it inherit whichever profile happened to be active immediately before it.
+      write: (s) =>
+        deps.trendInstruments.set(
+          Array.isArray(s.trendInstrumentIds)
+            ? s.trendInstrumentIds
+            : [...DEFAULT_TREND_INSTRUMENT_IDS],
+        ),
+      track: () => void deps.trendInstruments.value,
     },
     anchorRadiusMeters: {
       read: () => ({ anchorRadiusMeters: deps.anchorRadius.get() }),

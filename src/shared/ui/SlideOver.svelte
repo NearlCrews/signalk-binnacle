@@ -3,6 +3,7 @@ import type { Snippet } from 'svelte';
 import { fly } from 'svelte/transition';
 import { prefersReducedMotion } from '$shared/lib';
 import { dialog } from './dialog';
+import { trapFocus } from './focus';
 import PanelHeader from './PanelHeader.svelte';
 import { PANEL_TRANSITION_MS } from './transitions';
 
@@ -19,6 +20,8 @@ interface Props {
   dock?: 'left' | 'right';
   // Lay the body out as a gapped column, for panels whose content is a stack of controls.
   bodyFlex?: boolean;
+  // Trap Tab navigation when this panel is acting as a modal surface at its current breakpoint.
+  focusTrap?: boolean;
   closeLabel?: string;
   onClose: () => void;
   // When supplied, a leading back button returns to the menu instead of dismissing to the chart, so
@@ -44,6 +47,7 @@ const {
   ariaLabel,
   dock = 'left',
   bodyFlex = false,
+  focusTrap = false,
   closeLabel = 'Close',
   onClose,
   onBack,
@@ -55,11 +59,15 @@ const {
 }: Props = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
 <aside
   class="slide-over slide-over--dock-{dock}"
+  role={focusTrap ? 'dialog' : undefined}
   aria-label={ariaLabel ?? title}
+  aria-modal={focusTrap ? 'true' : undefined}
   tabindex="-1"
   use:dialog={onClose}
+  use:trapFocus={focusTrap}
   transition:fly={{
     x: dock === 'right' ? 24 : -24,
     duration: reduceMotion ? 0 : PANEL_TRANSITION_MS,

@@ -253,6 +253,22 @@ announcements remain unique without deduplicating legitimate readings. Never cop
 into a current instrument tile. Do not add further
 split panels without a matching product case; overlays stay the default.
 
+Data trends is a normal SlideOver, not another split. Its overview selection is profile-owned and
+independent from the instrument dock. It renders zero to eight explicit trend descriptors in saved
+order and uses `CustomizeToggle` plus `createReorder` for touch and keyboard editing. Preserve
+unavailable saved ids until the navigator removes them. Opening a focused chart from an eligible
+instrument detail adds one transient recorder and subscription slot without changing that overview.
+Back restores the same detail and focus, while Close clears the transient context and returns to the
+chart.
+
+History loading for Data trends is chart-specific. Batch deduplicated `path:aggregate` requests
+within the Signal K History API limit, query each registered provider once per batch, and resolve by
+candidate priority followed by provider order. Never merge providers or fallback paths inside one
+series. Attribute the chosen provider, path, and reference. Keep accepted data during retry, and
+distinguish provider checking, partial failure, total failure, true empty history, session fallback,
+and no samples. A stock server gets only the bounded, in-memory session window, and the copy must say
+so.
+
 Edit-mode entry (the customize rule): render the `CustomizeToggle` primitive from `$shared/ui`,
 one per surface, trailing in the header row, and open the mode with one `.muted-note` line
 stating what a tap now does. The visual and aria recipe lives in the design system's Edit modes

@@ -13,6 +13,14 @@ async function openInstruments(page: Page): Promise<void> {
     .click();
 }
 
+async function openTrends(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Data trends', exact: true })
+    .click();
+}
+
 async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<void> {
   await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -454,6 +462,90 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   await expect(dock).not.toBeVisible();
 });
 
+test('data trends discovers instruments independently and enforces the profile selection limit', async ({
+  page,
+}) => {
+  let providerRequests = 0;
+  let batteryRequests = 0;
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, async (route) => {
+    providerRequests += 1;
+    if (providerRequests === 1) {
+      await route.fulfill({ status: 500, body: 'provider probe failed' });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self\/electrical\/batteries$/, async (route) => {
+    batteryRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        house: {
+          voltage: { value: 12.7 },
+          current: { value: -4.2 },
+          capacity: {
+            stateOfCharge: { value: 0.8 },
+            timeRemaining: { value: 7200 },
+          },
+        },
+      }),
+    });
+  });
+  await page.route(
+    /\/signalk\/v1\/api\/vessels\/self\/(?:propulsion|tanks|electrical\/solar|environment\/inside)$/,
+    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+
+  await page.goto('/');
+  await openTrends(page);
+  const panel = page.locator('.slide-over[aria-label="Data trends"]');
+  await expect(panel).toBeVisible();
+  await expect.poll(() => providerRequests, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(panel.getByRole('button', { name: 'Retry provider check' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Retry provider check' }).click();
+  await expect(panel.getByText('This session only.', { exact: false })).toBeVisible();
+  await panel.getByRole('button', { name: 'Customize trends' }).click();
+
+  await expect.poll(() => batteryRequests).toBeGreaterThan(0);
+  await expect(panel.getByRole('checkbox', { name: 'Voltage · House battery' })).toBeVisible();
+  await expect(panel.getByText('4 of 8 selected')).toBeVisible();
+  for (const label of ['Water speed', 'True wind', 'Water temp', 'Air temp']) {
+    await panel.getByRole('checkbox', { name: label, exact: true }).check();
+  }
+
+  await expect(panel.getByText('8 of 8 selected')).toBeVisible();
+  const ninth = panel.getByRole('checkbox', { name: 'Satellites', exact: true });
+  await expect(ninth).toBeVisible();
+  await expect(ninth).toBeDisabled();
+  await expect(panel.getByText('Remove a trend before adding another.').first()).toBeVisible();
+
+  const selectedTitles = () =>
+    panel.locator('.trend-list').first().locator('[data-trend-row] .title').allTextContents();
+  await expect.poll(async () => (await selectedTitles())[0]?.trim()).toBe('Depth');
+  await panel.getByRole('button', { name: /Move Depth, position 1 of 8/ }).press('ArrowDown');
+  await expect.poll(async () => (await selectedTitles())[0]?.trim()).not.toBe('Depth');
+
+  const grip = panel.locator('.trend-list').first().locator('.handle').first();
+  const box = await grip.boundingBox();
+  if (!box) throw new Error('Trend move handle did not lay out.');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const cdp = await page.context().newCDPSession(page);
+  const point = (offset: number) => [{ x, y: y + offset, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(0) });
+  for (const offset of [20, 60, 110]) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(offset) });
+    await page.waitForTimeout(30);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(async () => (await selectedTitles())[0]?.trim()).not.toBe('Wind');
+});
+
 test('history-only engine readings stay identifiable through selection and detail', async ({
   page,
 }) => {
@@ -504,6 +596,15 @@ test('history-only engine readings stay identifiable through selection and detai
     valueRequests += 1;
     const params = new URL(route.request().url()).searchParams;
     const requestedPaths = (params.get('paths') ?? '').split(',').filter(Boolean);
+    const columns = requestedPaths.map((requestPath) => {
+      const aggregateAt = requestPath.lastIndexOf(':');
+      return aggregateAt > 0
+        ? {
+            path: requestPath.slice(0, aggregateAt),
+            method: requestPath.slice(aggregateAt + 1),
+          }
+        : { path: requestPath, method: 'average' };
+    });
     valueQuery = {
       paths: requestedPaths,
       duration: params.get('duration'),
@@ -518,11 +619,11 @@ test('history-only engine readings stay identifiable through selection and detai
           from: '2026-07-01T00:00:00Z',
           to: '2026-07-01T00:01:00Z',
         },
-        values: requestedPaths.map((path) => ({ path, method: 'average' })),
+        values: columns,
         data: [
           [
             '2026-07-01T00:00:00Z',
-            ...requestedPaths.map((path) => recordedValues.get(path) ?? null),
+            ...columns.map((column) => recordedValues.get(column.path) ?? null),
           ],
         ],
       }),
@@ -560,6 +661,163 @@ test('history-only engine readings stay identifiable through selection and detai
   await dock.getByRole('button', { name: 'Done' }).click();
   await dock.getByRole('button', { name: /RPM · Port engine.*Open details/ }).click();
   await expect(dock.getByText('Previously recorded, but not reporting live now.')).toBeVisible();
+  await dock.getByRole('button', { name: 'View recent trend' }).click();
+  const trends = page.locator('.slide-over[aria-label="Data trends"]');
+  await expect(trends.getByText('RPM · Port engine', { exact: true })).toBeVisible();
+  await expect(trends.getByText(/Last 24 hours · signalk-questdb/)).toBeVisible();
+});
+
+test('focused trends return to instrument detail without changing the saved overview', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+
+  await page.goto('/');
+  await openInstruments(page);
+  let dock = page.getByRole('complementary', { name: 'Instruments' });
+  await dock.getByRole('button', { name: 'Customize instruments' }).click();
+  await dock.getByRole('checkbox', { name: 'Water speed', exact: true }).check();
+  await dock.getByRole('button', { name: 'Done' }).click();
+  await dock.getByRole('button', { name: /Water speed.*Open details/ }).click();
+  const trendAction = dock.getByRole('button', { name: 'View recent trend' });
+  await trendAction.click();
+
+  let trends = page.locator('.slide-over[aria-label="Data trends"]');
+  await expect(trends.getByText('Water speed', { exact: true })).toBeVisible();
+  await expect(
+    trends.getByText('Focused session started when this trend opened. No samples yet.'),
+  ).toBeVisible();
+  await trends.getByRole('button', { name: 'Back to instrument details' }).click();
+
+  dock = page.getByRole('complementary', { name: 'Instruments' });
+  const restoredAction = dock.getByRole('button', { name: 'View recent trend' });
+  await expect(restoredAction).toBeVisible();
+  await expect(restoredAction).toBeFocused();
+  await restoredAction.click();
+  trends = page.locator('.slide-over[aria-label="Data trends"]');
+  await trends.getByRole('button', { name: 'Close trends, return to chart' }).click();
+  await expect(trends).not.toBeVisible();
+  await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Instruments' })).not.toBeVisible();
+
+  await openTrends(page);
+  const overview = page.locator('.slide-over[aria-label="Data trends"]');
+  await overview.getByRole('button', { name: 'Customize trends' }).click();
+  await expect(overview.getByText('4 of 8 selected')).toBeVisible();
+  await expect(
+    overview.getByRole('checkbox', { name: 'Water speed', exact: true }),
+  ).not.toBeChecked();
+});
+
+test('trend charts stay scrub-accessible and night-readable on a 320 px phone', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => localStorage.clear());
+  let historyValueRequests = 0;
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ 'signalk-questdb': { isDefault: true } }),
+    }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/paths/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route(/\/signalk\/v2\/api\/history\/values/, async (route) => {
+    historyValueRequests += 1;
+    const params = new URL(route.request().url()).searchParams;
+    const columns = (params.get('paths') ?? '')
+      .split(',')
+      .filter(Boolean)
+      .map((requestPath) => {
+        const aggregateAt = requestPath.lastIndexOf(':');
+        return {
+          path: requestPath.slice(0, aggregateAt),
+          method: requestPath.slice(aggregateAt + 1),
+        };
+      });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        range: {
+          from: '2026-07-28T00:00:00Z',
+          to: '2026-07-28T00:05:00Z',
+        },
+        values: columns,
+        data: [
+          ['2026-07-28T00:00:00Z', ...columns.map(() => 2)],
+          ['2026-07-28T00:05:00Z', ...columns.map(() => 4)],
+        ],
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await openTrends(page);
+  const panel = page.locator('.slide-over[aria-label="Data trends"]');
+  const scrubber = panel.getByRole('slider', { name: 'Inspect Depth timeline' });
+  await expect.poll(() => historyValueRequests, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(scrubber).toBeVisible({ timeout: 10_000 });
+  await expect(panel).toHaveAttribute('role', 'dialog');
+  await expect(panel).toHaveAttribute('aria-modal', 'true');
+  const scrubberBox = await scrubber.boundingBox();
+  expect(scrubberBox?.height).toBeGreaterThanOrEqual(44);
+  await scrubber.press('Home');
+  await expect(scrubber).toHaveValue('0');
+  await scrubber.press('End');
+  await expect(scrubber).toHaveValue('1');
+  await expect(scrubber).toHaveAttribute('aria-valuetext', /4/);
+  await expect(panel.getByText(/Latest .*minimum .*maximum .*start .*end/).first()).toBeVisible();
+  await expect
+    .poll(async () => {
+      const [bodyFits, panelFits] = await Promise.all([
+        page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1),
+        panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+      ]);
+      return bodyFits && panelFits;
+    })
+    .toBe(true);
+
+  const themeToggle = page.getByRole('button', { name: /Switch theme/ });
+  await themeToggle.click();
+  await themeToggle.click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
+  await expect
+    .poll(() =>
+      panel.locator('.trend-chart canvas').evaluateAll((canvases) =>
+        canvases.every((canvas) => {
+          const bitmap = canvas as HTMLCanvasElement;
+          const context = bitmap.getContext('2d');
+          if (!context) return false;
+          const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+          for (let index = 0; index < pixels.length; index += 4) {
+            const red = pixels[index];
+            const green = pixels[index + 1];
+            const blue = pixels[index + 2];
+            const alpha = pixels[index + 3];
+            if (alpha > 0 && (green > red + 4 || blue > red + 4)) return false;
+          }
+          return true;
+        }),
+      ),
+    )
+    .toBe(true);
+
+  await panel.focus();
+  await page.keyboard.press('Shift+Tab');
+  const lastScrubber = panel.getByRole('slider', { name: 'Inspect Speed timeline' });
+  await expect(lastScrubber).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('button', { name: 'Back to menu' })).toBeFocused();
 });
 
 test('a touch drag on a customize grip reorders the shown instruments', async ({ page }) => {

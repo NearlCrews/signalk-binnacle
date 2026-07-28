@@ -26,6 +26,7 @@ import { AisTargets } from '$entities/ais';
 import { AnchorWatch } from '$entities/anchor';
 import { CollisionAssessment } from '$entities/collision';
 import { CourseGuidance } from '$entities/course';
+import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
 import { NotificationsStore } from '$entities/notifications';
@@ -100,7 +101,7 @@ import {
 } from '$features/tides';
 import { TimeTravelStore } from '$features/time-travel';
 import { createTrackController } from '$features/tracks';
-import { TrendSessionRecorder } from '$features/trends';
+import { createTrendsController } from '$features/trends';
 import { createWaypointsController, WaypointDialog } from '$features/waypoints';
 import {
   createPointConditionsLoader,
@@ -228,7 +229,10 @@ async function probeHistoryProviders(
   historyProviderState =
     providers === undefined ? 'failed' : providers.ids.length > 0 ? 'available' : 'absent';
   const providerIdsChanged = (providers?.ids.join('\u0000') ?? '') !== previousIds;
-  if ((refreshOpenInstruments || providerIdsChanged) && untrack(() => instruments.open)) {
+  if (
+    (refreshOpenInstruments || providerIdsChanged) &&
+    untrack(() => instruments.open || trends.open)
+  ) {
     // The refresh reads the provider state we just assigned. Keep those controller reads out of
     // any effect that initiated this async probe, or the probe becomes its own dependency.
     untrack(() => instruments.refreshCatalog());
@@ -389,11 +393,21 @@ let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 let menuOpen = $state(false);
 let menuEditing = $state(false);
 const closePanel = (): void => {
+  if (activePanel === 'trends') {
+    trends.setOpen(false);
+    trends.setFocus(undefined);
+    trendReturnInstrumentId = undefined;
+  }
   activePanel = null;
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
 // can move menu to panel to back to another panel without reopening the menu by hand.
 const backToMenu = (): void => {
+  if (activePanel === 'trends') {
+    trends.setOpen(false);
+    trends.setFocus(undefined);
+    trendReturnInstrumentId = undefined;
+  }
   activePanel = null;
   menuOpen = true;
 };
@@ -408,7 +422,13 @@ const backToOfflineCharts = (): void => openPanel('regions');
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
 let narrow = $state(false);
 const openPanel = (panel: PanelId): void => {
+  if (activePanel === 'trends' && panel !== 'trends') {
+    trends.setOpen(false);
+    trends.setFocus(undefined);
+    trendReturnInstrumentId = undefined;
+  }
   activePanel = panel;
+  if (panel === 'trends') trends.setOpen(true);
   if (narrow) selectedNote = undefined;
 };
 // Open the panel if it is closed, close it if it is already open, so a bar pill and a menu tile both
@@ -507,6 +527,12 @@ const instrumentTiles = new PersistedValue<string[]>(
   undefined,
   stringArrayPersistedCodec({ maxItems: 100, maxLength: 256 }),
 );
+const trendInstruments = new PersistedValue<string[]>(
+  binnacleStorageKey('trendInstruments'),
+  [...DEFAULT_TREND_INSTRUMENT_IDS],
+  undefined,
+  stringArrayPersistedCodec({ maxItems: 8, maxLength: 256 }),
+);
 const instrumentsOpen = new PersistedValue<boolean>(
   binnacleStorageKey('instrumentsOpen'),
   false,
@@ -524,6 +550,49 @@ const instruments = createInstrumentsController({
   tilesStore: instrumentTiles,
   openStore: instrumentsOpen,
 });
+const trends = createTrendsController({
+  store,
+  origin,
+  getToken: () => authToken,
+  getHistoryProviders: () => historyProviders,
+  getHistoryProviderState: () => historyProviderState,
+  subscribe: (entries) => void client.raw.subscribe(entries),
+  unsubscribe: (paths) => void client.raw.unsubscribe(paths),
+  selectionStore: trendInstruments,
+  getCatalog: () => instruments.trendCatalog,
+  getDescriptor: (id) => instruments.trendDescriptor(id),
+  prepareDescriptors: (ids) => instruments.prepareTrendDescriptors(ids),
+  refreshCatalog: () => instruments.refreshCatalog(),
+  getDiscovering: () => instruments.discovering,
+  isHistoricalOnly: (id) => instruments.isHistoricalOnly(id),
+});
+let trendReturnInstrumentId = $state<string | undefined>();
+
+function openFocusedTrend(id: string): void {
+  if (!trends.setFocus(id)) return;
+  trendReturnInstrumentId = id;
+  instruments.setOpen(false);
+  openPanel('trends');
+}
+
+function closeTrendsPanel(): void {
+  trends.setFocus(undefined);
+  trendReturnInstrumentId = undefined;
+  closePanel();
+}
+
+function backFromTrendsPanel(): void {
+  const returnId = trends.focusedId ?? trendReturnInstrumentId;
+  if (!returnId) {
+    backToMenu();
+    return;
+  }
+  trends.setOpen(false);
+  trends.setFocus(undefined);
+  activePanel = null;
+  trendReturnInstrumentId = returnId;
+  instruments.setOpen(true);
+}
 const onTogglePin = (id: string): void => {
   pinnedActions.set(togglePinned(pinnedActions.value, id));
 };
@@ -577,10 +646,6 @@ function refreshCompanionProbe(): void {
 // base resolves after detectCompanion. Management access uses the browser's Signal K administrator
 // session rather than Binnacle's device token.
 const companionStatus = new CompanionStatus(() => companionBase);
-
-// Samples the live instruments from app start so the Trends panel has an honest in-session
-// series on servers with no history provider. Stopped on destroy.
-const trendRecorder = new TrendSessionRecorder();
 
 // Time-travel review: scrubs the last 24 h of recorded history, reading the same token and provider
 // list as the other history clients, and degrading to an honest empty state when no provider runs.
@@ -715,6 +780,7 @@ const profileBindings = createProfileBindings({
   unitsLocal: units.localSetting,
   pinnedActions,
   instrumentTiles,
+  trendInstruments,
   anchorRadius: {
     get: () => anchor.preferredRadiusMeters,
     set: (radiusMeters) => anchor.rememberRadius(radiusMeters),
@@ -1190,7 +1256,11 @@ const menuItems = $derived<MenuItem[]>([
     icon: ChartLine,
     group: 'Instruments',
     pressed: activePanel === 'trends',
-    onSelect: () => togglePanel('trends'),
+    onSelect: () => {
+      trends.setFocus(undefined);
+      trendReturnInstrumentId = undefined;
+      togglePanel('trends');
+    },
   },
   {
     id: 'instruments',
@@ -1650,6 +1720,7 @@ const streamController = createStreamController({
   onWorkerRestart: () => {
     workerGenerationBase = store.generation + 1;
     instruments.resubscribe();
+    trends.resubscribe();
   },
 });
 const streamError = $derived(streamController.error);
@@ -1712,15 +1783,6 @@ const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 onMount(() => {
   refreshCompanionProbe();
   companionStatus.start();
-  trendRecorder.start(() => {
-    const depth = vessel.trendDepth;
-    return {
-      depth: depth.stale ? undefined : depth.meters,
-      wind: vessel.windStale ? undefined : vessel.windSpeedApparentMps,
-      pressure: vessel.pressureStale ? undefined : vessel.outsidePressurePa,
-      sog: vessel.sogStale ? undefined : vessel.sogMps,
-    };
-  });
   window.addEventListener('pointerdown', primeAudio);
   window.addEventListener('keydown', primeAudio);
   // The auth controller owns the focus and cross-tab listeners that pick up an approval.
@@ -1813,7 +1875,7 @@ onDestroy(() => {
   companionStatus.stop();
   streamController.dispose();
   notificationsController.dispose();
-  trendRecorder.stop();
+  trends.dispose();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
   if (privacyReloadTimer) clearTimeout(privacyReloadTimer);
@@ -1848,7 +1910,7 @@ const plotterServices = {
   auth,
   net,
   theme,
-  trendRecorder,
+  trends,
   weatherLoader,
   pointConditionsLoader,
   planningSpeedKn,
@@ -1909,6 +1971,8 @@ const plotterActions = {
   openAlarmsPanel: () => openPanel('alarms'),
   closePanel,
   backToMenu,
+  closeTrendsPanel,
+  backFromTrendsPanel,
   openInstalledCharts,
   backToOfflineCharts,
   openLayersPanel: (mode: 'charts' | 'overlays') => {
@@ -2032,7 +2096,6 @@ const plotterActions = {
     {poiInView}
     {poiViewState}
     {historyProviders}
-    {historyProviderState}
     {serverFeatures}
     {notificationsApi}
     {weatherProvider}
@@ -2093,6 +2156,10 @@ const plotterActions = {
     <InstrumentsPanel
       controller={instruments}
       deps={{ vessel, store, units, clock, course: courseGuidance }}
+      initialDetailId={trendReturnInstrumentId}
+      restoreTrendFocusId={trendReturnInstrumentId}
+      onViewTrend={openFocusedTrend}
+      onTrendFocusRestored={() => (trendReturnInstrumentId = undefined)}
     />
   {/if}
 

@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import InstrumentsPanel from './InstrumentsPanel.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
@@ -32,6 +33,7 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     catalog: [...TILE_CATALOG],
     discovering: false,
     historyStatus: 'unavailable',
+    trendCatalog: [],
     toggleOpen: () => {},
     setOpen: () => {},
     toggleTile: () => {},
@@ -45,6 +47,8 @@ function makeController(overrides: Partial<InstrumentsController> = {}): Instrum
     ...overrides,
     isHistoricalOnly: overrides.isHistoricalOnly ?? (() => false),
     isLiveDiscovered: overrides.isLiveDiscovered ?? (() => false),
+    trendDescriptor: overrides.trendDescriptor ?? (() => undefined),
+    prepareTrendDescriptors: overrides.prepareTrendDescriptors ?? (() => {}),
   };
 }
 
@@ -82,6 +86,24 @@ describe('InstrumentsPanel', () => {
     const deps = makeDeps();
     const { body } = render(InstrumentsPanel, { props: { controller, deps } });
     expect(body).toContain('Customize instruments');
+  });
+
+  it('offers a full-width recent-trend action for an eligible detail', () => {
+    const depth = tileById('depth');
+    if (!depth) throw new Error('Missing depth tile');
+    const body = render(InstrumentDetail, {
+      props: {
+        def: depth,
+        label: 'Depth',
+        deps: makeDeps(),
+        reading: { state: 'live', value: '4.2', unit: 'm', siValue: 4.2 },
+        zone: 'normal',
+        onBack: () => {},
+        onViewTrend: () => {},
+      },
+    }).body;
+    expect(body).toContain('View recent trend');
+    expect(body).toContain('trend-action');
   });
 
   it('titles a shown tile with the resolved label while the catalog keeps its own', () => {

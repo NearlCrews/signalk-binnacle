@@ -1,3 +1,4 @@
+import type { InstrumentTrendDescriptor } from '$entities/instrument-trend';
 import { hasControlCharacters } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import {
@@ -36,6 +37,7 @@ import {
   type TileDef,
   tankDefsFor,
   tileById,
+  trendDescriptorFor,
 } from './tile-catalog';
 
 export interface InstrumentsDeps {
@@ -58,8 +60,11 @@ export interface InstrumentsController {
   readonly catalog: TileDef[];
   readonly discovering: boolean;
   readonly historyStatus: InstrumentHistoryStatus;
+  readonly trendCatalog: readonly InstrumentTrendDescriptor[];
   isHistoricalOnly(id: string): boolean;
   isLiveDiscovered(id: string): boolean;
+  trendDescriptor(id: string): InstrumentTrendDescriptor | undefined;
+  prepareTrendDescriptors(ids: readonly string[]): void;
   toggleOpen(): void;
   setOpen(open: boolean): void;
   toggleTile(id: string): void;
@@ -339,6 +344,29 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     return name;
   }
 
+  function availableTrendDef(id: string): TileDef | undefined {
+    return (
+      TILE_CATALOG.find((entry) => entry.id === id) ??
+      dynamicCatalog.find((entry) => entry.id === id)
+    );
+  }
+
+  function trendDescriptor(id: string): InstrumentTrendDescriptor | undefined {
+    // tileById deliberately reconstructs syntactically valid persisted dynamic tiles before
+    // discovery so the Instruments dock can preserve its own selection. Trends has a stricter
+    // availability contract: a stored dynamic id stays unavailable until live or historical
+    // discovery confirms that instrument on this server.
+    const def = availableTrendDef(id);
+    return def ? trendDescriptorFor(def, resolvedLabel(def)) : undefined;
+  }
+
+  function prepareTrendDescriptors(ids: readonly string[]): void {
+    for (const id of ids) {
+      const def = availableTrendDef(id);
+      if (def?.trend) metaCache.load(def.zonesPath);
+    }
+  }
+
   function zoneState(def: TileDef, value: number | undefined): ZoneState {
     // Read reactive version counters so a template $derived re-evaluates after fetches and notifications.
     void metaCache.version;
@@ -403,12 +431,20 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     get historyStatus() {
       return historyStatus;
     },
+    get trendCatalog() {
+      return [...TILE_CATALOG, ...dynamicCatalog].flatMap((def) => {
+        const descriptor = trendDescriptorFor(def, resolvedLabel(def));
+        return descriptor ? [descriptor] : [];
+      });
+    },
     isHistoricalOnly(id: string): boolean {
       return historicalOnlyIds.has(id);
     },
     isLiveDiscovered(id: string): boolean {
       return liveDiscoveredIds.has(id);
     },
+    trendDescriptor,
+    prepareTrendDescriptors,
     toggleOpen,
     setOpen,
     toggleTile,

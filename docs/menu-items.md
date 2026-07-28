@@ -100,9 +100,16 @@ source, and surrounding traffic before relying on it.
 
 ## Instruments
 
-- **Data trends** shows the last 24 hours when a history provider works and otherwise uses this
-  session's recorder. History and chart-module failures have separate retry actions. Provider
-  discovery checking, available, absent, failed, and retrying states are labeled separately.
+- **Data trends** shows zero to eight profile-owned instrument trends in saved order.
+  Customize groups the available readings by category, supports touch and keyboard reordering, keeps
+  unavailable saved selections removable, and disables a ninth addition without hiding it. Each
+  chart resolves an ordered Signal K path fallback and one history provider without merging sources.
+  A nonempty 24 hour history series wins per chart; otherwise the bounded, in-memory session recorder
+  is used. Provider checking, partial failure, total failure, true empty history, session fallback,
+  and no samples remain distinct. Every chart identifies its provider, path, and reference and
+  includes a touch and keyboard timeline scrubber plus a textual latest, minimum, maximum, start, and
+  end summary. Eligible instrument details can open one focused trend without changing the saved
+  overview. Back restores the same detail and focus, while Close returns to the chart.
 - **Instruments** opens the live instrument dock. Customize can show, hide, and reorder tiles,
   including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. A
   Rescan checks the live Signal K model first. When a registered history provider is available, it
@@ -139,9 +146,10 @@ source, and surrounding traffic before relying on it.
 
 ## Settings
 
-- **Profiles** saves portable chart, weather, threshold, toolbar, instrument, track, unit-fallback,
-  planning, and preferred anchor-radius settings. The active profile saves automatically after a
-  short debounce. Each device keeps its own active choice, while profiles and the default sync
+- **Profiles** saves portable chart, weather, threshold, toolbar, instrument, Data trends, track,
+  unit-fallback, planning, and preferred anchor-radius settings. The active profile saves
+  automatically after a short debounce. Each device keeps its own active choice, while profiles and
+  the default sync
   through the authenticated Signal K account. A remote change to the active profile is offered for
   explicit application or rejection so the chart does not change underneath the navigator. The
   browser persists the last-applied setup separately, so an unresolved update survives reload.

@@ -1,146 +1,172 @@
 <script lang="ts">
 import type { UnitsMode } from '$shared/lib';
-import type { HistoryProviders } from '$shared/signalk';
 import type { Theme } from '$shared/ui';
-import { SlideOver } from '$shared/ui';
-import type { TrendSessionRecorder } from './session-recorder.svelte';
-import type { TrendKey, TrendSeries } from './trend-metrics';
-import { loadTrendHistory, type TrendHistory } from './trends-history';
+import { CustomizeToggle, SlideOver } from '$shared/ui';
+import TrendsCustomize from './TrendsCustomize.svelte';
+import type { TrendsController } from './trends-controller.svelte';
 
 interface Props {
-  origin: string;
-  token: string | undefined;
-  // undefined while unknown or unavailable; empty ids means the API exists with no provider.
-  providers: HistoryProviders | undefined;
-  providerState: 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
+  controller: TrendsController;
   onRetryProvider: () => void;
-  recorder: TrendSessionRecorder;
   mode: UnitsMode;
   theme: Theme;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const {
-  origin,
-  token,
-  providers,
-  providerState,
-  onRetryProvider,
-  recorder,
-  mode,
-  theme,
-  onClose,
-  onBack,
-}: Props = $props();
-
-const hasProvider = $derived((providers?.ids.length ?? 0) > 0);
-
-let history = $state<TrendHistory | undefined>(undefined);
-let loading = $state(false);
-let loadFailed = $state(false);
+const { controller, onRetryProvider, mode, theme, onClose, onBack }: Props = $props();
+let customizing = $state(false);
 let chartsPromise = $state(import('./TrendCharts.svelte'));
-
-// The sequence counter keeps a stale in-flight load from clobbering a newer result when
-// providers (or the token) change mid-fetch; only the latest load may write state.
-let loadSeq = 0;
-function refreshHistory(): void {
-  if (!providers?.ids.length) {
-    loadSeq += 1;
-    history = undefined;
-    loading = false;
-    loadFailed = false;
-    return;
-  }
-  const mine = ++loadSeq;
-  loading = true;
-  loadFailed = false;
-  loadTrendHistory(origin, token, providers)
-    .then((got) => {
-      if (mine !== loadSeq) return;
-      history = got;
-      loading = false;
-      loadFailed = got === undefined;
-    })
-    .catch(() => {
-      if (mine !== loadSeq) return;
-      history = undefined;
-      loading = false;
-      loadFailed = true;
-    });
-}
+let phoneFocusTrap = $state(false);
 
 $effect(() => {
-  void providers;
-  void token;
-  refreshHistory();
-});
-
-// The session recorder's version is the reactive pulse for the fallback series; reading it here
-// makes the charts re-derive on each new sample without polling.
-const sessionSeries = $derived.by(() => {
-  // Only track the recorder pulse when there is no history series to show. With history present the
-  // session fallback is never read, so tracking version would needlessly re-derive every chart on
-  // each 30 s sample.
-  if (!history?.series) void recorder.version;
-  return (key: TrendKey): TrendSeries => recorder.series(key);
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+  const query = window.matchMedia('(max-width: 600px)');
+  phoneFocusTrap = query.matches;
+  const update = (event: MediaQueryListEvent) => {
+    phoneFocusTrap = event.matches;
+  };
+  query.addEventListener('change', update);
+  return () => query.removeEventListener('change', update);
 });
 
 const sourceNote = $derived.by(() => {
-  if (history?.series) {
-    return history.provider ? `Last 24 hours, from ${history.provider}` : 'Last 24 hours';
+  const retained = (controller.history?.series.size ?? 0) > 0;
+  if (controller.loading) {
+    return retained
+      ? 'Refreshing the last 24 hours. Accepted history remains visible.'
+      : 'Loading the last 24 hours. Session samples remain available.';
   }
-  if (loading) return 'Loading the last 24 hours…';
-  if (hasProvider && loadFailed) return 'History query failed; showing this session only.';
-  if (providerState === 'checking')
-    return 'Checking for a history provider; showing this session meanwhile.';
-  if (providerState === 'retrying')
-    return 'Checking again for a history provider; showing this session meanwhile.';
-  if (providerState === 'failed')
-    return 'Could not check for a history provider. This session remains available.';
-  return 'This session only. A history provider on the server (for example signalk-questdb or signalk-to-influxdb2) unlocks the full 24 hour view.';
+  if (controller.providerState === 'checking') {
+    return retained
+      ? 'Checking for a history provider. Accepted history remains visible.'
+      : 'Checking for a history provider. Showing this session meanwhile.';
+  }
+  if (controller.providerState === 'retrying') {
+    return retained
+      ? 'Checking again for a history provider. Accepted history remains visible.'
+      : 'Checking again for a history provider. Showing this session meanwhile.';
+  }
+  if (controller.providerState === 'failed') {
+    return retained
+      ? 'Could not check for a history provider. Accepted history remains visible.'
+      : 'Could not check for a history provider. This session remains available.';
+  }
+  if (controller.providerState === 'absent') {
+    return 'This session only. A Signal K history provider unlocks the full 24 hour view.';
+  }
+  if (controller.historyState === 'partial') {
+    return retained
+      ? 'Some history providers or columns could not be read. Accepted charts remain available.'
+      : 'Some history providers or columns could not be read. Showing session samples where available.';
+  }
+  if (controller.historyState === 'failed') {
+    return retained
+      ? 'History refresh failed. Accepted history remains visible.'
+      : 'History query failed. Showing session samples where available.';
+  }
+  if (controller.historyState === 'empty') {
+    return 'No history samples were found in the last 24 hours. Showing this session where available.';
+  }
+  return retained ? 'Last 24 hours, with session fallback per chart.' : 'Session samples.';
 });
+
+const focused = $derived(controller.focusedId !== undefined);
 </script>
 
-<SlideOver title="Data trends" closeLabel="Close trends panel" {onClose} {onBack} bodyFlex>
-  <p class="muted-note">
-    Recent trends in the boat's wind, depth, and other data over the last day.
-  </p>
-  <p class="muted-note" role="status">{sourceNote}</p>
-  {#if providerState === 'failed' || providerState === 'absent'}
-    <button type="button" class="btn" onclick={onRetryProvider}>
-      {providerState === 'failed' ? 'Retry provider check' : 'Check for provider again'}
-    </button>
-  {/if}
-  {#if loadFailed && hasProvider}
-    <button type="button" class="btn" disabled={loading} onclick={refreshHistory}>
-      Retry history
-    </button>
-  {/if}
-  {#await chartsPromise}
-    <p class="muted-note" role="status">Loading trend charts…</p>
-  {:then charts}
-    <charts.default history={history?.series} {sessionSeries} {mode} {theme} />
-  {:catch}
-    <div class="chart-error" role="alert">
-      <p class="muted-note">Could not open the trend charts.</p>
+<SlideOver
+  title="Data trends"
+  subtitle={focused ? controller.charts[0]?.label : undefined}
+  closeLabel="Close trends, return to chart"
+  {onClose}
+  {onBack}
+  backLabel={focused ? 'Back to instrument details' : 'Back to menu'}
+  bodyFlex
+  focusTrap={phoneFocusTrap}
+>
+  {#snippet headerExtra()}
+    {#if !focused}
+      <CustomizeToggle
+        object="trends"
+        editing={customizing}
+        compact
+        onToggle={() => (customizing = !customizing)}
+      />
+    {/if}
+  {/snippet}
+
+  {#if customizing && !focused}
+    <p class="muted-note customize-copy">
+      Choose up to eight trends. Drag or use the arrow keys on a move handle to reorder.
+    </p>
+    <TrendsCustomize {controller} />
+  {:else}
+    <p class="muted-note">
+      Recent Signal K instrument data, with values converted only for display.
+    </p>
+    <p class="muted-note" role="status">{sourceNote}</p>
+    {#if controller.providerState === 'failed' || controller.providerState === 'absent'}
+      <button type="button" class="btn" onclick={onRetryProvider}>
+        {controller.providerState === 'failed'
+          ? 'Retry provider check'
+          : 'Check for provider again'}
+      </button>
+    {/if}
+    {#if controller.historyState === 'failed' && controller.hasProvider}
       <button
         type="button"
         class="btn"
-        onclick={() => (chartsPromise = import('./TrendCharts.svelte'))}
+        disabled={controller.loading}
+        onclick={() => controller.refreshHistory()}
       >
-        Retry charts
+        Retry history
       </button>
-    </div>
-  {/await}
+    {/if}
+
+    {#if !focused && controller.selected.length === 0}
+      <div class="empty-state">
+        <p>No trends are selected for this profile.</p>
+        <button type="button" class="btn btn-primary" onclick={() => (customizing = true)}>
+          Customize trends
+        </button>
+      </div>
+    {:else}
+      {#await chartsPromise}
+        <p class="muted-note" role="status">Loading trend charts…</p>
+      {:then charts}
+        <charts.default {controller} {mode} {theme} />
+      {:catch}
+        <div class="chart-error" role="alert">
+          <p class="muted-note">Could not open the trend charts.</p>
+          <button
+            type="button"
+            class="btn"
+            onclick={() => (chartsPromise = import('./TrendCharts.svelte'))}
+          >
+            Retry charts
+          </button>
+        </div>
+      {/await}
+    {/if}
+  {/if}
 </SlideOver>
 
 <style>
-.chart-error {
+.chart-error,
+.empty-state {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+}
+.empty-state {
+  padding-block: var(--space-3);
+}
+.empty-state p {
+  margin: 0;
+}
+.customize-copy {
+  padding-inline: var(--space-3);
 }
 </style>

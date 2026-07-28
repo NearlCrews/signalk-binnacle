@@ -21,6 +21,9 @@ export interface ProfileSettings {
   pinnedActionIds?: string[];
   // Selected instrument tiles in display order; optional for pre-instruments profiles.
   instrumentTiles?: string[];
+  // Selected Data trends instruments in display order. Optional for profiles saved before
+  // customizable trends existed; the read edge applies the original four-chart default.
+  trendInstrumentIds?: string[];
   // The starting radius for the next anchor drop, in meters. The active watch and its live radius are
   // safety state and never travel with a profile.
   anchorRadiusMeters?: number;
@@ -43,6 +46,7 @@ export const PORTABLE_PROFILE_SETTING_KEYS = [
   'units',
   'pinnedActionIds',
   'instrumentTiles',
+  'trendInstrumentIds',
   'anchorRadiusMeters',
 ] as const satisfies readonly (keyof ProfileSettings)[];
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { tick } from 'svelte';
 import type { ZoneState } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
 import type { TileDef, TileDeps, TileReading } from './tile-catalog';
@@ -13,9 +14,32 @@ interface Props {
   zone: ZoneState;
   historicalOnly?: boolean;
   onBack: () => void;
+  onViewTrend?: () => void;
+  restoreTrendFocus?: boolean;
+  onTrendFocusRestored?: () => void;
 }
 
-const { def, label, deps, reading, zone, historicalOnly = false, onBack }: Props = $props();
+const {
+  def,
+  label,
+  deps,
+  reading,
+  zone,
+  historicalOnly = false,
+  onBack,
+  onViewTrend,
+  restoreTrendFocus = false,
+  onTrendFocusRestored,
+}: Props = $props();
+let trendAction: HTMLButtonElement | undefined = $state();
+
+$effect(() => {
+  if (!restoreTrendFocus || !trendAction) return;
+  void tick().then(() => {
+    trendAction?.focus();
+    onTrendFocusRestored?.();
+  });
+});
 
 const valueLine = $derived(
   `${reading.value}${reading.unit ? ` ${reading.unit}` : ''}${
@@ -77,6 +101,17 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
     <dd><span>{age}</span><span class="unit"></span></dd>
   </dl>
 
+  {#if onViewTrend}
+    <button
+      bind:this={trendAction}
+      type="button"
+      class="btn btn-primary trend-action"
+      onclick={onViewTrend}
+    >
+      View recent trend
+    </button>
+  {/if}
+
   <section class="paths" aria-label="Signal K paths">
     <h3 class="caps-label">Signal K paths</h3>
     <ul class="bare-list path-list">
@@ -107,6 +142,10 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+.trend-action {
+  min-block-size: 44px;
+  inline-size: 100%;
 }
 .paths h3 {
   margin: 0;

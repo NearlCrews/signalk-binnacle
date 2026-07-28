@@ -201,6 +201,23 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   provider failures use a status message while retaining live and previously accepted results.
   Context-scoped value checks prevent another vessel's catalog paths from appearing. Stored samples
   never populate a live instrument tile.
+- Data trends uses the same instrument catalog through neutral trend descriptors. Only readings with
+  explicit aggregate, fallback, display, and precision semantics are eligible. A profile owns zero to
+  eight trend ids independently of the instrument dock. Customize keeps the saved order, groups
+  options by instrument category, leaves unavailable saved ids removable, and uses the shared
+  `createReorder` pointer and keyboard behavior. At eight selections, every unselected option stays
+  visible and disabled with the instruction to remove a trend first.
+  Each chart selects one candidate path for its whole history series and one provider for that chart.
+  An empty history column falls back to the bounded session recorder instead of hiding useful live
+  data. The recorder samples selected instruments, plus one focused instrument, every 30 seconds,
+  retains at most 2,880 samples per series, and never persists those samples. A focused chart opened
+  from instrument detail does not change the profile selection. Back reconstructs that detail, while
+  Close returns to the chart.
+  Trend charts must not require hover. Each includes a 44 px timeline range control with touch,
+  Arrow keys, Home, End, visible time and value, and `aria-valuetext`, plus a textual latest, minimum,
+  maximum, start, and end summary. Labels, source paths, and readouts wrap at 320 px. Canvas colors
+  resolve from tokens and redraw on theme changes, with no blue or bright stray pixels in night-red.
+  The phone sheet traps keyboard focus while it is open.
 - Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
@@ -265,8 +282,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
   constrained header that already names the object may display the compact text "Customize" while
   retaining that full accessible name. The label swapping to "Done" is the entire state story: never
   aria-pressed or is-on. The mode opens with one leading `.muted-note` line stating what a tap now
-  does. The instrument dock and the menu's toolbar editor are the two shipped examples; both render
-  the primitive, never a hand-written copy.
+  does. The instrument dock, Data trends, and the menu's toolbar editor are the shipped examples; all
+  render the primitive, never a hand-written copy.
 - `ArmedRow`: a keyed one-at-a-time delete confirm for a list of rows (the routes, tracks, waypoints,
   profiles, and Chart Locker saved-area panels): arming one row disarms the rest. Use it instead of a
   per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.

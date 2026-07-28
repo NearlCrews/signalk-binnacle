@@ -1,3 +1,4 @@
+import { isTrendInstrumentId, MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
 import {
   hasControlCharacters,
   isFiniteNumber,
@@ -203,6 +204,13 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   if (
     value.instrumentTiles !== undefined &&
     !validStringList(value.instrumentTiles, MAX_INSTRUMENT_TILES)
+  ) {
+    return false;
+  }
+  if (
+    value.trendInstrumentIds !== undefined &&
+    (!validStringList(value.trendInstrumentIds, MAX_TREND_INSTRUMENTS) ||
+      !value.trendInstrumentIds.every(isTrendInstrumentId))
   ) {
     return false;
   }

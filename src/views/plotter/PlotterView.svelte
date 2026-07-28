@@ -35,7 +35,7 @@ import { RoutesPanel } from '$features/routing';
 import { TidesPanel } from '$features/tides';
 import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
 import { TracksPanel } from '$features/tracks';
-import { TrendsPanel } from '$features/trends';
+import { loadTrendsPanel } from '$features/trends';
 import { WaypointsPanel } from '$features/waypoints';
 import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
@@ -100,7 +100,7 @@ interface FlatProps {
   notificationsStore: NotificationsStore;
 
   // Additional services and loaders
-  trendRecorder: import('$features/trends').TrendSessionRecorder;
+  trends: import('$features/trends').TrendsController;
   weatherLoader: ReturnType<typeof import('$features/weather').createWeatherLoader>;
   pointConditionsLoader: ReturnType<typeof import('$features/weather').createPointConditionsLoader>;
   planningSpeedKn: import('$shared/settings').PersistedValue<number>;
@@ -142,7 +142,6 @@ interface FlatProps {
   poiInView: Poi[];
   poiViewState: PoiViewState;
   historyProviders: HistoryProviders | undefined;
-  historyProviderState: 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
   weatherProvider: WeatherProvider | undefined;
@@ -175,6 +174,8 @@ interface FlatProps {
   // Panel actions
   closePanel: () => void;
   backToMenu: () => void;
+  closeTrendsPanel: () => void;
+  backFromTrendsPanel: () => void;
   openInstalledCharts: () => void;
   backToOfflineCharts: () => void;
   openLayersPanel: (mode: 'charts' | 'overlays') => void;
@@ -216,7 +217,7 @@ type ServiceKey =
   | 'auth'
   | 'net'
   | 'theme'
-  | 'trendRecorder'
+  | 'trends'
   | 'weatherLoader'
   | 'pointConditionsLoader'
   | 'planningSpeedKn'
@@ -264,6 +265,8 @@ type ActionKey =
   | 'onWeatherLayersReady'
   | 'closePanel'
   | 'backToMenu'
+  | 'closeTrendsPanel'
+  | 'backFromTrendsPanel'
   | 'openInstalledCharts'
   | 'backToOfflineCharts'
   | 'openLayersPanel'
@@ -333,7 +336,6 @@ let {
   poiInView,
   poiViewState,
   historyProviders,
-  historyProviderState,
   serverFeatures,
   notificationsApi,
   weatherProvider,
@@ -356,7 +358,7 @@ const {
   auth,
   net,
   theme,
-  trendRecorder,
+  trends,
   weatherLoader,
   pointConditionsLoader,
   planningSpeedKn,
@@ -408,6 +410,8 @@ const {
   onWeatherLayersReady,
   closePanel,
   backToMenu,
+  closeTrendsPanel,
+  backFromTrendsPanel,
   openInstalledCharts,
   backToOfflineCharts,
   openLayersPanel,
@@ -475,6 +479,11 @@ function radarControlsForAttempt() {
 function weatherMapForAttempt() {
   void lazyPanelAttempt;
   return loadWeatherMap();
+}
+
+function trendsPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadTrendsPanel();
 }
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
@@ -716,18 +725,25 @@ $effect(() => {
           onBack={backToMenu}
         />
       {:else if activePanel === 'trends'}
-        <TrendsPanel
-          {origin}
-          token={chartsToken}
-          providers={historyProviders}
-          providerState={historyProviderState}
-          onRetryProvider={onRetryHistoryProviders}
-          recorder={trendRecorder}
-          mode={units.mode}
-          theme={theme.theme}
-          onClose={closePanel}
-          onBack={backToMenu}
-        />
+        {#await trendsPanelForAttempt()}
+          <div class="slide-over slide-over--dock-left panel-loading" role="status">
+            Loading data trends…
+          </div>
+        {:then module}
+          <module.default
+            controller={trends}
+            onRetryProvider={onRetryHistoryProviders}
+            mode={units.mode}
+            theme={theme.theme}
+            onClose={closeTrendsPanel}
+            onBack={backFromTrendsPanel}
+          />
+        {:catch}
+          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
+            Data trends could not load.
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       {:else if activePanel === 'ais'}
         <AisListPanel
           {units}

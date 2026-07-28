@@ -23,7 +23,8 @@ A profile contains:
 - planning speed;
 - the local units fallback used when server unit preferences are unavailable;
 - bottom-toolbar pins;
-- instrument selection and order; and
+- instrument selection and order;
+- Data trends selection and order, including an intentionally empty selection; and
 - the preferred radius for the next anchor drop.
 
 Stored settings remain in SI units. Conversion happens only at the display boundary.

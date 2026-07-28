@@ -20,6 +20,7 @@ const base: ProfileSettings = {
   arrivalMuted: false,
   pinnedActionIds: [],
   instrumentTiles: [],
+  trendInstrumentIds: [],
 };
 
 describe('seedStarterProfiles', () => {
@@ -38,5 +39,11 @@ describe('seedStarterProfiles', () => {
     expect(
       new Set(store.profiles.map((profile) => profile.settings.instrumentTiles?.join(','))).size,
     ).toBe(3);
+    expect(
+      store.profiles.every(
+        (profile) =>
+          profile.settings.trendInstrumentIds?.join(',') === 'depth,wind-apparent,pressure,sog',
+      ),
+    ).toBe(true);
   });
 });

@@ -1,4 +1,10 @@
 import type { CourseGuidance } from '$entities/course';
+import type {
+  InstrumentTrendAggregate,
+  InstrumentTrendCandidate,
+  InstrumentTrendDescriptor,
+  InstrumentTrendDisplayKind,
+} from '$entities/instrument-trend';
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, type OwnVessel } from '$entities/vessel';
 import { asNumber } from '$shared/geo';
@@ -45,7 +51,7 @@ export interface TileReading {
   angleRad?: number;
 }
 
-type TileCategory =
+export type TileCategory =
   | 'navigation'
   | 'wind'
   | 'depth'
@@ -67,6 +73,14 @@ export interface TileDef {
   kind: 'numeric' | 'wind' | 'position';
   // Rendered mark type beside the numeric readout; the mark components live beside NumericTile.
   viz?: 'spark' | 'battery' | 'rot';
+  trend?: {
+    candidates: readonly InstrumentTrendCandidate[];
+    aggregate: InstrumentTrendAggregate;
+    display: InstrumentTrendDisplayKind;
+    metricPrecision: number;
+    imperialPrecision: number;
+    description?: string;
+  };
   read(deps: TileDeps): TileReading;
 }
 
@@ -119,6 +133,48 @@ export function instrumentOptionLabels(defs: readonly TileDef[]): ReadonlyMap<st
 
 export const TILE_STALE_MS = 10_000;
 
+const MIN_PERIOD_BY_PATH: ReadonlyMap<string, number> = new Map([
+  [SK_PATHS.headingTrue, 200],
+  [SK_PATHS.outsidePressure, 5000],
+]);
+
+export function minPeriodFor(path: string): number {
+  return MIN_PERIOD_BY_PATH.get(path) ?? 1000;
+}
+
+function trendCandidate(path: string, referenceLabel?: string): InstrumentTrendCandidate {
+  return {
+    path,
+    referenceLabel,
+    minPeriodMs: minPeriodFor(path),
+    staleAfterMs: TILE_STALE_MS,
+  };
+}
+
+function trendMetadata(
+  display: InstrumentTrendDisplayKind,
+  candidates: readonly InstrumentTrendCandidate[],
+  metricPrecision: number,
+  imperialPrecision = metricPrecision,
+  aggregate: InstrumentTrendAggregate = 'average',
+): NonNullable<TileDef['trend']> {
+  return { candidates, aggregate, display, metricPrecision, imperialPrecision };
+}
+
+export function trendDescriptorFor(
+  def: TileDef,
+  label: string = def.label,
+): InstrumentTrendDescriptor | undefined {
+  if (!def.trend) return undefined;
+  return {
+    id: def.id,
+    label,
+    category: def.category,
+    ...def.trend,
+    description: def.trend.description ?? def.description,
+  };
+}
+
 // Structural alias avoids importing PathCell from the shared/signalk internal file.
 type PathCell = ReturnType<SignalKStore['cell']>;
 
@@ -144,6 +200,7 @@ const SOG_DEF: TileDef = {
   category: 'navigation',
   kind: 'numeric',
   viz: 'spark',
+  trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedOverGround)], 1),
   read({ vessel, store, clock }) {
     const cell = store.cell(SK_PATHS.speedOverGround);
     const state = grade(cell, clock);
@@ -211,6 +268,19 @@ const DEPTH_DEF: TileDef = {
   category: 'depth',
   kind: 'numeric',
   viz: 'spark',
+  trend: {
+    ...trendMetadata(
+      'depth',
+      [
+        trendCandidate(SK_PATHS.depthBelowTransducer, 'Transducer'),
+        trendCandidate(SK_PATHS.depthBelowSurface, 'Surface'),
+        trendCandidate(SK_PATHS.depthBelowKeel, 'Keel'),
+      ],
+      1,
+    ),
+    description:
+      'Depth history, preferring below-transducer, then below-surface, then below-keel data.',
+  },
   // The entity owns the resolution so this tile and the status chip can never disagree about
   // which reference the boat's Depth number is measured from.
   read({ vessel, store, clock, units }) {
@@ -244,6 +314,19 @@ const WIND_APPARENT_DEF: TileDef = {
   zonesPath: SK_PATHS.windSpeedApparent,
   category: 'wind',
   kind: 'wind',
+  trend: {
+    ...trendMetadata(
+      'speed',
+      [
+        trendCandidate(SK_PATHS.windSpeedApparent, 'Apparent'),
+        trendCandidate(SK_PATHS.windSpeedOverGround, 'Ground'),
+      ],
+      1,
+      1,
+      'max',
+    ),
+    description: 'Wind speed history, preferring apparent wind and falling back to ground wind.',
+  },
   read({ vessel, store, clock }) {
     const apparentSpeedCell = store.cell(SK_PATHS.windSpeedApparent);
     const groundSpeedCell = store.cell(SK_PATHS.windSpeedOverGround);
@@ -290,6 +373,7 @@ const STW_DEF: TileDef = {
   category: 'navigation',
   kind: 'numeric',
   viz: 'spark',
+  trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedThroughWater)], 1),
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.speedThroughWater);
     const state = grade(cell, clock);
@@ -311,6 +395,7 @@ const WIND_TRUE_DEF: TileDef = {
   zonesPath: SK_PATHS.windSpeedTrue,
   category: 'wind',
   kind: 'wind',
+  trend: trendMetadata('speed', [trendCandidate(SK_PATHS.windSpeedTrue, 'True')], 1, 1, 'max'),
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.windSpeedTrue);
     const state = grade(cell, clock);
@@ -331,6 +416,7 @@ const PRESSURE_DEF: TileDef = {
   category: 'weather',
   kind: 'numeric',
   viz: 'spark',
+  trend: trendMetadata('pressure', [trendCandidate(SK_PATHS.outsidePressure)], 0, 2),
   read({ vessel, store, clock, units }) {
     const cell = store.cell(SK_PATHS.outsidePressure);
     const state = grade(cell, clock);
@@ -499,6 +585,7 @@ const WATER_TEMP_DEF: TileDef = {
   category: 'weather',
   kind: 'numeric',
   viz: 'spark',
+  trend: trendMetadata('temperature', [trendCandidate(SK_PATHS.waterTemperature)], 1),
   read: temperatureRead(SK_PATHS.waterTemperature),
 };
 
@@ -513,6 +600,7 @@ const AIR_TEMP_DEF: TileDef = {
   category: 'weather',
   kind: 'numeric',
   viz: 'spark',
+  trend: trendMetadata('temperature', [trendCandidate(SK_PATHS.outsideTemperature)], 1),
   read: temperatureRead(SK_PATHS.outsideTemperature),
 };
 
@@ -526,6 +614,7 @@ const GNSS_DEF: TileDef = {
   zonesPath: SK_PATHS.gnssSatellites,
   category: 'navigation',
   kind: 'numeric',
+  trend: trendMetadata('count', [trendCandidate(SK_PATHS.gnssSatellites)], 0, 0, 'last'),
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.gnssSatellites);
     const state = grade(cell, clock);
@@ -549,6 +638,7 @@ const ROT_DEF: TileDef = {
   category: 'navigation',
   kind: 'numeric',
   viz: 'rot',
+  trend: trendMetadata('rate-of-turn', [trendCandidate(SK_PATHS.rateOfTurn)], 1),
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.rateOfTurn);
     const state = grade(cell, clock);
@@ -596,6 +686,7 @@ export function batteryTileDef(instanceId: string): TileDef {
     category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('voltage', [trendCandidate(path)], 1),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -625,6 +716,7 @@ export function batterySocTileDef(instanceId: string): TileDef {
     category: 'electrical',
     kind: 'numeric',
     viz: 'battery',
+    trend: trendMetadata('ratio', [trendCandidate(path)], 0),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -648,15 +740,25 @@ export function batteryTimeTileDef(instanceId: string): TileDef {
     zonesPath: path,
     category: 'electrical',
     kind: 'numeric',
+    trend: trendMetadata('duration', [trendCandidate(path)], 1),
     read({ store, clock }) {
       const cell = store.cell(path);
       const seconds = asNumber(cell.value);
       // timeRemaining is null when the battery is full or charging: a real reported-then-absent
       // reading, shown as the placeholder rather than a fabricated duration.
       if (seconds === undefined) {
-        return { state: cell.epoch === 0 ? 'never' : 'placeholder', value: PLACEHOLDER, unit: '' };
+        return {
+          state: cell.epoch === 0 ? 'never' : 'placeholder',
+          value: PLACEHOLDER,
+          unit: '',
+        };
       }
-      return { state: grade(cell, clock), value: formatDuration(seconds), unit: '' };
+      return {
+        state: grade(cell, clock),
+        value: formatDuration(seconds),
+        unit: '',
+        siValue: seconds,
+      };
     },
   };
 }
@@ -676,6 +778,7 @@ export function batteryCurrentTileDef(instanceId: string): TileDef {
     category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('current', [trendCandidate(path)], 1),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -740,6 +843,7 @@ export function propulsionRpmTileDef(instanceId: string): TileDef {
     category: 'propulsion',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('rpm', [trendCandidate(path)], 0),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -764,6 +868,7 @@ export function propulsionTemperatureTileDef(instanceId: string): TileDef {
     category: 'propulsion',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('temperature', [trendCandidate(path)], 1),
     read: temperatureRead(path),
   };
 }
@@ -782,6 +887,7 @@ function propulsionCoolantTileDef(instanceId: string): TileDef {
     category: 'propulsion',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('temperature', [trendCandidate(path)], 1),
     read: temperatureRead(path),
   };
 }
@@ -800,6 +906,7 @@ function propulsionOilPressureTileDef(instanceId: string): TileDef {
     category: 'propulsion',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('pressure', [trendCandidate(path)], 0, 2),
     read({ store, clock, units }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -828,6 +935,7 @@ export function propulsionLoadTileDef(instanceId: string): TileDef {
     category: 'propulsion',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('ratio', [trendCandidate(path)], 0),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -851,6 +959,7 @@ export function tankLevelTileDef(instanceId: string): TileDef {
     category: 'tanks',
     kind: 'numeric',
     viz: 'battery',
+    trend: trendMetadata('ratio', [trendCandidate(path)], 0),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -873,6 +982,7 @@ function tankVolumeTileDef(instanceId: string): TileDef {
     zonesPath: path,
     category: 'tanks',
     kind: 'numeric',
+    trend: trendMetadata('volume', [trendCandidate(path)], 0, 1),
     read({ store, clock, units }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -901,6 +1011,7 @@ export function solarPowerTileDef(instanceId: string): TileDef {
     category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('power', [trendCandidate(path)], 0),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -924,6 +1035,7 @@ function solarCurrentTileDef(instanceId: string): TileDef {
     category: 'electrical',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('current', [trendCandidate(path)], 1),
     read({ store, clock }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -969,6 +1081,7 @@ export function insideTemperatureTileDef(instanceId: string): TileDef {
     category: 'cabin',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('temperature', [trendCandidate(path)], 1),
     read: temperatureRead(path),
   };
 }
@@ -988,6 +1101,11 @@ export function insideHumidityTileDef(instanceId: string): TileDef {
     category: 'cabin',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata(
+      'ratio',
+      [trendCandidate(primary, 'Relative humidity'), trendCandidate(fallback, 'Humidity')],
+      0,
+    ),
     read({ store, clock }) {
       const primaryCell = store.cell(primary);
       const fallbackCell = store.cell(fallback);
@@ -1013,6 +1131,7 @@ function insidePressureTileDef(instanceId: string): TileDef {
     category: 'cabin',
     kind: 'numeric',
     viz: 'spark',
+    trend: trendMetadata('pressure', [trendCandidate(path)], 0, 2),
     read({ store, clock, units }) {
       const cell = store.cell(path);
       const state = grade(cell, clock);
@@ -1105,15 +1224,6 @@ export function tileById(id: string): TileDef | undefined {
 export const ALL_CATALOG_PATHS: readonly string[] = [
   ...new Set(TILE_CATALOG.flatMap((def) => def.paths)),
 ];
-
-const MIN_PERIOD_BY_PATH: ReadonlyMap<string, number> = new Map([
-  [SK_PATHS.headingTrue, 200],
-  [SK_PATHS.outsidePressure, 5000],
-]);
-
-export function minPeriodFor(path: string): number {
-  return MIN_PERIOD_BY_PATH.get(path) ?? 1000;
-}
 
 // Client-side default zones applied when a path has no server-configured meta.zones. The server's
 // zones always take precedence when present. Depths in meters (SI).

@@ -99,6 +99,7 @@ const {
   display: block;
   color: var(--text-muted);
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 /* A two-line heading aligns to the top of the header instead of vertical center. */
 .panel-header--stacked {

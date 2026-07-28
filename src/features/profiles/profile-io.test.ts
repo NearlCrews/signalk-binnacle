@@ -200,6 +200,30 @@ describe('parseProfilesJson', () => {
     );
   });
 
+  it('accepts zero to eight unique trend ids and legacy profiles without the field', () => {
+    expect(isProfileSettings({ ...settings(), trendInstrumentIds: undefined })).toBe(true);
+    expect(isProfileSettings({ ...settings(), trendInstrumentIds: [] })).toBe(true);
+    expect(
+      isProfileSettings({
+        ...settings(),
+        trendInstrumentIds: ['depth', 'wind-apparent', 'future-sensor'],
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects duplicate, malformed, or ninth trend ids', () => {
+    expect(isProfileSettings({ ...settings(), trendInstrumentIds: ['depth', 'depth'] })).toBe(
+      false,
+    );
+    expect(isProfileSettings({ ...settings(), trendInstrumentIds: ['depth\nwind'] })).toBe(false);
+    expect(
+      isProfileSettings({
+        ...settings(),
+        trendInstrumentIds: Array.from({ length: 9 }, (_, index) => `trend-${index}`),
+      }),
+    ).toBe(false);
+  });
+
   it('round-trips a valid mode and drops a Profile with a non-string mode', () => {
     const kept = parseProfilesJson(JSON.stringify(profile('Anchor', { mode: 'anchor' })));
     expect(kept[0].settings.mode).toBe('anchor');

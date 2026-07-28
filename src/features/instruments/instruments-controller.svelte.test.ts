@@ -354,6 +354,33 @@ describe('createInstrumentsController', () => {
     ctrl.dispose();
   });
 
+  it('keeps valid dynamic trend ids unavailable until discovery confirms the instrument', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/electrical/batteries')) {
+          return jsonResponse(200, { house: { voltage: { value: 12.7 } } });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+
+    const deps = makeDeps();
+    const ctrl = createInstrumentsController(deps);
+    expect(ctrl.trendDescriptor('battery:house')).toBeUndefined();
+    expect(ctrl.trendDescriptor('battery:ghost')).toBeUndefined();
+
+    ctrl.setOpen(true);
+    await flushPromises();
+
+    expect(ctrl.trendDescriptor('battery:house')).toMatchObject({
+      id: 'battery:house',
+      label: 'Voltage · House battery',
+    });
+    expect(ctrl.trendDescriptor('battery:ghost')).toBeUndefined();
+    ctrl.dispose();
+  });
+
   it('battery discovery runs only once per construction even across multiple opens', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if ((url as string).includes('electrical/batteries')) {

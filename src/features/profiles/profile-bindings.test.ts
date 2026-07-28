@@ -35,6 +35,7 @@ function makeDeps(): ProfileBindingDeps {
     unitsLocal: pv('metric'),
     pinnedActions: pv<string[]>([]),
     instrumentTiles: pv<string[]>(['depth', 'speed']),
+    trendInstruments: pv<string[]>(['depth', 'wind-apparent']),
     anchorRadius: {
       get: () => anchorRadiusMeters,
       set: (next: number) => {
@@ -139,5 +140,16 @@ describe('createProfileBindings', () => {
     const deps = makeDeps();
     const bindings = createProfileBindings(deps);
     expect(() => bindings.track()).not.toThrow();
+  });
+
+  it('captures trend ids and applies the legacy default when the field is absent', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    expect(bindings.capture().trendInstrumentIds).toEqual(['depth', 'wind-apparent']);
+    const legacy = bindings.capture();
+    legacy.trendInstrumentIds = undefined;
+    deps.trendInstruments.set(['sog']);
+    bindings.apply(legacy);
+    expect(deps.trendInstruments.value).toEqual(['depth', 'wind-apparent', 'pressure', 'sog']);
   });
 });

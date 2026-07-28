@@ -28,6 +28,7 @@ const BINNACLE_STORAGE_KEYS = {
   radarAutoEnabled: { key: 'binnacle:radar-autoenabled', scope: 'device' },
   pinnedActions: { key: 'binnacle:pinned-actions', scope: 'profile' },
   instrumentTiles: { key: 'binnacle:instrument-tiles', scope: 'profile' },
+  trendInstruments: { key: 'binnacle:trend-instruments', scope: 'profile' },
   instrumentsOpen: { key: 'binnacle:instruments-open', scope: 'device' },
   layerCategories: { key: 'binnacle:layer-categories', scope: 'device' },
   userCharts: { key: 'binnacle:user-charts', scope: 'server-resource' },
