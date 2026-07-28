@@ -1,11 +1,15 @@
 import type {
   CurrentEvent,
-  CurrentReading,
+  NearbyTideStation,
   TideEvent,
   TideReading,
+  TideSelectionSnapshot,
   TideStation,
+  TideStationSelection,
+  TidesLoadResult,
   TidesStore,
 } from '$entities/tides';
+import { MAX_NEARBY_STATIONS } from '$entities/tides';
 import { quantizeCellDeg } from '$shared/geo';
 import { DAY_MS, MINUTE_MS } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
@@ -45,6 +49,14 @@ export interface TidesLoader {
   load(store: TidesStore, lat: number, lon: number, force?: boolean): Promise<void>;
 }
 
+interface StationLists {
+  tide: TideStation[];
+  current: TideStation[];
+}
+
+type TideOutcome = TidesLoadResult['tide'];
+type CurrentOutcome = TidesLoadResult['current'];
+
 // A tide station up to 100 km away is still a useful approximation; a tidal-current station is a
 // local feature, so it uses a tighter radius.
 const TIDE_RADIUS_M = 100_000;
@@ -58,8 +70,8 @@ const STATIONS_TTL_MS = DAY_MS;
 const COOLDOWN_MS = 5 * MINUTE_MS;
 // A backstop on the per-station event caches so a long session of panning cannot grow them forever.
 const MAX_EVENT_ENTRIES = 24;
-// Skip a reload when the view barely moved and a reading is already on screen, so small pans do not
-// flicker the panel or rerun the nearest-station search.
+// Skip provider work when the view barely moved in automatic mode. Catalog and reading distances
+// are still recalculated before this gate, and cached full lists rebuild the bounded catalogs.
 const SKIP_RADIUS_M = 3000;
 // The persisted station lists outlive the in-memory daily refresh so an offline reload still has
 // them; they are nearly static, so a week-old list is still right.
@@ -97,9 +109,68 @@ const realDeps: LoaderDeps = {
 // derive from utcYmd), so the cache and the window roll over at the same UTC-midnight instant.
 const dayKey = (ms: number): string => utcYmd(ms, '-');
 
-// A tides loader with its own session caches: the station lists are fetched once a day, and each
-// station's events are kept for the day so panning back to a covered area is instant. It feeds the
-// nearest tide and current readings into the store, or flags no coverage outside US waters.
+function manualSelectionAt(
+  selection: Extract<TideStationSelection, { mode: 'manual' }>,
+  lat: number,
+  lon: number,
+): TideStationSelection {
+  return {
+    ...selection,
+    distanceMeters: haversineMeters(
+      lat,
+      lon,
+      selection.station.latitude,
+      selection.station.longitude,
+    ),
+  };
+}
+
+function selectionAt(
+  selection: TideStationSelection,
+  lat: number,
+  lon: number,
+): TideStationSelection {
+  return selection.mode === 'manual' ? manualSelectionAt(selection, lat, lon) : selection;
+}
+
+function snapshotAt(
+  selection: TideSelectionSnapshot,
+  lat: number,
+  lon: number,
+): TideSelectionSnapshot {
+  return {
+    tide: selectionAt(selection.tide, lat, lon),
+    current: selectionAt(selection.current, lat, lon),
+  };
+}
+
+function automaticSnapshot(selection: TideSelectionSnapshot): boolean {
+  return selection.tide.mode === 'automatic' && selection.current.mode === 'automatic';
+}
+
+function catalogs(
+  lists: StationLists,
+  lat: number,
+  lon: number,
+): {
+  nearbyTideStations: NearbyTideStation[];
+  nearbyCurrentStations: NearbyTideStation[];
+} {
+  return {
+    nearbyTideStations: nearestStations(lists.tide, lat, lon, MAX_NEARBY_STATIONS, TIDE_RADIUS_M),
+    nearbyCurrentStations: nearestStations(
+      lists.current,
+      lat,
+      lon,
+      MAX_NEARBY_STATIONS,
+      CURRENT_RADIUS_M,
+    ),
+  };
+}
+
+// A tides loader with session caches and one active plus one latest queued request. Every queued
+// request snapshots independent tide and current intent. Only its generation can publish catalogs,
+// readings, provider provenance, failure state, and successfully loaded selections.
 export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoader {
   const deps = { ...realDeps, ...overrides };
   let tideList: TideStation[] | undefined;
@@ -121,19 +192,22 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
         lon: number;
         force: boolean;
         generation: number;
+        selection: TideSelectionSnapshot;
         waiters: Array<() => void>;
       }
     | undefined;
   let lastLat: number | undefined;
   let lastLon: number | undefined;
-  // The day of the last load, so an anchored boat still refetches after midnight when the
-  // 48-hour event window would otherwise age out behind the skip radius.
   let lastDay: string | undefined;
+  let lastSelection: TideSelectionSnapshot | undefined;
 
-  async function ensureLists(nowMs: number): Promise<void> {
-    if (tideList && currentList && nowMs - listsAt < STATIONS_TTL_MS) return;
-    // Only a reload (no in-memory lists yet) promotes the persisted copy; an in-session daily
-    // refresh goes to the network so a long-running session keeps converging on current data.
+  async function ensureLists(nowMs: number): Promise<StationLists> {
+    if (tideList && currentList && nowMs - listsAt < STATIONS_TTL_MS) {
+      return { tide: tideList, current: currentList };
+    }
+    // Only a reload (no in-memory lists yet) promotes the persisted copy. An in-session daily
+    // refresh asks the network, but a failure retains the accepted lists instead of blanking the
+    // bounded catalog.
     if (!tideList || !currentList) {
       const [storedTides, storedCurrents] = await Promise.all([
         deps.persist.get(TIDE_STATIONS_KEY),
@@ -149,23 +223,29 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
         currentList = storedCurrents.value as TideStation[];
         listsAt = nowMs;
         void deps.persist.prune(nowMs);
-        return;
+        return { tide: tideList, current: currentList };
       }
     }
-    const [tides, currents] = await Promise.all([deps.tideStations(), deps.currentStations()]);
-    tideList = tides;
-    currentList = currents;
-    listsAt = nowMs;
-    await Promise.all([
-      deps.persist.put(TIDE_STATIONS_KEY, tides, nowMs + STATIONS_PERSIST_MS),
-      deps.persist.put(CURRENT_STATIONS_KEY, currents, nowMs + STATIONS_PERSIST_MS),
-    ]);
-    void deps.persist.prune(nowMs);
+    try {
+      const [tides, currents] = await Promise.all([deps.tideStations(), deps.currentStations()]);
+      tideList = tides;
+      currentList = currents;
+      listsAt = nowMs;
+      await Promise.all([
+        deps.persist.put(TIDE_STATIONS_KEY, tides, nowMs + STATIONS_PERSIST_MS),
+        deps.persist.put(CURRENT_STATIONS_KEY, currents, nowMs + STATIONS_PERSIST_MS),
+      ]);
+      void deps.persist.prune(nowMs);
+      return { tide: tides, current: currents };
+    } catch (error) {
+      if (tideList && currentList) return { tide: tideList, current: currentList };
+      throw error;
+    }
   }
 
   // Resolve a station's day-keyed events through the in-memory cache, then the persisted store,
-  // then the network (the weather loader's promote pattern), so a reload reuses the day's
-  // predictions without a fetch.
+  // then the network, so a reload reuses the day's predictions without a fetch. Empty arrays are
+  // valid cache entries and mean the selected station has no events in this window.
   async function eventsFor<E extends TideEvent[] | CurrentEvent[]>(
     cache: MemoryCache<{ events: E; day: string }>,
     prefix: 'tide' | 'current',
@@ -191,172 +271,240 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     return events;
   }
 
-  // The nearest current station is often a reference-only point that serves no predictions, so
-  // try the nearest few and take the first that actually returns events.
-  async function nearestCurrent(
+  async function pluginTide(
     lat: number,
     lon: number,
     nowMs: number,
     day: string,
-  ): Promise<CurrentReading | undefined> {
-    const nearCurrents = nearestStations(
-      currentList ?? [],
-      lat,
-      lon,
-      CURRENT_TRIES,
-      CURRENT_RADIUS_M,
-    );
-    for (const candidate of nearCurrents) {
+  ): Promise<TideReading | undefined> {
+    if (!deps.pluginAvailable()) return undefined;
+    const pluginKey = `plugin:${quantizeCellDeg(lat)},${quantizeCellDeg(lon)}:${day}`;
+    let reading = await deps.pluginTides(lat, lon).catch(() => undefined);
+    const fromNetwork = reading !== undefined;
+    if (!reading) {
+      const stored = await deps.persist.get(pluginKey);
+      if (stored && stored.expires > nowMs) {
+        const replayed = stored.value as TideReading;
+        reading = {
+          ...replayed,
+          distanceMeters: haversineMeters(
+            lat,
+            lon,
+            replayed.station.latitude,
+            replayed.station.longitude,
+          ),
+        };
+        void deps.persist.prune(nowMs);
+      }
+    }
+    if (!reading || reading.distanceMeters > TIDE_RADIUS_M) return undefined;
+    if (fromNetwork) {
+      await deps.persist.put(pluginKey, reading, eventsExpiresAt(nowMs));
+      void deps.persist.prune(nowMs);
+    }
+    return reading;
+  }
+
+  async function loadTide(
+    selection: TideStationSelection,
+    lists: StationLists | undefined,
+    automaticPlugin: Promise<TideReading | undefined> | undefined,
+    lat: number,
+    lon: number,
+    nowMs: number,
+    day: string,
+  ): Promise<TideOutcome> {
+    try {
+      if (selection.mode === 'manual') {
+        const events = await eventsFor(
+          tideEventCache,
+          'tide',
+          deps.tideEvents,
+          selection.station.id,
+          nowMs,
+          day,
+        );
+        return {
+          state: 'accepted',
+          reading: {
+            station: selection.station,
+            distanceMeters: selection.distanceMeters,
+            events,
+          },
+          source: 'noaa-coops',
+          selection,
+        };
+      }
+
+      const plugin = await automaticPlugin;
+      if (plugin) {
+        return {
+          state: 'accepted',
+          reading: plugin,
+          source: 'signalk-tides',
+          selection,
+        };
+      }
+      if (!lists) return { state: 'failed', selection };
+      const nearest = nearestStations(lists.tide, lat, lon, 1, TIDE_RADIUS_M)[0];
+      if (!nearest) return { state: 'no-coverage', selection };
       const events = await eventsFor(
-        currentEventCache,
-        'current',
-        deps.currentEvents,
-        candidate.station.id,
+        tideEventCache,
+        'tide',
+        deps.tideEvents,
+        nearest.station.id,
         nowMs,
         day,
       );
-      if (events.length > 0) {
-        return {
-          station: candidate.station,
-          distanceMeters: candidate.distanceMeters,
-          events,
-        };
-      }
+      return {
+        state: 'accepted',
+        reading: { ...nearest, events },
+        source: 'noaa-coops',
+        selection,
+      };
+    } catch (error) {
+      console.warn('[tides] tide load failed', error);
+      return { state: 'failed', selection };
     }
-    return undefined;
   }
 
-  // Tidal currents still come from CO-OPS even when the plugin serves the tide (the plugin carries
-  // only tide heights), but a CO-OPS failure must not take down a plugin-served reading, so this
-  // degrades to no current instead of throwing.
-  async function nearestCurrentOrUndefined(
+  async function loadCurrent(
+    selection: TideStationSelection,
+    lists: StationLists | undefined,
     lat: number,
     lon: number,
     nowMs: number,
     day: string,
-  ): Promise<CurrentReading | undefined> {
-    try {
-      await ensureLists(nowMs);
-      return await nearestCurrent(lat, lon, nowMs, day);
-    } catch {
-      return undefined;
+  ): Promise<CurrentOutcome> {
+    if (selection.mode === 'manual') {
+      try {
+        const events = await eventsFor(
+          currentEventCache,
+          'current',
+          deps.currentEvents,
+          selection.station.id,
+          nowMs,
+          day,
+        );
+        return {
+          state: 'accepted',
+          reading: {
+            station: selection.station,
+            distanceMeters: selection.distanceMeters,
+            events,
+          },
+          selection,
+        };
+      } catch (error) {
+        console.warn('[tides] current load failed', error);
+        return { state: 'failed', selection };
+      }
     }
+    if (!lists) return { state: 'failed', selection };
+
+    const candidates = nearestStations(lists.current, lat, lon, CURRENT_TRIES, CURRENT_RADIUS_M);
+    let failed = false;
+    for (const candidate of candidates) {
+      try {
+        const events = await eventsFor(
+          currentEventCache,
+          'current',
+          deps.currentEvents,
+          candidate.station.id,
+          nowMs,
+          day,
+        );
+        // Automatic mode keeps searching past valid empty reference stations. A manual exact
+        // selection accepts the same empty response above.
+        if (events.length > 0) {
+          return {
+            state: 'accepted',
+            reading: { ...candidate, events },
+            selection,
+          };
+        }
+      } catch {
+        failed = true;
+      }
+    }
+    return failed ? { state: 'failed', selection } : { state: 'no-coverage', selection };
   }
 
-  async function performLoad(
-    store: TidesStore,
-    lat: number,
-    lon: number,
-    force: boolean,
-    generation: number,
-  ): Promise<void> {
+  function sameSelection(a: TideSelectionSnapshot | undefined, b: TideSelectionSnapshot): boolean {
+    if (!a || a.tide.mode !== b.tide.mode || a.current.mode !== b.current.mode) return false;
+    if (a.tide.mode === 'manual' && b.tide.mode === 'manual') {
+      if (a.tide.station.id !== b.tide.station.id) return false;
+    }
+    if (a.current.mode === 'manual' && b.current.mode === 'manual') {
+      if (a.current.station.id !== b.current.station.id) return false;
+    }
+    return true;
+  }
+
+  async function performLoad(request: NonNullable<typeof queued>): Promise<void> {
+    const { store, lat, lon, force, generation } = request;
     const nowMs = deps.now();
+    const selection = snapshotAt(request.selection, lat, lon);
+    const isCurrent = (): boolean => generation === requestGeneration;
     if (!force && nowMs < cooldownUntil) return;
-    const settled = store.status === 'ready' || store.status === 'no-coverage';
-    if (
+
+    const day = dayKey(nowMs);
+    const movedLittle =
       !force &&
-      settled &&
+      automaticSnapshot(selection) &&
+      sameSelection(lastSelection, selection) &&
       lastLat !== undefined &&
       lastLon !== undefined &&
-      dayKey(nowMs) === lastDay
-    ) {
-      if (haversineMeters(lastLat, lastLon, lat, lon) < SKIP_RADIUS_M) return;
-    }
-    const isCurrent = (): boolean => generation === requestGeneration;
-    store.setLoading();
+      day === lastDay &&
+      haversineMeters(lastLat, lastLon, lat, lon) < SKIP_RADIUS_M;
+
+    let lists: StationLists | undefined;
+    // Start the preferred automatic provider before the independent NOAA catalog lookup. This
+    // preserves plugin-first latency while the catalog warms for the panel and current selection.
+    const automaticPlugin =
+      selection.tide.mode === 'automatic' ? pluginTide(lat, lon, nowMs, day) : undefined;
     try {
-      const day = dayKey(nowMs);
-      // Prefer the signalk-tides plugin when the server has it; anything it cannot answer
-      // (mid-start, no position fix, outside its sources' coverage) falls through to CO-OPS,
-      // including a rejection from an injected pluginTides. The plugin answers for the vessel's
-      // position, so when the viewed point is beyond the same usefulness radius CO-OPS stations
-      // get, fall through too: a pan to a far coast should show that coast, not the boat's tides.
-      if (deps.pluginAvailable()) {
-        const pluginKey = `plugin:${quantizeCellDeg(lat)},${quantizeCellDeg(lon)}:${day}`;
-        let pluginTide = await deps.pluginTides(lat, lon).catch(() => undefined);
-        const fromNetwork = pluginTide !== undefined;
-        if (!pluginTide) {
-          // A plugin hiccup (mid-start, offline) replays the day's persisted reading for this
-          // spot before conceding to CO-OPS, which is just as unreachable with the network down.
-          const stored = await deps.persist.get(pluginKey);
-          if (stored && stored.expires > nowMs) {
-            // The key quantizes to a 0.1 degree cell, so the stored distance was measured from
-            // a point up to several km away; remeasure from here before the radius gate.
-            const replayed = stored.value as TideReading;
-            pluginTide = {
-              ...replayed,
-              distanceMeters: haversineMeters(
-                lat,
-                lon,
-                replayed.station.latitude,
-                replayed.station.longitude,
-              ),
-            };
-            void deps.persist.prune(nowMs);
-          }
-        }
-        if (pluginTide && pluginTide.distanceMeters <= TIDE_RADIUS_M) {
-          if (!isCurrent()) return;
-          lastLat = lat;
-          lastLon = lon;
-          lastDay = day;
-          if (fromNetwork) {
-            await deps.persist.put(pluginKey, pluginTide, eventsExpiresAt(nowMs));
-            void deps.persist.prune(nowMs);
-          }
-          const current = await nearestCurrentOrUndefined(lat, lon, nowMs, day);
-          if (!isCurrent()) return;
-          store.setReadings(pluginTide, current, 'signalk-tides');
-          return;
-        }
-      }
-      await ensureLists(nowMs);
-      if (!isCurrent()) return;
-      lastLat = lat;
-      lastLon = lon;
-      lastDay = day;
-      const nearTide = nearestStations(tideList ?? [], lat, lon, 1, TIDE_RADIUS_M)[0];
-      if (!nearTide) {
-        store.setNoCoverage();
-        return;
-      }
-      // The tide events and the current-station lookup are independent round trips; running
-      // them concurrently halves the cold-start wait on a slow boat link.
-      const [events, current] = await Promise.all([
-        eventsFor(tideEventCache, 'tide', deps.tideEvents, nearTide.station.id, nowMs, day),
-        // Per-station isolation: a current-station fetch (a reference-only station the loop skips,
-        // a CO-OPS hiccup) must degrade to no current, not reject the whole load and discard the
-        // tide events already fetched alongside it.
-        nearestCurrentOrUndefined(lat, lon, nowMs, day),
-      ]);
-      const tide: TideReading = {
-        station: nearTide.station,
-        distanceMeters: nearTide.distanceMeters,
-        events,
-      };
-      if (!isCurrent()) return;
-      store.setReadings(tide, current, 'noaa-coops');
+      lists = await ensureLists(nowMs);
     } catch (error) {
-      if (!isCurrent()) return;
-      cooldownUntil = deps.now() + COOLDOWN_MS;
-      // Leave a breadcrumb: a persistent tides failure (provider down, network, parse) is
-      // otherwise undiagnosable behind the generic error state and the cooldown.
-      console.warn('[tides] load failed', error);
-      store.setError();
+      console.warn('[tides] station catalog load failed', error);
     }
+    if (!isCurrent()) {
+      // Keep the one-active-request contract even after newer intent supersedes this generation.
+      // The result is discarded, but its provider round trip settles before the queued request starts.
+      await automaticPlugin?.catch(() => undefined);
+      return;
+    }
+    if (movedLittle) {
+      if (lists) {
+        const nearby = catalogs(lists, lat, lon);
+        store.setCatalogs(nearby.nearbyTideStations, nearby.nearbyCurrentStations);
+      }
+      return;
+    }
+
+    store.setLoading();
+    const [tide, current] = await Promise.all([
+      loadTide(selection.tide, lists, automaticPlugin, lat, lon, nowMs, day),
+      loadCurrent(selection.current, lists, lat, lon, nowMs, day),
+    ]);
+    if (!isCurrent()) return;
+
+    const nearby = lists ? catalogs(lists, lat, lon) : {};
+    store.applyLoad({ ...nearby, tide, current });
+    if (tide.state === 'failed' || current.state === 'failed') {
+      cooldownUntil = deps.now() + COOLDOWN_MS;
+    }
+    lastLat = lat;
+    lastLon = lon;
+    lastDay = day;
+    lastSelection = selection;
   }
 
   async function drain(first: NonNullable<typeof queued>): Promise<void> {
     let request: NonNullable<typeof queued> | undefined = first;
     while (request) {
       try {
-        await performLoad(
-          request.store,
-          request.lat,
-          request.lon,
-          request.force,
-          request.generation,
-        );
+        await performLoad(request);
       } finally {
         for (const resolve of request.waiters) resolve();
       }
@@ -368,16 +516,26 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
 
   return {
     load(store, lat, lon, force = false) {
+      store.recalculateDistances(lat, lon);
       const generation = ++requestGeneration;
+      const selection = store.selectionSnapshot();
       return new Promise<void>((resolve) => {
-        const request = { store, lat, lon, force, generation, waiters: [resolve] };
+        const request = {
+          store,
+          lat,
+          lon,
+          force,
+          generation,
+          selection,
+          waiters: [resolve],
+        };
         if (!running) {
           running = true;
           void drain(request);
           return;
         }
-        // Keep only the latest queued position. Earlier callers settle with that latest request,
-        // bounding provider traffic to one active request and one pending request during rapid pans.
+        // Keep only the latest queued position and its selection snapshot. Earlier callers settle
+        // with that latest request, bounding provider traffic to one active and one pending request.
         queued = queued
           ? {
               ...request,

@@ -150,7 +150,7 @@ describe('createTidesLoader', () => {
     expect(store.source).toBe('noaa-coops');
   });
 
-  it('keeps the plugin tide when the CO-OPS current lookup fails', async () => {
+  it('keeps the plugin tide and reports when the CO-OPS current lookup fails', async () => {
     const loader = createTidesLoader(
       deps({
         pluginAvailable: () => true,
@@ -162,10 +162,11 @@ describe('createTidesLoader', () => {
     );
     const store = new TidesStore();
     await loader.load(store, 27.7, -82.7);
-    expect(store.status).toBe('ready');
+    expect(store.status).toBe('error');
     expect(store.tide).toBe(pluginReading);
     expect(store.current).toBeUndefined();
     expect(store.source).toBe('signalk-tides');
+    expect(store.failure('current')).toBeDefined();
   });
 
   it('reuses cached station lists and events on a second nearby load', async () => {
@@ -284,5 +285,213 @@ describe('createTidesLoader', () => {
     expect(store.tide?.station.id).toBe('tides');
     expect(store.source).toBe('signalk-tides');
     expect(d.tideEvents).not.toHaveBeenCalled();
+  });
+
+  it('publishes at most eight sorted stations of each kind inside its radius', async () => {
+    const tides = Array.from({ length: 12 }, (_, index) => ({
+      id: `T${index}`,
+      name: `Tide ${index}`,
+      latitude: 27.7 + index * 0.01,
+      longitude: -82.7,
+    }));
+    const currents = Array.from({ length: 12 }, (_, index) => ({
+      id: `C${index}`,
+      name: `Current ${index}`,
+      latitude: 27.7 + index * 0.01,
+      longitude: -82.7,
+    }));
+    tides.push({ id: 'far-tide', name: 'Far tide', latitude: 30, longitude: -82.7 });
+    currents.push({ id: 'far-current', name: 'Far current', latitude: 30, longitude: -82.7 });
+    const loader = createTidesLoader(
+      deps({
+        tideStations: vi.fn(async () => tides),
+        currentStations: vi.fn(async () => currents),
+      }),
+    );
+    const store = new TidesStore();
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.nearbyTideStations).toHaveLength(8);
+    expect(store.nearbyCurrentStations).toHaveLength(8);
+    expect(store.nearbyTideStations.map(({ station }) => station.id)).toEqual(
+      Array.from({ length: 8 }, (_, index) => `T${index}`),
+    );
+    expect(store.nearbyCurrentStations.map(({ station }) => station.id)).toEqual(
+      Array.from({ length: 8 }, (_, index) => `C${index}`),
+    );
+    expect(store.nearbyTideStations.map(({ distanceMeters }) => distanceMeters)).toEqual(
+      [...store.nearbyTideStations]
+        .map(({ distanceMeters }) => distanceMeters)
+        .sort((a, b) => a - b),
+    );
+  });
+
+  it('combines an automatic plugin tide with an exact manual NOAA current', async () => {
+    const manualCurrent = {
+      id: 'C2',
+      name: 'Manual current',
+      latitude: 27.71,
+      longitude: -82.71,
+    };
+    const d = deps({
+      pluginAvailable: () => true,
+      pluginTides: vi.fn(async () => pluginReading),
+      currentStations: vi.fn(async () => [currentStation, manualCurrent]),
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+    store.requestManual('current', manualCurrent, 0);
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.source).toBe('signalk-tides');
+    expect(store.current?.station.id).toBe('C2');
+    expect(d.currentEvents).toHaveBeenCalledWith('C2');
+    expect(store.loadedCurrent.mode).toBe('manual');
+  });
+
+  it('bypasses signalk-tides and fetches the exact manually selected tide station', async () => {
+    const manualTide = {
+      id: 'T2',
+      name: 'Manual tide',
+      latitude: 27.71,
+      longitude: -82.71,
+    };
+    const pluginTides = vi.fn(async () => pluginReading);
+    const d = deps({
+      pluginAvailable: () => true,
+      pluginTides,
+      tideStations: vi.fn(async () => [tideStation, manualTide]),
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+    store.requestManual('tide', manualTide, 0);
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(pluginTides).not.toHaveBeenCalled();
+    expect(d.tideEvents).toHaveBeenCalledWith('T2');
+    expect(store.tide?.station.id).toBe('T2');
+    expect(store.source).toBe('noaa-coops');
+  });
+
+  it('accepts valid empty windows for exact manual tide and current stations', async () => {
+    const d = deps({
+      tideEvents: vi.fn(async () => []),
+      currentEvents: vi.fn(async () => []),
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+    store.requestManual('tide', tideStation, 0);
+    store.requestManual('current', currentStation, 0);
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.status).toBe('ready');
+    expect(store.tide?.events).toEqual([]);
+    expect(store.current?.events).toEqual([]);
+    expect(store.loadedTide.mode).toBe('manual');
+    expect(store.loadedCurrent.mode).toBe('manual');
+  });
+
+  it('keeps accepted readings, provider, catalogs, and loaded selection after a replacement fails', async () => {
+    const replacement = {
+      id: 'T2',
+      name: 'Replacement tide',
+      latitude: 27.72,
+      longitude: -82.72,
+    };
+    const tideEventsFetch = vi
+      .fn()
+      .mockResolvedValueOnce(tideEvents)
+      .mockRejectedValueOnce(new Error('transport'));
+    const d = deps({
+      tideStations: vi.fn(async () => [tideStation, replacement]),
+      tideEvents: tideEventsFetch,
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+    store.requestManual('tide', tideStation, 0);
+    await loader.load(store, 27.7, -82.7);
+    const acceptedCatalog = store.nearbyTideStations;
+    store.requestManual('tide', replacement, 0);
+
+    await loader.load(store, 27.7, -82.7, true);
+
+    expect(store.status).toBe('error');
+    expect(store.tide?.station.id).toBe('T1');
+    expect(store.source).toBe('noaa-coops');
+    expect(store.loadedTide).toMatchObject({ mode: 'manual', station: { id: 'T1' } });
+    expect(store.failure('tide')?.requested).toMatchObject({
+      mode: 'manual',
+      station: { id: 'T2' },
+    });
+    expect(store.nearbyTideStations.map(({ station }) => station.id)).toEqual(
+      acceptedCatalog.map(({ station }) => station.id),
+    );
+  });
+
+  it('prevents a late automatic request from overwriting newer manual intent', async () => {
+    let resolvePlugin: ((value: typeof pluginReading) => void) | undefined;
+    const manualTide = {
+      id: 'T2',
+      name: 'Manual tide',
+      latitude: 27.71,
+      longitude: -82.71,
+    };
+    const pluginTides = vi.fn(
+      () => new Promise<typeof pluginReading>((resolve) => (resolvePlugin = resolve)),
+    );
+    const d = deps({
+      pluginAvailable: () => true,
+      pluginTides,
+      tideStations: vi.fn(async () => [tideStation, manualTide]),
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+    const automatic = loader.load(store, 27.7, -82.7);
+    store.requestManual('tide', manualTide, 0);
+    const manual = loader.load(store, 27.7, -82.7, true);
+    resolvePlugin?.(pluginReading);
+
+    await Promise.all([automatic, manual]);
+
+    expect(store.requestedTide).toMatchObject({ mode: 'manual', station: { id: 'T2' } });
+    expect(store.loadedTide).toMatchObject({ mode: 'manual', station: { id: 'T2' } });
+    expect(store.tide?.station.id).toBe('T2');
+  });
+
+  it('lets a forced retry bypass the failure cooldown', async () => {
+    const tideEventsFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(tideEvents);
+    const d = deps({ tideEvents: tideEventsFetch });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+
+    await loader.load(store, 27.7, -82.7);
+    await loader.load(store, 27.8, -82.8);
+    expect(tideEventsFetch).toHaveBeenCalledTimes(1);
+
+    await loader.load(store, 27.8, -82.8, true);
+    expect(tideEventsFetch).toHaveBeenCalledTimes(2);
+    expect(store.status).toBe('ready');
+  });
+
+  it('keeps a manual selection and exact reading after panning beyond the nearby catalog', async () => {
+    const loader = createTidesLoader(deps());
+    const store = new TidesStore();
+    store.requestManual('tide', tideStation, 0);
+    await loader.load(store, 27.7, -82.7);
+
+    await loader.load(store, 35, -90, true);
+
+    expect(store.requestedTide).toMatchObject({ mode: 'manual', station: { id: 'T1' } });
+    expect(store.loadedTide).toMatchObject({ mode: 'manual', station: { id: 'T1' } });
+    expect(store.tide?.station.id).toBe('T1');
+    expect(store.tide?.distanceMeters).toBeGreaterThan(100_000);
+    expect(store.nearbyTideStations).toEqual([]);
   });
 });

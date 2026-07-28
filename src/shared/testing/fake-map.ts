@@ -14,7 +14,7 @@ type FakeSource = {
 
 export function createFakeMap() {
   const sources = new Map<string, FakeSource>();
-  const layers = new Set<string>();
+  const layers = new Map<string, Record<string, unknown>>();
   const images = new Set<string>();
   const updatedImages: string[] = [];
   // A source is not loaded until its tiles arrive, as in real MapLibre; markSourceLoaded plus an
@@ -22,6 +22,12 @@ export function createFakeMap() {
   // not a bare spy, so emit can fire them.
   const loadedSources = new Set<string>();
   const handlers = new Map<string, Set<(event: unknown) => void>>();
+  const canvas = {
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
+    dispatchEvent: () => true,
+    style: {} as CSSStyleDeclaration,
+  };
+  const handlerKey = (type: string, layer?: string) => (layer ? `${type}:${layer}` : type);
   return {
     sources,
     layers,
@@ -64,8 +70,8 @@ export function createFakeMap() {
     getSource: (id: string) => sources.get(id),
     isSourceLoaded: (id: string) => loadedSources.has(id),
     markSourceLoaded: (id: string) => loadedSources.add(id),
-    getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
-    addLayer: (layer: { id: string }) => layers.add(layer.id),
+    getLayer: (id: string) => layers.get(id),
+    addLayer: (layer: { id: string }) => layers.set(layer.id, layer),
     removeLayer: (id: string) => layers.delete(id),
     moveLayer: vi.fn(),
     removeSource: (id: string) => sources.delete(id),
@@ -73,26 +79,40 @@ export function createFakeMap() {
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
     setGlobalStateProperty: vi.fn(),
-    on: (type: string, handler: (event: unknown) => void) => {
-      const set = handlers.get(type) ?? new Set();
+    on: (
+      type: string,
+      layerOrHandler: string | ((event: unknown) => void),
+      delegatedHandler?: (event: unknown) => void,
+    ) => {
+      const layer = typeof layerOrHandler === 'string' ? layerOrHandler : undefined;
+      const handler = delegatedHandler ?? (layerOrHandler as (event: unknown) => void);
+      const key = handlerKey(type, layer);
+      const set = handlers.get(key) ?? new Set();
       set.add(handler);
-      handlers.set(type, set);
+      handlers.set(key, set);
     },
-    off: (type: string, handler: (event: unknown) => void) => {
-      handlers.get(type)?.delete(handler);
+    off: (
+      type: string,
+      layerOrHandler: string | ((event: unknown) => void),
+      delegatedHandler?: (event: unknown) => void,
+    ) => {
+      const layer = typeof layerOrHandler === 'string' ? layerOrHandler : undefined;
+      const handler = delegatedHandler ?? (layerOrHandler as (event: unknown) => void);
+      handlers.get(handlerKey(type, layer))?.delete(handler);
     },
     emit: (type: string, event: unknown) => {
       for (const handler of [...(handlers.get(type) ?? [])]) handler(event);
     },
+    emitLayer: (type: string, layer: string, event: unknown) => {
+      for (const handler of [...(handlers.get(handlerKey(type, layer)) ?? [])]) handler(event);
+    },
+    handlerCount: (type: string, layer?: string) =>
+      handlers.get(handlerKey(type, layer))?.size ?? 0,
     once: vi.fn(),
     // Read-only accessors several overlays call (anchor, notes, ais-trails, wind, base-theme), with
     // benign defaults, so an overlay tested against the bare fake exercises its logic instead of
     // throwing. A test that needs a specific value overrides the method on the returned object.
-    getCanvas: () => ({
-      getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
-      dispatchEvent: () => true,
-      style: {} as CSSStyleDeclaration,
-    }),
+    getCanvas: () => canvas,
     getZoom: () => 10,
     getCenter: () => ({ lng: 0, lat: 0 }),
     getBounds: () => ({

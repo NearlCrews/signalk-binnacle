@@ -32,7 +32,11 @@ import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$fea
 import { type Poi, PoiSearchPanel } from '$features/poi-search';
 import { loadRegionsPanel } from '$features/prewarm';
 import { RoutesPanel } from '$features/routing';
-import { TidesPanel } from '$features/tides';
+import {
+  loadTidesPanel,
+  type TideStationSelectionEvent,
+  type TidesController,
+} from '$features/tides';
 import { HistoryStrip, type TimeTravelStore } from '$features/time-travel';
 import { TracksPanel } from '$features/tracks';
 import { loadTrendsPanel } from '$features/trends';
@@ -82,6 +86,7 @@ interface FlatProps {
   waypointsController: WaypointsController;
   trackController: TrackController;
   marineRadar: RadarController;
+  tidesController: TidesController;
 
   // Entity stores
   anchor: AnchorWatch;
@@ -123,6 +128,7 @@ interface FlatProps {
 
   // Panel state
   activePanel: PanelId | null;
+  tidesOpenedFrom: 'menu' | 'chart';
   menuOpen: boolean;
   layersView: LayersView | undefined;
   noteLoader: NoteDetailLoader | undefined;
@@ -167,6 +173,7 @@ interface FlatProps {
   onMapDestroyed: () => void;
   onUserPan: () => void;
   onNoteSelect: (selection: NoteSelection | undefined) => void;
+  onTideStationSelect: (selection: TideStationSelectionEvent) => void;
   onNotes: (notes: NotePoint[]) => void;
   onPoiStatus: (state: PoiViewState) => void;
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => void;
@@ -180,7 +187,6 @@ interface FlatProps {
   backToOfflineCharts: () => void;
   openLayersPanel: (mode: 'charts' | 'overlays') => void;
   setLayerVisible: (id: string, visible: boolean) => void;
-  onRetryTides: () => void;
   onRetryHistoryProviders: () => void;
   onRetryChartLocker: () => void;
   // Arms the measure tool (shows the layer and resets prior points); owned by the shell so the
@@ -231,7 +237,8 @@ type ControllerKey =
   | 'routeController'
   | 'waypointsController'
   | 'trackController'
-  | 'marineRadar';
+  | 'marineRadar'
+  | 'tidesController';
 type EntityKey =
   | 'anchor'
   | 'mob'
@@ -260,6 +267,7 @@ type ActionKey =
   | 'onMapDestroyed'
   | 'onUserPan'
   | 'onNoteSelect'
+  | 'onTideStationSelect'
   | 'onNotes'
   | 'onPoiStatus'
   | 'onWeatherLayersReady'
@@ -271,7 +279,6 @@ type ActionKey =
   | 'backToOfflineCharts'
   | 'openLayersPanel'
   | 'setLayerVisible'
-  | 'onRetryTides'
   | 'onRetryHistoryProviders'
   | 'onRetryChartLocker'
   | 'armMeasure'
@@ -317,6 +324,7 @@ let {
   weatherLayerSettings,
   trackPersistenceDegraded,
   activePanel,
+  tidesOpenedFrom,
   menuOpen = $bindable(),
   layersView,
   noteLoader,
@@ -375,6 +383,7 @@ const {
   waypointsController,
   trackController,
   marineRadar,
+  tidesController,
 } = $derived(controllers);
 const {
   anchor,
@@ -405,6 +414,7 @@ const {
   onMapDestroyed,
   onUserPan,
   onNoteSelect,
+  onTideStationSelect,
   onNotes,
   onPoiStatus,
   onWeatherLayersReady,
@@ -416,7 +426,6 @@ const {
   backToOfflineCharts,
   openLayersPanel,
   setLayerVisible,
-  onRetryTides,
   onRetryHistoryProviders,
   onRetryChartLocker,
   armMeasure,
@@ -486,6 +495,11 @@ function trendsPanelForAttempt() {
   return loadTrendsPanel();
 }
 
+function tidesPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadTidesPanel();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
@@ -553,6 +567,7 @@ $effect(() => {
     }}
     {onViewChange}
     {onNoteSelect}
+    {onTideStationSelect}
     {onNotes}
     {onPoiStatus}
     {onUserPan}
@@ -715,15 +730,26 @@ $effect(() => {
           onBack={backFromWaypointsPanel}
         />
       {:else if activePanel === 'tides'}
-        <TidesPanel
-          store={tidesStore}
-          {units}
-          stationsShown={layerSettings.tides?.visible ?? false}
-          onToggleStations={(shown) => setLayerVisible('tides', shown)}
-          onRetry={onRetryTides}
-          onClose={closePanel}
-          onBack={backToMenu}
-        />
+        {#await tidesPanelForAttempt()}
+          <div class="slide-over slide-over--dock-left panel-loading" role="status">
+            Loading tide predictions…
+          </div>
+        {:then module}
+          <module.default
+            store={tidesStore}
+            controller={tidesController}
+            {units}
+            stationsShown={layerSettings.tides?.visible ?? false}
+            onToggleStations={(shown) => setLayerVisible('tides', shown)}
+            onClose={closePanel}
+            onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
+          />
+        {:catch}
+          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
+            Tide predictions could not load.
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       {:else if activePanel === 'trends'}
         {#await trendsPanelForAttempt()}
           <div class="slide-over slide-over--dock-left panel-loading" role="status">

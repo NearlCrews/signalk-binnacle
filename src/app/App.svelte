@@ -95,9 +95,11 @@ import {
 import { createRouteController } from '$features/routing';
 import { ThemeToggle } from '$features/theme-toggle';
 import {
+  createTidesController,
   createTidesLoader,
   fetchSignalkTidesReading,
   SIGNALK_TIDES_PLUGIN_ID,
+  type TideStationSelectionEvent,
 } from '$features/tides';
 import { TimeTravelStore } from '$features/time-travel';
 import { createTrackController } from '$features/tracks';
@@ -386,6 +388,7 @@ let layersView = $state<LayersView | undefined>();
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
 // opening one closes whatever was open without each opener having to clear the others by hand.
 let activePanel = $state<PanelId | null>(null);
+let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
@@ -490,6 +493,7 @@ const savedView = isMapView(mapViewStore.value) ? mapViewStore.value : undefined
 // The live map view if one has been reported, else the persisted view: the fallback that the tides
 // load and the weather map's initial view share.
 const currentView = $derived(mapView ?? savedView);
+const tidesController = createTidesController(tidesStore, tidesLoader, () => currentView);
 const layerSettings = new PersistedValue<LayerSettings>(
   binnacleStorageKey('layers'),
   {},
@@ -933,13 +937,13 @@ function onViewChange(view: MapView): void {
   viewSaveTimer = setTimeout(() => {
     mapViewStore.set(view);
     // Refresh tides for the settled view; the loader skips small moves and dedups in flight.
-    if (tidesWanted) void tidesLoader.load(tidesStore, view.lat, view.lon);
+    if (tidesWanted) void tidesController.load(view);
   }, VIEW_SAVE_DEBOUNCE_MS);
 }
 
 // Load tides for the current view, so opening the Tides panel shows data without a pan first.
 function loadTides(force = false): void {
-  if (currentView) void tidesLoader.load(tidesStore, currentView.lat, currentView.lon, force);
+  void tidesController.loadCurrent(force);
 }
 
 // Toggling the tide layer on (or opening the panel) loads tides for the current view, covering the
@@ -979,6 +983,19 @@ function setLayerVisible(id: string, visible: boolean): void {
   const next = { ...layerSettings.value, [id]: entry };
   layerSettings.set(next);
   mapCommands?.applyLayers(next, layerOrder.value);
+}
+
+function onTideStationSelect(selection: TideStationSelectionEvent): void {
+  setLayerVisible('tides', true);
+  if (activePanel !== 'tides') {
+    tidesOpenedFrom = 'chart';
+    openPanel('tides');
+  }
+  if (selection.mode === 'automatic') {
+    void tidesController.useAutomatic(selection.kind);
+  } else {
+    void tidesController.selectStation(selection.kind, selection.station);
+  }
 }
 
 // A menu action can reveal a layer before ChartCanvas finishes its asynchronous map setup. Persisted
@@ -1247,7 +1264,15 @@ const menuItems = $derived<MenuItem[]>([
     icon: Waves,
     group: 'Weather',
     pressed: activePanel === 'tides',
-    onSelect: () => togglePanel('tides', loadTides),
+    onSelect: () => {
+      if (activePanel === 'tides') {
+        closePanel();
+        return;
+      }
+      tidesOpenedFrom = 'menu';
+      openPanel('tides');
+      loadTides();
+    },
   },
   {
     id: 'trends',
@@ -1927,6 +1952,7 @@ const plotterControllers = {
   waypointsController,
   trackController,
   marineRadar,
+  tidesController,
 };
 
 const plotterEntities = {
@@ -1962,6 +1988,7 @@ const plotterActions = {
   onMapDestroyed: () => (mapInstance = undefined),
   onUserPan: () => (following = false),
   onNoteSelect: selectNote,
+  onTideStationSelect,
   onNotes: (notes: NotePoint[]) => (poiNotes = notes),
   onPoiStatus: (state: PoiViewState) => (poiViewState = state),
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => (applyWeatherLayers = apply),
@@ -1980,7 +2007,6 @@ const plotterActions = {
     openPanel('layers');
   },
   setLayerVisible,
-  onRetryTides: () => loadTides(true),
   onRetryHistoryProviders: () => void probeHistoryProviders(true, true),
   onRetryChartLocker: () => void companionStatus.refresh(),
   armMeasure,
@@ -2077,6 +2103,7 @@ const plotterActions = {
     weatherLayerSettings={weatherLayerSettings.value}
     {trackPersistenceDegraded}
     {activePanel}
+    {tidesOpenedFrom}
     bind:menuOpen
     {layersView}
     {noteLoader}

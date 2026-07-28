@@ -77,6 +77,7 @@ function setup(marineRadarLayer?: { id: string }) {
     trackSettings: { value: { intervalSeconds: 10 } },
     savedTracks: { list: vi.fn() },
     notesOverlay: { id: 'notes' },
+    onTideStationSelect: vi.fn(),
     onAnchorMoved: vi.fn(),
     aisTrailsAvailable: vi.fn(() => true),
     historyProviders: vi.fn(() => ({ providers: [] })),
@@ -141,7 +142,11 @@ describe('buildDynamicOverlays', () => {
   it('forwards live getters and each store to the intended overlay factory', () => {
     const { deps } = setup();
 
-    expect(factories.createTidesOverlay).toHaveBeenCalledWith(deps.tides, deps.units);
+    expect(factories.createTidesOverlay).toHaveBeenCalledWith(
+      deps.tides,
+      deps.units,
+      deps.onTideStationSelect,
+    );
     expect(factories.createAnchorOverlay).toHaveBeenCalledWith(
       deps.anchor,
       deps.vessel,

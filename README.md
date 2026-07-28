@@ -85,9 +85,11 @@ Binnacle ships its full feature set as a Signal K webapp:
   labels, deterministic risk cues, and official warnings when a Signal K weather provider supplies
   them. Open-Meteo provides the key-free fallback, including wind waves, swell, currents, and sea
   surface temperature, while cached forecasts remain available offline with explicit stale labeling.
-- **Tides:** the nearest tide station's next high and low with a 48-hour curve and the nearest
-  tidal-current station's next flood or ebb. NOAA CO-OPS covers US waters out of the box; the
-  signalk-tides plugin extends coverage worldwide when the server runs it.
+- **Tides:** independent tide-height and tidal-current station selection with automatic nearest
+  choices, exact manual NOAA CO-OPS choices, a 48-hour tide curve, and the next high, low, flood, ebb,
+  or slack. Filled tide markers and hollow current markers are selectable on the chart. Manual
+  choices survive chart pans for the session but reset on reload. NOAA CO-OPS covers US waters out of
+  the box; automatic tide height prefers the signalk-tides plugin when the server runs it.
 - **Lookout:** a collision watch with CPA and TCPA, chart-highlight rings, an audible alarm, and a
   published Signal K notification, plus a sortable **AIS target list** (by range, CPA, or name) with
   live range and bearing, tap-to-locate, and faded **target trails** from the tracks plugin. An
@@ -233,10 +235,11 @@ from OpenSeaMap, NASA GIBS, Open Water Seascape, GEBCO, EMODnet, and NOAA servic
 BlueTopo, and marine protected areas. The maritime-boundaries overlay requests VLIZ Marine Regions.
 
 Opening weather or enabling its optional layers can contact Open-Meteo and RainViewer. Opening tides
-can contact NOAA CO-OPS when a Signal K tide provider is unavailable. These services can observe your
-public network address and the requested tile, map area, or forecast coordinates. Optional marine,
-weather, and tide requests are made only when the corresponding layer or feature is used, and cached
-results remain usable when a provider is unavailable.
+can contact NOAA CO-OPS for automatic fallback, tidal-current predictions, or a manually selected
+station. These services can observe your public network address and the requested tile, map area, or
+forecast coordinates. Optional marine, weather, and tide requests are made only when the
+corresponding layer or feature is used, and cached results remain usable when a provider is
+unavailable.
 
 User-added URL charts are fetched by the browser. Binnacle rejects URLs with embedded usernames or
 passwords, removes URL fragments, redacts every query value in displays and errors, and keeps every

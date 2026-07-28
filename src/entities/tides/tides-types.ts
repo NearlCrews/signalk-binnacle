@@ -5,12 +5,40 @@
 // high and low are always present even late in the day. Shared so the CO-OPS and signalk-tides
 // sources trim to the same span and their curves and readouts agree.
 export const TIDE_WINDOW_HOURS = 48;
+export const MAX_NEARBY_STATIONS = 8;
 
 export interface TideStation {
   id: string;
   name: string;
   latitude: number;
   longitude: number;
+}
+
+export type TideStationKind = 'tide' | 'current';
+
+export interface NearbyTideStation {
+  station: TideStation;
+  // Straight-line distance from the current chart center, not sailing distance or an indication
+  // that the station represents the local water movement.
+  distanceMeters: number;
+}
+
+export type TideStationSelection =
+  | { mode: 'automatic' }
+  | {
+      mode: 'manual';
+      station: TideStation;
+      distanceMeters: number;
+    };
+
+export interface TideSelectionSnapshot {
+  tide: TideStationSelection;
+  current: TideStationSelection;
+}
+
+export interface TideStationLoadFailure {
+  kind: TideStationKind;
+  requested: TideStationSelection;
 }
 
 export interface TideEvent {

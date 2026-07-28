@@ -1,4 +1,4 @@
-import type { CurrentEvent, TideEvent, TidesSource } from '$entities/tides';
+import type { CurrentEvent, TideEvent, TideStationSelection, TidesSource } from '$entities/tides';
 import {
   formatFixed,
   formatKnots,
@@ -40,10 +40,21 @@ export function formatStationDistance(meters: number, mode: UnitsMode): string {
   return value < 1 ? `<1 ${unit}` : `${Math.round(value)} ${unit}`;
 }
 
-// The quiet provenance line under the readings: which source served the tide prediction.
-export function tideSourceNote(source: TidesSource | undefined): string {
-  if (source === 'signalk-tides') return 'Predictions from the signalk-tides plugin.';
-  if (source === 'noaa-coops') return 'Predictions from NOAA CO-OPS.';
+// The quiet provenance line under the readings: which source served the tide prediction and which
+// part of the result always comes from NOAA CO-OPS.
+export function tideSourceNote(
+  source: TidesSource | undefined,
+  selection: TideStationSelection = { mode: 'automatic' },
+): string {
+  if (selection.mode === 'manual') {
+    return 'The manually selected tide station and all tidal-current predictions use NOAA CO-OPS.';
+  }
+  if (source === 'signalk-tides') {
+    return 'Automatic tide predictions use the signalk-tides plugin. Tidal-current predictions use NOAA CO-OPS.';
+  }
+  if (source === 'noaa-coops') {
+    return 'Automatic tide and tidal-current predictions use NOAA CO-OPS.';
+  }
   return '';
 }
 

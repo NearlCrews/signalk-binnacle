@@ -221,6 +221,11 @@
 .nav-row:hover {
   border-color: var(--accent);
 }
+.nav-row[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  box-shadow: inset var(--active-bar-width) 0 0 var(--accent);
+}
 .nav-name {
   font-weight: 600;
   overflow: hidden;

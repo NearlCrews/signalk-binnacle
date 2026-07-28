@@ -32,6 +32,7 @@ import { buildOceanSources, createOceanOverlay } from '$features/ocean-condition
 import type { RouteEditor } from '$features/route-edit';
 import { createWorkingRouteOverlay, type WorkingRouteOverlay } from '$features/route-layer';
 import { createSeamarkOverlay, SEAMARK_SOURCES } from '$features/seamark-overlay';
+import type { TideStationSelectionEvent } from '$features/tides';
 import type { TimeTravelStore } from '$features/time-travel';
 import type { SavedTracksSource } from '$features/track-layer';
 import { OWN_VESSEL_OVERLAY_ID } from '$features/vessel-layer';
@@ -114,6 +115,7 @@ interface Props {
   onCriticalOverlayError?: (overlayIds: string[]) => void;
   onViewChange?: (view: MapView) => void;
   onNoteSelect?: (selection: NoteSelection | undefined) => void;
+  onTideStationSelect?: (selection: TideStationSelectionEvent) => void;
   // The on-screen POI set, forwarded from the notes overlay to the POI search.
   onNotes?: (notes: NotePoint[]) => void;
   onPoiStatus?: (state: PoiViewState) => void;
@@ -187,6 +189,7 @@ const {
   onCriticalOverlayError,
   onViewChange,
   onNoteSelect,
+  onTideStationSelect,
   onNotes,
   onPoiStatus,
   onUserPan,
@@ -397,6 +400,7 @@ onMount(async () => {
         recorder,
         routeStore,
         tides,
+        onTideStationSelect,
         units,
         waypoints,
         symbols,

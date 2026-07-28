@@ -182,7 +182,6 @@ onDestroy(() => onHover(undefined));
           <button
             type="button"
             class="nav-row"
-            class:is-selected={selectedId === row.poi.id}
             aria-current={selectedId === row.poi.id ? 'true' : undefined}
             title="Open the detail for {row.poi.name}"
             onclick={() => onSelect(row.poi)}
@@ -230,9 +229,9 @@ onDestroy(() => onHover(undefined));
 </SlideOver>
 
 <style>
-/* The search field, the sort header, the result rows, and the readout line come from the global
-   .search-input and the shared .nav-* family in cards.css, shared with the AIS targets and Waypoints
-   panels; only the leading category icon and the selected-row accent are local. */
+/* The search field, the sort header, the result rows, the selected-row accent, and the readout line
+   come from the global .search-input and shared .nav-* family in cards.css. Only the leading category
+   icon is local. */
 .poi-head {
   display: flex;
   align-items: center;
@@ -254,10 +253,5 @@ onDestroy(() => onHover(undefined));
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.nav-row.is-selected {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 </style>

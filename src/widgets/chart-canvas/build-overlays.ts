@@ -23,7 +23,7 @@ import { createMeasureOverlay } from '$features/measure';
 import { createMobOverlay } from '$features/mob';
 import type { NotesOverlay } from '$features/notes';
 import { createCourseOverlay, createRouteOverlay } from '$features/route-layer';
-import { createTidesOverlay } from '$features/tides';
+import { createTidesOverlay, type TideStationSelectionEvent } from '$features/tides';
 import { createTimeTravelOverlay, type TimeTravelStore } from '$features/time-travel';
 import {
   createHistoryTrackOverlay,
@@ -53,6 +53,7 @@ export interface DynamicOverlaysDeps {
   recorder: TrackRecorder;
   routeStore: RouteStore;
   tides: TidesStore;
+  onTideStationSelect?: (selection: TideStationSelectionEvent) => void;
   units: UnitsStore;
   waypoints: WaypointsStore;
   symbols?: SymbolsStore;
@@ -89,6 +90,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     recorder,
     routeStore,
     tides,
+    onTideStationSelect,
     units,
     waypoints,
     symbols,
@@ -102,7 +104,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     marineRadarLayer,
   } = deps;
   return [
-    createTidesOverlay(tides, units),
+    createTidesOverlay(tides, units, onTideStationSelect),
     createAnchorOverlay(anchor, vessel, onAnchorMoved),
     createMeasureOverlay(measure, units),
     createRouteOverlay(routeStore),

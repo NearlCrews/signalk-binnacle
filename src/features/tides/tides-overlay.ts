@@ -1,5 +1,17 @@
-import type { CircleLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl';
-import type { CurrentReading, TideReading, TidesStore } from '$entities/tides';
+import type {
+  CircleLayerSpecification,
+  ExpressionSpecification,
+  SymbolLayerSpecification,
+} from 'maplibre-gl';
+import type {
+  CurrentReading,
+  NearbyTideStation,
+  TideReading,
+  TideStation,
+  TideStationKind,
+  TideStationSelection,
+  TidesStore,
+} from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import { latLonToLonLat } from '$shared/geo';
 import { formatClockTime, MINUTE_MS, type UnitsMode } from '$shared/lib';
@@ -20,14 +32,38 @@ import {
   nextCurrentEvent,
   nextTideEvent,
 } from './tides-display';
-
-const SOURCE_ID = 'binnacle-tides';
-const CIRCLE_LAYER = 'binnacle-tides-circle';
-const LABEL_LAYER = 'binnacle-tides-label';
-const LAYERS = [CIRCLE_LAYER, LABEL_LAYER];
+import { createTideHitHandlers, type TideStationSelectionEvent } from './tides-hit-handlers';
+import {
+  TIDES_CURRENT_LAYER,
+  TIDES_GLYPH_LAYER,
+  TIDES_HIT_LAYER,
+  TIDES_LABEL_LAYER,
+  TIDES_LAYERS,
+  TIDES_SELECTED_LAYER,
+  TIDES_SOURCE_ID,
+  TIDES_TIDE_LAYER,
+  TIDES_VISUAL_LAYERS,
+} from './tides-overlay-layers';
 
 interface TidesOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
+}
+
+interface RenderStation {
+  kind: TideStationKind;
+  station: TideStation;
+  selected: boolean;
+  loaded: boolean;
+  reading?: TideReading | CurrentReading;
+}
+
+interface TideFeatureProperties {
+  stationId: string;
+  kind: TideStationKind;
+  selected: boolean;
+  loaded: boolean;
+  glyph: 'T' | 'C';
+  label: string;
 }
 
 // The marker label: the station name, then the next high or low with its height and time.
@@ -41,57 +77,120 @@ function tideLabel(reading: TideReading, nowMs: number, mode: UnitsMode): string
 function currentLabel(reading: CurrentReading, nowMs: number): string {
   const next = nextCurrentEvent(reading.events, nowMs);
   if (!next) return reading.station.name;
-  const tag = next.kind === 'flood' ? 'Flood' : 'Ebb';
+  const tag = next.kind === 'flood' ? 'Flood' : next.kind === 'ebb' ? 'Ebb' : 'Slack';
   return `${reading.station.name}\n${tag} ${formatCurrentRate(next.velocityMps)} ${formatClockTime(next.timeMs)}`;
 }
 
-function features(
-  tide: TideReading | undefined,
-  current: CurrentReading | undefined,
+function addCandidate(
+  stations: Map<string, RenderStation>,
+  kind: TideStationKind,
+  station: TideStation,
+): RenderStation {
+  const key = `${kind}:${station.id}`;
+  const existing = stations.get(key);
+  if (existing) return existing;
+  const candidate = { kind, station, selected: false, loaded: false };
+  stations.set(key, candidate);
+  return candidate;
+}
+
+function addNearby(
+  stations: Map<string, RenderStation>,
+  kind: TideStationKind,
+  nearby: NearbyTideStation[],
+): void {
+  for (const candidate of nearby) addCandidate(stations, kind, candidate.station);
+}
+
+function addSelected(
+  stations: Map<string, RenderStation>,
+  kind: TideStationKind,
+  selection: TideStationSelection,
+): void {
+  if (selection.mode === 'manual') {
+    addCandidate(stations, kind, selection.station).selected = true;
+  }
+}
+
+function addReading(
+  stations: Map<string, RenderStation>,
+  kind: TideStationKind,
+  reading: TideReading | CurrentReading | undefined,
+): void {
+  if (!reading) return;
+  const candidate = addCandidate(stations, kind, reading.station);
+  candidate.loaded = true;
+  candidate.reading = reading;
+}
+
+export function tideStationFeatures(
+  store: TidesStore,
   nowMs: number,
   mode: UnitsMode,
 ): GeoJSON.FeatureCollection {
-  const list: GeoJSON.Feature[] = [];
-  if (tide) {
-    list.push({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: latLonToLonLat(tide.station) },
-      properties: { label: tideLabel(tide, nowMs, mode) },
-    });
-  }
-  if (current) {
-    list.push({
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: latLonToLonLat(current.station),
-      },
-      properties: { label: currentLabel(current, nowMs) },
-    });
-  }
-  return featureCollection(list);
+  const stations = new Map<string, RenderStation>();
+  addNearby(stations, 'tide', store.nearbyTideStations);
+  addNearby(stations, 'current', store.nearbyCurrentStations);
+  addSelected(stations, 'tide', store.requestedTide);
+  addSelected(stations, 'current', store.requestedCurrent);
+  addReading(stations, 'tide', store.tide);
+  addReading(stations, 'current', store.current);
+
+  return featureCollection(
+    [...stations.values()].map((candidate) => {
+      let label = '';
+      if (candidate.reading) {
+        label =
+          candidate.kind === 'tide'
+            ? tideLabel(candidate.reading as TideReading, nowMs, mode)
+            : currentLabel(candidate.reading as CurrentReading, nowMs);
+      }
+      return {
+        type: 'Feature' as const,
+        id: `${candidate.kind}:${candidate.station.id}`,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: latLonToLonLat(candidate.station),
+        },
+        properties: {
+          stationId: candidate.station.id,
+          kind: candidate.kind,
+          selected: candidate.selected,
+          loaded: candidate.loaded,
+          glyph: candidate.kind === 'tide' ? 'T' : 'C',
+          label,
+        },
+      } satisfies GeoJSON.Feature<GeoJSON.Point, TideFeatureProperties>;
+    }),
+  );
 }
 
-// A small overlay marking the nearest tide and tidal-current stations, each labeled with its next
-// event. It is driven by the store (the loader pushes readings in), not by the viewport, and only
-// rebuilds when the readings change. Point and text layers, so they theme cleanly to night-red.
-// The clock is injectable so a test can drive the minute rollover without real time, matching the
-// CollisionMute pattern; production callers take the Date.now default.
+// Render the bounded nearby NOAA catalog plus any selected or loaded station that has moved outside
+// it. A transparent 44 px circle owns hit testing; visual opacity zero and hidden state also hide
+// that hit layer so an invisible tide overlay never intercepts the chart.
 export function createTidesOverlay(
   store: TidesStore,
   units: UnitsStore,
+  onSelect?: (selection: TideStationSelectionEvent) => void,
   now: () => number = Date.now,
 ): TidesOverlay {
   let theme: Theme = 'day';
+  let lastCatalogTide: NearbyTideStation[] | undefined;
+  let lastCatalogCurrent: NearbyTideStation[] | undefined;
+  let lastRequestedTide: TideStationSelection | undefined;
+  let lastRequestedCurrent: TideStationSelection | undefined;
   let lastTide: TideReading | undefined;
   let lastCurrent: CurrentReading | undefined;
   let seeded = false;
-  // The minute the labels were last baked for. The "next event" text depends on the clock, not
-  // just the readings, so a label is refreshed when the minute turns over rather than showing a
-  // past event for hours on a stationary boat. The unit preference is baked in the same way, so
-  // a mode flip refreshes the labels too.
+  let visible = true;
+  let opacity = 1;
   let lastLabelMinute = -1;
   let lastMode: UnitsMode | undefined;
+  const hit = createTideHitHandlers(store, onSelect);
+
+  const syncHitVisibility = (ctx: OverlayContext): void => {
+    setLayersVisibility(ctx.map, [TIDES_HIT_LAYER], visible && opacity > 0);
+  };
 
   return {
     id: 'tides',
@@ -102,11 +201,15 @@ export function createTidesOverlay(
     region: 'US',
     supportsOpacity: true,
     defaultVisible: false,
-    layerIds: LAYERS,
+    layerIds: TIDES_LAYERS,
     reset() {
-      // The manager calls this on a base-style swap, which recreated the source emptied, so the next
-      // sync repopulates the stations rather than early-returning on unchanged readings.
+      // Map listeners survive a style swap. Keep them attached, but force the recreated source to
+      // repopulate even when store identities have not changed.
       seeded = false;
+      lastCatalogTide = undefined;
+      lastCatalogCurrent = undefined;
+      lastRequestedTide = undefined;
+      lastRequestedCurrent = undefined;
       lastTide = undefined;
       lastCurrent = undefined;
       lastLabelMinute = -1;
@@ -115,30 +218,82 @@ export function createTidesOverlay(
     add(ctx) {
       const paint = mapThemePaint(theme);
       const before = ctx.beforeIdFor('safety');
-      ensureGeoJsonSource(ctx.map, SOURCE_ID);
+      ensureGeoJsonSource(ctx.map, TIDES_SOURCE_ID);
 
-      const circle: CircleLayerSpecification = {
-        id: CIRCLE_LAYER,
+      const selected: CircleLayerSpecification = {
+        id: TIDES_SELECTED_LAYER,
         type: 'circle',
-        source: SOURCE_ID,
+        source: TIDES_SOURCE_ID,
+        filter: ['==', ['get', 'selected'], true],
         paint: {
-          'circle-radius': 6,
+          'circle-radius': 11,
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-stroke-color': paint.select,
+          'circle-stroke-width': 3,
+        },
+      };
+      if (!ctx.map.getLayer(TIDES_SELECTED_LAYER)) ctx.map.addLayer(selected, before);
+
+      const tideMarker: CircleLayerSpecification = {
+        id: TIDES_TIDE_LAYER,
+        type: 'circle',
+        source: TIDES_SOURCE_ID,
+        filter: ['==', ['get', 'kind'], 'tide'],
+        paint: {
+          'circle-radius': 7,
           'circle-color': paint.tide,
           'circle-stroke-color': paint.background,
           'circle-stroke-width': 2,
         },
       };
-      if (!ctx.map.getLayer(CIRCLE_LAYER)) ctx.map.addLayer(circle, before);
+      if (!ctx.map.getLayer(TIDES_TIDE_LAYER)) ctx.map.addLayer(tideMarker, before);
+
+      const currentMarker: CircleLayerSpecification = {
+        id: TIDES_CURRENT_LAYER,
+        type: 'circle',
+        source: TIDES_SOURCE_ID,
+        filter: ['==', ['get', 'kind'], 'current'],
+        paint: {
+          'circle-radius': 7,
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-stroke-color': paint.tide,
+          'circle-stroke-width': 2,
+        },
+      };
+      if (!ctx.map.getLayer(TIDES_CURRENT_LAYER)) ctx.map.addLayer(currentMarker, before);
+
+      const glyphColor = [
+        'match',
+        ['get', 'kind'],
+        'tide',
+        paint.markerGlyph,
+        paint.tide,
+      ] as ExpressionSpecification;
+      const glyph: SymbolLayerSpecification = {
+        id: TIDES_GLYPH_LAYER,
+        type: 'symbol',
+        source: TIDES_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'glyph'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 9,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: { 'text-color': glyphColor },
+      };
+      if (!ctx.map.getLayer(TIDES_GLYPH_LAYER)) ctx.map.addLayer(glyph, before);
 
       const label: SymbolLayerSpecification = {
-        id: LABEL_LAYER,
+        id: TIDES_LABEL_LAYER,
         type: 'symbol',
-        source: SOURCE_ID,
+        source: TIDES_SOURCE_ID,
+        filter: ['!=', ['get', 'label'], ''],
         layout: {
           'text-field': ['get', 'label'],
           'text-font': ['Noto Sans Regular'],
           'text-size': 11,
-          'text-offset': [0, 1.1],
+          'text-offset': [0, 1.25],
           'text-anchor': 'top',
           'text-optional': true,
           'text-max-width': 12,
@@ -149,9 +304,29 @@ export function createTidesOverlay(
           'text-halo-width': 1.2,
         },
       };
-      if (!ctx.map.getLayer(LABEL_LAYER)) ctx.map.addLayer(label, before);
+      if (!ctx.map.getLayer(TIDES_LABEL_LAYER)) ctx.map.addLayer(label, before);
+
+      const hitTarget: CircleLayerSpecification = {
+        id: TIDES_HIT_LAYER,
+        type: 'circle',
+        source: TIDES_SOURCE_ID,
+        paint: {
+          // A 22 px radius is a 44 px touch target. Near-transparent color keeps it invisible while
+          // the minimal alpha keeps MapLibre from optimizing it out of rendered-feature hit testing.
+          // The separate layout-visibility gate controls whether it intercepts input.
+          'circle-radius': 22,
+          'circle-color': 'rgba(0,0,0,0.01)',
+        },
+      };
+      if (!ctx.map.getLayer(TIDES_HIT_LAYER)) ctx.map.addLayer(hitTarget, before);
+      hit.attach(ctx);
+      syncHitVisibility(ctx);
     },
     sync(ctx) {
+      const nearbyTideStations = store.nearbyTideStations;
+      const nearbyCurrentStations = store.nearbyCurrentStations;
+      const requestedTide = store.requestedTide;
+      const requestedCurrent = store.requestedCurrent;
       const tide = store.tide;
       const current = store.current;
       const mode = units.mode;
@@ -159,6 +334,10 @@ export function createTidesOverlay(
       const minute = Math.floor(nowMs / MINUTE_MS);
       if (
         seeded &&
+        nearbyTideStations === lastCatalogTide &&
+        nearbyCurrentStations === lastCatalogCurrent &&
+        requestedTide === lastRequestedTide &&
+        requestedCurrent === lastRequestedCurrent &&
         tide === lastTide &&
         current === lastCurrent &&
         minute === lastLabelMinute &&
@@ -167,29 +346,51 @@ export function createTidesOverlay(
         return;
       }
       seeded = true;
+      lastCatalogTide = nearbyTideStations;
+      lastCatalogCurrent = nearbyCurrentStations;
+      lastRequestedTide = requestedTide;
+      lastRequestedCurrent = requestedCurrent;
       lastTide = tide;
       lastCurrent = current;
       lastLabelMinute = minute;
       lastMode = mode;
-      setSourceData(ctx.map, SOURCE_ID, features(tide, current, nowMs, mode));
+      setSourceData(ctx.map, TIDES_SOURCE_ID, tideStationFeatures(store, nowMs, mode));
     },
-    setVisible(ctx, visible) {
-      setLayersVisibility(ctx.map, LAYERS, visible);
+    setVisible(ctx, isVisible) {
+      visible = isVisible;
+      setLayersVisibility(ctx.map, TIDES_VISUAL_LAYERS, isVisible);
+      syncHitVisibility(ctx);
     },
-    setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(CIRCLE_LAYER, 'circle-opacity', opacity);
-      ctx.map.setPaintProperty(CIRCLE_LAYER, 'circle-stroke-opacity', opacity);
-      ctx.map.setPaintProperty(LABEL_LAYER, 'text-opacity', opacity);
+    setOpacity(ctx, nextOpacity) {
+      opacity = nextOpacity;
+      ctx.map.setPaintProperty(TIDES_SELECTED_LAYER, 'circle-stroke-opacity', nextOpacity);
+      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-opacity', nextOpacity);
+      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-stroke-opacity', nextOpacity);
+      ctx.map.setPaintProperty(TIDES_CURRENT_LAYER, 'circle-stroke-opacity', nextOpacity);
+      ctx.map.setPaintProperty(TIDES_GLYPH_LAYER, 'text-opacity', nextOpacity);
+      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-opacity', nextOpacity);
+      syncHitVisibility(ctx);
     },
     applyTheme(ctx, paint) {
       theme = paint.theme;
-      ctx.map.setPaintProperty(CIRCLE_LAYER, 'circle-color', paint.tide);
-      ctx.map.setPaintProperty(CIRCLE_LAYER, 'circle-stroke-color', paint.background);
-      ctx.map.setPaintProperty(LABEL_LAYER, 'text-color', paint.tide);
-      ctx.map.setPaintProperty(LABEL_LAYER, 'text-halo-color', paint.background);
+      ctx.map.setPaintProperty(TIDES_SELECTED_LAYER, 'circle-stroke-color', paint.select);
+      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-color', paint.tide);
+      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-stroke-color', paint.background);
+      ctx.map.setPaintProperty(TIDES_CURRENT_LAYER, 'circle-stroke-color', paint.tide);
+      ctx.map.setPaintProperty(TIDES_GLYPH_LAYER, 'text-color', [
+        'match',
+        ['get', 'kind'],
+        'tide',
+        paint.markerGlyph,
+        paint.tide,
+      ]);
+      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-color', paint.tide);
+      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-halo-color', paint.background);
     },
     remove(ctx) {
-      removeLayersAndSources(ctx.map, LAYERS, [SOURCE_ID]);
+      visible = false;
+      hit.detach(ctx);
+      removeLayersAndSources(ctx.map, TIDES_LAYERS, [TIDES_SOURCE_ID]);
     },
   };
 }

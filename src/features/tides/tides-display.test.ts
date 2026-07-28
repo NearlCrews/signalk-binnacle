@@ -63,8 +63,19 @@ describe('tides-display', () => {
   });
 
   it('names the source that served the tide prediction, or stays silent without one', () => {
-    expect(tideSourceNote('signalk-tides')).toBe('Predictions from the signalk-tides plugin.');
-    expect(tideSourceNote('noaa-coops')).toBe('Predictions from NOAA CO-OPS.');
+    expect(tideSourceNote('signalk-tides')).toBe(
+      'Automatic tide predictions use the signalk-tides plugin. Tidal-current predictions use NOAA CO-OPS.',
+    );
+    expect(tideSourceNote('noaa-coops')).toBe(
+      'Automatic tide and tidal-current predictions use NOAA CO-OPS.',
+    );
+    expect(
+      tideSourceNote('noaa-coops', {
+        mode: 'manual',
+        station: { id: 'T1', name: 'Tide', latitude: 0, longitude: 0 },
+        distanceMeters: 0,
+      }),
+    ).toContain('manually selected');
     expect(tideSourceNote(undefined)).toBe('');
   });
 });

@@ -92,11 +92,19 @@ source, and surrounding traffic before relying on it.
   missing optional warning labels receive bounded fallbacks. Open-Meteo marine fields are omitted
   when the provider's sea-snapped coordinate is too far from the requested grid cell. Provider
   warnings state when warning data is unavailable or cached.
-- **Tides** shows the nearest useful tide station, high and low events, a tide curve, and the nearest
-  current station with distance, set, rate, and next flood, ebb, or slack. The signalk-tides plugin is
-  preferred when available, with NOAA CO-OPS as the US-waters fallback. Cached readings survive a
-  failed refresh, and Retry bypasses the automatic cooldown. Provider station and event payloads are
-  validated and bounded, and CO-OPS station identifiers are constrained before URL construction.
+- **Tides** independently selects tide-height and tidal-current stations. Automatic mode is the
+  session default, prefers signalk-tides for tide height, and uses NOAA CO-OPS as the US-waters
+  fallback and current source. Up to eight NOAA stations of each kind are listed within the supported
+  radius. A manual choice fetches that exact NOAA station, survives chart pans for the session, and
+  can be reset independently or together with **Use nearest stations**. Straight-line distance from
+  the chart center is guidance only and does not guarantee that a station represents local water
+  movement. Filled tide markers and hollow current markers are tappable; a marker selection reveals
+  the layer, opens the panel when needed, and expands a minimized panel. Cached readings, accepted
+  station choices, provider attribution, and nearby catalogs survive a failed replacement, and
+  **Retry** bypasses the automatic cooldown. A valid empty response reports that no predictions are
+  in the current window. Provider station and event payloads are validated and bounded, and CO-OPS
+  station identifiers are constrained before URL construction. Choices are not persisted across
+  reloads.
 
 ## Instruments
 
