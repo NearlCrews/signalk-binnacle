@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
-import type { OwnVessel } from '$entities/vessel';
+import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
 import { type MenuItem, PinnedActions } from '$features/menu';
 import {
   formatBearingOr,
@@ -51,6 +51,8 @@ let {
 const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
+
+const depth = $derived(vessel.safetyDepth);
 </script>
 
 <footer class="status-strip" class:editing>
@@ -130,17 +132,20 @@ const connectionDown = $derived(connectionPhase === 'reconnecting' || connection
     <span
       class="readout depth-readout"
       class:depth-alarm={shallowAlarming}
-      class:fix-lost={vessel.depthStale}
-      title={vessel.depthStale
+      class:fix-lost={depth.stale}
+      title={depth.stale
         ? 'Depth data is stale'
         : shallowAlarming
           ? 'Shallow water: depth below the alarm threshold'
-          : 'Depth below the transducer'}
-      >{shallowAlarming ? 'Shallow' : vessel.depthStale ? 'Depth stale' : 'Depth'}
-      <b class="num"
-        >{formatLengthOr(vessel.depthStale ? undefined : vessel.depthMeters, units.mode)}</b
-      >
-      {lengthUnit(units.mode)}</span
+          : depth.source
+            ? DEPTH_SOURCE_TITLES[depth.source]
+            : 'No depth source is publishing'}
+      >{shallowAlarming ? 'Shallow' : depth.stale ? 'Depth stale' : 'Depth'}
+      <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
+      {lengthUnit(units.mode)}
+      {#if depth.source}
+        <span class="datum">{DEPTH_SOURCE_LABELS[depth.source]}</span>
+      {/if}</span
     >
   </div>
   <PinnedActions actions={pinnedActions} />
@@ -300,6 +305,13 @@ const connectionDown = $derived(connectionPhase === 'reconnecting' || connection
 }
 .depth-alarm b {
   color: var(--alarm);
+}
+/* The datum tag names which depth reference the number is (keel, surface, or transducer), so the
+   strip and an instruments tile showing different depths on one screen explain themselves. It
+   stays muted inside the alarm state: the label and value carry the alarm color. */
+.datum {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 /* Keep each readout on one line, so "SOG -- kn" does not wrap to two lines when the strip is tight. */
 .readout {

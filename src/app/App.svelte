@@ -57,7 +57,12 @@ import {
   KIP_URL,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
-import { CollisionMute, isShallowAlarmActive, LookoutAlarm, SHALLOW_TONE } from '$features/lookout';
+import {
+  CollisionMute,
+  createShallowController,
+  GenericAlarm,
+  LookoutAlarm,
+} from '$features/lookout';
 import { createMarineRadarController, type RadarStatus } from '$features/marine-radar';
 import {
   AppMenu,
@@ -105,16 +110,9 @@ import {
   WEATHER_LAYER_IDS,
   type WeatherProvider,
 } from '$features/weather';
-import { GatedAlarm } from '$shared/audio';
+import { alarmAudioPrimed, GatedAlarm, primeAlarmAudio } from '$shared/audio';
 import { type Bbox4, bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import {
-  Clock,
-  formatLengthOr,
-  hasControlCharacters,
-  isRecord,
-  lengthUnit,
-  Toast,
-} from '$shared/lib';
+import { Clock, hasControlCharacters, isRecord, Toast } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
 import { probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
@@ -134,7 +132,6 @@ import {
   createMapView,
   createThresholds,
   createTrackSettings,
-  DEFAULT_THRESHOLDS,
   isMapView,
   type MapView,
   type PersistedCodec,
@@ -246,30 +243,6 @@ const notificationsStore = new NotificationsStore(store);
 // drag alarm mirrors the collision split: an audible tone here, the strip and live region below.
 const anchor = new AnchorWatch(store, vessel);
 const anchorAlarm = new GatedAlarm(ANCHOR_TONE);
-
-// Shallow-water depth alarm: sounds while the below-transducer depth reads under the configured
-// threshold. A live depth reading is required to sound; an absent depth (no sounder, no fix on the
-// path) stays silent rather than alarming on missing data. The tone alone gives no indication of
-// what is beeping, so the strip's Depth readout and the live region below both key off the same
-// condition, matching the anchor drag alarm's own strip-chip-plus-live-region pairing.
-const shallowAlarm = new GatedAlarm(SHALLOW_TONE);
-const shallowLimit = $derived(
-  thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters,
-);
-const shallowAlarming = $derived(
-  isShallowAlarmActive(vessel.depthMeters, vessel.depthStale, shallowLimit),
-);
-const shallowAlert = $derived.by(() => {
-  if (vessel.depthStale) return 'Depth data lost. Shallow-water monitoring is unavailable.';
-  if (!shallowAlarming) return '';
-  const depth = formatLengthOr(vessel.depthMeters, units.mode);
-  const limit = formatLengthOr(shallowLimit, units.mode);
-  const unit = lengthUnit(units.mode);
-  return `Shallow water: depth ${depth} ${unit}, under the ${limit} ${unit} alarm threshold.`;
-});
-$effect(() => {
-  shallowAlarm.update(shallowAlarming);
-});
 
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
 // raises the recovery strip; a remote station's notifications.mob raises it here too.
@@ -1001,6 +974,52 @@ function onSetRadarPower(status: RadarStatus): void {
   });
 }
 
+// Shallow-water depth alarm: the lookout controller owns the resolved-depth predicate, the server
+// meta.zones authority, the live-region string, and the tone. The strip's Depth readout and the
+// live region key off the same conditions through it, matching the anchor drag alarm's own
+// strip-chip-plus-live-region pairing.
+const shallowController = createShallowController({
+  getSafetyDepth: () => vessel.safetyDepth,
+  thresholds,
+  units,
+  origin,
+  getToken: () => chartsToken,
+});
+
+// The generic server-alarm channel: any inbound alarm or emergency grade notification outside the
+// five dedicated hazards sounds through this one alarm and surfaces on the AlarmStrip, the Alarms
+// badge, and the assistive channel. The controller drives it from the shared generic list. It is
+// constructed before the menu registry so the Alarms entry can carry the live count.
+const genericAlarm = new GenericAlarm();
+
+const notificationsController = createNotificationsController({
+  origin,
+  token: () => chartsToken,
+  notificationsApi: () => notificationsApi,
+  writeBlocked: () => auth.writeBlocked,
+  client,
+  collision,
+  collisionMute,
+  lookoutAlarm,
+  anchor,
+  notificationsStore,
+  companionStatus,
+  timeTravel,
+  mob,
+  genericAlarm,
+});
+const collisionAlert = $derived(notificationsController.collisionAlert);
+const genericAlarms = $derived(notificationsController.genericAlarms);
+const genericNotificationAlert = $derived(notificationsController.notificationAlert);
+const muteAlert = $derived(notificationsController.muteAlert);
+const muteRemainingMin = $derived(notificationsController.muteRemainingMin);
+const companionAnnounce = $derived(notificationsController.companionAnnounce);
+const alarmActionError = $derived(notificationsController.alarmActionError);
+const toggleCollisionMute = notificationsController.toggleCollisionMute;
+const onSilenceNotification = notificationsController.onSilenceNotification;
+const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
+const muteGenericHere = notificationsController.muteGenericHere;
+
 // The app menu's options, grouped into helm-first intent groups: chart controls and navigation,
 // safety, weather, instruments, optional offline charts, and settings. Adding an option is a single
 // entry; the launcher renders and groups whatever it is given.
@@ -1143,6 +1162,7 @@ const menuItems = $derived<MenuItem[]>([
     icon: Bell,
     group: 'Safety',
     pressed: activePanel === 'alarms',
+    count: genericAlarms.length,
     onSelect: () => togglePanel('alarms'),
   },
   {
@@ -1254,31 +1274,6 @@ const resolvedPinned = $derived(resolvePinned(menuItems, pinnedActions.value));
 
 // AIS staleness pruning, tied to the app lifecycle; the entity owns the TTL and cadence policy.
 $effect(() => aisTargets.startPruning());
-
-const notificationsController = createNotificationsController({
-  origin,
-  token: () => chartsToken,
-  notificationsApi: () => notificationsApi,
-  writeBlocked: () => auth.writeBlocked,
-  client,
-  collision,
-  collisionMute,
-  lookoutAlarm,
-  anchor,
-  notificationsStore,
-  companionStatus,
-  timeTravel,
-  mob,
-});
-const collisionAlert = $derived(notificationsController.collisionAlert);
-const genericNotificationAlert = $derived(notificationsController.notificationAlert);
-const muteAlert = $derived(notificationsController.muteAlert);
-const muteRemainingMin = $derived(notificationsController.muteRemainingMin);
-const companionAnnounce = $derived(notificationsController.companionAnnounce);
-const alarmActionError = $derived(notificationsController.alarmActionError);
-const toggleCollisionMute = notificationsController.toggleCollisionMute;
-const onSilenceNotification = notificationsController.onSilenceNotification;
-const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
 
 function publishDelta(path: string, value: unknown): void {
   void client.publish({ context: SELF_CONTEXT, updates: [{ values: [{ path, value }] }] });
@@ -1566,14 +1561,21 @@ function backFromPoiSearch(): void {
   backToMenu();
 }
 
-// Browsers block audio until a user gesture; prime the audio contexts on the first one so the
-// collision and arrival alarms can sound later on their own.
+// Browsers block audio until a user gesture; prime the shared alarm context on gestures so every
+// alarm, including ones constructed later, can sound on its own. A real AudioContext resumes
+// asynchronously and a browser may reject a given gesture (a bare modifier key, for one), so the
+// listeners stay registered and self-remove only once a later gesture finds the context already
+// running. Keydown is included so keyboard-only operators get audible alarms too.
 const primeAudio = () => {
-  lookoutAlarm.prime();
-  arrivalAlarm.prime();
-  anchorAlarm.prime();
-  mobAlarm.prime();
-  shallowAlarm.prime();
+  if (alarmAudioPrimed()) {
+    removePrimeListeners();
+    return;
+  }
+  primeAlarmAudio();
+};
+const removePrimeListeners = () => {
+  window.removeEventListener('pointerdown', primeAudio);
+  window.removeEventListener('keydown', primeAudio);
 };
 
 const CONNECTION_LABELS: Record<ConnectionPhase, string> = {
@@ -1708,13 +1710,17 @@ const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 onMount(() => {
   refreshCompanionProbe();
   companionStatus.start();
-  trendRecorder.start(() => ({
-    depth: vessel.depthStale ? undefined : vessel.depthMeters,
-    wind: vessel.windStale ? undefined : vessel.windSpeedApparentMps,
-    pressure: vessel.pressureStale ? undefined : vessel.outsidePressurePa,
-    sog: vessel.sogStale ? undefined : vessel.sogMps,
-  }));
-  window.addEventListener('pointerdown', primeAudio, { once: true });
+  trendRecorder.start(() => {
+    const depth = vessel.trendDepth;
+    return {
+      depth: depth.stale ? undefined : depth.meters,
+      wind: vessel.windStale ? undefined : vessel.windSpeedApparentMps,
+      pressure: vessel.pressureStale ? undefined : vessel.outsidePressurePa,
+      sog: vessel.sogStale ? undefined : vessel.sogMps,
+    };
+  });
+  window.addEventListener('pointerdown', primeAudio);
+  window.addEventListener('keydown', primeAudio);
   // The auth controller owns the focus and cross-tab listeners that pick up an approval.
   auth.watch();
   void auth.probe().finally(() => {
@@ -1810,14 +1816,14 @@ onDestroy(() => {
   if (arrivalBannerTimer) clearTimeout(arrivalBannerTimer);
   if (privacyReloadTimer) clearTimeout(privacyReloadTimer);
   toast.dispose();
-  // Covers the case where the component unmounts before any pointer gesture; once the listener has
-  // fired its `once: true` registration has already removed it, so this is a harmless no-op then.
-  window.removeEventListener('pointerdown', primeAudio);
+  // Harmless no-op when a primed gesture already self-removed the pair.
+  removePrimeListeners();
   lookoutAlarm.stop();
   anchorAlarm.stop();
   mobAlarm.stop();
-  shallowAlarm.stop();
+  shallowController.stop();
   arrivalAlarm.stop();
+  genericAlarm.stop();
   setWriteOutcomeListener(undefined);
   auth.stop();
   profilesController.dispose();
@@ -1897,6 +1903,8 @@ const plotterActions = {
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => (applyWeatherLayers = apply),
   onSilenceNotification,
   onAcknowledgeNotification,
+  muteGenericHere,
+  openAlarmsPanel: () => openPanel('alarms'),
   closePanel,
   backToMenu,
   openInstalledCharts,
@@ -1934,7 +1942,7 @@ const plotterActions = {
     collision={collisionAlert}
     anchor={anchorController.anchorAlert}
     mob={mobController.mobAlert}
-    shallow={shallowAlert}
+    shallow={shallowController.alert}
     notification={genericNotificationAlert}
     mute={muteAlert}
     companion={companionAnnounce}
@@ -2029,6 +2037,14 @@ const plotterActions = {
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
     {alarmActionError}
+    {genericAlarms}
+    genericSounding={notificationsController.genericSounding}
+    genericLocallyMuted={notificationsController.genericLocallyMuted}
+    shallowMonitor={{
+      monitorState: shallowController.monitorState,
+      thresholdSource: shallowController.thresholdSource,
+      effectiveLimitMeters: shallowController.effectiveLimitMeters,
+    }}
   />
 
   {#if activePanel === 'profiles'}
@@ -2088,7 +2104,7 @@ const plotterActions = {
     {anchor}
     {units}
     {vessel}
-    {shallowAlarming}
+    shallowAlarming={shallowController.alarming}
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}

@@ -34,6 +34,8 @@ const SUBSCRIPTIONS = [
   { path: SK_PATHS.courseArrivalCircle, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.courseCalcValuesAll, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.depthBelowTransducer, policy: 'instant' as const, minPeriod: 1000 },
+  { path: SK_PATHS.depthBelowKeel, policy: 'instant' as const, minPeriod: 1000 },
+  { path: SK_PATHS.depthBelowSurface, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.windSpeedApparent, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.outsidePressure, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.anchorPosition, policy: 'instant' as const, minPeriod: 1000 },

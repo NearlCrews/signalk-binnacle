@@ -4,18 +4,13 @@ import type { AnchorWatch } from '$entities/anchor';
 import type { CollisionAssessment } from '$entities/collision';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
-import type { CollisionMute, LookoutAlarm } from '$features/lookout';
-import { CollisionNotifier, NOTIFICATION_PATH } from '$features/lookout';
+import type { CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
+import { CollisionNotifier, notificationLabel, selectGenericAlarms } from '$features/lookout';
 import type { CompanionStatus } from '$features/prewarm';
 import type { TimeTravelStore } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
 import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
-import {
-  acknowledgeNotification,
-  SELF_CONTEXT,
-  SK_PATHS,
-  silenceNotification,
-} from '$shared/signalk';
+import { acknowledgeNotification, SELF_CONTEXT, silenceNotification } from '$shared/signalk';
 import { createCollisionNotificationPublisher } from './collision-notification-publisher';
 
 interface NotificationsControllerDeps {
@@ -32,6 +27,7 @@ interface NotificationsControllerDeps {
   companionStatus: CompanionStatus;
   timeTravel: TimeTravelStore;
   mob: MobStore;
+  genericAlarm: GenericAlarm;
 }
 
 // Owns collision publication, alarm actions, safety live-region text, and the effects that tie an
@@ -135,17 +131,10 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     return `${lead}: ${who}. Open Nearby vessels for closest-pass details.`;
   });
 
-  const genericNotifications = $derived(
-    deps.notificationsStore
-      .list()
-      .filter(
-        (notification) =>
-          !notification.acknowledged &&
-          !notification.path.startsWith(SK_PATHS.mobNotification) &&
-          notification.path !== SK_PATHS.anchorNotification &&
-          notification.path !== NOTIFICATION_PATH,
-      ),
-  );
+  const genericNotifications = $derived(selectGenericAlarms(deps.notificationsStore.list()));
+  $effect(() => {
+    deps.genericAlarm.update(genericNotifications);
+  });
   let genericNotificationAlert = $state('');
   let lastGenericNotificationKey = '';
   $effect(() => {
@@ -158,8 +147,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     const key = `${notification.path}:${notification.state}:${notification.message}`;
     if (key === lastGenericNotificationKey) return;
     lastGenericNotificationKey = key;
-    const label = notification.message || notification.path.replace(/^notifications\./, '');
-    genericNotificationAlert = `${notification.state}: ${label}. Open Alarms for details.`;
+    genericNotificationAlert = `${notification.state}: ${notificationLabel(notification)}. Open Alarms for details.`;
   });
 
   const muteAlert = $derived(deps.collisionMute.active ? 'Collision alarm muted.' : '');
@@ -191,11 +179,25 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     if (deps.mob.active || dangerNow) untrack(() => deps.timeTravel.exit());
   });
 
+  function muteGenericHere(): void {
+    deps.genericAlarm.muteActiveHere();
+  }
+
   return {
     toggleCollisionMute,
     onSilenceNotification,
     onAcknowledgeNotification,
+    muteGenericHere,
     dispose: collisionPublisher.dispose,
+    get genericAlarms() {
+      return genericNotifications;
+    },
+    get genericSounding() {
+      return deps.genericAlarm.sounding;
+    },
+    get genericLocallyMuted() {
+      return deps.genericAlarm.locallyMuted;
+    },
     get collisionAlert() {
       return collisionAlert;
     },

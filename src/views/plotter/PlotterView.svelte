@@ -22,7 +22,8 @@ import { AnchorPanel, AnchorStrip } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
-import { AlarmsPanel, DangerStrip } from '$features/lookout';
+import type { ShallowMonitorState, ShallowThresholdSource } from '$features/lookout';
+import { AlarmStrip, AlarmsPanel, DangerStrip } from '$features/lookout';
 import { loadRadarControls } from '$features/marine-radar';
 import { MeasureStrip } from '$features/measure';
 import { MobStrip } from '$features/mob';
@@ -148,6 +149,14 @@ interface FlatProps {
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
   alarmActionError: string | undefined;
+  genericAlarms: ActiveNotification[];
+  genericSounding: boolean;
+  genericLocallyMuted: boolean;
+  shallowMonitor: {
+    monitorState: ShallowMonitorState;
+    thresholdSource: ShallowThresholdSource;
+    effectiveLimitMeters: number | undefined;
+  };
   arrivalMuted: import('$shared/settings').PersistedValue<boolean>;
 
   // Callbacks for state mutations
@@ -183,6 +192,8 @@ interface FlatProps {
   toggleCollisionMute: () => void;
   onSilenceNotification: (notification: ActiveNotification) => void;
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
+  muteGenericHere: () => void;
+  openAlarmsPanel: () => void;
   selectPoi: (poi: Poi) => void;
   flyToPosition: (position: LatLon) => void;
   onShowChartBounds: (bounds: Bbox4) => void;
@@ -268,6 +279,8 @@ type ActionKey =
   | 'toggleCollisionMute'
   | 'onSilenceNotification'
   | 'onAcknowledgeNotification'
+  | 'muteGenericHere'
+  | 'openAlarmsPanel'
   | 'selectPoi'
   | 'flyToPosition'
   | 'onShowChartBounds'
@@ -331,6 +344,10 @@ let {
   collisionMute,
   collisionMuteRemainingMin,
   alarmActionError,
+  genericAlarms,
+  genericSounding,
+  genericLocallyMuted,
+  shallowMonitor,
   actions,
 }: Props = $props();
 
@@ -406,6 +423,8 @@ const {
   toggleCollisionMute,
   onSilenceNotification,
   onAcknowledgeNotification,
+  muteGenericHere,
+  openAlarmsPanel,
   selectPoi,
   flyToPosition,
   onShowChartBounds,
@@ -575,6 +594,16 @@ $effect(() => {
       <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
       <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
       <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
+      <AlarmStrip
+        notifications={genericAlarms}
+        sounding={genericSounding}
+        locallyMuted={genericLocallyMuted}
+        writeBlocked={auth.writeBlocked}
+        onSilence={notificationsApi ? onSilenceNotification : undefined}
+        onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+        onMuteHere={muteGenericHere}
+        onOpenAlarms={openAlarmsPanel}
+      />
     </div>
   </div>
   {#if selectedNote && noteLoader}
@@ -754,6 +783,7 @@ $effect(() => {
           error={alarmActionError}
           onSilence={notificationsApi ? onSilenceNotification : undefined}
           onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+          shallow={shallowMonitor}
           onClose={closePanel}
           onBack={backToMenu}
         />

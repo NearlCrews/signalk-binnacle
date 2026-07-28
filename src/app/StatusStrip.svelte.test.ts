@@ -50,7 +50,41 @@ describe('StatusStrip depth alarm', () => {
   it('does not mark the Depth readout when the shallow alarm is not sounding', () => {
     const html = body(baseProps());
     expect(html).not.toContain('depth-alarm');
+    expect(html).toContain('No depth source is publishing');
+  });
+
+  it('labels the transducer datum when only the transducer publishes', () => {
+    const props = baseProps();
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame({
+      self: new Map([['environment.depth.belowTransducer', 4]]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const html = body({ ...props, vessel });
     expect(html).toContain('Depth below the transducer');
+    expect(html).toContain('Xducer');
+    expect(html).not.toContain('No depth source is publishing');
+  });
+
+  it('prefers and labels the keel datum when the boat publishes it', () => {
+    const props = baseProps();
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame({
+      self: new Map([
+        ['environment.depth.belowTransducer', 4],
+        ['environment.depth.belowKeel', 3.2],
+      ]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const html = body({ ...props, vessel });
+    expect(html).toContain('Depth below the keel');
+    expect(html).toContain('Keel');
+    expect(html).toContain('3.2');
+    expect(html).not.toContain('>4.0<');
   });
 
   it('marks the Depth readout and swaps its tooltip when the shallow alarm is sounding', () => {

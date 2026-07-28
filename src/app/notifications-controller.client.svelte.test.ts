@@ -47,6 +47,12 @@ function setup(
   };
   const client = { publish: vi.fn(async () => undefined) };
   const lookoutAlarm = { update: vi.fn() };
+  const genericAlarm = {
+    update: vi.fn(),
+    muteActiveHere: vi.fn(),
+    sounding: false,
+    locallyMuted: false,
+  };
   const timeTravel = { active: options.timeTravelActive ?? false, exit: vi.fn() };
   const mob = { active: options.mobActive ?? false };
   const controller = createNotificationsController({
@@ -67,11 +73,13 @@ function setup(
     companionStatus: { state: 'ready', down: false } as never,
     timeTravel: timeTravel as never,
     mob: mob as never,
+    genericAlarm: genericAlarm as never,
   });
   return {
     client,
     collisionMute,
     controller,
+    genericAlarm,
     lookoutAlarm,
     timeTravel,
   };
@@ -160,5 +168,15 @@ describe('createNotificationsController', () => {
     await vi.waitFor(() =>
       expect(test.controller.alarmActionError).toContain('Could not acknowledge'),
     );
+  });
+
+  it('drives the generic alarm from the store list and exposes its state and mute', () => {
+    const test = mount();
+    expect(test.genericAlarm.update).toHaveBeenCalledWith([]);
+    expect(test.controller.genericAlarms).toEqual([]);
+    expect(test.controller.genericSounding).toBe(false);
+    expect(test.controller.genericLocallyMuted).toBe(false);
+    test.controller.muteGenericHere();
+    expect(test.genericAlarm.muteActiveHere).toHaveBeenCalledOnce();
   });
 });
