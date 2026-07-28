@@ -91,8 +91,10 @@ Binnacle ships its full feature set as a Signal K webapp:
 - **Lookout:** a collision watch with CPA and TCPA, chart-highlight rings, an audible alarm, and a
   published Signal K notification, plus a sortable **AIS target list** (by range, CPA, or name) with
   live range and bearing, tap-to-locate, and faded **target trails** from the tracks plugin. An
-  **Alarms panel** collects every active alert on the boat (engine, autopilot, any plugin) with
-  one-tap Silence and Acknowledge that propagate to every station.
+  **Alarms panel** collects every active alert on the boat (engine, autopilot, any plugin); any alarm
+  or emergency grade notification outside the dedicated hazards sounds its own tone and raises a
+  strip with the count showing live on the Alarms menu entry, with one-tap Silence and Acknowledge
+  that propagate to every station and a device-local mute when the server cannot silence it.
 - **Anchor watch:** drop the anchor at the boat, set the swing radius (or capture it from the live
   distance), and get a drag alarm that latches until acknowledged. It drives the
   signalk-anchoralarm-plugin when installed (so the alarm keeps running with the browser closed) and
@@ -110,13 +112,16 @@ Binnacle ships its full feature set as a Signal K webapp:
   route, or confirm a retrace to navigate home along it. The panel explains persistence, access,
   loading, and refresh failures instead of silently losing state. The active trail survives reloads in
   IndexedDB. Completed tracks live in Signal K resources and can be shared with other clients once the
-  server stores them, which takes one administrator step: in the Signal K admin UI, open Server, then
-  Plugin Config, then Resources Provider, and add a custom resource type named tracks. Until that is
-  done, the panel names the step instead of letting a save fail.
-- **Waypoints:** drop one from a long press, see it as a named marker, and locate,
-  navigate to, rename, or delete it from the Waypoints panel. Loading and failures stay explicit,
-  accepted writes survive refresh failures, and navigation requires confirmation. Marks live in the
-  server's waypoint resources, so they interoperate with other Signal K clients.
+  server stores them, which takes one administrator step: in the Signal K admin UI, open Server,
+  then Plugin Config, then Resources Provider (built-in), and add tracks under Resources (custom).
+  Until that is done, the panel names the step instead of letting a save fail.
+- **Waypoints:** drop one from a long press, see it as a named marker, and search, sort, locate,
+  navigate to, rename, or delete it from the Waypoints panel. Search covers name and description, and
+  sorting by name, distance, or bearing needs a fresh GPS fix. Loading and failures stay explicit,
+  accepted writes survive refresh failures, and navigation requires confirmation and sends the
+  waypoint's resource reference so the destination name reaches the navigation strip and other
+  stations. Marks live in the server's waypoint resources, so they interoperate with other Signal K
+  clients.
 - **Trends:** depth, apparent wind, barometric pressure, and speed over the last 24 hours as themed
   graphs from the server's v2 History API, or live session sampling without a history provider.
 - **Find places and points of interest:** search the notes in the current chart view by name,

@@ -69,16 +69,19 @@ source, and surrounding traffic before relying on it.
   watch remains active independently. Server-mode changes require write access; client-mode changes
   stay available. Conflicting actions are locked until completion.
 - **Alarms** lists bounded, validated Signal K notifications by severity, and its menu entry carries
-  the count of active raised alarms. Any inbound alarm or emergency grade notification outside the
+  the live count of raised generic alarms. Any inbound alarm or emergency grade notification outside the
   dedicated hazards sounds a shared tone and raises a safety strip offering Silence, Acknowledge,
-  Mute here, and Open Alarms; the notification method field is honored with an audible-safe default,
-  and a device-local mute never swallows a newly raised alarm. Silence and acknowledge are locked
+  Mute here, and Open Alarms; within those two grades the notification method field is honored with
+  an audible-safe default, warn and alert grades stay visual by design, and a device-local mute
+  never swallows a newly raised alarm. Silence and acknowledge are locked
   while pending and require server write access. A disconnected stream is labeled because displayed
   alarm state may be stale. Collision warnings publish as visual-only Signal K deltas, while danger
   alarms use the Notifications API with visual and sound methods. Collision and shallow-water
   settings stay in safe numeric bounds, in SI internally, with conversion only at display inputs.
-  The shallow threshold follows the server's depth zones when they include an alarm band, and the
-  panel says when no depth source is publishing.
+  The shallow threshold merges the server's depth zones with the locally configured limit
+  conservatively: whichever bound is deeper governs, so the server can tighten the alarm but never
+  quietly loosen it. The panel names which one is in force and says when no depth source is
+  publishing.
 
 ## Weather
 

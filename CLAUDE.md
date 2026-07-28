@@ -225,8 +225,11 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   same copy), AnchoredMenu's onFocusLeft prop (the shared close-on-focus-out contract, applied
   against its own surface while open, so consumers pass their close function instead of re-deriving
   the check from a surface binding), the isTabKey helper, the pickTextFile importer, the NameEntry name
-  form with its defaultSaveName and resolveSaveName helpers, and the PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
-  global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.popover-card`, the
+  form with its defaultSaveName and resolveSaveName helpers, NavSortControl (the generic segmented sort
+  control over `$shared/nav`'s NavSortState, shared by the POI search and Waypoints panels), and the
+  PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
+  global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.pill-count` (the small count
+  chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`, the
   `.surface-elevated` floating-panel frame, `.modal-card`, `.menu-item`, the `.row-interactive`
   control-height interactive-row base composed by the weather, route, and layers-category rows (it
   carries the hover tint and the lit `.is-on` body at a high enough specificity to beat a scoped
@@ -239,7 +242,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*` (including `.panel-slot`
   and its `--end` modifier), `.saved`, `.stat-grid`,
   `.num`, and the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
-  `.nav-metric`) shared by the AIS targets and POI search panels)
+  `.nav-metric`) shared by the AIS targets, POI search, and Waypoints panels)
   before any panel grows a scoped duplicate. Lay a panel's body out with SlideOver's `bodyFlex` prop
   rather than a hand-rolled flex column, so the section rhythm matches across panels. When the same
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
@@ -253,7 +256,7 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   paint property name (casts once through MapLibre's keyed paint types instead of re-spelling `as
   keyof AllPaintProperties` / `as never` at each call site), rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
-  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource) and meta.ts (fetchPathMeta, zoneStateFor), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; fakeOverlayContext for the overlay-test context, the one place the `{ map, beforeIdFor }` shape is built; createFrameFactory for SKFrames, including AIS vessels from plain records; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
+  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource), meta.ts (fetchPathMeta, zoneStateFor), path-meta-cache.svelte.ts (createPathMetaCache, the shared per-session path-meta cache with a retry on the next reactive visit after any failed fetch), provider-probe.ts (fetchProviderIdList for the resources API's ARRAY `_providers` contract, and safeProviderId; history and weather keep their own keyed `_providers` readers, since the two APIs disagree on the response shape), and the NOTIFICATIONS_PREFIX export, `$shared/nav` (the rhumb helpers, plus the nav-rows list core shared by the POI search and Waypoints panels, and only those two: SEARCH_COLLATOR, compareNavIdentity, filterNavRows, sortNavRows, defaultNavSort, toggleSort, navMetrics, and MAX_NAV_ROWS; the AIS targets panel keeps its own sort in ais-rows.ts and shares only the `.nav-*` CSS family), `$shared/audio` (Alarm and GatedAlarm, which draw one shared AudioContext for the whole app rather than one per alarm, so a gesture on one alarm primes every alarm; GatedAlarm.restart re-articulates an already-sounding tone; primeAlarmAudio and alarmAudioPrimed are the gesture-priming pair), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; fakeOverlayContext for the overlay-test context, the one place the `{ map, beforeIdFor }` shape is built; createFrameFactory for SKFrames, including AIS vessels from plain records; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a
   `getSource(...) as { setData }` cast or a `{ type: 'FeatureCollection', features }` literal should use
   setSourceData and featureCollection instead.

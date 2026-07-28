@@ -137,13 +137,16 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   as a layout container, not a semantic list).
 - Buttons (`buttons.css`): `.btn` (the base bordered button, 44px), `.btn-primary` (filled accent),
   `.btn-danger`, `.btn-ghost`, `.btn--grow` (flex-fill), `.segmented` (a joined row of `.btn` for a
-  binary or small-enum choice; the active segment carries `.is-on`).
+  binary or small-enum choice; the active segment carries `.is-on`), and `.pill-count` (the small
+  count chip shared by the toolbar's collapsed More pill and a menu item's live count, rendered
+  through the menu slice's `MenuItemCount`).
 - Icon controls (`icon-controls.css`): `.icon-btn` (square icon button), `.icon-btn--accent`,
   `.icon-btn--danger`, `.icon-pill` (a pill-shaped icon toggle), the `.panel-close` and
   `.panel-minimize` panel header controls, and the shared `.is-on` lit state (accent color, accent
   border, accent-tint fill) that lights any composing control.
 - Forms (`forms.css`): `.input` (text inputs and selects, 44px, raised fill), `.range` (the live
-  slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header).
+  slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header),
+  and `.search-input` (the full-width search field shared by the Find places and Waypoints panels).
 - Text (`text.css`): `.caps-label` (the uppercase, tracked, muted SECTION heading), `.muted-note` (a
   quiet hint for empty states and inline guidance), `.alert-note` (an outline alarm banner) and its
   `.alert-note--filled` tinted variant, `.sev-danger` and `.sev-warning` (severity text coloring),
@@ -157,7 +160,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-sm +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
-  `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS and POI two-line sortable lists. A selected
+  `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS, POI, and Waypoints two-line sortable lists.
+  POI search and Waypoints also share the `$shared/nav` list core behind that presentation
+  (`filterNavRows`, `sortNavRows`, `navMetrics`, and friends), so the two can never search, sort, or
+  measure differently; AIS targets keeps its own sort in `ais-rows.ts` and shares only the CSS. A
+  selected
   row uses `aria-current="true"`, an accent border, an accent tint, and a leading inset accent line;
   hover or keyboard preview alone must not claim selection.
 - Instruments (`instruments.css`): the `.tile` vocabulary on the `.card-frame` surface, shared by
@@ -271,6 +278,10 @@ Shared behavior lives here. Compose these; do not re-implement them.
   supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
   must distinguish loading, refresh with retained cards, real empty, and failure outside the
   primitive. Disable conflicting mutations while one is pending.
+- `NavSortControl`: the generic segmented sort control over `$shared/nav`'s `NavSortState`. Pass the
+  sort keys and labels, the current `state`, and `onChoose`; it renders the active segment and its
+  ascending or descending indicator itself. Used by the POI search and Waypoints panels, so the two
+  cannot drift on how a sortable list presents its sort control.
 
 - `createPanelMinimize`: the shared reactive controller passed to `SlideOver` as `{minimize}`. Use its
   `collapse`, `expand`, and `onToggle` methods instead of creating panel-local collapse state.
@@ -321,6 +332,23 @@ Shared behavior lives here. Compose these; do not re-implement them.
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.
 - `THEMES`, `ThemeController`, `createThemeController` for the theme switch.
+
+`$shared/audio` (`Alarm`, `GatedAlarm`) draws one module-scoped `AudioContext` for the whole app, not
+one per alarm: `primeAlarmAudio` and `alarmAudioPrimed` are the gesture-priming pair, wired to both
+`pointerdown` and `keydown` in `App.svelte` so a keyboard-only operator still gets audible alarms, and
+`GatedAlarm.restart` re-articulates an already-sounding tone so a second alarm raised mid-burst is
+heard rather than absorbed into the first one's loop.
+
+`AlarmStrip` (`features/lookout`, composed by `PlotterView`) is the fourth bottom-strip in the safety
+tier, alongside `AnchorStrip`, `DangerStrip`, and `MobStrip`: the generic channel for any inbound alarm
+or emergency grade notification outside the four dedicated hazards (MOB, anchor drag, collision
+danger, and shallow water), with the same worst-first ordering, quieted-dims state, and a device-local
+Mute here fallback for when the server cannot silence it.
+
+`createPathMetaCache` (`$shared/signalk`): the shared per-session cache of `meta.zones` and related
+path metadata, with a null in-flight sentinel and a retry on the next reactive visit after any failed
+fetch. The instruments controller and the shallow monitor both read through it, so a path's meta is
+fetched once per session rather than once per consumer.
 
 ### Settings persistence
 

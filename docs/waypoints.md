@@ -37,8 +37,8 @@ the resource top level, with a GeoJSON Point in `feature.geometry` and the symbo
 `{ latitude, longitude }` inside Binnacle.
 
 Starting navigation references the saved mark instead of copying its position: the Course API
-destination receives `{ "href": "/resources/waypoints/{id}" }`, with the id percent-encoded so any
-resource id stays one path segment. The server resolves the resource and publishes the waypoint's name
+destination receives `{ "href": "/resources/waypoints/{id}" }`. The server validates that reference
+against its strict resource-id pattern, resolves the resource, and publishes the waypoint's name
 with the course, so the destination reads by name in the navigation strip and on every other station.
 If the server rejects the reference, Binnacle retries once with the position alone, which keeps
 navigation available at the cost of the destination name.

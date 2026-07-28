@@ -104,7 +104,7 @@ route, a body of some other shape, a timeout, or a network failure, leaves the l
 place, so a transient outage never claims that storage is missing.
 
 To enable track storage: open the Signal K admin UI, choose **Server**, then **Plugin Config**, then
-**Resources Provider**, add a custom resource type named `tracks`, and submit. Then select **Check
+**Resources Provider (built-in)**, add `tracks` under **Resources (custom)**, and submit. Then select **Check
 again** in the Tracks panel, which reloads the collection and re-runs the probe. An accepted save also
 proves that storage exists, so a server whose probe route never answers still resolves itself on the
 first successful write.

@@ -4,6 +4,51 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A generic alarm surface for the boat's own equipment: any inbound Signal K alarm or emergency
+  grade notification outside the dedicated hazards (man overboard, anchor drag, collision danger,
+  and shallow water) now sounds its own tone and raises an Alarm strip, with worst-first ordering,
+  a quieted-dim state, Silence, Acknowledge, a device-local Mute here fallback for when the server
+  cannot silence it, and an Open Alarms action. The Alarms menu entry now carries a live count of
+  raised alarms, and a notification's method field is honored, with sound as the safe default when
+  a producer names none.
+- Waypoints now search name and description, sort by name, distance, or bearing with fresh-fix-only
+  metrics, and follow GPS availability until a sort is chosen, capping the rendered list and saying
+  how many matches are hidden.
+- Instrument tiles and their detail view now show the server's meta display name for a path when
+  the boat has renamed it, falling back to the catalog label otherwise.
+- Tracks now detect a server with no track storage (tracks are not a standard Signal K resource
+  type) and say so directly, naming the one administrator step to enable it, with a Check again
+  action, instead of only reporting the collection as reachable and empty.
+- The offline charts page and guide now explain the HTTPS boundary directly: which cache layer
+  needs a secure context, why a plain-HTTP server still caches through Chart Locker and the
+  browser's own IndexedDB, and how to add and trust a certificate.
+
+### Changed
+
+- The status strip's Depth readout, the anchor panel, and the depth instrument tile now resolve
+  depth per purpose from whichever of keel, transducer, and surface references the boat publishes,
+  in that safety priority, and label the readout with its source (Keel, Xducer, Surface) so two
+  depths on screen at once never look contradictory.
+- The shallow-water alarm now follows the server's depth zones when they publish an alarm band,
+  merging conservatively with the locally configured threshold so the deeper of the two always
+  governs; the Alarms panel explains which one is in force and says when no depth source is
+  publishing.
+- Starting navigation from a saved waypoint now sends the server the waypoint's resource reference
+  instead of a bare position, so the destination name reaches the navigation strip and other
+  stations; a rejected reference retries once with the position alone.
+- Stop navigation, on the navigation strip and in the routes panel, now requires a confirming
+  second tap instead of firing immediately. The strip's Stop control's accessible name is now its
+  own visible text, so it reads "Confirm stop?" while armed instead of a fixed "Stop navigation"
+  label throughout.
+- Alarm audio now shares one AudioContext for the whole app instead of one per alarm, primed from
+  both a pointer gesture and a keydown so a keyboard-only operator gets audible alarms too, and a
+  second alarm raised while one is already sounding is now heard rather than absorbed into the
+  running tone.
+
 <a id="v0171"></a>
 
 ## [0.17.1] - 2026-07-27
