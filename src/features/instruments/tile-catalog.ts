@@ -1,6 +1,6 @@
 import type { CourseGuidance } from '$entities/course';
 import type { UnitsStore } from '$entities/units';
-import type { OwnVessel } from '$entities/vessel';
+import { DEPTH_SOURCE_LABELS, type OwnVessel } from '$entities/vessel';
 import { asNumber } from '$shared/geo';
 import type { ReactiveClock } from '$shared/lib';
 import {
@@ -211,30 +211,18 @@ const DEPTH_DEF: TileDef = {
   category: 'depth',
   kind: 'numeric',
   viz: 'spark',
+  // The entity owns the resolution so this tile and the status chip can never disagree about
+  // which reference the boat's Depth number is measured from.
   read({ vessel, store, clock, units }) {
-    const keelCell = store.cell(SK_PATHS.depthBelowKeel);
-    const surfaceCell = store.cell(SK_PATHS.depthBelowSurface);
-    const transducerCell = store.cell(SK_PATHS.depthBelowTransducer);
-    let cell = transducerCell;
-    let meters = vessel.depthMeters;
-    let referenceLabel = 'Xducer';
-    if (keelCell.epoch > 0) {
-      cell = keelCell;
-      meters = asNumber(keelCell.value);
-      referenceLabel = 'Keel';
-    } else if (surfaceCell.epoch > 0) {
-      cell = surfaceCell;
-      meters = asNumber(surfaceCell.value);
-      referenceLabel = 'Surface';
-    }
-    const state = grade(cell, clock);
+    const reading = vessel.safetyDepth;
+    const state = grade(store.cell(reading.path), clock);
     const mode = units.mode;
     return {
       state,
-      value: formatLengthOr(meters, mode),
+      value: formatLengthOr(reading.meters, mode),
       unit: lengthUnit(mode),
-      siValue: meters,
-      referenceLabel: cell.epoch > 0 ? referenceLabel : undefined,
+      siValue: reading.meters,
+      referenceLabel: reading.source ? DEPTH_SOURCE_LABELS[reading.source] : undefined,
     };
   },
 };

@@ -40,7 +40,7 @@ describe('OwnVessel client reactivity', () => {
               vessel.sogStale ||
               vessel.cogStale ||
               vessel.headingStale ||
-              vessel.depthStale ||
+              vessel.safetyDepth.stale ||
               vessel.windStale ||
               vessel.pressureStale,
           );

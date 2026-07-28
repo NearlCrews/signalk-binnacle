@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { SKFrame } from '$shared/signalk';
-import { SignalKStore } from '$shared/signalk';
-import { OwnVessel } from './vessel.svelte';
+import { SignalKStore, SK_PATHS } from '$shared/signalk';
+import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, OwnVessel } from './vessel.svelte';
 
-function frame(self: Record<string, unknown>): SKFrame {
+function frame(self: Record<string, unknown>, epoch = 1000): SKFrame {
   return {
     self: new Map(Object.entries(self)) as SKFrame['self'],
     connection: { phase: 'open', attempt: 0 },
-    epoch: 1000,
+    epoch,
   };
 }
 
@@ -32,11 +32,12 @@ describe('OwnVessel', () => {
     expect(vessel.outsidePressurePa).toBe(101325);
   });
 
-  it('exposes depth below the transducer in meters (SI)', () => {
+  it('exposes depth in meters (SI) from the transducer when it is the only source', () => {
     const store = new SignalKStore();
     const vessel = new OwnVessel(store);
     store.applyFrame(frame({ 'environment.depth.belowTransducer': 12.4 }));
-    expect(vessel.depthMeters).toBe(12.4);
+    expect(vessel.safetyDepth.meters).toBe(12.4);
+    expect(vessel.safetyDepth.source).toBe('transducer');
   });
 
   it('exposes course over ground and heading in radians (SI)', () => {
@@ -110,7 +111,7 @@ describe('OwnVessel', () => {
     expect(vessel.sogStale).toBe(true);
     expect(vessel.cogStale).toBe(true);
     expect(vessel.headingStale).toBe(true);
-    expect(vessel.depthStale).toBe(true);
+    expect(vessel.safetyDepth.stale).toBe(true);
     expect(vessel.windStale).toBe(true);
     expect(vessel.pressureStale).toBe(true);
 
@@ -119,7 +120,7 @@ describe('OwnVessel', () => {
       connection: { phase: 'open', attempt: 0 },
       epoch: clock.now,
     });
-    expect(vessel.depthStale).toBe(false);
+    expect(vessel.safetyDepth.stale).toBe(false);
     expect(vessel.headingStale).toBe(true);
     expect(vessel.windStale).toBe(true);
     expect(vessel.pressureStale).toBe(true);
@@ -156,8 +157,161 @@ describe('OwnVessel', () => {
       'navigation.courseOverGroundTrue',
       'navigation.headingTrue',
       'environment.depth.belowTransducer',
+      'environment.depth.belowKeel',
+      'environment.depth.belowSurface',
       'environment.wind.speedApparent',
       'environment.outside.pressure',
     ]);
+  });
+});
+
+describe('OwnVessel depth resolution', () => {
+  it('labels and titles every depth source', () => {
+    expect(DEPTH_SOURCE_LABELS).toEqual({
+      keel: 'Keel',
+      surface: 'Surface',
+      transducer: 'Xducer',
+    });
+    expect(DEPTH_SOURCE_TITLES).toEqual({
+      keel: 'Depth below the keel',
+      surface: 'Depth below the surface',
+      transducer: 'Depth below the transducer',
+    });
+  });
+
+  it('prefers the keel, then the surface, then the transducer for the safety depth', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.depthBelowTransducer]: 8,
+        [SK_PATHS.depthBelowSurface]: 9,
+        [SK_PATHS.depthBelowKeel]: 7,
+      }),
+    );
+    expect(vessel.safetyDepth).toEqual({
+      meters: 7,
+      source: 'keel',
+      path: SK_PATHS.depthBelowKeel,
+      stale: false,
+    });
+  });
+
+  it('resolves the safety depth on a corrected-only boat that never publishes the transducer', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(frame({ [SK_PATHS.depthBelowSurface]: 9 }));
+    expect(vessel.safetyDepth).toEqual({
+      meters: 9,
+      source: 'surface',
+      path: SK_PATHS.depthBelowSurface,
+      stale: false,
+    });
+  });
+
+  it('reports no depth source before any sounder publishes, graded on the transducer path', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    expect(vessel.safetyDepth).toEqual({
+      meters: undefined,
+      source: undefined,
+      path: SK_PATHS.depthBelowTransducer,
+      stale: false,
+    });
+  });
+
+  it('keeps a stale preferred source rather than falling through to a fresh lesser one', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    const vessel = new OwnVessel(store, clock);
+    store.applyFrame(frame({ [SK_PATHS.depthBelowKeel]: 7 }));
+    clock.now = 20_000;
+    store.applyFrame(frame({ [SK_PATHS.depthBelowTransducer]: 8 }, clock.now));
+    expect(vessel.safetyDepth).toEqual({
+      meters: 7,
+      source: 'keel',
+      path: SK_PATHS.depthBelowKeel,
+      stale: true,
+    });
+  });
+
+  it('takes staleness from the winning path, not from a stale lesser source', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 1000 });
+    const vessel = new OwnVessel(store, clock);
+    store.applyFrame(frame({ [SK_PATHS.depthBelowTransducer]: 8 }));
+    clock.now = 20_000;
+    store.applyFrame(frame({ [SK_PATHS.depthBelowKeel]: 7 }, clock.now));
+    expect(vessel.safetyDepth.source).toBe('keel');
+    expect(vessel.safetyDepth.stale).toBe(false);
+  });
+
+  it('never reads the keel for the anchor depth', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.depthBelowTransducer]: 8,
+        [SK_PATHS.depthBelowSurface]: 9,
+        [SK_PATHS.depthBelowKeel]: 7,
+      }),
+    );
+    expect(vessel.anchorDepth).toEqual({
+      meters: 9,
+      source: 'surface',
+      path: SK_PATHS.depthBelowSurface,
+      stale: false,
+    });
+
+    const keelOnly = new SignalKStore();
+    const keelVessel = new OwnVessel(keelOnly);
+    keelOnly.applyFrame(
+      frame({ [SK_PATHS.depthBelowTransducer]: 8, [SK_PATHS.depthBelowKeel]: 7 }),
+    );
+    expect(keelVessel.anchorDepth.meters).toBe(8);
+    expect(keelVessel.anchorDepth.source).toBe('transducer');
+  });
+
+  it('prefers the transducer for the trend source', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.depthBelowTransducer]: 8,
+        [SK_PATHS.depthBelowSurface]: 9,
+        [SK_PATHS.depthBelowKeel]: 7,
+      }),
+    );
+    expect(vessel.trendDepth.source).toBe('transducer');
+    expect(vessel.trendDepth.meters).toBe(8);
+  });
+
+  it('latches the trend source at the first read so a later source cannot step the history', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(frame({ [SK_PATHS.depthBelowSurface]: 9 }));
+    expect(vessel.trendDepth.source).toBe('surface');
+
+    store.applyFrame(
+      frame({
+        [SK_PATHS.depthBelowSurface]: 9.5,
+        [SK_PATHS.depthBelowKeel]: 7,
+        [SK_PATHS.depthBelowTransducer]: 8,
+      }),
+    );
+    expect(vessel.trendDepth).toEqual({
+      meters: 9.5,
+      source: 'surface',
+      path: SK_PATHS.depthBelowSurface,
+      stale: false,
+    });
+  });
+
+  it('does not latch the trend source while no depth has been published', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    expect(vessel.trendDepth.source).toBeUndefined();
+    store.applyFrame(frame({ [SK_PATHS.depthBelowKeel]: 7 }));
+    expect(vessel.trendDepth.source).toBe('keel');
   });
 });

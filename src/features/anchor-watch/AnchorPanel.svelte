@@ -10,7 +10,7 @@ import {
   MIN_RADIUS_M,
 } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
-import type { OwnVessel } from '$entities/vessel';
+import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import { createPanelMinimize, InlineConfirm, SlideOver, UnitField } from '$shared/ui';
@@ -57,7 +57,11 @@ const radiusDisplay = $derived(toDisplayUnits(anchor.radiusMeters ?? anchor.pref
 const minRadiusDisplay = $derived(toDisplayUnits(MIN_RADIUS_M));
 const distanceText = $derived(formatLengthOr(distance, mode, 0));
 const radiusText = $derived(watching ? formatLengthOr(anchor.radiusMeters, mode, 0) : PLACEHOLDER);
-const depthText = $derived(formatLengthOr(vessel.depthMeters, mode, 1));
+// Scope is reckoned against the water column, so the entity resolves this without the
+// keel-corrected path. A stale reading holds out the number rather than passing off an old
+// sounding as the depth the boat is lying in.
+const depth = $derived(vessel.anchorDepth);
+const depthText = $derived(formatLengthOr(depth.stale ? undefined : depth.meters, mode, 1));
 const captureTitle = $derived(
   `Set the radius to the current distance plus a ${formatLengthOr(CAPTURE_MARGIN_M, mode, 0)} ${unit} margin`,
 );
@@ -131,8 +135,8 @@ function captureFromDistance(): void {
     <dd><span class="num">{distanceText}</span><span class="unit">{unit}</span></dd>
     <dt>Radius</dt>
     <dd><span class="num">{radiusText}</span><span class="unit">{unit}</span></dd>
-    {#if vessel.depthMeters !== undefined}
-      <dt>Depth</dt>
+    {#if depth.source}
+      <dt title={DEPTH_SOURCE_TITLES[depth.source]}>Depth ({DEPTH_SOURCE_LABELS[depth.source]})</dt>
       <dd><span class="num">{depthText}</span><span class="unit">{unit}</span></dd>
     {/if}
   </dl>

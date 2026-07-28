@@ -220,6 +220,33 @@ describe('depth tile', () => {
     reading = readTile('depth', surfaceDeps);
     expect(reading.value).toBe('9.0');
     expect(reading.referenceLabel).toBe('Surface');
+
+    const transducerDeps = makeDeps(clock, 'metric');
+    transducerDeps.store.applyFrame(skFrame({ [SK_PATHS.depthBelowTransducer]: 8 }, 1000));
+    reading = readTile('depth', transducerDeps);
+    expect(reading.value).toBe('8.0');
+    expect(reading.referenceLabel).toBe('Xducer');
+  });
+
+  it('leaves the reference unlabeled until a depth source reports', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'metric');
+    const reading = readTile('depth', deps);
+    expect(reading.state).toBe('never');
+    expect(reading.value).toBe(PLACEHOLDER);
+    expect(reading.referenceLabel).toBeUndefined();
+  });
+
+  it('grades a stale keel reading on the keel path rather than a fresh transducer', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock, 'metric');
+    deps.store.applyFrame(skFrame({ [SK_PATHS.depthBelowKeel]: 7 }, 1000));
+    clock.now = 1000 + TILE_STALE_MS + 1;
+    deps.store.applyFrame(skFrame({ [SK_PATHS.depthBelowTransducer]: 8 }, clock.now));
+    const reading = readTile('depth', deps);
+    expect(reading.state).toBe('stale');
+    expect(reading.value).toBe('7.0');
+    expect(reading.referenceLabel).toBe('Keel');
   });
 });
 
