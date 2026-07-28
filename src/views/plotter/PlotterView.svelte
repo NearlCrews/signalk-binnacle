@@ -678,6 +678,7 @@ $effect(() => {
           saved={trackController.savedTracks}
           shown={trackController.shownSaved}
           loadState={trackController.loadState}
+          provisioning={trackController.provisioning}
           busy={trackController.busy}
           routeBusy={routeController.busy}
           persistenceDegraded={trackPersistenceDegraded}
@@ -694,13 +695,15 @@ $effect(() => {
       {:else if activePanel === 'waypoints'}
         <WaypointsPanel
           {auth}
+          {vessel}
+          {units}
           waypoints={waypointsStore.waypoints}
           loadState={waypointsController.loadState}
           busy={waypointsController.busy}
           routeBusy={routeController.busy}
           onRetry={() => void waypointsController.refreshWaypoints()}
           onLocate={(waypoint) => flyToPosition(waypoint.position)}
-          onGoTo={(waypoint) => void routeController.onGoToHere(waypoint.position)}
+          onGoTo={(waypoint) => void routeController.onGoToWaypoint(waypoint)}
           onEdit={waypointsController.onOpenEditWaypoint}
           onDelete={waypointsController.onDeleteWaypoint}
           onClose={closeWaypointsPanel}

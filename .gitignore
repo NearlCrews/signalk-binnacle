@@ -57,6 +57,9 @@ Thumbs.db
 # screenshot sources live under static/screenshots/ and are copied into the generated public/ output.
 /*.png
 
+# Failure screenshots a red Vitest browser-mode run writes beside the test file inside src/.
+__screenshots__/
+
 # Agent and session scratch (local only, not for contributors)
 .claude/
 .superpowers/

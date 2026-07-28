@@ -22,7 +22,8 @@ source, and surrounding traffic before relying on it.
 
 - **Routes** loads Signal K route resources independently of the live WebSocket. Creating, editing,
   importing, reversing, deleting, activating, stopping, skipping, and chart-side route actions
-  require write access. Route activation and chart-position navigation require confirmation. Failed
+  require write access. Route activation, stopping navigation (in the panel and on the navigation
+  strip), and chart-position navigation require confirmation. Failed
   refreshes keep the last accepted list and offer Retry. Secondary card actions live in a labeled
   overflow menu. Route ids, names, geometry, and collection size are bounded before use. GPX imports
   accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
@@ -30,10 +31,15 @@ source, and surrounding traffic before relying on it.
 - **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
   remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
   continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
-  startup toast. See [Tracks](tracks.md).
+  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
+  panel names the one-time Resources Provider step with a Check again action. See
+  [Tracks](tracks.md).
 - **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
-  location, and confirmed navigation. Locate collapses the phone panel so the chart stays visible,
-  and failed loads offer Retry. See [Waypoints](waypoints.md).
+  location, and confirmed navigation. Navigation sends the waypoint's resource reference so the
+  destination name reaches the navigation strip and other stations. The panel searches name and
+  description ignoring case and accents, sorts by name, distance, or bearing with fresh-fix-only
+  metrics, and states its render and ingestion caps. Locate collapses the phone panel so the chart
+  stays visible, and failed loads offer Retry. See [Waypoints](waypoints.md).
 - **Find places** searches chart notes and points of interest, including cached offline results.
   Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
   distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
@@ -62,12 +68,17 @@ source, and surrounding traffic before relying on it.
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
   watch remains active independently. Server-mode changes require write access; client-mode changes
   stay available. Conflicting actions are locked until completion.
-- **Alarms** lists bounded, validated Signal K notifications by severity. Silence and acknowledge are
-  locked while pending and require server write access. A disconnected stream is labeled because
-  displayed alarm state may be stale. Collision warnings publish as visual-only Signal K deltas,
-  while danger alarms use the Notifications API with visual and sound methods. Collision and
-  shallow-water settings stay in safe numeric bounds, in SI internally, with conversion only at
-  display inputs.
+- **Alarms** lists bounded, validated Signal K notifications by severity, and its menu entry carries
+  the count of active raised alarms. Any inbound alarm or emergency grade notification outside the
+  dedicated hazards sounds a shared tone and raises a safety strip offering Silence, Acknowledge,
+  Mute here, and Open Alarms; the notification method field is honored with an audible-safe default,
+  and a device-local mute never swallows a newly raised alarm. Silence and acknowledge are locked
+  while pending and require server write access. A disconnected stream is labeled because displayed
+  alarm state may be stale. Collision warnings publish as visual-only Signal K deltas, while danger
+  alarms use the Notifications API with visual and sound methods. Collision and shallow-water
+  settings stay in safe numeric bounds, in SI internally, with conversion only at display inputs.
+  The shallow threshold follows the server's depth zones when they include an alarm band, and the
+  panel says when no depth source is publishing.
 
 ## Weather
 
