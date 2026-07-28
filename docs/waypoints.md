@@ -11,7 +11,7 @@ hazards, conditions, and direct observation.
    then choose **Drop waypoint**.
 2. Enter a name, choose the default marker, a built-in place icon, or a compatible custom symbol, then
    select **Save**.
-3. Open **Menu**, then **Waypoints** to locate, edit, or delete saved marks.
+3. Open **Menu**, then **Waypoints** to search, sort, locate, edit, or delete saved marks.
 4. Select the navigation icon, review the named destination, then select **Start navigation**. The
    confirmation prevents a rolling-deck mis-tap from replacing an active course.
 5. Select the waypoint name to move the chart to it without changing navigation. On a phone, this
@@ -36,6 +36,13 @@ the resource top level, with a GeoJSON Point in `feature.geometry` and the symbo
 `feature.properties.skIcon`. Coordinates are `[longitude, latitude]` in GeoJSON and become
 `{ latitude, longitude }` inside Binnacle.
 
+Starting navigation references the saved mark instead of copying its position: the Course API
+destination receives `{ "href": "/resources/waypoints/{id}" }`, with the id percent-encoded so any
+resource id stays one path segment. The server resolves the resource and publishes the waypoint's name
+with the course, so the destination reads by name in the navigation strip and on every other station.
+If the server rejects the reference, Binnacle retries once with the position alone, which keeps
+navigation available at the cost of the destination name.
+
 ## Loading and mutation behavior
 
 Waypoint loading is independent of the live Signal K WebSocket. It begins when access resolves, so a
@@ -56,6 +63,27 @@ change.
 Delete and navigation use separate inline confirmations. Delete names the destructive action.
 Navigation names the exact waypoint and warns the navigator to check the destination before relying on
 it.
+
+## Finding a waypoint in the panel
+
+The panel searches and sorts saved marks with the same list idioms as Find places, over the shared
+`src/shared/nav/nav-rows.ts` core.
+
+- Search covers the name and the description. Matching ignores case and accents, so a lowercase
+  unaccented query still finds a capitalized or accented name. The search field and the sort control
+  appear only once the locker holds at least one mark.
+- Sort by **Name**, **Distance**, or **Bearing**. Selecting the current key reverses it, and a new key
+  starts ascending. Equal values break by collated name and then by resource id, so rows never swap
+  places between renders.
+- Distance is rhumb distance and bearing is rhumb bearing in degrees true, the same leg the navigator
+  steers. Both need a fresh vessel fix. Without one the two readouts show `--`, the list sorts by name,
+  and the panel explains why.
+- Until the navigator chooses a sort, the panel follows the fix: nearest first as soon as a fresh fix
+  arrives, by name while it is absent or stale. An explicit choice is never overridden.
+- At most 250 cards render at once. The panel reports how many matches are hidden and asks for a
+  narrower search rather than rendering a full collection of action-bearing cards.
+- When the collection arrives at the 5,000-waypoint ingestion limit, the panel says more marks may
+  exist on the server, so a short list is never mistaken for the whole locker.
 
 ## Validation and limits
 
@@ -85,9 +113,12 @@ not require the plugin for standard waypoint behavior.
 - `src/features/waypoints/waypoints-client.ts` owns v2 and v1 reads and v2 writes.
 - `src/features/waypoints/waypoint-controller.svelte.ts` owns loading, dialogs, serialization, and
   refresh generations.
+- `src/features/waypoints/waypoint-rows.ts` builds the searchable, sortable panel rows on the shared
+  `src/shared/nav/nav-rows.ts` core.
 - `src/features/waypoints/WaypointsPanel.svelte` and `WaypointDialog.svelte` own the helm interaction.
 - `src/features/waypoints/waypoint-overlay.ts` renders the shared collection.
 
 Unit coverage verifies resource conversion, validation limits, stale refresh rejection, retained
-dialogs, serialized writes, optimistic state, load copy, and access gating. The Playwright flow covers
-HTTP-only loading, narrow layout, and the navigation confirmation boundary.
+dialogs, serialized writes, optimistic state, load copy, access gating, search matching, sort order and
+tie-breaking, and the render and ingestion cap notices. The Playwright flow covers HTTP-only loading,
+narrow layout, and the navigation confirmation boundary.

@@ -5,13 +5,13 @@ import { categoryLabel, poiInlineIconSvg } from '$entities/poi-icons';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
+import { type NavSortState, toggleSort } from '$shared/nav';
 import { createPanelMinimize, ShowOnChartToggle, SlideOver } from '$shared/ui';
 import {
   defaultSort,
   filterRows,
   type Poi,
   type PoiSort,
-  type SortDir,
   sortRows,
   toRows,
 } from './poi-search-rows';
@@ -48,7 +48,7 @@ const {
 }: Props = $props();
 
 let query = $state('');
-let sortState = $state<{ key: PoiSort; dir: SortDir }>(defaultSort(false));
+let sortState = $state<NavSortState<PoiSort>>(defaultSort(false));
 let sortTouched = $state(false);
 let previewedId = $state<string | undefined>();
 const minimize = createPanelMinimize();
@@ -73,13 +73,9 @@ const SORTS: { key: PoiSort; label: string }[] = [
   { key: 'bearing', label: 'Bearing' },
 ];
 
-// Same key flips the direction; a new key starts ascending.
-function toggleSort(key: PoiSort): void {
+function chooseSort(key: PoiSort): void {
   sortTouched = true;
-  sortState =
-    sortState.key === key
-      ? { key, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: 'asc' };
+  sortState = toggleSort(sortState, key);
 }
 
 function preview(poi: Poi | undefined): void {
@@ -153,7 +149,7 @@ onDestroy(() => onHover(undefined));
           class="btn"
           class:is-on={sortState.key === option.key}
           aria-pressed={sortState.key === option.key}
-          onclick={() => toggleSort(option.key)}
+          onclick={() => chooseSort(option.key)}
         >
           {option.label}
           {#if sortState.key === option.key}
@@ -251,13 +247,9 @@ onDestroy(() => onHover(undefined));
 </SlideOver>
 
 <style>
-/* The sort header, the result rows, and the readout line come from the shared .nav-* family in
-   cards.css, shared with the AIS targets panel; only the panel section and the leading category icon
-   are local. */
-/* Composes the shared .input primitive; only the full-panel width is local. */
-.search-input {
-  inline-size: 100%;
-}
+/* The search field, the sort header, the result rows, and the readout line come from the global
+   .search-input and the shared .nav-* family in cards.css, shared with the AIS targets and Waypoints
+   panels; only the leading category icon and the selected-row accent are local. */
 .poi-head {
   display: flex;
   align-items: center;

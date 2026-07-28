@@ -7,6 +7,19 @@ export {
   normalizeLonDeltaDeg,
 } from './distance';
 export {
+  compareNavIdentity,
+  defaultNavSort,
+  filterNavRows,
+  type NavSortKey,
+  type NavSortState,
+  navMetrics,
+  SEARCH_COLLATOR,
+  type SortableNavRow,
+  type SortDir,
+  sortNavRows,
+  toggleSort,
+} from './nav-rows';
+export {
   etaSeconds,
   rhumbBearingRad,
   rhumbCrossTrackErrorMeters,

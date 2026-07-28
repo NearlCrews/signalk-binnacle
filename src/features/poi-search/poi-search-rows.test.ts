@@ -61,11 +61,15 @@ describe('filterRows', () => {
   });
 });
 
+function rowOf(place: Poi, distanceMeters?: number, bearingRad?: number): PoiRow {
+  return { poi: place, id: place.id, name: place.name, distanceMeters, bearingRad };
+}
+
 describe('sortRows', () => {
   const rows: PoiRow[] = [
-    { poi: poi('a', 'Bravo', 0, 0, 'anchorage'), distanceMeters: 200, bearingRad: 1 },
-    { poi: poi('b', 'Alpha', 0, 0, 'marina'), distanceMeters: 100, bearingRad: 2 },
-    { poi: poi('c', 'Charlie', 0, 0, 'hazard'), distanceMeters: undefined, bearingRad: undefined },
+    rowOf(poi('a', 'Bravo', 0, 0, 'anchorage'), 200, 1),
+    rowOf(poi('b', 'Alpha', 0, 0, 'marina'), 100, 2),
+    rowOf(poi('c', 'Charlie', 0, 0, 'hazard')),
   ];
 
   it('sorts by name ascending and descending', () => {
@@ -107,9 +111,9 @@ describe('sortRows', () => {
 
   it('breaks equal sort values deterministically by name and id', () => {
     const tied: PoiRow[] = [
-      { poi: poi('b', 'Same', 0, 0), distanceMeters: 10 },
-      { poi: poi('z', 'Zulu', 0, 0), distanceMeters: 10 },
-      { poi: poi('a', 'Same', 0, 0), distanceMeters: 10 },
+      rowOf(poi('b', 'Same', 0, 0), 10),
+      rowOf(poi('z', 'Zulu', 0, 0), 10),
+      rowOf(poi('a', 'Same', 0, 0), 10),
     ];
     expect(sortRows(tied, 'distance', 'asc').map((r) => r.poi.id)).toEqual(['a', 'b', 'z']);
     expect(sortRows(tied, 'distance', 'desc').map((r) => r.poi.id)).toEqual(['z', 'b', 'a']);

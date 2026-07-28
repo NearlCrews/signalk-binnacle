@@ -2,15 +2,22 @@
 import Navigation from '@lucide/svelte/icons/navigation';
 import SquarePen from '@lucide/svelte/icons/square-pen';
 import Trash2 from '@lucide/svelte/icons/trash-2';
+import type { UnitsStore } from '$entities/units';
+import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
-import { formatLatitude, formatLongitude } from '$shared/lib';
+import { formatBearingOr, formatLatitude, formatLongitude, formatMetersOrNm } from '$shared/lib';
+import { defaultNavSort, type NavSortKey, type NavSortState, toggleSort } from '$shared/nav';
 import type { AuthController } from '$shared/signalk';
 import { ArmedRow, createPanelMinimize, InlineConfirm, SavedList, SlideOver } from '$shared/ui';
 import type { WaypointLoadState } from './waypoint-controller.svelte';
+import { filterWaypointRows, sortWaypointRows, toWaypointRows } from './waypoint-rows';
+import { MAX_WAYPOINTS } from './waypoints-client';
 
 interface Props {
   auth: AuthController;
   waypoints: Waypoint[];
+  vessel: OwnVessel;
+  units: UnitsStore;
   loadState: WaypointLoadState;
   busy: boolean;
   routeBusy: boolean;
@@ -29,6 +36,8 @@ interface Props {
 const {
   auth,
   waypoints,
+  vessel,
+  units,
   loadState,
   busy,
   routeBusy,
@@ -51,7 +60,44 @@ const armedDelete = new ArmedRow((id) => {
 });
 
 let confirmingNavigate = $state<Waypoint | undefined>();
+let query = $state('');
+let sortState = $state<NavSortState>(defaultNavSort(false));
+let sortTouched = $state(false);
 const minimize = createPanelMinimize();
+
+const vesselPosition = $derived(vessel.positionStale ? undefined : vessel.position);
+const allRows = $derived(
+  sortWaypointRows(
+    filterWaypointRows(toWaypointRows(waypoints, vesselPosition), query),
+    sortState.key,
+    sortState.dir,
+  ),
+);
+// Cap the rendered cards: a full collection is thousands of marks, and each card carries three
+// actions, so rendering them all would cost far more than the navigator can read at once.
+const MAX_RESULTS = 250;
+const rows = $derived(allRows.slice(0, MAX_RESULTS));
+
+const SORTS: { key: NavSortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'distance', label: 'Distance' },
+  { key: 'bearing', label: 'Bearing' },
+];
+
+const emptyMessage = $derived(
+  loadState === 'loading'
+    ? 'Loading waypoints…'
+    : loadState === 'error'
+      ? 'Waypoints are unavailable.'
+      : waypoints.length > 0
+        ? 'No waypoints match your search. Clear it to see all saved waypoints.'
+        : 'No waypoints yet. Press and hold the chart to drop one.',
+);
+
+function chooseSort(key: NavSortKey): void {
+  sortTouched = true;
+  sortState = toggleSort(sortState, key);
+}
 
 function locate(waypoint: Waypoint): void {
   onLocate(waypoint);
@@ -64,6 +110,22 @@ function confirmNavigation(): void {
   if (!waypoint || navigationDisabled) return;
   onGoTo?.(waypoint);
 }
+
+// Before the navigator chooses a sort, follow GPS availability: nearest first as soon as a fresh fix
+// arrives, and name first if the fix is absent or stale. An explicit sort choice is never overridden.
+$effect(() => {
+  if (sortTouched) return;
+  const next = defaultNavSort(vesselPosition !== undefined);
+  if (sortState.key !== next.key || sortState.dir !== next.dir) sortState = next;
+});
+
+// A search, a refresh, or the render cap can hide the card whose confirm is open. Close the confirm
+// with its card, so clearing the search never brings back a confirm the navigator did not just arm.
+$effect(() => {
+  const armed = confirmingNavigate;
+  if (armed && !rows.some((row) => row.id === armed.id)) confirmingNavigate = undefined;
+  if (!rows.some((row) => armedDelete.isArmed(row.id))) armedDelete.cancel();
+});
 </script>
 
 <SlideOver
@@ -96,17 +158,48 @@ function confirmNavigation(): void {
     <p class="muted-note" role="status">Refreshing waypoints…</p>
   {/if}
 
-  <SavedList
-    heading="Saved waypoints"
-    items={waypoints}
-    empty={loadState === 'loading'
-      ? 'Loading waypoints…'
-      : loadState === 'error'
-        ? 'Waypoints are unavailable.'
-        : 'No waypoints yet. Press and hold the chart to drop one.'}
-    key={(waypoint) => waypoint.id}
-  >
-    {#snippet card(waypoint)}
+  {#if waypoints.length > 0 && vesselPosition === undefined}
+    <p class="muted-note" role="status">
+      Distance and bearing need a fresh GPS fix. Waypoints are sorted by name until one arrives.
+    </p>
+  {/if}
+
+  <!-- No marks means nothing to search or order, so the controls stay out of the empty locker. -->
+  {#if waypoints.length > 0}
+    <input
+      class="input search-input"
+      type="search"
+      placeholder="Search name or description"
+      aria-label="Search waypoints by name or description"
+      bind:value={query}
+    >
+    <div class="nav-sort">
+      <span class="caps-label">Sort by</span>
+      <div class="segmented" role="group" aria-label="Sort waypoints by">
+        {#each SORTS as option (option.key)}
+          <button
+            type="button"
+            class="btn"
+            class:is-on={sortState.key === option.key}
+            aria-pressed={sortState.key === option.key}
+            onclick={() => chooseSort(option.key)}
+          >
+            {option.label}
+            {#if sortState.key === option.key}
+              <span aria-hidden="true">{sortState.dir === 'asc' ? '▲' : '▼'}</span>
+              <span class="visually-hidden">
+                {sortState.dir === 'asc' ? 'ascending' : 'descending'}
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <SavedList heading="Saved waypoints" items={rows} empty={emptyMessage} key={(row) => row.id}>
+    {#snippet card(row)}
+      {@const waypoint = row.waypoint}
       <div class="card-head">
         <button
           type="button"
@@ -123,6 +216,16 @@ function confirmNavigation(): void {
           <span class="num">
             {formatLatitude(waypoint.position.latitude)}
             {formatLongitude(waypoint.position.longitude)}
+          </span>
+        </dd>
+        <dt class="caps-label">Distance</dt>
+        <dd>
+          <span class="num">{formatMetersOrNm(row.distanceMeters, units.mode)}</span>
+        </dd>
+        <dt class="caps-label">Bearing</dt>
+        <dd title="Bearing in degrees true">
+          <span class="num">
+            {row.bearingRad === undefined ? '--' : `${formatBearingOr(row.bearingRad)}°T`}
           </span>
         </dd>
       </dl>
@@ -180,11 +283,24 @@ function confirmNavigation(): void {
       {/if}
     {/snippet}
   </SavedList>
+
+  {#if allRows.length > MAX_RESULTS}
+    <p class="muted-note" role="status">
+      Showing the first {MAX_RESULTS} of {allRows.length} matches. Search to narrow the results.
+    </p>
+  {/if}
+  {#if waypoints.length === MAX_WAYPOINTS}
+    <p class="muted-note" role="status">
+      The panel accepts at most {MAX_WAYPOINTS.toLocaleString('en')} waypoints from the server. More
+      may exist; delete unused marks to make room.
+    </p>
+  {/if}
 </SlideOver>
 
 <style>
 /* The card list, wrapper, stats, and actions come from the shared SavedList plus the global .saved
-   system in app.css; only the optional description line is Waypoints-specific. */
+   system in app.css, and the search field and sort header from the global .search-input and .nav-sort
+   classes; only the optional description line is Waypoints-specific. */
 .description {
   margin: 0;
   font-size: var(--text-sm);

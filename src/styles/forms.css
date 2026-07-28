@@ -19,6 +19,12 @@
   opacity: 1;
 }
 
+/* The panel-wide search field: the .input box stretched across the panel, shared by the Find places
+   and Waypoints lists so both present the same search affordance at the same width. */
+.search-input {
+  inline-size: 100%;
+}
+
 /* Theme native checkboxes and radios so they match the accent color in every theme, instead of
    the user-agent default blue. */
 input[type="checkbox"],
