@@ -206,7 +206,7 @@ function chartLabel(id: string): string {
 
     <SavedRegionsView
       {regions}
-      {loadError}
+      loadError={adminAccess ? loadError : null}
       {regionStatus}
       {regionPollError}
       {pendingRegion}

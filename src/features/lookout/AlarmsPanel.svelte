@@ -417,7 +417,9 @@ $effect(() => {
   flex: 1;
   flex-direction: column;
   gap: 0.1rem;
-  min-inline-size: 0;
+  /* A real floor, not zero: the row wraps, so when the action buttons crowd a long message the
+     actions drop to the next line instead of squeezing the text into a one-word column. */
+  min-inline-size: 12rem;
 }
 .alert-message {
   overflow-wrap: anywhere;
