@@ -46,6 +46,31 @@ describe('GatedAlarm', () => {
     expect(events).toEqual(['start', 'stop', 'start']);
   });
 
+  it('restart() re-articulates the tone while sounding', () => {
+    const { control, events, lastTone } = createFakeAlarmControl();
+    const alarm = new GatedAlarm(TONE, control);
+    alarm.update(true);
+    alarm.restart();
+    expect(events).toEqual(['start', 'stop', 'start']);
+    expect(lastTone()).toBe(TONE);
+    // The gate stays closed, so the next true is still not a rising edge.
+    alarm.update(true);
+    expect(events).toEqual(['start', 'stop', 'start']);
+    alarm.update(false);
+    expect(events).toEqual(['start', 'stop', 'start', 'stop']);
+  });
+
+  it('restart() is a no-op while quiet', () => {
+    const { control, events } = createFakeAlarmControl();
+    const alarm = new GatedAlarm(TONE, control);
+    alarm.restart();
+    expect(events).toEqual([]);
+    alarm.update(true);
+    alarm.stop();
+    alarm.restart();
+    expect(events).toEqual(['start', 'stop']);
+  });
+
   it('forwards prime to the control', () => {
     const { control, events } = createFakeAlarmControl();
     new GatedAlarm(TONE, control).prime();

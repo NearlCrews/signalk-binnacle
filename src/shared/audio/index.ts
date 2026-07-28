@@ -1,2 +1,8 @@
-export { type AlarmControl, type AlarmTone, DANGER_TONE } from './alarm';
+export {
+  type AlarmControl,
+  type AlarmTone,
+  alarmAudioPrimed,
+  DANGER_TONE,
+  primeAlarmAudio,
+} from './alarm';
 export { GatedAlarm } from './gated-alarm';

@@ -27,6 +27,15 @@ export class GatedAlarm {
     else this.#alarm.stop();
   }
 
+  // Re-articulate an already sounding tone: a second alarm raised while the first is running must
+  // be heard, and the running burst loop would otherwise absorb it (Alarm.start leaves a loop of
+  // the same tone alone). Silent when quiet, so this can never be the thing that starts a sound.
+  restart(): void {
+    if (!this.#sounding) return;
+    this.#alarm.stop();
+    this.#alarm.start(this.#tone);
+  }
+
   // Silence outright (teardown), regardless of the last condition.
   stop(): void {
     this.#sounding = false;

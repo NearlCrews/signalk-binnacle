@@ -1,6 +1,7 @@
 // A repeating alarm tone, synthesized with the Web Audio API so nothing has to be bundled
-// or fetched. Browsers block audio until a user gesture, so call prime() from a click once;
-// after that the alarm can sound on its own when a danger arises.
+// or fetched. Browsers block audio until a user gesture, so call primeAlarmAudio() from one once;
+// every alarm shares that context, so after it every alarm can sound on its own when a danger
+// arises.
 
 export interface AlarmTone {
   // Beep pitch in Hz.
@@ -32,13 +33,38 @@ export interface AlarmControl {
   stop(): void;
 }
 
-function createContext(): AudioContext | undefined {
-  if (typeof window === 'undefined' || !window.AudioContext) return undefined;
-  return new window.AudioContext();
+// One context for the whole app. Browsers cap how many an origin may create, and a gesture primes
+// the context it touched, so a per-instance context would leave later alarms suspended and silent
+// after the single priming gesture has been spent.
+let sharedCtx: AudioContext | undefined;
+
+function sharedContext(): AudioContext | undefined {
+  if (!sharedCtx && typeof window !== 'undefined' && window.AudioContext) {
+    sharedCtx = new window.AudioContext();
+  }
+  return sharedCtx;
+}
+
+function resumeContext(ctx: AudioContext): void {
+  // resume() rejects if the context is closing or the gesture requirement is unmet; swallow it so
+  // a failed resume never surfaces as an unhandled rejection. The next burst retries the resume.
+  void ctx.resume().catch(() => undefined);
+}
+
+// Create and resume the shared alarm context. Must run from a user gesture (autoplay policy); a
+// call outside one leaves the context suspended, which alarmAudioPrimed() then reports.
+export function primeAlarmAudio(): void {
+  const ctx = sharedContext();
+  if (ctx && ctx.state === 'suspended') resumeContext(ctx);
+}
+
+// Whether alarms can actually sound. Deliberately does not build a context: a caller asking
+// whether the gesture took must not create the very thing it is asking about.
+export function alarmAudioPrimed(): boolean {
+  return sharedCtx?.state === 'running';
 }
 
 export class Alarm implements AlarmControl {
-  #ctx: AudioContext | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #tone: AlarmTone | undefined;
   #warnedNoAudio = false;
@@ -48,8 +74,7 @@ export class Alarm implements AlarmControl {
 
   // Create and resume the audio context. Must run from a user gesture (autoplay policy).
   prime(): void {
-    const ctx = this.#context();
-    if (ctx && ctx.state === 'suspended') this.#resume(ctx);
+    primeAlarmAudio();
   }
 
   start(tone: AlarmTone): void {
@@ -64,7 +89,7 @@ export class Alarm implements AlarmControl {
       return;
     }
     this.stop();
-    const ctx = this.#context();
+    const ctx = sharedContext();
     if (!ctx) {
       // No Web Audio: the audible alarm is unavailable. The visual strip and the assertive live
       // region still fire, so the watch is not silent, but a one-time breadcrumb makes a
@@ -75,7 +100,7 @@ export class Alarm implements AlarmControl {
       }
       return;
     }
-    if (ctx.state === 'suspended') this.#resume(ctx);
+    if (ctx.state === 'suspended') resumeContext(ctx);
     this.#tone = tone;
     this.#burst(ctx, tone);
     this.#timer = setInterval(() => this.#burst(ctx, tone), tone.periodMs);
@@ -97,19 +122,8 @@ export class Alarm implements AlarmControl {
     this.#active.clear();
   }
 
-  #context(): AudioContext | undefined {
-    if (!this.#ctx) this.#ctx = createContext();
-    return this.#ctx;
-  }
-
-  #resume(ctx: AudioContext): void {
-    // resume() rejects if the context is closing or the gesture requirement is unmet; swallow it so
-    // a failed resume never surfaces as an unhandled rejection. The next burst retries the resume.
-    void ctx.resume().catch(() => undefined);
-  }
-
   #burst(ctx: AudioContext, tone: AlarmTone): void {
-    if (ctx.state === 'suspended') this.#resume(ctx);
+    if (ctx.state === 'suspended') resumeContext(ctx);
     const step = (tone.beepMs + tone.gapMs) / 1000;
     for (let i = 0; i < tone.beeps; i += 1) {
       this.#beep(ctx, tone, ctx.currentTime + i * step);
