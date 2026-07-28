@@ -388,6 +388,7 @@ let layersView = $state<LayersView | undefined>();
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
 // opening one closes whatever was open without each opener having to clear the others by hand.
 let activePanel = $state<PanelId | null>(null);
+let selectedAisId = $state<string | undefined>();
 let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
@@ -401,6 +402,7 @@ const closePanel = (): void => {
     trends.setFocus(undefined);
     trendReturnInstrumentId = undefined;
   }
+  if (activePanel === 'ais') selectedAisId = undefined;
   activePanel = null;
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
@@ -411,6 +413,7 @@ const backToMenu = (): void => {
     trends.setFocus(undefined);
     trendReturnInstrumentId = undefined;
   }
+  if (activePanel === 'ais') selectedAisId = undefined;
   activePanel = null;
   menuOpen = true;
 };
@@ -430,6 +433,7 @@ const openPanel = (panel: PanelId): void => {
     trends.setFocus(undefined);
     trendReturnInstrumentId = undefined;
   }
+  if (panel !== 'ais') selectedAisId = undefined;
   activePanel = panel;
   if (panel === 'trends') trends.setOpen(true);
   if (narrow) selectedNote = undefined;
@@ -1513,6 +1517,12 @@ function flyToPosition(position: LatLon): void {
   mapCommands?.flyTo(position.latitude, position.longitude);
 }
 
+function selectAisTarget(id: string | undefined): void {
+  if (id && !aisTargets.find(id)) return;
+  selectedAisId = id;
+  if (id) openPanel('ais');
+}
+
 function selectPoi(poi: Poi): void {
   // Same as tapping the marker on the chart: ring it in place (the highlight effect above) and open
   // its detail in the standard note popup, without moving the map.
@@ -1634,7 +1644,10 @@ const selectNote = (selection: NoteSelection | undefined, fromPlaces = false): v
   selectedNote = selection;
   noteReturnsToPlaces = Boolean(selection && fromPlaces && narrow);
   // Only yield a leading panel when actually opening a note, not when the selection clears.
-  if (narrow && selection) activePanel = null;
+  if (narrow && selection) {
+    if (activePanel === 'ais') selectedAisId = undefined;
+    activePanel = null;
+  }
 };
 function backFromNote(): void {
   selectedNote = undefined;
@@ -1988,6 +2001,7 @@ const plotterActions = {
   onMapDestroyed: () => (mapInstance = undefined),
   onUserPan: () => (following = false),
   onNoteSelect: selectNote,
+  onAisSelect: selectAisTarget,
   onTideStationSelect,
   onNotes: (notes: NotePoint[]) => (poiNotes = notes),
   onPoiStatus: (state: PoiViewState) => (poiViewState = state),
@@ -2103,6 +2117,7 @@ const plotterActions = {
     weatherLayerSettings={weatherLayerSettings.value}
     {trackPersistenceDegraded}
     {activePanel}
+    {selectedAisId}
     {tidesOpenedFrom}
     bind:menuOpen
     {layersView}

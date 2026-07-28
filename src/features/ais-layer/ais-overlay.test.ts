@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AisTargets } from '$entities/ais';
 import { mapThemePaint } from '$shared/map';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
-import { createFakeMap, createFrameFactory, fakeOverlayContext } from '$shared/testing';
+import {
+  createFakeMap,
+  createFrameFactory,
+  fakeOverlayContext,
+  sourceFeatures,
+} from '$shared/testing';
 import { createAisOverlay } from './ais-overlay';
 
 // Seeded from the wall clock: AIS freshness is judged against real time, so a tiny epoch would
@@ -30,15 +35,23 @@ beforeEach(() => vi.stubGlobal('ImageData', FakeImageData));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('ais overlay', () => {
-  it('adds an image, a source, and a symbol layer in the traffic band', async () => {
+  it('adds an image, a source, a symbol, a selection ring, and a 44 px hit layer', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
+    const addLayer = vi.spyOn(map, 'addLayer');
     await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('traffic');
     expect(map.images.size).toBe(1);
     expect(map.sources.size).toBe(1);
-    expect(map.layers.size).toBe(1);
+    expect(map.layers.size).toBe(3);
+    expect(addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'binnacle-ais-selected' }),
+      'binnacle-ais-symbol',
+    );
+    expect(map.layers.get('binnacle-ais-hit')?.paint).toMatchObject({
+      'circle-radius': 22,
+    });
   });
 
   it('syncs one feature per positioned target', async () => {
@@ -115,7 +128,7 @@ describe('ais overlay', () => {
   it('throttles steady-state position churn to about 1 Hz and paints the latest data', async () => {
     const store = new SignalKStore();
     let t = 0;
-    const overlay = createAisOverlay(new AisTargets(store), () => t);
+    const overlay = createAisOverlay(new AisTargets(store), { now: () => t });
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
@@ -142,7 +155,7 @@ describe('ais overlay', () => {
   it('paints a new target immediately even inside the throttle window', async () => {
     const store = new SignalKStore();
     let t = 0;
-    const overlay = createAisOverlay(new AisTargets(store), () => t);
+    const overlay = createAisOverlay(new AisTargets(store), { now: () => t });
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
     store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
@@ -165,5 +178,77 @@ describe('ais overlay', () => {
     await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.updatedImages).toContain('binnacle-ais-icon');
+  });
+
+  it('dispatches only current target ids and tears down hit handlers idempotently', async () => {
+    const store = new SignalKStore();
+    const targets = new AisTargets(store);
+    const onSelect = vi.fn();
+    const overlay = createAisOverlay(targets, { onSelect });
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    store.applyFrame(positionFrame({ 'vessels.current': { latitude: 1, longitude: 2 } }));
+
+    await overlay.add(ctx);
+    await overlay.add(ctx);
+    expect(map.handlerCount('click', 'binnacle-ais-hit')).toBe(1);
+    map.emitLayer('mouseenter', 'binnacle-ais-hit', {});
+    expect(map.getCanvas().style.cursor).toBe('pointer');
+
+    map.emitLayer('click', 'binnacle-ais-hit', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [2, 1] },
+          properties: { id: 'vessels.missing' },
+        },
+      ],
+    });
+    map.emitLayer('click', 'binnacle-ais-hit', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [2, 1] },
+          properties: { id: 'vessels.current' },
+        },
+      ],
+    });
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onSelect).toHaveBeenCalledWith('vessels.current');
+
+    overlay.remove(ctx);
+    expect(map.handlerCount('click', 'binnacle-ais-hit')).toBe(0);
+    expect(map.getCanvas().style.cursor).toBe('');
+  });
+
+  it('refreshes the selected target ring without waiting for AIS churn', async () => {
+    const store = new SignalKStore();
+    const targets = new AisTargets(store);
+    let selectedId: string | undefined;
+    const overlay = createAisOverlay(targets, { selectedId: () => selectedId });
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    store.applyFrame(positionFrame({ 'vessels.a': { latitude: 1, longitude: 2 } }));
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    expect(sourceFeatures(map, 'binnacle-ais')[0]?.properties?.selected).toBe(false);
+
+    selectedId = 'vessels.a';
+    overlay.sync(ctx);
+
+    expect(sourceFeatures(map, 'binnacle-ais')[0]?.properties?.selected).toBe(true);
+  });
+
+  it('disables the hit surface when the overlay is hidden or fully transparent', async () => {
+    const overlay = createAisOverlay(new AisTargets(new SignalKStore()));
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+
+    overlay.setVisible?.(ctx, false);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-ais-hit', 'visibility', 'none');
+
+    map.setLayoutProperty.mockClear();
+    overlay.setVisible?.(ctx, true);
+    overlay.setOpacity?.(ctx, 0);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-ais-hit', 'visibility', 'none');
   });
 });

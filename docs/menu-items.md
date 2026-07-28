@@ -56,10 +56,15 @@ source, and surrounding traffic before relying on it.
 
 ## Safety
 
-- **Nearby vessels (AIS)** lists up to 500 current targets by distance, CPA, or name. Stale or absent
-  own GPS removes derived distance and bearing instead of showing frozen values. The panel labels a
-  disconnected Signal K stream, shows collision severity, and exposes target identity, position,
-  course, heading, speed, CPA, TCPA, navigation state, and reported ship type.
+- **Nearby vessels (AIS)** searches reported names and Maritime Mobile Service Identity numbers,
+  filters collision risks and getting-close targets, then renders up to 500 matches by distance,
+  closest point of approach (CPA), or name. A list row or generous chart hit target opens the same
+  live in-panel detail, and the selected chart target gains a ring below the collision styling.
+  Stale or absent own GPS removes derived distance and bearing instead of showing frozen values. An
+  expired selected target returns to the live list instead of freezing its values. The panel labels
+  a disconnected Signal K stream, shows collision severity, and exposes target identity, position,
+  course, heading, speed, CPA, time to closest point of approach (TCPA), navigation state, and a
+  plain-language ship type with the reported numeric id.
 - **Radar** stays discoverable without a provider and explains what is missing. Controls report radar
   identity, control-write state, spoke-stream health, renderer health, and stale pictures. Transmit
   requires confirmation, Standby stays immediate, and Open overlay settings moves directly to the

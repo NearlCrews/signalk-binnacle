@@ -1,5 +1,6 @@
 <script lang="ts">
 import Crosshair from '@lucide/svelte/icons/crosshair';
+import { aisShipTypeLabel } from '$entities/ais';
 import type { UnitsStore } from '$entities/units';
 import type { LatLon } from '$shared/geo';
 import {
@@ -12,7 +13,7 @@ import {
   formatNm,
   formatTcpaMin,
 } from '$shared/lib';
-import { SlideOver } from '$shared/ui';
+import { SubViewHeader } from '$shared/ui';
 import type { AisListRow } from './ais-rows';
 
 interface Props {
@@ -20,26 +21,34 @@ interface Props {
   // as it stays open rather than a snapshot from the moment it was opened.
   row: AisListRow;
   units: UnitsStore;
-  onClose: () => void;
+  onBack: () => void;
   onLocate: (position: LatLon) => void;
 }
 
-const { row, units, onClose, onLocate }: Props = $props();
+const { row, units, onBack, onLocate }: Props = $props();
 </script>
 
-<SlideOver
-  dock="right"
-  title={row.label}
-  subtitle={row.navigationState ? capitalize(row.navigationState) : undefined}
-  ariaLabel="Details for {row.label}"
-  closeLabel="Close target details"
-  {onClose}
-  bodyFlex
->
+<SubViewHeader title={row.label} backLabel="Back to nearby vessels" {onBack} />
+{#if row.navigationState}
+  <p class="caps-label">{capitalize(row.navigationState)}</p>
+{/if}
+{#if row.severity === 'danger'}
+  <p class="alert-note alert-note--filled" role="status">
+    Collision risk. Review the closest pass and time to closest values below.
+  </p>
+{:else if row.severity === 'warning'}
+  <p class="alert-note" role="status">
+    Getting close. Continue monitoring this target and the surrounding traffic.
+  </p>
+{/if}
+<section class="panel-section" aria-label="Target actions">
   <button type="button" class="btn btn-ghost locate" onclick={() => onLocate(row.position)}>
     <Crosshair size={16} aria-hidden="true" />
     Show on chart
   </button>
+</section>
+<section class="panel-section" aria-label="Live target details">
+  <h4 class="caps-label">Live target details</h4>
   <dl class="detail-list">
     <div class="item">
       <dt>Identifier</dt>
@@ -78,24 +87,24 @@ const { row, units, onClose, onLocate }: Props = $props();
     {/if}
     {#if row.shipTypeId !== undefined}
       <div class="item">
-        <dt>AIS ship type</dt>
-        <dd>{row.shipTypeId}</dd>
+        <dt>Ship type</dt>
+        <dd>{aisShipTypeLabel(row.shipTypeId)} ({row.shipTypeId})</dd>
       </div>
     {/if}
     {#if row.cpaMeters !== undefined}
       <div class="item">
-        <dt>CPA</dt>
+        <dt>Closest pass (CPA)</dt>
         <dd>{formatNm(row.cpaMeters)} nm</dd>
       </div>
     {/if}
     {#if row.tcpaSeconds !== undefined}
       <div class="item">
-        <dt>TCPA</dt>
+        <dt>Time to closest (TCPA)</dt>
         <dd>{formatTcpaMin(row.tcpaSeconds, 1)} min</dd>
       </div>
     {/if}
   </dl>
-</SlideOver>
+</section>
 
 <style>
 /* The locate action sits at the top of the body as a compact button, not stretched full width. */

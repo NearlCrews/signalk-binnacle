@@ -8,6 +8,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Nearby vessels now searches reported names and Maritime Mobile Service Identity numbers before the
+  500-row display cap, filters collision risks and getting-close targets, opens the same live
+  in-panel detail from the list or a generous chart target, highlights the selected target, and
+  names supported AIS ship types while retaining their numeric ids.
 - A generic alarm surface for the boat's own equipment: any inbound Signal K alarm or emergency
   grade notification outside the dedicated hazards (man overboard, anchor drag, collision danger,
   and shallow water) now sounds its own tone and raises an Alarm strip, with worst-first ordering,

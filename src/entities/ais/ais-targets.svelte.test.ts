@@ -42,6 +42,23 @@ describe('AisTargets', () => {
     expect(ais.list()).toHaveLength(0);
   });
 
+  it('resolves only a currently visible target by id', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'vessels.visible': {
+          'navigation.position': { latitude: 36, longitude: -121 },
+        },
+        'vessels.no-position': { name: 'No fix' },
+      }),
+    );
+
+    expect(ais.find('vessels.visible')?.position).toEqual({ latitude: 36, longitude: -121 });
+    expect(ais.find('vessels.no-position')).toBeUndefined();
+    expect(ais.find('vessels.missing')).toBeUndefined();
+  });
+
   it('exposes closestApproach as cpa and tcpa from a raw-number timeTo', () => {
     const store = new SignalKStore();
     const ais = new AisTargets(store);

@@ -17,7 +17,7 @@ import type { UserCharts } from '$entities/user-charts';
 import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import type { WeatherStore } from '$entities/weather';
-import { AisListPanel } from '$features/ais-list';
+import { loadAisListPanel } from '$features/ais-list';
 import { AnchorPanel, AnchorStrip } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
@@ -128,6 +128,7 @@ interface FlatProps {
 
   // Panel state
   activePanel: PanelId | null;
+  selectedAisId: string | undefined;
   tidesOpenedFrom: 'menu' | 'chart';
   menuOpen: boolean;
   layersView: LayersView | undefined;
@@ -173,6 +174,7 @@ interface FlatProps {
   onMapDestroyed: () => void;
   onUserPan: () => void;
   onNoteSelect: (selection: NoteSelection | undefined) => void;
+  onAisSelect: (id: string | undefined) => void;
   onTideStationSelect: (selection: TideStationSelectionEvent) => void;
   onNotes: (notes: NotePoint[]) => void;
   onPoiStatus: (state: PoiViewState) => void;
@@ -267,6 +269,7 @@ type ActionKey =
   | 'onMapDestroyed'
   | 'onUserPan'
   | 'onNoteSelect'
+  | 'onAisSelect'
   | 'onTideStationSelect'
   | 'onNotes'
   | 'onPoiStatus'
@@ -324,6 +327,7 @@ let {
   weatherLayerSettings,
   trackPersistenceDegraded,
   activePanel,
+  selectedAisId,
   tidesOpenedFrom,
   menuOpen = $bindable(),
   layersView,
@@ -414,6 +418,7 @@ const {
   onMapDestroyed,
   onUserPan,
   onNoteSelect,
+  onAisSelect,
   onTideStationSelect,
   onNotes,
   onPoiStatus,
@@ -500,6 +505,11 @@ function tidesPanelForAttempt() {
   return loadTidesPanel();
 }
 
+function aisListPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadAisListPanel();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
@@ -535,6 +545,8 @@ $effect(() => {
     {store}
     {vessel}
     {aisTargets}
+    {selectedAisId}
+    onAisSelect={(id) => onAisSelect(id)}
     {anchor}
     {mob}
     {measure}
@@ -771,16 +783,29 @@ $effect(() => {
           </div>
         {/await}
       {:else if activePanel === 'ais'}
-        <AisListPanel
-          {units}
-          {aisTargets}
-          {vessel}
-          {collision}
-          connectionPhase={store.connection.phase}
-          onLocate={flyToPosition}
-          onClose={closePanel}
-          onBack={backToMenu}
-        />
+        {#await aisListPanelForAttempt()}
+          <div class="slide-over slide-over--dock-left panel-loading" role="status">
+            Loading AIS targets…
+          </div>
+        {:then module}
+          <module.default
+            {units}
+            {aisTargets}
+            {vessel}
+            {collision}
+            selectedId={selectedAisId}
+            onSelect={onAisSelect}
+            connectionPhase={store.connection.phase}
+            onLocate={flyToPosition}
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:catch}
+          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
+            AIS targets could not load.
+            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
+          </div>
+        {/await}
       {:else if activePanel === 'poi-search'}
         <PoiSearchPanel
           pois={poiInView}

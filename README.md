@@ -91,8 +91,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   choices survive chart pans for the session but reset on reload. NOAA CO-OPS covers US waters out of
   the box; automatic tide height prefers the signalk-tides plugin when the server runs it.
 - **Lookout:** a collision watch with CPA and TCPA, chart-highlight rings, an audible alarm, and a
-  published Signal K notification, plus a sortable **AIS target list** (by range, CPA, or name) with
-  live range and bearing, tap-to-locate, and faded **target trails** from the tracks plugin. An
+  published Signal K notification, plus a searchable, risk-filtered **AIS target list** with
+  tappable chart targets, live in-panel details, and sorting by range, CPA, or name. Each detail
+  keeps range and bearing live, locates the target on the chart, and complements faded **target
+  trails** from the tracks plugin. An
   **Alarms panel** collects every active alert on the boat (engine, autopilot, any plugin); any alarm
   or emergency grade notification outside the dedicated hazards sounds its own tone and raises a
   strip with the count showing live on the Alarms menu entry, with one-tap Silence and Acknowledge

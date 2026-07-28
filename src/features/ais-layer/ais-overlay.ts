@@ -1,29 +1,49 @@
+import type { CircleLayerSpecification, MapLayerMouseEvent } from 'maplibre-gl';
 import type { AisTargets } from '$entities/ais';
 import { latLonToLonLat } from '$shared/geo';
 import { headingDegrees } from '$shared/lib';
 import {
+  createLayerHitHandlers,
   createSymbolOverlay,
   featureCollection,
   mapThemePaint,
+  type OverlayContext,
   type Rgba,
+  removeLayersAndSources,
   type SymbolOverlay,
+  setLayersVisibility,
 } from '$shared/map';
 import { AIS_ICON_ID, aisIconImage } from './ais-icon';
 import { createAisRefreshGate } from './ais-refresh';
 
 const SOURCE_ID = 'binnacle-ais';
 const LAYER_ID = 'binnacle-ais-symbol';
+const SELECTED_LAYER_ID = 'binnacle-ais-selected';
+const HIT_LAYER_ID = 'binnacle-ais-hit';
 // The transient color shown for the single frame before the first recolor; taken from the day theme
 // so there is one source for the day AIS color rather than a literal that could drift.
 const DEFAULT_COLOR: Rgba = mapThemePaint('day').aisTarget;
 
-// Purely presentational: stale-target expiry lives on an app-level timer (store.pruneAis with the
-// entities/ais TTL), never in this render path, which pauses in a hidden tab while the collision
-// math keeps consuming the store.
-export function createAisOverlay(targets: AisTargets, now: () => number = Date.now): SymbolOverlay {
-  const gate = createAisRefreshGate(targets, now);
+// Stale-target expiry lives on an app-level timer (store.pruneAis with the entities/ais TTL), never
+// in this render path, which pauses in a hidden tab while the collision math keeps consuming the
+// store. The interaction layer resolves every clicked id against that current entity view.
+export interface AisOverlayOptions {
+  onSelect?: (id: string) => void;
+  selectedId?: () => string | undefined;
+  now?: () => number;
+}
+
+export function createAisOverlay(
+  targets: AisTargets,
+  options: AisOverlayOptions = {},
+): SymbolOverlay {
+  const gate = createAisRefreshGate(targets, options.now ?? Date.now);
+  let visible = true;
+  let opacity = 1;
+  let lastSelectedId = options.selectedId?.();
 
   function buildFeatures(): GeoJSON.FeatureCollection {
+    const selectedId = options.selectedId?.();
     return featureCollection(
       targets.list().map((target) => ({
         type: 'Feature',
@@ -35,12 +55,19 @@ export function createAisOverlay(targets: AisTargets, now: () => number = Date.n
           id: target.id,
           name: target.name ?? '',
           heading: headingDegrees(target.headingRad, target.cogRad),
+          selected: target.id === selectedId,
         },
       })),
     );
   }
 
-  return createSymbolOverlay({
+  const hit = createLayerHitHandlers(HIT_LAYER_ID, (event: MapLayerMouseEvent) => {
+    const feature = event.features?.[0];
+    if (feature?.geometry.type !== 'Point') return;
+    const id = feature.properties?.id;
+    if (typeof id === 'string' && targets.find(id)) options.onSelect?.(id);
+  });
+  const base = createSymbolOverlay({
     id: 'ais',
     title: 'AIS targets',
     description: 'Other vessels broadcasting their position over AIS.',
@@ -52,6 +79,78 @@ export function createAisOverlay(targets: AisTargets, now: () => number = Date.n
     defaultColor: DEFAULT_COLOR,
     paintColor: (paint) => paint.aisTarget,
     features: buildFeatures,
-    shouldRefresh: () => gate.shouldRefresh(),
+    shouldRefresh: () => {
+      const selectedId = options.selectedId?.();
+      const selectionChanged = selectedId !== lastSelectedId;
+      lastSelectedId = selectedId;
+      return selectionChanged || gate.shouldRefresh();
+    },
   });
+
+  const syncVisibility = (ctx: OverlayContext): void => {
+    setLayersVisibility(ctx.map, [SELECTED_LAYER_ID], visible);
+    setLayersVisibility(ctx.map, [HIT_LAYER_ID], visible && opacity > 0);
+  };
+
+  return {
+    ...base,
+    layerIds: [SELECTED_LAYER_ID, LAYER_ID, HIT_LAYER_ID],
+    async add(ctx) {
+      await base.add(ctx);
+      const before = ctx.beforeIdFor('traffic');
+      if (!ctx.map.getLayer(SELECTED_LAYER_ID)) {
+        const selectedLayer: CircleLayerSpecification = {
+          id: SELECTED_LAYER_ID,
+          type: 'circle',
+          source: SOURCE_ID,
+          filter: ['==', ['get', 'selected'], true],
+          paint: {
+            'circle-radius': 18,
+            'circle-color': 'rgba(0,0,0,0)',
+            'circle-stroke-color': mapThemePaint('day').select,
+            'circle-stroke-width': 3,
+          },
+        };
+        ctx.map.addLayer(selectedLayer, LAYER_ID);
+      }
+      if (!ctx.map.getLayer(HIT_LAYER_ID)) {
+        const hitLayer: CircleLayerSpecification = {
+          id: HIT_LAYER_ID,
+          type: 'circle',
+          source: SOURCE_ID,
+          paint: {
+            'circle-radius': 22,
+            'circle-color': 'rgba(0,0,0,0)',
+          },
+        };
+        ctx.map.addLayer(hitLayer, before);
+      }
+      hit.attach(ctx);
+      syncVisibility(ctx);
+    },
+    applyTheme(ctx, paint) {
+      base.applyTheme?.(ctx, paint);
+      if (ctx.map.getLayer(SELECTED_LAYER_ID)) {
+        ctx.map.setPaintProperty(SELECTED_LAYER_ID, 'circle-stroke-color', paint.select);
+      }
+    },
+    setVisible(ctx, nextVisible) {
+      visible = nextVisible;
+      base.setVisible?.(ctx, nextVisible);
+      syncVisibility(ctx);
+    },
+    setOpacity(ctx, nextOpacity) {
+      opacity = nextOpacity;
+      base.setOpacity?.(ctx, nextOpacity);
+      if (ctx.map.getLayer(SELECTED_LAYER_ID)) {
+        ctx.map.setPaintProperty(SELECTED_LAYER_ID, 'circle-stroke-opacity', nextOpacity);
+      }
+      syncVisibility(ctx);
+    },
+    remove(ctx) {
+      hit.detach(ctx);
+      removeLayersAndSources(ctx.map, [HIT_LAYER_ID, SELECTED_LAYER_ID], []);
+      base.remove(ctx);
+    },
+  };
 }

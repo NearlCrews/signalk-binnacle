@@ -14,6 +14,10 @@ export { type CustomLayerMatrix, matrixForWebGl, matrixOf } from './custom-layer
 export { emptyFeatureCollection, featureCollection } from './feature-collection';
 export type { Rgba } from './icon-raster';
 export { rasterIcon, rasterIconColored } from './icon-raster';
+export {
+  createLayerHitHandlers,
+  type LayerHitHandlers,
+} from './layer-hit-handlers';
 export type { LayerListItem, LayerSettings } from './layer-manager';
 export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';

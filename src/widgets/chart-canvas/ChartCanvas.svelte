@@ -66,6 +66,8 @@ interface Props {
   origin: string;
   vessel: OwnVessel;
   aisTargets: AisTargets;
+  selectedAisId?: string;
+  onAisSelect?: (id: string) => void;
   // The anchor watch, drawn as the swing circle, rode line, and draggable drop-point marker.
   anchor: AnchorWatch;
   // The man-overboard mark, pinned with the collision ring so nothing can hide it.
@@ -159,6 +161,8 @@ const {
   origin,
   vessel,
   aisTargets,
+  selectedAisId,
+  onAisSelect,
   anchor,
   mob,
   measure,
@@ -392,6 +396,10 @@ onMount(async () => {
         store,
         vessel,
         aisTargets,
+        selectedAisId: () => selectedAisId,
+        onAisSelect: (id) => {
+          if (!measure.active && !routeStore.working) onAisSelect?.(id);
+        },
         anchor,
         mob,
         measure,

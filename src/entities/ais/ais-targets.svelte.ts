@@ -148,6 +148,10 @@ export class AisTargets {
     return out;
   }
 
+  find(id: string): AisTargetView | undefined {
+    return this.list().find((target) => target.id === id);
+  }
+
   #numField(value: unknown, key: string): number | undefined {
     return isRecord(value) ? asNumber(value[key]) : undefined;
   }

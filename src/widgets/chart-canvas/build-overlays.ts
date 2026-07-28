@@ -45,6 +45,8 @@ export interface DynamicOverlaysDeps {
   store: SignalKStore;
   vessel: OwnVessel;
   aisTargets: AisTargets;
+  onAisSelect?: (id: string) => void;
+  selectedAisId?: () => string | undefined;
   anchor: AnchorWatch;
   mob: MobStore;
   measure: MeasureStore;
@@ -82,6 +84,8 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     store,
     vessel,
     aisTargets,
+    onAisSelect,
+    selectedAisId,
     anchor,
     mob,
     measure,
@@ -113,7 +117,10 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     notesOverlay,
     createAisTrailsOverlay(origin, getToken, aisTrailsAvailable, () => store.selfContext),
     createAisVectorsOverlay(aisTargets, () => collision.assessment),
-    createAisOverlay(aisTargets),
+    createAisOverlay(aisTargets, {
+      onSelect: onAisSelect,
+      selectedId: selectedAisId,
+    }),
     createCollisionOverlay(collision),
     createMobOverlay(mob, vessel),
     createHistoryTrackOverlay(origin, getToken, historyProviders),

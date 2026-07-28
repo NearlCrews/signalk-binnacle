@@ -63,6 +63,8 @@ function setup(marineRadarLayer?: { id: string }) {
     store: { selfContext: 'vessels.self' },
     vessel: { name: 'vessel' },
     aisTargets: { name: 'ais-targets' },
+    onAisSelect: vi.fn(),
+    selectedAisId: vi.fn(() => 'vessels.selected'),
     anchor: { name: 'anchor' },
     mob: { name: 'mob' },
     measure: { name: 'measure' },
@@ -171,7 +173,10 @@ describe('buildDynamicOverlays', () => {
     );
     const collisionAssessment = factories.createAisVectorsOverlay.mock.calls[0]?.[1];
     expect(collisionAssessment?.()).toBe(deps.collision.assessment);
-    expect(factories.createAisOverlay).toHaveBeenCalledWith(deps.aisTargets);
+    expect(factories.createAisOverlay).toHaveBeenCalledWith(deps.aisTargets, {
+      onSelect: deps.onAisSelect,
+      selectedId: deps.selectedAisId,
+    });
     expect(factories.createHistoryTrackOverlay).toHaveBeenCalledWith(
       deps.origin,
       deps.getToken,

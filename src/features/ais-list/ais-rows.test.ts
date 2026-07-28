@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AisTargetView } from '$entities/ais';
 import type { DangerContact } from '$entities/collision';
-import { buildAisRows } from './ais-rows';
+import { buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
 
 const OWN = { latitude: 0, longitude: 0 };
 
@@ -105,5 +105,50 @@ describe('buildAisRows', () => {
     );
     expect(row.headingRad).toBe(1.2);
     expect(row.navigationState).toBe('anchored');
+  });
+
+  it('searches reported names and MMSIs before applying the render cap', () => {
+    const targets = Array.from({ length: MAX_AIS_LIST_ROWS + 2 }, (_, index) =>
+      target({
+        id: `vessels.urn:mrn:imo:mmsi:${100_000_000 + index}`,
+        name: index === MAX_AIS_LIST_ROWS + 1 ? 'BEYOND THE CAP' : `VESSEL ${index}`,
+      }),
+    );
+
+    const byName = buildAisRows(targets, OWN, [], 'name', 'beyond the cap');
+    const byMmsi = buildAisRows(targets, OWN, [], 'name', '100000501');
+
+    expect(byName.map((row) => row.label)).toEqual(['BEYOND THE CAP']);
+    expect(byMmsi.map((row) => row.identifier)).toEqual(['100000501']);
+  });
+
+  it('filters collision risks and getting-close targets before sorting', () => {
+    const contacts = [
+      { id: 'danger', severity: 'danger', cpaMeters: 50, tcpaSeconds: 30 },
+      { id: 'warning', severity: 'warning', cpaMeters: 200, tcpaSeconds: 120 },
+    ] as DangerContact[];
+    const targets = [
+      target({ id: 'clear', name: 'CLEAR' }),
+      target({ id: 'warning', name: 'WARNING' }),
+      target({ id: 'danger', name: 'DANGER' }),
+    ];
+
+    expect(buildAisRows(targets, OWN, contacts, 'name', '', 'danger').map((row) => row.id)).toEqual(
+      ['danger'],
+    );
+    expect(
+      buildAisRows(targets, OWN, contacts, 'name', '', 'warning').map((row) => row.id),
+    ).toEqual(['warning']);
+  });
+
+  it('uses target identity as a deterministic tie-breaker', () => {
+    const rows = buildAisRows(
+      [target({ id: 'vessels.b', name: 'SAME' }), target({ id: 'vessels.a', name: 'SAME' })],
+      undefined,
+      [],
+      'range',
+    );
+
+    expect(rows.map((row) => row.id)).toEqual(['vessels.a', 'vessels.b']);
   });
 });

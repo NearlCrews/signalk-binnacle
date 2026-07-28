@@ -5,6 +5,7 @@ import { compareOptionalNumber } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
 
 export type AisSort = 'range' | 'cpa' | 'name';
+export type AisRiskFilter = 'all' | 'danger' | 'warning';
 export const MAX_AIS_LIST_ROWS = 500;
 
 export interface AisListRow {
@@ -33,12 +34,14 @@ export function buildAisRows(
   own: LatLon | undefined,
   contacts: readonly DangerContact[],
   sort: AisSort,
+  query = '',
+  riskFilter: AisRiskFilter = 'all',
 ): AisListRow[] {
   // The lookout's contact per target id, so a risky target reads in its severity color here, and
   // its locally computed CPA and TCPA fill in when the provider publishes none.
   const risks = new Map<string, DangerContact>();
   for (const contact of contacts) risks.set(contact.id, contact);
-  const rows = targets.map<AisListRow>((target) => {
+  let rows = targets.map<AisListRow>((target) => {
     const risk = risks.get(target.id);
     return {
       id: target.id,
@@ -64,8 +67,22 @@ export function buildAisRows(
       severity: risk?.severity,
     };
   });
-  if (sort === 'name') rows.sort((a, b) => a.label.localeCompare(b.label));
-  else if (sort === 'cpa') rows.sort((a, b) => compareOptionalNumber(a.cpaMeters, b.cpaMeters));
-  else rows.sort((a, b) => compareOptionalNumber(a.rangeMeters, b.rangeMeters));
-  return rows.slice(0, MAX_AIS_LIST_ROWS);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery) {
+    rows = rows.filter((row) =>
+      `${row.label}\n${row.identifier}\n${row.id}`.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }
+  if (riskFilter !== 'all') {
+    rows = rows.filter((row) => row.severity === riskFilter);
+  }
+  const byIdentity = (a: AisListRow, b: AisListRow): number =>
+    a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
+  if (sort === 'name') rows.sort(byIdentity);
+  else if (sort === 'cpa') {
+    rows.sort((a, b) => compareOptionalNumber(a.cpaMeters, b.cpaMeters) || byIdentity(a, b));
+  } else {
+    rows.sort((a, b) => compareOptionalNumber(a.rangeMeters, b.rangeMeters) || byIdentity(a, b));
+  }
+  return rows;
 }
