@@ -7,6 +7,7 @@ import * as tracksClient from './tracks-client';
 vi.mock('./tracks-client', () => ({
   deleteTrack: vi.fn(),
   fetchSavedTracks: vi.fn(),
+  fetchTracksProvisioned: vi.fn(),
   saveTrack: vi.fn(),
   savedTrackFromPoints: vi.fn((id: string, name: string, points: TrackPoint[]) => ({
     id,
@@ -40,6 +41,7 @@ describe('createTrackController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(tracksClient.fetchSavedTracks).mockResolvedValue([]);
+    vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(true);
     vi.mocked(tracksClient.saveTrack).mockResolvedValue(true);
     vi.mocked(tracksClient.deleteTrack).mockResolvedValue(true);
   });
@@ -80,6 +82,47 @@ describe('createTrackController', () => {
     expect(tracksClient.saveTrack).toHaveBeenCalledOnce();
     resolveSave(true);
     await Promise.all([first, second]);
+  });
+
+  it('records what the provisioning probe answered', async () => {
+    const { controller } = makeController();
+    expect(controller.provisioning).toBe('unknown');
+    await controller.refreshSavedTracks();
+    expect(controller.provisioning).toBe('provisioned');
+    vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(false);
+    await controller.refreshSavedTracks();
+    expect(controller.provisioning).toBe('unprovisioned');
+  });
+
+  it('keeps the last known provisioning when the probe does not answer', async () => {
+    const { controller } = makeController();
+    vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(false);
+    await controller.refreshSavedTracks();
+    vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(undefined);
+    await controller.refreshSavedTracks();
+    expect(controller.provisioning).toBe('unprovisioned');
+  });
+
+  it('drops a stale probe answer', async () => {
+    const { controller } = makeController();
+    let resolveFirst!: (provisioned: boolean | undefined) => void;
+    vi.mocked(tracksClient.fetchTracksProvisioned)
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce(true);
+    const first = controller.refreshSavedTracks();
+    await controller.refreshSavedTracks();
+    resolveFirst(false);
+    await first;
+    expect(controller.provisioning).toBe('provisioned');
+  });
+
+  it('treats an accepted save as proof that the server stores tracks', async () => {
+    const { controller } = makeController();
+    vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(undefined);
+    await controller.refreshSavedTracks();
+    expect(controller.provisioning).toBe('unknown');
+    await controller.onSaveTrack('Passage');
+    expect(controller.provisioning).toBe('provisioned');
   });
 
   it('removes a deleted track before a failed refresh', async () => {

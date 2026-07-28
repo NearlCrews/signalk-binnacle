@@ -1,9 +1,9 @@
 # Tracks
 
 The Tracks menu records the vessel's breadcrumb trail, keeps the active recording across reloads,
-saves completed tracks to Signal K resources, and can derive a route from the latest continuous
-segment. Track output is advisory. Review any derived route against the chart, hazards, conditions,
-and the vessel's capabilities before navigating it.
+saves completed tracks to Signal K resources when the server is configured to store them, and can
+derive a route from the latest continuous segment. Track output is advisory. Review any derived route
+against the chart, hazards, conditions, and the vessel's capabilities before navigating it.
 
 ## Quick use
 
@@ -20,6 +20,10 @@ and the vessel's capabilities before navigating it.
 
 On a secured Signal K server, Save, Save as route, Retrace track, and Delete require read/write access.
 The panel explains when the current grant is read-only.
+
+Saving also requires the server to have track storage. Tracks are not a standard Signal K resource
+type, so a stock server has nothing behind the tracks collection. Until an administrator enables it,
+Save stays disabled and the panel names the one step that fixes it. See Server provisioning below.
 
 ## Recording
 
@@ -48,9 +52,9 @@ values remain SI.
 ## Panel behavior
 
 The panel separates current recording state from saved-resource state. It reports loading, refresh
-failure with retained data, true empty results, memory-only persistence, missing write access, and
-pending mutations explicitly. Save, delete, route conversion, and retrace are disabled while their
-required write access or operation capacity is unavailable.
+failure with retained data, true empty results, memory-only persistence, missing write access, absent
+server-side track storage, and pending mutations explicitly. Save, delete, route conversion, and
+retrace are disabled while their required write access or operation capacity is unavailable.
 
 Discard and delete require inline confirmation. Retrace also requires confirmation because it creates,
 saves, activates, and reverses a route. Visibility toggles and GeoJSON export remain local read actions.
@@ -78,6 +82,32 @@ portable, bounded `.geojson` filenames.
 The server resource preserves segment geometry, the track name, source, distance, and timespan. The
 download preserves the geometry, name, and source. Neither form preserves every point timestamp or
 speed sample. Use the GeoJSON as a portable trail, not as a raw navigation-data archive.
+
+### Server provisioning
+
+Tracks are not one of Signal K's standard resource types. The bundled resources provider serves the
+standard types and only the custom types an administrator configures, and that custom list defaults
+to empty, so a stock server registers no provider for tracks at all.
+
+With no provider registered, both the collection read and the save answer 404, and they do so before
+the authorization check. A read-only token and a read/write token get the identical answer, and a
+registered provider that throws while writing also answers 404, so the status code alone cannot tell
+missing storage from a rejected or failed write.
+
+Binnacle therefore asks the server directly:
+
+`GET /signalk/v2/api/resources/tracks/_providers`
+
+The resources API answers with an array of provider ids. At least one id means the server stores
+tracks, and an empty array means the type is not registered. Any other outcome, including an absent
+route, a body of some other shape, a timeout, or a network failure, leaves the last known state in
+place, so a transient outage never claims that storage is missing.
+
+To enable track storage: open the Signal K admin UI, choose **Server**, then **Plugin Config**, then
+**Resources Provider**, add a custom resource type named `tracks`, and submit. Then select **Check
+again** in the Tracks panel, which reloads the collection and re-runs the probe. An accepted save also
+proves that storage exists, so a server whose probe route never answers still resolves itself on the
+first successful write.
 
 ### Data lifecycle
 
@@ -109,7 +139,11 @@ segment is drawable. Record another connected point, or use the earlier trail on
 - **Could not refresh:** previously loaded or newly saved tracks remain visible. Restore server
   connectivity, then select **Retry saved tracks**.
 - **Saved tracks unavailable:** neither the v2 nor v1 collection produced a usable response. A 404 on
-  both collections is treated as a reachable server with no saved tracks.
+  both collections is treated as a reachable server with no saved tracks, which is also how a server
+  without track storage answers, so the provider probe is what separates the two.
+- **Server has no track storage:** the provider probe answered, and no provider is registered for the
+  tracks collection. Save is disabled, the saved list explains itself, and the panel names the single
+  administrator step. Select **Check again** once the custom resource type has been added.
 - **Track storage is memory-only:** IndexedDB is unavailable or failed. Save the current trail to the
   server before reloading or closing the tab.
 - **Write token needed:** approve Binnacle for read/write access in Signal K. Read-only actions, such as

@@ -109,7 +109,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   GeoJSON. GPS gaps never become invented route legs. Save the latest continuous segment as a reusable
   route, or confirm a retrace to navigate home along it. The panel explains persistence, access,
   loading, and refresh failures instead of silently losing state. The active trail survives reloads in
-  IndexedDB, while completed tracks live in Signal K resources and can be shared with other clients.
+  IndexedDB. Completed tracks live in Signal K resources and can be shared with other clients once the
+  server stores them, which takes one administrator step: in the Signal K admin UI, open Server, then
+  Plugin Config, then Resources Provider, and add a custom resource type named tracks. Until that is
+  done, the panel names the step instead of letting a save fail.
 - **Waypoints:** drop one from a long press, see it as a named marker, and locate,
   navigate to, rename, or delete it from the Waypoints panel. Loading and failures stay explicit,
   accepted writes survive refresh failures, and navigation requires confirmation. Marks live in the

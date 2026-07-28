@@ -1,5 +1,6 @@
 import { fetchJsonOrUndefined, hasControlCharacters, isRecord } from '$shared/lib';
-import { asKeyedObject, authInit } from './resource';
+import { fetchProviderIds, type ProviderIds, safeProviderId } from './provider-probe';
+import { authInit } from './resource';
 
 // The server's v2 History API (signalk-server 2.19 and later): the server core mounts
 // /signalk/v2/api/history and proxies to pluggable providers (signalk-questdb,
@@ -15,12 +16,6 @@ const MAX_HISTORY_ROWS = 100_000;
 const MAX_HISTORY_DURATION_SECONDS = 366 * 24 * 60 * 60;
 const MAX_HISTORY_METHOD_LENGTH = 64;
 const HISTORY_VALIDATION_BATCH_SIZE = 25;
-
-function safeProviderId(value: string | undefined): boolean {
-  return (
-    value === undefined || (value.length > 0 && value.length <= 128 && !hasControlCharacters(value))
-  );
-}
 
 function safeDuration(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0 && value <= MAX_HISTORY_DURATION_SECONDS;
@@ -65,10 +60,7 @@ function safeQueryPaths(paths: readonly string[]): boolean {
 export const HISTORY_WINDOW_SECONDS = 24 * 60 * 60;
 export const HISTORY_RESOLUTION_SECONDS = 60;
 
-export interface HistoryProviders {
-  // The accepted bounded provider ids, with the server's default first.
-  ids: readonly string[];
-}
+export type HistoryProviders = ProviderIds;
 
 interface HistoryColumn {
   path: string;
@@ -110,22 +102,11 @@ export function columnIndex(values: HistoryValues, path: string, method?: string
   return values.columns.findIndex((c) => c.path === path);
 }
 
-export async function fetchHistoryProviders(
+export function fetchHistoryProviders(
   base: string,
   token?: string,
 ): Promise<HistoryProviders | undefined> {
-  const body = await fetchJsonOrUndefined(`${base}${HISTORY_API}/_providers`, authInit(token));
-  const keyed = asKeyedObject(body);
-  if (!keyed) return undefined;
-  const isDefault = (id: string): boolean => {
-    const entry = keyed[id];
-    return isRecord(entry) && entry.isDefault === true;
-  };
-  const ids = Object.keys(keyed)
-    .filter((id) => safeProviderId(id))
-    .sort((a, b) => Number(isDefault(b)) - Number(isDefault(a)))
-    .slice(0, MAX_HISTORY_PROVIDERS);
-  return { ids };
+  return fetchProviderIds(`${base}${HISTORY_API}/_providers`, token, MAX_HISTORY_PROVIDERS);
 }
 
 export async function fetchHistoryValues(

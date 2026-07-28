@@ -4,6 +4,7 @@ import { jsonResponse } from '$shared/testing';
 import {
   deleteTrack,
   fetchSavedTracks,
+  fetchTracksProvisioned,
   type SavedTrack,
   savedTrackFromPoints,
   savedTracksToFeatures,
@@ -154,6 +155,33 @@ describe('fetchSavedTracks', () => {
     const tracks = await fetchSavedTracks('http://pi');
     expect(tracks).toHaveLength(500);
     expect(overflowDecoded).toBe(false);
+  });
+});
+
+describe('fetchTracksProvisioned', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The resources API answers _providers with a plain array of provider id strings, unlike the
+  // history and weather APIs, whose route answers with a keyed object.
+  it('reports a registered provider as provisioned', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, ['resources-provider']));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchTracksProvisioned('http://pi', 'tok')).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://pi/signalk/v2/api/resources/tracks/_providers');
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer tok' });
+  });
+
+  it('reports an answered empty provider list as unprovisioned', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, [])));
+    expect(await fetchTracksProvisioned('http://pi')).toBe(false);
+  });
+
+  it('stays unknown when the probe itself does not answer', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(500, {})));
+    expect(await fetchTracksProvisioned('http://pi')).toBeUndefined();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
+    expect(await fetchTracksProvisioned('http://pi')).toBeUndefined();
   });
 });
 

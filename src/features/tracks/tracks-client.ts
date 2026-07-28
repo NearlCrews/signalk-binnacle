@@ -2,7 +2,12 @@ import { computeStats, splitAtGaps, type TrackPoint, toLonLat } from '$entities/
 import { isLonLat } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
 import { antimeridianLineGeometry, featureCollection } from '$shared/map';
-import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
+import {
+  deleteResource,
+  fetchKeyedResource,
+  fetchProviderIdList,
+  putResource,
+} from '$shared/signalk';
 import { toGeoJsonFeature } from './track-export';
 
 // A track read back from the Signal K resources API. Points are grouped one array per segment
@@ -43,6 +48,7 @@ const V2 = '/signalk/v2/api/resources/tracks';
 const V1 = '/signalk/v1/api/resources/tracks';
 const MAX_SAVED_TRACKS = 500;
 const MAX_POINTS_PER_TRACK = 100_000;
+const MAX_TRACK_PROVIDERS = 8;
 
 interface RawGeometry {
   type?: unknown;
@@ -155,6 +161,26 @@ export async function fetchSavedTracks(
     },
     (url, status) => console.warn(`[tracks] ${url} returned ${status}`),
   );
+}
+
+// Whether this server can store tracks at all. Tracks are not a standard Signal K resource type, and
+// the bundled resources provider registers only the custom types an administrator configures, so a
+// stock server has no provider behind /resources/tracks. Both the collection read and a save then
+// answer 404 ahead of the auth gate, which makes a status-only guess unsafe: a registered provider
+// that throws during a PUT answers 404 too. The _providers sub-route is the honest signal, and the
+// resources API answers it with an array of provider ids, so undefined (the probe never answered)
+// stays distinct from a confirmed empty list.
+export async function fetchTracksProvisioned(
+  base: string,
+  token?: string,
+): Promise<boolean | undefined> {
+  const providers = await fetchProviderIdList(
+    `${base}${V2}/_providers`,
+    token,
+    MAX_TRACK_PROVIDERS,
+  );
+  if (!providers) return undefined;
+  return providers.ids.length > 0;
 }
 
 export function savedTrackFromPoints(

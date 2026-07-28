@@ -27,7 +27,7 @@ import {
   SlideOver,
   VisibilityToggle,
 } from '$shared/ui';
-import type { TrackLoadState } from './track-controller.svelte';
+import type { TrackLoadState, TracksProvisioning } from './track-controller.svelte';
 import type { SavedTrack } from './tracks-client';
 
 interface Props {
@@ -37,6 +37,9 @@ interface Props {
   saved: SavedTrack[];
   shown: ReadonlySet<string>;
   loadState: TrackLoadState;
+  // Whether the server has a tracks resource provider at all, which is why a save can fail on a
+  // server that is otherwise reachable and authorized.
+  provisioning: TracksProvisioning;
   busy: boolean;
   routeBusy: boolean;
   persistenceDegraded: boolean;
@@ -59,6 +62,7 @@ const {
   saved,
   shown,
   loadState,
+  provisioning,
   busy,
   routeBusy,
   persistenceDegraded,
@@ -80,6 +84,7 @@ const hasTrack = $derived(recorder.points.length > 0);
 const canSaveTrack = $derived(hasDrawableTrack(recorder.points));
 const canMakeRoute = $derived(latestTrackSegment(recorder.points).length >= 2);
 const trackHasGaps = $derived(hasTrackGaps(recorder.points));
+const storageMissing = $derived(provisioning === 'unprovisioned');
 const writesDisabled = $derived(auth.writeBlocked || busy);
 const routeActionsDisabled = $derived(auth.writeBlocked || busy || routeBusy || !canMakeRoute);
 const minimize = createPanelMinimize();
@@ -94,6 +99,18 @@ const savedCards = $derived(
     durationText:
       track.durationSeconds == null ? PLACEHOLDER : formatDuration(track.durationSeconds),
   })),
+);
+
+// An empty saved list means something different in each state: still reading, failed, nowhere to
+// read from, or genuinely nothing saved yet.
+const savedEmptyText = $derived(
+  loadState === 'loading'
+    ? 'Loading saved tracks…'
+    : loadState === 'error'
+      ? 'Saved tracks are unavailable.'
+      : storageMissing
+        ? 'Saved tracks are unavailable until this server has track storage.'
+        : 'No saved tracks yet. Record a track, then tap Save to keep it.',
 );
 
 // Naming a save happens inline through NameEntry rather than a native prompt; one state drives both
@@ -131,10 +148,19 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       A write token is needed to save or delete tracks. Request a read/write token to continue.
     </p>
   {/if}
+  {#if storageMissing}
+    <p class="alert-note" role="alert">
+      This Signal K server has no track storage, so tracks cannot be saved to it. An administrator
+      can enable it: open the Signal K admin UI, choose Server, then Plugin Config, then Resources
+      Provider, add a custom resource type named tracks, and submit.
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+  {/if}
   {#if persistenceDegraded}
     <p class="alert-note" role="alert">
-      Track storage is memory-only. The current track will be lost on reload. Save it to the server
-      before leaving.
+      {storageMissing
+        ? 'Track storage is memory-only. The current track will be lost on reload. Saving to the server is unavailable until track storage is enabled there.'
+        : 'Track storage is memory-only. The current track will be lost on reload. Save it to the server before leaving.'}
     </p>
   {/if}
   <p class="muted-note">
@@ -160,7 +186,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       type="button"
       class="btn btn-primary"
       onclick={() => (naming = 'track')}
-      disabled={!canSaveTrack || writesDisabled}
+      disabled={!canSaveTrack || writesDisabled || storageMissing}
     >
       <Save size={16} aria-hidden="true" />
       Save
@@ -310,11 +336,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
   <SavedList
     heading="Saved tracks"
     items={savedCards}
-    empty={loadState === 'loading'
-      ? 'Loading saved tracks…'
-      : loadState === 'error'
-        ? 'Saved tracks are unavailable.'
-        : 'No saved tracks yet. Record a track, then tap Save to keep it.'}
+    empty={savedEmptyText}
     key={({ track }) => track.id}
   >
     {#snippet card({ track, distanceNm, durationText })}

@@ -8,7 +8,7 @@ import {
   readBoundedJson,
   withTimeout,
 } from '$shared/lib';
-import { authInit } from '$shared/signalk';
+import { authInit, safeProviderId } from '$shared/signalk';
 import type { WeatherReadout } from './weather-readout';
 
 const WEATHER_BASE = '/signalk/v2/api/weather';
@@ -17,11 +17,9 @@ export const MAX_WEATHER_PROVIDERS = 32;
 export const MAX_WEATHER_OBSERVATIONS = 256;
 export const MAX_WEATHER_FORECASTS = 512;
 export const MAX_WEATHER_WARNINGS = 64;
-const MAX_PROVIDER_ID_LENGTH = 128;
 const MAX_PROVIDER_NAME_LENGTH = 256;
 const MAX_WEATHER_TEXT_LENGTH = 2_048;
 const MAX_WARNING_DETAILS_LENGTH = 4_096;
-const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const WARNING_TYPE_FALLBACK = 'Weather warning';
 const WARNING_DETAILS_FALLBACK = 'Details unavailable.';
 const WARNING_SOURCE_FALLBACK = 'Weather provider';
@@ -122,13 +120,6 @@ function boundedText(value: unknown, maxLength: number): string | undefined {
     !hasControlCharacters(value)
     ? value
     : undefined;
-}
-
-function safeProviderId(value: unknown): value is string {
-  return (
-    boundedText(value, MAX_PROVIDER_ID_LENGTH) !== undefined &&
-    !MAGIC_OBJECT_KEYS.has(value as string)
-  );
 }
 
 function safePointQuery(providerId: string, lat: number, lon: number): boolean {

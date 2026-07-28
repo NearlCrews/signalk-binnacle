@@ -34,6 +34,7 @@ export {
 } from './notifications-client';
 export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
 export { SK_PATHS } from './paths';
+export { fetchProviderIdList, safeProviderId } from './provider-probe';
 export {
   adminSessionInit,
   asKeyedObject,

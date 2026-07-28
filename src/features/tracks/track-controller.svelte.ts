@@ -5,6 +5,7 @@ import { downloadGeoJson } from './track-export';
 import {
   deleteTrack,
   fetchSavedTracks,
+  fetchTracksProvisioned,
   type SavedTrack,
   savedTrackFromPoints,
   savedTracksToFeatures,
@@ -12,6 +13,11 @@ import {
 } from './tracks-client';
 
 export type TrackLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+// Whether this server can store tracks at all, which is separate from whether a read succeeded: a
+// server with no tracks provider answers every read and write with 404. 'unknown' until a probe
+// answers, so the panel never blames storage for a plain connection failure.
+export type TracksProvisioning = 'unknown' | 'provisioned' | 'unprovisioned';
 
 export interface TrackControllerDeps {
   origin: string;
@@ -29,6 +35,7 @@ export function createTrackController(deps: TrackControllerDeps) {
   let savedTracks = $state.raw<SavedTrack[]>([]);
   let shownSaved = $state<ReadonlySet<string>>(new Set());
   let loadState = $state<TrackLoadState>('idle');
+  let provisioning = $state<TracksProvisioning>('unknown');
   let busy = $state(false);
   let savedVersion = 0;
   let refreshGeneration = 0;
@@ -45,8 +52,15 @@ export function createTrackController(deps: TrackControllerDeps) {
   async function refreshSavedTracks(): Promise<void> {
     const generation = ++refreshGeneration;
     loadState = 'loading';
-    const fetched = await fetchSavedTracks(origin, deps.getToken());
+    const token = deps.getToken();
+    const [fetched, provisioned] = await Promise.all([
+      fetchSavedTracks(origin, token),
+      fetchTracksProvisioned(origin, token),
+    ]);
     if (generation !== refreshGeneration) return;
+    // An unanswered probe keeps the last known value: a transient outage must not flash the
+    // "no track storage" banner at a server that has a provider.
+    if (provisioned !== undefined) provisioning = provisioned ? 'provisioned' : 'unprovisioned';
     if (fetched) {
       savedTracks = fetched;
       const ids = new Set(fetched.map((track) => track.id));
@@ -74,6 +88,9 @@ export function createTrackController(deps: TrackControllerDeps) {
       savedTracks = [saved, ...savedTracks.filter((track) => track.id !== id)];
       shownSaved = new Set(shownSaved).add(id);
       loadState = 'ready';
+      // A write the server accepted is direct proof that a tracks provider is registered, which is
+      // stronger evidence than the probe and covers a server whose _providers route never answers.
+      provisioning = 'provisioned';
       bumpSaved();
       deps.clearRecorderThrough(points[points.length - 1].t);
       await refreshSavedTracks();
@@ -137,6 +154,9 @@ export function createTrackController(deps: TrackControllerDeps) {
     },
     get loadState() {
       return loadState;
+    },
+    get provisioning() {
+      return provisioning;
     },
     get busy() {
       return busy;
