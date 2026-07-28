@@ -15,14 +15,23 @@ export function activateRoute(
   return putResource(`${base}${COURSE}/activeRoute`, token, { href, pointIndex, reverse });
 }
 
+// A single-point course target: a bare position, or the href of a saved waypoint resource. The
+// optional never members make the two forms mutually exclusive, so a caller cannot build a body
+// carrying both and leave it to the server to decide which one wins.
+export type DestinationTarget =
+  | { position: LatLon; href?: never }
+  | { href: string; position?: never };
+
 // Set a single-point destination ("go to here"): the v2 Course API replaces any active route with a
-// course straight to this position. Mirrors activateRoute but targets a position, not a route href.
+// course straight to this target. The body is the target alone, never both forms: given an href the
+// server resolves the waypoint itself and publishes its name and href on nextPoint, which is what
+// lets the navigation strip name the destination instead of showing a placeholder.
 export function setDestination(
   base: string,
   token: string | undefined,
-  position: LatLon,
+  target: DestinationTarget,
 ): Promise<boolean> {
-  return putResource(`${base}${COURSE}/destination`, token, { position });
+  return putResource(`${base}${COURSE}/destination`, token, target);
 }
 
 export function advancePoint(

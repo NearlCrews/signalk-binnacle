@@ -338,4 +338,79 @@ describe('createRouteController', () => {
     expect(routeStore.working).toBeUndefined();
     expect(toast.show).toHaveBeenCalledWith('A write token is needed to create routes.');
   });
+
+  describe('goto destinations', () => {
+    const waypoint = {
+      id: 'b7a1f0e2-3c4d-4a5b-8c6d-7e8f9a0b1c2d',
+      name: 'Harbor entrance',
+      position: { latitude: 44.1, longitude: -86.5 },
+    };
+    const href = `/resources/waypoints/${waypoint.id}`;
+
+    it('sends a bare position for a chart-tap destination', async () => {
+      const { controller } = makeController();
+      vi.mocked(courseClient.setDestination).mockResolvedValue(true);
+
+      await controller.onGoToHere({ latitude: 42, longitude: -83 });
+
+      expect(courseClient.setDestination).toHaveBeenCalledExactlyOnceWith('http://sk', 'token', {
+        position: { latitude: 42, longitude: -83 },
+      });
+      expect(controller.gotoActive).toBe(true);
+    });
+
+    it('navigates to a saved waypoint by resource href so the server publishes its name', async () => {
+      const { controller, routeStore } = makeController();
+      routeStore.setRoutes([route]);
+      routeStore.setActive('r1');
+      vi.mocked(courseClient.setDestination).mockResolvedValue(true);
+
+      await controller.onGoToWaypoint(waypoint);
+
+      expect(courseClient.setDestination).toHaveBeenCalledExactlyOnceWith('http://sk', 'token', {
+        href,
+      });
+      expect(routeStore.activeId).toBeUndefined();
+      expect(controller.gotoActive).toBe(true);
+      expect(courseClient.hydrateCourse).toHaveBeenCalled();
+    });
+
+    it('retries with the position only after the href destination is rejected', async () => {
+      const { controller, toast } = makeController();
+      vi.mocked(courseClient.setDestination)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      await controller.onGoToWaypoint(waypoint);
+
+      expect(vi.mocked(courseClient.setDestination).mock.calls.map((call) => call[2])).toEqual([
+        { href },
+        { position: waypoint.position },
+      ]);
+      expect(controller.gotoActive).toBe(true);
+      expect(toast.show).not.toHaveBeenCalled();
+    });
+
+    it('flags the destination error when both the href and the position are rejected', async () => {
+      const { controller, toast } = makeController();
+      vi.mocked(courseClient.setDestination).mockResolvedValue(false);
+
+      await controller.onGoToWaypoint(waypoint);
+
+      expect(courseClient.setDestination).toHaveBeenCalledTimes(2);
+      expect(controller.gotoActive).toBe(false);
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not set the destination. Check the connection.',
+      );
+    });
+
+    it('blocks waypoint navigation without write access', async () => {
+      const { controller, toast } = makeController(true);
+
+      await controller.onGoToWaypoint(waypoint);
+
+      expect(courseClient.setDestination).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith('A write token is needed to start navigation.');
+    });
+  });
 });

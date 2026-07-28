@@ -2,6 +2,7 @@ import type { CourseGuidance } from '$entities/course';
 import type { Route, RouteStore } from '$entities/route';
 import { reverseRoute } from '$entities/route';
 import type { TrackPoint } from '$entities/track';
+import { type Waypoint, waypointHref } from '$entities/waypoint';
 import { trackToRoute } from '$features/track-layer';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
 import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
@@ -12,6 +13,7 @@ import {
   activationFromCourse,
   advancePoint,
   clearCourse,
+  type DestinationTarget,
   hydrateCourse,
   refreshActiveRoute,
   setActiveRoutePointIndex,
@@ -504,7 +506,13 @@ export function createRouteController(deps: RouteControllerDeps) {
     for (const id of saved) routeStore.toggleShown(id, true);
   }
 
-  async function onGoToHere(position: LatLon): Promise<void> {
+  // Both goto entry points share the write guard, the sequence bumps that discard an in-flight
+  // hydration, and the bookkeeping a single-point course needs. fallback is attempted once, only
+  // when the server rejects the primary target.
+  async function goToDestination(
+    target: DestinationTarget,
+    fallback?: DestinationTarget,
+  ): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
       flagRouteError('A write token is needed to start navigation.');
@@ -512,13 +520,28 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     hydrateSequence += 1;
     arrivalAdvanceSequence += 1;
-    if (!(await setDestination(origin, deps.getToken(), position))) {
+    let accepted = await setDestination(origin, deps.getToken(), target);
+    if (!accepted && fallback) accepted = await setDestination(origin, deps.getToken(), fallback);
+    if (!accepted) {
       flagRouteError('Could not set the destination. Check the connection.');
       return;
     }
     routeStore.setActive(undefined);
     gotoActive = true;
     await hydrateAndSeedCourse();
+  }
+
+  function onGoToHere(position: LatLon): Promise<void> {
+    return goToDestination({ position });
+  }
+
+  // Navigating to a saved waypoint sends its resource href, so the server resolves the waypoint and
+  // publishes its name on nextPoint; a position-only destination leaves every station reading an
+  // unnamed course. The waypoint came from this server, so a rejected href is either a transient
+  // failure, where the position retry fails too and the error surfaces, or an href-specific quirk,
+  // where navigation still starts without the name.
+  function onGoToWaypoint(waypoint: Pick<Waypoint, 'id' | 'position'>): Promise<void> {
+    return goToDestination({ href: waypointHref(waypoint.id) }, { position: waypoint.position });
   }
 
   return {
@@ -540,6 +563,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onExportRouteGpx,
     onImportRouteGpx: withBusy(onImportRouteGpx),
     onGoToHere: withBusy(onGoToHere),
+    onGoToWaypoint: withBusy(onGoToWaypoint),
     flyToRouteStart,
     showRoute,
     clearRouteError,

@@ -27,15 +27,26 @@ it('activateRoute PUTs the href, pointIndex, and reverse', async () => {
   });
 });
 
-it('setDestination PUTs the position to the destination endpoint', async () => {
+it('setDestination PUTs a position target to the destination endpoint', async () => {
   const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
-  expect(await setDestination('http://pi', 'tok', { latitude: 42.5, longitude: -83.1 })).toBe(true);
+  expect(
+    await setDestination('http://pi', 'tok', { position: { latitude: 42.5, longitude: -83.1 } }),
+  ).toBe(true);
   expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/destination`);
   const init = f.mock.calls[0][1] as RequestInit;
   expect(init.method).toBe('PUT');
   expect(JSON.parse(init.body as string)).toEqual({
     position: { latitude: 42.5, longitude: -83.1 },
   });
+});
+
+it('setDestination PUTs an href target alone, so the server resolves the waypoint', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setDestination('http://pi', 'tok', { href: '/resources/waypoints/abc' })).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/destination`);
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('PUT');
+  expect(JSON.parse(init.body as string)).toEqual({ href: '/resources/waypoints/abc' });
 });
 
 it('advancePoint PUTs a signed increment', async () => {

@@ -6,5 +6,6 @@ export {
   MAX_WAYPOINT_NAME_LENGTH,
   waypointToFeature,
 } from './waypoint-geojson';
+export { waypointHref } from './waypoint-href';
 export type { Waypoint } from './waypoint-types';
 export { WaypointsStore } from './waypoints-store.svelte';
