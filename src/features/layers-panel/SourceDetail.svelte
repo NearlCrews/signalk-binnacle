@@ -248,6 +248,10 @@ function changeSharing(share: boolean): void {
 
   <ChartSpecList rows={specRows} />
 
+  {#if !item.available && item.unavailableHint}
+    <p class="muted-note" role="status">{item.unavailableHint}</p>
+  {/if}
+
   {#if chartBounds}
     <button type="button" class="btn" onclick={() => onShowBounds?.(chartBounds)}>
       <LocateFixed size={16} aria-hidden="true" />

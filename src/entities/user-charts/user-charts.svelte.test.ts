@@ -99,6 +99,9 @@ describe('isUserChartSource', () => {
         'https://x/y.pmtiles?style=day&access_token=secret&X-Amz-Signature=signed',
       ),
     ).toBe('https://x/y.pmtiles?style=REDACTED&access_token=REDACTED&X-Amz-Signature=REDACTED');
+    expect(userChartUrlForDisplay('/charts/style.json?style=day&access_token=secret')).toBe(
+      '/charts/style.json?style=REDACTED&access_token=REDACTED',
+    );
   });
 
   it('migrates query-bearing URLs to local-only unless sharing was explicit', () => {

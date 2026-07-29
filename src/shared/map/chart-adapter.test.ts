@@ -5,6 +5,20 @@ import type { SignalKChart } from './chart-types';
 const base = 'http://pi.local';
 
 describe('chartToSpecs', () => {
+  it('rejects a style document instead of returning an empty successful chart', () => {
+    expect(() =>
+      chartToSpecs(
+        {
+          identifier: 'styled',
+          name: 'Styled chart',
+          type: 'mapstyleJSON',
+          url: '/charts/style.json',
+        },
+        base,
+      ),
+    ).toThrow('Style-document charts cannot be converted to standalone map resources.');
+  });
+
   it('builds a raster source and layer for a tilelayer', () => {
     const chart: SignalKChart = {
       identifier: 'noaa',

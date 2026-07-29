@@ -696,24 +696,56 @@ describe('LayerManager', () => {
     expect(moved).toEqual(expect.arrayContaining(['a-layer', 'b-layer']));
   });
 
-  it('surfaces availability, the unavailable hint, and the manageable flag into layers()', async () => {
-    const manager = new LayerManager(fakeCtx());
+  it('hides unavailable overlays without losing desired visibility', async () => {
+    const changes: Array<Record<string, { visible: boolean; opacity: number }>> = [];
+    const manager = new LayerManager(fakeCtx(), {
+      onChange: (settings) => changes.push(settings),
+    });
     let present = false;
-    await manager.register({
+    const radar = {
       ...fakeOverlay('radar'),
       available: () => present,
       unavailableHint: 'No radar detected.',
       manageable: true,
-    });
+    };
+    await manager.register(radar);
     await manager.register(fakeOverlay('plain'));
     const byId = () => new Map(manager.layers().map((l) => [l.id, l]));
+
     expect(byId().get('radar')?.available).toBe(false);
+    expect(byId().get('radar')?.visible).toBe(false);
     expect(byId().get('radar')?.unavailableHint).toBe('No radar detected.');
     expect(byId().get('radar')?.manageable).toBe(true);
+    expect(radar.events).toContain('visible:false');
     // A module that declares no availability defaults to available and is not manageable.
     expect(byId().get('plain')?.available).toBe(true);
     expect(byId().get('plain')?.manageable).toBeUndefined();
+
     present = true;
     expect(byId().get('radar')?.available).toBe(true);
+    expect(byId().get('radar')?.visible).toBe(true);
+    expect(radar.events.at(-1)).toBe('visible:true');
+
+    present = false;
+    expect(byId().get('radar')?.visible).toBe(false);
+    expect(radar.events.at(-1)).toBe('visible:false');
+    expect(changes).toEqual([]);
+  });
+
+  it('keeps a user-hidden overlay off when its provider returns', async () => {
+    let present = true;
+    const radar = {
+      ...fakeOverlay('radar'),
+      available: () => present,
+    };
+    const manager = new LayerManager(fakeCtx());
+    await manager.register(radar);
+    manager.toggle('radar', false);
+
+    present = false;
+    expect(manager.layers()[0]).toMatchObject({ available: false, visible: false });
+    present = true;
+    expect(manager.layers()[0]).toMatchObject({ available: true, visible: false });
+    expect(radar.events.at(-1)).toBe('visible:false');
   });
 });

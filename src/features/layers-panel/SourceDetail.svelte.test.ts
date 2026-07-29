@@ -39,6 +39,37 @@ function body(writeBlocked: boolean, userSource: UserChartSource = source): stri
 }
 
 describe('SourceDetail', () => {
+  it('shows an unsupported style chart reason and keeps its query values redacted', () => {
+    const styleUrl = 'https://charts.example/style.json?access_token=secret';
+    const styleItem: LayerListItem = {
+      ...item,
+      id: 'chart-style',
+      title: 'Provider style',
+      available: false,
+      unavailableHint:
+        'Binnacle lists this style-document chart for compatibility but cannot display it yet.',
+      chart: {
+        identifier: 'provider-style',
+        source: 'server',
+        kind: 'style',
+        type: 'mapstyleJSON',
+        url: styleUrl,
+      },
+    };
+    const html = render(SourceDetail, {
+      props: {
+        item: styleItem,
+        onBack: noop,
+      },
+    }).body;
+
+    expect(html).toContain('Type');
+    expect(html).toContain('Style');
+    expect(html).toContain('cannot display it yet');
+    expect(html).toContain('access_token=REDACTED');
+    expect(html).not.toContain('access_token=secret');
+  });
+
   it('redacts every query value from the visible source URL', () => {
     const html = body(false);
 

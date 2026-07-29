@@ -224,9 +224,8 @@ function isVector(chart: SignalKChart): boolean {
 }
 
 export function chartToSpecs(chart: SignalKChart, serverBase: string): ChartSpecs {
-  // A mapstyleJSON chart is a full style document, not a tile source; until the style
-  // pipeline lands (a later spec) it cannot load as an overlay, so emit nothing rather
-  // than a broken vector source. No current provider ships this type.
-  if (chart.type === 'mapstyleJSON') return { sources: {}, layers: [] };
+  if (chart.type === 'mapstyleJSON') {
+    throw new TypeError('Style-document charts cannot be converted to standalone map resources.');
+  }
   return isVector(chart) ? vectorSpecs(chart, serverBase) : rasterSpecs(chart, serverBase);
 }

@@ -58,7 +58,9 @@ source, and surrounding traffic before relying on it.
   import cancels its metadata request. User chart detail can stage a replacement URL, refresh the
   current URL's metadata, and change server sharing while retaining the chart id, visibility,
   opacity, and stack position. A failed replacement restores the accepted chart. Overlays remain in
-  their own tab with visibility, opacity, management, and stacking controls.
+  their own tab with visibility, opacity, management, and stacking controls. Signal K style-document
+  sources remain listed with details available for inspection, but they are disabled, forced off,
+  and identified as unsupported instead of appearing as blank charts.
 
 ## Safety
 

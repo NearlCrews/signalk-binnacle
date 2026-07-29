@@ -14,12 +14,18 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.17.1
+## What's new in 0.18.0
 
-The README no longer uses file links. The Signal K App Store's README view renders links
-unmodified, so links to the shipped guides could never resolve there; guide references are plain
-text now and read correctly everywhere the README appears. See the changelog for the full details
-of this release and of 0.17.0, which moved Binnacle to MapLibre GL JS 6.
+This release adds personal chart notes, editable multi-leg measurements, and complete native radar
+area editing for zones, no-transmit sectors, and rectangles. Time travel can now replay bounded
+history ranges, Data trends are profile-aware and interactive, and nearby vessels have searchable
+live details and generous chart targets.
+
+Chart and provider workflows are more resilient. PMTiles sources can be repaired, refreshed, and
+shared without losing their settings; tide and current stations can be selected independently; and
+unsupported Signal K style-document charts are labeled and kept off instead of appearing as blank
+layers. Generic equipment alarms, safer depth-source selection, clearer track-provider detection,
+and stronger waypoint navigation round out the release. See the changelog for the complete details.
 
 ## What it does
 
@@ -40,8 +46,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   sources (NOAA ENC, BlueTopo, and EMODnet each add a nested survey-quality facet; GEBCO is global
   base bathymetry; Seascape adds globally merged depth shading, hillshade, contours, and soundings),
   and your own PMTiles charts added by URL or served from the server's charts folder. The Charts tab
-  selects chart sources and opens source details; the Overlays tab controls visibility, opacity, and
-  stacking for marks, routes, weather-adjacent data, and other map overlays.
+  selects chart sources and opens source details. Signal K style-document sources remain listed and
+  available for inspection, but Binnacle labels them unsupported and keeps them off instead of
+  presenting a blank chart. The Overlays tab controls visibility, opacity, and stacking for marks,
+  routes, weather-adjacent data, and other map overlays.
   A 24 hour **track history** layer draws the server-recorded past day under the live track.
 - **Offline charts:** with the optional Chart Locker plugin, draw and save the chart area needed for a
   passage, choose overview, coastal, or harbor detail, review the estimated download and available

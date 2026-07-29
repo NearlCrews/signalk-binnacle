@@ -21,7 +21,7 @@ function layer(id: string, overrides: Partial<LayerListItem> = {}): LayerListIte
   };
 }
 
-function body(item: LayerListItem, subLayers: LayerListItem[]): string {
+function body(item: LayerListItem, subLayers: LayerListItem[], onManage?: () => void): string {
   return render(LayerRow, {
     props: {
       item,
@@ -35,6 +35,8 @@ function body(item: LayerListItem, subLayers: LayerListItem[]): string {
       dropAfter: false,
       onHandlePointerDown: noop,
       onHandleKeydown: noop,
+      onManage,
+      manageLabel: onManage ? `Open ${item.title} chart details` : undefined,
     },
   }).body;
 }
@@ -58,6 +60,26 @@ describe('LayerRow availability', () => {
     expect(checkboxes[0]).toContain('disabled=""');
     expect(checkboxes[0]).toContain('aria-describedby="layer-standalone-unavailable"');
     expect(html).toContain('Standalone provider unavailable.');
+  });
+
+  it('keeps unavailable chart details reachable while its toggle stays off', () => {
+    const html = body(
+      layer('style-chart', {
+        title: 'Provider style',
+        visible: false,
+        supportsOpacity: false,
+        available: false,
+        unavailableHint: 'Style-document charts are unsupported.',
+      }),
+      [],
+      noop,
+    );
+    const checkboxes = checkboxAttributes(html);
+
+    expect(checkboxes).toHaveLength(1);
+    expect(checkboxes[0]).toContain('disabled=""');
+    expect(checkboxes[0]).not.toContain('checked=""');
+    expect(html).toContain('aria-label="Open Provider style chart details"');
   });
 
   it('disables an unavailable facet parent and every child beneath it', () => {

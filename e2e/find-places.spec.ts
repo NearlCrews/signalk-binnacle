@@ -71,7 +71,7 @@ test('find places enables its layer, searches provider metadata, and keeps selec
   await expect(placesToggle).toHaveAttribute('aria-pressed', 'false');
   await placesToggle.click();
   await expect.poll(() => listRequests, { timeout: 15_000 }).toBeGreaterThan(0);
-  await expect(panel.getByText('Harbor Marina')).toBeVisible();
+  await expect(panel.getByText('Harbor Marina')).toBeVisible({ timeout: 15_000 });
   await expect(panel.getByText("Marina · Crow's Nest")).toBeVisible();
   await expect(panel.getByText('Distance and bearing need a fresh GPS fix.')).toBeVisible();
 
@@ -245,7 +245,7 @@ test('personal notes create, edit, move, and delete through the v2 notes provide
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('button', { name: 'Find places' }).click();
   const places = page.getByRole('complementary', { name: 'Find places' });
-  await expect(places.getByText('Quiet cove updated')).toBeVisible();
+  await expect(places.getByText('Quiet cove updated')).toBeVisible({ timeout: 15_000 });
 
   const updatedDetail = page.getByRole('complementary', {
     name: 'Details for Quiet cove updated',

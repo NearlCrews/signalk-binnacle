@@ -9,6 +9,42 @@ vi.mock('./pmtiles', () => ({
 }));
 
 describe('chart overlay', () => {
+  it('lists a style-document chart as explicitly unsupported without touching the map', async () => {
+    const overlay = createChartOverlay(
+      {
+        identifier: 'styled',
+        name: 'Styled chart',
+        type: 'mapstyleJSON',
+        url: '/charts/style.json',
+      },
+      'http://pi.local',
+    );
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+
+    expect(overlay.chart).toMatchObject({
+      identifier: 'styled',
+      source: 'server',
+      kind: 'style',
+      type: 'mapstyleJSON',
+      url: '/charts/style.json',
+    });
+    expect(overlay.defaultVisible).toBe(false);
+    expect(overlay.supportsOpacity).toBe(false);
+    expect(overlay.layerIds).toEqual([]);
+    expect(overlay.available?.()).toBe(false);
+    expect(overlay.unavailableHint).toContain('cannot display it yet');
+
+    await overlay.add(ctx);
+    overlay.setVisible(ctx, true);
+    overlay.remove(ctx);
+
+    expect(map.sources.size).toBe(0);
+    expect(map.layers.size).toBe(0);
+    expect(map.handlerCount('sourcedata')).toBe(0);
+    expect(registerPmtilesArchive).not.toHaveBeenCalled();
+  });
+
   it('adds the chart source and layer in the basemap band', async () => {
     const overlay = createChartOverlay(
       { identifier: 'noaa', name: 'NOAA', type: 'tilelayer', tilemapUrl: '/t/{z}/{x}/{y}' },

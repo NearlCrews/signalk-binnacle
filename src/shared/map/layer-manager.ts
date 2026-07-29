@@ -44,8 +44,9 @@ export interface LayerListItem {
   // The region tag (US, EU, Global) shown on the row. See OverlayModule.region.
   region?: string;
   // False when the overlay's provider or data is absent: the panel grays the row and disables its
-  // toggle. See OverlayModule.available. A snapshot taken at layers() time, so the host calls
-  // LayersView.refresh() when an availability-gating value changes (App.svelte does this in an effect).
+  // toggle. See OverlayModule.available. layers() synchronizes the rendered visibility and takes
+  // an availability snapshot, so the host calls LayersView.refresh() when an availability-gating
+  // value changes (App.svelte does this in an effect).
   available: boolean;
   // The hover tooltip for a grayed-out row. See OverlayModule.unavailableHint.
   unavailableHint?: string;
@@ -87,6 +88,9 @@ export class LayerManager {
   #ctx: OverlayContext;
   #modules = new Map<string, OverlayModule>();
   #state = new Map<string, OverlayState>();
+  // Provider availability is runtime-only. Keep it separate from the desired, persisted visibility
+  // in #state so an unavailable overlay is hidden on the map without losing the user's preference.
+  #availability = new Map<string, boolean>();
   // An async add can be canceled by unregister before it finishes. Keep its identity and completion
   // task separate from the public module map so a same-id replacement waits for the canceled add's
   // final cleanup, and a stale catch cannot delete the replacement's state.
@@ -148,6 +152,7 @@ export class LayerManager {
     this.#registrations.delete(module.id);
     this.#modules.delete(module.id);
     this.#state.delete(module.id);
+    this.#availability.delete(module.id);
 
     try {
       await this.#addModule(module, retainedState);
@@ -165,6 +170,7 @@ export class LayerManager {
         }
         this.#modules.delete(module.id);
         this.#state.delete(module.id);
+        this.#availability.delete(module.id);
       }
       try {
         await this.#addModule(previous, retainedState);
@@ -297,7 +303,7 @@ export class LayerManager {
       // it in place, so this re-apply picks up changes made while add() was awaited. Overlays skip
       // paint updates until their layers exist, and this pass is what recovers those skips; if
       // #state ever moves to replace-on-write, this must re-read the current entry instead.
-      module.setVisible(this.#ctx, state.visible);
+      this.#syncVisibility(module, state, true);
       module.setOpacity?.(this.#ctx, state.opacity);
       if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);
     } catch (error) {
@@ -313,6 +319,7 @@ export class LayerManager {
         this.#registrations.delete(module.id);
         this.#modules.delete(module.id);
         this.#state.delete(module.id);
+        this.#availability.delete(module.id);
       }
       throw error;
     }
@@ -332,6 +339,7 @@ export class LayerManager {
       this.#registrations.delete(id);
       this.#modules.delete(id);
       this.#state.delete(id);
+      this.#availability.delete(id);
     }
     // Drop the state and order entries too, and persist, so a deleted overlay (a removed user
     // chart) does not live on in the saved snapshot forever.
@@ -353,6 +361,7 @@ export class LayerManager {
     this.#registrations.clear();
     this.#modules.clear();
     this.#state.clear();
+    this.#availability.clear();
     for (const module of modules) {
       try {
         module.remove(this.#ctx);
@@ -375,12 +384,12 @@ export class LayerManager {
         const os = this.#state.get(other);
         if (om && os?.visible) {
           os.visible = false;
-          om.setVisible(this.#ctx, false);
+          this.#syncVisibility(om, os, true);
         }
       }
     }
     state.visible = visible;
-    module.setVisible(this.#ctx, visible);
+    this.#syncVisibility(module, state, true);
     // Turning a parent off hides its sub-layers, so a facet (the data-quality overlay) never lingers
     // on the map without the chart it annotates. The panel also disables a sub-layer's toggle while
     // its parent is off, so this only fires when the parent goes off with a child still on.
@@ -390,7 +399,7 @@ export class LayerManager {
         const childState = this.#state.get(childId);
         if (childState?.visible) {
           childState.visible = false;
-          child.setVisible(this.#ctx, false);
+          this.#syncVisibility(child, childState, true);
         }
       }
     }
@@ -435,10 +444,12 @@ export class LayerManager {
       const next = settings[id];
       const state = this.#state.get(id);
       if (!next || !state) continue;
+      let visibilityChanged = false;
       if (next.visible !== state.visible) {
         state.visible = next.visible;
-        module.setVisible(this.#ctx, next.visible);
+        visibilityChanged = true;
       }
+      this.#syncVisibility(module, state, visibilityChanged);
       // Coerce as #addModule does: a corrupted or legacy snapshot opacity (NaN or out of range)
       // would otherwise flow into setOpacity and render the layer transparent or broken.
       const opacity = this.#coerceOpacity(next.opacity);
@@ -471,6 +482,25 @@ export class LayerManager {
   // render the layer as NaN, transparent, or broken.
   #coerceOpacity(value: unknown): number {
     return Number.isFinite(value) ? Math.max(0, Math.min(1, value as number)) : 1;
+  }
+
+  // Apply the rendered visibility when the desired state changes or a provider appears or
+  // disappears. Availability never mutates #state, so persistence and provider recovery retain the
+  // user's choice while the map and disabled panel control remain aligned.
+  #syncVisibility(module: OverlayModule, state: OverlayState, force = false): boolean {
+    const available = module.available?.() ?? true;
+    if (force || this.#availability.get(module.id) !== available) {
+      module.setVisible(this.#ctx, available && state.visible);
+      this.#availability.set(module.id, available);
+    }
+    return available;
+  }
+
+  #refreshAvailability(): void {
+    for (const [id, module] of this.#modules) {
+      const state = this.#state.get(id);
+      if (state) this.#syncVisibility(module, state);
+    }
   }
 
   #groupOf(id: string): string[] | undefined {
@@ -591,7 +621,7 @@ export class LayerManager {
         }
         return;
       }
-      module.setVisible(this.#ctx, state.visible);
+      this.#syncVisibility(module, state, true);
       module.setOpacity?.(this.#ctx, state.opacity);
       if (this.#lastPaint) module.applyTheme?.(this.#ctx, this.#lastPaint);
     }
@@ -600,6 +630,8 @@ export class LayerManager {
 
   // The layer list for the panel, top of the map first, so the panel's top row is the top layer.
   layers(): LayerListItem[] {
+    // Synchronize every module, including unlisted safety overlays, before projecting panel rows.
+    this.#refreshAvailability();
     return this.#effectiveOrder()
       .reverse()
       .flatMap((id) => {
@@ -607,12 +639,13 @@ export class LayerManager {
         if (!module) return [];
         if (module.listed === false) return [];
         const state = this.#state.get(id) ?? { visible: true, opacity: 1 };
+        const available = this.#availability.get(id) ?? true;
         return [
           {
             id,
             title: module.title,
             description: module.description,
-            visible: state.visible,
+            visible: available && state.visible,
             opacity: state.opacity,
             supportsOpacity: module.supportsOpacity,
             pinned: this.#pinned.has(id),
@@ -621,7 +654,7 @@ export class LayerManager {
             group: module.group,
             category: module.category,
             region: module.region,
-            available: module.available?.() ?? true,
+            available,
             unavailableHint: module.unavailableHint,
             manageable: module.manageable,
             chart: module.chart,

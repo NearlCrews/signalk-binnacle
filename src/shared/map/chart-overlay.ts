@@ -25,6 +25,8 @@ const OPACITY_PROPERTY = {
   raster: 'raster-opacity',
 } as const;
 const RASTER_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
+const STYLE_CHART_UNAVAILABLE_HINT =
+  'Binnacle lists this style-document chart for compatibility but cannot display it yet.';
 
 // The opacity paint property for a layer type, or undefined for a type the chart adapter never
 // emits (only fill, line, and raster are produced). setOpacity skips an undefined so an unexpected
@@ -42,6 +44,41 @@ function chartKind(chart: SignalKChart): ChartLayerInfo['kind'] {
   return hasPmtilesPath(candidate) ? 'vector' : 'raster';
 }
 
+function createUnsupportedStyleChartOverlay(
+  chart: SignalKChart,
+  band: ZBand,
+  source: ChartLayerInfo['source'],
+): OverlayModule {
+  const url = chart.url ?? chart.tilemapUrl;
+  return {
+    id: chartSourceId(chart.identifier),
+    title: chart.name,
+    description:
+      chart.description ??
+      'A style-document chart source reported by the Signal K server, which Binnacle cannot display yet',
+    band,
+    defaultVisible: false,
+    supportsOpacity: false,
+    layerIds: [],
+    available: () => false,
+    unavailableHint: STYLE_CHART_UNAVAILABLE_HINT,
+    chart: {
+      identifier: chart.identifier,
+      source,
+      kind: 'style',
+      type: chart.type,
+      url,
+      bounds: chart.bounds,
+      minzoom: chart.minzoom,
+      maxzoom: chart.maxzoom,
+      format: chart.format,
+    },
+    add() {},
+    remove() {},
+    setVisible() {},
+  };
+}
+
 // Server charts default to the basemap band; a user-imported chart passes 'bathymetry' so it
 // layers above the base map. Pass getToken when the archive may be companion-provided so each
 // PMTiles fetch carries the current auth token on a security-enabled server.
@@ -52,6 +89,10 @@ export function createChartOverlay(
   getToken?: () => string | undefined,
   options: { source?: ChartLayerInfo['source'] } = {},
 ): OverlayModule {
+  const source = options.source ?? 'server';
+  if (chart.type === 'mapstyleJSON') {
+    return createUnsupportedStyleChartOverlay(chart, band, source);
+  }
   const specs = chartToSpecs(chart, serverBase);
   const sourceIds = Object.keys(specs.sources);
   // A lightweight view of just the fields the lifecycle methods touch, derived once from
@@ -83,7 +124,6 @@ export function createChartOverlay(
       onSourceData = undefined;
     }
   };
-  const source = options.source ?? 'server';
   const url = chart.url ?? chart.tilemapUrl;
   const kind = chartKind(chart);
   const description =
@@ -142,8 +182,8 @@ export function createChartOverlay(
           ctx.map.addLayer(layer, ctx.beforeIdFor(band));
         }
       }
-      // A chart with no sources (the empty mapstyleJSON specs) has nothing to cap, so skip
-      // the listener entirely rather than waiting forever on an undefined source id.
+      // A malformed or future source-free chart has nothing to cap, so skip the listener instead
+      // of waiting forever on an undefined source id.
       if (!chartSource) return;
       // Clear anything left by a prior add (the reattach path) so the handler reference cannot
       // be orphaned.

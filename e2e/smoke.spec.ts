@@ -730,6 +730,58 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
   );
 });
 
+test('style-document charts stay visible and explain that they are unsupported', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.clear());
+  let styleRequests = 0;
+  await page.route(/\/signalk\/v2\/api\/resources\/charts\/?$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        'provider-style': {
+          identifier: 'provider-style',
+          name: 'Provider style',
+          description: 'Provider-supplied style document',
+          type: 'mapstyleJSON',
+          url: '/provider-style.json?access_token=secret',
+        },
+      }),
+    }),
+  );
+  await page.route(/\/provider-style\.json/, (route) => {
+    styleRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ version: 8, sources: {}, layers: [] }),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Layers and charts', exact: true })
+    .click();
+
+  const panel = page.locator('#layers-panel');
+  const row = panel.locator('[data-layer-row="chart-provider-style"]');
+  await expect(row).toBeVisible();
+  await expect(row.getByRole('checkbox', { name: 'Provider style' })).toBeDisabled();
+  await expect(row.getByRole('checkbox', { name: 'Provider style' })).not.toBeChecked();
+  await row.getByRole('button', { name: 'Open Provider style chart details' }).click();
+
+  await expect(panel.getByText('cannot display it yet')).toBeVisible();
+  await expect(panel.getByText('Style', { exact: true })).toBeVisible();
+  await expect(panel.getByText('access_token=REDACTED')).toBeVisible();
+  await expect(panel.getByText('access_token=secret')).toHaveCount(0);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  expect(styleRequests).toBe(0);
+});
+
 test('saved PMTiles charts expose repair, refresh, and sharing controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route(/\/test-chart\.pmtiles(?:\?|$)/, async (route) => {

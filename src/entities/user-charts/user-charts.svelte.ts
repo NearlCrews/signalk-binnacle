@@ -53,7 +53,16 @@ export function userChartUrlForDisplay(value: string): string {
     }
     return parsed.toString();
   } catch {
-    return value;
+    const queryStart = value.indexOf('?');
+    if (queryStart < 0) return value;
+    const fragmentStart = value.indexOf('#', queryStart);
+    const queryEnd = fragmentStart < 0 ? value.length : fragmentStart;
+    const searchParams = new URLSearchParams(value.slice(queryStart + 1, queryEnd));
+    for (const name of new Set(searchParams.keys())) {
+      searchParams.set(name, 'REDACTED');
+    }
+    const fragment = fragmentStart < 0 ? '' : value.slice(fragmentStart);
+    return `${value.slice(0, queryStart)}?${searchParams.toString()}${fragment}`;
   }
 }
 

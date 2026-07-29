@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0180"></a>
+
+## [0.18.0] - 2026-07-29
+
 ### Added
 
 - Personal chart notes can now be created from the chart actions menu with bounded name, text,
@@ -96,6 +100,14 @@ All notable changes to Binnacle are documented here. The format follows
   empty or unavailable provider falls back to bounded in-memory session samples. Charts identify
   their source and provider, retain accepted data during retries, and add touch and keyboard timeline
   scrubbing plus textual latest, minimum, maximum, start, and end values.
+
+### Fixed
+
+- Signal K style-document chart sources no longer register as checked, opacity-capable blank layers.
+  They remain visible with details available for inspection in Charts, but are disabled, forced off,
+  and explain that style-document rendering is unsupported. Runtime provider loss now hides affected
+  overlays while retaining the user's visibility preference for recovery. Other chart sources
+  continue loading normally.
 
 <a id="v0171"></a>
 
