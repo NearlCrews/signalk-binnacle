@@ -27,7 +27,8 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
       Approve <strong>{auth.clientId}</strong> in Signal K under Security, then Access Requests, and
       leave this tab open. Binnacle connects automatically after approval. Grant
       <strong>read and write</strong>
-      so routes, waypoints, tracks, course control, alarms, and profiles can use the server.
+      so routes, waypoints, personal notes, tracks, course control, alarms, and profiles can use the
+      server.
     </p>
   </div>
 {:else if auth.status === 'denied'}
@@ -70,8 +71,8 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
   </div>
 {:else if auth.writeBlocked}
   <div class="auth-banner warn" role="status" aria-live="polite">
-    Binnacle has read-only access. Saving routes, waypoints, tracks, course, alarms, and radar
-    controls needs read and write.
+    Binnacle has read-only access. Saving routes, waypoints, personal notes, tracks, course, alarms,
+    and radar controls needs read and write.
     <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestWriteAccess()}>
       Request read/write access
     </button>

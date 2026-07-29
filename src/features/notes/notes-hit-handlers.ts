@@ -44,6 +44,9 @@ export function createNoteHitHandlers(
           name: String(props.name ?? 'Point of interest'),
           category,
           position: { latitude, longitude },
+          description: str(props.description),
+          skIcon: str(props.skIcon),
+          ownedByBinnacle: props.ownedByBinnacle === true,
           attribution: str(props.attribution) ?? str(props.source),
           url: str(props.url),
         });

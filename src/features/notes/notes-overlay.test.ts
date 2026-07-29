@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PersonalNotesStore } from '$entities/poi';
 import { SymbolsStore, symbolIconId } from '$entities/symbols';
 import { iconOffsetExpression, type OverlayContext } from '$shared/map';
 import type { SkSymbol } from '$shared/signalk';
@@ -244,6 +245,58 @@ describe('notes overlay', () => {
       'icon-offset',
       [0, 0],
     );
+  });
+
+  it('keeps a confirmed personal-note edit visible when its follow-up refresh fails', async () => {
+    const personalNotes = new PersonalNotesStore();
+    const accepted: NotePoint = {
+      ...MARINA_NOTE,
+      name: 'Accepted edit',
+      ownedByBinnacle: true,
+    };
+    fetchNotesMock.mockResolvedValueOnce([MARINA_NOTE]).mockResolvedValueOnce(undefined);
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      personalNotes,
+      persist: createExpiringStore<NotePoint[]>('personal', { factory: undefined }),
+    });
+    const map = viewFakeMap({ zoom: 12, lng: 0, lat: 0 });
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    await settle();
+
+    personalNotes.upsert(accepted);
+    personalNotes.requestRefresh();
+    overlay.sync(ctx);
+    await settle();
+    const data = map.sources.get('binnacle-notes')?.data as GeoJSON.FeatureCollection;
+    expect(data.features.map((feature) => feature.properties?.name)).toContain('Accepted edit');
+    expect(fetchNotesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a confirmed create when the first provider refresh fails', async () => {
+    const personalNotes = new PersonalNotesStore();
+    const accepted: NotePoint = {
+      ...MARINA_NOTE,
+      name: 'Accepted create',
+      ownedByBinnacle: true,
+    };
+    fetchNotesMock.mockResolvedValue(undefined);
+    const seen: NotePoint[][] = [];
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      personalNotes,
+      persist: createExpiringStore<NotePoint[]>('personal-create', { factory: undefined }),
+      onNotes: (notes) => seen.push(notes),
+    });
+    const ctx = viewCtx({ zoom: 12, lng: 0, lat: 0 });
+
+    personalNotes.upsert(accepted);
+    personalNotes.requestRefresh();
+    overlay.sync(ctx);
+    await settle();
+
+    expect(seen.at(-1)?.map((note) => note.name)).toContain('Accepted create');
+    expect(fetchNotesMock).toHaveBeenCalledOnce();
   });
 
   it('serves a persisted note set to a fresh overlay (a reload) without fetching', async () => {

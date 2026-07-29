@@ -45,6 +45,32 @@ Find places with the current results and selection intact.
 At most 250 matching rows render at once. Search or zoom in to narrow a larger result set. The complete
 in-view set still participates in search and sort before this display limit is applied.
 
+## Personal notes
+
+Right-click the chart, press and hold it on a touch screen, or press the Context Menu key or Shift+F10
+while the chart is focused, then choose **Add note here**. The editor accepts a name, plain text, a
+point-of-interest category, an optional note symbol, and latitude and longitude. Names are limited to
+120 characters, text to 4,000 characters, symbols to 256 characters, and coordinates to their valid
+geographic ranges. Changing the coordinates moves an existing note.
+
+Personal notes are standard Signal K `notes` resources written through
+`/signalk/v2/api/resources/notes/{id}`. Binnacle marks its resources with the exact
+`binnacle.signalk.org` schema-versioned ownership object. Edit and Delete appear only when that marker
+is valid. Provider-created and third-party notes remain read-only even when their title, source, or
+other fields resemble a Binnacle note.
+
+The v2 resource route is the only write transport. A server that exposes only the v1 collection
+continues to supply places but is labeled read-only. If no notes provider is available, the editor
+explains how to enable Notes in Signal K's built-in Resources Provider. Read-only authorization offers
+a direct read/write access request. A refused or failed save keeps the editor and all entered values
+open; a refused or failed delete keeps the selected note and confirmation context intact.
+
+After Signal K accepts a create, edit, move, or delete, the chart and Find places apply that result
+immediately. A bounded session-only bridge keeps the confirmed result through a slow or failed
+collection refresh, including when the first refresh has no prior provider snapshot. Signal K remains
+the source of record, and an exact successful provider response retires the local bridge. The bridge
+is not a second note database and does not survive a reload.
+
 ## Provider and offline states
 
 The panel distinguishes these states instead of presenting every empty list as the same condition:
@@ -73,11 +99,18 @@ pending results so data fetched under prior credentials cannot leak into the new
 - `src/features/notes/notes-source.ts` owns viewport cache, persistence, single-flight loading, and
   retry cooldown.
 - `src/features/notes/notes-overlay.ts` renders markers and reports the current viewport state.
+- `src/features/notes/personal-note-contract.ts` owns field bounds and the strict ownership marker.
+- `src/features/notes/personal-notes-client.ts` probes write capability and performs v2 mutations.
+- `src/features/notes/personal-notes-controller.svelte.ts` owns editor, access, mutation, and
+  confirmed-refresh behavior.
+- `src/entities/poi/personal-notes-store.svelte.ts` holds the bounded session-only confirmed-write
+  bridge.
 - `src/features/poi-search/poi-search-rows.ts` owns search, distance, bearing, and stable sorting.
 - `src/features/poi-search/PoiSearchPanel.svelte` owns the accessible list interaction and copy.
 
 Focused tests cover parsing, bounds, cache corruption and failure, provider and connectivity changes,
-token invalidation, search normalization, stable sorting, and hover and selection wiring. The
-Playwright suite covers a provider-backed menu flow, a layer initially saved as hidden, metadata
-search, the direct visibility toggle, selection, the zoom-limit message, narrow-screen overflow, and
-phone detail navigation.
+token invalidation, ownership, v1 and v2 capability states, mutation failures, accepted-write
+synchronization, search normalization, stable sorting, and hover and selection wiring. The Playwright
+suite covers a provider-backed menu flow, a layer initially saved as hidden, metadata search, the
+direct visibility toggle, selection, personal-note create, edit, move, and delete, refresh failure,
+the zoom-limit message, narrow-screen overflow, and phone detail navigation.

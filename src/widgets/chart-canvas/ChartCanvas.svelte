@@ -7,6 +7,7 @@ import type { CollisionAssessment } from '$entities/collision';
 import type { CourseGuidance } from '$entities/course';
 import type { MeasureStore } from '$entities/measure';
 import type { MobStore } from '$entities/mob';
+import type { PersonalNotesStore } from '$entities/poi';
 import type { RouteStore } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
@@ -117,6 +118,8 @@ interface Props {
   onCriticalOverlayError?: (overlayIds: string[]) => void;
   onViewChange?: (view: MapView) => void;
   onNoteSelect?: (selection: NoteSelection | undefined) => void;
+  // Confirmed personal-note writes merged over the provider snapshot until refresh catches up.
+  personalNotes: PersonalNotesStore;
   onTideStationSelect?: (selection: TideStationSelectionEvent) => void;
   // The on-screen POI set, forwarded from the notes overlay to the POI search.
   onNotes?: (notes: NotePoint[]) => void;
@@ -130,6 +133,8 @@ interface Props {
   // Drop a standard waypoint at a long-pressed chart position; a refused save surfaces in the
   // Waypoints panel (write access is unknowable client-side).
   onDropWaypoint?: (position: LatLon) => void;
+  // Open the personal-note editor at a long-pressed chart position.
+  onAddNote?: (position: LatLon) => void;
   // Arm the measure tool seeded with the long-pressed chart position as its first point.
   onMeasureFrom?: (position: LatLon) => void;
   // The lazily-imported route editor chunk failed to load, so the app can surface it.
@@ -200,6 +205,7 @@ const {
   onGoToHere,
   onStartRoute,
   onDropWaypoint,
+  onAddNote,
   onMeasureFrom,
   onRouteEditorError,
   aisTrailsAvailable,
@@ -210,6 +216,7 @@ const {
   marineRadarLayer,
   onMapInstance,
   onMapDestroyed,
+  personalNotes,
 }: Props = $props();
 
 let container: HTMLDivElement;
@@ -409,6 +416,7 @@ onMount(async () => {
           interactionsAllowed: markerInteractionsAllowed,
           onNotes,
           onStatus: onPoiStatus,
+          personalNotes,
         },
       );
       // One list feeds both registration and the per-frame tick, so the two cannot drift. The order
@@ -780,6 +788,12 @@ onDestroy(() => {
       onDropWaypoint={onDropWaypoint
         ? () => {
             onDropWaypoint({ latitude: menu.lat, longitude: menu.lon });
+            chartMenu = undefined;
+          }
+        : undefined}
+      onAddNote={onAddNote
+        ? () => {
+            onAddNote({ latitude: menu.lat, longitude: menu.lon });
             chartMenu = undefined;
           }
         : undefined}

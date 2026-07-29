@@ -1,9 +1,11 @@
 <script lang="ts">
 import Crosshair from '@lucide/svelte/icons/crosshair';
 import ExternalLink from '@lucide/svelte/icons/external-link';
+import SquarePen from '@lucide/svelte/icons/square-pen';
 import Star from '@lucide/svelte/icons/star';
+import Trash2 from '@lucide/svelte/icons/trash-2';
 import { categoryLabel } from '$entities/poi-icons';
-import { SlideOver } from '$shared/ui';
+import { InlineConfirm, SlideOver } from '$shared/ui';
 import type { NoteSelection } from './notes-client';
 import type { NormalizedItem, NoteDetail } from './notes-detail';
 import { safeHttpUrl } from './notes-detail';
@@ -16,14 +18,31 @@ interface Props {
   onBack?: () => void;
   // Pan the chart to this place; the action renders only when the host wires it.
   onLocate?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  writeBlocked?: boolean;
+  busy?: boolean;
+  mutationError?: string;
 }
 
-const { selection, load, onClose, onBack, onLocate }: Props = $props();
+const {
+  selection,
+  load,
+  onClose,
+  onBack,
+  onLocate,
+  onEdit,
+  onDelete,
+  writeBlocked = false,
+  busy = false,
+  mutationError,
+}: Props = $props();
 
 let detail = $state<NoteDetail | undefined>();
 let loading = $state(true);
 let failed = $state(false);
 let attempt = $state(0);
+let confirmingDelete = $state(false);
 
 // A new selection or a retry re-runs the load; the object identity changes either way.
 const request = $derived({ id: selection.id, attempt });
@@ -78,11 +97,45 @@ function measure(item: NormalizedItem): string {
   footer={hasFooter ? footer : undefined}
   bodyFlex
 >
-  {#if onLocate}
-    <button type="button" class="btn btn-ghost locate" onclick={onLocate}>
-      <Crosshair size={16} aria-hidden="true" />
-      Show on chart
-    </button>
+  <div class="detail-actions">
+    {#if onLocate}
+      <button type="button" class="btn btn-ghost" onclick={onLocate}>
+        <Crosshair size={16} aria-hidden="true" />
+        Show on chart
+      </button>
+    {/if}
+    {#if selection.ownedByBinnacle && onEdit}
+      <button type="button" class="btn btn-ghost" onclick={onEdit} disabled={busy || writeBlocked}>
+        <SquarePen size={16} aria-hidden="true" />
+        Edit
+      </button>
+    {/if}
+    {#if selection.ownedByBinnacle && onDelete && !confirmingDelete}
+      <button
+        type="button"
+        class="btn btn-danger"
+        onclick={() => (confirmingDelete = true)}
+        disabled={busy || writeBlocked}
+      >
+        <Trash2 size={16} aria-hidden="true" />
+        Delete
+      </button>
+    {/if}
+  </div>
+  {#if selection.ownedByBinnacle && writeBlocked}
+    <p class="muted-note" role="status">
+      A read/write token is needed to edit or delete this personal note.
+    </p>
+  {/if}
+  {#if confirmingDelete && onDelete}
+    <InlineConfirm
+      question="Delete this personal note?"
+      onConfirm={onDelete}
+      onCancel={() => (confirmingDelete = false)}
+    />
+  {/if}
+  {#if mutationError}
+    <p class="alert-note" role="alert">{mutationError}</p>
   {/if}
   {#if loading}
     <p class="muted-note" role="status">Loading…</p>
@@ -188,8 +241,11 @@ function measure(item: NormalizedItem): string {
 }
 /* The scroll box and the gapped column come from the shared .panel-body with bodyFlex; only the
    content spacing inside a section is local. */
-/* The locate action sits at the top of the body as a compact button, not stretched full width. */
-.locate {
+/* The chart and ownership actions sit at the top as compact buttons, not stretched full width. */
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   align-self: flex-start;
 }
 /* dl, dt, dd, and .item come from the shared .detail-list utility in panels.css. */

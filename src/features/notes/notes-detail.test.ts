@@ -167,6 +167,18 @@ describe('createNoteDetailLoader', () => {
     await loader.load('lll-1'); // cached, no fetch
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('invalidates an accepted detail after an edit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, structured));
+    vi.stubGlobal('fetch', fetchMock);
+    const loader = createNoteDetailLoader('http://pi', () => 'tok');
+    await loader.load('lll-1');
+    await loader.load('lll-1');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    loader.invalidate('lll-1');
+    await loader.load('lll-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('plainText and safeHttpUrl', () => {

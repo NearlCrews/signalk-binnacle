@@ -194,6 +194,7 @@ export async function fetchNoteDetail(
 
 export interface NoteDetailLoader {
   load(id: string): Promise<NoteDetail | undefined>;
+  invalidate(id: string): void;
 }
 
 // The most note details to keep memoized, so a long session of tapping markers cannot grow the
@@ -241,6 +242,10 @@ export function createNoteDetailLoader(
         });
       inflight.set(id, promise);
       return promise;
+    },
+    invalidate(id) {
+      cache.delete(id);
+      inflight.delete(id);
     },
   };
 }

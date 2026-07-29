@@ -7,7 +7,7 @@ import type { CourseGuidance } from '$entities/course';
 import type { MeasureStore } from '$entities/measure';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
-import type { NotePoint, PoiViewState } from '$entities/poi';
+import type { NotePoint, PersonalNotesStore, PoiViewState } from '$entities/poi';
 import type { RouteStore } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
@@ -70,6 +70,9 @@ type RouteController = ReturnType<typeof import('$features/routing').createRoute
 type WaypointsController = ReturnType<
   typeof import('$features/waypoints').createWaypointsController
 >;
+type PersonalNotesController = ReturnType<
+  typeof import('$features/notes').createPersonalNotesController
+>;
 type TrackController = ReturnType<typeof import('$features/tracks').createTrackController>;
 type RadarController = ReturnType<
   typeof import('$features/marine-radar').createMarineRadarController
@@ -91,6 +94,7 @@ interface FlatProps {
   mobController: MobController;
   routeController: RouteController;
   waypointsController: WaypointsController;
+  personalNotesController: PersonalNotesController;
   trackController: TrackController;
   marineRadar: RadarController;
   tidesController: TidesController;
@@ -105,6 +109,7 @@ interface FlatProps {
   routeStore: RouteStore;
   tidesStore: TidesStore;
   waypointsStore: WaypointsStore;
+  personalNotesStore: PersonalNotesStore;
   symbolsStore: SymbolsStore;
   userCharts: UserCharts;
   weather: WeatherStore;
@@ -250,6 +255,7 @@ type ControllerKey =
   | 'mobController'
   | 'routeController'
   | 'waypointsController'
+  | 'personalNotesController'
   | 'trackController'
   | 'marineRadar'
   | 'tidesController';
@@ -263,6 +269,7 @@ type EntityKey =
   | 'routeStore'
   | 'tidesStore'
   | 'waypointsStore'
+  | 'personalNotesStore'
   | 'symbolsStore'
   | 'userCharts'
   | 'weather'
@@ -400,6 +407,7 @@ const {
   mobController,
   routeController,
   waypointsController,
+  personalNotesController,
   trackController,
   marineRadar,
   tidesController,
@@ -414,6 +422,7 @@ const {
   routeStore,
   tidesStore,
   waypointsStore,
+  personalNotesStore,
   symbolsStore,
   userCharts,
   weather,
@@ -647,8 +656,10 @@ $effect(() => {
     {origin}
     {units}
     waypoints={waypointsStore}
+    personalNotes={personalNotesStore}
     symbols={symbolsStore}
     onDropWaypoint={waypointsController.onDropWaypoint}
+    onAddNote={personalNotesController.openAdd}
     aisTrailsAvailable={() => serverFeatures?.plugins.has('tracks') ?? false}
     isOnline={() => net.online}
     historyProviders={() => historyProviders}
@@ -798,6 +809,15 @@ $effect(() => {
         onClose={closeNote}
         onBack={onBackFromNote}
         onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
+        onEdit={selectedNote.ownedByBinnacle
+          ? () => selectedNote && personalNotesController.openEdit(selectedNote)
+          : undefined}
+        onDelete={selectedNote.ownedByBinnacle
+          ? () => selectedNote && void personalNotesController.remove(selectedNote)
+          : undefined}
+        writeBlocked={auth.writeBlocked}
+        busy={personalNotesController.busy}
+        mutationError={personalNotesController.error}
       />
     </div>
   {/if}

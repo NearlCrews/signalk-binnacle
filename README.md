@@ -142,9 +142,11 @@ Binnacle ships its full feature set as a Signal K webapp:
   focused recent trend without changing the saved overview.
 - **Find places and points of interest:** search the notes in the current chart view by name,
   category, or provider; sort them by name, category, distance, or true bearing; preview and select a
-  result on the chart; and open its structured detail. Loading, zoom-limit, cached-offline, empty, and
-  provider-error states remain distinct. Custom chart symbols are supported through the
-  signalk-symbol-manager plugin.
+  result on the chart; and open its structured detail. Add personal notes from a chart press, then
+  edit, move, or delete only the notes Binnacle owns. Accepted writes remain visible through a failed
+  refresh, while v1-only providers and read-only authorization explain why saving is unavailable.
+  Loading, zoom-limit, cached-offline, empty, and provider-error states remain distinct. Custom chart
+  symbols are supported through the signalk-symbol-manager plugin.
 - **Your units:** every readout follows the server's imperial-or-metric unit preference; knots,
   nautical miles, and bearings stay nautical.
 - **Themes:** day, dusk, and night-red, with true red on black for a dark-adapted watch.

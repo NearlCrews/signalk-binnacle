@@ -1,4 +1,4 @@
-import type { PoiViewPhase, PoiViewState } from '$entities/poi';
+import type { PersonalNotesStore, PoiViewPhase, PoiViewState } from '$entities/poi';
 import { registerPoiIcons } from '$entities/poi-icons';
 import { createOverlayIconResolver, type SymbolsStore } from '$entities/symbols';
 import { type Bbox4, bboxContains, type LatLon, lngLatBoundsToBbox4, padBbox } from '$shared/geo';
@@ -14,7 +14,7 @@ import {
 } from '$shared/map';
 import type { ExpiringStore } from '$shared/storage';
 import { registerNavaidIcons } from './navaid-symbols';
-import type { NotePoint, NoteSelection } from './notes-client';
+import { MAX_NOTES_PER_VIEW, type NotePoint, type NoteSelection } from './notes-client';
 import { buildRender } from './notes-features';
 import { createNoteHitHandlers } from './notes-hit-handlers';
 import {
@@ -55,6 +55,9 @@ export interface NotesOverlayOptions {
   onStatus?: (state: PoiViewState) => void;
   // A live gate for chart tools that temporarily own every map tap.
   interactionsAllowed?: () => boolean;
+  // Session-scoped confirmed personal-note mutations. They are merged over provider snapshots until
+  // a successful refresh confirms them, so a failed follow-up load cannot undo an accepted write.
+  personalNotes?: PersonalNotesStore;
 }
 
 // The Points-of-interest overlay: renders community notes as clustered markers. The where-notes-
@@ -71,12 +74,17 @@ export function createNotesOverlay(
   const isOnline = options.isOnline ?? (() => true);
   const onNotes = options.onNotes;
   const onStatus = options.onStatus;
+  const personalNotes = options.personalNotes;
   const source = createNotesSource(serverBase, options.persist);
   const hit = createNoteHitHandlers(onSelect, options.interactionsAllowed);
   const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a
   // failed fetch keeps it on screen instead of blanking the markers.
   let renderedNotes: NotePoint[] | undefined;
+  let renderedRemoteNotes: NotePoint[] | undefined;
+  let renderedViewport: Bbox4 | undefined;
+  let renderedPersonalVersion = personalNotes?.version ?? 0;
+  let lastPersonalRefreshVersion = personalNotes?.refreshVersion ?? 0;
   let lastStatus: PoiViewState | undefined;
   let failed = false;
   let requestGeneration = 0;
@@ -131,8 +139,11 @@ export function createNotesOverlay(
   function ensurePendingIcons(ctx: OverlayContext, notes: NotePoint[], generation: number): void {
     iconResolver.ensurePending(ctx.map, themePaint, () => {
       if (!isCurrent(generation) || renderedNotes !== notes) return;
-      renderedNotes = undefined;
-      render(ctx, notes, generation);
+      const remote = renderedRemoteNotes;
+      const viewport = renderedViewport;
+      if (!remote || !viewport) return;
+      renderedRemoteNotes = undefined;
+      render(ctx, remote, viewport, generation);
     });
   }
 
@@ -151,8 +162,24 @@ export function createNotesOverlay(
 
   // Render a note set, skipping the work when it is the same set already shown. Leaving the source
   // untouched on a no-op avoids re-clustering the markers every idle frame.
-  function render(ctx: OverlayContext, notes: NotePoint[], generation = lifecycle): void {
-    if (!isCurrent(generation) || notes === renderedNotes) return;
+  function render(
+    ctx: OverlayContext,
+    remoteNotes: NotePoint[],
+    viewport: Bbox4,
+    generation = lifecycle,
+  ): void {
+    const personalVersion = personalNotes?.version ?? 0;
+    if (
+      !isCurrent(generation) ||
+      (remoteNotes === renderedRemoteNotes &&
+        personalVersion === renderedPersonalVersion &&
+        viewport.every((value, index) => value === renderedViewport?.[index]))
+    )
+      return;
+    renderedRemoteNotes = remoteNotes;
+    renderedViewport = viewport;
+    renderedPersonalVersion = personalVersion;
+    const notes = personalNotes?.merge(remoteNotes, viewport, MAX_NOTES_PER_VIEW) ?? remoteNotes;
     renderedNotes = notes;
     const { data, iconOffset } = buildRender(notes, iconResolver.iconEntry);
     setSourceData(ctx.map, SOURCE_ID, data);
@@ -168,6 +195,8 @@ export function createNotesOverlay(
   function clearRendered(ctx: OverlayContext): void {
     if (renderedNotes === undefined) return;
     renderedNotes = undefined;
+    renderedRemoteNotes = undefined;
+    renderedViewport = undefined;
     setSourceData(ctx.map, SOURCE_ID, emptyFeatureCollection());
     onNotes?.([]);
   }
@@ -198,6 +227,8 @@ export function createNotesOverlay(
       iconGeneration += 1;
       iconResolver.invalidate();
       renderedNotes = undefined;
+      renderedRemoteNotes = undefined;
+      renderedViewport = undefined;
       invalidateIdleAnchor();
       ring.reset();
     },
@@ -223,6 +254,18 @@ export function createNotesOverlay(
       }
       const zoom = ctx.map.getZoom();
       const center = ctx.map.getCenter();
+      const personalVersion = personalNotes?.version ?? 0;
+      const personalChanged = personalVersion !== renderedPersonalVersion;
+      const personalRefreshVersion = personalNotes?.refreshVersion ?? 0;
+      if (personalRefreshVersion !== lastPersonalRefreshVersion) {
+        lastPersonalRefreshVersion = personalRefreshVersion;
+        requestGeneration += 1;
+        source.invalidate();
+        forceRefresh = true;
+        invalidateIdleAnchor();
+      } else if (personalChanged) {
+        invalidateIdleAnchor();
+      }
       // Idle fast-path: nothing moved since the last sync, so skip the viewport work entirely.
       if (zoom === lastZoom && center.lng === lastLng && center.lat === lastLat) return;
       lastZoom = zoom;
@@ -234,13 +277,17 @@ export function createNotesOverlay(
         return;
       }
       const viewport: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
+      // A confirmed create can arrive before the first provider collection finishes. Render it over
+      // an empty remote snapshot immediately, so a failed first refresh cannot leave the accepted
+      // note absent from the chart and Find places.
+      if (personalChanged) render(ctx, renderedRemoteNotes ?? [], viewport);
       // A recent fetch whose padded area still covers the viewport serves the markers with no
       // network. This runs before the in-flight guard, so a cache hit renders even mid-fetch.
       const cached = forceRefresh ? undefined : source.cached(viewport, !online);
       if (cached) {
         failed = false;
         report('ready', !online);
-        render(ctx, cached);
+        render(ctx, cached, viewport);
         return;
       }
       if (source.inFlight()) {
@@ -285,10 +332,11 @@ export function createNotesOverlay(
         }
         failed = false;
         report('ready', !loadOnline);
-        render(ctx, notes);
+        const current: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
+        personalNotes?.reconcile(notes, fetchBbox, notes.length < MAX_NOTES_PER_VIEW);
+        render(ctx, notes, current);
         // The map may have moved while the fetch was in flight; when this fetch no longer covers
         // the current viewport, drop the fast-path anchor so the next sync serves the new area.
-        const current: Bbox4 = lngLatBoundsToBbox4(ctx.map.getBounds());
         if (!bboxContains(fetchBbox, current)) invalidateIdleAnchor();
       });
     },
@@ -347,6 +395,8 @@ export function createNotesOverlay(
       iconGeneration += 1;
       iconResolver.invalidate();
       visible = false;
+      renderedRemoteNotes = undefined;
+      renderedViewport = undefined;
       hit.detach(ctx);
       removeNoteLayers(ctx.map);
       onNotes?.([]);

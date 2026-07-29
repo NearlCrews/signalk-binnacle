@@ -153,3 +153,108 @@ test('place detail returns to find places on a narrow screen', async ({ page }) 
   await detail.getByRole('button', { name: 'Back to find places' }).click();
   await expect(page.getByRole('complementary', { name: 'Find places' })).toBeVisible();
 });
+
+test('personal notes create, edit, move, and delete through the v2 notes provider', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+
+  const notes = new Map<string, Record<string, unknown>>();
+  let failNextCollectionRefresh = false;
+  await page.route(/\/signalk\/v[12]\/api\/resources\/notes/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const id = url.pathname.match(/\/notes\/([^/]+)$/)?.[1];
+    if (request.method() === 'PUT' && id) {
+      notes.set(id, request.postDataJSON() as Record<string, unknown>);
+      failNextCollectionRefresh = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ state: 'COMPLETED' }),
+      });
+      return;
+    }
+    if (request.method() === 'DELETE' && id) {
+      notes.delete(id);
+      failNextCollectionRefresh = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ state: 'COMPLETED' }),
+      });
+      return;
+    }
+    if (request.method() === 'GET' && id) {
+      const note = notes.get(id);
+      await route.fulfill({
+        status: note ? 200 : 404,
+        contentType: 'application/json',
+        body: JSON.stringify(note ?? {}),
+      });
+      return;
+    }
+    if (failNextCollectionRefresh) {
+      if (url.pathname.includes('/v1/')) failNextCollectionRefresh = false;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ state: 'FAILED' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(Object.fromEntries(notes)),
+    });
+  });
+
+  await page.goto('/');
+  const canvas = page.locator('.maplibregl-canvas');
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('.maplibregl-ctrl-scale')).toContainText(/nm|km/);
+  await canvas.click({ button: 'right', position: { x: 200, y: 180 } });
+  await page.getByRole('menuitem', { name: 'Add note here' }).click();
+
+  const add = page.getByRole('dialog', { name: 'Add personal note' });
+  await add.getByLabel('Name').fill('Quiet cove');
+  await add.getByLabel('Text').fill('Good holding in mud.');
+  await add.getByLabel('Category').selectOption('anchorage');
+  await add.getByRole('button', { name: 'Save note' }).click();
+
+  const detail = page.getByRole('complementary', { name: 'Details for Quiet cove' });
+  await expect(detail).toBeVisible();
+  await detail.getByRole('button', { name: 'Edit' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit personal note' });
+  await edit.getByLabel('Name').fill('Quiet cove updated');
+  await edit.getByLabel(/Latitude/).fill('42.61');
+  await edit.getByLabel(/Latitude/).blur();
+  await edit.getByRole('button', { name: 'Save note' }).click();
+  await expect(
+    page.getByRole('complementary', { name: 'Details for Quiet cove updated' }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Find places' }).click();
+  const places = page.getByRole('complementary', { name: 'Find places' });
+  await expect(places.getByText('Quiet cove updated')).toBeVisible();
+
+  const updatedDetail = page.getByRole('complementary', {
+    name: 'Details for Quiet cove updated',
+  });
+  await updatedDetail.getByRole('button', { name: 'Delete' }).click();
+  await updatedDetail
+    .getByRole('group', { name: 'Delete this personal note?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(updatedDetail).not.toBeVisible();
+  await expect(places.getByText('Quiet cove updated')).not.toBeVisible();
+});

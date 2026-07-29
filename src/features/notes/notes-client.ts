@@ -8,6 +8,12 @@ import {
 import { type Bbox4, isLatLon } from '$shared/geo';
 import { hasControlCharacters } from '$shared/lib';
 import { fetchKeyedResource, str } from '$shared/signalk';
+import {
+  cleanPersonalNoteText,
+  isPersonalNoteId,
+  PERSONAL_NOTE_NAMESPACE,
+  personalNoteOwnership,
+} from './personal-note-contract';
 
 // The note shape itself lives in $entities/poi (the POI search panel renders the same points, and
 // cross-feature data flows through entities); re-exported here so the notes modules and the
@@ -23,6 +29,9 @@ export interface NoteSelection {
   // The marker position, so the chart can ring it from a list selection without re-querying the
   // rendered feature, and without moving the map.
   position: { latitude: number; longitude: number };
+  description?: string;
+  skIcon?: string;
+  ownedByBinnacle?: boolean;
   attribution?: string;
   url?: string;
 }
@@ -46,6 +55,7 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
   const note = raw as {
     name?: unknown;
     title?: unknown;
+    description?: unknown;
     url?: unknown;
     position?: { latitude?: unknown; longitude?: unknown };
     properties?: {
@@ -53,11 +63,15 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
       source?: unknown;
       attribution?: unknown;
       crowsNest?: { type?: unknown };
+      [PERSONAL_NOTE_NAMESPACE]?: unknown;
     };
   };
   const position = note.position;
   if (!isLatLon(position)) return undefined;
   const props = note.properties ?? {};
+  const ownership = isPersonalNoteId(id)
+    ? personalNoteOwnership(props[PERSONAL_NOTE_NAMESPACE])
+    : undefined;
   const clean = (value: unknown, maxLength: number): string | undefined => {
     const text = str(value)?.trim();
     return text ? text.slice(0, maxLength) : undefined;
@@ -67,10 +81,14 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
     name: clean(note.name, 256) ?? clean(note.title, 256) ?? resourceId,
     position,
     category:
+      ownership?.category ??
       poiCategoryForType(
         typeof props.crowsNest?.type === 'string' ? (props.crowsNest.type as PoiType) : undefined,
-      ) ?? categoryForSkIcon(clean(props.skIcon, 256)),
+      ) ??
+      categoryForSkIcon(clean(props.skIcon, 256)),
+    description: ownership ? cleanPersonalNoteText(note.description) : undefined,
     skIcon: clean(props.skIcon, 256),
+    ownedByBinnacle: ownership ? true : undefined,
     url: clean(note.url, 2048),
     source: clean(props.source, 256),
     attribution: clean(props.attribution, 1024),

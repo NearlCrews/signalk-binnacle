@@ -10,9 +10,14 @@ export interface NotePoint {
   name: string;
   position: { latitude: number; longitude: number };
   category: PoiCategory;
+  // Plain-text note content. Provider markup is never retained in the chart or search model.
+  description?: string;
   // The provider's raw icon reference, kept alongside the derived category so a provided
   // symbol (signalk-symbol-manager) can resolve it to a custom marker.
   skIcon?: string;
+  // True only for the exact, versioned Binnacle ownership marker. It is never inferred from the
+  // source name, provider id, icon, or another mutable display field.
+  ownedByBinnacle?: boolean;
   // Optional credit and link surfaced for the marker and its detail panel.
   url?: string;
   source?: string;
@@ -45,8 +50,11 @@ export function isNotePoint(value: unknown): value is NotePoint {
     isLatLon(point.position) &&
     typeof point.category === 'string' &&
     isPoiCategory(point.category) &&
+    (point.description === undefined ||
+      (typeof point.description === 'string' && point.description.length <= 4_000)) &&
     (point.skIcon === undefined ||
       (typeof point.skIcon === 'string' && point.skIcon.length <= 256)) &&
+    (point.ownedByBinnacle === undefined || typeof point.ownedByBinnacle === 'boolean') &&
     (point.url === undefined || (typeof point.url === 'string' && point.url.length <= 2048)) &&
     (point.source === undefined ||
       (typeof point.source === 'string' && point.source.length <= 256)) &&

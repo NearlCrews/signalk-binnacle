@@ -1,6 +1,7 @@
 <script lang="ts">
 import MapPin from '@lucide/svelte/icons/map-pin';
 import Navigation from '@lucide/svelte/icons/navigation';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Route from '@lucide/svelte/icons/route';
 import Ruler from '@lucide/svelte/icons/ruler';
 import { AnchoredMenu, InlineConfirm, rovingFocus } from '$shared/ui';
@@ -19,6 +20,8 @@ interface Props {
   // Optional: absent when the app does not wire dropping. Write access is unknowable client-side,
   // so a refused save surfaces as the Waypoints panel error rather than hiding the item.
   onDropWaypoint?: () => void;
+  // Opens the bounded personal-note editor at the pressed chart position.
+  onAddNote?: () => void;
   // Optional: arms the measure tool with its first point at the pressed position, so measuring
   // starts where the navigator is looking instead of via the app menu.
   onMeasureFrom?: () => void;
@@ -33,6 +36,7 @@ const {
   onGoToHere,
   onStartRoute,
   onDropWaypoint,
+  onAddNote,
   onMeasureFrom,
   onClose,
 }: Props = $props();
@@ -65,7 +69,7 @@ const left = $derived(
 // Prefer above the press so a finger does not cover the menu; drop below near the top edge.
 let confirmingGoTo = $state(false);
 const itemCount = $derived(
-  confirmingGoTo ? 3 : 2 + (onDropWaypoint ? 1 : 0) + (onMeasureFrom ? 1 : 0),
+  confirmingGoTo ? 3 : 2 + (onDropWaypoint ? 1 : 0) + (onAddNote ? 1 : 0) + (onMeasureFrom ? 1 : 0),
 );
 const menuHeight = $derived(itemCount * ITEM_HEIGHT + MENU_PADDING);
 const above = $derived(y > menuHeight + EDGE * 2 || y > height / 2);
@@ -113,6 +117,12 @@ const top = $derived(above ? y - EDGE : y + EDGE);
         <button type="button" role="menuitem" class="menu-item item" onclick={onDropWaypoint}>
           <MapPin size={16} aria-hidden="true" />
           Drop waypoint
+        </button>
+      {/if}
+      {#if onAddNote}
+        <button type="button" role="menuitem" class="menu-item item" onclick={onAddNote}>
+          <NotebookPen size={16} aria-hidden="true" />
+          Add note here
         </button>
       {/if}
       {#if onMeasureFrom}

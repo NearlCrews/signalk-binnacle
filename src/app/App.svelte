@@ -30,6 +30,7 @@ import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
 import { NotificationsStore } from '$entities/notifications';
+import { PersonalNotesStore } from '$entities/poi';
 import {
   MAX_PROFILES,
   type ProfileSettings,
@@ -81,6 +82,8 @@ import { createMobController, MOB_TONE, MobButton } from '$features/mob';
 import { ARRIVAL_TONE, shouldSoundArrivalAlarm } from '$features/navigation';
 import {
   createNoteDetailLoader,
+  createPersonalNotesController,
+  loadPersonalNoteDialog,
   type NoteDetailLoader,
   type NotePoint,
   type NoteSelection,
@@ -160,7 +163,13 @@ import {
   setWriteOutcomeListener,
 } from '$shared/signalk';
 import { createTrackStore } from '$shared/storage';
-import { createThemeController, defaultSaveName, type PanelId, type Theme } from '$shared/ui';
+import {
+  createThemeController,
+  defaultSaveName,
+  dialog,
+  type PanelId,
+  type Theme,
+} from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
@@ -395,6 +404,7 @@ let activePanel = $state<PanelId | null>(null);
 let selectedAisId = $state<string | undefined>();
 let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
+let personalNoteDialogAttempt = $state(0);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
@@ -424,6 +434,10 @@ const backToMenu = (): void => {
 function profilesPanelForAttempt() {
   void profilesPanelAttempt;
   return loadProfilesPanel();
+}
+function personalNoteDialogForAttempt() {
+  void personalNoteDialogAttempt;
+  return loadPersonalNoteDialog();
 }
 const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
@@ -479,6 +493,9 @@ const poiInView = $derived.by<Poi[]>(() => {
     name: note.name,
     position: note.position,
     category: note.category,
+    description: note.description,
+    skIcon: note.skIcon,
+    ownedByBinnacle: note.ownedByBinnacle,
     source: note.source,
     attribution: note.attribution,
     url: note.url,
@@ -670,6 +687,7 @@ const timeTravel = createTimeTravelController(
 // Standard server waypoints: fetched from /resources/waypoints, rendered by the chart overlay,
 // managed in the Waypoints panel, and dropped from the chart's long-press menu.
 const waypointsStore = new WaypointsStore();
+const personalNotesStore = new PersonalNotesStore();
 
 // Provided chart symbols (signalk-symbol-manager). Constructed empty so the chart can mount
 // immediately and hold one stable reference; filled when the fetch lands after access resolves.
@@ -1494,6 +1512,19 @@ const waypointsController = createWaypointsController({
   toast,
 });
 
+// Personal notes use the standard notes resource and a session-only confirmed-write overlay. Signal K
+// remains authoritative; the local store only prevents a follow-up refresh failure from undoing an
+// accepted write on the chart.
+const personalNotesController = createPersonalNotesController({
+  origin,
+  getToken: () => chartsToken,
+  writeBlocked: () => auth.writeBlocked,
+  requestWriteAccess: () => auth.requestWriteAccess(),
+  personalNotes: personalNotesStore,
+  onSelect: (selection) => selectNote(selection),
+  invalidateDetail: (id) => noteLoader?.invalidate(id),
+});
+
 // Track controller: owns saved tracks CRUD and display.
 const trackController = createTrackController({
   origin,
@@ -1583,6 +1614,9 @@ function selectPoi(poi: Poi): void {
       name: poi.name,
       category: poi.category,
       position: poi.position,
+      description: poi.description,
+      skIcon: poi.skIcon,
+      ownedByBinnacle: poi.ownedByBinnacle,
       attribution: poi.attribution,
       url: poi.url,
     },
@@ -1688,10 +1722,12 @@ $effect(() => {
 
 function closeNote(): void {
   // The highlight effect clears the chart ring once selectedNote is undefined.
+  personalNotesController.clearError();
   selectedNote = undefined;
   noteReturnsToPlaces = false;
 }
-const selectNote = (selection: NoteSelection | undefined, fromPlaces = false): void => {
+function selectNote(selection: NoteSelection | undefined, fromPlaces = false): void {
+  personalNotesController.clearError();
   selectedNote = selection;
   noteReturnsToPlaces = Boolean(selection && fromPlaces && narrow);
   // Only yield a leading panel when actually opening a note, not when the selection clears.
@@ -1699,7 +1735,7 @@ const selectNote = (selection: NoteSelection | undefined, fromPlaces = false): v
     if (activePanel === 'ais') selectedAisId = undefined;
     activePanel = null;
   }
-};
+}
 function backFromNote(): void {
   selectedNote = undefined;
   noteReturnsToPlaces = false;
@@ -1761,6 +1797,7 @@ const aisCount = $derived(aisTargets.list().length);
 function refreshAfterStreamReconnect(token: string | undefined): void {
   void routeController.refreshRoutes();
   void waypointsController.refreshWaypoints();
+  void personalNotesController.probe();
   void refreshWeatherProvider(token);
   void refreshSymbols();
   void fetchServerFeatures(origin, token).then((features) => {
@@ -1837,6 +1874,9 @@ $effect(() => {
   void routeController.refreshRoutes();
   // Waypoints are HTTP resources too, so do not make their first load depend on the live stream.
   void waypointsController.refreshWaypoints();
+  // Personal-note writes are v2-only. Recheck capability when credentials change so a newly
+  // approved token or enabled provider updates the editor without a reload.
+  void personalNotesController.probe();
   void refreshWeatherProvider(authToken);
   // Resolve the server's unit preferences with the same trigger: per-user resolution rides on the
   // session credentials that exist once access has resolved.
@@ -2015,6 +2055,7 @@ const plotterControllers = {
   mobController,
   routeController,
   waypointsController,
+  personalNotesController,
   trackController,
   marineRadar,
   tidesController,
@@ -2030,6 +2071,7 @@ const plotterEntities = {
   routeStore,
   tidesStore,
   waypointsStore,
+  personalNotesStore,
   symbolsStore,
   userCharts,
   weather,
@@ -2301,8 +2343,63 @@ const plotterActions = {
     />
   {/key}
 {/if}
+{#if personalNotesController.editor}
+  {#key personalNotesController.editor}
+    {#await personalNoteDialogForAttempt()}
+      <dialog
+        class="modal-card lazy-note-dialog"
+        aria-label="Loading personal note editor"
+        use:dialog={personalNotesController.cancelEdit}
+      >
+        <p role="status">Loading personal note editor…</p>
+        <button type="button" class="btn" onclick={personalNotesController.cancelEdit}>
+          Cancel
+        </button>
+      </dialog>
+    {:then module}
+      <module.default
+        editor={personalNotesController.editor}
+        symbols={symbolsStore}
+        {auth}
+        capability={personalNotesController.capability}
+        probing={personalNotesController.probing}
+        busy={personalNotesController.busy}
+        error={personalNotesController.error}
+        onSave={(input) => void personalNotesController.save(input)}
+        onCancel={personalNotesController.cancelEdit}
+        onProbe={() => void personalNotesController.probe()}
+      />
+    {:catch}
+      <dialog
+        class="modal-card lazy-note-dialog"
+        aria-label="Personal note editor unavailable"
+        use:dialog={personalNotesController.cancelEdit}
+      >
+        <p class="alert-note" role="alert">Personal note editor could not load.</p>
+        <div class="panel-controls">
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={() => (personalNoteDialogAttempt += 1)}
+          >
+            Retry
+          </button>
+          <button type="button" class="btn" onclick={personalNotesController.cancelEdit}>
+            Cancel
+          </button>
+        </div>
+      </dialog>
+    {/await}
+  {/key}
+{/if}
 
 <style>
+.lazy-note-dialog {
+  display: grid;
+  gap: var(--space-3);
+  inline-size: min(25rem, calc(100dvw - 2 * var(--space-4)));
+  padding: var(--space-4);
+}
 .binnacle-shell {
   display: grid;
   grid-template-rows: auto 1fr auto;

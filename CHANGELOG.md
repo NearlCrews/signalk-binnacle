@@ -8,6 +8,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Personal chart notes can now be created from the chart actions menu with bounded name, text,
+  category, symbol, and position fields, then edited, moved, or deleted from their detail panel.
+  Binnacle writes standard Signal K v2 note resources with a strict namespaced ownership marker, so
+  third-party notes remain read-only. Missing providers, v1-only providers, and read-only access are
+  explained without hiding the editor, failed saves retain every field, and confirmed writes stay
+  synchronized with the chart and Find places through a failed refresh.
 - Measure points can now be selected through a 44 px chart target or the strip, deliberately moved
   by drag, chart tap, or chart-center keyboard workflow, and deleted with operation-based Undo.
   Selected points show both adjacent rhumb-leg distances and true bearings, while antimeridian-safe

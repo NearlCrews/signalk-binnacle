@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '$shared/testing';
 import { fetchNotes } from './notes-client';
+import { PERSONAL_NOTE_NAMESPACE } from './personal-note-contract';
 
 describe('fetchNotes', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -127,5 +128,55 @@ describe('fetchNotes', () => {
     expect(notes?.[0].name).toHaveLength(256);
     expect(notes?.[0].source).toHaveLength(256);
     expect(notes?.[0].attribution).toHaveLength(1024);
+  });
+
+  it('recognizes only the exact versioned personal-note ownership marker', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          '123e4567-e89b-42d3-a456-426614174000': {
+            title: 'My anchorage',
+            description: 'Good holding.\nMind the shoal.',
+            position: { latitude: 42, longitude: -83 },
+            properties: {
+              skIcon: 'custom:anchor',
+              [PERSONAL_NOTE_NAMESPACE]: {
+                schemaVersion: 1,
+                kind: 'personal-note',
+                category: 'anchorage',
+              },
+            },
+          },
+          forged: {
+            title: 'Provider note',
+            description: 'Not editable.',
+            position: { latitude: 42.1, longitude: -83.1 },
+            properties: {
+              source: 'Binnacle Chartplotter',
+              [PERSONAL_NOTE_NAMESPACE]: {
+                schemaVersion: 2,
+                kind: 'personal-note',
+                category: 'hazard',
+              },
+            },
+          },
+        }),
+      ),
+    );
+
+    const notes = await fetchNotes('http://pi', undefined, [-84, 41, -82, 43]);
+    expect(notes?.[0]).toMatchObject({
+      name: 'My anchorage',
+      description: 'Good holding.\nMind the shoal.',
+      category: 'anchorage',
+      ownedByBinnacle: true,
+    });
+    expect(notes?.[1]).toMatchObject({
+      name: 'Provider note',
+      category: 'generic',
+      ownedByBinnacle: undefined,
+      description: undefined,
+    });
   });
 });
