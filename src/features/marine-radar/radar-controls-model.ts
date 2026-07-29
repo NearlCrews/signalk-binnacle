@@ -1,7 +1,8 @@
-import type { ControlDefinition } from './radar-types';
+import type { ControlDefinition, RadarControlEntry } from './radar-types';
 
 // Map a Signal K radar control definition to the widget that edits it: a boolean is a toggle, an enum is
-// a select, and a number or compound control is a slider over its value.
+// a select, and a number is a slider over its value. Unknown compound controls stay structured and
+// read-only because their provider-defined properties cannot safely be inferred.
 export function widgetKind(
   def: ControlDefinition,
 ): 'slider' | 'list' | 'toggle' | 'text' | 'button' | 'structured' {
@@ -9,8 +10,30 @@ export function widgetKind(
   if (def.type === 'enum') return 'list';
   if (def.type === 'string') return 'text';
   if (def.type === 'button') return 'button';
-  if (def.type === 'sector' || def.type === 'zone' || def.type === 'rect') return 'structured';
+  if (
+    def.type === 'sector' ||
+    def.type === 'zone' ||
+    def.type === 'rect' ||
+    def.type === 'compound'
+  )
+    return 'structured';
   return 'slider';
+}
+
+// Capability readOnly is static. The live value's allowed flag is the Radar API's dynamic permission.
+// Use one predicate in the panel and at the controller action boundary so controls cannot become
+// writable merely because one of those checks was omitted.
+export function controlWriteBlockReason(
+  def: ControlDefinition | undefined,
+  entry: RadarControlEntry | undefined,
+  controlsForbidden: boolean,
+): string | undefined {
+  if (!def) return 'The radar did not report a capability for this control.';
+  if (controlsForbidden) return 'Read-write radar access is required.';
+  if (def.readOnly) return 'The radar reports this control as read-only.';
+  if (entry?.allowed === false)
+    return 'The radar is not allowing changes to this control right now.';
+  return undefined;
 }
 
 // The everyday controls a helmsman reaches for underway, shown in their own section above the advanced

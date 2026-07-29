@@ -8,6 +8,7 @@ import {
   setPower,
   spokesUrl,
   writeControl,
+  writeStructuredControl,
 } from './radar-client';
 import type { RadarInfo } from './radar-types';
 
@@ -279,10 +280,11 @@ describe('parseRadarControls', () => {
         endValue: undefined,
         startDistance: undefined,
         endDistance: undefined,
-        x: undefined,
-        y: undefined,
+        x1: undefined,
+        y1: undefined,
+        x2: undefined,
+        y2: undefined,
         width: undefined,
-        height: undefined,
         allowed: undefined,
       },
       rain: {
@@ -293,13 +295,47 @@ describe('parseRadarControls', () => {
         endValue: undefined,
         startDistance: undefined,
         endDistance: undefined,
-        x: undefined,
-        y: undefined,
+        x1: undefined,
+        y1: undefined,
+        x2: undefined,
+        y2: undefined,
         width: undefined,
-        height: undefined,
         allowed: undefined,
       },
     });
+  });
+
+  it('parses the documented zone and rectangle fields and drops unsafe magnitudes', () => {
+    const controls = parseRadarControls({
+      guardZone1: {
+        value: -1,
+        endValue: 1,
+        startDistance: 200,
+        endDistance: 500,
+        enabled: false,
+        allowed: true,
+      },
+      exclusionRect1: { x1: -100, y1: 50, x2: 100, y2: 50, width: 20 },
+      unsafe: { startDistance: -1, endDistance: 1_000_001, x1: Number.POSITIVE_INFINITY },
+    });
+    expect(controls.guardZone1).toMatchObject({
+      value: -1,
+      endValue: 1,
+      startDistance: 200,
+      endDistance: 500,
+      enabled: false,
+      allowed: true,
+    });
+    expect(controls.exclusionRect1).toMatchObject({
+      x1: -100,
+      y1: 50,
+      x2: 100,
+      y2: 50,
+      width: 20,
+    });
+    expect(controls.unsafe?.startDistance).toBeUndefined();
+    expect(controls.unsafe?.endDistance).toBeUndefined();
+    expect(controls.unsafe?.x1).toBeUndefined();
   });
 });
 
@@ -482,6 +518,34 @@ describe('fetchCapabilities', () => {
     expect(caps?.controls.map((c) => c.id)).toEqual(['gain', 'noTransmit', 'clear', 'label']);
   });
 
+  it('marks native guard-zone capabilities with their complete bounds and dialect', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        capabilitiesResponse({
+          guardZone1: {
+            name: 'Guard zone 1',
+            dataType: 'zone',
+            minValue: -Math.PI,
+            maxValue: Math.PI,
+            stepValue: Math.PI / 180,
+            units: 'rad',
+            maxDistance: 100_000,
+            hasEnabled: true,
+          },
+        }),
+      ),
+    );
+    const zone = (await fetchCapabilities('http://boat.local', undefined, 'nav1034A'))?.controls[0];
+    expect(zone).toMatchObject({
+      dialect: 'native',
+      type: 'zone',
+      hasEnabled: true,
+      maxDistance: 100_000,
+      range: { min: -Math.PI, max: Math.PI, step: Math.PI / 180, unit: 'rad' },
+    });
+  });
+
   it('marks an isReadOnly control read-only', async () => {
     vi.stubGlobal(
       'fetch',
@@ -567,6 +631,7 @@ describe('fetchCapabilities', () => {
     const caps = await fetchCapabilities('http://boat.local', undefined, 'r');
     expect(caps?.controls.map((c) => c.id)).toEqual(['gain', 'power', 'zone']);
     const gain = caps?.controls.find((c) => c.id === 'gain');
+    expect(gain?.dialect).toBe('v5');
     expect(gain?.range).toEqual({ min: 0, max: 100, step: 1, unit: '%' });
     expect(gain?.modes).toEqual(['auto', 'manual']);
     expect(caps?.controls.find((c) => c.id === 'power')?.values).toEqual([
@@ -734,5 +799,37 @@ describe('writeControl', () => {
     );
     await writeControl('http://boat.local', undefined, 'nav1034A', 'sector/blank', { value: 10 });
     expect(capturedUrl).toContain('sector%2Fblank');
+  });
+});
+
+describe('writeStructuredControl', () => {
+  it('uses the bulk route so the server and provider preserve the complete zone', async () => {
+    let capturedUrl = '';
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        capturedUrl = url;
+        capturedBody = JSON.parse(init.body as string);
+        return new Response('', { status: 200 });
+      }),
+    );
+    const zone = {
+      value: -1,
+      endValue: 1,
+      startDistance: 200,
+      endDistance: 500,
+      enabled: false,
+    };
+    const result = await writeStructuredControl(
+      'http://boat.local',
+      undefined,
+      'nav1034A',
+      'guardZone1',
+      zone,
+    );
+    expect(result).toEqual({ ok: true, status: 200 });
+    expect(capturedUrl).toBe('http://boat.local/signalk/v2/api/vessels/self/radars/nav1034A');
+    expect(capturedBody).toEqual({ value: { guardZone1: zone } });
   });
 });

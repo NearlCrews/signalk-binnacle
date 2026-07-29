@@ -34,6 +34,23 @@ const fakeRadar = {
   controls: { gain: { value: 50 } },
 };
 
+function gainCapabilities(): Response {
+  return new Response(
+    JSON.stringify({
+      controls: {
+        gain: {
+          name: 'Gain',
+          dataType: 'number',
+          minValue: 0,
+          maxValue: 100,
+          hasAuto: true,
+        },
+      },
+    }),
+    { status: 200 },
+  );
+}
+
 describe('createMarineRadarController', () => {
   it('does not discover or open a worker when radar is unavailable', async () => {
     vi.stubGlobal(
@@ -77,6 +94,9 @@ describe('createMarineRadarController', () => {
       'fetch',
       vi.fn(async (url: string) => {
         urls.push(url);
+        if (url.includes('/capabilities')) return gainCapabilities();
+        if (url.endsWith('/controls'))
+          return new Response(JSON.stringify({ gain: { value: 50 } }), { status: 200 });
         if (
           url.includes('/radars') &&
           !url.includes('/controls') &&
@@ -182,6 +202,9 @@ describe('createMarineRadarController', () => {
       vi.fn(async (url: string) => {
         if (url.endsWith('/radars'))
           return new Response(JSON.stringify([fakeRadar]), { status: 200 });
+        if (url.includes('/capabilities')) return gainCapabilities();
+        if (url.endsWith('/controls'))
+          return new Response(JSON.stringify({ gain: { value: 50 } }), { status: 200 });
         if (url.includes('/controls/gain')) {
           controlWrites += 1;
           if (controlWrites === 1)
@@ -202,11 +225,227 @@ describe('createMarineRadarController', () => {
     await controller.start();
     const first = controller.setControl('gain', { value: 55 });
     const second = controller.setControl('gain', { value: 60 });
-    await second;
+    expect(controlWrites).toBe(1);
     resolveFirst?.(new Response('', { status: 500 }));
     await first;
+    await second;
+    expect(controlWrites).toBe(2);
     expect(controller.store.controlValues.gain).toBe(60);
     expect(controller.store.controlErrors.gain).toBeUndefined();
+    await controller.dispose();
+  });
+
+  it('keeps an active write pending across a same-radar refresh', async () => {
+    let resolveWrite: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([fakeRadar]), { status: 200 });
+        if (url.includes('/capabilities')) return gainCapabilities();
+        if (url.endsWith('/controls'))
+          return new Response(JSON.stringify({ gain: { value: 50 } }), { status: 200 });
+        if (url.includes('/controls/gain'))
+          return new Promise<Response>((resolve) => {
+            resolveWrite = resolve;
+          });
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    const write = controller.setControl('gain', { value: 55 });
+    expect(controller.store.pendingControls.gain).toBe(true);
+    await controller.refresh();
+    expect(controller.store.controlValues.gain).toBe(55);
+    expect(controller.store.pendingControls.gain).toBe(true);
+    resolveWrite?.(new Response('', { status: 200 }));
+    await write;
+    expect(controller.store.pendingControls.gain).toBeUndefined();
+    expect(controller.store.controlValues.gain).toBe(55);
+    await controller.dispose();
+  });
+
+  it('ignores an old A write after switching A to B to A', async () => {
+    let resolveWrite: ((response: Response) => void) | undefined;
+    const radarB = { ...fakeRadar, id: 'b', name: 'B', controls: { gain: { value: 25 } } };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([fakeRadar, radarB]), { status: 200 });
+        if (url.includes('/capabilities')) return gainCapabilities();
+        if (url.endsWith('/controls')) {
+          return new Response(
+            JSON.stringify({ gain: { value: url.includes('/radars/b/') ? 25 : 50 } }),
+            { status: 200 },
+          );
+        }
+        if (url.includes('/radars/a/controls/gain'))
+          return new Promise<Response>((resolve) => {
+            resolveWrite = resolve;
+          });
+        return new Response('', { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    const oldWrite = controller.setControl('gain', { value: 55 });
+    controller.selectRadar('b');
+    controller.selectRadar('a');
+    await vi.waitFor(() => expect(controller.store.capabilities).not.toHaveLength(0));
+    resolveWrite?.(new Response('', { status: 500 }));
+    await oldWrite;
+    expect(controller.store.selectedId).toBe('a');
+    expect(controller.store.controlValues.gain).toBe(50);
+    expect(controller.store.controlErrors.gain).toBeUndefined();
+    expect(controller.store.pendingControls.gain).toBeUndefined();
+    await controller.dispose();
+  });
+
+  it('writes one complete native guard zone and restores the exact entry after rejection', async () => {
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/radars')) {
+          return new Response(
+            JSON.stringify([
+              {
+                ...fakeRadar,
+                controls: {
+                  guardZone1: {
+                    value: -1,
+                    endValue: 1,
+                    startDistance: 200,
+                    endDistance: 500,
+                    enabled: false,
+                    allowed: true,
+                  },
+                },
+              },
+            ]),
+            { status: 200 },
+          );
+        }
+        if (url.includes('/capabilities')) {
+          return new Response(
+            JSON.stringify({
+              controls: {
+                guardZone1: {
+                  name: 'Guard zone 1',
+                  dataType: 'zone',
+                  minValue: -Math.PI,
+                  maxValue: Math.PI,
+                  stepValue: Math.PI / 180,
+                  units: 'rad',
+                  maxDistance: 100_000,
+                  hasEnabled: true,
+                },
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/controls')) {
+          return new Response(
+            JSON.stringify({
+              guardZone1: {
+                value: -1,
+                endValue: 1,
+                startDistance: 200,
+                endDistance: 500,
+                enabled: false,
+                allowed: true,
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        capturedBody = JSON.parse(init?.body as string);
+        return new Response('', { status: 500 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    const accepted = { ...controller.store.controlEntries.guardZone1 };
+    const write = controller.setZoneControl('guardZone1', {
+      value: -0.5,
+      endValue: 0.75,
+      startDistance: 250,
+      endDistance: 750,
+      enabled: false,
+    });
+    expect(controller.store.controlEntries.guardZone1).toMatchObject({
+      value: -0.5,
+      endValue: 0.75,
+      startDistance: 250,
+      endDistance: 750,
+      enabled: false,
+      allowed: true,
+    });
+    await write;
+    expect(capturedBody).toEqual({
+      value: {
+        guardZone1: {
+          value: -0.5,
+          endValue: 0.75,
+          startDistance: 250,
+          endDistance: 750,
+          enabled: false,
+        },
+      },
+    });
+    expect(controller.store.controlEntries.guardZone1).toEqual(accepted);
+    expect(controller.store.controlErrors.guardZone1).toContain('HTTP 500');
+    await controller.dispose();
+  });
+
+  it('rechecks the live allowed flag before writing', async () => {
+    let writes = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(
+            JSON.stringify([{ ...fakeRadar, controls: { gain: { value: 50, allowed: false } } }]),
+            { status: 200 },
+          );
+        if (url.includes('/capabilities')) return gainCapabilities();
+        if (url.endsWith('/controls'))
+          return new Response(JSON.stringify({ gain: { value: 50, allowed: false } }), {
+            status: 200,
+          });
+        writes += 1;
+        return new Response('', { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    await controller.setControl('gain', { value: 60 });
+    expect(writes).toBe(0);
+    expect(controller.store.controlValues.gain).toBe(50);
+    expect(controller.store.controlErrors.gain).toContain('not allowing changes');
     await controller.dispose();
   });
 

@@ -8,6 +8,13 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Complete native Radar API guard zones now have an explicit form editor with degree and server-length
+  display conversion, separate enabled state, atomic Save, Cancel, dirty-discard confirmation, live
+  provider conflict detection, exact rollback, and provider-safe bulk writes. Radar selection and
+  panel dismissal keep the accepted radar visible until a dirty draft is resolved, and discard
+  confirmation remains visible when Advanced controls are collapsed. Unsupported compound controls,
+  sectors that may alter the no-transmit envelope, and rectangle shapes not yet validated remain
+  honestly read-only.
 - Time travel now offers bounded 1-hour, 6-hour, 24-hour, and 7-day history ranges with adaptive
   resolution, play and pause, 0.5x, 1x, and 2x speeds, full local dates, provider attribution, and a
   range-owned track synchronized with the marker and metric readouts. It keeps one provider's
@@ -47,6 +54,9 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
+- Radar control writes now enforce both capability read-only state and the live allowed flag at the
+  action boundary, serialize requests per radar and control, coalesce unsent updates, protect active
+  writes from polling, and parse the standard rectangle coordinate fields.
 - The status strip's Depth readout, the anchor panel, and the depth instrument tile now resolve
   depth per purpose from whichever of keel, transducer, and surface references the boat publishes,
   in that safety priority, and label the readout with its source (Keel, Xducer, Surface) so two

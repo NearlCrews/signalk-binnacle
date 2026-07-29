@@ -12,32 +12,48 @@ import {
 } from '$shared/lib';
 import { Disclosure, InlineConfirm, ShowOnChartToggle } from '$shared/ui';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
-import { isPowerControl, isPrimaryControl, widgetKind } from './radar-controls-model';
-import type { ControlDefinition, RadarStatus } from './radar-types';
+import RadarAreaControl from './RadarAreaControl.svelte';
+import {
+  controlWriteBlockReason,
+  isPowerControl,
+  isPrimaryControl,
+  widgetKind,
+} from './radar-controls-model';
+import type { ControlDefinition, RadarStatus, RadarZoneValue } from './radar-types';
 
 let {
   store,
   onSetControl,
   onSetAuto,
+  onSetZoneControl,
   onSelectRadar,
   onSetPower,
   echoShown,
   onToggleEcho,
   onOpenOverlaySettings,
   unitsMode,
+  discardRequested = false,
+  onDraftDirtyChange,
+  onDiscardResolved,
 }: {
   store: MarineRadarStore;
   onSetControl: (controlId: string, value: number | string | boolean) => void;
   onSetAuto: (controlId: string, auto: boolean) => void;
+  onSetZoneControl: (controlId: string, value: RadarZoneValue) => void;
   onSelectRadar?: (id: string) => void;
   onSetPower: (status: RadarStatus) => void;
   echoShown: boolean;
   onToggleEcho: (shown: boolean) => void;
   onOpenOverlaySettings?: () => void;
   unitsMode: UnitsMode;
+  discardRequested?: boolean;
+  onDraftDirtyChange?: (dirty: boolean) => void;
+  onDiscardResolved?: (discarded: boolean) => void;
 } = $props();
 
 let confirmingTransmit = $state(false);
+let activeEditorId = $state<string | undefined>(undefined);
+let activeEditorDirty = $state(false);
 
 const controls = $derived(
   [...store.capabilities].sort(
@@ -137,19 +153,33 @@ function readout(def: ControlDefinition): string {
   return unit ? `${shown} ${unit}` : String(shown);
 }
 
-function structuredReadout(def: ControlDefinition): string {
-  const entry = store.controlEntries[def.id];
-  if (!entry) return PLACEHOLDER;
-  return Object.entries(entry)
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => `${key}: ${String(value)}`)
-    .join(', ');
-}
-
 // Whether a control reports an auto/manual capability, so it gets an Auto toggle, and whether that
 // control is currently in auto, so its manual widget is disabled while the radar drives the value.
 const hasAuto = (def: ControlDefinition): boolean => def.modes?.includes('auto') === true;
 const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] === true;
+
+function blockedReason(def: ControlDefinition): string | undefined {
+  return controlWriteBlockReason(def, store.controlEntries[def.id], store.controlsForbidden);
+}
+
+function controlWriteDisabled(def: ControlDefinition): boolean {
+  return blockedReason(def) !== undefined || store.pendingControls[def.id] === true;
+}
+
+function controlDisabled(def: ControlDefinition): boolean {
+  return controlWriteDisabled(def) || isAuto(def);
+}
+
+function onAreaEditState(controlId: string, state: 'idle' | 'editing' | 'dirty'): void {
+  if (state === 'idle') {
+    if (activeEditorId === controlId) activeEditorId = undefined;
+  } else {
+    activeEditorId = controlId;
+  }
+  activeEditorDirty = state === 'dirty';
+  onDraftDirtyChange?.(activeEditorDirty);
+  if (discardRequested && state === 'idle') onDiscardResolved?.(true);
+}
 </script>
 
 <!-- One labeled control: the name (and, for a slider, the live value) on a head row, then a full-width
@@ -160,6 +190,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
   {@const kind = widgetKind(def)}
   {@const labelId = `rc-${def.id}`}
   {@const value = store.controlValues[def.id]}
+  {@const writeBlocked = blockedReason(def)}
   <div class="radar-field">
     <div class="field-head" title={def.description}>
       <span class="field-name" id={labelId}>{def.name}</span>
@@ -176,7 +207,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
             class:is-on={isAuto(def)}
             aria-pressed={isAuto(def)}
             aria-label={`Auto ${def.name}`}
-            disabled={def.readOnly || store.controlsForbidden || store.pendingControls[def.id]}
+            disabled={controlWriteDisabled(def)}
             onclick={() => onSetAuto(def.id, !isAuto(def))}
           >
             Auto
@@ -194,11 +225,10 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
         min={displayBound(def, def.range?.min ?? 0)}
         max={displayBound(def, def.range?.max ?? 100)}
         step={displayBound(def, def.range?.step ?? 1)}
-        disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+        disabled={controlDisabled(def)}
         value={typeof value === 'number' ? displayNumber(def, value) : displayBound(def, def.range?.min ?? 0)}
         aria-labelledby={labelId}
         onchange={(e) => onSetControl(def.id, siNumber(def, Number(e.currentTarget.value)))}
-        oninput={(e) => store.setControlValue(def.id, siNumber(def, Number(e.currentTarget.value)))}
       >
     {:else if kind === 'toggle'}
       <div class="segmented" role="group" aria-labelledby={labelId}>
@@ -207,7 +237,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class="btn"
           class:is-on={value !== undefined && !value}
           aria-pressed={value !== undefined && !value}
-          disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+          disabled={controlDisabled(def)}
           onclick={() => onSetControl(def.id, false)}
         >
           Off
@@ -217,7 +247,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
           class="btn"
           class:is-on={Boolean(value)}
           aria-pressed={Boolean(value)}
-          disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+          disabled={controlDisabled(def)}
           onclick={() => onSetControl(def.id, true)}
         >
           On
@@ -227,7 +257,7 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       <select
         class="input"
         aria-labelledby={labelId}
-        disabled={isAuto(def) || store.controlsForbidden || store.pendingControls[def.id]}
+        disabled={controlDisabled(def)}
         value={String(value ?? '')}
         onchange={(e) => {
           const raw = e.currentTarget.value;
@@ -245,22 +275,33 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
         type="text"
         aria-labelledby={labelId}
         value={typeof value === 'string' ? value : ''}
-        disabled={store.controlsForbidden || store.pendingControls[def.id]}
+        disabled={controlDisabled(def)}
         onchange={(e) => onSetControl(def.id, e.currentTarget.value)}
       >
     {:else if kind === 'button'}
       <button
         type="button"
         class="btn"
-        disabled={store.controlsForbidden || store.pendingControls[def.id] || def.allowed === false}
+        disabled={controlDisabled(def)}
         onclick={() => onSetControl(def.id, true)}
       >
         {def.name}
       </button>
     {:else if kind === 'structured'}
-      <p class="muted-note">
-        {structuredReadout(def)}. Adjust this area control on the radar display.
-      </p>
+      <RadarAreaControl
+        definition={def}
+        entry={store.controlEntries[def.id]}
+        radarId={store.selectedId}
+        {unitsMode}
+        controlsForbidden={store.controlsForbidden}
+        pending={store.pendingControls[def.id] === true}
+        anotherEditorActive={activeEditorId !== undefined && activeEditorId !== def.id}
+        onSave={onSetZoneControl}
+        onEditStateChange={onAreaEditState}
+      />
+    {/if}
+    {#if writeBlocked && !def.readOnly && kind !== 'structured' && !store.controlsForbidden}
+      <p class="muted-note">{writeBlocked}</p>
     {/if}
     {#if def.description}
       <p class="control-description">{def.description}</p>
@@ -311,7 +352,11 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
       class="input"
       aria-label="Select radar"
       value={store.selectedId}
-      onchange={(e) => onSelectRadar?.(e.currentTarget.value)}
+      onchange={(e) => {
+        const requestedId = e.currentTarget.value;
+        e.currentTarget.value = store.selectedId ?? '';
+        onSelectRadar?.(requestedId);
+      }}
     >
       {#each store.radars as r (r.id)}
         <option value={r.id}>{r.name}</option>
@@ -319,6 +364,15 @@ const isAuto = (def: ControlDefinition): boolean => store.controlAuto[def.id] ==
     </select>
   {/if}
 </section>
+
+{#if discardRequested && activeEditorId}
+  <InlineConfirm
+    question="Discard unsaved guard-zone changes?"
+    confirmLabel="Discard"
+    onConfirm={() => onDiscardResolved?.(true)}
+    onCancel={() => onDiscardResolved?.(false)}
+  />
+{/if}
 
 {#if store.controlsForbidden}
   <p class="muted-note" role="status">

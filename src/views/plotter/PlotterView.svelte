@@ -144,6 +144,8 @@ interface FlatProps {
   weatherPanelOpen: boolean;
   radarControlsOpen: boolean;
   radarOpenedFrom: 'menu' | 'layers';
+  radarDraftDirty: boolean;
+  radarCloseRequested: boolean;
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
   chartLockerAccessUrl: string;
@@ -343,6 +345,8 @@ let {
   weatherPanelOpen = $bindable(),
   radarControlsOpen = $bindable(),
   radarOpenedFrom = $bindable(),
+  radarDraftDirty = $bindable(),
+  radarCloseRequested = $bindable(),
   mapInstance = $bindable(),
   companionBase,
   chartLockerAccessUrl,
@@ -467,6 +471,14 @@ let serverChartsStatus = $state<'loading' | 'ready' | 'partial' | 'error'>('load
 let retryServerCharts = $state<(() => void) | undefined>();
 let criticalOverlayError = $state<string | undefined>();
 let lazyPanelAttempt = $state(0);
+let radarDiscardRequested = $state(false);
+let pendingRadarPanelAction = $state<
+  | { kind: 'close' }
+  | { kind: 'back' }
+  | { kind: 'overlays' }
+  | { kind: 'select'; radarId: string }
+  | undefined
+>(undefined);
 
 const CRITICAL_OVERLAY_LABELS: Record<string, string> = {
   'own-vessel': 'vessel position',
@@ -494,6 +506,40 @@ function chartsPanelForAttempt() {
 function radarControlsForAttempt() {
   void lazyPanelAttempt;
   return loadRadarControls();
+}
+
+function runRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAction>): void {
+  switch (action.kind) {
+    case 'back':
+      radarControlsOpen = false;
+      backToMenu();
+      break;
+    case 'overlays':
+      radarControlsOpen = false;
+      openLayersPanel('overlays');
+      break;
+    case 'select':
+      marineRadar.selectRadar(action.radarId);
+      break;
+    default:
+      radarControlsOpen = false;
+  }
+}
+
+function requestRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAction>): void {
+  if (!radarDraftDirty) {
+    runRadarPanelAction(action);
+    return;
+  }
+  pendingRadarPanelAction = action;
+  radarDiscardRequested = true;
+}
+
+function resolveRadarDraftDiscard(discarded: boolean): void {
+  const action = pendingRadarPanelAction;
+  radarDiscardRequested = false;
+  pendingRadarPanelAction = undefined;
+  if (discarded && action) runRadarPanelAction(action);
 }
 
 function weatherMapForAttempt() {
@@ -535,6 +581,19 @@ const routeProgress = $derived.by<RouteProgress | undefined>(() => {
 
 $effect(() => {
   mapCommands?.highlightPoi(hoveredPoi?.position ?? selectedNote?.position);
+});
+
+$effect(() => {
+  if (radarControlsOpen) return;
+  radarDraftDirty = false;
+  radarDiscardRequested = false;
+  pendingRadarPanelAction = undefined;
+});
+
+$effect(() => {
+  if (!radarCloseRequested) return;
+  radarCloseRequested = false;
+  if (radarControlsOpen) requestRadarPanelAction({ kind: 'close' });
 });
 
 $effect(() => {
@@ -944,12 +1003,9 @@ $effect(() => {
         title="Radar controls"
         closeLabel="Close radar controls"
         bodyFlex
-        onClose={() => (radarControlsOpen = false)}
+        onClose={() => requestRadarPanelAction({ kind: 'close' })}
         onBack={radarOpenedFrom === 'menu'
-          ? () => {
-              radarControlsOpen = false;
-              backToMenu();
-            }
+          ? () => requestRadarPanelAction({ kind: 'back' })
           : undefined}
       >
         {#await radarControlsForAttempt()}
@@ -960,15 +1016,16 @@ $effect(() => {
             unitsMode={units.mode}
             onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
             onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-            onSelectRadar={(id) => marineRadar.selectRadar(id)}
+            onSetZoneControl={(id, value) => void marineRadar.setZoneControl(id, value)}
+            onSelectRadar={(id) => requestRadarPanelAction({ kind: 'select', radarId: id })}
             onSetPower={onSetRadarPower}
             echoShown={radarEchoShown}
             onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
+            discardRequested={radarDiscardRequested}
+            onDraftDirtyChange={(dirty) => (radarDraftDirty = dirty)}
+            onDiscardResolved={resolveRadarDraftDiscard}
             onOpenOverlaySettings={layersView
-              ? () => {
-                  radarControlsOpen = false;
-                  openLayersPanel('overlays');
-                }
+              ? () => requestRadarPanelAction({ kind: 'overlays' })
               : undefined}
           />
         {:catch}

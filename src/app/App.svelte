@@ -1037,6 +1037,8 @@ const marineRadar = createMarineRadarController({
 // (from the gear the layers panel is still behind it, so going to the menu would strand the navigator).
 let radarControlsOpen = $state(false);
 let radarOpenedFrom = $state<'menu' | 'layers'>('menu');
+let radarDraftDirty = $state(false);
+let radarCloseRequested = $state(false);
 
 // Auto-enable the radar echo the first time a radar is discovered, then latch so a later manual
 // toggle-off in the Layers panel is never overridden. The radar layer row's toggle is disabled until a
@@ -1233,7 +1235,8 @@ const menuItems = $derived<MenuItem[]>([
       radarOpenedFrom = 'menu';
       // The echo reveals on first radar discovery and when transmit is keyed up, so opening the
       // panel must not force the layer back on: that would override an explicit toggle-off.
-      radarControlsOpen = !radarControlsOpen;
+      if (radarControlsOpen && radarDraftDirty) radarCloseRequested = true;
+      else radarControlsOpen = !radarControlsOpen;
     },
   },
   {
@@ -2130,6 +2133,8 @@ const plotterActions = {
     bind:weatherPanelOpen
     bind:radarControlsOpen
     bind:radarOpenedFrom
+    bind:radarDraftDirty
+    bind:radarCloseRequested
     bind:mapInstance
     {companionBase}
     {chartLockerAccessUrl}

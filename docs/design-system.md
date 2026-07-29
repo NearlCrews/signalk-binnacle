@@ -426,6 +426,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
     `.is-on` and `aria-pressed`. A lone "Off" button is ambiguous; the segmented pair makes the state
     self-evident.
   - A larger enum: `<select class="input">`, full width in a label-on-top field.
+  - A structured provider value, such as a radar guard zone: a separate accepted snapshot and draft,
+    stacked `UnitField` controls, one whole-object Save, and an explicit Cancel. A provider update
+    during editing creates a visible conflict instead of replacing the draft. Any discard prompt
+    stays outside a collapsible disclosure so navigation cannot hide it.
   - A toggle list row (a layer, a weather overlay): `.row-interactive` with `.is-on` for the lit state.
   - A saved-item list: `SavedList` over `.card-frame` cards.
   - A destructive or immediate navigation action: `InlineConfirm` (armed), never a blocking confirm.

@@ -65,19 +65,53 @@ WebGL renderer health are reported separately.
 
 ## Controls and units
 
-Capabilities remain data-driven. Binnacle handles number, enum, boolean, string, button, compound,
+Capabilities remain data-driven. Binnacle parses number, enum, boolean, string, button, compound,
 sector, zone, and rectangle definitions, including categories, ordering, descriptions, read-only state,
-automatic mode, enabled state, and allowed state. Complex area controls are shown read-only and direct
-the user to the radar display for safe geometry editing.
+automatic mode, enabled state, and live allowed state. Unknown compound controls stay readable and
+read-only. Rectangle values use the Radar API's `x1`, `y1`, `x2`, `y2`, and `width` fields.
+
+A guard zone is editable only when the provider reports the object-keyed native `dataType: "zone"`
+dialect with:
+
+- angular bounds in radians;
+- a positive bounded `maxDistance`;
+- `hasEnabled: true`; and
+- a complete live value containing `value`, `endValue`, `startDistance`, `endDistance`, and `enabled`.
+
+The panel snapshots the accepted geometry when Edit starts. Form changes affect only that draft. Save
+revalidates every field and sends one complete geometry update, while Cancel leaves the provider
+unchanged. Start and end angles are not sorted because a valid zone can cross the capability boundary.
+A provider update during editing preserves the draft, reports a conflict, and requires the navigator
+to reload the current geometry before saving. Closing the panel, going Back, switching radars, or
+opening overlay settings asks before discarding a dirty draft.
+
+Enabled means the zone is configured and active at the provider. It is not write permission and does
+not mean the zone is alarming. Alarm styling and copy remain reserved for a provider-reported
+notification. Live `allowed: false`, static read-only state, missing write access, and an in-flight
+write all block Save independently.
+
+Sector editing remains read-only because a sector can describe a no-transmit area and therefore change
+the radar's emission envelope. Rectangle and generic compound editors also remain unsupported until
+their individual provider and hardware behavior is validated. The form is the complete accessible
+workflow; Binnacle does not claim chart gesture ownership for radar geometry in this slice.
 
 Radar API values remain SI in state and writes. Meters follow the server's metric or imperial display
 preference, radians display as degrees, and seconds display as durations. Converted slider bounds and
 steps return to SI when committed. A manual write to an automatic control explicitly sends `auto: false`.
 
-Writes are optimistic and latest-write-wins per control. The panel shows pending state and rejected
-writes, restores the exact prior value after the latest write fails, and explains when read-write access
-is required. Dotted control ids reconcile from Signal K deltas without being mistaken for nested
-controls, and closing the radar controller stops its capability polling.
+Writes are optimistic and serialized per radar and control. If another value is queued while a request
+is active, Binnacle coalesces unsent values to the newest snapshot so an older request cannot reach the
+radar after the desired final value. Polling stays excluded for the full request lifetime, then observes
+a short echo grace period. The panel shows pending state and rejected writes, restores the exact prior
+scalar or geometry entry after the final write fails, and explains when read-write access is required.
+Every write rechecks static read-only state and the live allowed flag at the controller boundary.
+Dotted control ids reconcile from Signal K deltas without being mistaken for nested controls, and
+closing the radar controller stops its capability polling.
+
+The Signal K single-control route and some providers each unwrap or wrap `body.value`, which can nest
+a structured value and lose its required wire shape. Structured writes therefore use the standard
+bulk-control Radar API route with one control map. The server passes that map to the provider's bulk
+write unchanged, so all zone fields arrive together. Binnacle does not call a Mayara-specific route.
 
 ## Night-red behavior
 
@@ -88,11 +122,20 @@ pixel.
 ## Verification
 
 Focused tests cover Radar API parsing, bounded geometry, relative and cross-origin URLs, token handling,
-protobuf decoding, spoke integration, pending-frame state, buffer recycling, control sequencing, provider
-removal, heading math, WebGL setup, theme tables, range geometry, vector overlays, and synthetic radar
-frames. The Playwright smoke suite verifies both the unavailable Radar menu path on a stock server and
-a provider-backed discovery, control hydration, identity, status, transmit confirmation, direct
-overlay-settings transition, and slider path.
+protobuf decoding, spoke integration, pending-frame state, buffer recycling, serialized control
+writes, whole-entry rollback, live permission changes, provider removal, heading math, WebGL setup,
+theme tables, range geometry, vector overlays, and synthetic radar frames. The Playwright smoke suite
+verifies both the unavailable Radar menu path on a stock server and a provider-backed discovery,
+control hydration, identity, status, transmit confirmation, guarded radar switching and menu
+dismissal, direct overlay-settings transition from a collapsed disclosure, slider path, 320 px
+guard-zone form, and the exact atomic bulk-control payload.
+
+The native guard-zone fixture and SI round trip were also verified against the Mayara 3.7.0 built-in
+emulator. The provider-hop contract is covered separately using the Signal K bulk-control envelope
+that Mayara forwards unchanged. These checks confirm the `zone` capability bounds and a
+read-after-write value containing both angles, both distances, and enabled state. They are
+provider-emulator evidence, not a claim that every radar model has been tested. Sector and rectangle
+support still require their own hardware matrix.
 
 For provider development, use the current Mayara emulator or a captured binary fixture and run:
 

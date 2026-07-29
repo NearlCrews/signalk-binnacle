@@ -12,11 +12,19 @@ import {
   setPower as setPowerRequest,
   spokesUrl,
   writeControl,
+  writeStructuredControl,
 } from './radar-client';
+import { controlWriteBlockReason } from './radar-controls-model';
 import type { RadarFrame } from './radar-frame-core';
 import { radarFlushHz } from './radar-limits';
-import { POWER_PENDING_KEY, type RadarControlEntry, type RadarStatus } from './radar-types';
+import {
+  POWER_PENDING_KEY,
+  type RadarControlEntry,
+  type RadarStatus,
+  type RadarZoneValue,
+} from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
+import { validateRadarZone } from './radar-zone-model';
 
 export interface MarineRadarDeps {
   origin: string;
@@ -31,8 +39,36 @@ export interface MarineRadarDeps {
 const REOPEN_BASE_MS = 1000;
 const REOPEN_MAX_MS = 30_000;
 const CONTROL_POLL_MS = 15_000;
-const PENDING_MS = 3000;
+const ECHO_GRACE_MS = 3000;
 const STALE_MS = 5000;
+
+interface ControlSnapshot {
+  entryExists: boolean;
+  entry?: RadarControlEntry;
+  valueExists: boolean;
+  value?: number | string | boolean;
+  autoExists: boolean;
+  auto?: boolean;
+}
+
+type QueuedPayload =
+  | { kind: 'scalar'; value: ControlWrite }
+  | { kind: 'zone'; value: RadarZoneValue };
+
+interface QueuedControlWrite {
+  payload: QueuedPayload;
+  desired: ControlSnapshot;
+  resolve: () => void;
+}
+
+interface ControlWriteQueue {
+  radarId: string;
+  controlId: string;
+  selectionEpoch: number;
+  accepted: ControlSnapshot;
+  active: boolean;
+  queued?: QueuedControlWrite;
+}
 
 export function createMarineRadarController(deps: MarineRadarDeps) {
   const store = new MarineRadarStore();
@@ -57,22 +93,28 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   let liveFrame: RadarFrame | undefined;
   let discoveryGeneration = 0;
   let selectionGeneration = 0;
+  let selectionEpoch = 0;
   let streamGeneration = 0;
   let streamLifecycle = Promise.resolve();
   let streamRadarId: string | undefined;
-  const pending = new Map<string, number>();
+  const echoGrace = new Map<string, number>();
+  const controlWriteQueues = new Map<string, ControlWriteQueue>();
   const writeGenerations = new Map<string, number>();
 
-  function markPending(id: string): void {
-    pending.set(id, Date.now() + PENDING_MS);
+  function markEchoGrace(id: string): void {
+    echoGrace.set(id, Date.now() + ECHO_GRACE_MS);
   }
 
   function pendingIds(): Set<string> {
     const now = Date.now();
-    const live = new Set<string>();
-    for (const [id, expiry] of pending) {
+    const live = new Set(
+      Object.entries(store.pendingControls)
+        .filter(([, active]) => active)
+        .map(([id]) => id),
+    );
+    for (const [id, expiry] of echoGrace) {
       if (expiry > now) live.add(id);
-      else pending.delete(id);
+      else echoGrace.delete(id);
     }
     return live;
   }
@@ -243,6 +285,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     if (disposed) return;
     const generation = ++discoveryGeneration;
     if (!deps.radarAvailable()) {
+      if (store.selectedId !== undefined) selectionEpoch += 1;
       store.setAvailability('absent');
       store.setDiscovered([]);
       await syncStreamLifecycle();
@@ -251,8 +294,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     store.setAvailability('probing');
     const result = await discoverRadars(deps.origin, deps.getToken());
     if (disposed || generation !== discoveryGeneration) return;
+    const priorSelectedId = store.selectedId;
     store.setAvailability(result.availability);
     store.setDiscovered(result.radars);
+    if (store.selectedId !== priorSelectedId) selectionEpoch += 1;
     if (result.availability === 'auth-required') store.setControlsForbidden(true);
     store.statusDetail = result.detail;
     await loadSelected();
@@ -260,6 +305,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
 
   function selectRadar(id: string): void {
     if (id === store.selectedId) return;
+    selectionEpoch += 1;
     clearReopen();
     reopenAttempt = 0;
     store.select(id);
@@ -273,40 +319,183 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     return `The radar rejected the change (HTTP ${status}).`;
   }
 
+  function snapshotControl(controlId: string): ControlSnapshot {
+    const entry = store.controlEntries[controlId];
+    return {
+      entryExists: Object.hasOwn(store.controlEntries, controlId),
+      entry: entry ? { ...entry } : undefined,
+      valueExists: Object.hasOwn(store.controlValues, controlId),
+      value: store.controlValues[controlId],
+      autoExists: Object.hasOwn(store.controlAuto, controlId),
+      auto: store.controlAuto[controlId],
+    };
+  }
+
+  function restoreControl(controlId: string, snapshot: ControlSnapshot): void {
+    if (snapshot.entryExists && snapshot.entry) store.setControlEntry(controlId, snapshot.entry);
+    else store.deleteControlEntry(controlId);
+    if (snapshot.valueExists && snapshot.value !== undefined)
+      store.setControlValue(controlId, snapshot.value);
+    else delete store.controlValues[controlId];
+    if (snapshot.autoExists) store.setControlAuto(controlId, snapshot.auto === true);
+    else delete store.controlAuto[controlId];
+  }
+
+  function applyScalarControl(controlId: string, write: ControlWrite): void {
+    const definition = store.capabilities.find((entry) => entry.id === controlId);
+    const entry = { ...(store.controlEntries[controlId] ?? {}) };
+    if ('value' in write) {
+      entry.value = write.value;
+      if (definition?.modes?.includes('auto')) entry.auto = false;
+    }
+    if ('auto' in write && typeof write.auto === 'boolean') entry.auto = write.auto;
+    store.setControlEntry(controlId, entry);
+  }
+
+  function applyZoneControl(controlId: string, value: RadarZoneValue): void {
+    store.setControlEntry(controlId, {
+      ...(store.controlEntries[controlId] ?? {}),
+      ...value,
+    });
+  }
+
+  function queueKey(radarId: string, controlId: string): string {
+    return `${radarId}\u0000${controlId}`;
+  }
+
+  async function drainControlWrites(key: string, queue: ControlWriteQueue): Promise<void> {
+    queue.active = true;
+    while (queue.queued) {
+      if (
+        disposed ||
+        queue.selectionEpoch !== selectionEpoch ||
+        store.selectedId !== queue.radarId
+      ) {
+        queue.queued.resolve();
+        queue.queued = undefined;
+        break;
+      }
+      const current = queue.queued;
+      queue.queued = undefined;
+      const result =
+        current.payload.kind === 'zone'
+          ? await writeStructuredControl(
+              deps.origin,
+              deps.getToken(),
+              queue.radarId,
+              queue.controlId,
+              current.payload.value,
+            )
+          : await writeControl(
+              deps.origin,
+              deps.getToken(),
+              queue.radarId,
+              queue.controlId,
+              current.payload.value,
+            );
+      const stillSelected =
+        !disposed && queue.selectionEpoch === selectionEpoch && store.selectedId === queue.radarId;
+      if (stillSelected && result.ok) {
+        queue.accepted = current.desired;
+        store.setControlsForbidden(false);
+      } else if (stillSelected && (result.status === 401 || result.status === 403)) {
+        const superseded = queue.queued as QueuedControlWrite | undefined;
+        superseded?.resolve();
+        queue.queued = undefined;
+        restoreControl(queue.controlId, queue.accepted);
+        store.setControlsForbidden(true);
+        store.setControlError(queue.controlId, errorMessage(result.status));
+      } else if (stillSelected && !result.ok && !queue.queued) {
+        restoreControl(queue.controlId, queue.accepted);
+        store.setControlError(queue.controlId, errorMessage(result.status));
+      }
+      current.resolve();
+    }
+    queue.active = false;
+    if (controlWriteQueues.get(key) === queue) controlWriteQueues.delete(key);
+    if (
+      !disposed &&
+      queue.selectionEpoch === selectionEpoch &&
+      store.selectedId === queue.radarId
+    ) {
+      store.setControlPending(queue.controlId, false);
+      markEchoGrace(queue.controlId);
+    }
+  }
+
+  function enqueueControlWrite(
+    radarId: string,
+    controlId: string,
+    acceptedBeforeOptimistic: ControlSnapshot,
+    payload: QueuedPayload,
+  ): Promise<void> {
+    const key = queueKey(radarId, controlId);
+    let queue = controlWriteQueues.get(key);
+    if (!queue || queue.selectionEpoch !== selectionEpoch) {
+      queue = {
+        radarId,
+        controlId,
+        selectionEpoch,
+        accepted: acceptedBeforeOptimistic,
+        active: false,
+      };
+      controlWriteQueues.set(key, queue);
+    }
+    const promise = new Promise<void>((resolve) => {
+      queue?.queued?.resolve();
+      if (!queue) {
+        resolve();
+        return;
+      }
+      queue.queued = { payload, desired: snapshotControl(controlId), resolve };
+    });
+    store.setControlPending(controlId, true);
+    store.setControlError(controlId);
+    if (!queue.active) void drainControlWrites(key, queue);
+    return promise;
+  }
+
+  function controlDefinition(controlId: string) {
+    return store.capabilities.find((entry) => entry.id === controlId);
+  }
+
   async function setControl(controlId: string, write: ControlWrite): Promise<void> {
     const radar = store.selected;
     if (!radar) return;
-    const priorExists = Object.hasOwn(store.controlValues, controlId);
-    const priorValue = store.controlValues[controlId];
-    const priorAutoExists = Object.hasOwn(store.controlAuto, controlId);
-    const priorAuto = store.controlAuto[controlId];
-    const generation = (writeGenerations.get(controlId) ?? 0) + 1;
-    writeGenerations.set(controlId, generation);
-    const definition = store.capabilities.find((entry) => entry.id === controlId);
-    const payload =
-      'value' in write && definition?.modes?.includes('auto') ? { ...write, auto: false } : write;
-    if ('value' in payload) {
-      store.setControlValue(controlId, payload.value);
-      store.setControlAuto(controlId, false);
-    }
-    if ('auto' in payload && typeof payload.auto === 'boolean')
-      store.setControlAuto(controlId, payload.auto);
-    markPending(controlId);
-    store.setControlPending(controlId, true);
-    store.setControlError(controlId);
-    const result = await writeControl(deps.origin, deps.getToken(), radar.id, controlId, payload);
-    if (writeGenerations.get(controlId) !== generation || store.selectedId !== radar.id) return;
-    store.setControlPending(controlId, false);
-    if (result.ok) {
-      store.setControlsForbidden(false);
+    const definition = controlDefinition(controlId);
+    const blocked = controlWriteBlockReason(
+      definition,
+      store.controlEntries[controlId],
+      store.controlsForbidden,
+    );
+    if (blocked) {
+      store.setControlError(controlId, blocked);
       return;
     }
-    if (priorExists && priorValue !== undefined) store.setControlValue(controlId, priorValue);
-    else delete store.controlValues[controlId];
-    if (priorAutoExists) store.setControlAuto(controlId, priorAuto === true);
-    else delete store.controlAuto[controlId];
-    if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
-    store.setControlError(controlId, errorMessage(result.status));
+    const payload =
+      'value' in write && definition?.modes?.includes('auto') ? { ...write, auto: false } : write;
+    const accepted = snapshotControl(controlId);
+    applyScalarControl(controlId, payload);
+    await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'scalar', value: payload });
+  }
+
+  async function setZoneControl(controlId: string, value: RadarZoneValue): Promise<void> {
+    const radar = store.selected;
+    if (!radar) return;
+    const definition = controlDefinition(controlId);
+    const blocked = controlWriteBlockReason(
+      definition,
+      store.controlEntries[controlId],
+      store.controlsForbidden,
+    );
+    const validation = definition ? validateRadarZone(definition, value) : blocked;
+    if (blocked || validation) {
+      store.setControlError(controlId, blocked ?? validation);
+      return;
+    }
+    const accepted = snapshotControl(controlId);
+    applyZoneControl(controlId, value);
+    await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'zone', value });
   }
 
   async function setPower(status: RadarStatus): Promise<boolean> {
@@ -314,15 +503,20 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     if (!radar) return false;
     const generation = (writeGenerations.get(POWER_PENDING_KEY) ?? 0) + 1;
     writeGenerations.set(POWER_PENDING_KEY, generation);
+    const selectionEpochAtStart = selectionEpoch;
     const prior = store.operationalStatus;
     store.setOperationalStatus(status);
     store.setControlPending(POWER_PENDING_KEY, true);
     store.setControlError(POWER_PENDING_KEY);
-    markPending(POWER_PENDING_KEY);
     const result = await setPowerRequest(deps.origin, deps.getToken(), radar.id, status);
-    if (writeGenerations.get(POWER_PENDING_KEY) !== generation || store.selectedId !== radar.id)
+    if (
+      writeGenerations.get(POWER_PENDING_KEY) !== generation ||
+      selectionEpochAtStart !== selectionEpoch ||
+      store.selectedId !== radar.id
+    )
       return false;
     store.setControlPending(POWER_PENDING_KEY, false);
+    markEchoGrace(POWER_PENDING_KEY);
     if (!result.ok) {
       if (prior) store.setOperationalStatus(prior);
       if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
@@ -387,6 +581,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     dispose,
     selectRadar,
     setControl,
+    setZoneControl,
     setPower,
     setPolling,
     applyControlDelta,

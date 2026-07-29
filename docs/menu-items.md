@@ -69,8 +69,9 @@ source, and surrounding traffic before relying on it.
   plain-language ship type with the reported numeric id.
 - **Radar** stays discoverable without a provider and explains what is missing. Controls report radar
   identity, control-write state, spoke-stream health, renderer health, and stale pictures. Transmit
-  requires confirmation, Standby stays immediate, and Open overlay settings moves directly to the
-  Overlays view. See [Marine radar](marine-radar.md).
+  requires confirmation, Standby stays immediate, complete native guard zones have an atomic form
+  editor, and Open overlay settings moves directly to the Overlays view. See
+  [Marine radar](marine-radar.md).
 - **Anchor watch** prefers the Signal K Anchor API and falls back to a browser-only watch. A fresh GPS
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
   watch remains active independently. Server-mode changes require write access; client-mode changes

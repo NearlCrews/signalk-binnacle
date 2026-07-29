@@ -31,11 +31,22 @@ export interface RadarControlEntry {
   endValue?: number;
   startDistance?: number;
   endDistance?: number;
-  x?: number;
-  y?: number;
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
   width?: number;
-  height?: number;
   allowed?: boolean;
+}
+
+// The complete native Radar API guard-zone value. Angles are heading-relative radians, distances are
+// meters, and enabled is configuration state rather than write permission or an alarm indication.
+export interface RadarZoneValue {
+  value: number;
+  endValue: number;
+  startDistance: number;
+  endDistance: number;
+  enabled: boolean;
 }
 
 // Current control settings keyed by control id, as reported in RadarInfo.controls.
@@ -73,6 +84,9 @@ export interface ControlDefinition {
   id: string;
   name: string;
   description?: string;
+  // Only the object-keyed native dialect defines the sector, zone, and rectangle wire shapes.
+  // Keeping the dialect explicit prevents an arbitrary V5 compound control from gaining an editor.
+  dialect: 'native' | 'v5' | 'fallback';
   type:
     | 'boolean'
     | 'number'
@@ -90,7 +104,7 @@ export interface ControlDefinition {
   category?: string;
   order?: number;
   hasEnabled?: boolean;
-  allowed?: boolean;
+  maxDistance?: number;
 }
 
 // The subset of GET /radars/{id}/capabilities Binnacle reads.

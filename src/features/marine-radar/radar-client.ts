@@ -25,6 +25,7 @@ import type {
   RadarControls,
   RadarInfo,
   RadarStatus,
+  RadarZoneValue,
 } from './radar-types';
 
 // The Signal K v2 radar API. The server serves a JSON ARRAY of RadarInfo objects here (each with its
@@ -36,6 +37,7 @@ const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
 const RADAR_STATUSES: ReadonlySet<string> = new Set(['off', 'standby', 'transmit', 'warming']);
 const MAX_RADAR_RANGE_METERS = 1_000_000;
+const MAX_RADAR_CONTROL_MAGNITUDE = 1_000_000;
 const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'boolean',
   'number',
@@ -107,9 +109,19 @@ export function parseRadarControls(raw: unknown): RadarControls {
     if (!id) continue;
     if (isRecord(entry)) {
       const value = entry.value;
+      const boundedNumber = (candidate: unknown): number | undefined =>
+        isFiniteNumber(candidate) && Math.abs(candidate) <= MAX_RADAR_CONTROL_MAGNITUDE
+          ? candidate
+          : undefined;
+      const boundedDistance = (candidate: unknown): number | undefined =>
+        isFiniteNumber(candidate) && candidate >= 0 && candidate <= MAX_RADAR_CONTROL_MAGNITUDE
+          ? candidate
+          : undefined;
       out[id] = {
         value:
-          (typeof value === 'number' && Number.isFinite(value)) ||
+          (typeof value === 'number' &&
+            Number.isFinite(value) &&
+            Math.abs(value) <= MAX_RADAR_CONTROL_MAGNITUDE) ||
           (typeof value === 'string' &&
             value.length <= MAX_RADAR_TEXT_LENGTH &&
             !hasControlCharacters(value)) ||
@@ -117,15 +129,16 @@ export function parseRadarControls(raw: unknown): RadarControls {
             ? value
             : undefined,
         auto: typeof entry.auto === 'boolean' ? entry.auto : undefined,
-        autoValue: isFiniteNumber(entry.autoValue) ? entry.autoValue : undefined,
+        autoValue: boundedNumber(entry.autoValue),
         enabled: typeof entry.enabled === 'boolean' ? entry.enabled : undefined,
-        endValue: isFiniteNumber(entry.endValue) ? entry.endValue : undefined,
-        startDistance: isFiniteNumber(entry.startDistance) ? entry.startDistance : undefined,
-        endDistance: isFiniteNumber(entry.endDistance) ? entry.endDistance : undefined,
-        x: isFiniteNumber(entry.x) ? entry.x : undefined,
-        y: isFiniteNumber(entry.y) ? entry.y : undefined,
-        width: isFiniteNumber(entry.width) ? entry.width : undefined,
-        height: isFiniteNumber(entry.height) ? entry.height : undefined,
+        endValue: boundedNumber(entry.endValue),
+        startDistance: boundedDistance(entry.startDistance),
+        endDistance: boundedDistance(entry.endDistance),
+        x1: boundedNumber(entry.x1),
+        y1: boundedNumber(entry.y1),
+        x2: boundedNumber(entry.x2),
+        y2: boundedNumber(entry.y2),
+        width: boundedDistance(entry.width),
         allowed: typeof entry.allowed === 'boolean' ? entry.allowed : undefined,
       };
     }
@@ -247,6 +260,7 @@ function toControlDefinition(id: string, raw: unknown): ControlDefinition | unde
     id: idOnWire,
     name: boundedText(raw.name) ?? idOnWire,
     description: boundedText(raw.description, 1_024),
+    dialect: 'native',
     type,
     range: parseRange(raw),
     values: type === 'enum' ? parseEnumValues(raw.descriptions, raw.validValues) : undefined,
@@ -256,7 +270,12 @@ function toControlDefinition(id: string, raw: unknown): ControlDefinition | unde
     category: boundedText(raw.category),
     order: isFiniteNumber(raw.order) ? raw.order : undefined,
     hasEnabled: raw.hasEnabled === true,
-    allowed: typeof raw.allowed === 'boolean' ? raw.allowed : undefined,
+    maxDistance:
+      isFiniteNumber(raw.maxDistance) &&
+      raw.maxDistance > 0 &&
+      raw.maxDistance <= MAX_RADAR_CONTROL_MAGNITUDE
+        ? raw.maxDistance
+        : undefined,
   };
 }
 
@@ -308,6 +327,7 @@ function toControlDefinitionV5(raw: unknown): ControlDefinition | undefined {
     id,
     name: boundedText(raw.name) ?? id,
     description: boundedText(raw.description, 1_024),
+    dialect: 'v5',
     type,
     range: parseRangeV5(raw),
     values: type === 'enum' ? parseValuesV5(raw.values) : undefined,
@@ -316,7 +336,6 @@ function toControlDefinitionV5(raw: unknown): ControlDefinition | undefined {
     category: boundedText(raw.category),
     order: isFiniteNumber(raw.order) ? raw.order : undefined,
     hasEnabled: raw.hasEnabled === true,
-    allowed: typeof raw.allowed === 'boolean' ? raw.allowed : undefined,
   };
 }
 
@@ -416,6 +435,7 @@ export function capabilitiesFromControls(radar: RadarInfo): ControlDefinition[] 
     out.push({
       id,
       name: id,
+      dialect: 'fallback',
       type:
         typeof entry.value === 'string'
           ? 'string'
@@ -529,6 +549,28 @@ export async function writeControl(
   const status = result?.status ?? 0;
   if (!result?.ok) {
     console.warn(`[marine-radar] control ${controlId} write rejected: ${status || 'network'}`);
+  }
+  return { ok: result?.ok ?? false, status };
+}
+
+// The single-control route forwards body.value to the provider, but some providers then wrap that
+// value again before calling their radar API. Use the standard bulk-control route for structured
+// values so the server passes a control map to setControls and the provider preserves every geometry
+// field. The outer value envelope matches the server route's accepted request shape.
+export async function writeStructuredControl(
+  origin: string,
+  token: string | undefined,
+  radarId: string,
+  controlId: string,
+  value: RadarZoneValue,
+): Promise<{ ok: boolean; status: number }> {
+  const url = `${origin}${RADARS_PATH}/${encodeURIComponent(radarId)}`;
+  const result = await sendJson(url, token, 'PUT', { value: { [controlId]: value } });
+  const status = result?.status ?? 0;
+  if (!result?.ok) {
+    console.warn(
+      `[marine-radar] structured control ${controlId} write rejected: ${status || 'network'}`,
+    );
   }
   return { ok: result?.ok ?? false, status };
 }

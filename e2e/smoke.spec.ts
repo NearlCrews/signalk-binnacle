@@ -317,7 +317,9 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
 });
 
 test('radar discovery opens a hydrated provider-driven controls panel', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
   await page.addInitScript(() => localStorage.clear());
+  const radarWrites: Array<{ pathname: string; body: unknown }> = [];
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
@@ -330,21 +332,41 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   });
   await page.route(/\/signalk\/v2\/api\/vessels\/self\/radars/, async (route) => {
     const url = route.request().url();
+    const requestBody = route.request().postDataJSON() as
+      | { value?: Record<string, unknown> }
+      | undefined;
+    if (route.request().method() === 'PUT') {
+      radarWrites.push({ pathname: new URL(url).pathname, body: requestBody });
+      await route.fulfill({ status: 200, body: '' });
+      return;
+    }
     if (url.endsWith('/capabilities')) {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          controls: [
-            {
-              id: 'gain',
+          controls: {
+            gain: {
               name: 'Gain',
               description: 'Receiver sensitivity',
-              type: 'number',
-              range: { min: 0, max: 100, step: 1 },
-              modes: ['auto', 'manual'],
+              dataType: 'number',
+              minValue: 0,
+              maxValue: 100,
+              stepValue: 1,
+              hasAuto: true,
             },
-          ],
+            guardZone1: {
+              name: 'Guard zone 1',
+              description: 'Heading-relative target detection area',
+              dataType: 'zone',
+              minValue: -Math.PI,
+              maxValue: Math.PI,
+              stepValue: Math.PI / 180,
+              units: 'rad',
+              maxDistance: 100_000,
+              hasEnabled: true,
+            },
+          },
         }),
       });
       return;
@@ -353,7 +375,18 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ gain: { value: 42, auto: false }, power: { value: 'standby' } }),
+        body: JSON.stringify({
+          gain: { value: 42, auto: false },
+          power: { value: 'standby' },
+          guardZone1: {
+            value: -Math.PI / 2,
+            endValue: Math.PI / 2,
+            startDistance: 200,
+            endDistance: 500,
+            enabled: false,
+            allowed: true,
+          },
+        }),
       });
       return;
     }
@@ -369,7 +402,39 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
           spokesPerRevolution: 2048,
           maxSpokeLen: 1024,
           range: 1852,
-          controls: { gain: { value: 40, auto: false }, power: { value: 'standby' } },
+          controls: {
+            gain: { value: 40, auto: false },
+            power: { value: 'standby' },
+            guardZone1: {
+              value: -Math.PI / 2,
+              endValue: Math.PI / 2,
+              startDistance: 200,
+              endDistance: 500,
+              enabled: false,
+              allowed: true,
+            },
+          },
+        },
+        {
+          id: 'halo-b',
+          name: 'Flybridge Halo',
+          brand: 'Navico',
+          status: 'standby',
+          spokesPerRevolution: 2048,
+          maxSpokeLen: 1024,
+          range: 1852,
+          controls: {
+            gain: { value: 38, auto: false },
+            power: { value: 'standby' },
+            guardZone1: {
+              value: -Math.PI / 3,
+              endValue: Math.PI / 3,
+              startDistance: 150,
+              endDistance: 450,
+              enabled: false,
+              allowed: true,
+            },
+          },
         },
       ]),
     });
@@ -387,11 +452,66 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await expect(panel.locator('.power-status')).toHaveText('Standby');
   await expect(panel.getByText('42', { exact: true })).toBeVisible();
   await expect(panel.getByRole('slider', { name: 'Gain' })).toHaveValue('42');
+  await panel.getByRole('button', { name: 'Advanced controls' }).click();
+  await expect(panel.getByText(/Zone disabled/)).toBeVisible();
+  await panel.getByRole('button', { name: 'Edit guard zone' }).click();
+  await panel.getByRole('spinbutton', { name: 'Start angle' }).fill('-45');
+  await panel.getByRole('spinbutton', { name: `Inner distance in m` }).fill('250');
+  await panel.getByRole('spinbutton', { name: `Outer distance in m` }).fill('750');
+  await panel.getByRole('button', { name: 'Save zone' }).click();
+  await expect.poll(() => radarWrites).toHaveLength(1);
+  expect(radarWrites[0]).toEqual({
+    pathname: '/signalk/v2/api/vessels/self/radars/halo',
+    body: {
+      value: {
+        guardZone1: {
+          value: -Math.PI / 4,
+          endValue: Math.PI / 2,
+          startDistance: 250,
+          endDistance: 750,
+          enabled: false,
+        },
+      },
+    },
+  });
+  const panelBox = await panel.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect((panelBox?.x ?? 0) + (panelBox?.width ?? 0)).toBeLessThanOrEqual(320);
   await panel.getByRole('button', { name: 'Transmit', exact: true }).click();
   const transmitConfirm = panel.getByRole('group', { name: 'Start transmitting radar energy?' });
   await expect(transmitConfirm).toBeVisible();
   await transmitConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await panel.getByRole('button', { name: 'Edit guard zone' }).click();
+  const endAngle = panel.getByRole('spinbutton', { name: 'End angle' });
+  await endAngle.fill('60');
+  await endAngle.press('Tab');
+  const radarSelector = panel.getByRole('combobox', { name: 'Select radar' });
+  await radarSelector.selectOption('halo-b');
+  const discardConfirm = panel.getByRole('group', {
+    name: 'Discard unsaved guard-zone changes?',
+  });
+  await expect(discardConfirm).toBeVisible();
+  await expect(radarSelector).toHaveValue('halo');
+  await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(radarSelector).toHaveValue('halo');
+  await expect(panel.getByText('Cabin Halo · Navico')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: /Radar$/ })
+    .click();
+  await expect(discardConfirm).toBeVisible();
+  await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeVisible();
+
+  await panel.getByRole('button', { name: 'Advanced controls' }).click();
   await panel.getByRole('button', { name: 'Open overlay settings' }).click();
+  await expect(discardConfirm).toBeVisible();
+  await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Open overlay settings' }).click();
+  await discardConfirm.getByRole('button', { name: 'Discard' }).click();
   const layers = page.locator('#layers-panel');
   await expect(layers.getByRole('button', { name: 'Overlays', exact: true })).toHaveAttribute(
     'aria-pressed',

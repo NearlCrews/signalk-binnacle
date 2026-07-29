@@ -168,6 +168,20 @@ export class MarineRadarStore {
     this.controlAuto[id] = auto;
   }
 
+  setControlEntry(id: string, entry: RadarControlEntry): void {
+    this.controlEntries[id] = { ...entry };
+    if (entry.value !== undefined) this.controlValues[id] = entry.value;
+    else delete this.controlValues[id];
+    if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
+    else delete this.controlAuto[id];
+  }
+
+  deleteControlEntry(id: string): void {
+    delete this.controlEntries[id];
+    delete this.controlValues[id];
+    delete this.controlAuto[id];
+  }
+
   setControlsForbidden(forbidden: boolean): void {
     this.controlsForbidden = forbidden;
   }
