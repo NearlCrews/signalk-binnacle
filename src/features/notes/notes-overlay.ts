@@ -83,7 +83,10 @@ export function createNotesOverlay(
   let renderedNotes: NotePoint[] | undefined;
   let renderedRemoteNotes: NotePoint[] | undefined;
   let renderedViewport: Bbox4 | undefined;
-  let renderedPersonalVersion = personalNotes?.version ?? 0;
+  // A fresh overlay has not rendered the session's confirmed-write overlay yet, even when it is
+  // reconstructed after an accepted mutation. Start below the store's nonnegative version range so
+  // the first sync merges pending personal notes before a provider response can fail.
+  let renderedPersonalVersion = personalNotes ? -1 : 0;
   let lastPersonalRefreshVersion = personalNotes?.refreshVersion ?? 0;
   let lastStatus: PoiViewState | undefined;
   let failed = false;

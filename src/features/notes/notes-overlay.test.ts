@@ -281,6 +281,8 @@ describe('notes overlay', () => {
       name: 'Accepted create',
       ownedByBinnacle: true,
     };
+    personalNotes.upsert(accepted);
+    personalNotes.requestRefresh();
     fetchNotesMock.mockResolvedValue(undefined);
     const seen: NotePoint[][] = [];
     const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
@@ -290,8 +292,6 @@ describe('notes overlay', () => {
     });
     const ctx = viewCtx({ zoom: 12, lng: 0, lat: 0 });
 
-    personalNotes.upsert(accepted);
-    personalNotes.requestRefresh();
     overlay.sync(ctx);
     await settle();
 
