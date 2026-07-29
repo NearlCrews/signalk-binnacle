@@ -44,6 +44,7 @@ function deferred<T>() {
 function makeController(
   writeBlocked = false,
   wait: (ms: number) => Promise<void> = async () => {},
+  editBlockedReason?: () => string | undefined,
 ) {
   const routeStore = new RouteStore();
   const toast = { show: vi.fn() } as unknown as Toast;
@@ -53,21 +54,23 @@ function makeController(
     clear: vi.fn(),
   } as unknown as CourseGuidance;
   const fitBounds = vi.fn();
+  const startRouteEdit = vi.fn(() => true);
   const controller = createRouteController({
     origin: 'http://sk',
     getToken: () => 'token',
     writeBlocked: () => writeBlocked,
+    editBlockedReason,
     routeStore,
     courseGuidance: guidance,
     toast,
     flyTo: vi.fn(),
     fitBounds,
-    startRouteEdit: vi.fn(() => true),
+    startRouteEdit,
     stopRouteEdit: vi.fn(),
     getTrackPoints: () => [],
     wait,
   });
-  return { controller, routeStore, toast, guidance, fitBounds };
+  return { controller, routeStore, toast, guidance, fitBounds, startRouteEdit };
 }
 
 describe('createRouteController', () => {
@@ -337,6 +340,25 @@ describe('createRouteController', () => {
     controller.beginNewRoute({ latitude: 42, longitude: -83 });
     expect(routeStore.working).toBeUndefined();
     expect(toast.show).toHaveBeenCalledWith('A write token is needed to create routes.');
+  });
+
+  it('blocks new and existing route editing while another chart tool owns gestures', () => {
+    const reason = 'Finish the measurement before editing a route.';
+    const { controller, routeStore, toast, startRouteEdit } = makeController(
+      false,
+      async () => {},
+      () => reason,
+    );
+    routeStore.setRoutes([route]);
+
+    controller.beginNewRoute({ latitude: 42, longitude: -83 });
+    controller.onEditRoute('r1');
+
+    expect(routeStore.working).toBeUndefined();
+    expect(startRouteEdit).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledTimes(2);
+    expect(toast.show).toHaveBeenNthCalledWith(1, reason);
+    expect(toast.show).toHaveBeenNthCalledWith(2, reason);
   });
 
   describe('goto destinations', () => {

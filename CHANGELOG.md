@@ -8,6 +8,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Measure points can now be selected through a 44 px chart target or the strip, deliberately moved
+  by drag, chart tap, or chart-center keyboard workflow, and deleted with operation-based Undo.
+  Selected points show both adjacent rhumb-leg distances and true bearings, while antimeridian-safe
+  distance labels use collision placement above a bounded zoom. Move mode cancels before Measure on
+  Escape, Clear requires confirmation, and route editing is excluded in both directions without
+  silently clearing either tool.
 - Complete native Radar API guard zones now have an explicit form editor with degree and server-length
   display conversion, separate enabled state, atomic Save, Cancel, dirty-discard confirmation, live
   provider conflict detection, exact rollback, and provider-safe bulk writes. Radar selection and

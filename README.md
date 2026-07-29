@@ -113,9 +113,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   marks the spot, publishes the boat-wide Signal K alarm, and raises a recovery strip with live
   bearing, range, and elapsed time, plus an opt-in **Steer to MOB** handoff to the course system. An
   MOB raised by another station shows here too.
-- **Measure:** tap points on the chart for rhumb-line leg range, true bearing, and
-  a running total. The active strip guides each next tap, Undo and Clear keep the tool active, and
-  Done removes its temporary session-only points.
+- **Measure:** tap points on the chart for rhumb-line leg range, true bearing, and a running total.
+  Select any point from its generous chart target or the strip, move or delete it, and Undo the
+  completed operation without dismantling later legs. Collision-managed leg labels stay restrained
+  by zoom, Clear confirms before resetting, and Done removes the temporary session-only points.
 - **Tracks:** record, pause, save, show, and export segmented voyage tracks as
   GeoJSON. GPS gaps never become invented route legs. Save the latest continuous segment as a reusable
   route, or confirm a retrace to navigate home along it. The panel explains persistence, access,
@@ -260,8 +261,9 @@ credentials and boat data are encrypted on the local network.
 - **Open the context menu.** Long-press the chart on a touch screen, right-click with a mouse, or focus
   the chart and use the Context Menu key or Shift+F10. Drop a waypoint, choose **Go to here** to
   navigate straight to that point, or start a route or measurement.
-- **Measure a chart leg.** Open **Measure**, tap a start and destination, then read the latest rhumb
-  range, true bearing, and total in the strip. Use **Done** when finished.
+- **Measure a chart leg.** Open **Measure**, tap a start and destination, then read the rhumb range,
+  true bearing, and total. Select a point to inspect both adjacent legs, choose **Move point** to drag
+  or place it again, and use **Undo** to reverse an add, move, or deletion. Use **Done** when finished.
 - **Manage charts and overlays.** Open **Charts** to select chart sources, inspect their details,
   repair a saved PMTiles URL, refresh its metadata, or change server sharing. Switch to **Overlays**
   to toggle overlays, change opacity, and drag rows to reorder their stack.

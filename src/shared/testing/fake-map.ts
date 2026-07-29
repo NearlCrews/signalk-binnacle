@@ -17,6 +17,8 @@ export function createFakeMap() {
   const layers = new Map<string, Record<string, unknown>>();
   const images = new Set<string>();
   const updatedImages: string[] = [];
+  const renderedFeatures: GeoJSON.Feature[] = [];
+  let dragPanEnabled = true;
   // A source is not loaded until its tiles arrive, as in real MapLibre; markSourceLoaded plus an
   // emitted 'sourcedata' event let a test drive the deferred load path. Event handlers are stored,
   // not a bare spy, so emit can fire them.
@@ -33,6 +35,7 @@ export function createFakeMap() {
     layers,
     images,
     updatedImages,
+    renderedFeatures,
     hasImage: (id: string) => images.has(id),
     addImage: (id: string) => images.add(id),
     removeImage: (id: string) => images.delete(id),
@@ -79,6 +82,16 @@ export function createFakeMap() {
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
     setGlobalStateProperty: vi.fn(),
+    queryRenderedFeatures: vi.fn(() => renderedFeatures),
+    dragPan: {
+      isEnabled: () => dragPanEnabled,
+      enable: vi.fn(() => {
+        dragPanEnabled = true;
+      }),
+      disable: vi.fn(() => {
+        dragPanEnabled = false;
+      }),
+    },
     on: (
       type: string,
       layerOrHandler: string | ((event: unknown) => void),

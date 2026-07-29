@@ -1015,9 +1015,23 @@ function captureMapCommands(commands: MapCommands): void {
 // Arming always reveals the measure layer first: an armed tool drawing into an invisible layer
 // would read as broken. Selecting the active menu item keeps the current measurement. The chart's
 // "Measure from here" action explicitly requests a fresh measurement at that position.
-function armMeasure(reset = false): void {
+function armMeasure(reset = false): boolean {
+  if (routeStore.working) {
+    toast.show('Save or cancel the route edit before starting Measure.');
+    return false;
+  }
   setLayerVisible('measure', true);
   if (!measure.active || reset) measure.start();
+  return true;
+}
+
+function moveSelectedMeasureToCenter(): void {
+  const center = mapInstance?.getCenter();
+  if (!center) {
+    toast.show('The chart is still loading. Try moving the point again in a moment.');
+    return;
+  }
+  measure.commitMove({ latitude: center.lat, longitude: center.lng });
 }
 
 // The marine radar controller owns the spokes worker and the echo layer. Detection runs once server
@@ -1193,6 +1207,8 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Measure',
     icon: Ruler,
     group: 'Navigate',
+    disabled: routeStore.working !== undefined,
+    disabledLabel: 'Measure (save or cancel the route edit first)',
     pressed: measure.active,
     onSelect: armMeasure,
   },
@@ -1425,6 +1441,8 @@ const routeController = createRouteController({
   origin,
   getToken: () => chartsToken,
   writeBlocked: () => auth.writeBlocked,
+  editBlockedReason: () =>
+    measure.active ? 'Finish the measurement before editing a route.' : undefined,
   routeStore,
   courseGuidance,
   flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),
@@ -2030,6 +2048,7 @@ const plotterActions = {
   onRetryHistoryProviders: () => void probeHistoryProviders(true, true),
   onRetryChartLocker: () => void companionStatus.refresh(),
   armMeasure,
+  moveSelectedMeasureToCenter,
   toggleCollisionMute,
   selectPoi,
   flyToPosition: (position: LatLon) => mapCommands?.flyTo(position.latitude, position.longitude),

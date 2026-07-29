@@ -500,8 +500,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened
   order, not a raw window listener.
 - A temporary chart-tap mode changes the chart cursor where a pointer exists, keeps a live strip with
-  the next gesture, and restores the prior cursor and interaction state on exit. The Measure tool is
-  the reference.
+  the next gesture, and restores the prior cursor and interaction state on exit. If it adds a nested
+  manipulation mode, the first Escape cancels that mode and preserves the parent tool. Measure is the
+  reference: point selection is separate from movement, the invisible chart hit area is 44 px, and
+  the strip supplies the keyboard-equivalent movement path.
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.

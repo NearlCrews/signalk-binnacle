@@ -134,8 +134,11 @@ level. Inside, in this order:
    what a destructive action removes. If persistence degrades to memory, surface that state before the
    user leaves the panel. The Tracks guide documents the complete lifecycle pattern.
 10. A chart-tap tool uses a visible mode affordance, gives the next gesture in its live strip, validates
-    and bounds collected points, and restores chart chrome on exit. Selecting an already-active menu
-    item must not silently erase work. Measure is the canonical example.
+    and bounds collected points, and restores chart chrome on exit. Selection must not implicitly
+    begin a destructive drag. A nested manipulation mode cancels before the parent tool on Escape,
+    chart hit areas meet the 44 px target, and the strip supplies a keyboard-equivalent path.
+    Selecting an already-active menu item must not silently erase work. Measure is the canonical
+    example.
 11. Sensor-derived actions must reject stale inputs at the action boundary, not only gray the button.
     Center, Follow, and Anchor watch are the canonical GPS examples. Readouts derived from stale own
     position must become unavailable instead of keeping frozen range or bearing values.

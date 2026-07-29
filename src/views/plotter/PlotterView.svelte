@@ -25,7 +25,7 @@ import { LayersPanel, type LayersView } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { AlarmStrip, AlarmsPanel, DangerStrip } from '$features/lookout';
 import { loadRadarControls } from '$features/marine-radar';
-import { MeasureStrip } from '$features/measure';
+import { loadMeasureStrip } from '$features/measure';
 import { MobStrip } from '$features/mob';
 import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
@@ -201,7 +201,10 @@ interface FlatProps {
   onRetryChartLocker: () => void;
   // Arms the measure tool (shows the layer and resets prior points); owned by the shell so the
   // menu tile and the chart's context action share one meaning.
-  armMeasure: (reset?: boolean) => void;
+  armMeasure: (reset?: boolean) => boolean;
+  // Keyboard-equivalent Measure movement after the navigator pans the chart with MapLibre's
+  // keyboard controls.
+  moveSelectedMeasureToCenter: () => void;
   toggleCollisionMute: () => void;
   onSilenceNotification: (notification: ActiveNotification) => void;
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
@@ -293,6 +296,7 @@ type ActionKey =
   | 'onRetryHistoryProviders'
   | 'onRetryChartLocker'
   | 'armMeasure'
+  | 'moveSelectedMeasureToCenter'
   | 'toggleCollisionMute'
   | 'onSilenceNotification'
   | 'onAcknowledgeNotification'
@@ -444,6 +448,7 @@ const {
   onRetryHistoryProviders,
   onRetryChartLocker,
   armMeasure,
+  moveSelectedMeasureToCenter,
   toggleCollisionMute,
   onSilenceNotification,
   onAcknowledgeNotification,
@@ -567,6 +572,11 @@ function historyStripForAttempt() {
   return loadHistoryStrip();
 }
 
+function measureStripForAttempt() {
+  void lazyPanelAttempt;
+  return loadMeasureStrip();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
@@ -660,8 +670,7 @@ $effect(() => {
     onGoToHere={(position) => void routeController.onGoToHere(position)}
     onStartRoute={onStartRouteHere}
     onMeasureFrom={(position) => {
-      armMeasure(true);
-      measure.add(position);
+      if (armMeasure(true)) measure.add(position);
     }}
     onRouteEditorError={() => routeController.flagEditorLoadFailed()}
     onAnchorMoved={(position) => void anchorController.onAnchorMoved(position)}
@@ -716,7 +725,27 @@ $effect(() => {
         onStop={() => routeController.onStopCourse()}
         onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
       />
-      <MeasureStrip {measure} {units} />
+      {#if measure.active}
+        {#await measureStripForAttempt()}
+          <aside class="bottom-strip bottom-strip--accent" aria-label="Measure">
+            <div class="head">
+              <span class="title">Measure</span>
+              <span class="note" role="status">Loading Measure controls…</span>
+              <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+            </div>
+          </aside>
+        {:then module}
+          <module.default {measure} {units} onMoveSelectedToCenter={moveSelectedMeasureToCenter} />
+        {:catch}
+          <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
+            <div class="row">
+              <span class="alert-note">Measure controls could not load.</span>
+              <button type="button" class="ack" onclick={retryLazyPanel}>Retry</button>
+              <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+            </div>
+          </div>
+        {/await}
+      {/if}
     </div>
     <div class="safety-strips">
       <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />

@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MeasureStore } from '$entities/measure';
 import type { UnitsMode } from '$shared/lib';
 import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
-import { createMeasureOverlay } from './measure-overlay';
+import { createMeasureOverlay, rhumbDisplayMidpoint } from './measure-overlay';
 
 function setup(mode: UnitsMode = 'metric') {
   const measure = new MeasureStore();
@@ -20,7 +20,7 @@ describe('measure overlay', () => {
     expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(0);
   });
 
-  it('renders vertices, the line, and the total label on the last point', async () => {
+  it('renders vertices, a leg, its label, and the total label on the last point', async () => {
     const { measure, overlay, map, ctx } = setup();
     await overlay.add(ctx);
     measure.start();
@@ -28,10 +28,10 @@ describe('measure overlay', () => {
     measure.add({ latitude: 0.001, longitude: 0 });
     overlay.sync(ctx);
     const all = sourceFeatures(map, 'binnacle-measure');
-    expect(all.filter((f) => f.geometry.type === 'Point')).toHaveLength(2);
+    expect(all.filter((f) => f.properties?.kind === 'vertex')).toHaveLength(2);
     expect(all.filter((f) => f.geometry.type === 'LineString')).toHaveLength(1);
-    const labeled = all.find((f) => f.properties?.label);
-    expect(labeled?.properties?.label).toBe('111 m');
+    expect(all.find((f) => f.properties?.kind === 'leg-label')?.properties?.label).toBe('111 m');
+    expect(all.find((f) => f.properties?.totalLabel)?.properties?.totalLabel).toBe('111 m');
   });
 
   it('redraws after each accepted point, not only the first one', async () => {
@@ -43,7 +43,7 @@ describe('measure overlay', () => {
     expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(1);
     measure.add({ latitude: 0.001, longitude: 0 });
     overlay.sync(ctx);
-    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(3);
+    expect(sourceFeatures(map, 'binnacle-measure')).toHaveLength(4);
   });
 
   it('unwraps an antimeridian crossing into the short visual leg', async () => {
@@ -80,8 +80,98 @@ describe('measure overlay', () => {
     overlay.sync(ctx);
     units.mode = 'imperial';
     overlay.sync(ctx);
-    const labeled = sourceFeatures(map, 'binnacle-measure').find((f) => f.properties?.label);
+    const labeled = sourceFeatures(map, 'binnacle-measure').find(
+      (f) => f.properties?.kind === 'leg-label',
+    );
     expect(labeled?.properties?.label).toMatch(/ ft$/);
+  });
+
+  it('places an antimeridian leg label on the seam instead of near Greenwich', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 10, longitude: 179 });
+    measure.add({ latitude: 12, longitude: -179 });
+    overlay.sync(ctx);
+    const label = sourceFeatures(map, 'binnacle-measure').find(
+      (feature) => feature.properties?.kind === 'leg-label',
+    );
+    expect(label?.geometry.type).toBe('Point');
+    if (label?.geometry.type !== 'Point') throw new Error('leg label is not a point');
+    expect(Math.abs(label.geometry.coordinates[0])).toBeGreaterThan(179);
+    expect(rhumbDisplayMidpoint(measure.points[0], measure.points[1]).latitude).toBeCloseTo(11, 1);
+  });
+
+  it('uses a 44 pixel hit target and collision-managed labels above a bounded zoom', async () => {
+    const { overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    const hit = map.layers.get('binnacle-measure-hit') as {
+      paint: Record<string, unknown>;
+    };
+    const labels = map.layers.get('binnacle-measure-leg-label') as {
+      minzoom: number;
+      layout: Record<string, unknown>;
+    };
+    expect(hit.paint['circle-radius']).toBe(22);
+    expect(labels.minzoom).toBe(8);
+    expect(labels.layout['text-allow-overlap']).toBe(false);
+    expect(labels.layout['text-ignore-placement']).toBe(false);
+    expect(labels.layout['symbol-avoid-edges']).toBe(true);
+  });
+
+  it('selects through the hit surface and commits one deliberate drag operation', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    measure.add({ latitude: 0.001, longitude: 0 });
+    const vertexId = measure.vertices[0].id;
+    map.renderedFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { vertexId },
+    });
+    expect(overlay.hitTestVertex([0, 0])).toBe(vertexId);
+    measure.select(vertexId);
+    measure.armMove();
+    const preventDefault = vi.fn();
+    map.emitLayer('mousedown', 'binnacle-measure-hit', {
+      features: [{ properties: { vertexId } }],
+      lngLat: { lat: 0, lng: 0 },
+      preventDefault,
+    });
+    map.emit('mousemove', { lngLat: { lat: 0.0005, lng: 0.0005 } });
+    overlay.sync(ctx);
+    expect(measure.displayPoints[0]).toEqual({ latitude: 0.0005, longitude: 0.0005 });
+    map.emit('mouseup', { lngLat: { lat: 0.0005, lng: 0.0005 } });
+    expect(preventDefault).toHaveBeenCalled();
+    expect(measure.points[0]).toEqual({ latitude: 0.0005, longitude: 0.0005 });
+    expect(measure.moveArmed).toBe(false);
+    expect(overlay.consumeTrailingClick()).toBe(true);
+    measure.undo();
+    expect(measure.points[0]).toEqual({ latitude: 0, longitude: 0 });
+  });
+
+  it('cancels an interrupted touch drag and restores map panning', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    const vertexId = measure.vertices[0].id;
+    measure.select(vertexId);
+    measure.armMove();
+    map.emitLayer('touchstart', 'binnacle-measure-hit', {
+      features: [{ properties: { vertexId } }],
+      points: [{ x: 0, y: 0 }],
+      lngLat: { lat: 0, lng: 0 },
+      preventDefault: vi.fn(),
+    });
+    map.emit('touchmove', { lngLat: { lat: 1, lng: 1 } });
+    map.emit('touchcancel', {});
+    expect(measure.points[0]).toEqual({ latitude: 0, longitude: 0 });
+    expect(measure.moveArmed).toBe(false);
+    expect(map.dragPan.disable).toHaveBeenCalledOnce();
+    expect(map.dragPan.enable).toHaveBeenCalledOnce();
   });
 
   it('scales the line, the vertices, and the label with the overlay opacity', async () => {
@@ -101,6 +191,11 @@ describe('measure overlay', () => {
     );
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-measure-label',
+      'text-opacity',
+      0.4,
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-measure-leg-label',
       'text-opacity',
       0.4,
     );

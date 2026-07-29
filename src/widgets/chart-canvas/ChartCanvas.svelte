@@ -20,6 +20,7 @@ import { fetchCharts } from '$features/charts';
 import { LayersView } from '$features/layers-panel';
 import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
+import type { MeasureOverlay } from '$features/measure';
 import { MOB_OVERLAY_ID } from '$features/mob';
 import { createMpaOverlay, MPA_SOURCES } from '$features/mpa-overlays';
 import {
@@ -217,6 +218,9 @@ let mapHandle: ThemedMapHandle | undefined;
 // unmounting during that await, which would otherwise build a map onDestroy never tears down.
 let destroyed = false;
 let routeEditor: RouteEditor | undefined;
+// The registered Measure overlay also owns its generous vertex hit surface and deliberate drag
+// lifecycle. The chart click dispatcher consults it before deciding that a tap adds a new point.
+let measureOverlay: MeasureOverlay | undefined;
 // The unmanaged overlay that draws the working route's dots, labels, and cross-highlight. Like the
 // editor, ChartCanvas owns its lifecycle (add, tick, recolor, raise) rather than the layer manager.
 let workingRouteOverlay: WorkingRouteOverlay | undefined;
@@ -265,16 +269,17 @@ $effect(() => {
   map.setGlobalStateProperty('unit', lengthUnit(units.mode));
 });
 
-// A crosshair makes the chart's temporary tap mode visible before the first point exists. Restore
-// MapLibre's prior cursor on exit, and let route editing keep ownership when the two states overlap.
+// A crosshair makes the chart's temporary tap mode visible. Deliberate move mode switches to a move
+// cursor, and route exclusion is still checked defensively in case external state changes overlap.
 $effect(() => {
   const map = mapRef;
   if (!map || !measure.active || routeStore.working) return;
   const canvas = map.getCanvas();
   const prior = canvas.style.cursor;
-  canvas.style.cursor = 'crosshair';
+  const cursor = measure.moveArmed ? 'move' : 'crosshair';
+  canvas.style.cursor = cursor;
   return () => {
-    if (canvas.style.cursor === 'crosshair') canvas.style.cursor = prior;
+    if (canvas.style.cursor === cursor) canvas.style.cursor = prior;
   };
 });
 
@@ -333,13 +338,20 @@ onMount(async () => {
       map.on('movestart', () => {
         chartMenu = undefined;
       });
-      // A single click handler dispatches to measure and route highlight based on active state.
-      // Both guards are independent so they can coexist without interference.
+      // A single click handler gives the active chart tool one outcome per tap. Measure resolves an
+      // generous vertex hit before an empty-water add, and it suppresses the synthetic click that
+      // follows a completed drag.
       map.on('click', (e: MapMouseEvent) => {
-        // While the measure tool is armed, plain taps append measurement points. Route editing wins
-        // when both are somehow active, since Terra Draw owns the chart taps then.
         if (measure.active && !routeStore.working) {
-          measure.add({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
+          if (measureOverlay?.consumeTrailingClick()) return;
+          const vertexId = measureOverlay?.hitTestVertex(e.point);
+          if (vertexId) {
+            measure.select(vertexId);
+            return;
+          }
+          const position = { latitude: e.lngLat.lat, longitude: e.lngLat.lng };
+          if (measure.moveArmed) measure.commitMove(position);
+          else measure.add(position);
           return;
         }
         // While a working route is up, a tap on a waypoint dot lights it and the legs it joins; a
@@ -357,11 +369,19 @@ onMount(async () => {
       // vessel and collision pinned on top, then the navigator's routes and track, then AIS and the
       // safety overlays, the ocean fields, and the charts at the base); the order below sets only the
       // order within a band.
-      const notesOverlay = createNotesOverlay(origin, () => chartsToken, onNoteSelect, symbols, {
-        isOnline: isOnline ?? (() => true),
-        onNotes,
-        onStatus: onPoiStatus,
-      });
+      const notesOverlay = createNotesOverlay(
+        origin,
+        () => chartsToken,
+        (selection) => {
+          if (!measure.active && !routeStore.working) onNoteSelect?.(selection);
+        },
+        symbols,
+        {
+          isOnline: isOnline ?? (() => true),
+          onNotes,
+          onStatus: onPoiStatus,
+        },
+      );
       // One list feeds both registration and the per-frame tick, so the two cannot drift. The order
       // sets z within each band (tides under the safety overlays, the own vessel on top).
       const dynamicOverlays = buildDynamicOverlays({
@@ -395,6 +415,9 @@ onMount(async () => {
         timeTravel,
         marineRadarLayer,
       });
+      measureOverlay = dynamicOverlays.find(
+        (overlay): overlay is MeasureOverlay => overlay.id === 'measure',
+      );
       const criticalOverlayIds: readonly string[] = [
         OWN_VESSEL_OVERLAY_ID,
         COLLISION_OVERLAY_ID,
@@ -684,6 +707,8 @@ onDestroy(() => {
   // layers in the right order (start -> stop, before map.remove()); the guard makes it a no-op when
   // editing never started. Then tear the map down.
   destroyed = true;
+  measureOverlay?.cancelInteraction();
+  measureOverlay = undefined;
   routeEditor?.stop();
   mapHandle?.destroy();
   onMapDestroyed?.();

@@ -46,6 +46,106 @@ describe('MeasureStore', () => {
     expect(measure.active).toBe(true);
   });
 
+  it('moves a middle point, recomputes adjacent legs, and undoes the completed operation', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.add({ latitude: 0.001, longitude: 0.001 });
+    const priorTotal = measure.totalMeters;
+    expect(measure.selectIndex(1)).toBe(true);
+    const selectedId = measure.selectedId;
+    expect(measure.moveSelected({ latitude: 0.0005, longitude: 0.002 })).toBe(true);
+    expect(measure.selectedId).toBe(selectedId);
+    expect(measure.points[1]).toEqual({ latitude: 0.0005, longitude: 0.002 });
+    expect(measure.legs).toHaveLength(2);
+    expect(measure.totalMeters).not.toBeCloseTo(priorTotal, 5);
+
+    measure.undo();
+    expect(measure.points[1]).toEqual(B);
+    expect(measure.totalMeters).toBeCloseTo(priorTotal, 5);
+    measure.undo();
+    expect(measure.points).toHaveLength(2);
+  });
+
+  it('deletes and restores a middle point with the same stable id and index', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.add(C);
+    expect(measure.selectIndex(1)).toBe(true);
+    const selectedId = measure.selectedId;
+    expect(measure.deleteSelected()).toBe(true);
+    expect(measure.points).toEqual([A, C]);
+    expect(measure.legs).toHaveLength(1);
+
+    measure.undo();
+    expect(measure.points).toEqual([A, B, C]);
+    expect(measure.vertices[1].id).toBe(selectedId);
+    expect(measure.selectedIndex).toBe(1);
+  });
+
+  it('deletes endpoints and the sole point, then leaves Undo available', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    expect(measure.selectIndex(0)).toBe(true);
+    expect(measure.deleteSelected()).toBe(true);
+    expect(measure.isEmpty).toBe(true);
+    expect(measure.canUndo).toBe(true);
+    measure.undo();
+    expect(measure.points).toEqual([A]);
+
+    measure.add(B);
+    measure.selectIndex(0);
+    expect(measure.deleteSelected()).toBe(true);
+    expect(measure.points).toEqual([B]);
+  });
+
+  it('rejects moves that are invalid or duplicate an adjacent point without adding history', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.add(C);
+    measure.selectIndex(1);
+    expect(measure.moveSelected(A)).toBe(false);
+    expect(measure.moveSelected(C)).toBe(false);
+    expect(measure.moveSelected({ latitude: Number.NaN, longitude: 0 })).toBe(false);
+    expect(measure.points).toEqual([A, B, C]);
+    measure.undo();
+    expect(measure.points).toEqual([A, B]);
+  });
+
+  it('rejects deletion when it would join duplicate neighbors', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.add(A);
+    measure.selectIndex(1);
+    expect(measure.canDeleteSelected).toBe(false);
+    expect(measure.deleteSelected()).toBe(false);
+    expect(measure.points).toEqual([A, B, A]);
+  });
+
+  it('previews and cancels a move without changing the committed measurement or history', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.selectIndex(1);
+    expect(measure.armMove()).toBe(true);
+    expect(measure.previewSelected({ latitude: 0.001, longitude: 0.001 })).toBe(true);
+    expect(measure.displayPoints[1]).toEqual({ latitude: 0.001, longitude: 0.001 });
+    expect(measure.points[1]).toEqual(B);
+    measure.cancelMove();
+    expect(measure.displayPoints).toEqual(measure.points);
+    measure.undo();
+    expect(measure.points).toEqual([A]);
+  });
+
   it('accepts a seed point immediately after arming, the "Measure from here" contract', () => {
     const measure = new MeasureStore();
     measure.start();
@@ -76,6 +176,9 @@ describe('MeasureStore', () => {
     expect(measure.points).toHaveLength(0);
     measure.start();
     expect(measure.points).toHaveLength(0);
+    expect(measure.canUndo).toBe(false);
+    expect(measure.selectedId).toBeUndefined();
+    expect(measure.moveArmed).toBe(false);
   });
 
   it('rejects invalid and duplicate consecutive points', () => {
@@ -96,6 +199,14 @@ describe('MeasureStore', () => {
     }
     expect(measure.atLimit).toBe(true);
     expect(measure.add({ latitude: 1, longitude: 1 })).toBe(false);
+    measure.selectIndex(Math.floor(MAX_MEASURE_POINTS / 2));
+    expect(measure.moveSelected({ latitude: 1, longitude: 2 })).toBe(true);
+    expect(measure.deleteSelected()).toBe(true);
+    expect(measure.atLimit).toBe(false);
+    measure.undo();
+    expect(measure.atLimit).toBe(true);
+    measure.undo();
+    expect(measure.atLimit).toBe(true);
     measure.undo();
     expect(measure.atLimit).toBe(false);
     expect(measure.add({ latitude: 1, longitude: 1 })).toBe(true);

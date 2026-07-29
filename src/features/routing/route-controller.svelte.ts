@@ -27,6 +27,9 @@ export interface RouteControllerDeps {
   origin: string;
   getToken: () => string | undefined;
   writeBlocked: () => boolean;
+  // A live chart-tool exclusion checked at every edit entry point. The shell supplies Measure's
+  // active state so route editing refuses overlap instead of silently ending either tool.
+  editBlockedReason?: () => string | undefined;
   routeStore: RouteStore;
   courseGuidance: CourseGuidance;
   // Transient action failures (a failed save, activate, stop, delete, and similar) surface here
@@ -184,6 +187,11 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('A write token is needed to create routes.');
       return;
     }
+    const blockedReason = deps.editBlockedReason?.();
+    if (blockedReason) {
+      flagRouteError(blockedReason);
+      return;
+    }
     editorLoadFailed = false;
     lastEditRequest = { initialPoint };
     routeStore.setWorking({ id: uuidv4(), name: '', waypoints: [] });
@@ -196,6 +204,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   function onEditRoute(id: string): void {
     if (deps.writeBlocked()) {
       flagRouteError('A write token is needed to edit routes.');
+      return;
+    }
+    const blockedReason = deps.editBlockedReason?.();
+    if (blockedReason) {
+      flagRouteError(blockedReason);
       return;
     }
     const route = routeStore.routeById(id);
@@ -224,6 +237,11 @@ export function createRouteController(deps: RouteControllerDeps) {
     if (!lastEditRequest) return;
     if (deps.writeBlocked()) {
       flagRouteError('A write token is needed to edit routes.');
+      return;
+    }
+    const blockedReason = deps.editBlockedReason?.();
+    if (blockedReason) {
+      flagRouteError(blockedReason);
       return;
     }
     editorLoadFailed = false;

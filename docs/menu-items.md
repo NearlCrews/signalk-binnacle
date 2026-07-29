@@ -44,8 +44,12 @@ source, and surrounding traffic before relying on it.
   Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
   distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
   [Find places](find-places.md).
-- **Measure** arms chart taps for distance and bearing. The active strip gives the next gesture, and
-  selecting Measure again preserves current work. See [Measure](measure.md).
+- **Measure** arms chart taps for rhumb-line distance and true bearing. Points can be selected through
+  a 44 px chart target or the strip, moved deliberately by drag, chart tap, or chart-center keyboard
+  workflow, deleted, and restored through operation-based Undo. The strip shows both legs adjacent to
+  a selected point, while collision-managed chart labels show distance only above a bounded zoom.
+  Clear confirms, nested Escape cancels movement before ending Measure, route editing is excluded in
+  both directions, and selecting Measure again preserves current work. See [Measure](measure.md).
 - **Layers and charts** opens to chart sources first. Signal K chart discovery can be retried without
   removing the last loaded sources. A broken source cannot stop the chart from opening. URL-backed
   PMTiles imports accept bounded HTTP or HTTPS URLs, validate metadata, and persist locally. Plain
