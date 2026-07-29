@@ -1136,7 +1136,9 @@ test('history-only engine readings stay identifiable through selection and detai
   await expect(dock.getByText('Previously recorded, but not reporting live now.')).toBeVisible();
   await dock.getByRole('button', { name: 'View recent trend' }).click();
   const trends = page.locator('.slide-over[aria-label="Data trends"]');
-  await expect(trends.getByText('RPM · Port engine', { exact: true })).toBeVisible();
+  await expect(
+    trends.getByRole('heading', { name: 'RPM · Port engine', exact: true }),
+  ).toBeVisible();
   await expect(trends.getByText(/Last 24 hours · signalk-questdb/)).toBeVisible();
 });
 
@@ -1159,7 +1161,7 @@ test('focused trends return to instrument detail without changing the saved over
   await trendAction.click();
 
   let trends = page.locator('.slide-over[aria-label="Data trends"]');
-  await expect(trends.getByText('Water speed', { exact: true })).toBeVisible();
+  await expect(trends.getByRole('heading', { name: 'Water speed', exact: true })).toBeVisible();
   await expect(
     trends.getByText('Focused session started when this trend opened. No samples yet.'),
   ).toBeVisible();
