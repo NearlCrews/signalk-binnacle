@@ -49,6 +49,38 @@ export interface RadarZoneValue {
   enabled: boolean;
 }
 
+// A native sector is a heading-relative angular envelope. Mayara uses this shape for no-transmit
+// sectors, so changing it always requires the explicit emission-safety confirmation in the panel.
+export interface RadarSectorValue {
+  value: number;
+  endValue: number;
+  enabled: boolean;
+}
+
+// A native rectangle uses local east and north offsets from the radar in meters. The first two
+// points form one edge, and width extends clockwise, perpendicular to that edge.
+export interface RadarRectValue {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  width: number;
+  enabled: boolean;
+}
+
+export type RadarStructuredValue = RadarZoneValue | RadarSectorValue | RadarRectValue;
+export type RadarAreaType = 'sector' | 'zone' | 'rect';
+
+export interface RadarAreaDraft {
+  radarId: string;
+  controlId: string;
+  type: RadarAreaType;
+  value: RadarStructuredValue;
+  chartEditing: boolean;
+  chartStep: number;
+  chartError?: string;
+}
+
 // Current control settings keyed by control id, as reported in RadarInfo.controls.
 export type RadarControls = Record<string, RadarControlEntry | undefined>;
 

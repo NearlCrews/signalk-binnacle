@@ -218,6 +218,12 @@ let mapHandle: ThemedMapHandle | undefined;
 // unmounting during that await, which would otherwise build a map onDestroy never tears down.
 let destroyed = false;
 let routeEditor: RouteEditor | undefined;
+// Stays true through the synchronous MapLibre dispatch for a radar placement tap. The general map
+// listener runs before layer-delegated listeners, and the final or failed placement tap may stop
+// editing immediately, so the live chartEditing flag alone cannot gate those later listeners.
+let radarPlacementDispatch = false;
+const markerInteractionsAllowed = (): boolean =>
+  !radarPlacementDispatch && !marineRadarLayer?.chartEditing();
 // The registered Measure overlay also owns its generous vertex hit surface and deliberate drag
 // lifecycle. The chart click dispatcher consults it before deciding that a tap adds a new point.
 let measureOverlay: MeasureOverlay | undefined;
@@ -273,10 +279,12 @@ $effect(() => {
 // cursor, and route exclusion is still checked defensively in case external state changes overlap.
 $effect(() => {
   const map = mapRef;
-  if (!map || !measure.active || routeStore.working) return;
+  if (!map) return;
+  const radarEditing = marineRadarLayer?.chartEditing() === true;
+  if ((!measure.active || routeStore.working) && !radarEditing) return;
   const canvas = map.getCanvas();
   const prior = canvas.style.cursor;
-  const cursor = measure.moveArmed ? 'move' : 'crosshair';
+  const cursor = radarEditing ? 'crosshair' : measure.moveArmed ? 'move' : 'crosshair';
   canvas.style.cursor = cursor;
   return () => {
     if (canvas.style.cursor === cursor) canvas.style.cursor = prior;
@@ -318,7 +326,9 @@ onMount(async () => {
       // No context menu at all while drawing or editing a route, or while the measure tool is armed
       // (this suppresses every item, not just "Go to here"): Terra Draw and the measure tool own the
       // chart taps then.
-      if (!onGoToHere || routeStore.working || measure.active) return;
+      if (!onGoToHere || routeStore.working || measure.active || marineRadarLayer?.chartEditing()) {
+        return;
+      }
       dismissContextHint();
       chartMenu = {
         x: point.x,
@@ -342,6 +352,20 @@ onMount(async () => {
       // generous vertex hit before an empty-water add, and it suppresses the synthetic click that
       // follows a completed drag.
       map.on('click', (e: MapMouseEvent) => {
+        if (marineRadarLayer?.chartEditing()) {
+          radarPlacementDispatch = true;
+          queueMicrotask(() => {
+            radarPlacementDispatch = false;
+          });
+          if (
+            marineRadarLayer.handleChartPoint({
+              latitude: e.lngLat.lat,
+              longitude: e.lngLat.lng,
+            })
+          ) {
+            return;
+          }
+        }
         if (measure.active && !routeStore.working) {
           if (measureOverlay?.consumeTrailingClick()) return;
           const vertexId = measureOverlay?.hitTestVertex(e.point);
@@ -349,7 +373,10 @@ onMount(async () => {
             measure.select(vertexId);
             return;
           }
-          const position = { latitude: e.lngLat.lat, longitude: e.lngLat.lng };
+          const position = {
+            latitude: e.lngLat.lat,
+            longitude: e.lngLat.lng,
+          };
           if (measure.moveArmed) measure.commitMove(position);
           else measure.add(position);
           return;
@@ -373,11 +400,13 @@ onMount(async () => {
         origin,
         () => chartsToken,
         (selection) => {
-          if (!measure.active && !routeStore.working) onNoteSelect?.(selection);
+          if (!measure.active && !routeStore.working && markerInteractionsAllowed())
+            onNoteSelect?.(selection);
         },
         symbols,
         {
           isOnline: isOnline ?? (() => true),
+          interactionsAllowed: markerInteractionsAllowed,
           onNotes,
           onStatus: onPoiStatus,
         },
@@ -392,7 +421,8 @@ onMount(async () => {
         aisTargets,
         selectedAisId: () => selectedAisId,
         onAisSelect: (id) => {
-          if (!measure.active && !routeStore.working) onAisSelect?.(id);
+          if (!measure.active && !routeStore.working && markerInteractionsAllowed())
+            onAisSelect?.(id);
         },
         anchor,
         mob,
@@ -402,7 +432,10 @@ onMount(async () => {
         recorder,
         routeStore,
         tides,
-        onTideStationSelect,
+        onTideStationSelect: (selection) => {
+          if (markerInteractionsAllowed()) onTideStationSelect?.(selection);
+        },
+        interactionsAllowed: markerInteractionsAllowed,
         units,
         waypoints,
         symbols,

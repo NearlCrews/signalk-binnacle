@@ -220,6 +220,32 @@ describe('tides overlay', () => {
     expect(map.sources.has('binnacle-tides')).toBe(false);
   });
 
+  it('blocks delegated station selection while another chart tool owns taps', async () => {
+    const store = new TidesStore();
+    store.setCatalogs([{ station, distanceMeters: 0 }], []);
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(
+      store,
+      unitsStub() as unknown as UnitsStore,
+      onSelect,
+      Date.now,
+      () => false,
+    );
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+
+    map.emitLayer('click', 'binnacle-tides-hit', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
+          properties: { stationId: 'T1', kind: 'tide', selected: false, loaded: true },
+        },
+      ],
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it('keeps automatic mode when the loaded marker represents signalk-tides output', async () => {
     const pluginStation = {
       id: 'tides',

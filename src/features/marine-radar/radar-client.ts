@@ -25,7 +25,7 @@ import type {
   RadarControls,
   RadarInfo,
   RadarStatus,
-  RadarZoneValue,
+  RadarStructuredValue,
 } from './radar-types';
 
 // The Signal K v2 radar API. The server serves a JSON ARRAY of RadarInfo objects here (each with its
@@ -562,7 +562,7 @@ export async function writeStructuredControl(
   token: string | undefined,
   radarId: string,
   controlId: string,
-  value: RadarZoneValue,
+  value: RadarStructuredValue,
 ): Promise<{ ok: boolean; status: number }> {
   const url = `${origin}${RADARS_PATH}/${encodeURIComponent(radarId)}`;
   const result = await sendJson(url, token, 'PUT', { value: { [controlId]: value } });

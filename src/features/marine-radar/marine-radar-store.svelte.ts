@@ -1,6 +1,7 @@
 import {
   type ControlDefinition,
   POWER_PENDING_KEY,
+  type RadarAreaDraft,
   type RadarAvailability,
   type RadarControlEntry,
   type RadarInfo,
@@ -64,6 +65,10 @@ export class MarineRadarStore {
   controlsForbidden = $state(false);
   pendingControls = $state<Record<string, boolean>>({});
   controlErrors = $state<Record<string, string>>({});
+  // One structured geometry draft can own the chart at a time. The form remains the accessible
+  // editor, while the chart can update the same SI snapshot through deliberate point placement.
+  areaDraft = $state<RadarAreaDraft | undefined>(undefined);
+  areaVersion = $state(0);
 
   selected = $derived(this.radars.find((r) => r.id === this.selectedId));
   // A radar is detected once discovery returns at least one. Shared by the layer row's availability
@@ -104,6 +109,8 @@ export class MarineRadarStore {
       this.pendingControls = {};
       this.controlErrors = {};
       this.operationalStatus = first?.status;
+      this.areaDraft = undefined;
+      this.areaVersion += 1;
     }
   }
 
@@ -122,6 +129,8 @@ export class MarineRadarStore {
       this.pendingControls = {};
       this.controlErrors = {};
       this.operationalStatus = radar.status;
+      this.areaDraft = undefined;
+      this.areaVersion += 1;
     }
   }
 
@@ -140,6 +149,7 @@ export class MarineRadarStore {
     for (const [id, entry] of Object.entries(controls)) {
       if (!entry || pending.has(id)) continue;
       this.controlEntries[id] = entry;
+      this.areaVersion += 1;
       if (entry.value !== undefined) this.controlValues[id] = entry.value;
       if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
       if (id === POWER_PENDING_KEY && !pending.has(POWER_PENDING_KEY)) {
@@ -151,6 +161,7 @@ export class MarineRadarStore {
 
   setCapabilities(controls: ControlDefinition[]): void {
     this.capabilities = controls;
+    this.areaVersion += 1;
   }
 
   setStatus(status: RadarConnectionStatus, detail?: string): void {
@@ -174,12 +185,14 @@ export class MarineRadarStore {
     else delete this.controlValues[id];
     if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
     else delete this.controlAuto[id];
+    this.areaVersion += 1;
   }
 
   deleteControlEntry(id: string): void {
     delete this.controlEntries[id];
     delete this.controlValues[id];
     delete this.controlAuto[id];
+    this.areaVersion += 1;
   }
 
   setControlsForbidden(forbidden: boolean): void {
@@ -199,6 +212,11 @@ export class MarineRadarStore {
   setControlError(id: string, message?: string): void {
     if (message) this.controlErrors[id] = message;
     else delete this.controlErrors[id];
+  }
+
+  setAreaDraft(draft: RadarAreaDraft | undefined): void {
+    this.areaDraft = draft;
+    this.areaVersion += 1;
   }
 }
 

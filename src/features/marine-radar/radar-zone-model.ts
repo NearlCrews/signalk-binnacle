@@ -1,4 +1,6 @@
-import { feetToMeters, METERS_PER_FOOT, RAD_TO_DEG, type UnitsMode } from '$shared/lib';
+import { RAD_TO_DEG, type UnitsMode } from '$shared/lib';
+import { isBoundedRadarAngleRange } from './radar-angle';
+import { displayRadarDistance, siRadarDistance } from './radar-area-units';
 import type { ControlDefinition, RadarControlEntry, RadarZoneValue } from './radar-types';
 
 const MAX_ZONE_DISTANCE_METERS = 1_000_000;
@@ -15,10 +17,7 @@ export function isNativeZoneDefinition(def: ControlDefinition): boolean {
   return (
     def.dialect === 'native' &&
     def.type === 'zone' &&
-    def.range?.unit === 'rad' &&
-    Number.isFinite(def.range.min) &&
-    Number.isFinite(def.range.max) &&
-    def.range.min <= def.range.max &&
+    isBoundedRadarAngleRange(def.range) &&
     def.hasEnabled === true &&
     def.maxDistance !== undefined &&
     Number.isFinite(def.maxDistance) &&
@@ -34,8 +33,7 @@ export function radarZoneValue(entry: RadarControlEntry | undefined): RadarZoneV
     !Number.isFinite(entry.value) ||
     !Number.isFinite(entry.endValue) ||
     !Number.isFinite(entry.startDistance) ||
-    !Number.isFinite(entry.endDistance) ||
-    typeof entry.enabled !== 'boolean'
+    !Number.isFinite(entry.endDistance)
   ) {
     return undefined;
   }
@@ -44,24 +42,16 @@ export function radarZoneValue(entry: RadarControlEntry | undefined): RadarZoneV
     endValue: entry.endValue as number,
     startDistance: entry.startDistance as number,
     endDistance: entry.endDistance as number,
-    enabled: entry.enabled,
+    enabled: entry.enabled ?? false,
   };
-}
-
-function displayDistance(meters: number, unitsMode: UnitsMode): number {
-  return unitsMode === 'imperial' ? meters / METERS_PER_FOOT : meters;
-}
-
-function siDistance(distance: number, unitsMode: UnitsMode): number {
-  return unitsMode === 'imperial' ? feetToMeters(distance) : distance;
 }
 
 export function zoneDraftFromValue(value: RadarZoneValue, unitsMode: UnitsMode): RadarZoneDraft {
   return {
     startDegrees: value.value * RAD_TO_DEG,
     endDegrees: value.endValue * RAD_TO_DEG,
-    innerDistance: displayDistance(value.startDistance, unitsMode),
-    outerDistance: displayDistance(value.endDistance, unitsMode),
+    innerDistance: displayRadarDistance(value.startDistance, unitsMode),
+    outerDistance: displayRadarDistance(value.endDistance, unitsMode),
     enabled: value.enabled,
   };
 }
@@ -70,8 +60,8 @@ export function zoneValueFromDraft(draft: RadarZoneDraft, unitsMode: UnitsMode):
   return {
     value: draft.startDegrees / RAD_TO_DEG,
     endValue: draft.endDegrees / RAD_TO_DEG,
-    startDistance: siDistance(draft.innerDistance, unitsMode),
-    endDistance: siDistance(draft.outerDistance, unitsMode),
+    startDistance: siRadarDistance(draft.innerDistance, unitsMode),
+    endDistance: siRadarDistance(draft.outerDistance, unitsMode),
     enabled: draft.enabled,
   };
 }

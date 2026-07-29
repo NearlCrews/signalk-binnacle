@@ -12,6 +12,8 @@ Binnacle uses the Signal K v2 Radar API:
 - `GET /signalk/v2/api/vessels/self/radars/{id}/capabilities` describes available controls.
 - `GET /signalk/v2/api/vessels/self/radars/{id}/controls` hydrates their current values.
 - `PUT /signalk/v2/api/vessels/self/radars/{id}/controls/{controlId}` writes a control.
+- `PUT /signalk/v2/api/vessels/self/radars/{id}` writes one complete structured area through the
+  standard bulk-control envelope.
 - Signal K deltas at `radars.{radarId}.controls.{controlId}` reconcile live out-of-band changes.
 - `RadarInfo.streamUrl`, or the built-in per-radar stream fallback, carries protobuf spokes over a
   WebSocket.
@@ -66,17 +68,28 @@ WebGL renderer health are reported separately.
 ## Controls and units
 
 Capabilities remain data-driven. Binnacle parses number, enum, boolean, string, button, compound,
-sector, zone, and rectangle definitions, including categories, ordering, descriptions, read-only state,
-automatic mode, enabled state, and live allowed state. Unknown compound controls stay readable and
-read-only. Rectangle values use the Radar API's `x1`, `y1`, `x2`, `y2`, and `width` fields.
+sector, zone, and rectangle definitions, including categories, ordering, descriptions, read-only
+state, automatic mode, enabled state, and live allowed state. Unknown compound controls stay readable
+and read-only.
 
-A guard zone is editable only when the provider reports the object-keyed native `dataType: "zone"`
-dialect with:
+A structured radar area is editable only when the provider reports the object-keyed native dialect
+with bounded geometry. Angular ranges must use radians, stay within the normal native radar domain,
+and span no more than one revolution. This keeps malformed provider values out of chart placement and
+puts a fixed upper bound on polygon tessellation. A supported definition includes:
 
-- angular bounds in radians;
-- a positive bounded `maxDistance`;
+- `dataType: "zone"` with angular bounds in radians and a positive bounded `maxDistance`;
+- `dataType: "sector"` with angular bounds in radians;
+- `dataType: "rect"` with meter bounds and a positive bounded `maxDistance`;
 - `hasEnabled: true`; and
-- a complete live value containing `value`, `endValue`, `startDistance`, `endDistance`, and `enabled`.
+- every geometry field required by that shape.
+
+Zone values contain `value`, `endValue`, `startDistance`, and `endDistance`. Sector values contain
+`value` and `endValue`. Rectangle values contain `x1`, `y1`, `x2`, `y2`, and `width`. Rectangle
+coordinates are local meter offsets from the radar, with positive x east and positive y north. The
+first two points form an edge, and the positive width extends perpendicular to that edge. A fresh
+Mayara stationary area can omit `enabled`; Binnacle seeds that complete native geometry as disabled.
+A fresh zero rectangle opens as a draft, but validation blocks Save until it has distinct edge points
+and a positive width.
 
 The panel snapshots the accepted geometry when Edit starts. Form changes affect only that draft. Save
 revalidates every field and sends one complete geometry update, while Cancel leaves the provider
@@ -85,15 +98,39 @@ A provider update during editing preserves the draft, reports a conflict, and re
 to reload the current geometry before saving. Closing the panel, going Back, switching radars, or
 opening overlay settings asks before discarding a dirty draft.
 
-Enabled means the zone is configured and active at the provider. It is not write permission and does
-not mean the zone is alarming. Alarm styling and copy remain reserved for a provider-reported
+Enabled means the area is configured and active at the provider. It is not write permission and does
+not mean a guard zone is alarming. Alarm styling and copy remain reserved for a provider-reported
 notification. Live `allowed: false`, static read-only state, missing write access, and an in-flight
-write all block Save independently.
+write all block Save independently. Saving any sector also requires a separate no-transmit
+confirmation because the change can alter the radar emission envelope.
 
-Sector editing remains read-only because a sector can describe a no-transmit area and therefore change
-the radar's emission envelope. Rectangle and generic compound editors also remain unsupported until
-their individual provider and hardware behavior is validated. The form is the complete accessible
-workflow; Binnacle does not claim chart gesture ownership for radar geometry in this slice.
+The form is the complete keyboard-accessible workflow. **Edit on chart** is an optional, explicit
+placement mode for a form draft:
+
+- a sector uses taps for its start and end bearings;
+- a zone uses taps for its inner start and outer end corners; and
+- a rectangle uses two taps for one edge and a third tap for positive width.
+
+If the second zone tap is closer to the radar than the first, Binnacle swaps the complete
+angle-distance pairs. The closer tap remains the inner start corner, and the farther tap remains the
+outer end corner. It never sorts distances independently from their tapped bearings.
+
+Starting chart placement reveals the Radar overlay if it was hidden. The radar panel collapses while
+placement is active, but its pinned footer keeps the current step and **Stop chart edit** visible on
+phones. The form returns after the final tap or Stop. Losing the fresh own-vessel position or heading
+between taps stops placement and reports the failed input instead of leaving an apparently stuck
+editor.
+
+Radar placement cannot start while Measure, route editing, or Offline charts owns chart gestures.
+Those tools cannot start while radar placement owns them. Ordinary chart selection, tide station
+selection, point-of-interest selection, cluster zoom, and context actions are suppressed for the same
+interval. Accepted and draft areas render with different line and fill emphasis in day, dusk, and
+night-red themes.
+
+The echo, range rings, guard zones, and no-transmit sectors all use the same effective heading and
+range from the current spoke frame. Navigation true heading and the discovered radar range are
+fallbacks only when the frame does not supply those values. A live range change invalidates area
+geometry with the echo, so a sector cannot remain shorter or longer than the displayed radar picture.
 
 Radar API values remain SI in state and writes. Meters follow the server's metric or imperial display
 preference, radians display as degrees, and seconds display as durations. Converted slider bounds and
@@ -111,13 +148,13 @@ closing the radar controller stops its capability polling.
 The Signal K single-control route and some providers each unwrap or wrap `body.value`, which can nest
 a structured value and lose its required wire shape. Structured writes therefore use the standard
 bulk-control Radar API route with one control map. The server passes that map to the provider's bulk
-write unchanged, so all zone fields arrive together. Binnacle does not call a Mayara-specific route.
+write unchanged, so all area fields arrive together. Binnacle does not call a Mayara-specific route.
 
 ## Night-red behavior
 
-Every radar echo, Doppler accent, trail, sweep, ring, and label has zero green and blue in night-red.
-Special returns remain distinguishable through red intensity and alpha, never through a blue or green
-pixel.
+Every radar echo, Doppler accent, trail, sweep, ring, label, area fill, and area line has zero green
+and blue in night-red. Special returns and radar areas remain distinguishable through red intensity,
+alpha, line weight, and dash patterns, never through a blue or green pixel.
 
 ## Verification
 
@@ -127,15 +164,20 @@ writes, whole-entry rollback, live permission changes, provider removal, heading
 theme tables, range geometry, vector overlays, and synthetic radar frames. The Playwright smoke suite
 verifies both the unavailable Radar menu path on a stock server and a provider-backed discovery,
 control hydration, identity, status, transmit confirmation, guarded radar switching and menu
-dismissal, direct overlay-settings transition from a collapsed disclosure, slider path, 320 px
-guard-zone form, and the exact atomic bulk-control payload.
+dismissal, direct overlay-settings transition from a collapsed disclosure, slider path, 320 px area
+forms, no-transmit confirmation, and exact zone, sector, and rectangle bulk-control payloads. Focused
+coverage also pins complete zone-tap pairing, bounded provider angles, capped tessellation,
+frame-owned heading and range, pure-red area colors, delegated marker gating, stale-input failure
+reporting, external editor cleanup, and persistent footer behavior while a phone panel body is
+collapsed.
 
-The native guard-zone fixture and SI round trip were also verified against the Mayara 3.7.0 built-in
-emulator. The provider-hop contract is covered separately using the Signal K bulk-control envelope
-that Mayara forwards unchanged. These checks confirm the `zone` capability bounds and a
-read-after-write value containing both angles, both distances, and enabled state. They are
-provider-emulator evidence, not a claim that every radar model has been tested. Sector and rectangle
-support still require their own hardware matrix.
+Native zone and stationary rectangle SI round trips were verified against the Mayara 3.7.0 built-in
+emulator. The checks include fresh values with omitted enabled state, capability bounds, signed and
+fractional rectangle coordinates, both zone angles and distances, and the returned enabled state. The
+sector shape and sibling-field request are matched to Mayara 3.7.0's authoritative native capability,
+server, and control UI contract. The generic Mayara emulator does not expose a no-transmit sector.
+These are provider-emulator and provider-source evidence, not a claim that every radar model or actual
+radar hardware has been tested.
 
 For provider development, use the current Mayara emulator or a captured binary fixture and run:
 

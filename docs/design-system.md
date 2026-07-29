@@ -250,8 +250,11 @@ Shared behavior lives here. Compose these; do not re-implement them.
   controls), `closeLabel`, `onClose`, `onBack` (when set, a leading back arrow returns to the menu via
   the App's `backToMenu`; omit on panels opened from the chart), `headerExtra`, `footer`, and `minimize`
   (a phone collapse-to-header control). Use `minimize` when a phone workflow needs a chart gesture:
-  collapse before enabling the gesture, then restore the panel when it finishes or is canceled.
-  Offline area drawing is the canonical example. Every left-docked panel is a SlideOver.
+  collapse before enabling the gesture, then restore the panel when it finishes or is canceled. The
+  body is hidden while collapsed, but the pinned `footer` remains visible. Put the active step and
+  Stop action in that footer when a multi-step chart gesture must remain understandable and
+  cancelable on a phone. Offline area drawing and radar-area placement are the canonical examples.
+  Every left-docked panel is a SlideOver.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
@@ -426,10 +429,12 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
     `.is-on` and `aria-pressed`. A lone "Off" button is ambiguous; the segmented pair makes the state
     self-evident.
   - A larger enum: `<select class="input">`, full width in a label-on-top field.
-  - A structured provider value, such as a radar guard zone: a separate accepted snapshot and draft,
-    stacked `UnitField` controls, one whole-object Save, and an explicit Cancel. A provider update
-    during editing creates a visible conflict instead of replacing the draft. Any discard prompt
-    stays outside a collapsible disclosure so navigation cannot hide it.
+  - A structured provider value, such as a radar zone, sector, or rectangle: a separate accepted
+    snapshot and draft, stacked `UnitField` controls, one whole-object Save, and an explicit Cancel. A
+    provider update during editing creates a visible conflict instead of replacing the draft. Any
+    optional chart placement is an explicit, cancelable mode with a complete form equivalent. Its
+    gesture ownership must be exclusive. Any discard prompt stays outside a collapsible disclosure so
+    navigation cannot hide it.
   - A toggle list row (a layer, a weather overlay): `.row-interactive` with `.is-on` for the lit state.
   - A saved-item list: `SavedList` over `.card-frame` cards.
   - A destructive or immediate navigation action: `InlineConfirm` (armed), never a blocking confirm.

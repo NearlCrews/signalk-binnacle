@@ -173,6 +173,7 @@ export function createTidesOverlay(
   units: UnitsStore,
   onSelect?: (selection: TideStationSelectionEvent) => void,
   now: () => number = Date.now,
+  interactionsAllowed: () => boolean = () => true,
 ): TidesOverlay {
   let theme: Theme = 'day';
   let lastCatalogTide: NearbyTideStation[] | undefined;
@@ -186,7 +187,7 @@ export function createTidesOverlay(
   let opacity = 1;
   let lastLabelMinute = -1;
   let lastMode: UnitsMode | undefined;
-  const hit = createTideHitHandlers(store, onSelect);
+  const hit = createTideHitHandlers(store, onSelect, interactionsAllowed);
 
   const syncHitVisibility = (ctx: OverlayContext): void => {
     setLayersVisibility(ctx.map, [TIDES_HIT_LAYER], visible && opacity > 0);

@@ -94,6 +94,35 @@ describe('notes overlay', () => {
     expect(map.layers.has('binnacle-notes-selected-casing')).toBe(true);
   });
 
+  it('blocks marker selection and cluster zoom while another chart tool owns taps', async () => {
+    const onSelect = vi.fn();
+    const map = { ...createFakeMap(), easeTo: vi.fn() };
+    const overlay = createNotesOverlay('http://pi', () => undefined, onSelect, undefined, {
+      interactionsAllowed: () => false,
+    });
+    await overlay.add(fakeOverlayContext(map));
+
+    map.emitLayer('click', 'binnacle-notes-symbol', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { id: 'n1', name: 'Marina', category: 'marina' },
+        },
+      ],
+    });
+    map.emitLayer('click', 'binnacle-notes-cluster-ring', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { cluster_id: 7 },
+        },
+      ],
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(map.easeTo).not.toHaveBeenCalled();
+  });
+
   it('highlights a position by ringing it, and clears the ring with undefined', async () => {
     const overlay = createNotesOverlay('http://pi', () => undefined);
     const map = createFakeMap();

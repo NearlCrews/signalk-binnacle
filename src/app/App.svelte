@@ -64,7 +64,11 @@ import {
   GenericAlarm,
   LookoutAlarm,
 } from '$features/lookout';
-import { createMarineRadarController, type RadarStatus } from '$features/marine-radar';
+import {
+  createMarineRadarController,
+  type RadarStatus,
+  radarChartEditBlockedReason,
+} from '$features/marine-radar';
 import {
   AppMenu,
   DEFAULT_PINNED,
@@ -1016,6 +1020,10 @@ function captureMapCommands(commands: MapCommands): void {
 // would read as broken. Selecting the active menu item keeps the current measurement. The chart's
 // "Measure from here" action explicitly requests a fresh measurement at that position.
 function armMeasure(reset = false): boolean {
+  if (marineRadar.store.areaDraft?.chartEditing) {
+    toast.show('Finish the radar-area chart edit before starting Measure.');
+    return false;
+  }
   if (routeStore.working) {
     toast.show('Save or cancel the route edit before starting Measure.');
     return false;
@@ -1045,6 +1053,13 @@ const marineRadar = createMarineRadarController({
   centerFresh: () => !vessel.positionStale,
   headingFresh: () => !vessel.headingStale,
   radarAvailable: () => serverFeatures !== undefined,
+  chartEditBlockedReason: () =>
+    radarChartEditBlockedReason({
+      measureActive: measure.active,
+      routeEditing: routeStore.working !== undefined,
+      offlineChartsOpen: activePanel === 'regions' || activePanel === 'charts-management',
+      chartReady: mapInstance !== undefined,
+    }),
 });
 // The radar controls slide-over opens from the radar menu tile or the radar layer row's gear;
 // radarOpenedFrom records which, so its back arrow returns to the menu only when the menu opened it
@@ -1207,8 +1222,12 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Measure',
     icon: Ruler,
     group: 'Navigate',
-    disabled: routeStore.working !== undefined,
-    disabledLabel: 'Measure (save or cancel the route edit first)',
+    disabled:
+      routeStore.working !== undefined || marineRadar.store.areaDraft?.chartEditing === true,
+    disabledLabel:
+      marineRadar.store.areaDraft?.chartEditing === true
+        ? 'Measure (finish the radar-area chart edit first)'
+        : 'Measure (save or cancel the route edit first)',
     pressed: measure.active,
     onSelect: armMeasure,
   },
@@ -1374,8 +1393,13 @@ const menuItems = $derived<MenuItem[]>([
     pressed: activePanel === 'regions' || activePanel === 'charts-management',
     // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
     // exists. An absent provider uses available rather than disabled so tapping explains the setup.
-    disabled: companionBase !== null && mapInstance === undefined,
-    disabledLabel: 'Offline charts (chart is loading)',
+    disabled:
+      (companionBase !== null && mapInstance === undefined) ||
+      marineRadar.store.areaDraft?.chartEditing === true,
+    disabledLabel:
+      marineRadar.store.areaDraft?.chartEditing === true
+        ? 'Offline charts (finish the radar-area chart edit first)'
+        : 'Offline charts (chart is loading)',
     onSelect: () => togglePanel('regions'),
   },
   {
@@ -1442,7 +1466,11 @@ const routeController = createRouteController({
   getToken: () => chartsToken,
   writeBlocked: () => auth.writeBlocked,
   editBlockedReason: () =>
-    measure.active ? 'Finish the measurement before editing a route.' : undefined,
+    measure.active
+      ? 'Finish the measurement before editing a route.'
+      : marineRadar.store.areaDraft?.chartEditing
+        ? 'Finish the radar-area chart edit before editing a route.'
+        : undefined,
   routeStore,
   courseGuidance,
   flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),

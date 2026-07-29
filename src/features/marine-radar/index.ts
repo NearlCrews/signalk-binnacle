@@ -6,6 +6,8 @@ export {
 } from './marine-radar-controller.svelte';
 export type { MarineRadarStore } from './marine-radar-store.svelte';
 export { createPpiLayer, type PpiLayer, RADAR_UNAVAILABLE_HINT } from './ppi-layer';
+export { radarAreaChartInstruction } from './radar-area-geometry';
+export { radarChartEditBlockedReason } from './radar-controls-model';
 export type { RadarStatus } from './radar-types';
 
 const radarControlsLoader = createRetryableLazyLoader(() => import('./RadarControls.svelte'));

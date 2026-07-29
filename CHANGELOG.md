@@ -14,13 +14,16 @@ All notable changes to Binnacle are documented here. The format follows
   distance labels use collision placement above a bounded zoom. Move mode cancels before Measure on
   Escape, Clear requires confirmation, and route editing is excluded in both directions without
   silently clearing either tool.
-- Complete native Radar API guard zones now have an explicit form editor with degree and server-length
-  display conversion, separate enabled state, atomic Save, Cancel, dirty-discard confirmation, live
-  provider conflict detection, exact rollback, and provider-safe bulk writes. Radar selection and
-  panel dismissal keep the accepted radar visible until a dirty draft is resolved, and discard
-  confirmation remains visible when Advanced controls are collapsed. Unsupported compound controls,
-  sectors that may alter the no-transmit envelope, and rectangle shapes not yet validated remain
-  honestly read-only.
+- Complete native Radar API zones, no-transmit sectors, and rectangles now have explicit form and chart
+  editors with degree and server-length display conversion, separate enabled state, atomic Save,
+  Cancel, dirty-discard confirmation, live provider conflict detection, exact rollback, and
+  provider-safe bulk writes. Radar chart placement is cancelable and mutually exclusive with Measure,
+  route editing, Offline charts, and delegated marker actions. Placement reveals hidden radar areas,
+  keeps its step and Stop action visible on phones, preserves each zone bearing with its tapped
+  distance, and stops with a clear error if position or heading freshness is lost. Areas follow the
+  live spoke-frame heading and range, reject oversized provider angle domains, cap polygon
+  tessellation, and stay pure red in night-red. Sector writes require a separate emission-envelope
+  confirmation, while unsupported compound controls remain honestly read-only.
 - Time travel now offers bounded 1-hour, 6-hour, 24-hour, and 7-day history ranges with adaptive
   resolution, play and pause, 0.5x, 1x, and 2x speeds, full local dates, provider attribution, and a
   range-owned track synchronized with the marker and metric readouts. It keeps one provider's

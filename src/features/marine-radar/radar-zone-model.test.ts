@@ -24,9 +24,15 @@ describe('radar zone model', () => {
     expect(isNativeZoneDefinition({ ...definition, dialect: 'v5' })).toBe(false);
     expect(isNativeZoneDefinition({ ...definition, maxDistance: undefined })).toBe(false);
     expect(isNativeZoneDefinition({ ...definition, hasEnabled: false })).toBe(false);
+    expect(
+      isNativeZoneDefinition({
+        ...definition,
+        range: { min: -1_000_000, max: 1_000_000, unit: 'rad' },
+      }),
+    ).toBe(false);
   });
 
-  it('requires a complete live value and preserves enabled false', () => {
+  it('requires complete geometry and treats an omitted native enabled state as disabled', () => {
     expect(
       radarZoneValue({
         value: -1,
@@ -34,6 +40,20 @@ describe('radar zone model', () => {
         startDistance: 200,
         endDistance: 500,
         enabled: false,
+      }),
+    ).toEqual({
+      value: -1,
+      endValue: 1,
+      startDistance: 200,
+      endDistance: 500,
+      enabled: false,
+    });
+    expect(
+      radarZoneValue({
+        value: -1,
+        endValue: 1,
+        startDistance: 200,
+        endDistance: 500,
       }),
     ).toEqual({
       value: -1,

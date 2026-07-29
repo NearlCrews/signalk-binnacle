@@ -60,6 +60,7 @@ export interface DynamicOverlaysDeps {
   routeStore: RouteStore;
   tides: TidesStore;
   onTideStationSelect?: (selection: TideStationSelectionEvent) => void;
+  interactionsAllowed?: () => boolean;
   units: UnitsStore;
   waypoints: WaypointsStore;
   symbols?: SymbolsStore;
@@ -99,6 +100,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     routeStore,
     tides,
     onTideStationSelect,
+    interactionsAllowed,
     units,
     waypoints,
     symbols,
@@ -112,7 +114,9 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     marineRadarLayer,
   } = deps;
   return [
-    createTidesOverlay(tides, units, onTideStationSelect),
+    interactionsAllowed
+      ? createTidesOverlay(tides, units, onTideStationSelect, Date.now, interactionsAllowed)
+      : createTidesOverlay(tides, units, onTideStationSelect),
     createAnchorOverlay(anchor, vessel, onAnchorMoved),
     createMeasureOverlay(measure, units),
     createRouteOverlay(routeStore),

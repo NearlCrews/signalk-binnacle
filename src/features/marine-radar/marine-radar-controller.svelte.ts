@@ -14,17 +14,25 @@ import {
   writeControl,
   writeStructuredControl,
 } from './radar-client';
-import { controlWriteBlockReason } from './radar-controls-model';
+import {
+  controlWriteBlockReason,
+  startRadarAreaChartEdit,
+  stopRadarAreaChartEdit,
+  validateStructuredControl,
+} from './radar-controls-model';
 import type { RadarFrame } from './radar-frame-core';
 import { radarFlushHz } from './radar-limits';
 import {
   POWER_PENDING_KEY,
+  type RadarAreaDraft,
   type RadarControlEntry,
+  type RadarRectValue,
+  type RadarSectorValue,
   type RadarStatus,
+  type RadarStructuredValue,
   type RadarZoneValue,
 } from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
-import { validateRadarZone } from './radar-zone-model';
 
 export interface MarineRadarDeps {
   origin: string;
@@ -34,6 +42,7 @@ export interface MarineRadarDeps {
   centerFresh?: () => boolean;
   headingFresh?: () => boolean;
   radarAvailable: () => boolean;
+  chartEditBlockedReason?: () => string | undefined;
 }
 
 const REOPEN_BASE_MS = 1000;
@@ -53,7 +62,7 @@ interface ControlSnapshot {
 
 type QueuedPayload =
   | { kind: 'scalar'; value: ControlWrite }
-  | { kind: 'zone'; value: RadarZoneValue };
+  | { kind: 'structured'; value: RadarStructuredValue };
 
 interface QueuedControlWrite {
   payload: QueuedPayload;
@@ -352,7 +361,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     store.setControlEntry(controlId, entry);
   }
 
-  function applyZoneControl(controlId: string, value: RadarZoneValue): void {
+  function applyStructuredControl(controlId: string, value: RadarStructuredValue): void {
     store.setControlEntry(controlId, {
       ...(store.controlEntries[controlId] ?? {}),
       ...value,
@@ -378,7 +387,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
       const current = queue.queued;
       queue.queued = undefined;
       const result =
-        current.payload.kind === 'zone'
+        current.payload.kind === 'structured'
           ? await writeStructuredControl(
               deps.origin,
               deps.getToken(),
@@ -479,7 +488,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'scalar', value: payload });
   }
 
-  async function setZoneControl(controlId: string, value: RadarZoneValue): Promise<void> {
+  async function setStructuredControl(
+    controlId: string,
+    value: RadarStructuredValue,
+  ): Promise<void> {
     const radar = store.selected;
     if (!radar) return;
     const definition = controlDefinition(controlId);
@@ -488,14 +500,39 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
       store.controlEntries[controlId],
       store.controlsForbidden,
     );
-    const validation = definition ? validateRadarZone(definition, value) : blocked;
+    const validation = validateStructuredControl(definition, value);
     if (blocked || validation) {
       store.setControlError(controlId, blocked ?? validation);
       return;
     }
     const accepted = snapshotControl(controlId);
-    applyZoneControl(controlId, value);
-    await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'zone', value });
+    applyStructuredControl(controlId, value);
+    await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'structured', value });
+  }
+
+  async function setZoneControl(controlId: string, value: RadarZoneValue): Promise<void> {
+    await setStructuredControl(controlId, value);
+  }
+
+  async function setSectorControl(controlId: string, value: RadarSectorValue): Promise<void> {
+    await setStructuredControl(controlId, value);
+  }
+
+  async function setRectControl(controlId: string, value: RadarRectValue): Promise<void> {
+    await setStructuredControl(controlId, value);
+  }
+
+  function setAreaDraft(draft: RadarAreaDraft | undefined): void {
+    if (draft && (draft.radarId !== store.selectedId || draft.controlId.length === 0)) return;
+    store.setAreaDraft(draft);
+  }
+
+  function startAreaChartEdit(controlId: string): string | undefined {
+    return startRadarAreaChartEdit(store, deps, controlId);
+  }
+
+  function stopAreaChartEdit(): void {
+    stopRadarAreaChartEdit(store);
   }
 
   async function setPower(status: RadarStatus): Promise<boolean> {
@@ -581,7 +618,13 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     dispose,
     selectRadar,
     setControl,
+    setStructuredControl,
     setZoneControl,
+    setSectorControl,
+    setRectControl,
+    setAreaDraft,
+    startAreaChartEdit,
+    stopAreaChartEdit,
     setPower,
     setPolling,
     applyControlDelta,

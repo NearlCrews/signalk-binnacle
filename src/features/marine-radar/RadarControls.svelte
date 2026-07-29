@@ -19,13 +19,16 @@ import {
   isPrimaryControl,
   widgetKind,
 } from './radar-controls-model';
-import type { ControlDefinition, RadarStatus, RadarZoneValue } from './radar-types';
+import type { ControlDefinition, RadarStatus, RadarStructuredValue } from './radar-types';
 
 let {
   store,
   onSetControl,
   onSetAuto,
-  onSetZoneControl,
+  onSetAreaControl,
+  onSetAreaDraft,
+  onStartAreaChartEdit,
+  onStopAreaChartEdit,
   onSelectRadar,
   onSetPower,
   echoShown,
@@ -39,7 +42,10 @@ let {
   store: MarineRadarStore;
   onSetControl: (controlId: string, value: number | string | boolean) => void;
   onSetAuto: (controlId: string, auto: boolean) => void;
-  onSetZoneControl: (controlId: string, value: RadarZoneValue) => void;
+  onSetAreaControl: (controlId: string, value: RadarStructuredValue) => void;
+  onSetAreaDraft: (draft: import('./radar-types').RadarAreaDraft | undefined) => void;
+  onStartAreaChartEdit: (controlId: string) => string | undefined;
+  onStopAreaChartEdit: () => void;
   onSelectRadar?: (id: string) => void;
   onSetPower: (status: RadarStatus) => void;
   echoShown: boolean;
@@ -180,6 +186,14 @@ function onAreaEditState(controlId: string, state: 'idle' | 'editing' | 'dirty')
   onDraftDirtyChange?.(activeEditorDirty);
   if (discardRequested && state === 'idle') onDiscardResolved?.(true);
 }
+
+function discardActiveDraft(): void {
+  const controlId = activeEditorId;
+  onStopAreaChartEdit();
+  onSetAreaDraft(undefined);
+  if (controlId) onAreaEditState(controlId, 'idle');
+  onDiscardResolved?.(true);
+}
 </script>
 
 <!-- One labeled control: the name (and, for a slider, the live value) on a head row, then a full-width
@@ -296,7 +310,11 @@ function onAreaEditState(controlId: string, state: 'idle' | 'editing' | 'dirty')
         controlsForbidden={store.controlsForbidden}
         pending={store.pendingControls[def.id] === true}
         anotherEditorActive={activeEditorId !== undefined && activeEditorId !== def.id}
-        onSave={onSetZoneControl}
+        areaDraft={store.areaDraft}
+        onSave={onSetAreaControl}
+        onDraftChange={onSetAreaDraft}
+        onStartChartEdit={onStartAreaChartEdit}
+        onStopChartEdit={onStopAreaChartEdit}
         onEditStateChange={onAreaEditState}
       />
     {/if}
@@ -367,9 +385,9 @@ function onAreaEditState(controlId: string, state: 'idle' | 'editing' | 'dirty')
 
 {#if discardRequested && activeEditorId}
   <InlineConfirm
-    question="Discard unsaved guard-zone changes?"
+    question="Discard unsaved radar-area changes?"
     confirmLabel="Discard"
-    onConfirm={() => onDiscardResolved?.(true)}
+    onConfirm={discardActiveDraft}
     onCancel={() => onDiscardResolved?.(false)}
   />
 {/if}

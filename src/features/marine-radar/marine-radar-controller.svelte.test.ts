@@ -416,6 +416,150 @@ describe('createMarineRadarController', () => {
     await controller.dispose();
   });
 
+  it('writes complete native sector and rectangle values through the atomic bulk route', async () => {
+    const writes: unknown[] = [];
+    const controls = {
+      noTransmitSector1: { value: -1, endValue: 1, enabled: false, allowed: true },
+      exclusionRect1: {
+        x1: -100,
+        y1: 50,
+        x2: 100,
+        y2: 50,
+        width: 20,
+        enabled: true,
+        allowed: true,
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/radars')) {
+          return new Response(JSON.stringify([{ ...fakeRadar, controls }]), { status: 200 });
+        }
+        if (url.includes('/capabilities')) {
+          return new Response(
+            JSON.stringify({
+              controls: {
+                noTransmitSector1: {
+                  name: 'No-transmit sector 1',
+                  dataType: 'sector',
+                  minValue: -Math.PI,
+                  maxValue: Math.PI,
+                  stepValue: Math.PI / 180,
+                  units: 'rad',
+                  hasEnabled: true,
+                },
+                exclusionRect1: {
+                  name: 'Exclusion rectangle 1',
+                  dataType: 'rect',
+                  minValue: 0,
+                  maxValue: 100_000,
+                  units: 'm',
+                  maxDistance: 100_000,
+                  hasEnabled: true,
+                },
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/controls')) {
+          return new Response(JSON.stringify(controls), { status: 200 });
+        }
+        writes.push(JSON.parse(init?.body as string));
+        return new Response('', { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+
+    await controller.setSectorControl('noTransmitSector1', {
+      value: -0.5,
+      endValue: 0.75,
+      enabled: true,
+    });
+    await controller.setRectControl('exclusionRect1', {
+      x1: -200,
+      y1: 100,
+      x2: 200,
+      y2: 100,
+      width: 40,
+      enabled: false,
+    });
+
+    expect(writes).toEqual([
+      {
+        value: {
+          noTransmitSector1: { value: -0.5, endValue: 0.75, enabled: true },
+        },
+      },
+      {
+        value: {
+          exclusionRect1: {
+            x1: -200,
+            y1: 100,
+            x2: 200,
+            y2: 100,
+            width: 40,
+            enabled: false,
+          },
+        },
+      },
+    ]);
+
+    await controller.setRectControl('exclusionRect1', {
+      x1: -200,
+      y1: 100,
+      x2: 200,
+      y2: 100,
+      width: 0,
+      enabled: false,
+    });
+    expect(writes).toHaveLength(2);
+    expect(controller.store.controlErrors.exclusionRect1).toContain('Width');
+    await controller.dispose();
+  });
+
+  it('starts chart editing only with an active draft, fresh inputs, and no competing tool', async () => {
+    let blocked: string | undefined = 'Finish the measurement first.';
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      getHeading: () => 0,
+      radarAvailable: () => true,
+      chartEditBlockedReason: () => blocked,
+    });
+    controller.store.setDiscovered([
+      {
+        ...fakeRadar,
+        status: 'standby' as const,
+        controls: { noTransmitSector1: { value: -1, endValue: 1, enabled: false } },
+      },
+    ]);
+    controller.store.setAreaDraft({
+      radarId: 'a',
+      controlId: 'noTransmitSector1',
+      type: 'sector',
+      value: { value: -1, endValue: 1, enabled: false },
+      chartEditing: false,
+      chartStep: 0,
+    });
+
+    expect(controller.startAreaChartEdit('noTransmitSector1')).toBe(blocked);
+    blocked = undefined;
+    expect(controller.startAreaChartEdit('noTransmitSector1')).toBeUndefined();
+    expect(controller.store.areaDraft?.chartEditing).toBe(true);
+    controller.stopAreaChartEdit();
+    expect(controller.store.areaDraft?.chartEditing).toBe(false);
+    await controller.dispose();
+  });
+
   it('rechecks the live allowed flag before writing', async () => {
     let writes = 0;
     vi.stubGlobal(

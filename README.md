@@ -54,9 +54,11 @@ Binnacle ships its full feature set as a Signal K webapp:
   NASA GIBS ocean conditions (sea-surface temperature and sea ice), each with its source attribution.
 - **Marine radar:** an optional live radar picture from the Signal K Radar API, rendered over the chart
   with range rings, a heading line, strict night-red colors, confirmed transmit, immediate standby,
-  direct overlay settings, the tuning controls reported by the radar, and an atomic editor for
-  complete native guard-zone controls. Provider, stream, stale-data, access, and renderer failures
-  remain distinct so an old picture is never presented as live.
+  direct overlay settings, the tuning controls reported by the radar, and atomic form and chart
+  editors for complete native zones, no-transmit sectors, and rectangles. Chart placement keeps its
+  active step and Stop action visible on phones, while area geometry follows the live frame heading
+  and range. Provider, stream, stale-data, access, and renderer failures remain distinct so an old
+  picture is never presented as live.
 - **Routing:** draw and save routes as Signal K resources, or tap **Go to here** (long-press or
   right-click the chart) to navigate straight to a point. Follow a route with a nav strip (cross-track,
   distance, bearing, velocity made good, and time to go) over the v2 Course API, with an arrival alarm
@@ -214,9 +216,10 @@ failure does not mislabel an authenticated administrator as signed out.
 `/signalk/v2/api/vessels/self/radars`. Mayara is the reference provider. Binnacle discovers radars,
 hydrates `/controls`, listens for `radars.*.controls.*` Signal K deltas, and opens the selected radar's
 reported spoke stream. Read access is sufficient for the picture; transmit, standby, and tuning writes
-require read-write approval. A provider that reports the complete native guard-zone shape also gets an
-explicit Edit, Save, and Cancel form. Angles display in degrees, distances follow the server unit
-preference, and the write remains one SI geometry update.
+require read-write approval. A provider that reports complete native zone, sector, or rectangle
+shapes also gets explicit Edit, Save, Cancel, and optional chart-placement controls. No-transmit
+sectors require an additional emission-envelope confirmation. Angles display in degrees, distances
+follow the server unit preference, and each write remains one SI geometry update.
 
 ## Usage
 

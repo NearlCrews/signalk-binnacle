@@ -34,7 +34,11 @@ function body(
       controlsForbidden: false,
       pending: false,
       anotherEditorActive: false,
+      areaDraft: undefined,
       onSave: vi.fn(),
+      onDraftChange: vi.fn(),
+      onStartChartEdit: vi.fn(),
+      onStopChartEdit: vi.fn(),
       onEditStateChange: vi.fn(),
     },
   }).body;
@@ -69,12 +73,47 @@ describe('RadarAreaControl', () => {
     expect(html).toContain('not allowing changes');
   });
 
-  it('keeps sectors read-only and explains their transmission effect', () => {
+  it('offers native sector editing with an explicit no-transmit label', () => {
     const html = body(
       { ...zone, id: 'noTransmit', name: 'No transmit', type: 'sector' },
       { value: -1, endValue: 1, enabled: true },
     );
-    expect(html).toContain('can control radar transmission');
+    expect(html).toContain('No-transmit sector enabled');
+    expect(html).toContain('Edit no-transmit sector');
     expect(html).not.toContain('Edit guard zone');
+  });
+
+  it('offers a complete native rectangle editor', () => {
+    const html = body(
+      {
+        id: 'exclusionRect1',
+        name: 'Exclusion rectangle 1',
+        dialect: 'native',
+        type: 'rect',
+        range: { min: 0, max: 100_000, unit: 'm' },
+        hasEnabled: true,
+        maxDistance: 100_000,
+      },
+      { x1: -100, y1: 50, x2: 100, y2: 50, width: 20, enabled: true },
+    );
+    expect(html).toContain('Rectangle enabled');
+    expect(html).toContain('Edit exclusion rectangle');
+  });
+
+  it('treats a fresh native rectangle with omitted enabled state as disabled and editable', () => {
+    const html = body(
+      {
+        id: 'exclusionRect1',
+        name: 'Exclusion rectangle 1',
+        dialect: 'native',
+        type: 'rect',
+        range: { min: 0, max: 100_000, unit: 'm' },
+        hasEnabled: true,
+        maxDistance: 100_000,
+      },
+      { value: 0, x1: 0, y1: 0, x2: 0, y2: 0, width: 0 },
+    );
+    expect(html).toContain('Rectangle disabled');
+    expect(html).toContain('Edit exclusion rectangle');
   });
 });

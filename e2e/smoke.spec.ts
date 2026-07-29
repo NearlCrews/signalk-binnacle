@@ -366,6 +366,26 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
               maxDistance: 100_000,
               hasEnabled: true,
             },
+            noTransmitSector1: {
+              name: 'No-transmit sector 1',
+              description: 'Heading-relative radar emission exclusion',
+              dataType: 'sector',
+              minValue: -Math.PI,
+              maxValue: Math.PI,
+              stepValue: Math.PI / 180,
+              units: 'rad',
+              hasEnabled: true,
+            },
+            exclusionRect1: {
+              name: 'Exclusion rectangle 1',
+              description: 'Stationary target exclusion area',
+              dataType: 'rect',
+              minValue: 0,
+              maxValue: 100_000,
+              units: 'm',
+              maxDistance: 100_000,
+              hasEnabled: true,
+            },
           },
         }),
       });
@@ -384,6 +404,21 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
             startDistance: 200,
             endDistance: 500,
             enabled: false,
+            allowed: true,
+          },
+          noTransmitSector1: {
+            value: -Math.PI / 3,
+            endValue: Math.PI / 3,
+            enabled: false,
+            allowed: true,
+          },
+          exclusionRect1: {
+            x1: -100,
+            y1: 50,
+            x2: 100,
+            y2: 50,
+            width: 20,
+            enabled: true,
             allowed: true,
           },
         }),
@@ -411,6 +446,21 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
               startDistance: 200,
               endDistance: 500,
               enabled: false,
+              allowed: true,
+            },
+            noTransmitSector1: {
+              value: -Math.PI / 3,
+              endValue: Math.PI / 3,
+              enabled: false,
+              allowed: true,
+            },
+            exclusionRect1: {
+              x1: -100,
+              y1: 50,
+              x2: 100,
+              y2: 50,
+              width: 20,
+              enabled: true,
               allowed: true,
             },
           },
@@ -474,6 +524,46 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
       },
     },
   });
+  await panel.getByRole('button', { name: 'Edit no-transmit sector' }).click();
+  await panel.getByRole('spinbutton', { name: 'Start angle' }).fill('-30');
+  await panel.getByRole('button', { name: 'Review sector save' }).click();
+  const sectorConfirm = panel.getByRole('group', {
+    name: 'Apply this no-transmit sector and change the radar emission envelope?',
+  });
+  await expect(sectorConfirm).toBeVisible();
+  await sectorConfirm.getByRole('button', { name: 'Apply sector' }).click();
+  await expect.poll(() => radarWrites).toHaveLength(2);
+  expect(radarWrites[1]).toEqual({
+    pathname: '/signalk/v2/api/vessels/self/radars/halo',
+    body: {
+      value: {
+        noTransmitSector1: {
+          value: -Math.PI / 6,
+          endValue: Math.PI / 3,
+          enabled: false,
+        },
+      },
+    },
+  });
+  await panel.getByRole('button', { name: 'Edit exclusion rectangle' }).click();
+  await panel.getByRole('spinbutton', { name: 'Width' }).fill('40');
+  await panel.getByRole('button', { name: 'Save rectangle' }).click();
+  await expect.poll(() => radarWrites).toHaveLength(3);
+  expect(radarWrites[2]).toEqual({
+    pathname: '/signalk/v2/api/vessels/self/radars/halo',
+    body: {
+      value: {
+        exclusionRect1: {
+          x1: -100,
+          y1: 50,
+          x2: 100,
+          y2: 50,
+          width: 40,
+          enabled: true,
+        },
+      },
+    },
+  });
   const panelBox = await panel.boundingBox();
   expect(panelBox).not.toBeNull();
   expect((panelBox?.x ?? 0) + (panelBox?.width ?? 0)).toBeLessThanOrEqual(320);
@@ -488,7 +578,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   const radarSelector = panel.getByRole('combobox', { name: 'Select radar' });
   await radarSelector.selectOption('halo-b');
   const discardConfirm = panel.getByRole('group', {
-    name: 'Discard unsaved guard-zone changes?',
+    name: 'Discard unsaved radar-area changes?',
   });
   await expect(discardConfirm).toBeVisible();
   await expect(radarSelector).toHaveValue('halo');

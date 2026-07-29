@@ -24,7 +24,7 @@ import { loadChartsManagementPanel } from '$features/charts-management';
 import { LayersPanel, type LayersView } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { AlarmStrip, AlarmsPanel, DangerStrip } from '$features/lookout';
-import { loadRadarControls } from '$features/marine-radar';
+import { loadRadarControls, radarAreaChartInstruction } from '$features/marine-radar';
 import { loadMeasureStrip } from '$features/measure';
 import { MobStrip } from '$features/mob';
 import { NavStrip, type RouteProgress } from '$features/navigation';
@@ -54,6 +54,7 @@ import type {
 } from '$shared/signalk';
 import { isInsecureTransportOrigin } from '$shared/signalk';
 import {
+  createPanelMinimize,
   type PanelId,
   registerDismiss,
   SlideOver,
@@ -477,6 +478,8 @@ let retryServerCharts = $state<(() => void) | undefined>();
 let criticalOverlayError = $state<string | undefined>();
 let lazyPanelAttempt = $state(0);
 let radarDiscardRequested = $state(false);
+const radarMinimize = createPanelMinimize();
+let radarChartEditing = $state(false);
 let pendingRadarPanelAction = $state<
   | { kind: 'close' }
   | { kind: 'back' }
@@ -511,6 +514,12 @@ function chartsPanelForAttempt() {
 function radarControlsForAttempt() {
   void lazyPanelAttempt;
   return loadRadarControls();
+}
+
+function startRadarAreaChartEdit(controlId: string): string | undefined {
+  const error = marineRadar.startAreaChartEdit(controlId);
+  if (!error) setLayerVisible('marine-radar', true);
+  return error;
 }
 
 function runRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAction>): void {
@@ -601,6 +610,13 @@ $effect(() => {
 });
 
 $effect(() => {
+  const editing = marineRadar.store.areaDraft?.chartEditing === true;
+  if (editing) radarMinimize.collapse();
+  else if (radarChartEditing) radarMinimize.expand();
+  radarChartEditing = editing;
+});
+
+$effect(() => {
   if (!radarCloseRequested) return;
   radarCloseRequested = false;
   if (radarControlsOpen) requestRadarPanelAction({ kind: 'close' });
@@ -614,6 +630,17 @@ $effect(() => {
   if (timeTravel.active) return registerDismiss(() => timeTravel.exit());
 });
 </script>
+
+{#snippet radarPlacementFooter()}
+  {#if marineRadar.store.areaDraft?.chartEditing}
+    <span class="radar-placement-instruction" role="status" aria-live="polite">
+      {radarAreaChartInstruction(marineRadar.store.areaDraft)}
+    </span>
+    <button type="button" class="btn btn-ghost" onclick={marineRadar.stopAreaChartEdit}>
+      Stop chart edit
+    </button>
+  {/if}
+{/snippet}
 
 <section class="chart-host" aria-label="Chart">
   <ChartCanvas
@@ -1032,10 +1059,15 @@ $effect(() => {
         title="Radar controls"
         closeLabel="Close radar controls"
         bodyFlex
+        minimize={{
+          collapsed: radarMinimize.collapsed,
+          onToggle: radarMinimize.onToggle,
+        }}
         onClose={() => requestRadarPanelAction({ kind: 'close' })}
         onBack={radarOpenedFrom === 'menu'
           ? () => requestRadarPanelAction({ kind: 'back' })
           : undefined}
+        footer={marineRadar.store.areaDraft?.chartEditing ? radarPlacementFooter : undefined}
       >
         {#await radarControlsForAttempt()}
           <div class="panel-loading" role="status">Loading radar controls…</div>
@@ -1045,7 +1077,10 @@ $effect(() => {
             unitsMode={units.mode}
             onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
             onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-            onSetZoneControl={(id, value) => void marineRadar.setZoneControl(id, value)}
+            onSetAreaControl={(id, value) => void marineRadar.setStructuredControl(id, value)}
+            onSetAreaDraft={marineRadar.setAreaDraft}
+            onStartAreaChartEdit={startRadarAreaChartEdit}
+            onStopAreaChartEdit={marineRadar.stopAreaChartEdit}
             onSelectRadar={(id) => requestRadarPanelAction({ kind: 'select', radarId: id })}
             onSetPower={onSetRadarPower}
             echoShown={radarEchoShown}
@@ -1108,6 +1143,10 @@ $effect(() => {
 .chart-host {
   position: relative;
   block-size: 100%;
+}
+.radar-placement-instruction {
+  flex: 1;
+  min-inline-size: 12rem;
 }
 .banner-slot {
   position: absolute;

@@ -22,8 +22,10 @@ function stationKind(value: unknown): TideStationKind | undefined {
 export function createTideHitHandlers(
   store: TidesStore,
   onSelect?: (selection: TideStationSelectionEvent) => void,
+  interactionsAllowed: () => boolean = () => true,
 ): TideHitHandlers {
   const onClick = (event: MapLayerMouseEvent): void => {
+    if (!interactionsAllowed()) return;
     const feature = event.features?.[0];
     if (feature?.geometry.type !== 'Point') return;
     const properties = feature.properties ?? {};

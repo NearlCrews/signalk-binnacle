@@ -53,6 +53,8 @@ export interface NotesOverlayOptions {
   // Reports why the viewport has results, or why it does not, so Find places can distinguish
   // loading, zoom limits, offline cache, provider failure, and an intentionally hidden overlay.
   onStatus?: (state: PoiViewState) => void;
+  // A live gate for chart tools that temporarily own every map tap.
+  interactionsAllowed?: () => boolean;
 }
 
 // The Points-of-interest overlay: renders community notes as clustered markers. The where-notes-
@@ -70,7 +72,7 @@ export function createNotesOverlay(
   const onNotes = options.onNotes;
   const onStatus = options.onStatus;
   const source = createNotesSource(serverBase, options.persist);
-  const hit = createNoteHitHandlers(onSelect);
+  const hit = createNoteHitHandlers(onSelect, options.interactionsAllowed);
   const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a
   // failed fetch keeps it on screen instead of blanking the markers.

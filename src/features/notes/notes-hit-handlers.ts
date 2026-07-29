@@ -16,6 +16,7 @@ export interface NoteHitHandlers {
 
 export function createNoteHitHandlers(
   onSelect?: (selection: NoteSelection | undefined) => void,
+  interactionsAllowed: () => boolean = () => true,
 ): NoteHitHandlers {
   let onClick: ((event: MapLayerMouseEvent) => void) | undefined;
   let onClusterClick: ((event: MapLayerMouseEvent) => void) | undefined;
@@ -26,6 +27,7 @@ export function createNoteHitHandlers(
     attach(ctx) {
       if (onClick) return;
       onClick = (event) => {
+        if (!interactionsAllowed()) return;
         const feature = event.features?.[0];
         if (feature?.geometry.type !== 'Point') return;
         const props = feature.properties ?? {};
@@ -47,6 +49,7 @@ export function createNoteHitHandlers(
         });
       };
       onClusterClick = (event) => {
+        if (!interactionsAllowed()) return;
         const feature = event.features?.[0];
         const clusterId = feature?.properties?.cluster_id;
         if (typeof clusterId !== 'number' || feature?.geometry.type !== 'Point') return;
@@ -61,6 +64,7 @@ export function createNoteHitHandlers(
           .catch(() => undefined);
       };
       onEnter = () => {
+        if (!interactionsAllowed()) return;
         ctx.map.getCanvas().style.cursor = 'pointer';
       };
       onLeave = () => {
