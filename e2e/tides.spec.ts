@@ -12,7 +12,7 @@ const currentStations = [{ id: 'C1', name: 'Channel current', lat: 27.77, lng: -
 
 async function mockCoops(page: Page): Promise<void> {
   await page.route(
-    /api\.tidesandcurrents\.noaa\.gov\/mdapi\/prod\/webapi\/stations\.json/,
+    /^https:\/\/api\.tidesandcurrents\.noaa\.gov\/mdapi\/prod\/webapi\/stations\.json(?:\?.*)?$/,
     async (route) => {
       const type = new URL(route.request().url()).searchParams.get('type');
       await route.fulfill({
@@ -25,46 +25,49 @@ async function mockCoops(page: Page): Promise<void> {
       });
     },
   );
-  await page.route(/api\.tidesandcurrents\.noaa\.gov\/api\/prod\/datagetter/, async (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    if (params.get('product') === 'currents_predictions') {
+  await page.route(
+    /^https:\/\/api\.tidesandcurrents\.noaa\.gov\/api\/prod\/datagetter(?:\?.*)?$/,
+    async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      if (params.get('product') === 'currents_predictions') {
+        await route.fulfill({
+          status: 200,
+          headers: { 'access-control-allow-origin': '*' },
+          contentType: 'application/json',
+          body: JSON.stringify({
+            current_predictions: {
+              cp: [
+                {
+                  Time: '2026-07-29 10:00',
+                  Velocity_Major: 82,
+                  Type: 'flood',
+                  meanFloodDir: 110,
+                },
+                {
+                  Time: '2026-07-29 16:00',
+                  Velocity_Major: -61,
+                  Type: 'ebb',
+                  meanEbbDir: 290,
+                },
+              ],
+            },
+          }),
+        });
+        return;
+      }
       await route.fulfill({
         status: 200,
         headers: { 'access-control-allow-origin': '*' },
         contentType: 'application/json',
         body: JSON.stringify({
-          current_predictions: {
-            cp: [
-              {
-                Time: '2026-07-29 10:00',
-                Velocity_Major: 82,
-                Type: 'flood',
-                meanFloodDir: 110,
-              },
-              {
-                Time: '2026-07-29 16:00',
-                Velocity_Major: -61,
-                Type: 'ebb',
-                meanEbbDir: 290,
-              },
-            ],
-          },
+          predictions: [
+            { t: '2026-07-29 09:00', v: '0.72', type: 'H' },
+            { t: '2026-07-29 15:00', v: '0.11', type: 'L' },
+          ],
         }),
       });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      headers: { 'access-control-allow-origin': '*' },
-      contentType: 'application/json',
-      body: JSON.stringify({
-        predictions: [
-          { t: '2026-07-29 09:00', v: '0.72', type: 'H' },
-          { t: '2026-07-29 15:00', v: '0.11', type: 'L' },
-        ],
-      }),
-    });
-  });
+    },
+  );
 }
 
 test('selects stations by keyboard and marker tap on a narrow chart', async ({ page }) => {
