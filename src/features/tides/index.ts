@@ -1,4 +1,4 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export {
   fetchSignalkTidesReading,
@@ -9,7 +9,9 @@ export type { TideStationSelectionEvent } from './tides-hit-handlers';
 export { createTidesLoader, type TidesLoader } from './tides-loader';
 export { createTidesOverlay } from './tides-overlay';
 
-const tidesPanelLoader = createRetryableLazyLoader(() => import('./TidesPanel.svelte'));
+const tidesPanelLoader = createRetryableLazyUiLoader(() => import('./TidesPanel.svelte'), {
+  timeoutMessage: 'Tides controls took too long to load.',
+});
 
 export function loadTidesPanel(): Promise<typeof import('./TidesPanel.svelte')> {
   return tidesPanelLoader();

@@ -1,4 +1,4 @@
-import type { CircleLayerSpecification, MapLayerMouseEvent } from 'maplibre-gl';
+import type { CircleLayerSpecification } from 'maplibre-gl';
 import type { AisTargets } from '$entities/ais';
 import { latLonToLonLat } from '$shared/geo';
 import { headingDegrees } from '$shared/lib';
@@ -6,6 +6,7 @@ import {
   createLayerHitHandlers,
   createSymbolOverlay,
   featureCollection,
+  type LayerHitEvent,
   mapThemePaint,
   type OverlayContext,
   type Rgba,
@@ -31,6 +32,7 @@ export interface AisOverlayOptions {
   onSelect?: (id: string) => void;
   selectedId?: () => string | undefined;
   now?: () => number;
+  interactionsAllowed?: () => boolean;
 }
 
 export function createAisOverlay(
@@ -41,6 +43,8 @@ export function createAisOverlay(
   let visible = true;
   let opacity = 1;
   let lastSelectedId = options.selectedId?.();
+  const interactionsAllowed = (): boolean =>
+    visible && opacity > 0 && (options.interactionsAllowed?.() ?? true);
 
   function buildFeatures(): GeoJSON.FeatureCollection {
     const selectedId = options.selectedId?.();
@@ -61,12 +65,23 @@ export function createAisOverlay(
     );
   }
 
-  const hit = createLayerHitHandlers(HIT_LAYER_ID, (event: MapLayerMouseEvent) => {
-    const feature = event.features?.[0];
-    if (feature?.geometry.type !== 'Point') return;
-    const id = feature.properties?.id;
-    if (typeof id === 'string' && targets.find(id)) options.onSelect?.(id);
-  });
+  const hit = createLayerHitHandlers(
+    HIT_LAYER_ID,
+    (event: LayerHitEvent) => {
+      for (const feature of event.features ?? []) {
+        if (feature.geometry.type !== 'Point') continue;
+        const id = feature.properties?.id;
+        if (typeof id !== 'string' || !targets.find(id)) continue;
+        options.onSelect?.(id);
+        return true;
+      }
+      return false;
+    },
+    {
+      band: 'traffic',
+      interactionsAllowed,
+    },
+  );
   const base = createSymbolOverlay({
     id: 'ais',
     title: 'AIS targets',
@@ -83,13 +98,16 @@ export function createAisOverlay(
       const selectedId = options.selectedId?.();
       const selectionChanged = selectedId !== lastSelectedId;
       lastSelectedId = selectedId;
-      return selectionChanged || gate.shouldRefresh();
+      // A selection change rebuilds the same source as an AIS update. Force the shared gate to
+      // record that painted target list, or its stale count can throttle the next real count change.
+      return gate.shouldRefresh(selectionChanged);
     },
   });
 
   const syncVisibility = (ctx: OverlayContext): void => {
     setLayersVisibility(ctx.map, [SELECTED_LAYER_ID], visible);
     setLayersVisibility(ctx.map, [HIT_LAYER_ID], visible && opacity > 0);
+    hit.refreshInteractionState();
   };
 
   return {

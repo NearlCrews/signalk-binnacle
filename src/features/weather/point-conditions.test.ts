@@ -43,6 +43,23 @@ function failureDeps(nowRef: { ms: number }) {
   };
 }
 
+function cachedPoint(requestKey: string, nowMs: number): ProviderPoint {
+  return {
+    requestKey,
+    fetchedAt: nowMs,
+    obs: OBS,
+    series: SERIES,
+    warnings: [WARNING],
+    observationsState: { status: 'success', fetchedAt: nowMs, stale: false },
+    forecastsState: { status: 'success', fetchedAt: nowMs, stale: false },
+    warningsState: { status: 'success', fetchedAt: nowMs, stale: false },
+    observationStatus: 'success',
+    forecastStatus: 'success',
+    warningAvailability: 'fresh',
+    warningsFetchedAt: nowMs,
+  };
+}
+
 describe('pointConditionsKey', () => {
   it('uses 0.001-degree precision consistently', () => {
     expect(pointConditionsKey('provider-id', 27.7104, -82.6904)).toBe('provider-id:27.710,-82.690');
@@ -137,6 +154,72 @@ describe('createPointConditionsLoader', () => {
     }).load('http://pi', 'other-provider', 27.7, -82.7);
     expect(otherProvider.obs).toBeUndefined();
     expect(otherProvider.warnings).toBeUndefined();
+  });
+
+  it('normalizes duplicate identities while promoting cached provider data', async () => {
+    const nowRef = { ms: 50_000 };
+    const persist = createExpiringStore<ProviderPoint>('shared', { factory: undefined });
+    const seeded = makeDeps(nowRef);
+    seeded.forecasts.mockResolvedValueOnce(success([SERIES[0], { ...SERIES[0] }]));
+    seeded.warnings.mockResolvedValueOnce(success([WARNING, { ...WARNING }]));
+    await createPointConditionsLoader({ ...seeded, persist }).load(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+    );
+    nowRef.ms += 30 * 60_000;
+
+    const point = await createPointConditionsLoader({ ...failureDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+    );
+
+    expect(point.series).toEqual(SERIES);
+    expect(point.warnings).toEqual([WARNING]);
+  });
+
+  it.each([
+    ['an invalid observation', { obs: { date: OBS.date, wind: { speedTrue: 'not-a-number' } } }],
+    ['a non-array forecast collection', { series: SERIES[0] }],
+    ['an invalid forecast entry', { series: [...SERIES, { date: 'not-a-date' }] }],
+    [
+      'an oversized forecast collection',
+      {
+        series: Array.from({ length: 13 }, (_, index) => ({
+          date: `2026-06-11T${String(index).padStart(2, '0')}:00:00Z`,
+        })),
+      },
+    ],
+    ['a non-array warning collection', { warnings: WARNING }],
+    ['an invalid warning entry', { warnings: [WARNING, { ...WARNING, endTime: 'not-a-date' }] }],
+    [
+      'an oversized warning collection',
+      { warnings: Array.from({ length: 65 }, () => ({ ...WARNING })) },
+    ],
+    ['an older incomplete envelope', { warningsState: undefined }],
+  ])('discards cached provider data with %s', async (_label, corruption) => {
+    const nowRef = { ms: 50_000 };
+    const requestKey = pointConditionsKey('provider-id', 27.7, -82.7);
+    const persist = createExpiringStore<ProviderPoint>('corrupt', { factory: undefined });
+    await persist.put(
+      requestKey,
+      { ...cachedPoint(requestKey, nowRef.ms), ...corruption } as unknown as ProviderPoint,
+      nowRef.ms + 30 * 60_000,
+    );
+
+    const point = await createPointConditionsLoader({ ...failureDeps(nowRef), persist }).load(
+      'http://pi',
+      'provider-id',
+      27.7,
+      -82.7,
+    );
+
+    expect(point.obs).toBeUndefined();
+    expect(point.series).toBeUndefined();
+    expect(point.warnings).toBeUndefined();
   });
 
   it.each(['empty', 'unsupported'] as const)(

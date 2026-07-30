@@ -18,23 +18,37 @@ interface AisRefreshGate {
 export function createAisRefreshGate(targets: AisTargets, now: () => number): AisRefreshGate {
   let lastVersion = -1;
   let lastCount = -1;
+  let lastList: ReturnType<AisTargets['list']> | undefined;
   let lastRefreshAt = Number.NEGATIVE_INFINITY;
   return {
     reset() {
       lastVersion = -1;
       lastCount = -1;
+      lastList = undefined;
       lastRefreshAt = Number.NEGATIVE_INFINITY;
     },
     shouldRefresh(force = false) {
       const version = targets.version;
-      if (!force && version === lastVersion) return false;
-      const count = targets.list().length;
-      if (!force && count === lastCount && now() - lastRefreshAt < AIS_REFRESH_MIN_MS) {
+      const list = targets.list();
+      // AisTargets retains a stable cached array until either the store version changes or one of
+      // its clock-based freshness boundaries passes. A fresh array at the same version therefore
+      // means a position, approach, or motion field expired and the rendered source must catch up.
+      const clockExpiry = version === lastVersion && list !== lastList;
+      if (!force && version === lastVersion && !clockExpiry) return false;
+      const count = list.length;
+      const refreshAt = now();
+      if (
+        !force &&
+        !clockExpiry &&
+        count === lastCount &&
+        refreshAt - lastRefreshAt < AIS_REFRESH_MIN_MS
+      ) {
         return false;
       }
       lastVersion = version;
       lastCount = count;
-      lastRefreshAt = now();
+      lastList = list;
+      lastRefreshAt = refreshAt;
       return true;
     },
   };

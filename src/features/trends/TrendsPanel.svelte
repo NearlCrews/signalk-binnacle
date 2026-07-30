@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { UnitsMode } from '$shared/lib';
+import { createRetryableLazyUiLoader, type UnitsMode } from '$shared/lib';
 import type { Theme } from '$shared/ui';
-import { CustomizeToggle, SlideOver } from '$shared/ui';
+import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
 import TrendsCustomize from './TrendsCustomize.svelte';
 import type { TrendsController } from './trends-controller.svelte';
 
@@ -16,8 +16,14 @@ interface Props {
 
 const { controller, onRetryProvider, mode, theme, onClose, onBack }: Props = $props();
 let customizing = $state(false);
-let chartsPromise = $state(import('./TrendCharts.svelte'));
+const loadTrendCharts = createRetryableLazyUiLoader(() => import('./TrendCharts.svelte'));
+let chartsAttempt = $state(0);
 let phoneFocusTrap = $state(false);
+
+function trendChartsForAttempt() {
+  void chartsAttempt;
+  return loadTrendCharts();
+}
 
 $effect(() => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -131,18 +137,23 @@ const focused = $derived(controller.focusedId !== undefined);
         </button>
       </div>
     {:else}
-      {#await chartsPromise}
+      {#await trendChartsForAttempt()}
         <p class="muted-note" role="status">Loading trend charts…</p>
       {:then charts}
-        <charts.default {controller} {mode} {theme} />
+        <ErrorBoundary>
+          <charts.default {controller} {mode} {theme} />
+
+          {#snippet fallback(_error, reset)}
+            <div class="chart-error" role="alert">
+              <p class="muted-note">Trend charts stopped unexpectedly.</p>
+              <button type="button" class="btn" onclick={reset}>Retry charts</button>
+            </div>
+          {/snippet}
+        </ErrorBoundary>
       {:catch}
         <div class="chart-error" role="alert">
           <p class="muted-note">Could not open the trend charts.</p>
-          <button
-            type="button"
-            class="btn"
-            onclick={() => (chartsPromise = import('./TrendCharts.svelte'))}
-          >
+          <button type="button" class="btn" onclick={() => (chartsAttempt += 1)}>
             Retry charts
           </button>
         </div>

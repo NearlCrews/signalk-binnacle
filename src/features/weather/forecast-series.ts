@@ -158,10 +158,16 @@ function pickRows(
   hasProvider: boolean,
 ): PointConditions[] {
   if (hasProvider && parsedSeries) {
+    const seenTimes = new Set<number>();
     const providerRows = parsedSeries
       .filter((conditions) => !Number.isNaN(conditions.timeMs) && conditions.timeMs >= targetMs)
       .slice()
       .sort((a, b) => a.timeMs - b.timeMs)
+      .filter((conditions) => {
+        if (seenTimes.has(conditions.timeMs)) return false;
+        seenTimes.add(conditions.timeMs);
+        return true;
+      })
       .slice(0, FORECAST_STEPS)
       .map((provider) => mergeConditions(freeAtTime(grid, parsedPos, provider.timeMs), provider))
       .filter((row): row is PointConditions => !!row);

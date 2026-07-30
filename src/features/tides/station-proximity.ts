@@ -37,6 +37,7 @@ export function nearestStations(
   k: number,
   maxDistMeters: number,
 ): RankedStation[] {
+  if (k <= 0) return [];
   const sorted = sortedByLat(stations);
   const latWindowDeg = maxDistMeters / LAT_METERS_PER_DEG;
   const ranked: RankedStation[] = [];
@@ -46,5 +47,17 @@ export function nearestStations(
     const distanceMeters = haversineMeters(lat, lon, station.latitude, station.longitude);
     if (distanceMeters <= maxDistMeters) ranked.push({ station, distanceMeters });
   }
-  return ranked.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, k);
+  ranked.sort((a, b) => a.distanceMeters - b.distanceMeters);
+
+  // Persisted catalogs can outlive a provider cleanup. Deduplicate after ranking so a conflicting
+  // old record keeps the occurrence nearest to the requested position.
+  const seenIds = new Set<string>();
+  const unique: RankedStation[] = [];
+  for (const candidate of ranked) {
+    if (seenIds.has(candidate.station.id)) continue;
+    seenIds.add(candidate.station.id);
+    unique.push(candidate);
+    if (unique.length >= k) break;
+  }
+  return unique;
 }

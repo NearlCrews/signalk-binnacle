@@ -49,14 +49,15 @@ import { cleanUserChartSource, type UserChartSource, UserCharts } from '$entitie
 import { OwnVessel } from '$entities/vessel';
 import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
+import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
 import {
   createInstrumentsController,
   DEFAULT_TILES,
   detectKip,
-  InstrumentsPanel,
   KIP_URL,
+  loadInstrumentsPanel,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
 import {
@@ -105,6 +106,7 @@ import {
   createTidesController,
   createTidesLoader,
   fetchSignalkTidesReading,
+  loadTidesPanel,
   SIGNALK_TIDES_PLUGIN_ID,
   type TideStationSelectionEvent,
 } from '$features/tides';
@@ -167,8 +169,12 @@ import {
   createThemeController,
   defaultSaveName,
   dialog,
+  ErrorBoundary,
+  LazyPanelState,
+  PanelHeader,
   type PanelId,
   type Theme,
+  trapFocus,
 } from '$shared/ui';
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
@@ -405,6 +411,7 @@ let selectedAisId = $state<string | undefined>();
 let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
 let personalNoteDialogAttempt = $state(0);
+let instrumentsPanelAttempt = $state(0);
 let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
@@ -439,13 +446,19 @@ function personalNoteDialogForAttempt() {
   void personalNoteDialogAttempt;
   return loadPersonalNoteDialog();
 }
+function instrumentsPanelForAttempt() {
+  void instrumentsPanelAttempt;
+  return loadInstrumentsPanel();
+}
 const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
 let narrow = $state(false);
+let instrumentsFullScreen = $state(false);
 const openPanel = (panel: PanelId): void => {
+  if (instrumentsFullScreen && instruments.open) instruments.setOpen(false);
   if (activePanel === 'trends' && panel !== 'trends') {
     trends.setOpen(false);
     trends.setFocus(undefined);
@@ -466,6 +479,33 @@ const togglePanel = (panel: PanelId, onOpen?: () => void): void => {
     onOpen?.();
   }
 };
+
+function finishOpeningInstrumentsPanel(): void {
+  if (instrumentsFullScreen) {
+    radarControlsOpen = false;
+    weatherPanelOpen = false;
+    closePanel();
+    selectedNote = undefined;
+    noteReturnsToPlaces = false;
+  }
+  instruments.setOpen(true);
+}
+
+function toggleInstrumentsPanel(): void {
+  if (instruments.open) {
+    instruments.setOpen(false);
+    return;
+  }
+  if (instrumentsFullScreen) {
+    if (radarControlsOpen) {
+      if (radarDraftDirty) {
+        radarPanelRequest = 'instruments';
+        return;
+      }
+    }
+  }
+  finishOpeningInstrumentsPanel();
+}
 let recolorMap: ((theme: Theme) => void) | undefined;
 let chartsToken = $state<string | undefined>();
 
@@ -975,9 +1015,13 @@ function loadTides(force = false): void {
 // Toggling the tide layer on (or opening the panel) loads tides for the current view, covering the
 // fetches the gated pan-settle path skipped while nothing displayed them. The view read is
 // untracked: mapView changes every frame of a pan, and depending on it would re-run this per
-// frame while the layer is on; the debounced pan-settle path already covers view changes.
+// frame while the layer is on; the debounced pan-settle path already covers view changes. Warm the
+// small panel module at the same time so tapping a visible chart marker does not start its first
+// chunk request while the user is waiting for the station detail.
 $effect(() => {
-  if (tidesWanted) untrack(loadTides);
+  if (!tidesWanted) return;
+  void loadTidesPanel().catch(() => undefined);
+  untrack(loadTides);
 });
 
 let mapCommands = $state<MapCommands | undefined>();
@@ -1085,7 +1129,7 @@ const marineRadar = createMarineRadarController({
 let radarControlsOpen = $state(false);
 let radarOpenedFrom = $state<'menu' | 'layers'>('menu');
 let radarDraftDirty = $state(false);
-let radarCloseRequested = $state(false);
+let radarPanelRequest = $state<'close' | 'instruments' | undefined>();
 
 // Auto-enable the radar echo the first time a radar is discovered, then latch so a later manual
 // toggle-off in the Layers panel is never overridden. The radar layer row's toggle is disabled until a
@@ -1288,8 +1332,12 @@ const menuItems = $derived<MenuItem[]>([
       radarOpenedFrom = 'menu';
       // The echo reveals on first radar discovery and when transmit is keyed up, so opening the
       // panel must not force the layer back on: that would override an explicit toggle-off.
-      if (radarControlsOpen && radarDraftDirty) radarCloseRequested = true;
-      else radarControlsOpen = !radarControlsOpen;
+      if (radarControlsOpen && radarDraftDirty) {
+        radarPanelRequest = 'close';
+      } else {
+        if (!radarControlsOpen && instrumentsFullScreen) instruments.setOpen(false);
+        radarControlsOpen = !radarControlsOpen;
+      }
     },
   },
   {
@@ -1316,7 +1364,10 @@ const menuItems = $derived<MenuItem[]>([
     icon: CloudSun,
     group: 'Weather',
     pressed: weatherPanelOpen,
-    onSelect: () => (weatherPanelOpen = !weatherPanelOpen),
+    onSelect: () => {
+      if (!weatherPanelOpen && instrumentsFullScreen) instruments.setOpen(false);
+      weatherPanelOpen = !weatherPanelOpen;
+    },
   },
   {
     id: 'tides',
@@ -1353,7 +1404,7 @@ const menuItems = $derived<MenuItem[]>([
     icon: Gauge,
     group: 'Instruments',
     pressed: instruments.open,
-    onSelect: () => instruments.toggleOpen(),
+    onSelect: toggleInstrumentsPanel,
   },
   {
     id: 'open-kip',
@@ -1792,6 +1843,13 @@ const fixStale = $derived(vessel.positionStale);
 // means "all clear" or "not working". list() reads aisVersion, so the derived stays reactive.
 const aisCount = $derived(aisTargets.list().length);
 
+// AIS markers are immediately tappable when the first target arrives. Warm their small detail panel
+// at that point so a chart selection cannot become the first request for its UI chunk.
+$effect(() => {
+  if (aisCount === 0) return;
+  void loadAisListPanel().catch(() => undefined);
+});
+
 // Refresh state that a resubscribed stream cannot replay. The stream controller owns the connection
 // edge detection and invokes this composition callback only for a genuine reopen after the first one.
 function refreshAfterStreamReconnect(token: string | undefined): void {
@@ -1907,6 +1965,7 @@ $effect(() => {
 // scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
 // scoped CSS below. This const is the source of truth; retune all of them together.
 const NARROW_BREAKPOINT_PX = 600;
+const INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX = 900;
 const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 
 onMount(() => {
@@ -1939,11 +1998,27 @@ onMount(() => {
   // at narrow widths, where they would otherwise both bottom-dock and overlap. The scoped CSS media
   // queries hardcode the same value, since a media query cannot reference a JS constant or CSS var.
   const narrowQuery = window.matchMedia(`(max-width: ${NARROW_BREAKPOINT_PX}px)`);
+  const instrumentsFullScreenQuery = window.matchMedia(
+    `(max-width: ${INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX}px)`,
+  );
   const syncNarrow = (): void => {
     narrow = narrowQuery.matches;
   };
+  const syncInstrumentsFullScreen = (): void => {
+    const next = instrumentsFullScreenQuery.matches;
+    instrumentsFullScreen = next;
+    if (
+      next &&
+      instruments.open &&
+      (activePanel !== null || weatherPanelOpen || radarControlsOpen || selectedNote !== undefined)
+    ) {
+      instruments.setOpen(false);
+    }
+  };
   syncNarrow();
+  syncInstrumentsFullScreen();
   narrowQuery.addEventListener('change', syncNarrow);
+  instrumentsFullScreenQuery.addEventListener('change', syncInstrumentsFullScreen);
   // Another open Binnacle tab may erase the shared browser storage. Reset this tab's in-memory token
   // and reload so it cannot keep using credentials or cached state that the navigator just removed.
   const privacyChannel =
@@ -1991,6 +2066,7 @@ onMount(() => {
   }
   return () => {
     narrowQuery.removeEventListener('change', syncNarrow);
+    instrumentsFullScreenQuery.removeEventListener('change', syncInstrumentsFullScreen);
     window.removeEventListener('focus', refreshProfiles);
     document.removeEventListener('visibilitychange', refreshProfiles);
     window.removeEventListener('storage', onProfileStorage);
@@ -2135,6 +2211,7 @@ const plotterActions = {
   closePoiSearch,
   backFromPoiSearch,
   onSetRadarPower,
+  openInstrumentsPanel: finishOpeningInstrumentsPanel,
 };
 </script>
 
@@ -2223,7 +2300,7 @@ const plotterActions = {
     bind:radarControlsOpen
     bind:radarOpenedFrom
     bind:radarDraftDirty
-    bind:radarCloseRequested
+    bind:radarPanelRequest
     bind:mapInstance
     {companionBase}
     {chartLockerAccessUrl}
@@ -2254,52 +2331,122 @@ const plotterActions = {
   {#if activePanel === 'profiles'}
     <div class="panel-slot" id="profiles-panel">
       {#await profilesPanelForAttempt()}
-        <div class="slide-over slide-over--dock-left panel-loading" role="status">
-          Loading profiles…
-        </div>
-      {:then module}
-        <module.default
-          {auth}
-          profiles={profileStore.profiles}
-          activeId={profileStore.activeId}
-          defaultId={profileStore.defaultId}
-          syncState={profileStore.syncState}
-          remoteUpdateAvailable={profileStore.remoteUpdateAvailable}
-          onRetrySync={() => void syncProfiles()}
-          onApply={onApplyProfile}
-          onApplyRemoteUpdate={profilesController.applyRemoteUpdate}
-          onKeepCurrentSetup={profilesController.keepCurrentSetup}
-          onSaveNew={onSaveNewProfile}
-          onRename={(id, name) => profileStore.rename(id, name)}
-          onRemove={profilesController.remove}
-          onSetDefault={(id) => profileStore.setDefault(id)}
-          onExport={onExportProfile}
-          onImport={onImportProfiles}
-          onForgetCredentials={forgetDeviceCredentials}
-          onEraseAllLocalData={eraseAllLocalData}
+        <LazyPanelState
+          title="Profiles"
+          closeLabel="Close profiles panel"
+          state="loading"
+          message="Loading Profiles controls…"
           onClose={closePanel}
           onBack={backToMenu}
         />
+      {:then module}
+        <ErrorBoundary>
+          <module.default
+            {auth}
+            profiles={profileStore.profiles}
+            activeId={profileStore.activeId}
+            defaultId={profileStore.defaultId}
+            syncState={profileStore.syncState}
+            remoteUpdateAvailable={profileStore.remoteUpdateAvailable}
+            onRetrySync={() => void syncProfiles()}
+            onApply={onApplyProfile}
+            onApplyRemoteUpdate={profilesController.applyRemoteUpdate}
+            onKeepCurrentSetup={profilesController.keepCurrentSetup}
+            onSaveNew={onSaveNewProfile}
+            onRename={(id, name) => profileStore.rename(id, name)}
+            onRemove={profilesController.remove}
+            onSetDefault={(id) => profileStore.setDefault(id)}
+            onExport={onExportProfile}
+            onImport={onImportProfiles}
+            onForgetCredentials={forgetDeviceCredentials}
+            onEraseAllLocalData={eraseAllLocalData}
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+
+          {#snippet fallback(_error, reset)}
+            <LazyPanelState
+              title="Profiles"
+              closeLabel="Close profiles panel"
+              state="error"
+              message="Profiles controls stopped unexpectedly."
+              onClose={closePanel}
+              onBack={backToMenu}
+              onRetry={reset}
+            />
+          {/snippet}
+        </ErrorBoundary>
       {:catch}
-        <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-          Profiles could not load.
-          <button type="button" class="btn btn-ghost" onclick={() => (profilesPanelAttempt += 1)}>
-            Retry
-          </button>
-        </div>
+        <LazyPanelState
+          title="Profiles"
+          closeLabel="Close profiles panel"
+          state="error"
+          message="Profiles controls could not load."
+          onClose={closePanel}
+          onBack={backToMenu}
+          onRetry={() => (profilesPanelAttempt += 1)}
+        />
       {/await}
     </div>
   {/if}
 
+  {#snippet instrumentsState(message: string, onRetry?: () => void)}
+    <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
+    <aside
+      class="instruments"
+      role={instrumentsFullScreen ? 'dialog' : undefined}
+      aria-label="Instruments"
+      aria-modal={instrumentsFullScreen ? 'true' : undefined}
+      tabindex="-1"
+      use:dialog={() => instruments.setOpen(false)}
+      use:trapFocus={instrumentsFullScreen}
+    >
+      <PanelHeader
+        title="Instruments"
+        closeLabel={instrumentsFullScreen
+          ? 'Close instruments, return to chart'
+          : 'Close instruments dock'}
+        onClose={() => instruments.setOpen(false)}
+      />
+      <div class="panel-body panel-body--flex">
+        <div
+          class:panel-loading={!onRetry}
+          class:panel-load-error={onRetry !== undefined}
+          role={onRetry ? 'alert' : 'status'}
+        >
+          <span>{message}</span>
+          {#if onRetry}
+            <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
+          {/if}
+        </div>
+      </div>
+    </aside>
+  {/snippet}
+
   {#if instruments.open}
-    <InstrumentsPanel
-      controller={instruments}
-      deps={{ vessel, store, units, clock, course: courseGuidance }}
-      initialDetailId={trendReturnInstrumentId}
-      restoreTrendFocusId={trendReturnInstrumentId}
-      onViewTrend={openFocusedTrend}
-      onTrendFocusRestored={() => (trendReturnInstrumentId = undefined)}
-    />
+    {#await instrumentsPanelForAttempt()}
+      {@render instrumentsState('Loading Instruments controls…')}
+    {:then module}
+      <ErrorBoundary>
+        <module.default
+          controller={instruments}
+          deps={{ vessel, store, units, clock, course: courseGuidance }}
+          fullscreen={instrumentsFullScreen}
+          initialDetailId={trendReturnInstrumentId}
+          restoreTrendFocusId={trendReturnInstrumentId}
+          onViewTrend={openFocusedTrend}
+          onTrendFocusRestored={() => (trendReturnInstrumentId = undefined)}
+        />
+
+        {#snippet fallback(_error, reset)}
+          {@render instrumentsState('Instruments controls stopped unexpectedly.', reset)}
+        {/snippet}
+      </ErrorBoundary>
+    {:catch}
+      {@render instrumentsState('Instruments controls could not load.', () => {
+        instrumentsPanelAttempt += 1;
+      })}
+    {/await}
   {/if}
 
   <StatusStrip
@@ -2357,18 +2504,36 @@ const plotterActions = {
         </button>
       </dialog>
     {:then module}
-      <module.default
-        editor={personalNotesController.editor}
-        symbols={symbolsStore}
-        {auth}
-        capability={personalNotesController.capability}
-        probing={personalNotesController.probing}
-        busy={personalNotesController.busy}
-        error={personalNotesController.error}
-        onSave={(input) => void personalNotesController.save(input)}
-        onCancel={personalNotesController.cancelEdit}
-        onProbe={() => void personalNotesController.probe()}
-      />
+      <ErrorBoundary>
+        <module.default
+          editor={personalNotesController.editor}
+          symbols={symbolsStore}
+          {auth}
+          capability={personalNotesController.capability}
+          probing={personalNotesController.probing}
+          busy={personalNotesController.busy}
+          error={personalNotesController.error}
+          onSave={(input) => void personalNotesController.save(input)}
+          onCancel={personalNotesController.cancelEdit}
+          onProbe={() => void personalNotesController.probe()}
+        />
+
+        {#snippet fallback(_error, reset)}
+          <dialog
+            class="modal-card lazy-note-dialog"
+            aria-label="Personal note editor unavailable"
+            use:dialog={personalNotesController.cancelEdit}
+          >
+            <p class="alert-note" role="alert">Personal note editor stopped unexpectedly.</p>
+            <div class="panel-controls">
+              <button type="button" class="btn btn-primary" onclick={reset}>Retry</button>
+              <button type="button" class="btn" onclick={personalNotesController.cancelEdit}>
+                Cancel
+              </button>
+            </div>
+          </dialog>
+        {/snippet}
+      </ErrorBoundary>
     {:catch}
       <dialog
         class="modal-card lazy-note-dialog"
@@ -2506,8 +2671,21 @@ const plotterActions = {
 .binnacle-shell > :global(.instruments) {
   grid-row: 2;
   grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  inline-size: clamp(20rem, 28vw, 24rem);
+  border-inline-start: 1px solid var(--border);
   /* The dock scrolls its own tiles; without this a long tile list would stretch the shell row. */
   min-block-size: 0;
+}
+@media (max-width: 900px) {
+  .binnacle-shell > :global(.instruments) {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-panel);
+    inline-size: auto;
+    background: var(--surface);
+  }
 }
 /* The strip's root lives inside the StatusStrip component, so the span reaches it with :global. */
 .binnacle-shell :global(.status-strip) {

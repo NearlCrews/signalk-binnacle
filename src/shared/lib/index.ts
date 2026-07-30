@@ -24,7 +24,10 @@ export {
 } from './math';
 export { prefersReducedMotion } from './motion';
 export { isRecord, sameJsonValue } from './object';
-export { createRetryableLazyLoader } from './retryable-lazy-loader';
+export {
+  createRetryableLazyLoader,
+  createRetryableLazyUiLoader,
+} from './retryable-lazy-loader';
 export { capitalize, hasControlCharacters } from './strings';
 export { Toast } from './toast.svelte';
 export {

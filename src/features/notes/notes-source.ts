@@ -61,7 +61,13 @@ export function createNotesSource(
 
   function cachedPoints(value: unknown): NotePoint[] | undefined {
     if (!Array.isArray(value)) return undefined;
-    const points = value.slice(0, MAX_NOTES_PER_VIEW).filter(isNotePoint);
+    const seenIds = new Set<string>();
+    const points: NotePoint[] = [];
+    for (const point of value.slice(0, MAX_NOTES_PER_VIEW)) {
+      if (!isNotePoint(point) || seenIds.has(point.id)) continue;
+      seenIds.add(point.id);
+      points.push(point);
+    }
     if (value.length > 0 && points.length === 0) return undefined;
     return points;
   }

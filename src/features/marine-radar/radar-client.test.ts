@@ -85,6 +85,27 @@ describe('discoverRadars', () => {
     expect(result.radars[0].controls['gain.fine']?.value).toBe(25);
   });
 
+  it('collapses identical radar ids and rejects a conflicting radar identity', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify([
+              radar,
+              { ...radar },
+              { ...radar, id: 'conflict', name: 'First' },
+              { ...radar, id: 'conflict', name: 'Second' },
+            ]),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    const result = await discoverRadars('http://boat.local', undefined);
+    expect(result.radars.map(({ id }) => id)).toEqual(['nav1034A']);
+  });
+
   it('reports an absent provider on a 404', async () => {
     vi.stubGlobal(
       'fetch',
@@ -670,6 +691,45 @@ describe('fetchCapabilities', () => {
     expect(caps?.controls.find((c) => c.id === 'power')?.values).toEqual([
       { value: 1, label: 'Standby' },
       { value: 2, label: 'Transmit' },
+    ]);
+  });
+
+  it('normalizes repeated v5 control ids and typed enum identities', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              controls: [
+                { id: 'gain', name: 'Gain', type: 'number' },
+                { id: 'gain', name: 'Gain', type: 'number' },
+                { id: 'conflict', name: 'First', type: 'number' },
+                { id: 'conflict', name: 'Second', type: 'number' },
+                {
+                  id: 'mode',
+                  name: 'Mode',
+                  type: 'enum',
+                  values: [
+                    { value: 1, label: 'Numeric' },
+                    { value: '1', label: 'String' },
+                    { value: '1', label: 'String' },
+                    { value: 2, label: 'First label' },
+                    { value: 2, label: 'Conflicting label' },
+                  ],
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    const controls = (await fetchCapabilities('http://boat.local', undefined, 'r'))?.controls;
+    expect(controls?.map(({ id }) => id)).toEqual(['gain', 'mode']);
+    expect(controls?.find(({ id }) => id === 'mode')?.values).toEqual([
+      { value: 1, label: 'Numeric' },
+      { value: '1', label: 'String' },
     ]);
   });
 });

@@ -1,4 +1,4 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export {
   COMPANION_POLL_MS,
@@ -6,7 +6,7 @@ export {
   CompanionStatus,
 } from './companion-status.svelte';
 
-const regionsPanelLoader = createRetryableLazyLoader(() => import('./RegionsPanel.svelte'));
+const regionsPanelLoader = createRetryableLazyUiLoader(() => import('./RegionsPanel.svelte'));
 
 export function loadRegionsPanel(): Promise<typeof import('./RegionsPanel.svelte')> {
   return regionsPanelLoader();

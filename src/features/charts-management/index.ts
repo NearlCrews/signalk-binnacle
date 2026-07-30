@@ -1,6 +1,6 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
-const chartsManagementPanelLoader = createRetryableLazyLoader(
+const chartsManagementPanelLoader = createRetryableLazyUiLoader(
   () => import('./ChartsManagementPanel.svelte'),
 );
 

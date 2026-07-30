@@ -35,16 +35,25 @@ function safeZoom(value: unknown): number | undefined {
     : undefined;
 }
 
-// Validate a keyed chart entry before it becomes a layer, the way notes and symbols are validated:
-// an error envelope ({state, statusCode, message}) or a record missing name or type has no business
-// rendering, so it falls through here. The key stands in as identifier when the entry omits one.
-// bounds is validated (4 finite numbers) and dropped when malformed so a bad value never reaches fitBounds.
+// Validate a keyed chart entry before it becomes a layer, the way notes and symbols are validated.
+// The resource key is the canonical identifier because it names the REST resource and is unique
+// within the collection. An embedded identifier is provider metadata and cannot replace that key.
 function chartFromEntry(id: string, raw: unknown): SignalKChart | undefined {
   if (!isRecord(raw)) return undefined;
-  const identifier = cleanString(raw.identifier ?? id, MAX_ID_LENGTH);
+  const identifier = cleanString(id, MAX_ID_LENGTH);
+  const embeddedIdentifier =
+    raw.identifier === undefined ? undefined : cleanString(raw.identifier, MAX_ID_LENGTH);
   const name = cleanString(raw.name, MAX_NAME_LENGTH);
   const type = cleanString(raw.type, 32);
-  if (!identifier || !name || !type || !CHART_TYPES.has(type)) return undefined;
+  if (
+    !identifier ||
+    (raw.identifier !== undefined && !embeddedIdentifier) ||
+    !name ||
+    !type ||
+    !CHART_TYPES.has(type)
+  ) {
+    return undefined;
+  }
   const chart: SignalKChart = { identifier, name, type: type as SignalKChart['type'] };
   const description = cleanString(raw.description, MAX_DESCRIPTION_LENGTH);
   if (description) chart.description = description;

@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { onDestroy, onMount } from 'svelte';
 import type { AisTargets } from '$entities/ais';
 import type { AnchorWatch } from '$entities/anchor';
@@ -39,13 +39,16 @@ import type { TimeTravelController } from '$features/time-travel';
 import type { SavedTracksSource } from '$features/track-layer';
 import { OWN_VESSEL_OVERLAY_ID } from '$features/vessel-layer';
 import type { LatLon } from '$shared/geo';
-import { lengthUnit } from '$shared/lib';
+import { createRetryableLazyUiLoader, lengthUnit } from '$shared/lib';
 import {
+  activeLayerHitCursor,
   chartSourceId,
   createChartOverlay,
+  createMapTapRecognizer,
   createThemedMap,
   detectCompanion,
   type LayerSettings,
+  type MapTapEvent,
   proxiedSources,
   type ThemedMapHandle,
 } from '$shared/map';
@@ -59,6 +62,8 @@ import { buildDynamicOverlays } from './build-overlays';
 import ChartContextMenu from './ChartContextMenu.svelte';
 import type { MapCommands, UserChartRegistrar } from './commands';
 import VesselOffScreenIndicator from './VesselOffScreenIndicator.svelte';
+
+const loadRouteEditorModule = createRetryableLazyUiLoader(() => import('$features/route-edit'));
 
 interface Props {
   store: SignalKStore;
@@ -225,12 +230,17 @@ let mapHandle: ThemedMapHandle | undefined;
 // unmounting during that await, which would otherwise build a map onDestroy never tears down.
 let destroyed = false;
 let routeEditor: RouteEditor | undefined;
-// Stays true through the synchronous MapLibre dispatch for a radar placement tap. The general map
-// listener runs before layer-delegated listeners, and the final or failed placement tap may stop
-// editing immediately, so the live chartEditing flag alone cannot gate those later listeners.
+// Stays true through MapLibre dispatch and the shared queued marker-hit routing for a radar placement
+// tap. The general map listener runs before layer delegates, and the final or failed placement tap
+// may stop editing immediately, so the live chartEditing flag alone cannot gate those later hits.
 let radarPlacementDispatch = false;
+// Measure, route editing, and radar placement each own chart taps. One shared live predicate gates
+// marker, label, and cluster delegates so a single gesture cannot also select another chart feature.
 const markerInteractionsAllowed = (): boolean =>
-  !radarPlacementDispatch && !marineRadarLayer?.chartEditing();
+  !measure.active &&
+  !routeStore.working &&
+  !radarPlacementDispatch &&
+  !marineRadarLayer?.chartEditing();
 // The registered Measure overlay also owns its generous vertex hit surface and deliberate drag
 // lifecycle. The chart click dispatcher consults it before deciding that a tap adds a new point.
 let measureOverlay: MeasureOverlay | undefined;
@@ -288,13 +298,16 @@ $effect(() => {
   const map = mapRef;
   if (!map) return;
   const radarEditing = marineRadarLayer?.chartEditing() === true;
-  if ((!measure.active || routeStore.working) && !radarEditing) return;
+  const routeEditing = routeStore.working !== undefined;
+  if (!measure.active && !routeEditing && !radarEditing) return;
   const canvas = map.getCanvas();
   const prior = canvas.style.cursor;
   const cursor = radarEditing ? 'crosshair' : measure.moveArmed ? 'move' : 'crosshair';
   canvas.style.cursor = cursor;
   return () => {
-    if (canvas.style.cursor === cursor) canvas.style.cursor = prior;
+    if (canvas.style.cursor === cursor) {
+      canvas.style.cursor = activeLayerHitCursor(canvas) ?? (prior === 'pointer' ? '' : prior);
+    }
   };
 });
 
@@ -347,6 +360,9 @@ onMount(async () => {
       };
     },
     onLoad: async ({ map, ctx, manager: mgr, recolor, isDestroyed, runTick }) => {
+      // Chart tools can be opened while optional overlays are still registering. Expose the loaded
+      // map immediately so their cursor and keyboard feedback do not wait on unrelated providers.
+      mapRef = map;
       // Seed the unit global-state before registerAll below adds Seascape's vector layers, so their
       // global-state-driven filters and text-fields never evaluate against an unset value; the
       // units effect (mapRef-gated, further down) keeps it live after this initial seed.
@@ -355,13 +371,15 @@ onMount(async () => {
       map.on('movestart', () => {
         chartMenu = undefined;
       });
-      // A single click handler gives the active chart tool one outcome per tap. Measure resolves an
-      // generous vertex hit before an empty-water add, and it suppresses the synthetic click that
-      // follows a completed drag.
-      map.on('click', (e: MapMouseEvent) => {
+      // One mouse-or-touch tap handler gives the active chart tool one outcome per gesture. Measure
+      // resolves a generous vertex hit before an empty-water add, and it suppresses the trailing
+      // event that follows a completed drag.
+      const handleChartTap = (e: MapTapEvent): void => {
         if (marineRadarLayer?.chartEditing()) {
           radarPlacementDispatch = true;
           queueMicrotask(() => {
+            // Delegated handlers have already checked this gate during the MapLibre event. Release
+            // it before Svelte restores the cursor after a final placement point.
             radarPlacementDispatch = false;
           });
           if (
@@ -376,10 +394,7 @@ onMount(async () => {
         if (measure.active && !routeStore.working) {
           if (measureOverlay?.consumeTrailingClick()) return;
           const vertexId = measureOverlay?.hitTestVertex(e.point);
-          if (vertexId) {
-            measure.select(vertexId);
-            return;
-          }
+          if (vertexId && measure.select(vertexId)) return;
           const position = {
             latitude: e.lngLat.lat,
             longitude: e.lngLat.lng,
@@ -397,7 +412,23 @@ onMount(async () => {
           if (index !== undefined) routeStore.setHighlight({ kind: 'waypoint', index });
           else routeStore.clearHighlight();
         }
+      };
+      const chartTap = createMapTapRecognizer((event) => {
+        if (event.type === 'touchend') {
+          // The Measure drag listener is registered after this map-wide listener. Let its touchend
+          // finish first so a completed drag can suppress this tap instead of adding another point.
+          queueMicrotask(() => {
+            if (!isDestroyed()) handleChartTap(event);
+          });
+          return;
+        }
+        handleChartTap(event);
       });
+      map.on('click', chartTap.click);
+      map.on('touchstart', chartTap.touchstart);
+      map.on('touchmove', chartTap.touchmove);
+      map.on('touchend', chartTap.touchend);
+      map.on('touchcancel', chartTap.cancel);
       // Build every overlay, then register the whole stack in one batch so the layer order is
       // applied once instead of restacking after each. The inter-band order comes from Z_ORDER (own
       // vessel and collision pinned on top, then the navigator's routes and track, then AIS and the
@@ -407,8 +438,7 @@ onMount(async () => {
         origin,
         () => chartsToken,
         (selection) => {
-          if (!measure.active && !routeStore.working && markerInteractionsAllowed())
-            onNoteSelect?.(selection);
+          if (markerInteractionsAllowed()) onNoteSelect?.(selection);
         },
         symbols,
         {
@@ -429,8 +459,7 @@ onMount(async () => {
         aisTargets,
         selectedAisId: () => selectedAisId,
         onAisSelect: (id) => {
-          if (!measure.active && !routeStore.working && markerInteractionsAllowed())
-            onAisSelect?.(id);
+          if (markerInteractionsAllowed()) onAisSelect?.(id);
         },
         anchor,
         mob,
@@ -550,7 +579,6 @@ onMount(async () => {
         }
       }
       if (isDestroyed()) return;
-      mapRef = map;
 
       // The Terra Draw route editor draws into its own layers anchored in the routes band. It writes
       // edits back into the working route, which the panel reads for its live distance and count.
@@ -559,7 +587,7 @@ onMount(async () => {
       const editorBeforeId = ctx.beforeIdFor('routes');
       let editorLoading: Promise<RouteEditor | undefined> | undefined;
       const loadRouteEditor = (): Promise<RouteEditor | undefined> => {
-        editorLoading ??= import('$features/route-edit')
+        editorLoading ??= loadRouteEditorModule()
           .then(({ createRouteEditor }) => {
             if (isDestroyed()) return undefined;
             routeEditor = createRouteEditor({

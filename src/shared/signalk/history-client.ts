@@ -156,6 +156,7 @@ export async function fetchHistoryValues(
     return undefined;
   }
   const columns: HistoryColumn[] = [];
+  const columnIds = new Set<string>();
   for (const col of body.values) {
     const { path, method } = (col ?? {}) as { path?: unknown; method?: unknown };
     if (
@@ -167,7 +168,11 @@ export async function fetchHistoryValues(
     ) {
       return undefined;
     }
-    columns.push({ path, method: typeof method === 'string' ? method : '' });
+    const normalizedMethod = typeof method === 'string' ? method : '';
+    const columnId = `${path}\u0000${normalizedMethod}`;
+    if (columnIds.has(columnId)) return undefined;
+    columnIds.add(columnId);
+    columns.push({ path, method: normalizedMethod });
   }
   const rows = body.data.filter(
     (row): row is [string, ...unknown[]] =>

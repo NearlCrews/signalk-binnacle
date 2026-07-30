@@ -94,9 +94,11 @@ export function createAnchorOverlay(
   anchor: AnchorWatch,
   vessel: OwnVessel,
   onMoved?: (position: LatLon) => void,
+  interactionsAllowed: () => boolean = () => true,
 ): AnchorOverlay {
   let paint = mapThemePaint('day');
   let opacity = 1;
+  let visible = true;
   // The marker position while a drag is in flight, overriding the store so the preview is smooth
   // without committing every pointer move. Cleared on pointer-up; in server mode the marker can snap
   // back briefly until the stream confirms the PUT, which is honest about who owns the state.
@@ -109,12 +111,18 @@ export function createAnchorOverlay(
   // add() can run again after a base-style swap; the map keeps its listeners across that, so the
   // drag handlers must only ever attach once.
   let handlersAttached = false;
+  let cancelActiveDrag: (() => void) | undefined;
   // Detaches the marker-layer drag handlers, set when they attach so remove() can unregister them.
   // Without it a standalone unregister-then-readd would leak the listeners and the attach guard would
   // then block reattach, silently disabling anchor drag.
   let detachMarkerDrag: (() => void) | undefined;
 
+  const canInteract = (): boolean => visible && opacity > 0 && interactionsAllowed();
   const onPointerMove = (e: MapMouseEvent | MapTouchEvent): void => {
+    if (!canInteract()) {
+      cancelActiveDrag?.();
+      return;
+    }
     dragPreview = { latitude: e.lngLat.lat, longitude: e.lngLat.lng };
     needsRedraw = true;
   };
@@ -188,8 +196,14 @@ export function createAnchorOverlay(
       handlersAttached = true;
       const commitMove = onMoved;
       function endDrag(e: MapMouseEvent | MapTouchEvent): void {
+        if (!canInteract()) {
+          cancelDrag();
+          return;
+        }
         map.off('mousemove', onPointerMove);
         map.off('touchmove', onPointerMove);
+        map.off('mouseup', endDrag);
+        map.off('touchend', endDrag);
         map.off('touchcancel', cancelDrag);
         const committed = dragPreview ?? { latitude: e.lngLat.lat, longitude: e.lngLat.lng };
         dragPreview = undefined;
@@ -202,11 +216,15 @@ export function createAnchorOverlay(
       function cancelDrag(): void {
         map.off('mousemove', onPointerMove);
         map.off('touchmove', onPointerMove);
+        map.off('mouseup', endDrag);
         map.off('touchend', endDrag);
+        map.off('touchcancel', cancelDrag);
         dragPreview = undefined;
         needsRedraw = true;
       }
+      cancelActiveDrag = cancelDrag;
       const onMarkerMouseDown = (e: MapLayerMouseEvent): void => {
+        if (!canInteract()) return;
         e.preventDefault();
         map.on('mousemove', onPointerMove);
         // No mouse cancel path: MapLibre tracks an in-flight mouse drag at the window level, so
@@ -214,14 +232,14 @@ export function createAnchorOverlay(
         void map.once('mouseup', endDrag);
       };
       const onMarkerTouchStart = (e: MapLayerTouchEvent): void => {
-        if (e.points.length !== 1) return;
+        if (e.points.length !== 1 || !canInteract()) return;
         e.preventDefault();
         map.on('touchmove', onPointerMove);
         void map.once('touchend', endDrag);
         void map.once('touchcancel', cancelDrag);
       };
       const onMarkerEnter = (): void => {
-        map.getCanvas().style.cursor = 'move';
+        if (canInteract()) map.getCanvas().style.cursor = 'move';
       };
       const onMarkerLeave = (): void => {
         map.getCanvas().style.cursor = '';
@@ -247,6 +265,7 @@ export function createAnchorOverlay(
       };
     },
     sync(ctx) {
+      if (!canInteract()) cancelActiveDrag?.();
       const anchorPos = dragPreview ?? anchor.position;
       const vesselPos = vessel.position;
       const radius = anchor.radiusMeters;
@@ -268,8 +287,13 @@ export function createAnchorOverlay(
       setSourceData(ctx.map, SHAPE_SRC, shapeFeatures(anchorPos, radius, vesselPos, dragging));
       setSourceData(ctx.map, POINT_SRC, pointFeatures(anchorPos, dragging));
     },
-    setVisible(ctx, visible) {
-      setLayersVisibility(ctx.map, LAYERS, visible);
+    setVisible(ctx, next) {
+      visible = next;
+      if (!canInteract()) {
+        cancelActiveDrag?.();
+        if (ctx.map.getCanvas().style.cursor === 'move') ctx.map.getCanvas().style.cursor = '';
+      }
+      setLayersVisibility(ctx.map, LAYERS, next);
     },
     // Both mutators guard on getLayer: an opacity or theme change can land in the window before
     // add() has attached the layers, and setPaintProperty throws on a missing layer. Skipping is
@@ -277,6 +301,10 @@ export function createAnchorOverlay(
     // the LayerManager re-applies both right after add() resolves.
     setOpacity(ctx, next) {
       opacity = next;
+      if (!canInteract()) {
+        cancelActiveDrag?.();
+        if (ctx.map.getCanvas().style.cursor === 'move') ctx.map.getCanvas().style.cursor = '';
+      }
       const { map } = ctx;
       if (map.getLayer(FILL_LAYER)) {
         map.setPaintProperty(FILL_LAYER, 'fill-opacity', FILL_OPACITY * opacity);
@@ -308,6 +336,7 @@ export function createAnchorOverlay(
     remove(ctx) {
       detachMarkerDrag?.();
       detachMarkerDrag = undefined;
+      cancelActiveDrag = undefined;
       handlersAttached = false;
       removeLayersAndSources(ctx.map, LAYERS, [SHAPE_SRC, POINT_SRC]);
     },

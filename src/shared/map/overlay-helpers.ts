@@ -24,14 +24,13 @@ export function ensureGeoJsonSources(map: MapLibreMap, ids: readonly string[]): 
 // Set a GeoJSON source's data, narrowing the source handle in one place: the dozen-odd overlays that
 // push fresh features otherwise re-spell the `(map.getSource(id) as GeoJSONSource | undefined)?.setData`
 // cast at each site. A no-op when the source is absent (the overlay was removed mid-flight).
-// MapLibre 6's setData returns a promise that settles when the worker finishes; every caller here
-// is fire-and-forget by design (the render pipeline paints when ready), so it is explicitly voided.
 export function setSourceData(
   map: MapLibreMap,
   sourceId: string,
   data: GeoJSON.GeoJSON | string,
 ): void {
-  void (map.getSource(sourceId) as GeoJSONSource | undefined)?.setData(data);
+  const source = map.getSource(sourceId) as GeoJSONSource | undefined;
+  void source?.setData(data);
 }
 
 // The two loops every overlay module's setVisible and remove repeat, shared so the lifecycle

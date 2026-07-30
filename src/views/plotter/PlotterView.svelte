@@ -55,6 +55,9 @@ import type {
 import { isInsecureTransportOrigin } from '$shared/signalk';
 import {
   createPanelMinimize,
+  dialog,
+  ErrorBoundary,
+  LazyPanelState,
   type PanelId,
   registerDismiss,
   SlideOver,
@@ -151,7 +154,7 @@ interface FlatProps {
   radarControlsOpen: boolean;
   radarOpenedFrom: 'menu' | 'layers';
   radarDraftDirty: boolean;
-  radarCloseRequested: boolean;
+  radarPanelRequest: 'close' | 'instruments' | undefined;
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
   chartLockerAccessUrl: string;
@@ -231,6 +234,7 @@ interface FlatProps {
   closePoiSearch: () => void;
   backFromPoiSearch: () => void;
   onSetRadarPower: (status: import('$features/marine-radar').RadarStatus) => void;
+  openInstrumentsPanel: () => void;
 }
 
 type ServiceKey =
@@ -324,7 +328,8 @@ type ActionKey =
   | 'closeNote'
   | 'closePoiSearch'
   | 'backFromPoiSearch'
-  | 'onSetRadarPower';
+  | 'onSetRadarPower'
+  | 'openInstrumentsPanel';
 
 interface Props extends Omit<FlatProps, ServiceKey | ControllerKey | EntityKey | ActionKey> {
   services: Pick<FlatProps, ServiceKey>;
@@ -358,7 +363,7 @@ let {
   radarControlsOpen = $bindable(),
   radarOpenedFrom = $bindable(),
   radarDraftDirty = $bindable(),
-  radarCloseRequested = $bindable(),
+  radarPanelRequest = $bindable(),
   mapInstance = $bindable(),
   companionBase,
   chartLockerAccessUrl,
@@ -479,6 +484,7 @@ const {
   closePoiSearch,
   backFromPoiSearch,
   onSetRadarPower,
+  openInstrumentsPanel,
 } = $derived(actions);
 
 let mapCommands = $state<MapCommands | undefined>();
@@ -494,6 +500,8 @@ let pendingRadarPanelAction = $state<
   | { kind: 'back' }
   | { kind: 'overlays' }
   | { kind: 'select'; radarId: string }
+  | { kind: 'tides'; selection: TideStationSelectionEvent }
+  | { kind: 'instruments' }
   | undefined
 >(undefined);
 
@@ -508,6 +516,15 @@ const CRITICAL_OVERLAY_LABELS: Record<string, string> = {
 
 function retryLazyPanel(): void {
   lazyPanelAttempt += 1;
+}
+
+function closeWeatherPanel(): void {
+  weatherPanelOpen = false;
+}
+
+function backFromWeatherPanel(): void {
+  weatherPanelOpen = false;
+  menuOpen = true;
 }
 
 function regionsPanelForAttempt() {
@@ -533,6 +550,9 @@ function startRadarAreaChartEdit(controlId: string): string | undefined {
 
 function runRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAction>): void {
   switch (action.kind) {
+    case 'close':
+      radarControlsOpen = false;
+      break;
     case 'back':
       radarControlsOpen = false;
       backToMenu();
@@ -544,8 +564,14 @@ function runRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAction>
     case 'select':
       marineRadar.selectRadar(action.radarId);
       break;
-    default:
+    case 'tides':
       radarControlsOpen = false;
+      onTideStationSelect(action.selection);
+      break;
+    case 'instruments':
+      radarControlsOpen = false;
+      openInstrumentsPanel();
+      break;
   }
 }
 
@@ -554,6 +580,7 @@ function requestRadarPanelAction(action: NonNullable<typeof pendingRadarPanelAct
     runRadarPanelAction(action);
     return;
   }
+  radarMinimize.expand();
   pendingRadarPanelAction = action;
   radarDiscardRequested = true;
 }
@@ -563,6 +590,16 @@ function resolveRadarDraftDiscard(discarded: boolean): void {
   radarDiscardRequested = false;
   pendingRadarPanelAction = undefined;
   if (discarded && action) runRadarPanelAction(action);
+}
+
+function requestTideStationSelection(selection: TideStationSelectionEvent): void {
+  if (!radarControlsOpen) {
+    onTideStationSelect(selection);
+    return;
+  }
+  // Radar and ordinary leading panels share one dock. Route this transition through the same
+  // discard guard as Close and Back so Tides cannot mount underneath Radar or drop an area draft.
+  requestRadarPanelAction({ kind: 'tides', selection });
 }
 
 function weatherMapForAttempt() {
@@ -626,9 +663,10 @@ $effect(() => {
 });
 
 $effect(() => {
-  if (!radarCloseRequested) return;
-  radarCloseRequested = false;
-  if (radarControlsOpen) requestRadarPanelAction({ kind: 'close' });
+  const request = radarPanelRequest;
+  if (!request) return;
+  radarPanelRequest = undefined;
+  if (radarControlsOpen) requestRadarPanelAction({ kind: request });
 });
 
 $effect(() => {
@@ -701,7 +739,7 @@ $effect(() => {
     }}
     {onViewChange}
     {onNoteSelect}
-    {onTideStationSelect}
+    onTideStationSelect={requestTideStationSelection}
     {onNotes}
     {onPoiStatus}
     {onUserPan}
@@ -746,7 +784,19 @@ $effect(() => {
             </div>
           </div>
         {:then module}
-          <module.default controller={timeTravel} {units} onExit={() => timeTravel.exit()} />
+          <ErrorBoundary>
+            <module.default controller={timeTravel} {units} onExit={() => timeTravel.exit()} />
+
+            {#snippet fallback(_error, reset)}
+              <div class="bottom-strip bottom-strip--accent" role="alert">
+                <div class="row">
+                  <span class="alert-note">Time travel controls stopped unexpectedly.</span>
+                  <button type="button" class="ack" onclick={reset}>Retry</button>
+                  <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+                </div>
+              </div>
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
           <div class="bottom-strip bottom-strip--accent" role="alert">
             <div class="row">
@@ -773,7 +823,23 @@ $effect(() => {
             </div>
           </aside>
         {:then module}
-          <module.default {measure} {units} onMoveSelectedToCenter={moveSelectedMeasureToCenter} />
+          <ErrorBoundary>
+            <module.default
+              {measure}
+              {units}
+              onMoveSelectedToCenter={moveSelectedMeasureToCenter}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
+                <div class="row">
+                  <span class="alert-note">Measure controls stopped unexpectedly.</span>
+                  <button type="button" class="ack" onclick={reset}>Retry</button>
+                  <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+                </div>
+              </div>
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
           <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
             <div class="row">
@@ -915,68 +981,149 @@ $effect(() => {
         />
       {:else if activePanel === 'tides'}
         {#await tidesPanelForAttempt()}
-          <div class="slide-over slide-over--dock-left panel-loading" role="status">
-            Loading tide predictions…
-          </div>
-        {:then module}
-          <module.default
-            store={tidesStore}
-            controller={tidesController}
-            {units}
-            stationsShown={layerSettings.tides?.visible ?? false}
-            onToggleStations={(shown) => setLayerVisible('tides', shown)}
+          <LazyPanelState
+            title="Tides"
+            closeLabel="Close tides panel"
+            state="loading"
+            message="Loading Tides controls…"
             onClose={closePanel}
             onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
           />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              store={tidesStore}
+              controller={tidesController}
+              {units}
+              stationsShown={layerSettings.tides?.visible ?? false}
+              onToggleStations={(shown) => setLayerVisible('tides', shown)}
+              onClose={closePanel}
+              onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Tides"
+                closeLabel="Close tides panel"
+                state="error"
+                message="Tides controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
-          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-            Tide predictions could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LazyPanelState
+            title="Tides"
+            closeLabel="Close tides panel"
+            state="error"
+            message="Tides controls could not load. Check the connection, then retry."
+            onClose={closePanel}
+            onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
+            onRetry={retryLazyPanel}
+          />
         {/await}
       {:else if activePanel === 'trends'}
         {#await trendsPanelForAttempt()}
-          <div class="slide-over slide-over--dock-left panel-loading" role="status">
-            Loading data trends…
-          </div>
-        {:then module}
-          <module.default
-            controller={trends}
-            onRetryProvider={onRetryHistoryProviders}
-            mode={units.mode}
-            theme={theme.theme}
+          <LazyPanelState
+            title="Data trends"
+            closeLabel="Close trends, return to chart"
+            state="loading"
+            message="Loading Data trends controls…"
             onClose={closeTrendsPanel}
             onBack={backFromTrendsPanel}
+            backLabel={trends.focusedId !== undefined
+              ? 'Back to instrument details'
+              : 'Back to menu'}
           />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              controller={trends}
+              onRetryProvider={onRetryHistoryProviders}
+              mode={units.mode}
+              theme={theme.theme}
+              onClose={closeTrendsPanel}
+              onBack={backFromTrendsPanel}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Data trends"
+                closeLabel="Close trends, return to chart"
+                state="error"
+                message="Data trends controls stopped unexpectedly."
+                onClose={closeTrendsPanel}
+                onBack={backFromTrendsPanel}
+                backLabel={trends.focusedId !== undefined
+                  ? 'Back to instrument details'
+                  : 'Back to menu'}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
-          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-            Data trends could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LazyPanelState
+            title="Data trends"
+            closeLabel="Close trends, return to chart"
+            state="error"
+            message="Data trends controls could not load."
+            onClose={closeTrendsPanel}
+            onBack={backFromTrendsPanel}
+            backLabel={trends.focusedId !== undefined
+              ? 'Back to instrument details'
+              : 'Back to menu'}
+            onRetry={retryLazyPanel}
+          />
         {/await}
       {:else if activePanel === 'ais'}
         {#await aisListPanelForAttempt()}
-          <div class="slide-over slide-over--dock-left panel-loading" role="status">
-            Loading AIS targets…
-          </div>
-        {:then module}
-          <module.default
-            {units}
-            {aisTargets}
-            {vessel}
-            {collision}
-            selectedId={selectedAisId}
-            onSelect={onAisSelect}
-            connectionPhase={store.connection.phase}
-            onLocate={flyToPosition}
+          <LazyPanelState
+            title="Nearby vessels (AIS)"
+            closeLabel="Close nearby vessels"
+            state="loading"
+            message="Loading AIS targets…"
             onClose={closePanel}
             onBack={backToMenu}
           />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {units}
+              {aisTargets}
+              {vessel}
+              {collision}
+              selectedId={selectedAisId}
+              onSelect={onAisSelect}
+              connectionPhase={store.connection.phase}
+              onLocate={flyToPosition}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Nearby vessels (AIS)"
+                closeLabel="Close nearby vessels"
+                state="error"
+                message="AIS targets stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
-          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-            AIS targets could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LazyPanelState
+            title="Nearby vessels (AIS)"
+            closeLabel="Close nearby vessels"
+            state="error"
+            message="AIS targets could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
         {/await}
       {:else if activePanel === 'poi-search'}
         <PoiSearchPanel
@@ -1027,48 +1174,99 @@ $effect(() => {
         />
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         {#await regionsPanelForAttempt()}
-          <div class="slide-over slide-over--dock-left panel-loading" role="status">
-            Loading offline charts…
-          </div>
-        {:then module}
-          <module.default
-            adminAccess={chartLockerAdminAccess}
-            accessUrl={chartLockerAccessUrl}
-            accessState={chartLockerState}
-            map={mapInstance}
-            {units}
-            {companionBase}
+          <LazyPanelState
+            title="Offline charts"
+            closeLabel="Close offline charts"
+            state="loading"
+            message="Loading Offline charts controls…"
             onClose={closePanel}
             onBack={backToMenu}
-            onOpenCharts={openInstalledCharts}
-            onRetryAccess={onRetryChartLocker}
           />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              adminAccess={chartLockerAdminAccess}
+              accessUrl={chartLockerAccessUrl}
+              accessState={chartLockerState}
+              map={mapInstance}
+              {units}
+              {companionBase}
+              onClose={closePanel}
+              onBack={backToMenu}
+              onOpenCharts={openInstalledCharts}
+              onRetryAccess={onRetryChartLocker}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Offline charts"
+                closeLabel="Close offline charts"
+                state="error"
+                message="Offline charts controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
-          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-            Offline charts could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LazyPanelState
+            title="Offline charts"
+            closeLabel="Close offline charts"
+            state="error"
+            message="Offline charts controls could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
         {/await}
       {:else if activePanel === 'charts-management' && companionBase !== null}
         {#await chartsPanelForAttempt()}
-          <div class="slide-over slide-over--dock-left panel-loading" role="status">
-            Loading installed charts…
-          </div>
-        {:then module}
-          <module.default
-            adminAccess={chartLockerAdminAccess}
-            accessUrl={chartLockerAccessUrl}
-            accessState={chartLockerState}
-            {companionBase}
+          <LazyPanelState
+            title="Installed charts"
+            closeLabel="Close installed charts panel"
+            state="loading"
+            message="Loading Installed charts controls…"
             onClose={closePanel}
             onBack={backToOfflineCharts}
-            onRetryAccess={onRetryChartLocker}
+            backLabel="Back to offline charts"
           />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              adminAccess={chartLockerAdminAccess}
+              accessUrl={chartLockerAccessUrl}
+              accessState={chartLockerState}
+              {companionBase}
+              onClose={closePanel}
+              onBack={backToOfflineCharts}
+              onRetryAccess={onRetryChartLocker}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Installed charts"
+                closeLabel="Close installed charts panel"
+                state="error"
+                message="Installed charts controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToOfflineCharts}
+                backLabel="Back to offline charts"
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
-          <div class="slide-over slide-over--dock-left panel-load-error" role="alert">
-            Installed charts could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LazyPanelState
+            title="Installed charts"
+            closeLabel="Close installed charts panel"
+            state="error"
+            message="Installed charts controls could not load."
+            onClose={closePanel}
+            onBack={backToOfflineCharts}
+            backLabel="Back to offline charts"
+            onRetry={retryLazyPanel}
+          />
         {/await}
       {/if}
     </div>
@@ -1092,26 +1290,35 @@ $effect(() => {
         {#await radarControlsForAttempt()}
           <div class="panel-loading" role="status">Loading radar controls…</div>
         {:then module}
-          <module.default
-            store={marineRadar.store}
-            unitsMode={units.mode}
-            onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
-            onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-            onSetAreaControl={(id, value) => void marineRadar.setStructuredControl(id, value)}
-            onSetAreaDraft={marineRadar.setAreaDraft}
-            onStartAreaChartEdit={startRadarAreaChartEdit}
-            onStopAreaChartEdit={marineRadar.stopAreaChartEdit}
-            onSelectRadar={(id) => requestRadarPanelAction({ kind: 'select', radarId: id })}
-            onSetPower={onSetRadarPower}
-            echoShown={radarEchoShown}
-            onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
-            discardRequested={radarDiscardRequested}
-            onDraftDirtyChange={(dirty) => (radarDraftDirty = dirty)}
-            onDiscardResolved={resolveRadarDraftDiscard}
-            onOpenOverlaySettings={layersView
-              ? () => requestRadarPanelAction({ kind: 'overlays' })
-              : undefined}
-          />
+          <ErrorBoundary>
+            <module.default
+              store={marineRadar.store}
+              unitsMode={units.mode}
+              onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
+              onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
+              onSetAreaControl={(id, value) => void marineRadar.setStructuredControl(id, value)}
+              onSetAreaDraft={marineRadar.setAreaDraft}
+              onStartAreaChartEdit={startRadarAreaChartEdit}
+              onStopAreaChartEdit={marineRadar.stopAreaChartEdit}
+              onSelectRadar={(id) => requestRadarPanelAction({ kind: 'select', radarId: id })}
+              onSetPower={onSetRadarPower}
+              echoShown={radarEchoShown}
+              onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
+              discardRequested={radarDiscardRequested}
+              onDraftDirtyChange={(dirty) => (radarDraftDirty = dirty)}
+              onDiscardResolved={resolveRadarDraftDiscard}
+              onOpenOverlaySettings={layersView
+                ? () => requestRadarPanelAction({ kind: 'overlays' })
+                : undefined}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <div class="panel-load-error" role="alert">
+                Radar controls stopped unexpectedly.
+                <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
+              </div>
+            {/snippet}
+          </ErrorBoundary>
         {:catch}
           <div class="panel-load-error" role="alert">
             Radar controls could not load.
@@ -1123,37 +1330,66 @@ $effect(() => {
   {/if}
   {#if weatherPanelOpen}
     {#await weatherMapForAttempt()}
-      <div class="panel-loading panel-loading--cover" role="status">Loading weather…</div>
+      <div class="panel-loading panel-loading--cover" tabindex="-1" use:dialog={closeWeatherPanel}>
+        <span role="status">Loading weather view…</span>
+        <div class="panel-controls">
+          <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
+            Back to menu
+          </button>
+          <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+        </div>
+      </div>
     {:then module}
-      <module.default
-        store={weather}
-        {origin}
-        {units}
-        loader={weatherLoader}
-        theme={theme.theme}
-        initialView={currentView}
-        savedLayers={weatherLayerSettings}
-        onLayersChange={onWeatherLayersChange}
-        onLayersReady={onWeatherLayersReady}
-        token={chartsToken}
-        {weatherProvider}
-        position={vessel.position}
-        positionStale={vessel.positionStale}
-        pointLoader={pointConditionsLoader}
-        online={net.online}
-        onClose={() => (weatherPanelOpen = false)}
-        onBack={() => {
-          weatherPanelOpen = false;
-          menuOpen = true;
-        }}
-      />
+      <ErrorBoundary>
+        <module.default
+          store={weather}
+          {origin}
+          {units}
+          loader={weatherLoader}
+          theme={theme.theme}
+          initialView={currentView}
+          savedLayers={weatherLayerSettings}
+          onLayersChange={onWeatherLayersChange}
+          onLayersReady={onWeatherLayersReady}
+          token={chartsToken}
+          {weatherProvider}
+          position={vessel.position}
+          positionStale={vessel.positionStale}
+          pointLoader={pointConditionsLoader}
+          online={net.online}
+          onClose={closeWeatherPanel}
+          onBack={backFromWeatherPanel}
+        />
+
+        {#snippet fallback(_error, reset)}
+          <div
+            class="panel-load-error panel-load-error--cover"
+            role="alert"
+            tabindex="-1"
+            use:dialog={closeWeatherPanel}
+          >
+            Weather view stopped unexpectedly.
+            <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
+            <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
+              Back to menu
+            </button>
+            <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+          </div>
+        {/snippet}
+      </ErrorBoundary>
     {:catch}
-      <div class="panel-load-error panel-load-error--cover" role="alert">
+      <div
+        class="panel-load-error panel-load-error--cover"
+        role="alert"
+        tabindex="-1"
+        use:dialog={closeWeatherPanel}
+      >
         Weather view could not load.
         <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-        <button type="button" class="btn btn-ghost" onclick={() => (weatherPanelOpen = false)}>
-          Close
+        <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
+          Back to menu
         </button>
+        <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
       </div>
     {/await}
   {/if}

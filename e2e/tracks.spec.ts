@@ -34,7 +34,7 @@ test('tracks loads saved resources without a live stream and fits a narrow scree
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Tracks' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Tracks' });

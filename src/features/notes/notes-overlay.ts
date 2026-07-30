@@ -76,7 +76,13 @@ export function createNotesOverlay(
   const onStatus = options.onStatus;
   const personalNotes = options.personalNotes;
   const source = createNotesSource(serverBase, options.persist);
-  const hit = createNoteHitHandlers(onSelect, options.interactionsAllowed);
+  const externalInteractionsAllowed = options.interactionsAllowed ?? (() => true);
+  let visible = true;
+  let opacity = 1;
+  const hit = createNoteHitHandlers(
+    onSelect,
+    () => visible && opacity > 0 && externalInteractionsAllowed(),
+  );
   const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a
   // failed fetch keeps it on screen instead of blanking the markers.
@@ -115,10 +121,6 @@ export function createNotesOverlay(
   const invalidateIdleAnchor = (): void => {
     lastZoom = undefined;
   };
-  // Whether the layer is shown. A hidden Points-of-interest layer skips its sync entirely (no network
-  // fetch, no re-clustering) and defers the icon re-raster on a theme change until it is shown again.
-  // Starts true to match the layer-manager default; the register-time setVisible corrects it.
-  let visible = true;
   // The paint to re-raster the icons with, set when the theme changes while hidden so the 18 POI and
   // navaid SVGs are refreshed lazily on the next show rather than re-rasterized while invisible.
   let pendingIconPaint: MapThemePaint | undefined;
@@ -364,6 +366,7 @@ export function createNotesOverlay(
     },
     setVisible(ctx, isVisible) {
       visible = isVisible;
+      hit.refreshInteractionState();
       setLayersVisibility(ctx.map, LAYERS, isVisible);
       if (!isVisible) {
         clearRendered(ctx);
@@ -379,18 +382,20 @@ export function createNotesOverlay(
         void refreshIcons(ctx, paint);
       }
     },
-    setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(LAYER_ID, 'icon-opacity', opacity);
-      ctx.map.setPaintProperty(LAYER_ID, 'text-opacity', opacity);
-      ctx.map.setPaintProperty(CLUSTER_ICON_LAYER, 'icon-opacity', opacity);
+    setOpacity(ctx, next) {
+      opacity = next;
+      hit.refreshInteractionState();
+      ctx.map.setPaintProperty(LAYER_ID, 'icon-opacity', next);
+      ctx.map.setPaintProperty(LAYER_ID, 'text-opacity', next);
+      ctx.map.setPaintProperty(CLUSTER_ICON_LAYER, 'icon-opacity', next);
       ctx.map.setPaintProperty(
         CLUSTER_RING_LAYER,
         'circle-stroke-opacity',
-        opacity * CLUSTER_RING_BASE_OPACITY,
+        next * CLUSTER_RING_BASE_OPACITY,
       );
-      ctx.map.setPaintProperty(CLUSTER_COUNT_LAYER, 'text-opacity', opacity);
-      ctx.map.setPaintProperty(SELECT_CASING_LAYER, 'circle-stroke-opacity', opacity);
-      ctx.map.setPaintProperty(SELECT_LAYER, 'circle-stroke-opacity', opacity);
+      ctx.map.setPaintProperty(CLUSTER_COUNT_LAYER, 'text-opacity', next);
+      ctx.map.setPaintProperty(SELECT_CASING_LAYER, 'circle-stroke-opacity', next);
+      ctx.map.setPaintProperty(SELECT_LAYER, 'circle-stroke-opacity', next);
     },
     remove(ctx) {
       mounted = false;

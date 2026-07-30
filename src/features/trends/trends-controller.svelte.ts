@@ -5,10 +5,13 @@ import {
   isTrendInstrumentId,
   MAX_TREND_INSTRUMENTS,
 } from '$entities/instrument-trend';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import type { HistoryProviders, SignalKStore, SubscribeEntry } from '$shared/signalk';
 import { type SessionTrendSeries, TrendSessionRecorder } from './session-recorder.svelte';
 import type { TrendHistory, TrendHistoryState } from './trends-history';
+
+const loadTrendsHistory = createRetryableLazyUiLoader(() => import('./trends-history'));
 
 export type TrendProviderState = 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
 
@@ -215,7 +218,7 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     loading = true;
     historyState = 'loading';
     try {
-      const { loadTrendHistory } = await import('./trends-history');
+      const { loadTrendHistory } = await loadTrendsHistory();
       if (disposed || generation !== historyGeneration || abort.signal.aborted) return;
       const result = await loadTrendHistory(
         deps.origin,

@@ -1,6 +1,6 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
-const trendsPanelLoader = createRetryableLazyLoader(() => import('./TrendsPanel.svelte'));
+const trendsPanelLoader = createRetryableLazyUiLoader(() => import('./TrendsPanel.svelte'));
 
 export function loadTrendsPanel(): Promise<typeof import('./TrendsPanel.svelte')> {
   return trendsPanelLoader();

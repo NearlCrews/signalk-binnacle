@@ -35,7 +35,7 @@ test('waypoints loads without the stream and confirms navigation on a narrow scr
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Waypoints' }).click();
   const panel = page.getByRole('complementary', { name: 'Waypoints' });
   await expect(panel.getByText('Harbor entrance')).toBeVisible();
@@ -59,7 +59,7 @@ test('measure edits middle points with pointer and keyboard paths, then restores
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Measure' }).click();
 
   const strip = page.getByRole('complementary', { name: 'Measure' });

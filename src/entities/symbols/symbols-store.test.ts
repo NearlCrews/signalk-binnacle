@@ -76,6 +76,30 @@ describe('SymbolsStore resolve', () => {
     expect(store.forRole('waypoint')).toEqual([both]);
   });
 
+  it('keeps picker references unique when different UUIDs repeat an adopted alias', () => {
+    const first = sym({
+      uuid: 'first',
+      aliases: ['custom:shared'],
+      roles: ['note'],
+    });
+    const alternate = sym({
+      uuid: 'alternate',
+      aliases: ['custom:shared', 'binnacle:alternate'],
+      roles: ['note'],
+    });
+    const shadowed = sym({
+      uuid: 'shadowed',
+      aliases: ['custom:shared'],
+      roles: ['note'],
+    });
+    const store = new SymbolsStore('http://pi', undefined, [first, alternate, shadowed]);
+
+    expect(store.forRole('note')).toEqual([first, alternate]);
+    expect(store.pickerReference(first)).toBe('custom:shared');
+    expect(store.pickerReference(alternate)).toBe('binnacle:alternate');
+    expect(store.pickerReference(shadowed)).toBeUndefined();
+  });
+
   it('keeps the first symbol when a malformed catalog repeats a uuid', () => {
     const first = sym({ aliases: ['custom:first'], url: '/s/first.svg' });
     const duplicate = sym({ aliases: ['custom:second'], url: '/s/second.svg' });

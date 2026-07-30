@@ -103,6 +103,34 @@ describe('fetchNoteDetail', () => {
     ]);
   });
 
+  it('keeps duplicate structured sections with deterministic unique ids', async () => {
+    const section = {
+      title: 'Details',
+      items: [{ label: 'Value', value: 'Kept' }],
+    };
+    const body = {
+      ...structured,
+      properties: {
+        ...structured.properties,
+        crowsNest: {
+          schemaVersion: 1,
+          type: 'Marina',
+          sections: [
+            { ...section, id: 'details' },
+            { ...section, id: 'details' },
+            { ...section, id: 'details:2' },
+          ],
+        },
+      },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));
+
+    const detail = await fetchNoteDetail('http://pi', undefined, 'duplicate-sections');
+
+    expect(detail?.sections?.map(({ id }) => id)).toEqual(['details', 'details:3', 'details:2']);
+    expect(detail?.sections).toHaveLength(3);
+  });
+
   it('falls back to plain text when crowsNest is absent', async () => {
     const body = { name: 'Plain Note', description: '<p>Hello <b>there</b></p>', properties: {} };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));

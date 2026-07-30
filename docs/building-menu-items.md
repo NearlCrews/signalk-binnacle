@@ -84,8 +84,17 @@ two leaves a tile that opens nothing, or a panel with no way in.
 
 Large optional panels should expose a cached dynamic-import loader from the slice's `index.ts` and
 mount through an `{#await}` block with loading, failure, and Retry states. Keep the import behind the
-public API. A rejected loader must clear its cached promise so Retry performs a new import. Core chart
-and safety chrome stays eagerly loaded.
+public API. Use the shared `LazyPanelState` for a docked panel's loading and failure branches so Back,
+Close, Escape, and Retry remain available before its module mounts. Use
+`createRetryableLazyUiLoader` to bound a stalled import and clear rejected or timed-out promises so
+Retry performs a new import. Reserve the unbounded `createRetryableLazyLoader` for one-shot
+registration paths without a recovery action, where a slow import must be allowed to finish instead
+of permanently rolling back the feature. Wrap the resolved component in the shared `ErrorBoundary`.
+Its fallback must preserve the same contextual Back, Close, Exit, or Done controls as the
+import-failure state, plus Retry, so a render or effect failure cannot trap the workflow. Apply the
+same boundary to nested lazy charts and dialogs. Core chart and safety chrome stays eagerly loaded.
+If a chart marker opens a small lazy panel, warm that panel while the marker is tappable so its first
+tap does not start the chunk request.
 
 When a menu destination depends on a matching chart layer, opening the destination must establish the
 visible state it needs. Use `togglePanel('<id>', () => setLayerVisible('<layer-id>', true))`, as Find
@@ -238,15 +247,18 @@ map of this kind.
 
 Second sanctioned exception: the instrument dock is a true SPLIT, not an overlay. The shell is a
 two-column grid; the dock takes the second column beside a live, narrowed chart, with a 1px
---border seam (night-red has no shadows) and an instant toggle (animating the grid track would
+`--border` seam (night-red has no shadows) and an instant toggle (animating the grid track would
 resize the map every frame). Under its 900px breakpoint the same panel goes full-screen at
---z-panel, below the safety strips, with its own close chrome ("Close instruments, return to
-chart"). Its tile grid fills the dock: rows share the full height, dense flow backfills holes,
-and an empty tile is never full width (the layout rules live in the design system's instruments
-module entry). Selecting a tile opens an in-dock detail view, and Customize groups available
-instruments by category with a Rescan action for dynamic Signal K instances. That scan unions live
-instances with concrete paths from the preceding year of registered history providers within a
-bounded scan.
+`--z-panel`, below the safety strips, with its own close chrome ("Close instruments, return to
+chart"). A full-screen instrument panel and a chart-owned panel never stack: the existing chart
+panel keeps ownership when the viewport crosses the breakpoint, while deliberately opening
+Instruments closes the other surface. Route a dirty editor, such as a Radar area draft, through its
+discard guard before transferring that ownership. Its tile grid fills the dock: rows share the full
+height, dense flow backfills holes, and an empty tile is never full width (the layout rules live in
+the design system's instruments module entry). Selecting a tile opens an in-dock detail view, and
+Customize groups available instruments by category with a Rescan action for dynamic Signal K
+instances. That scan unions live instances with concrete paths from the preceding year of registered
+history providers within a bounded scan.
 Validate those context-free catalog paths with a `vessels.self` values query before displaying them.
 Previously seen readings remain selectable, visibly marked in Available and Shown, and identified in
 detail until live data arrives. Provider absence or failure must preserve live discovery and explain

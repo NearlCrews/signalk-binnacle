@@ -238,7 +238,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   carry layout only, so the surface comes from where the placeholder sits: inside an open panel's
   body it needs nothing, standing in a bare `.panel-slot` it composes `.slide-over` and the dock
   modifier of the panel it replaces so it holds the same frame, and the `--cover` modifier fills the
-  chart area for a panel that owns the whole viewport.
+  chart area for a panel that owns the whole viewport. Docked lazy panels use `LazyPanelState`, which
+  retains their title, Back, Close, Escape, and Retry behavior while the module loads or fails.
+  `createRetryableLazyUiLoader` times out retryable user-interface imports instead of caching an
+  unresolved request for the rest of the session. One-shot feature registration without a recovery
+  action uses the unbounded `createRetryableLazyLoader`, so a slow import can still complete.
 - Overlays, modals: `.modal-card`.
 
 ## 6. Shared UI primitives (`$shared/ui`)
@@ -259,8 +263,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
   its compact "Customize" entry through `headerExtra`, with "Customize instruments" retained as the
-  accessible name), so the headers cannot drift apart. Do not
-  hand-roll a panel header.
+  accessible name), so the headers cannot drift apart. Do not hand-roll a panel header.
+- `ErrorBoundary`: the render boundary around every resolved lazy component. Its fallback receives
+  the error and a one-use reset function. Render the same contextual Back, Close, Exit, or Done
+  controls as the import-failure state, plus Retry. Update any local state that caused the failure
+  before calling reset. Use it for nested lazy charts and dialogs as well as docked panels so a
+  successful import cannot leave the surrounding workflow trapped after a render or effect failure.
 - `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with a scale transition
   and the dismiss-stack registration). Use it for any anchored menu (the app-menu launcher, the
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
@@ -509,6 +517,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   manipulation mode, the first Escape cancels that mode and preserves the parent tool. Measure is the
   reference: point selection is separate from movement, the invisible chart hit area is 44 px, and
   the strip supplies the keyboard-equivalent movement path.
+- Interactive map surfaces use the shared drag-safe tap path for mouse and one-finger touch input.
+  They reject pans, long presses, and multi-touch, preserve the pointer while overlapping surfaces
+  remain hovered, and route one gesture to the highest visible overlay instead of opening several
+  panels.
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.

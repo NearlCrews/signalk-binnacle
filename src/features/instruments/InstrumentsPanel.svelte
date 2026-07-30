@@ -16,6 +16,7 @@ interface Props {
   restoreTrendFocusId?: string;
   onViewTrend?: (id: string) => void;
   onTrendFocusRestored?: () => void;
+  fullscreen?: boolean;
 }
 
 const {
@@ -25,29 +26,13 @@ const {
   restoreTrendFocusId,
   onViewTrend,
   onTrendFocusRestored,
+  fullscreen = false,
 }: Props = $props();
 
 let customizing = $state(false);
 let detailId = $state<string | undefined>();
 $effect(() => {
   if (initialDetailId && detailId === undefined) detailId = initialDetailId;
-});
-
-const FULLSCREEN_BREAKPOINT_PX = 900;
-// Paired with the @media (max-width: 900px) block below: mirrors the CSS breakpoint so the
-// close-button label matches the panel's visual mode (dock vs. full-screen overlay). Listener
-// lives in an effect with cleanup: the panel is conditionally mounted, so a bare listener would
-// accumulate one copy per open cycle.
-let fullscreenQueryMatches = $state(false);
-$effect(() => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-  const query = window.matchMedia(`(max-width: ${FULLSCREEN_BREAKPOINT_PX}px)`);
-  fullscreenQueryMatches = query.matches;
-  const handler = (e: MediaQueryListEvent) => {
-    fullscreenQueryMatches = e.matches;
-  };
-  query.addEventListener('change', handler);
-  return () => query.removeEventListener('change', handler);
 });
 
 // Hoisted so the tile selection resolves (validate the persisted ids, scan the catalog) once per
@@ -80,18 +65,16 @@ $effect(() => {
 <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
 <aside
   class="instruments"
-  role={fullscreenQueryMatches ? 'dialog' : undefined}
+  role={fullscreen ? 'dialog' : undefined}
   aria-label="Instruments"
-  aria-modal={fullscreenQueryMatches ? 'true' : undefined}
+  aria-modal={fullscreen ? 'true' : undefined}
   tabindex="-1"
   use:dialog={() => controller.setOpen(false)}
-  use:trapFocus={fullscreenQueryMatches}
+  use:trapFocus={fullscreen}
 >
   <PanelHeader
     title="Instruments"
-    closeLabel={fullscreenQueryMatches
-      ? 'Close instruments, return to chart'
-      : 'Close instruments dock'}
+    closeLabel={fullscreen ? 'Close instruments, return to chart' : 'Close instruments dock'}
     onClose={() => controller.setOpen(false)}
   >
     {#snippet headerExtra()}
@@ -166,13 +149,6 @@ $effect(() => {
 </aside>
 
 <style>
-.instruments {
-  inline-size: clamp(20rem, 28vw, 24rem);
-  border-inline-start: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-
 .tiles {
   display: grid;
   /* The 40% arm caps the full-screen phone layout at two readable columns (and one column on a
@@ -195,15 +171,5 @@ $effect(() => {
 
 .customize-instruction {
   padding: 0 var(--space-3) var(--space-2);
-}
-
-@media (max-width: 900px) {
-  .instruments {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-panel);
-    inline-size: auto;
-    background: var(--surface);
-  }
 }
 </style>

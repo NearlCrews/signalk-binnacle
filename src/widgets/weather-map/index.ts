@@ -1,6 +1,6 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
-const weatherMapLoader = createRetryableLazyLoader(() => import('./WeatherMap.svelte'));
+const weatherMapLoader = createRetryableLazyUiLoader(() => import('./WeatherMap.svelte'));
 
 export function loadWeatherMap(): Promise<typeof import('./WeatherMap.svelte')> {
   return weatherMapLoader();

@@ -1,9 +1,14 @@
-import type { GeoJSONSource, MapLayerMouseEvent } from 'maplibre-gl';
+import type { GeoJSONSource } from 'maplibre-gl';
 import { asPoiCategory } from '$entities/poi-icons';
-import type { OverlayContext } from '$shared/map';
+import {
+  createLayerHitHandlers,
+  type LayerHitEvent,
+  type LayerHitHandlers,
+  type OverlayContext,
+} from '$shared/map';
 import { str } from '$shared/signalk';
 import type { NoteSelection } from './notes-client';
-import { CLUSTER_HIT_LAYERS, CLUSTER_RING_LAYER, LAYER_ID, SOURCE_ID } from './notes-layers';
+import { CLUSTER_HIT_LAYERS, LAYER_ID, SOURCE_ID } from './notes-layers';
 
 // The overlay's map hit handlers: marker click to selection, cluster click to zoom, and the
 // pointer cursor. Attach is idempotent because the handlers persist across a base-style swap (the
@@ -12,90 +17,103 @@ import { CLUSTER_HIT_LAYERS, CLUSTER_RING_LAYER, LAYER_ID, SOURCE_ID } from './n
 export interface NoteHitHandlers {
   attach(ctx: OverlayContext): void;
   detach(ctx: OverlayContext): void;
+  refreshInteractionState(): void;
 }
 
 export function createNoteHitHandlers(
   onSelect?: (selection: NoteSelection | undefined) => void,
   interactionsAllowed: () => boolean = () => true,
 ): NoteHitHandlers {
-  let onClick: ((event: MapLayerMouseEvent) => void) | undefined;
-  let onClusterClick: ((event: MapLayerMouseEvent) => void) | undefined;
-  let onEnter: (() => void) | undefined;
-  let onLeave: (() => void) | undefined;
-
-  return {
-    attach(ctx) {
-      if (onClick) return;
-      onClick = (event) => {
-        if (!interactionsAllowed()) return;
-        const feature = event.features?.[0];
-        if (feature?.geometry.type !== 'Point') return;
-        const props = feature.properties ?? {};
-        const id = String(props.id ?? '');
-        // A note with no id cannot be fetched for detail, so do not select it.
-        if (!id) return;
-        // The category rides on the rendered feature, so validate it against the known set rather
-        // than trusting the string into PoiCategory: an out-of-vocabulary value would key the label
-        // and icon records to nothing instead of falling back.
-        const category = asPoiCategory(String(props.category ?? ''));
-        const [longitude, latitude] = feature.geometry.coordinates as [number, number];
-        onSelect?.({
-          id,
-          name: String(props.name ?? 'Point of interest'),
-          category,
-          position: { latitude, longitude },
-          description: str(props.description),
-          skIcon: str(props.skIcon),
-          ownedByBinnacle: props.ownedByBinnacle === true,
-          attribution: str(props.attribution) ?? str(props.source),
-          url: str(props.url),
-        });
-      };
-      onClusterClick = (event) => {
-        if (!interactionsAllowed()) return;
-        const feature = event.features?.[0];
-        const clusterId = feature?.properties?.cluster_id;
-        if (typeof clusterId !== 'number' || feature?.geometry.type !== 'Point') return;
-        const source = ctx.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-        if (!source) return;
+  let ctxRef: OverlayContext | undefined;
+  let attachmentGeneration = 0;
+  const markerHit: LayerHitHandlers = createLayerHitHandlers(
+    LAYER_ID,
+    (event: LayerHitEvent) => {
+      const feature = event.features?.[0];
+      if (feature?.geometry.type !== 'Point') return false;
+      const props = feature.properties ?? {};
+      const id = String(props.id ?? '');
+      // A note with no id cannot be fetched for detail, so do not select it.
+      if (!id) return false;
+      // The category rides on the rendered feature, so validate it against the known set rather
+      // than trusting the string into PoiCategory: an out-of-vocabulary value would key the label
+      // and icon records to nothing instead of falling back.
+      const category = asPoiCategory(String(props.category ?? ''));
+      const [longitude, latitude] = feature.geometry.coordinates as [number, number];
+      onSelect?.({
+        id,
+        name: String(props.name ?? 'Point of interest'),
+        category,
+        position: { latitude, longitude },
+        description: str(props.description),
+        skIcon: str(props.skIcon),
+        ownedByBinnacle: props.ownedByBinnacle === true,
+        attribution: str(props.attribution) ?? str(props.source),
+        url: str(props.url),
+      });
+      return true;
+    },
+    {
+      band: 'routes',
+      interactionsAllowed,
+      withinBandOrder: 1,
+    },
+  );
+  // One multi-layer listener covers the stacked cluster icon and ring without double dispatch.
+  const clusterHit: LayerHitHandlers = createLayerHitHandlers(
+    CLUSTER_HIT_LAYERS,
+    (event: LayerHitEvent) => {
+      for (const feature of event.features ?? []) {
+        const clusterId = feature.properties?.cluster_id;
+        if (typeof clusterId !== 'number' || feature.geometry.type !== 'Point') continue;
+        const ctx = ctxRef;
+        const source = ctx?.map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
+        if (!ctx || !source) return false;
         const center = feature.geometry.coordinates as [number, number];
+        const generation = attachmentGeneration;
         void source
           .getClusterExpansionZoom(clusterId)
           .then((zoom) => {
+            if (
+              generation !== attachmentGeneration ||
+              ctxRef !== ctx ||
+              !interactionsAllowed() ||
+              ctx.map.getSource(SOURCE_ID) !== source ||
+              !Number.isFinite(zoom)
+            ) {
+              return;
+            }
             ctx.map.easeTo({ center, zoom });
           })
           .catch(() => undefined);
-      };
-      onEnter = () => {
-        if (!interactionsAllowed()) return;
-        ctx.map.getCanvas().style.cursor = 'pointer';
-      };
-      onLeave = () => {
-        ctx.map.getCanvas().style.cursor = '';
-      };
-      ctx.map.on('click', LAYER_ID, onClick);
-      ctx.map.on('mouseenter', LAYER_ID, onEnter);
-      ctx.map.on('mouseleave', LAYER_ID, onLeave);
-      // Click only the ring (it covers the cluster and then some), so a click does not fire once
-      // per stacked cluster layer; hover the ring and the icon so either shows the pointer cursor.
-      ctx.map.on('click', CLUSTER_RING_LAYER, onClusterClick);
-      for (const id of CLUSTER_HIT_LAYERS) {
-        ctx.map.on('mouseenter', id, onEnter);
-        ctx.map.on('mouseleave', id, onLeave);
+        return true;
       }
+      return false;
+    },
+    {
+      band: 'routes',
+      interactionsAllowed,
+    },
+  );
+
+  return {
+    attach(ctx) {
+      if (ctxRef) return;
+      attachmentGeneration += 1;
+      ctxRef = ctx;
+      markerHit.attach(ctx);
+      clusterHit.attach(ctx);
     },
     detach(ctx) {
-      if (onClick) ctx.map.off('click', LAYER_ID, onClick);
-      if (onEnter) ctx.map.off('mouseenter', LAYER_ID, onEnter);
-      if (onLeave) ctx.map.off('mouseleave', LAYER_ID, onLeave);
-      if (onClusterClick) ctx.map.off('click', CLUSTER_RING_LAYER, onClusterClick);
-      for (const id of CLUSTER_HIT_LAYERS) {
-        if (onEnter) ctx.map.off('mouseenter', id, onEnter);
-        if (onLeave) ctx.map.off('mouseleave', id, onLeave);
-      }
-      // Null the refs so a genuine detach()/attach() cycle re-attaches, while a bare reattach
-      // keeps the live handlers (attach guards on onClick).
-      onClick = onEnter = onLeave = onClusterClick = undefined;
+      if (!ctxRef) return;
+      attachmentGeneration += 1;
+      markerHit.detach(ctx);
+      clusterHit.detach(ctx);
+      ctxRef = undefined;
+    },
+    refreshInteractionState() {
+      markerHit.refreshInteractionState();
+      clusterHit.refreshInteractionState();
     },
   };
 }

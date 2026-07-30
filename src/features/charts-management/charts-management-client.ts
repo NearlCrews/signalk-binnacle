@@ -118,17 +118,21 @@ export function parseManagedChartsResponse(value: unknown): ManagedChartsRespons
     return undefined;
   }
   const charts: ManagedChart[] = [];
+  const chartIds = new Set<string>();
   for (const raw of value.charts) {
     const chart = parseManagedChart(raw);
-    if (!chart) return undefined;
+    if (!chart || chartIds.has(chart.identifier)) return undefined;
+    chartIds.add(chart.identifier);
     charts.push(chart);
   }
   const invalid: ManagedChartsResponse['invalid'] = [];
+  const invalidFileNames = new Set<string>();
   for (const raw of value.invalid) {
     if (!isRecord(raw)) return undefined;
     const fileName = boundedString(raw.fileName, MAX_FILE_NAME_LENGTH);
     const error = boundedString(raw.error, MAX_TEXT_LENGTH);
-    if (!fileName || !error) return undefined;
+    if (!fileName || !error || invalidFileNames.has(fileName)) return undefined;
+    invalidFileNames.add(fileName);
     invalid.push({ fileName, error });
   }
   return { charts, invalid };

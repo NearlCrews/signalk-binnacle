@@ -102,6 +102,42 @@ describe('ais overlay', () => {
     expect(store.aisTargets.size).toBe(1);
   });
 
+  it('removes a target when its position expires without an AIS version update', async () => {
+    let now = 1_000;
+    const store = new SignalKStore();
+    const targets = new AisTargets(store, () => now);
+    const overlay = createAisOverlay(targets, { now: () => now });
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map([
+        [
+          'vessels.expiring',
+          new Map<string, unknown>([['navigation.position', { latitude: 1, longitude: 2 }]]),
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: now,
+    });
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = [...map.sources.values()][0];
+    const version = targets.version;
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(1);
+    const spy = vi.spyOn(source, 'setData');
+
+    // Positions remain current for seven minutes. Crossing that boundary changes the entity's
+    // clock-derived list without mutating the underlying Signal K store or its AIS version.
+    now += 7 * 60_000 + 1;
+    overlay.sync(ctx);
+
+    expect(targets.version).toBe(version);
+    expect(spy).toHaveBeenCalledOnce();
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(0);
+    expect(store.aisTargets.size).toBe(1);
+  });
+
   it('skips setData when the ais version is unchanged', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
@@ -171,6 +207,63 @@ describe('ais overlay', () => {
     expect(fc.features).toHaveLength(2);
   });
 
+  it('records a selection-driven paint before the next target count change', async () => {
+    let now = 1_000_000;
+    let selectedId: string | undefined;
+    const store = new SignalKStore();
+    const targets = new AisTargets(store, () => now);
+    const overlay = createAisOverlay(targets, {
+      now: () => now,
+      selectedId: () => selectedId,
+    });
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map([
+        [
+          'vessels.current',
+          new Map<string, unknown>([['navigation.position', { latitude: 1, longitude: 2 }]]),
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: now,
+    });
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = [...map.sources.values()][0];
+    const spy = vi.spyOn(source, 'setData');
+
+    // This second position has only 500 ms of freshness left. Selecting the first vessel makes the
+    // same sync paint both targets, and the gate must remember that two-target source snapshot.
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map([
+        [
+          'vessels.expiring',
+          new Map<string, unknown>([['navigation.position', { latitude: 3, longitude: 4 }]]),
+        ],
+      ]),
+      aisEpochs: new Map([
+        ['vessels.expiring', new Map([['navigation.position', now - 7 * 60_000 + 500]])],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: now,
+    });
+    selectedId = 'vessels.current';
+    overlay.sync(ctx);
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(2);
+
+    now += 501;
+    overlay.sync(ctx);
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(1);
+    expect((source.data as GeoJSON.FeatureCollection).features[0].properties?.id).toBe(
+      'vessels.current',
+    );
+  });
+
   it('applyTheme recolors the icon image', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
@@ -206,6 +299,20 @@ describe('ais overlay', () => {
     map.emitLayer('click', 'binnacle-ais-hit', {
       features: [
         {
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [2, 1],
+              [3, 2],
+            ],
+          },
+          properties: { id: 'vessels.current' },
+        },
+        {
+          geometry: { type: 'Point', coordinates: [2, 1] },
+          properties: { id: 'vessels.missing' },
+        },
+        {
           geometry: { type: 'Point', coordinates: [2, 1] },
           properties: { id: 'vessels.current' },
         },
@@ -217,6 +324,34 @@ describe('ais overlay', () => {
     overlay.remove(ctx);
     expect(map.handlerCount('click', 'binnacle-ais-hit')).toBe(0);
     expect(map.getCanvas().style.cursor).toBe('');
+  });
+
+  it('preserves the chart-tool cursor and blocks selection while interactions are owned', async () => {
+    const store = new SignalKStore();
+    const targets = new AisTargets(store);
+    const onSelect = vi.fn();
+    const overlay = createAisOverlay(targets, {
+      onSelect,
+      interactionsAllowed: () => false,
+    });
+    const map = createFakeMap();
+    store.applyFrame(positionFrame({ 'vessels.current': { latitude: 1, longitude: 2 } }));
+    await overlay.add(fakeOverlayContext(map));
+    map.getCanvas().style.cursor = 'crosshair';
+
+    map.emitLayer('mouseenter', 'binnacle-ais-hit', {});
+    map.emitLayer('click', 'binnacle-ais-hit', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [2, 1] },
+          properties: { id: 'vessels.current' },
+        },
+      ],
+    });
+    map.emitLayer('mouseleave', 'binnacle-ais-hit', {});
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(map.getCanvas().style.cursor).toBe('crosshair');
   });
 
   it('refreshes the selected target ring without waiting for AIS churn', async () => {
@@ -250,5 +385,48 @@ describe('ais overlay', () => {
     overlay.setVisible?.(ctx, true);
     overlay.setOpacity?.(ctx, 0);
     expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-ais-hit', 'visibility', 'none');
+  });
+
+  it('cancels an armed target touch and pointer when visibility or opacity changes', async () => {
+    const store = new SignalKStore();
+    const targets = new AisTargets(store);
+    const onSelect = vi.fn();
+    const overlay = createAisOverlay(targets, { onSelect });
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    const originalEvent = {};
+    const touchEvent = (type: string) =>
+      ({
+        features: [
+          {
+            geometry: { type: 'Point', coordinates: [2, 1] },
+            properties: { id: 'vessels.current' },
+          },
+        ],
+        originalEvent,
+        point: { x: 10, y: 10 },
+        points: [{ x: 10, y: 10 }],
+        type,
+      }) as never;
+    store.applyFrame(positionFrame({ 'vessels.current': { latitude: 1, longitude: 2 } }));
+    await overlay.add(ctx);
+
+    map.emitLayer('mouseenter', 'binnacle-ais-hit', {});
+    expect(map.getCanvas().style.cursor).toBe('pointer');
+    map.emit('touchstart', touchEvent('touchstart'));
+    map.emitLayer('touchstart', 'binnacle-ais-hit', touchEvent('touchstart'));
+    overlay.setVisible?.(ctx, false);
+    expect(map.getCanvas().style.cursor).toBe('');
+    map.emit('touchend', touchEvent('touchend'));
+    await Promise.resolve();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    overlay.setVisible?.(ctx, true);
+    map.emit('touchstart', touchEvent('touchstart'));
+    map.emitLayer('touchstart', 'binnacle-ais-hit', touchEvent('touchstart'));
+    overlay.setOpacity?.(ctx, 0);
+    map.emit('touchend', touchEvent('touchend'));
+    await Promise.resolve();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

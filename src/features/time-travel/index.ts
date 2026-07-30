@@ -1,6 +1,6 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
-const historyStripLoader = createRetryableLazyLoader(() => import('./HistoryStrip.svelte'));
+const historyStripLoader = createRetryableLazyUiLoader(() => import('./HistoryStrip.svelte'));
 
 export function loadHistoryStrip(): Promise<typeof import('./HistoryStrip.svelte')> {
   return historyStripLoader();

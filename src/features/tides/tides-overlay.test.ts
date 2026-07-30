@@ -94,7 +94,11 @@ describe('tides overlay', () => {
     ]);
     expect(features.find((feature) => feature.id === 'tide:T2')?.properties).toMatchObject({
       stationId: 'T2',
+      stationName: 'Selected tide',
+      stationLatitude: 28,
+      stationLongitude: -83,
       kind: 'tide',
+      selectionMode: 'manual',
       selected: true,
       loaded: false,
       glyph: 'T',
@@ -146,8 +150,9 @@ describe('tides overlay', () => {
     expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-tides-hit', 'visibility', 'none');
     overlay.setVisible(ctx, true);
     overlay.setOpacity?.(ctx, 0);
-    expect(map.setLayoutProperty).toHaveBeenLastCalledWith(
-      'binnacle-tides-hit',
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-tides-hit', 'visibility', 'none');
+    expect(map.setLayoutProperty).toHaveBeenCalledWith(
+      'binnacle-tides-label',
       'visibility',
       'none',
     );
@@ -171,7 +176,49 @@ describe('tides overlay', () => {
     );
   });
 
-  it('dispatches only validated trusted stations and cleans up cursor and handlers idempotently', async () => {
+  it('cancels an armed station touch and pointer when visibility or opacity changes', async () => {
+    const store = new TidesStore();
+    store.setCatalogs([{ station, distanceMeters: 0 }], []);
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    const originalEvent = {};
+    const touchEvent = (type: string) =>
+      ({
+        features: [
+          {
+            geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
+            properties: { stationId: 'T1', kind: 'tide' },
+          },
+        ],
+        originalEvent,
+        point: { x: 10, y: 10 },
+        points: [{ x: 10, y: 10 }],
+        type,
+      }) as never;
+    await overlay.add(ctx);
+
+    map.emitLayer('mouseenter', 'binnacle-tides-hit', {});
+    expect(map.getCanvas().style.cursor).toBe('pointer');
+    map.emit('touchstart', touchEvent('touchstart'));
+    map.emitLayer('touchstart', 'binnacle-tides-hit', touchEvent('touchstart'));
+    overlay.setVisible(ctx, false);
+    expect(map.getCanvas().style.cursor).toBe('');
+    map.emit('touchend', touchEvent('touchend'));
+    await Promise.resolve();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    overlay.setVisible(ctx, true);
+    map.emit('touchstart', touchEvent('touchstart'));
+    map.emitLayer('touchstart', 'binnacle-tides-hit', touchEvent('touchstart'));
+    overlay.setOpacity?.(ctx, 0);
+    map.emit('touchend', touchEvent('touchend'));
+    await Promise.resolve();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('dispatches the first resolvable station from marker or label hits and cleans up idempotently', async () => {
     const store = new TidesStore();
     store.setCatalogs([{ station, distanceMeters: 0 }], []);
     const onSelect = vi.fn();
@@ -184,12 +231,19 @@ describe('tides overlay', () => {
 
     map.emitLayer('mouseenter', 'binnacle-tides-hit', {});
     expect(map.getCanvas().style.cursor).toBe('pointer');
-    map.emitLayer('click', 'binnacle-tides-hit', {
+    map.emitLayer('click', 'binnacle-tides-label', {
       features: [
+        {
+          id: 'tide:unknown',
+          geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
+          properties: { stationId: 'unknown', kind: 'tide' },
+        },
         {
           id: 'tide:T1',
           geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
-          properties: { stationId: 'T1', kind: 'tide', selected: false, loaded: true },
+          // Stable feature ids are sufficient even if MapLibre omits or coerces presentation-only
+          // properties. The exact layer id and bounded store resolution remain the authority.
+          properties: { selected: 0, loaded: 1 },
         },
       ],
     });
@@ -198,13 +252,11 @@ describe('tides overlay', () => {
     for (const properties of [
       { stationId: 1, kind: 'tide', selected: false, loaded: true },
       { stationId: 'T1', kind: 'other', selected: false, loaded: true },
-      { stationId: 'T1', kind: 'tide', selected: 'false', loaded: true },
       { stationId: 'unknown', kind: 'tide', selected: false, loaded: true },
     ]) {
       map.emitLayer('click', 'binnacle-tides-hit', {
         features: [
           {
-            id: `tide:${String(properties.stationId)}`,
             geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
             properties,
           },
@@ -220,6 +272,104 @@ describe('tides overlay', () => {
     expect(map.sources.has('binnacle-tides')).toBe(false);
   });
 
+  it('prefers the visible label over a neighboring station touch target', async () => {
+    const neighboringStation = {
+      id: 'T2',
+      name: 'Neighbor',
+      latitude: 27.7001,
+      longitude: -82.7001,
+    };
+    const store = new TidesStore();
+    store.setCatalogs(
+      [
+        { station, distanceMeters: 0 },
+        { station: neighboringStation, distanceMeters: 1 },
+      ],
+      [],
+    );
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+
+    map.emitLayer('click', 'binnacle-tides-label', {
+      features: [
+        {
+          layer: { id: 'binnacle-tides-hit' },
+          geometry: { type: 'Point', coordinates: [-82.7001, 27.7001] },
+          properties: { stationId: 'T2', kind: 'tide' },
+        },
+        {
+          layer: { id: 'binnacle-tides-label' },
+          geometry: { type: 'Point', coordinates: [-82.7, 27.7] },
+          properties: { stationId: 'T1', kind: 'tide' },
+        },
+      ],
+    });
+
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'tide', station, mode: 'manual' });
+  });
+
+  it('resolves a marker from the rendered snapshot while the store and source are transitioning', async () => {
+    const store = new TidesStore();
+    store.setCatalogs([{ station, distanceMeters: 0 }], []);
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const renderedFeature = sourceFeatures(map, 'binnacle-tides')[0];
+
+    // A catalog update can lead the MapLibre worker, leaving this old marker visible briefly.
+    store.setCatalogs([], []);
+    map.emitLayer('click', 'binnacle-tides-hit', {
+      features: [renderedFeature],
+    });
+
+    expect(store.resolveStation('tide', 'T1')).toBeUndefined();
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'tide', station, mode: 'manual' });
+  });
+
+  it('keeps older queued rendered snapshots selectable across multiple source updates', async () => {
+    const store = new TidesStore();
+    const stationB = { id: 'T2', name: 'Tide B', latitude: 27.8, longitude: -82.8 };
+    const stationC = { id: 'T3', name: 'Tide C', latitude: 27.9, longitude: -82.9 };
+    store.setCatalogs([{ station, distanceMeters: 0 }], []);
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const renderedStationA = sourceFeatures(map, 'binnacle-tides')[0];
+
+    store.setCatalogs([{ station: stationB, distanceMeters: 0 }], []);
+    overlay.sync(ctx);
+    store.setCatalogs([{ station: stationC, distanceMeters: 0 }], []);
+    overlay.sync(ctx);
+    map.emitLayer('click', 'binnacle-tides-hit', { features: [renderedStationA] });
+
+    expect(store.resolveStation('tide', station.id)).toBeUndefined();
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'tide', station, mode: 'manual' });
+  });
+
+  it('retries an unchanged source snapshot after its source is recreated', async () => {
+    const store = new TidesStore();
+    store.setCatalogs([{ station, distanceMeters: 0 }], []);
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    map.removeSource('binnacle-tides');
+    overlay.sync(ctx);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+
+    expect(sourceFeatures(map, 'binnacle-tides')).toHaveLength(1);
+  });
+
   it('blocks delegated station selection while another chart tool owns taps', async () => {
     const store = new TidesStore();
     store.setCatalogs([{ station, distanceMeters: 0 }], []);
@@ -233,7 +383,9 @@ describe('tides overlay', () => {
     );
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
+    map.getCanvas().style.cursor = 'crosshair';
 
+    map.emitLayer('mouseenter', 'binnacle-tides-hit', {});
     map.emitLayer('click', 'binnacle-tides-hit', {
       features: [
         {
@@ -242,8 +394,10 @@ describe('tides overlay', () => {
         },
       ],
     });
+    map.emitLayer('mouseleave', 'binnacle-tides-hit', {});
 
     expect(onSelect).not.toHaveBeenCalled();
+    expect(map.getCanvas().style.cursor).toBe('crosshair');
   });
 
   it('keeps automatic mode when the loaded marker represents signalk-tides output', async () => {
@@ -277,6 +431,72 @@ describe('tides overlay', () => {
       kind: 'tide',
       station: pluginStation,
       mode: 'automatic',
+    });
+  });
+
+  it('keeps the rendered plugin mode while an old signalk-tides marker is still visible', async () => {
+    const pluginStation = {
+      id: 'noaa/9414290',
+      name: 'Local tides (signalk-tides)',
+      latitude: 27.7,
+      longitude: -82.7,
+    };
+    const store = new TidesStore();
+    store.setReadings(
+      { station: pluginStation, distanceMeters: 0, events: [] },
+      undefined,
+      'signalk-tides',
+    );
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const renderedFeature = sourceFeatures(map, 'binnacle-tides')[0];
+
+    store.setNoCoverage();
+    map.emitLayer('click', 'binnacle-tides-hit', {
+      features: [renderedFeature],
+    });
+
+    expect(store.resolveStation('tide', pluginStation.id)).toBeUndefined();
+    expect(onSelect).toHaveBeenCalledWith({
+      kind: 'tide',
+      station: pluginStation,
+      mode: 'automatic',
+    });
+  });
+
+  it('keeps manual mode when a requested station shares the signalk-tides station id', async () => {
+    const pluginStation = {
+      id: 'noaa/9414290',
+      name: 'Shared station',
+      latitude: 27.7,
+      longitude: -82.7,
+    };
+    const store = new TidesStore();
+    store.setReadings(
+      { station: pluginStation, distanceMeters: 0, events: [] },
+      undefined,
+      'signalk-tides',
+    );
+    store.requestManual('tide', pluginStation, 0);
+    const onSelect = vi.fn();
+    const overlay = createTidesOverlay(store, unitsStub() as unknown as UnitsStore, onSelect);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+
+    map.emitLayer('click', 'binnacle-tides-hit', {
+      features: [sourceFeatures(map, 'binnacle-tides')[0]],
+    });
+
+    expect(onSelect).toHaveBeenCalledWith({
+      kind: 'tide',
+      station: pluginStation,
+      mode: 'manual',
     });
   });
 });

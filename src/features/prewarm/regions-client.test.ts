@@ -216,6 +216,25 @@ describe('regions client', () => {
     await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
   });
 
+  it('rejects duplicate per-source cache statistics', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok({
+          rows: 3,
+          bytes: 4096,
+          cap: 1000,
+          perSourceAvgBytes: {},
+          bySource: [
+            { source: 'basemap', bytes: 100, rows: 1 },
+            { source: 'basemap', bytes: 200, rows: 2 },
+          ],
+        }),
+      ) as unknown as typeof fetch,
+    );
+    await expect(client.getCacheStats()).rejects.toThrow('invalid cache stats');
+  });
+
   it('rejects a JSON response whose declared size exceeds the client boundary', async () => {
     const fetchImpl = vi.fn(
       async () =>
@@ -440,6 +459,16 @@ describe('regions client', () => {
       ) as unknown as typeof fetch,
     );
     await expect(client.getRegions()).rejects.toThrow('invalid saved region');
+  });
+
+  it('rejects duplicate saved-region identities', async () => {
+    const client = createRegionsClient(
+      'http://h/plugins/signalk-chart-locker',
+      vi.fn(async () =>
+        ok([savedRegion, { ...savedRegion, name: 'Conflicting area' }]),
+      ) as unknown as typeof fetch,
+    );
+    await expect(client.getRegions()).rejects.toThrow('invalid saved regions');
   });
 
   it('rejects malformed mutation responses before they reach controller state', async () => {

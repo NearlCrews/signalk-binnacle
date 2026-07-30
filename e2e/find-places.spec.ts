@@ -60,7 +60,7 @@ test('find places enables its layer, searches provider metadata, and keeps selec
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Find places' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
@@ -103,7 +103,7 @@ test('find places explains the chart zoom limit on a narrow screen', async ({ pa
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 4 }));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Find places' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
@@ -145,7 +145,7 @@ test('place detail returns to find places on a narrow screen', async ({ page }) 
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Find places' }).click();
   await page.getByRole('button', { name: /Harbor Marina/ }).click();
   const detail = page.getByRole('complementary', { name: 'Details for Harbor Marina' });
@@ -242,7 +242,7 @@ test('personal notes create, edit, move, and delete through the v2 notes provide
     page.getByRole('complementary', { name: 'Details for Quiet cove updated' }),
   ).toBeVisible();
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Find places' }).click();
   const places = page.getByRole('complementary', { name: 'Find places' });
   await expect(places.getByText('Quiet cove updated')).toBeVisible({ timeout: 15_000 });

@@ -7,7 +7,6 @@ import {
   poiInlineIconSvg,
 } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
-import type { SkSymbol } from '$shared/signalk';
 import { isTabKey, registerDismiss } from '$shared/ui';
 
 // Optional "default" entry at the top of the list (e.g. "Default waypoint marker"). When provided,
@@ -45,14 +44,6 @@ let {
   disabled = false,
 }: Props = $props();
 
-function iconRef(symbol: SkSymbol): string {
-  return (
-    symbol.aliases.find((a) => a.startsWith('custom:')) ??
-    symbol.aliases.find((a) => a.startsWith('binnacle:')) ??
-    symbol.aliases[0]
-  );
-}
-
 // POI_CATEGORIES and categoryLabel are static, so this list never changes; a plain const computes
 // it once instead of a $derived that would re-allocate in the reactive graph but never recompute.
 const poiOptions: IconOption[] = POI_CATEGORIES.map((cat) => ({
@@ -63,12 +54,19 @@ const poiOptions: IconOption[] = POI_CATEGORIES.map((cat) => ({
 }));
 
 const symbolOptions: IconOption[] = $derived(
-  (symbols?.forRole(symbolRole) ?? []).map((s) => ({
-    value: iconRef(s),
-    label: s.name,
-    kind: 'symbol' as const,
-    url: s.url,
-  })),
+  (symbols?.forRole(symbolRole) ?? []).flatMap((symbol) => {
+    const reference = symbols?.pickerReference(symbol);
+    return reference
+      ? [
+          {
+            value: reference,
+            label: symbol.name,
+            kind: 'symbol' as const,
+            url: symbol.url,
+          },
+        ]
+      : [];
+  }),
 );
 
 const options: IconOption[] = $derived([
@@ -99,7 +97,7 @@ let opensAbove = $state(false);
 let listMaxHeight = $state(256);
 let pickerEl: HTMLElement | undefined;
 let triggerEl: HTMLButtonElement | undefined;
-const optionEls: (HTMLElement | null)[] = [];
+const optionEls = $state<(HTMLElement | null)[]>([]);
 // The pending placement frame, so closing or unmounting the picker cannot leave a frame that reads
 // a detached trigger.
 let placeFrame: number | null = null;

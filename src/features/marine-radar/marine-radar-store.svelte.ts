@@ -1,3 +1,4 @@
+import { normalizeControlDefinitions, normalizeRadarIdentities } from './radar-client';
 import {
   type ControlDefinition,
   POWER_PENDING_KEY,
@@ -90,16 +91,17 @@ export class MarineRadarStore {
   });
 
   setDiscovered(radars: RadarInfo[]): void {
-    this.radars = radars;
+    const normalized = normalizeRadarIdentities(radars);
+    this.radars = normalized;
     // A fresh discovery clears a stale read-only warning: if access was granted and the link
     // reconnected, the next control write should be allowed to prove itself rather than the banner
     // lingering from the previous session.
     this.controlsForbidden = false;
-    const retained = radars.find((radar) => radar.id === this.selectedId);
+    const retained = normalized.find((radar) => radar.id === this.selectedId);
     if (retained) {
       this.operationalStatus = retained.status;
     } else {
-      const first = radars[0];
+      const first = normalized[0];
       this.selectedId = first?.id;
       // A new selection starts with that radar's own controls, never another radar's gain, sea, or rain.
       this.capabilities = [];
@@ -160,7 +162,7 @@ export class MarineRadarStore {
   }
 
   setCapabilities(controls: ControlDefinition[]): void {
-    this.capabilities = controls;
+    this.capabilities = normalizeControlDefinitions(controls);
     this.areaVersion += 1;
   }
 

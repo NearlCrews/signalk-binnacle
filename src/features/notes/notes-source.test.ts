@@ -6,6 +6,13 @@ import { createNotesSource } from './notes-source';
 describe('createNotesSource', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  const note = (id: string, name = id): NotePoint => ({
+    id,
+    name,
+    position: { latitude: 42.5, longitude: -83.5 },
+    category: 'generic',
+  });
+
   it('returns one active promise for concurrent loads and clears it after settlement', async () => {
     let resolveFirst!: (value: undefined) => void;
     const firstRead = new Promise<undefined>((resolve) => {
@@ -52,6 +59,24 @@ describe('createNotesSource', () => {
     expect(moved).not.toBe(first);
     await expect(first).resolves.toEqual([]);
     await expect(moved).resolves.toEqual([]);
+  });
+
+  it('restores one deterministic note for each persisted id', async () => {
+    const first = note('same', 'First copy');
+    const persist: ExpiringStore<NotePoint[]> = {
+      get: vi.fn().mockResolvedValue({
+        value: [first, note('same', 'Later copy'), note('other')],
+        expires: Date.now() + 60_000,
+      }),
+      put: vi.fn().mockResolvedValue(undefined),
+      prune: vi.fn().mockResolvedValue(undefined),
+    };
+    const source = createNotesSource('http://pi', persist);
+
+    await expect(source.load([-84, 42, -83, 43], undefined, false)).resolves.toEqual([
+      first,
+      note('other'),
+    ]);
   });
 
   it('reports in flight until the last concurrent flight lands', async () => {

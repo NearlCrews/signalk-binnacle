@@ -9,9 +9,9 @@ import type {
   TidesLoadResult,
   TidesStore,
 } from '$entities/tides';
-import { MAX_NEARBY_STATIONS } from '$entities/tides';
+import { isTideStation, MAX_NEARBY_STATIONS } from '$entities/tides';
 import { quantizeCellDeg } from '$shared/geo';
-import { DAY_MS, MINUTE_MS } from '$shared/lib';
+import { DAY_MS, isFiniteNumber, isRecord, MINUTE_MS } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { createExpiringStore, type ExpiringStore, MemoryCache } from '$shared/storage';
 import {
@@ -80,8 +80,85 @@ const STATIONS_PERSIST_MS = 7 * DAY_MS;
 // few plugin readings.
 const MAX_PLUGIN_PERSIST_ENTRIES = 6;
 const MAX_PERSIST_ENTRIES = 2 + 2 * MAX_EVENT_ENTRIES + MAX_PLUGIN_PERSIST_ENTRIES;
+const MAX_STATION_LIST_ENTRIES = 20_000;
+const MAX_EVENTS_PER_READING = 200;
 const TIDE_STATIONS_KEY = 'stations:tide';
 const CURRENT_STATIONS_KEY = 'stations:current';
+
+function validatedStations(value: unknown): TideStation[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_STATION_LIST_ENTRIES) return undefined;
+  const stations = value.filter(isTideStation);
+  return value.length === 0 || stations.length > 0 ? stations : undefined;
+}
+
+function isTideEvent(value: unknown): value is TideEvent {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.timeMs) &&
+    isFiniteNumber(value.heightMeters) &&
+    Math.abs(value.heightMeters) <= 100 &&
+    (value.kind === 'high' || value.kind === 'low')
+  );
+}
+
+function isCurrentEvent(value: unknown): value is CurrentEvent {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.timeMs) &&
+    isFiniteNumber(value.velocityMps) &&
+    value.velocityMps >= 0 &&
+    value.velocityMps <= 100 &&
+    (value.directionRad === undefined ||
+      (isFiniteNumber(value.directionRad) &&
+        value.directionRad >= 0 &&
+        value.directionRad <= 2 * Math.PI)) &&
+    (value.kind === 'flood' || value.kind === 'ebb' || value.kind === 'slack')
+  );
+}
+
+function validatedEvents<E extends TideEvent | CurrentEvent>(
+  value: unknown,
+  validate: (event: unknown) => event is E,
+): E[] | undefined {
+  if (!Array.isArray(value) || value.length > MAX_EVENTS_PER_READING) return undefined;
+  const events: E[] = [];
+  let changed = false;
+  let sorted = true;
+  let previousTime = Number.NEGATIVE_INFINITY;
+  for (const event of value) {
+    if (!validate(event)) {
+      changed = true;
+      continue;
+    }
+    if (event.timeMs < previousTime) sorted = false;
+    previousTime = event.timeMs;
+    events.push(event);
+  }
+  if (value.length > 0 && events.length === 0) return undefined;
+  if (!changed && sorted) return value as E[];
+  return events.sort((left, right) => left.timeMs - right.timeMs);
+}
+
+const validatedTideEvents = (value: unknown): TideEvent[] | undefined =>
+  validatedEvents(value, isTideEvent);
+
+const validatedCurrentEvents = (value: unknown): CurrentEvent[] | undefined =>
+  validatedEvents(value, isCurrentEvent);
+
+function validatedTideReading(value: unknown): TideReading | undefined {
+  if (!isRecord(value) || !isTideStation(value.station)) return undefined;
+  const events = validatedTideEvents(value.events);
+  if (
+    !events ||
+    events.length === 0 ||
+    !isFiniteNumber(value.distanceMeters) ||
+    value.distanceMeters < 0
+  ) {
+    return undefined;
+  }
+  if (events === value.events) return value as unknown as TideReading;
+  return { station: value.station, distanceMeters: value.distanceMeters, events };
+}
 
 // Persisted predictions expire at the end of the 48-hour window the day's fetch covered. The day
 // in the key already retires them at the UTC-midnight rollover; the expiry only bounds how long a
@@ -219,15 +296,25 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
         storedCurrents &&
         storedCurrents.expires > nowMs
       ) {
-        tideList = storedTides.value as TideStation[];
-        currentList = storedCurrents.value as TideStation[];
-        listsAt = nowMs;
-        void deps.persist.prune(nowMs);
-        return { tide: tideList, current: currentList };
+        const tides = validatedStations(storedTides.value);
+        const currents = validatedStations(storedCurrents.value);
+        if (tides && currents) {
+          tideList = tides;
+          currentList = currents;
+          listsAt = nowMs;
+          void deps.persist.prune(nowMs);
+          return { tide: tides, current: currents };
+        }
       }
     }
     try {
-      const [tides, currents] = await Promise.all([deps.tideStations(), deps.currentStations()]);
+      const [rawTides, rawCurrents] = await Promise.all([
+        deps.tideStations(),
+        deps.currentStations(),
+      ]);
+      const tides = validatedStations(rawTides);
+      const currents = validatedStations(rawCurrents);
+      if (!tides || !currents) throw new Error('Invalid tide station catalog');
       tideList = tides;
       currentList = currents;
       listsAt = nowMs;
@@ -253,18 +340,22 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     stationId: string,
     nowMs: number,
     day: string,
+    validate: (value: unknown) => E | undefined,
   ): Promise<E> {
     const entry = cache.get(stationId, nowMs);
     if (entry && entry.day === day) return entry.events;
     const key = `${prefix}:${stationId}:${day}`;
     const stored = await deps.persist.get(key);
     if (stored && stored.expires > nowMs) {
-      const events = stored.value as E;
-      cache.put(stationId, { events, day }, nowMs);
-      void deps.persist.prune(nowMs);
-      return events;
+      const events = validate(stored.value);
+      if (events) {
+        cache.put(stationId, { events, day }, nowMs);
+        void deps.persist.prune(nowMs);
+        return events;
+      }
     }
-    const events = await fetchEvents(stationId);
+    const events = validate(await fetchEvents(stationId));
+    if (!events) throw new Error(`Invalid ${prefix} event response`);
     cache.put(stationId, { events, day }, nowMs);
     await deps.persist.put(key, events, eventsExpiresAt(nowMs));
     void deps.persist.prune(nowMs);
@@ -279,22 +370,24 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
   ): Promise<TideReading | undefined> {
     if (!deps.pluginAvailable()) return undefined;
     const pluginKey = `plugin:${quantizeCellDeg(lat)},${quantizeCellDeg(lon)}:${day}`;
-    let reading = await deps.pluginTides(lat, lon).catch(() => undefined);
+    let reading = validatedTideReading(await deps.pluginTides(lat, lon).catch(() => undefined));
     const fromNetwork = reading !== undefined;
     if (!reading) {
       const stored = await deps.persist.get(pluginKey);
       if (stored && stored.expires > nowMs) {
-        const replayed = stored.value as TideReading;
-        reading = {
-          ...replayed,
-          distanceMeters: haversineMeters(
-            lat,
-            lon,
-            replayed.station.latitude,
-            replayed.station.longitude,
-          ),
-        };
-        void deps.persist.prune(nowMs);
+        const replayed = validatedTideReading(stored.value);
+        if (replayed) {
+          reading = {
+            ...replayed,
+            distanceMeters: haversineMeters(
+              lat,
+              lon,
+              replayed.station.latitude,
+              replayed.station.longitude,
+            ),
+          };
+          void deps.persist.prune(nowMs);
+        }
       }
     }
     if (!reading || reading.distanceMeters > TIDE_RADIUS_M) return undefined;
@@ -323,6 +416,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
           selection.station.id,
           nowMs,
           day,
+          validatedTideEvents,
         );
         return {
           state: 'accepted',
@@ -355,6 +449,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
         nearest.station.id,
         nowMs,
         day,
+        validatedTideEvents,
       );
       return {
         state: 'accepted',
@@ -385,6 +480,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
           selection.station.id,
           nowMs,
           day,
+          validatedCurrentEvents,
         );
         return {
           state: 'accepted',
@@ -413,6 +509,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
           candidate.station.id,
           nowMs,
           day,
+          validatedCurrentEvents,
         );
         // Automatic mode keeps searching past valid empty reference stations. A manual exact
         // selection accepts the same empty response above.
@@ -502,16 +599,27 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
 
   async function drain(first: NonNullable<typeof queued>): Promise<void> {
     let request: NonNullable<typeof queued> | undefined = first;
-    while (request) {
-      try {
-        await performLoad(request);
-      } finally {
-        for (const resolve of request.waiters) resolve();
+    try {
+      while (request) {
+        try {
+          await performLoad(request);
+        } catch (error) {
+          console.warn('[tides] unexpected loader failure', error);
+        } finally {
+          for (const resolve of request.waiters) resolve();
+        }
+        request = queued;
+        queued = undefined;
       }
-      request = queued;
+    } finally {
+      running = false;
+      const next = queued;
       queued = undefined;
+      if (next) {
+        running = true;
+        void drain(next);
+      }
     }
-    running = false;
   }
 
   return {

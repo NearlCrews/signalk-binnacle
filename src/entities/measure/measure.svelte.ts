@@ -45,9 +45,9 @@ function leg(from: MeasureVertex, to: MeasureVertex): MeasureLeg {
   };
 }
 
-// The measure tool is transient by design. Stable session-local vertex ids keep selection and Undo
-// deterministic while coordinates move, and inverse history entries avoid copying a 1,000-point
-// measurement for each edit.
+// The measure tool is transient by design. Stable store-lifetime vertex ids keep selection, Undo,
+// and delayed map hits deterministic while coordinates move and sessions change. Inverse history
+// entries avoid copying a 1,000-point measurement for each edit.
 export class MeasureStore {
   #active = $state(false);
   #vertices = $state<MeasureVertex[]>([]);
@@ -330,6 +330,5 @@ export class MeasureStore {
     this.#selectedId = undefined;
     this.#moveArmed = false;
     this.#movePreview = undefined;
-    this.#nextId = 1;
   }
 }

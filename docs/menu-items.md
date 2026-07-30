@@ -113,13 +113,14 @@ source, and surrounding traffic before relying on it.
   radius. A manual choice fetches that exact NOAA station, survives chart pans for the session, and
   can be reset independently or together with **Use nearest stations**. Straight-line distance from
   the chart center is guidance only and does not guarantee that a station represents local water
-  movement. Filled tide markers and hollow current markers are tappable; a marker selection reveals
-  the layer, opens the panel when needed, and expands a minimized panel. Cached readings, accepted
-  station choices, provider attribution, and nearby catalogs survive a failed replacement, and
-  **Retry** bypasses the automatic cooldown. A valid empty response reports that no predictions are
-  in the current window. Provider station and event payloads are validated and bounded, and CO-OPS
-  station identifiers are constrained before URL construction. Choices are not persisted across
-  reloads.
+  movement. Filled tide markers, hollow current markers, and their loaded prediction labels are
+  tappable by mouse or touchscreen; a station selection reveals the layer, opens the panel when
+  needed, and expands a minimized panel. When chart markers overlap, the highest visible overlay
+  owns the gesture. Cached readings, accepted station choices, provider attribution, and nearby
+  catalogs survive a failed replacement, and **Retry** bypasses the automatic cooldown. A valid
+  empty response reports that no predictions are in the current window. Provider station and event
+  payloads are validated and bounded, and CO-OPS station identifiers are constrained before URL
+  construction. Choices are not persisted across reloads.
 
 ## Instruments
 

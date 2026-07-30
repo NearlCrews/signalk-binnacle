@@ -152,6 +152,79 @@ describe('measure overlay', () => {
     expect(measure.points[0]).toEqual({ latitude: 0, longitude: 0 });
   });
 
+  it('ignores a rendered vertex that no longer exists in the current measurement', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    const vertexId = measure.vertices[0].id;
+    map.renderedFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { vertexId },
+    });
+
+    expect(overlay.hitTestVertex([0, 0])).toBe(vertexId);
+    measure.undo();
+    expect(overlay.hitTestVertex([0, 0])).toBeUndefined();
+  });
+
+  it('does not resolve a stale rendered vertex to a new measurement session', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    const staleId = measure.vertices[0].id;
+    map.renderedFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { vertexId: staleId },
+    });
+
+    measure.start();
+    measure.add({ latitude: 1, longitude: 1 });
+
+    expect(measure.vertices[0].id).not.toBe(staleId);
+    expect(overlay.hitTestVertex([0, 0])).toBeUndefined();
+  });
+
+  it('finds the first current point behind stale and non-point rendered features', async () => {
+    const { measure, overlay, map, ctx } = setup();
+    await overlay.add(ctx);
+    measure.start();
+    measure.add({ latitude: -1, longitude: -1 });
+    const staleId = measure.vertices[0].id;
+    measure.start();
+    measure.add({ latitude: 0, longitude: 0 });
+    measure.add({ latitude: 1, longitude: 1 });
+    const [lineOnlyId, pointId] = measure.vertices.map((vertex) => vertex.id);
+    map.renderedFeatures.push(
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+        properties: { vertexId: lineOnlyId },
+      },
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [0, 0] },
+        properties: { vertexId: staleId },
+      },
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        properties: { vertexId: pointId },
+      },
+    );
+
+    expect(overlay.hitTestVertex([0, 0])).toBe(pointId);
+  });
+
   it('cancels an interrupted touch drag and restores map panning', async () => {
     const { measure, overlay, map, ctx } = setup();
     await overlay.add(ctx);

@@ -6,7 +6,7 @@ import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 test.use({ serviceWorkers: 'block' });
 
 async function openInstruments(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Instruments', exact: true })
@@ -14,7 +14,7 @@ async function openInstruments(page: Page): Promise<void> {
 }
 
 async function openTrends(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Data trends', exact: true })
@@ -22,7 +22,7 @@ async function openTrends(page: Page): Promise<void> {
 }
 
 async function openTimeTravel(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Time travel', exact: true })
@@ -103,7 +103,7 @@ test('app shell stays usable and explains when WebGL2 is unavailable', async ({ 
   await expect(page.locator('.chart-start-error')).toContainText('WebGL2');
   await expect(page.locator('.brand')).toContainText('Binnacle Chartplotter');
   await expect(page.getByText('SOG')).toBeVisible();
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(page.locator('#app-menu-launcher')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
@@ -254,6 +254,49 @@ test('time travel can exit while its lazy controls are still loading', async ({ 
   }
 });
 
+test('weather can exit while its lazy view is still loading', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  let releaseChunk = () => {};
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunk = resolve;
+  });
+  await page.route(/\/assets\/WeatherMap-[^/]+\.js$/, async (route) => {
+    await chunkGate;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const forecast = page
+      .locator('#app-menu-launcher')
+      .getByRole('button', { name: 'Forecast', exact: true });
+    await forecast.click();
+
+    const pending = page.locator('.panel-loading--cover');
+    await expect(pending.getByText('Loading weather view…', { exact: true })).toBeVisible();
+    await pending.getByRole('button', { name: 'Back to menu' }).click();
+    await expect(pending).not.toBeVisible();
+
+    await expect(forecast).toBeVisible();
+    await forecast.click();
+    await expect(pending.getByText('Loading weather view…', { exact: true })).toBeVisible();
+    await pending.getByRole('button', { name: 'Close' }).click();
+    await expect(pending).not.toBeVisible();
+
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await forecast.click();
+    await expect(pending.getByText('Loading weather view…', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pending).not.toBeVisible();
+  } finally {
+    releaseChunk();
+  }
+});
+
 test('center and follow explain when no GPS fix is available', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
@@ -261,7 +304,7 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
   });
   const workerProof = await installMapLibreWorkerProof(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const menu = page.locator('#app-menu-launcher');
   const center = menu.getByRole('button', { name: /Center/ });
   const follow = menu.getByRole('button', { name: /Follow/ });
@@ -281,7 +324,7 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const menu = page.locator('#app-menu-launcher');
   await expect(menu).toBeVisible();
 
@@ -491,7 +534,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const radar = page.getByRole('button', { name: /Radar$/ });
   await expect(radar).toBeEnabled({ timeout: 10_000 });
   await radar.click();
@@ -586,11 +629,14 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await expect(radarSelector).toHaveValue('halo');
   await expect(panel.getByText('Cabin Halo · Navico')).toBeVisible();
 
+  await panel.getByRole('button', { name: 'Minimize panel' }).click();
+  await expect(panel.locator('.panel-body')).toHaveClass(/panel-body--collapsed/);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: /Radar$/ })
     .click();
+  await expect(panel.locator('.panel-body')).not.toHaveClass(/panel-body--collapsed/);
   await expect(discardConfirm).toBeVisible();
   await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(panel).toBeVisible();
@@ -607,12 +653,42 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
     'aria-pressed',
     'true',
   );
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: /Radar$/ })
+    .click();
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Advanced controls' }).click();
+  await panel.getByRole('button', { name: 'Edit guard zone' }).click();
+  await panel.getByRole('spinbutton', { name: 'End angle' }).fill('45');
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instruments', exact: true })
+    .click();
+  await expect(discardConfirm).toBeVisible();
+  await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Instruments' })).not.toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instruments', exact: true })
+    .click();
+  await expect(discardConfirm).toBeVisible();
+  await discardConfirm.getByRole('button', { name: 'Discard' }).click();
+  await expect(panel).not.toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Instruments' })).toBeVisible();
 });
 
 test('offline charts stays discoverable when Chart Locker is not installed', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
 
   const menu = page.locator('#app-menu-launcher');
   const offline = menu.getByRole('button', { name: /Offline charts/ });
@@ -632,7 +708,7 @@ test('offline area review shows a planning estimate and catalog chart defaults',
   await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
     timeout: 10_000,
   });
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const offline = page.locator('#app-menu-launcher').getByRole('button', {
     name: 'Offline charts',
     exact: true,
@@ -686,7 +762,7 @@ test('offline areas explain removed chart sources before re-download', async ({ 
   await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
     timeout: 10_000,
   });
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Offline charts', exact: true })
@@ -760,7 +836,7 @@ test('style-document charts stay visible and explain that they are unsupported',
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Layers and charts', exact: true })
@@ -811,7 +887,7 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
   });
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const charts = page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Layers and charts', exact: true });
@@ -842,7 +918,7 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
 test('route editing confirms before discarding plotted changes', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Routes' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Routes' });
@@ -894,7 +970,7 @@ test('saved route secondary actions use a labeled overflow menu', async ({ page 
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Routes' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Routes' });
@@ -1340,6 +1416,38 @@ test('instrument tiles take the full screen under the breakpoint with their own 
   await expect(dock).not.toBeVisible();
 });
 
+test('full-screen instruments and chart panels yield ownership to each other', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto('/');
+  await openInstruments(page);
+  const instruments = page.locator('aside.instruments');
+  await expect(instruments).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Tracks', exact: true })
+    .click();
+  const tracks = page.getByRole('complementary', { name: 'Tracks' });
+  await expect(tracks).toBeVisible();
+  await expect(instruments).toBeVisible();
+
+  // The dock and chart panel may coexist on a desktop, but entering the phone layout gives the
+  // existing chart panel ownership instead of stacking a full-screen Instruments dialog over it.
+  await page.setViewportSize({ width: 640, height: 900 });
+  await expect(instruments).not.toBeVisible();
+  await expect(tracks).toBeVisible();
+
+  // In the opposite direction, opening full-screen Instruments closes the existing chart panel.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instruments', exact: true })
+    .click();
+  await expect(tracks).not.toBeVisible();
+  await expect(instruments).toBeVisible();
+});
+
 test('weather remains usable without horizontal overflow on a narrow phone', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
@@ -1380,7 +1488,7 @@ test('weather remains usable without horizontal overflow on a narrow phone', asy
     });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Forecast' }).click();
 
   const panel = page.locator('#weather-panel');

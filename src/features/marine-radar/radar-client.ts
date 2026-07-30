@@ -4,6 +4,7 @@ import {
   isFiniteNumber,
   isRecord,
   readBoundedJson,
+  sameJsonValue,
   withTimeout,
 } from '$shared/lib';
 import { appendToken, authInit, sendJson } from '$shared/signalk';
@@ -50,6 +51,31 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'compound',
 ]);
 const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function normalizeUniqueIdentities<T>(values: T[], identity: (value: T) => string): T[] {
+  const accepted = new Map<string, T>();
+  const conflicted = new Set<string>();
+  for (const value of values) {
+    const id = identity(value);
+    if (conflicted.has(id)) continue;
+    const previous = accepted.get(id);
+    if (previous === undefined) {
+      accepted.set(id, value);
+    } else if (!sameJsonValue(previous, value)) {
+      accepted.delete(id);
+      conflicted.add(id);
+    }
+  }
+  return [...accepted.values()];
+}
+
+export function normalizeRadarIdentities(radars: RadarInfo[]): RadarInfo[] {
+  return normalizeUniqueIdentities(radars, (radar) => radar.id);
+}
+
+export function normalizeControlDefinitions(controls: ControlDefinition[]): ControlDefinition[] {
+  return normalizeUniqueIdentities(controls, (control) => control.id);
+}
 
 function safeStringId(value: unknown): string | undefined {
   return typeof value === 'string' &&
@@ -293,20 +319,23 @@ function parseRangeV5(raw: Record<string, unknown>): ControlDefinition['range'] 
   };
 }
 
-// The enum choices of a ControlDefinitionV5: an array of {value,label}. The internal model is numeric,
-// so a string-valued choice (legal in the type but not used by radar enums) is dropped.
+// The enum choices of a ControlDefinitionV5: an array of {value,label}. Preserve numeric and string
+// values as distinct wire types so the select can send the provider's exact choice.
 function parseValuesV5(values: unknown): ControlDefinition['values'] {
   if (!Array.isArray(values) || values.length > MAX_RADAR_CONTROLS) return undefined;
-  const out: NonNullable<ControlDefinition['values']> = [];
+  const parsed: NonNullable<ControlDefinition['values']> = [];
   for (const v of values) {
     if (
       isRecord(v) &&
       ((typeof v.value === 'number' && Number.isFinite(v.value)) ||
-        (typeof v.value === 'string' && v.value.length <= MAX_RADAR_TEXT_LENGTH))
+        (typeof v.value === 'string' &&
+          v.value.length <= MAX_RADAR_TEXT_LENGTH &&
+          !hasControlCharacters(v.value)))
     ) {
-      out.push({ value: v.value, label: boundedText(v.label) ?? String(v.value) });
+      parsed.push({ value: v.value, label: boundedText(v.label) ?? String(v.value) });
     }
   }
+  const out = normalizeUniqueIdentities(parsed, ({ value }) => `${typeof value}:${String(value)}`);
   return out.length > 0 ? out : undefined;
 }
 
@@ -374,7 +403,9 @@ export async function discoverRadars(
     const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);
     if (!Array.isArray(body) || body.length > MAX_RADARS)
       return { radars: [], availability: 'invalid', detail: 'Radar discovery was not an array.' };
-    const radars = body.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined);
+    const radars = normalizeRadarIdentities(
+      body.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined),
+    );
     return {
       radars,
       availability: radars.length > 0 ? 'available' : body.length > 0 ? 'invalid' : 'absent',
@@ -407,9 +438,11 @@ export async function fetchCapabilities(
   if (!isRecord(body)) return undefined;
   if (Array.isArray(body.controls)) {
     if (body.controls.length > MAX_RADAR_CONTROLS) return undefined;
-    const controls = body.controls
-      .map(toControlDefinitionV5)
-      .filter((c): c is ControlDefinition => c !== undefined);
+    const controls = normalizeControlDefinitions(
+      body.controls
+        .map(toControlDefinitionV5)
+        .filter((c): c is ControlDefinition => c !== undefined),
+    );
     return { controls };
   }
   if (isRecord(body.controls)) {

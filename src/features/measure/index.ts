@@ -1,6 +1,6 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
-const measureStripLoader = createRetryableLazyLoader(() => import('./MeasureStrip.svelte'));
+const measureStripLoader = createRetryableLazyUiLoader(() => import('./MeasureStrip.svelte'));
 
 export function loadMeasureStrip(): Promise<typeof import('./MeasureStrip.svelte')> {
   return measureStripLoader();

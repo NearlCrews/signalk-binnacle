@@ -114,7 +114,7 @@ test('profile overflow actions stay inside a narrow viewport', async ({ page }) 
   await installProfileServer(page, serverDocument);
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Profiles', exact: true })
@@ -177,7 +177,7 @@ test('profiles restore instrument order in a different browser', async ({ browse
   await installProfileServer(secondPage, serverDocument);
   await secondPage.goto('/');
 
-  await secondPage.getByRole('button', { name: 'Menu' }).click();
+  await secondPage.getByRole('button', { name: 'Menu', exact: true }).click();
   await secondPage
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Profiles', exact: true })

@@ -24,6 +24,11 @@ function cleanText(value: unknown, maxLength: number): string | undefined {
   return text ? text.slice(0, maxLength) : undefined;
 }
 
+function suffixedSectionId(id: string, suffix: number): string {
+  const ending = `:${suffix}`;
+  return `${id.slice(0, 256 - ending.length)}${ending}`;
+}
+
 export interface NormalizedItem {
   label: string;
   value: string | number | boolean;
@@ -106,7 +111,7 @@ function parseItem(raw: unknown): NormalizedItem | undefined {
 
 function parseSections(raw: unknown): NormalizedSection[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const sections: NormalizedSection[] = [];
+  const candidates: NormalizedSection[] = [];
   for (const s of raw.slice(0, MAX_SECTIONS)) {
     if (!s || typeof s !== 'object') continue;
     const sec = s as { id?: unknown; title?: unknown; items?: unknown };
@@ -117,9 +122,29 @@ function parseSections(raw: unknown): NormalizedSection[] | undefined {
       .map(parseItem)
       .filter((i): i is NormalizedItem => i !== undefined);
     if (items.length === 0) continue;
-    sections.push({ id: cleanText(sec.id, 256) ?? title, title, items });
+    candidates.push({ id: cleanText(sec.id, 256) ?? title, title, items });
   }
-  return sections.length > 0 ? sections : undefined;
+  if (candidates.length === 0) return undefined;
+
+  const sourceIds = new Set(candidates.map((section) => section.id));
+  const usedIds = new Set<string>();
+  const nextSuffix = new Map<string, number>();
+  return candidates.map((section) => {
+    if (!usedIds.has(section.id)) {
+      usedIds.add(section.id);
+      return section;
+    }
+
+    let suffix = nextSuffix.get(section.id) ?? 2;
+    let id = suffixedSectionId(section.id, suffix);
+    while (sourceIds.has(id) || usedIds.has(id)) {
+      suffix += 1;
+      id = suffixedSectionId(section.id, suffix);
+    }
+    nextSuffix.set(section.id, suffix + 1);
+    usedIds.add(id);
+    return { ...section, id };
+  });
 }
 
 async function tryFetch(

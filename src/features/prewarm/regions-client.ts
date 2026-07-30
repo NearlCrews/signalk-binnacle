@@ -161,15 +161,18 @@ function parseCacheStats(value: unknown): CacheStats {
     if (!Array.isArray(value.bySource) || value.bySource.length > MAX_SOURCE_STATS_COUNT) {
       throw new InvalidCacheStatsError();
     }
+    const sources = new Set<string>();
     bySource = value.bySource.map((row) => {
       if (
         !isRecord(row) ||
         !safeText(row.source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH) ||
+        sources.has(row.source) ||
         !isNonNegativeSafeInteger(row.bytes) ||
         !isNonNegativeSafeInteger(row.rows)
       ) {
         throw new InvalidCacheStatsError();
       }
+      sources.add(row.source);
       return { source: row.source, bytes: row.bytes, rows: row.rows };
     });
   }
@@ -317,7 +320,13 @@ function parseSavedRegions(value: unknown): SavedRegionDto[] {
   if (!Array.isArray(value) || value.length > MAX_REGION_COUNT) {
     throw new TypeError('invalid saved regions');
   }
-  return value.map((region) => parseSavedRegion(region, 'list'));
+  const ids = new Set<string>();
+  return value.map((region) => {
+    const parsed = parseSavedRegion(region, 'list');
+    if (ids.has(parsed.id)) throw new TypeError('invalid saved regions');
+    ids.add(parsed.id);
+    return parsed;
+  });
 }
 
 function parseJobResponse(value: unknown, status: number): RegionJobStart {

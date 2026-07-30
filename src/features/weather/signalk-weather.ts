@@ -6,6 +6,7 @@ import {
   MINUTE_MS,
   nearestBy,
   readBoundedJson,
+  sameJsonValue,
   withTimeout,
 } from '$shared/lib';
 import { authInit, safeProviderId } from '$shared/signalk';
@@ -186,7 +187,7 @@ function validNumericRecord(value: unknown, fields: readonly string[]): boolean 
   return value === undefined || (isRecord(value) && hasOnlyFiniteNumbers(value, fields));
 }
 
-function isSignalKWeatherData(value: unknown): value is SignalKWeatherData {
+export function isSignalKWeatherData(value: unknown): value is SignalKWeatherData {
   if (!isRecord(value)) return false;
   const date = boundedText(value.date, 64);
   if (!date) return false;
@@ -238,7 +239,7 @@ function isSignalKWeatherData(value: unknown): value is SignalKWeatherData {
   return true;
 }
 
-function cleanWarning(value: unknown): WeatherWarning | undefined {
+export function parseWeatherWarning(value: unknown): WeatherWarning | undefined {
   if (!isRecord(value)) return undefined;
   const startTime = boundedText(value.startTime, 64);
   const endTime = boundedText(value.endTime, 64);
@@ -251,6 +252,45 @@ function cleanWarning(value: unknown): WeatherWarning | undefined {
   const source = boundedText(value.source, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_SOURCE_FALLBACK;
   const type = boundedText(value.type, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_TYPE_FALLBACK;
   return { startTime, endTime, details, source, type };
+}
+
+export function weatherWarningIdentity(warning: WeatherWarning): string {
+  return JSON.stringify([
+    warning.startTime,
+    warning.endTime,
+    warning.type,
+    warning.source,
+    warning.details,
+  ]);
+}
+
+export function normalizeWeatherWarnings(warnings: WeatherWarning[]): WeatherWarning[] {
+  const accepted = new Map<string, WeatherWarning>();
+  for (const warning of warnings) {
+    const identity = weatherWarningIdentity(warning);
+    if (!accepted.has(identity)) accepted.set(identity, warning);
+  }
+  return [...accepted.values()];
+}
+
+export function normalizeSignalKForecasts(forecasts: SignalKWeatherData[]): SignalKWeatherData[] {
+  const accepted = new Map<number, SignalKWeatherData>();
+  const conflicted = new Set<number>();
+  for (const forecast of forecasts) {
+    const timeMs = Date.parse(forecast.date);
+    if (!Number.isFinite(timeMs) || conflicted.has(timeMs)) continue;
+    const previous = accepted.get(timeMs);
+    if (!previous) {
+      accepted.set(timeMs, forecast);
+    } else {
+      const { date: _previousDate, ...previousData } = previous;
+      const { date: _forecastDate, ...forecastData } = forecast;
+      if (sameJsonValue(previousData, forecastData)) continue;
+      accepted.delete(timeMs);
+      conflicted.add(timeMs);
+    }
+  }
+  return [...accepted.entries()].sort(([left], [right]) => left - right).map(([, value]) => value);
 }
 
 export async function fetchWeatherProviders(
@@ -417,11 +457,7 @@ export async function fetchPointForecastsResult(
     MAX_WEATHER_FORECASTS,
   );
   if (result.status !== 'success') return result;
-  const sorted = result.value
-    .filter((entry) => !Number.isNaN(entryMs(entry)))
-    .slice()
-    .sort((a, b) => entryMs(a) - entryMs(b))
-    .slice(0, count);
+  const sorted = normalizeSignalKForecasts(result.value).slice(0, count);
   return sorted.length > 0 ? { status: 'success', value: sorted } : { status: 'empty' };
 }
 
@@ -444,11 +480,12 @@ export async function fetchWeatherWarningsResult(
   if (result.value.length > MAX_WEATHER_WARNINGS) return { status: 'failure' };
   const warnings: WeatherWarning[] = [];
   for (const entry of result.value) {
-    const warning = cleanWarning(entry);
+    const warning = parseWeatherWarning(entry);
     if (!warning) return { status: 'failure' };
     warnings.push(warning);
   }
-  return warnings.length > 0 ? { status: 'success', value: warnings } : { status: 'empty' };
+  const normalized = normalizeWeatherWarnings(warnings);
+  return normalized.length > 0 ? { status: 'success', value: normalized } : { status: 'empty' };
 }
 
 export async function fetchObservations(

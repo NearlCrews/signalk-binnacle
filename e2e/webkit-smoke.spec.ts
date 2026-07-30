@@ -17,7 +17,7 @@ test('WebKit supports the app shell and a primary panel interaction', async ({ p
     /Connecting|Connected|Reconnecting|Not connected/,
   );
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const menu = page.locator('#app-menu-launcher');
   const center = menu.getByRole('button', { name: /Center/ });
   await expect(center).toHaveAttribute('title', /GPS position/, { timeout: 15_000 });

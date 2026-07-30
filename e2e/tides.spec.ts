@@ -8,7 +8,13 @@ const tideStations = [
   { id: 'T1', name: 'Harbor tide', lat: 27.7, lng: -82.7 },
   { id: 'T2', name: 'Pass tide', lat: 27.72, lng: -82.72 },
 ];
-const currentStations = [{ id: 'C1', name: 'Channel current', lat: 27.77, lng: -82.77 }];
+// NOAA's live currentpredictions catalog repeats some stable ids. Keep that production shape in
+// every panel-opening test so a duplicate keyed row cannot regress unnoticed.
+const currentStations = [
+  { id: 'C1', name: 'Channel current', lat: 27.77, lng: -82.77 },
+  { id: 'C1', name: 'Channel current', lat: 27.77, lng: -82.77 },
+  { id: 'C1', name: 'Channel current', lat: 27.77, lng: -82.77 },
+];
 
 async function mockCoops(page: Page): Promise<void> {
   await page.route(
@@ -70,6 +76,142 @@ async function mockCoops(page: Page): Promise<void> {
   );
 }
 
+async function waitForCenterStationHit(page: Page): Promise<{ x: number; y: number }> {
+  const canvas = page.locator('.maplibregl-canvas');
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('map canvas did not lay out');
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await expect
+    .poll(
+      async () => {
+        // NOAA can answer before the overlay sync and MapLibre worker have painted the station.
+        // Cross the target on every probe. Its delegated mouseenter proves that the matching hit
+        // geometry, not just the source data, is queryable in the rendered frame.
+        await page.mouse.move(center.x + 60, center.y);
+        await page.mouse.move(center.x, center.y);
+        return canvas.evaluate((element) => element.style.cursor);
+      },
+      { message: 'center Tide station did not become hittable' },
+    )
+    .toBe('pointer');
+  return center;
+}
+
+async function touchTap(page: Page, point: { x: number; y: number }): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ ...point, id: 1 }],
+  });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+test('warms Tide controls before a visible station marker is selected', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
+    localStorage.setItem(
+      'binnacle:layers',
+      JSON.stringify({ tides: { visible: true, opacity: 1 } }),
+    );
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await mockCoops(page);
+
+  const panelChunk = page.waitForResponse(/\/assets\/TidesPanel-[^/]+\.js$/);
+  await page.goto('/');
+  await expect(page.getByRole('complementary', { name: 'Tides' })).toHaveCount(0);
+  expect((await panelChunk).status()).toBe(200);
+});
+
+test('opens Tides from a station enabled only through Layers and charts', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 700 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  const workerProof = await installMapLibreWorkerProof(page);
+  await mockCoops(page);
+  await page.goto('/');
+  await workerProof.assertInitialNavigation();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Layers and charts', exact: true })
+    .click();
+  const layers = page.locator('#layers-panel');
+  await layers
+    .getByLabel('Layers and charts view')
+    .getByRole('button', { name: 'Overlays' })
+    .click();
+  await layers.getByRole('button', { name: /Chart overlays and marks/ }).click();
+  const tideLayer = layers
+    .locator('[data-layer-row="tides"]')
+    .getByRole('checkbox', { name: 'Tide stations' });
+  const prediction = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/prod/datagetter') &&
+      new URL(response.url()).searchParams.get('product') === 'predictions',
+  );
+  await tideLayer.check();
+  await prediction;
+  await layers.getByRole('button', { name: 'Close layers and charts' }).click();
+
+  const center = await waitForCenterStationHit(page);
+  await page.mouse.click(center.x, center.y);
+
+  const panel = page.getByRole('complementary', { name: 'Tides' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Harbor tide/ })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await expect(panel.getByRole('button', { name: /Channel current/ })).toHaveCount(1);
+});
+
+test('opens Tides from a direct chart touch tap', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 700 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
+    localStorage.setItem(
+      'binnacle:layers',
+      JSON.stringify({ tides: { visible: true, opacity: 1 } }),
+    );
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  const workerProof = await installMapLibreWorkerProof(page);
+  await mockCoops(page);
+  const prediction = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/prod/datagetter') &&
+      new URL(response.url()).searchParams.get('product') === 'predictions',
+  );
+  await page.goto('/');
+  await workerProof.assertInitialNavigation();
+  await prediction;
+
+  const center = await waitForCenterStationHit(page);
+  await touchTap(page, center);
+
+  const panel = page.getByRole('complementary', { name: 'Tides' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Harbor tide/ })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+});
+
 test('selects stations by keyboard and marker tap on a narrow chart', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
@@ -84,13 +226,14 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await page.goto('/');
   await workerProof.assertInitialNavigation();
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Tides', exact: true })
     .click();
   const panel = page.getByRole('complementary', { name: 'Tides' });
   await expect(panel.getByRole('button', { name: /Pass tide/ })).toBeVisible();
+  await expect(panel).toHaveCount(1);
 
   const passTide = panel.getByRole('button', { name: /Pass tide/ });
   await passTide.focus();
@@ -115,15 +258,34 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await expect(panel.getByRole('button', { name: 'Back to menu' })).toBeVisible();
 
   await panel.getByRole('button', { name: 'Close tides panel' }).click();
+  const chartOpenedPanel = page.getByRole('complementary', { name: 'Tides' });
+
+  // Keep the chart center clear of the phone-height Measure strip while proving that its delegated
+  // marker gate consumes the exact Tide station tap.
+  await page.setViewportSize({ width: 800, height: 700 });
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Measure', exact: true }).click();
+  const measure = page.getByRole('complementary', { name: 'Measure' });
+  await expect(measure).toBeVisible();
+  await expect(page.locator('#app-menu-launcher')).not.toBeVisible();
+  const measureCanvasBox = await canvas.boundingBox();
+  if (!measureCanvasBox) throw new Error('measure map canvas did not lay out');
+  await touchTap(page, {
+    x: measureCanvasBox.x + measureCanvasBox.width / 2,
+    y: measureCanvasBox.y + measureCanvasBox.height / 2,
+  });
+  await expect(measure.getByText('Tap the chart to set the next point')).toBeVisible();
+  await expect(chartOpenedPanel).toHaveCount(0);
+  await measure.getByRole('button', { name: 'Done' }).click();
+
   const expandedCanvasBox = await canvas.boundingBox();
   if (!expandedCanvasBox) throw new Error('expanded map canvas did not lay out');
-  await page.mouse.click(
-    expandedCanvasBox.x + expandedCanvasBox.width / 2,
-    expandedCanvasBox.y + expandedCanvasBox.height / 2,
-  );
-  const chartOpenedPanel = page.getByRole('complementary', { name: 'Tides' });
+  await canvas.click({
+    position: { x: expandedCanvasBox.width / 2, y: expandedCanvasBox.height / 2 },
+  });
   await expect(chartOpenedPanel).toBeVisible();
   await expect(chartOpenedPanel.getByRole('button', { name: 'Back to menu' })).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 568 });
 
   await expect
     .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
@@ -132,4 +294,46 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
     .include('aside[aria-label="Tides"]')
     .analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test('can leave Tides while its controls are still loading', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  let releaseChunk = () => {};
+  const chunkGate = new Promise<void>((resolve) => {
+    releaseChunk = resolve;
+  });
+  await page.route(/\/assets\/TidesPanel-[^/]+\.js$/, async (route) => {
+    await chunkGate;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const menuTides = page
+      .locator('#app-menu-launcher')
+      .getByRole('button', { name: 'Tides', exact: true });
+    await menuTides.click();
+    const pending = page.getByRole('complementary', { name: 'Tides' });
+    await expect(pending.getByText('Loading Tides controls…', { exact: true })).toBeVisible();
+    await pending.getByRole('button', { name: 'Back to menu' }).click();
+    await expect(pending).not.toBeVisible();
+
+    await expect(menuTides).toBeVisible();
+    await menuTides.click();
+    await expect(pending.getByText('Loading Tides controls…', { exact: true })).toBeVisible();
+    await pending.getByRole('button', { name: 'Close tides panel' }).click();
+    await expect(pending).not.toBeVisible();
+
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await menuTides.click();
+    await expect(pending.getByText('Loading Tides controls…', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(pending).not.toBeVisible();
+  } finally {
+    releaseChunk();
+  }
 });

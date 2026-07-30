@@ -19,12 +19,15 @@ import {
 } from './point-conditions';
 import {
   conditionsFromSignalK,
+  normalizeSignalKForecasts,
+  normalizeWeatherWarnings,
   OBSERVATION_STALE_MS,
   type PointConditions,
   pickProviderEntry,
   providerDisplayName,
   type SignalKWeatherData,
   type WeatherWarning,
+  weatherWarningIdentity,
 } from './signalk-weather';
 import { activeWarnings } from './warning-severity';
 import { conditionsFromReadout, readoutAtBracket } from './weather-readout';
@@ -76,6 +79,7 @@ function fallbackLoader(): PointConditionsLoader {
 const pointLoader = $derived(pointLoaderProp ?? fallbackLoader());
 
 let loading = $state(false);
+let loadError = $state<string | undefined>();
 // The provider's raw answers, kept as data so the conditions DERIVE from them and the selected
 // time: scrubbing the slider re-picks the step without refetching. A transient provider failure
 // replays the spot's persisted answers while they are within the hour, and past that leaves these
@@ -146,6 +150,7 @@ function clearForRequest(requestKey: string): void {
   observationStatus = 'empty';
   forecastStatus = 'empty';
   warningsAttemptedAt = 0;
+  loadError = undefined;
 }
 
 function clear(): void {
@@ -161,21 +166,42 @@ function clear(): void {
   forecastStatus = 'empty';
   warningSeq += 1;
   loading = false;
+  loadError = undefined;
 }
 
 async function loadProvider(provider: string, lat: number, lon: number): Promise<void> {
   const mine = ++seq;
   loading = true;
-  const point = await pointLoader.load(origin, provider, lat, lon, token);
-  if (mine !== seq || point.requestKey !== activeRequestKey) return;
-  obsData = point.obs;
-  seriesData = point.series;
-  observationStatus = point.observationStatus;
-  forecastStatus = point.forecastStatus;
-  warnings = point.warnings ?? [];
-  warningAvailability = point.warningAvailability;
-  warningsFetchedAt = point.warningsFetchedAt;
-  loading = false;
+  loadError = undefined;
+  try {
+    const point = await pointLoader.load(origin, provider, lat, lon, token);
+    if (mine !== seq || point.requestKey !== activeRequestKey) return;
+    obsData = point.obs;
+    seriesData = point.series ? normalizeSignalKForecasts(point.series) : undefined;
+    observationStatus = point.observationStatus;
+    forecastStatus = point.forecastStatus;
+    warnings = normalizeWeatherWarnings(point.warnings ?? []);
+    warningAvailability = point.warningAvailability;
+    warningsFetchedAt = point.warningsFetchedAt;
+  } catch {
+    if (mine !== seq) return;
+    observationStatus = 'failure';
+    forecastStatus = 'failure';
+    warningAvailability = 'unavailable';
+    loadError = 'Weather conditions could not be loaded.';
+  } finally {
+    if (mine === seq) loading = false;
+  }
+}
+
+function retryProvider(): void {
+  const pos = parsedPos;
+  const provider = effectiveProviderId;
+  if (!pos || !provider) return;
+  const [lat, lon] = pos;
+  const requestKey = pointConditionsKey(provider, lat, lon);
+  clearForRequest(requestKey);
+  void loadProvider(provider, lat, lon);
 }
 
 // Warnings change independently of forecast series. Refresh them on a bounded cadence without
@@ -198,12 +224,17 @@ async function refreshWarnings(
   requestKey: string,
 ): Promise<void> {
   const mine = ++warningSeq;
-  const point = await pointLoader.loadWarnings(origin, provider, lat, lon, token);
-  if (mine !== warningSeq || requestKey !== activeRequestKey || point.requestKey !== requestKey)
-    return;
-  warnings = point.warnings ?? [];
-  warningAvailability = point.warningAvailability;
-  warningsFetchedAt = point.warningsFetchedAt;
+  try {
+    const point = await pointLoader.loadWarnings(origin, provider, lat, lon, token);
+    if (mine !== warningSeq || requestKey !== activeRequestKey || point.requestKey !== requestKey)
+      return;
+    warnings = normalizeWeatherWarnings(point.warnings ?? []);
+    warningAvailability = point.warningAvailability;
+    warningsFetchedAt = point.warningsFetchedAt;
+  } catch {
+    if (mine !== warningSeq || requestKey !== activeRequestKey) return;
+    warningAvailability = warnings.length > 0 ? 'stale' : 'unavailable';
+  }
 }
 
 // The time the conditions answer for: the scrubbed forecast time once a grid exists, otherwise now.
@@ -297,9 +328,13 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
       {positionUnavailableReason ?? 'Waiting for a vessel position.'}
     </p>
   {:else}
+    {#if loadError}
+      <p class="alert-note" role="alert">{loadError}</p>
+      <button type="button" class="btn btn-ghost" onclick={retryProvider}>Retry</button>
+    {/if}
     {#if sortedWarnings.length > 0}
       <ul class="warnings bare-list" role="alert">
-        {#each sortedWarnings as w (w.startTime + w.type)}
+        {#each sortedWarnings as w, index (`${weatherWarningIdentity(w)}:${index}`)}
           {@const until = untilLabel(w.endTime)}
           <li class="alert-note alert-note--filled warning">
             <TriangleAlert size={14} aria-hidden="true" />

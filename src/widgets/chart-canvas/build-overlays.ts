@@ -117,7 +117,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     interactionsAllowed
       ? createTidesOverlay(tides, units, onTideStationSelect, Date.now, interactionsAllowed)
       : createTidesOverlay(tides, units, onTideStationSelect),
-    createAnchorOverlay(anchor, vessel, onAnchorMoved),
+    createAnchorOverlay(anchor, vessel, onAnchorMoved, interactionsAllowed),
     createMeasureOverlay(measure, units),
     createRouteOverlay(routeStore),
     createCourseOverlay(guidance, vessel),
@@ -128,6 +128,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     createAisOverlay(aisTargets, {
       onSelect: onAisSelect,
       selectedId: selectedAisId,
+      interactionsAllowed,
     }),
     createCollisionOverlay(collision),
     createMobOverlay(mob, vessel),

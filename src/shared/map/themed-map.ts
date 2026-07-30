@@ -1,4 +1,3 @@
-import type { MapMouseEvent } from 'maplibre-gl';
 import * as maplibregl from 'maplibre-gl';
 import type { MapView } from '$shared/geo';
 import type { Theme } from '$shared/ui';
@@ -13,6 +12,7 @@ import {
 } from './base-theme';
 import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
+import { createMapTapRecognizer } from './map-tap';
 import { mapThemePaint } from './map-theme';
 import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
 import { beforeIdFor, installSentinels } from './sentinels';
@@ -367,9 +367,14 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // follow lock survives a zoom but ends the moment the user drags the chart away.
   if (opts.onUserPan) mapInstance.on('dragstart', () => opts.onUserPan?.());
   if (opts.onClick) {
-    mapInstance.on('click', (e: MapMouseEvent) =>
-      opts.onClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }),
+    const tap = createMapTapRecognizer((event) =>
+      opts.onClick?.({ lng: event.lngLat.lng, lat: event.lngLat.lat }),
     );
+    mapInstance.on('click', tap.click);
+    mapInstance.on('touchstart', tap.touchstart);
+    mapInstance.on('touchmove', tap.touchmove);
+    mapInstance.on('touchend', tap.touchend);
+    mapInstance.on('touchcancel', tap.cancel);
   }
 
   // A right-click or long-press at a point, surfaced for the "go to here" menu. The contextMenu

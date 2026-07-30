@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AisTargetView } from '$entities/ais';
+import { AisTargets, type AisTargetView } from '$entities/ais';
 import type { Assessment, Severity } from '$entities/collision';
 import { mapThemePaint } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
+import { SignalKStore } from '$shared/signalk';
 import { createFakeMap, fakeOverlayContext } from '$shared/testing';
 import { buildFeatures, createAisVectorsOverlay } from './ais-vectors-overlay';
 
@@ -224,6 +225,44 @@ describe('createAisVectorsOverlay', () => {
     t = 1_100;
     overlay.sync(ctx);
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes a vector when target motion expires without an AIS version update', async () => {
+    let now = 1_000;
+    const store = new SignalKStore();
+    const targets = new AisTargets(store, () => now);
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map([
+        [
+          'vessels.expiring-motion',
+          new Map<string, unknown>([
+            ['navigation.position', { latitude: 10, longitude: 20 }],
+            ['navigation.courseOverGroundTrue', 0],
+            ['navigation.speedOverGround', 5],
+          ]),
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: now,
+    });
+    const overlay = createAisVectorsOverlay(targets, emptyAssessment, () => now);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    const source = map.sources.get(SOURCE_ID);
+    if (!source) throw new Error(`${SOURCE_ID} not added`);
+    const version = targets.version;
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(1);
+    const spy = vi.spyOn(source, 'setData');
+
+    now += 60_001;
+    overlay.sync(ctx);
+
+    expect(targets.version).toBe(version);
+    expect(spy).toHaveBeenCalledOnce();
+    expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(0);
   });
 
   it('repaints immediately when a contact severity changes', async () => {

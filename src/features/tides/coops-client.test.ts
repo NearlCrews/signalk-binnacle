@@ -41,6 +41,31 @@ describe('coops-client', () => {
     expect(url).toContain('type=currentpredictions');
   });
 
+  it('deduplicates repeated provider stations by stable id', async () => {
+    mockFetch({
+      stations: [
+        { id: 'DEB2104', name: 'Cape May Canal, West End', lat: 38.967, lng: -74.96 },
+        { id: 'DEB2104', name: 'Duplicate Cape May row', lat: 38.968, lng: -74.961 },
+        { id: 'DEB2113', name: 'Cape May Harbor', lat: 38.95, lng: -74.89 },
+      ],
+    });
+
+    expect(await fetchCurrentStations()).toEqual([
+      {
+        id: 'DEB2104',
+        name: 'Cape May Canal, West End',
+        latitude: 38.967,
+        longitude: -74.96,
+      },
+      {
+        id: 'DEB2113',
+        name: 'Cape May Harbor',
+        latitude: 38.95,
+        longitude: -74.89,
+      },
+    ]);
+  });
+
   it('parses tide events with meters and a high or low kind', async () => {
     const fetchMock = mockFetch({
       predictions: [

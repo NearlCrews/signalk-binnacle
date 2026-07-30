@@ -146,6 +146,15 @@ function displayBound(def: ControlDefinition, value: number): number {
   return displayNumber(def, value);
 }
 
+function enumOptionValue(value: number | string): string {
+  return `${typeof value === 'number' ? 'number' : 'string'}:${String(value)}`;
+}
+
+function controlLabelId(def: ControlDefinition): string {
+  const index = controls.findIndex((candidate) => candidate.id === def.id);
+  return `radar-control-label-${index < 0 ? controls.length : index}`;
+}
+
 function readout(def: ControlDefinition): string {
   const value = store.controlValues[def.id];
   if (value === undefined) return PLACEHOLDER;
@@ -202,7 +211,7 @@ function discardActiveDraft(): void {
      visible name is associated with the control via aria-labelledby across all widget kinds. -->
 {#snippet control(def: ControlDefinition)}
   {@const kind = widgetKind(def)}
-  {@const labelId = `rc-${def.id}`}
+  {@const labelId = controlLabelId(def)}
   {@const value = store.controlValues[def.id]}
   {@const writeBlocked = blockedReason(def)}
   <div class="radar-field">
@@ -272,15 +281,15 @@ function discardActiveDraft(): void {
         class="input"
         aria-labelledby={labelId}
         disabled={controlDisabled(def)}
-        value={String(value ?? '')}
+        value={typeof value === 'number' || typeof value === 'string' ? enumOptionValue(value) : ''}
         onchange={(e) => {
           const raw = e.currentTarget.value;
-          const option = def.values?.find((entry) => String(entry.value) === raw);
+          const option = def.values?.find((entry) => enumOptionValue(entry.value) === raw);
           if (option) onSetControl(def.id, option.value);
         }}
       >
-        {#each def.values ?? [] as opt (opt.value)}
-          <option value={String(opt.value)}>{opt.label}</option>
+        {#each def.values ?? [] as opt (enumOptionValue(opt.value))}
+          <option value={enumOptionValue(opt.value)}>{opt.label}</option>
         {/each}
       </select>
     {:else if kind === 'text'}

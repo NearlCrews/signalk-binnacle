@@ -102,7 +102,9 @@ describe('notes overlay', () => {
       interactionsAllowed: () => false,
     });
     await overlay.add(fakeOverlayContext(map));
+    map.getCanvas().style.cursor = 'crosshair';
 
+    map.emitLayer('mouseenter', 'binnacle-notes-symbol', {});
     map.emitLayer('click', 'binnacle-notes-symbol', {
       features: [
         {
@@ -119,8 +121,113 @@ describe('notes overlay', () => {
         },
       ],
     });
+    map.emitLayer('mouseleave', 'binnacle-notes-symbol', {});
 
     expect(onSelect).not.toHaveBeenCalled();
+    expect(map.easeTo).not.toHaveBeenCalled();
+    expect(map.getCanvas().style.cursor).toBe('crosshair');
+  });
+
+  it('disables invisible marker and cluster hit targets until opacity returns', async () => {
+    const onSelect = vi.fn();
+    const map = { ...createFakeMap(), easeTo: vi.fn() };
+    const overlay = createNotesOverlay('http://pi', () => undefined, onSelect);
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+
+    overlay.setOpacity?.(ctx, 0);
+    map.emitLayer('mouseenter', 'binnacle-notes-symbol', {});
+    map.emitLayer('click', 'binnacle-notes-symbol', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { id: 'n1', name: 'Marina', category: 'marina' },
+        },
+      ],
+    });
+    map.emitLayer('click', 'binnacle-notes-cluster-ring', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { cluster_id: 7 },
+        },
+      ],
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(map.easeTo).not.toHaveBeenCalled();
+    expect(map.getCanvas().style.cursor).toBeFalsy();
+
+    overlay.setOpacity?.(ctx, 1);
+    expect(map.getCanvas().style.cursor).toBe('pointer');
+    map.emitLayer('click', 'binnacle-notes-symbol', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { id: 'n1', name: 'Marina', category: 'marina' },
+        },
+      ],
+    });
+    expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it('drops a pending cluster zoom when interaction ownership changes', async () => {
+    let allowed = true;
+    let resolveZoom!: (zoom: number) => void;
+    const map = { ...createFakeMap(), easeTo: vi.fn() };
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      interactionsAllowed: () => allowed,
+    });
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    const source = map.sources.get('binnacle-notes');
+    if (!source) throw new Error('missing notes source');
+    Object.assign(source, {
+      getClusterExpansionZoom: () =>
+        new Promise<number>((resolve) => {
+          resolveZoom = resolve;
+        }),
+    });
+
+    map.emitLayer('click', 'binnacle-notes-cluster-ring', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { cluster_id: 7 },
+        },
+      ],
+    });
+    allowed = false;
+    resolveZoom(12);
+    await settle();
+    expect(map.easeTo).not.toHaveBeenCalled();
+  });
+
+  it('drops a pending cluster zoom after the overlay detaches', async () => {
+    let resolveZoom!: (zoom: number) => void;
+    const map = { ...createFakeMap(), easeTo: vi.fn() };
+    const overlay = createNotesOverlay('http://pi', () => undefined);
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    const source = map.sources.get('binnacle-notes');
+    if (!source) throw new Error('missing notes source');
+    Object.assign(source, {
+      getClusterExpansionZoom: () =>
+        new Promise<number>((resolve) => {
+          resolveZoom = resolve;
+        }),
+    });
+
+    map.emitLayer('click', 'binnacle-notes-cluster-ring', {
+      features: [
+        {
+          geometry: { type: 'Point', coordinates: [-83, 42] },
+          properties: { cluster_id: 7 },
+        },
+      ],
+    });
+    overlay.remove(ctx);
+    resolveZoom(12);
+    await settle();
     expect(map.easeTo).not.toHaveBeenCalled();
   });
 

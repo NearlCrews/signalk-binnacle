@@ -80,6 +80,25 @@ describe('MarineRadarStore', () => {
     expect(store.controlsForbidden).toBe(false);
   });
 
+  it('defends against duplicate radar and control identities', () => {
+    const store = new MarineRadarStore();
+    store.setDiscovered([
+      radar,
+      { ...radar },
+      { ...radar, id: 'conflict', name: 'First' },
+      { ...radar, id: 'conflict', name: 'Second' },
+    ]);
+    store.setCapabilities([
+      { id: 'gain', name: 'Gain', dialect: 'v5', type: 'number' },
+      { id: 'gain', name: 'Gain', dialect: 'v5', type: 'number' },
+      { id: 'mode', name: 'First', dialect: 'v5', type: 'enum' },
+      { id: 'mode', name: 'Second', dialect: 'v5', type: 'enum' },
+    ]);
+
+    expect(store.radars.map(({ id }) => id)).toEqual(['a']);
+    expect(store.capabilities.map(({ id }) => id)).toEqual(['gain']);
+  });
+
   it('seeds the operational status from the discovered radar', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([{ ...radar, status: 'transmit' }]);

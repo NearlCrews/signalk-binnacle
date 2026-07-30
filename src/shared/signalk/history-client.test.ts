@@ -161,6 +161,52 @@ describe('fetchHistoryValues', () => {
       ).resolves.toBeUndefined();
     }
   });
+
+  it('rejects duplicate columns while allowing distinct aggregate methods', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        range: RANGE,
+        values: [
+          { path: 'environment.depth.belowTransducer', method: 'average' },
+          { path: 'environment.depth.belowTransducer', method: 'average' },
+        ],
+        data: [],
+      },
+    });
+    await expect(
+      fetchHistoryValues(BASE, undefined, {
+        paths: ['environment.depth.belowTransducer:average'],
+        durationSeconds: 60,
+      }),
+    ).resolves.toBeUndefined();
+
+    stubFetch({
+      ok: true,
+      body: {
+        range: RANGE,
+        values: [
+          { path: 'environment.depth.belowTransducer', method: 'average' },
+          { path: 'environment.depth.belowTransducer', method: 'maximum' },
+        ],
+        data: [],
+      },
+    });
+    await expect(
+      fetchHistoryValues(BASE, undefined, {
+        paths: [
+          'environment.depth.belowTransducer:average',
+          'environment.depth.belowTransducer:maximum',
+        ],
+        durationSeconds: 60,
+      }),
+    ).resolves.toMatchObject({
+      columns: [
+        { path: 'environment.depth.belowTransducer', method: 'average' },
+        { path: 'environment.depth.belowTransducer', method: 'maximum' },
+      ],
+    });
+  });
 });
 
 describe('fetchHistoryPaths', () => {
@@ -284,7 +330,7 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
     expect(url).not.toContain('context=');
   });
 
-  it('retains valid intersections but marks missing and duplicate columns incomplete', async () => {
+  it('rejects a response with duplicate column identities without salvaging neighboring values', async () => {
     stubFetch({
       ok: true,
       body: {
@@ -307,6 +353,30 @@ describe('fetchPopulatedHistoryPathsForProvider', () => {
           'propulsion.starboard.revolutions',
           'propulsion.aux.revolutions',
         ],
+        3600,
+      ),
+    ).resolves.toEqual({
+      paths: [],
+      complete: false,
+      answered: false,
+    });
+  });
+
+  it('retains populated intersections while marking missing columns incomplete', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        range: RANGE,
+        values: [{ path: 'propulsion.starboard.revolutions' }],
+        data: [['2026-07-01T00:00:00Z', 22]],
+      },
+    });
+    await expect(
+      fetchPopulatedHistoryPathsForProvider(
+        BASE,
+        undefined,
+        'signalk-questdb',
+        ['propulsion.starboard.revolutions', 'propulsion.aux.revolutions'],
         3600,
       ),
     ).resolves.toEqual({

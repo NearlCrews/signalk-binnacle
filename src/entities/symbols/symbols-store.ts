@@ -184,7 +184,26 @@ export class SymbolsStore {
 
   // Adopted symbols (binnacle/custom) declaring the given role, for the icon pickers.
   forRole(role: string): SkSymbol[] {
-    return this.#adopted.filter((symbol) => symbol.roles.includes(role));
+    return this.#adopted.filter(
+      (symbol) => symbol.roles.includes(role) && this.pickerReference(symbol) !== undefined,
+    );
+  }
+
+  // Return an adopted alias that still resolves to this exact symbol. A malformed catalog can
+  // repeat an alias across UUIDs. The first symbol keeps that alias, while a later symbol uses
+  // another adopted alias when it has one, or stays out of the picker when it cannot be selected
+  // without resolving to the first symbol.
+  pickerReference(symbol: SkSymbol): string | undefined {
+    const adoptedAliases = symbol.aliases.filter((alias) => {
+      const namespace = alias.slice(0, alias.indexOf(':'));
+      return namespace === CUSTOM_NS || namespace === BINNACLE_NS;
+    });
+    adoptedAliases.sort((left, right) => {
+      const leftCustom = left.startsWith(`${CUSTOM_NS}:`);
+      const rightCustom = right.startsWith(`${CUSTOM_NS}:`);
+      return Number(rightCustom) - Number(leftCustom);
+    });
+    return adoptedAliases.find((alias) => this.#byRef.get(alias)?.uuid === symbol.uuid);
   }
 
   createIconRegistry(): SymbolIconRegistry {

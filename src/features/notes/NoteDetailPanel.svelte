@@ -160,7 +160,7 @@ function measure(item: NormalizedItem): string {
           </div>
         {/if}
         <dl class="detail-list">
-          {#each listItems as item, i (item.label + i)}
+          {#each listItems as item (item)}
             {@const linkUrl =
               item.kind === 'link' && typeof item.value === 'string'
                 ? safeHttpUrl(item.value)

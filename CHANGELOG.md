@@ -6,6 +6,47 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0181"></a>
+
+## [0.18.1] - 2026-07-30
+
+### Fixed
+
+- Tapping a visible tide or current station with a mouse or touchscreen now opens its controls from
+  either the marker or its prediction label, prioritizes that label over overlapping touch targets,
+  tolerates briefly stale rendered features, preserves automatic signalk-tides behavior during
+  source refreshes, deduplicates repeated NOAA station records, and repopulates a recreated chart
+  source. Tide selection also waits for dirty Radar controls to be confirmed instead of opening
+  underneath them.
+- Clock-expired AIS markers and motion vectors now leave the chart even when no new AIS delta changes
+  the store version. Stale Measure vertices and working-route waypoint hits are also rejected against
+  current state, so a delayed rendered feature cannot swallow a chart tap or select an invalid index.
+  Tide, AIS, and note hit surfaces no longer compete with active chart-editing gestures or cursors.
+  Short touch taps now use the same drag-safe path as mouse clicks across map markers, chart tools,
+  and weather point readouts, and an overlapping gesture goes only to the highest visible overlay.
+- Lazy optional panels now time out with Retry, Back, Close, and Escape recovery instead of leaving
+  the chart covered indefinitely, and a successfully imported panel that later fails to render gets
+  the same recovery surface. Tide and AIS controls are warmed when their chart markers become
+  available, and Instruments, routes, trends, dialogs, and chart tools use the same recovery
+  contract. One-shot supporting overlays wait for slow imports instead of expiring their only
+  registration attempt.
+- Full-screen Instruments now yields to an existing chart panel when a tablet crosses the 900 px
+  breakpoint, and opening Instruments closes other full-screen chart surfaces. A dirty Radar area
+  draft retains its confirmation through this transition: Cancel keeps the editor and Discard
+  completes the requested navigation.
+- Duplicate or conflicting identities from chart management, Chart Locker regions and cache
+  statistics, Signal K History columns, radar discovery and controls, weather forecasts and warnings,
+  notes, symbols, and tide catalogs are normalized or rejected before they reach keyed interface or
+  cache state. Radar enum controls preserve numeric and string wire values separately, and
+  whitespace-bearing provider control ids no longer become invalid document label references.
+- Persisted tide catalogs, predictions, plugin readings, and weather point conditions are validated
+  and bounded before reuse. Corrupt or older cache records fall back to providers instead of wedging
+  a loader, queued tide requests continue after an unexpected failure, and rejected weather loads
+  clear their loading state and offer Retry.
+- Hidden, fully transparent, detached, or chart-tool-blocked AIS, Tide, note, and anchor interaction
+  surfaces now cancel armed touches, pending cluster actions, drag ownership, and stale cursors.
+  Genuine mouse input immediately following a touch remains usable on hybrid devices.
+
 <a id="v0180"></a>
 
 ## [0.18.0] - 2026-07-29

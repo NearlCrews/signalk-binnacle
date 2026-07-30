@@ -278,9 +278,18 @@ export function createMeasureOverlay(
       hitTest = (point) => {
         if (!map.getLayer(HIT_LAYER)) return undefined;
         try {
-          const feature = map.queryRenderedFeatures(point, { layers: [HIT_LAYER] })[0];
-          const vertexId = feature?.properties?.vertexId;
-          return typeof vertexId === 'string' ? vertexId : undefined;
+          const currentIds = new Set(measure.vertices.map((vertex) => vertex.id));
+          for (const feature of map.queryRenderedFeatures(point, { layers: [HIT_LAYER] })) {
+            const vertexId = feature.properties?.vertexId;
+            if (
+              feature.geometry.type === 'Point' &&
+              typeof vertexId === 'string' &&
+              currentIds.has(vertexId)
+            ) {
+              return vertexId;
+            }
+          }
+          return undefined;
         } catch {
           // A style replacement can remove the layer between getLayer and the query. The next add
           // recreates it, and an empty result safely treats this one chart tap as water.

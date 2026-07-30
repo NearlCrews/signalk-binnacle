@@ -36,7 +36,7 @@ function stepLabel(timeMs: number): string {
 
 <h4 class="caps-label forecast-head">Forecast · next {horizonH} h</h4>
 <ul class="forecast bare-list">
-  {#each forecast as step (step.timeMs)}
+  {#each forecast as step, index (`${step.timeMs}:${index}`)}
     <li>
       <span class="f-time">{stepLabel(step.timeMs)}</span>
       <span class="f-details">

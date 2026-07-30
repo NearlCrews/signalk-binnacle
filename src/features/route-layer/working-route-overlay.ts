@@ -38,6 +38,7 @@ const BAND = 'routes';
 const LAYERS = [WPT_LAYER, HL_SEG_LAYER, HL_HALO_LAYER, HL_RING_LAYER, WPT_LABEL_LAYER];
 // The box half-size in pixels for the dot hit-test, generous so a small dot is tappable with a glove.
 const HIT_PAD = 10;
+const RENDER_GENERATION_PROPERTY = 'binnacleRenderGeneration';
 
 export interface WorkingRouteOverlay {
   add(ctx: OverlayContext): void;
@@ -64,6 +65,10 @@ export function createWorkingRouteOverlay(
   let lastWorking: Route | undefined;
   let lastHighlight: RouteHighlight | undefined;
   let ctxRef: OverlayContext | undefined;
+  // MapLibre can briefly return features from the previous GeoJSON source data after setData().
+  // Tag each working-route snapshot so an index that shifted after an insert or reorder cannot select
+  // a different waypoint while the renderer catches up.
+  let waypointRenderGeneration = 0;
 
   return {
     add(ctx) {
@@ -130,6 +135,7 @@ export function createWorkingRouteOverlay(
       const highlightChanged = highlight !== lastHighlight;
       lastWorking = working;
       lastHighlight = highlight;
+      if (workingChanged) waypointRenderGeneration += 1;
       if (!working) {
         if (workingChanged) {
           for (const src of [WPT_SRC, HL_SEG_SRC, HL_DOT_SRC]) {
@@ -139,11 +145,14 @@ export function createWorkingRouteOverlay(
         return;
       }
       if (workingChanged) {
-        setSourceData(
-          ctx.map,
-          WPT_SRC,
-          featureCollection(waypointPointFeatures(working.waypoints)),
-        );
+        const features = waypointPointFeatures(working.waypoints).map((feature) => ({
+          ...feature,
+          properties: {
+            ...feature.properties,
+            [RENDER_GENERATION_PROPERTY]: waypointRenderGeneration,
+          },
+        }));
+        setSourceData(ctx.map, WPT_SRC, featureCollection(features));
       }
       // The highlight geometry rides on the waypoint positions, so a drag (working change) moves it
       // too; rebuild it when either the working route or the highlight changed.
@@ -179,8 +188,25 @@ export function createWorkingRouteOverlay(
         ],
         { layers: [WPT_LAYER] },
       );
-      const index = hits.length > 0 ? Number(hits[0].properties?.index) : Number.NaN;
-      return Number.isInteger(index) ? index : undefined;
+      const working = store.working;
+      // If the store changed before this overlay's next sync, every rendered waypoint is stale.
+      if (!working || working !== lastWorking) return undefined;
+      for (const feature of hits) {
+        if (feature.geometry.type !== 'Point') continue;
+        if (feature.properties?.[RENDER_GENERATION_PROPERTY] !== waypointRenderGeneration) {
+          continue;
+        }
+        const index = feature.properties?.index;
+        if (
+          typeof index === 'number' &&
+          Number.isSafeInteger(index) &&
+          index >= 0 &&
+          index < working.waypoints.length
+        ) {
+          return index;
+        }
+      }
+      return undefined;
     },
   };
 }

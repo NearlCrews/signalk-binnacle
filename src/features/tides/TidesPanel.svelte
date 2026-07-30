@@ -95,14 +95,17 @@ function choices(
   nearby: NearbyTideStation[],
   requested: TideStationSelection,
 ): NearbyTideStation[] {
-  if (requested.mode === 'automatic') return nearby.slice(0, MAX_NEARBY_STATIONS);
-  const withoutSelected = nearby.filter(
-    (candidate) => candidate.station.id !== requested.station.id,
-  );
-  return [
-    { station: requested.station, distanceMeters: requested.distanceMeters },
-    ...withoutSelected,
-  ].slice(0, MAX_NEARBY_STATIONS);
+  const candidates =
+    requested.mode === 'automatic'
+      ? nearby
+      : [{ station: requested.station, distanceMeters: requested.distanceMeters }, ...nearby];
+  const unique: NearbyTideStation[] = [];
+  for (const candidate of candidates) {
+    if (unique.some((existing) => existing.station.id === candidate.station.id)) continue;
+    unique.push(candidate);
+    if (unique.length >= MAX_NEARBY_STATIONS) break;
+  }
+  return unique;
 }
 
 const tideChoices = $derived(choices(store.nearbyTideStations, store.requestedTide));

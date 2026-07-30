@@ -289,6 +289,30 @@ describe('createThemedMap onLoad', () => {
   });
 });
 
+describe('createThemedMap point taps', () => {
+  it('forwards a short touch tap to the shared point callback', async () => {
+    const onClick = vi.fn();
+    createThemedMap({ container, onClick, onLoad: () => {} });
+    const map = await lastMap();
+
+    map.fire('touchstart', {
+      lngLat: { lng: -82.7, lat: 27.7 },
+      point: { x: 10, y: 20 },
+      points: [{ x: 10, y: 20 }],
+      type: 'touchstart',
+    });
+    map.fire('touchend', {
+      lngLat: { lng: -82.7, lat: 27.7 },
+      point: { x: 10, y: 20 },
+      points: [{ x: 10, y: 20 }],
+      type: 'touchend',
+    });
+
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onClick).toHaveBeenCalledWith({ lng: -82.7, lat: 27.7 });
+  });
+});
+
 describe('createThemedMap style fallback', () => {
   it('swaps to the fallback style when the style JSON never arrives', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});

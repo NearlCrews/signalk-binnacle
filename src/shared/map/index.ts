@@ -15,12 +15,18 @@ export { emptyFeatureCollection, featureCollection } from './feature-collection'
 export type { Rgba } from './icon-raster';
 export { rasterIcon, rasterIconColored } from './icon-raster';
 export {
+  activeLayerHitCursor,
   createLayerHitHandlers,
+  type LayerHitEvent,
   type LayerHitHandlers,
 } from './layer-hit-handlers';
 export type { LayerListItem, LayerSettings } from './layer-manager';
 export { LayerManager } from './layer-manager';
 export { setMapImage } from './map-image';
+export {
+  createMapTapRecognizer,
+  type MapTapEvent,
+} from './map-tap';
 export type { MapThemePaint } from './map-theme';
 export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
 export { iconOffsetExpression, markerIconSizeExpression } from './overlay-expressions';

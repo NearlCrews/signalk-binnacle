@@ -59,7 +59,11 @@ interface RenderStation {
 
 interface TideFeatureProperties {
   stationId: string;
+  stationName: string;
+  stationLatitude: number;
+  stationLongitude: number;
   kind: TideStationKind;
+  selectionMode: TideStationSelectionEvent['mode'];
   selected: boolean;
   loaded: boolean;
   glyph: 'T' | 'C';
@@ -123,11 +127,7 @@ function addReading(
   candidate.reading = reading;
 }
 
-export function tideStationFeatures(
-  store: TidesStore,
-  nowMs: number,
-  mode: UnitsMode,
-): GeoJSON.FeatureCollection {
+function collectRenderStations(store: TidesStore): Map<string, RenderStation> {
   const stations = new Map<string, RenderStation>();
   addNearby(stations, 'tide', store.nearbyTideStations);
   addNearby(stations, 'current', store.nearbyCurrentStations);
@@ -135,7 +135,15 @@ export function tideStationFeatures(
   addSelected(stations, 'current', store.requestedCurrent);
   addReading(stations, 'tide', store.tide);
   addReading(stations, 'current', store.current);
+  return stations;
+}
 
+function renderStationFeatures(
+  store: TidesStore,
+  stations: Map<string, RenderStation>,
+  nowMs: number,
+  mode: UnitsMode,
+): GeoJSON.FeatureCollection {
   return featureCollection(
     [...stations.values()].map((candidate) => {
       let label = '';
@@ -154,7 +162,19 @@ export function tideStationFeatures(
         },
         properties: {
           stationId: candidate.station.id,
+          stationName: candidate.station.name,
+          stationLatitude: candidate.station.latitude,
+          stationLongitude: candidate.station.longitude,
           kind: candidate.kind,
+          // A requested manual station wins even when it shares the retained signalk-tides id.
+          // Otherwise only the plugin's live tide reading represents automatic selection.
+          selectionMode:
+            candidate.selected ||
+            candidate.kind !== 'tide' ||
+            store.source !== 'signalk-tides' ||
+            store.tide?.station.id !== candidate.station.id
+              ? 'manual'
+              : 'automatic',
           selected: candidate.selected,
           loaded: candidate.loaded,
           glyph: candidate.kind === 'tide' ? 'T' : 'C',
@@ -163,6 +183,14 @@ export function tideStationFeatures(
       } satisfies GeoJSON.Feature<GeoJSON.Point, TideFeatureProperties>;
     }),
   );
+}
+
+export function tideStationFeatures(
+  store: TidesStore,
+  nowMs: number,
+  mode: UnitsMode,
+): GeoJSON.FeatureCollection {
+  return renderStationFeatures(store, collectRenderStations(store), nowMs, mode);
 }
 
 // Render the bounded nearby NOAA catalog plus any selected or loaded station that has moved outside
@@ -187,10 +215,18 @@ export function createTidesOverlay(
   let opacity = 1;
   let lastLabelMinute = -1;
   let lastMode: UnitsMode | undefined;
-  const hit = createTideHitHandlers(store, onSelect, interactionsAllowed);
+  const hit = createTideHitHandlers(
+    store,
+    onSelect,
+    () => visible && opacity > 0 && interactionsAllowed(),
+  );
 
   const syncHitVisibility = (ctx: OverlayContext): void => {
     setLayersVisibility(ctx.map, [TIDES_HIT_LAYER], visible && opacity > 0);
+    // The label is also an interaction surface. Hide it at zero opacity so invisible text cannot
+    // retain a delegated hit region or pointer cursor.
+    setLayersVisibility(ctx.map, [TIDES_LABEL_LAYER], visible && opacity > 0);
+    hit.refreshInteractionState();
   };
 
   return {
@@ -324,6 +360,10 @@ export function createTidesOverlay(
       syncHitVisibility(ctx);
     },
     sync(ctx) {
+      if (!ctx.map.getSource(TIDES_SOURCE_ID)) {
+        seeded = false;
+        return;
+      }
       const nearbyTideStations = store.nearbyTideStations;
       const nearbyCurrentStations = store.nearbyCurrentStations;
       const requestedTide = store.requestedTide;
@@ -355,7 +395,8 @@ export function createTidesOverlay(
       lastCurrent = current;
       lastLabelMinute = minute;
       lastMode = mode;
-      setSourceData(ctx.map, TIDES_SOURCE_ID, tideStationFeatures(store, nowMs, mode));
+      const stations = collectRenderStations(store);
+      setSourceData(ctx.map, TIDES_SOURCE_ID, renderStationFeatures(store, stations, nowMs, mode));
     },
     setVisible(ctx, isVisible) {
       visible = isVisible;

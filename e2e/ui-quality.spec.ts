@@ -28,7 +28,7 @@ test('restores night-red before interaction and updates browser chrome', async (
 
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#000000');
-  await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
 });
 
 test('keeps primary phone controls touch-sized without horizontal overflow', async ({ page }) => {
@@ -52,7 +52,7 @@ test('keeps a scrolled layer opacity popover inside a narrow viewport', async ({
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Layers and charts', exact: true })
@@ -150,7 +150,7 @@ test('keeps chart controls legible and the instrument title on one line', async 
   if (await pinnedInstruments.isVisible()) {
     await pinnedInstruments.click();
   } else {
-    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page
       .locator('#app-menu-launcher')
       .getByRole('button', { name: 'Instruments', exact: true })
@@ -236,7 +236,7 @@ test('honors reduced motion and keeps menu keyboard focus contained', async ({ p
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  const menuButton = page.getByRole('button', { name: 'Menu' });
+  const menuButton = page.getByRole('button', { name: 'Menu', exact: true });
   await menuButton.click();
   const menu = page.locator('#app-menu-launcher');
   const first = menu.getByRole('button').first();

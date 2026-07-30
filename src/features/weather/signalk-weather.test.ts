@@ -15,10 +15,13 @@ import {
   MAX_WEATHER_WARNINGS,
   nearestInTimeBounded,
   normalizePressureTendency,
+  normalizeSignalKForecasts,
+  normalizeWeatherWarnings,
   pickProviderEntry,
   providerDisplayName,
   providerReadoutContribution,
   type SignalKWeatherData,
+  weatherWarningIdentity,
 } from './signalk-weather';
 
 const ORIGIN = 'https://boat.local';
@@ -185,6 +188,32 @@ describe('point endpoint outcomes', () => {
     });
   });
 
+  it('collapses identical forecast timestamps and rejects conflicting timestamp identities', async () => {
+    const result = await fetchPointForecastsResult(
+      ORIGIN,
+      'p',
+      0,
+      0,
+      12,
+      undefined,
+      mockFetch([
+        { date: '2026-06-03T12:00:00Z', description: 'Clear' },
+        { date: '2026-06-03T12:00:00.000Z', description: 'Clear' },
+        { date: '2026-06-03T15:00:00Z', description: 'Rain' },
+        { date: '2026-06-03T15:00:00Z', description: 'Clear' },
+        { date: '2026-06-03T18:00:00Z', description: 'Windy' },
+      ]),
+    );
+
+    expect(result).toEqual({
+      status: 'success',
+      value: [
+        { date: '2026-06-03T12:00:00Z', description: 'Clear' },
+        { date: '2026-06-03T18:00:00Z', description: 'Windy' },
+      ],
+    });
+  });
+
   it('rejects oversized observation, forecast, and warning collections', async () => {
     const observation = { date: '2026-06-03T12:00:00Z' };
     await expect(
@@ -258,6 +287,34 @@ describe('point endpoint outcomes', () => {
     });
   });
 
+  it('deduplicates identical warnings while preserving distinct warnings with shared start and type', async () => {
+    const shared = {
+      startTime: '2026-06-03T12:00:00Z',
+      endTime: '2026-06-03T18:00:00Z',
+      details: 'Gale warning',
+      source: 'Provider A',
+      type: 'gale',
+    };
+    const result = await fetchWeatherWarningsResult(
+      ORIGIN,
+      'p',
+      0,
+      0,
+      undefined,
+      mockFetch([
+        shared,
+        { ...shared },
+        { ...shared, source: 'Provider B' },
+        { ...shared, details: 'A second warning area' },
+      ]),
+    );
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') throw new Error('expected warning success');
+    expect(result.value).toHaveLength(3);
+    expect(new Set(result.value.map(weatherWarningIdentity)).size).toBe(3);
+  });
+
   it('rejects an inverted warning interval', async () => {
     await expect(
       fetchWeatherWarningsResult(
@@ -327,6 +384,22 @@ describe('point endpoint outcomes', () => {
         fetchWeatherWarningsResult(ORIGIN, 'p', 0, 0, undefined, mockFetch([valid, entry])),
       ).resolves.toEqual({ status: 'failure' });
     }
+  });
+});
+
+describe('weather identity promotion', () => {
+  it('normalizes repeated cached forecasts and warnings', () => {
+    const forecast = { date: '2026-06-03T12:00:00Z', description: 'Clear' };
+    expect(normalizeSignalKForecasts([forecast, { ...forecast }])).toEqual([forecast]);
+
+    const warning = {
+      startTime: '2026-06-03T12:00:00Z',
+      endTime: '2026-06-03T18:00:00Z',
+      details: 'Gale warning',
+      source: 'Provider',
+      type: 'gale',
+    };
+    expect(normalizeWeatherWarnings([warning, { ...warning }])).toEqual([warning]);
   });
 });
 

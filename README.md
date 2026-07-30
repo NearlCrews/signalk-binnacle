@@ -14,18 +14,19 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.18.0
+## What's new in 0.18.1
 
-This release adds personal chart notes, editable multi-leg measurements, and complete native radar
-area editing for zones, no-transmit sectors, and rectangles. Time travel can now replay bounded
-history ranges, Data trends are profile-aware and interactive, and nearby vessels have searchable
-live details and generous chart targets.
+This patch makes chart interaction reliable across mouse, touchscreen, and hybrid devices. Tide and
+current markers and prediction labels consistently open their controls, overlapping map surfaces
+route one gesture to the highest visible target, hidden overlays release touch and cursor ownership,
+and stale AIS, Measure, and working-route hits are rejected.
 
-Chart and provider workflows are more resilient. PMTiles sources can be repaired, refreshed, and
-shared without losing their settings; tide and current stations can be selected independently; and
-unsupported Signal K style-document charts are labeled and kept off instead of appearing as blank
-layers. Generic equipment alarms, safer depth-source selection, clearer track-provider detection,
-and stronger waypoint navigation round out the release. See the changelog for the complete details.
+Optional panels now preserve contextual Back, Close, Exit, Done, and Escape controls while loading,
+then offer Retry after an import timeout or render failure. Full-screen Instruments and other chart
+panels yield ownership cleanly on phones and tablets, including dirty Radar draft confirmation.
+Provider identities and persisted Tide and weather data are validated before display or cache reuse,
+so malformed, repeated, or conflicting records degrade safely instead of wedging the interface. See
+the changelog for the complete details.
 
 ## What it does
 
@@ -102,9 +103,10 @@ Binnacle ships its full feature set as a Signal K webapp:
   surface temperature, while cached forecasts remain available offline with explicit stale labeling.
 - **Tides:** independent tide-height and tidal-current station selection with automatic nearest
   choices, exact manual NOAA CO-OPS choices, a 48-hour tide curve, and the next high, low, flood, ebb,
-  or slack. Filled tide markers and hollow current markers are selectable on the chart. Manual
-  choices survive chart pans for the session but reset on reload. NOAA CO-OPS covers US waters out of
-  the box; automatic tide height prefers the signalk-tides plugin when the server runs it.
+  or slack. Filled tide markers, hollow current markers, and their loaded prediction labels are
+  selectable on the chart. Manual choices survive chart pans for the session but reset on reload.
+  NOAA CO-OPS covers US waters out of the box; automatic tide height prefers the signalk-tides plugin
+  when the server runs it.
 - **Lookout:** a collision watch with CPA and TCPA, chart-highlight rings, an audible alarm, and a
   published Signal K notification, plus a searchable, risk-filtered **AIS target list** with
   tappable chart targets, live in-panel details, and sorting by range, CPA, or name. Each detail

@@ -1,4 +1,4 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export type { PoiViewState } from '$entities/poi';
 export { default as NoteDetailPanel } from './NoteDetailPanel.svelte';
@@ -16,7 +16,7 @@ export {
   type PersonalNoteEditorState,
 } from './personal-notes-controller.svelte';
 
-const personalNoteDialogLoader = createRetryableLazyLoader(
+const personalNoteDialogLoader = createRetryableLazyUiLoader(
   () => import('./PersonalNoteDialog.svelte'),
 );
 

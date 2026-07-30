@@ -1,18 +1,14 @@
 import {
   type CurrentEvent,
+  cleanTideStationText,
+  MAX_TIDE_STATION_ID_LENGTH,
+  MAX_TIDE_STATION_NAME_LENGTH,
   TIDE_WINDOW_HOURS,
   type TideEvent,
   type TideStation,
 } from '$entities/tides';
 import { isLatitude, isLongitude } from '$shared/geo';
-import {
-  DEG_TO_RAD,
-  hasControlCharacters,
-  isFiniteNumber,
-  isRecord,
-  readBoundedJson,
-  withTimeout,
-} from '$shared/lib';
+import { DEG_TO_RAD, isFiniteNumber, isRecord, readBoundedJson, withTimeout } from '$shared/lib';
 
 // NOAA CO-OPS, the US tide and tidal-current authority. Public domain, key-free, CORS-open. The
 // metadata API lists stations; the datagetter returns predictions for one station.
@@ -20,19 +16,10 @@ const MDAPI = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.
 const DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const MAX_STATIONS = 20_000;
 const MAX_EVENTS = 200;
-const MAX_STATION_ID_LENGTH = 128;
-const MAX_STATION_NAME_LENGTH = 256;
-
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
 
 function safeStationId(value: unknown): value is string {
   return (
-    cleanText(value, MAX_STATION_ID_LENGTH) !== undefined &&
+    cleanTideStationText(value, MAX_TIDE_STATION_ID_LENGTH) !== undefined &&
     /^[A-Za-z0-9_-]+$/.test(value as string)
   );
 }
@@ -77,13 +64,19 @@ async function fetchStations(
   if (!isRecord(data) || !Array.isArray(data.stations) || data.stations.length > MAX_STATIONS) {
     throw new Error('Invalid CO-OPS station response');
   }
-  return data.stations.flatMap((station) => {
-    if (!isRecord(station)) return [];
+  // NOAA's currentpredictions catalog can repeat one physical station several times with the same
+  // stable id. Keep the first valid record so those provider duplicates cannot reach keyed UI lists.
+  const stationsById = new Map<string, TideStation>();
+  for (const station of data.stations) {
+    if (!isRecord(station)) continue;
     const id = safeStationId(station.id) ? station.id : undefined;
-    const name = cleanText(station.name, MAX_STATION_NAME_LENGTH);
-    if (!id || !name || !isLatitude(station.lat) || !isLongitude(station.lng)) return [];
-    return [{ id, name, latitude: station.lat, longitude: station.lng }];
-  });
+    const name = cleanTideStationText(station.name, MAX_TIDE_STATION_NAME_LENGTH);
+    if (!id || !name || !isLatitude(station.lat) || !isLongitude(station.lng)) continue;
+    if (!stationsById.has(id)) {
+      stationsById.set(id, { id, name, latitude: station.lat, longitude: station.lng });
+    }
+  }
+  return [...stationsById.values()];
 }
 
 export function fetchTideStations(): Promise<TideStation[]> {

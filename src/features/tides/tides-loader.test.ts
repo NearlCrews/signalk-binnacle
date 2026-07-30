@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TidesStore } from '$entities/tides';
+import { quantizeCellDeg } from '$shared/geo';
 import { createExpiringStore } from '$shared/storage';
 import { createTidesLoader, type TidesPersistValue } from './tides-loader';
 
@@ -234,6 +235,86 @@ describe('createTidesLoader', () => {
     expect(d.currentStations).not.toHaveBeenCalled();
     expect(d.tideEvents).not.toHaveBeenCalled();
     expect(d.currentEvents).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed persisted station lists before proximity ranking', async () => {
+    const persist = freshPersist();
+    await Promise.all([
+      persist.put(
+        'stations:tide',
+        [null, { id: 'old-shape', name: 'Old shape' }] as unknown as TidesPersistValue,
+        2_000_000,
+      ),
+      persist.put('stations:current', [currentStation], 2_000_000),
+    ]);
+    const d = deps({ persist });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.status).toBe('ready');
+    expect(store.tide?.station.id).toBe('T1');
+    expect(d.tideStations).toHaveBeenCalledTimes(1);
+    expect(d.currentStations).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed persisted tide and current events before caching them', async () => {
+    const persist = freshPersist();
+    await Promise.all([
+      persist.put('stations:tide', [tideStation], 2_000_000),
+      persist.put('stations:current', [currentStation], 2_000_000),
+      persist.put(
+        'tide:T1:1970-01-01',
+        [{ timeMs: 'old', heightMeters: 0.5, kind: 'high' }] as unknown as TidesPersistValue,
+        2_000_000,
+      ),
+      persist.put(
+        'current:C1:1970-01-01',
+        [
+          { timeMs: 1000, velocityMps: 'fast', directionRad: undefined, kind: 'flood' },
+        ] as unknown as TidesPersistValue,
+        2_000_000,
+      ),
+    ]);
+    const d = deps({ persist });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.tide?.events).toEqual(tideEvents);
+    expect(store.current?.events).toEqual(currentEvents);
+    expect(d.tideEvents).toHaveBeenCalledTimes(1);
+    expect(d.currentEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a malformed persisted plugin reading and falls back to CO-OPS', async () => {
+    const persist = freshPersist();
+    const day = '1970-01-01';
+    const pluginKey = `plugin:${quantizeCellDeg(27.7)},${quantizeCellDeg(-82.7)}:${day}`;
+    await persist.put(
+      pluginKey,
+      {
+        ...pluginReading,
+        events: [{ timeMs: 1000, heightMeters: 'old', kind: 'high' }],
+      } as unknown as TidesPersistValue,
+      2_000_000,
+    );
+    const d = deps({
+      persist,
+      pluginAvailable: () => true,
+      pluginTides: vi.fn(async () => undefined),
+    });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+
+    await loader.load(store, 27.7, -82.7);
+
+    expect(store.status).toBe('ready');
+    expect(store.source).toBe('noaa-coops');
+    expect(store.tide?.station.id).toBe('T1');
+    expect(d.tideEvents).toHaveBeenCalledTimes(1);
   });
 
   it('ignores persisted events from a previous UTC day', async () => {
@@ -493,5 +574,28 @@ describe('createTidesLoader', () => {
     expect(store.tide?.station.id).toBe('T1');
     expect(store.tide?.distanceMeters).toBeGreaterThan(100_000);
     expect(store.nearbyTideStations).toEqual([]);
+  });
+
+  it('continues queued work and accepts a later retry after an unexpected loader failure', async () => {
+    const now = vi
+      .fn<() => number>()
+      .mockImplementationOnce(() => {
+        throw new Error('unexpected');
+      })
+      .mockReturnValue(1_000_000);
+    const d = deps({ now });
+    const loader = createTidesLoader(d);
+    const store = new TidesStore();
+
+    const failed = loader.load(store, 27.7, -82.7);
+    const queued = loader.load(store, 27.8, -82.8, true);
+    await Promise.all([failed, queued]);
+
+    expect(store.status).toBe('ready');
+    expect(store.tide?.station.id).toBe('T1');
+
+    await loader.load(store, 27.9, -82.9, true);
+    expect(store.status).toBe('ready');
+    expect(now).toHaveBeenCalledTimes(3);
   });
 });

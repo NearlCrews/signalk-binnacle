@@ -1,3 +1,9 @@
+export {
+  cleanTideStationText,
+  isTideStation,
+  MAX_TIDE_STATION_ID_LENGTH,
+  MAX_TIDE_STATION_NAME_LENGTH,
+} from './tide-station';
 export { type TidesLoadResult, TidesStore } from './tides-store.svelte';
 export type {
   CurrentEvent,

@@ -89,6 +89,35 @@ describe('charts-management-client', () => {
     ).toBeUndefined();
   });
 
+  it('rejects duplicate chart and invalid-file identities', () => {
+    const chart = {
+      identifier: 'duplicate',
+      fileName: 'duplicate.pmtiles',
+      name: 'Duplicate',
+      description: '',
+      scale: 10_000,
+      minzoom: 0,
+      maxzoom: 12,
+      format: 'mvt',
+      override: {},
+    };
+    expect(
+      parseManagedChartsResponse({
+        charts: [chart, { ...chart, fileName: 'second.pmtiles' }],
+        invalid: [],
+      }),
+    ).toBeUndefined();
+    expect(
+      parseManagedChartsResponse({
+        charts: [],
+        invalid: [
+          { fileName: 'broken.pmtiles', error: 'First diagnostic' },
+          { fileName: 'broken.pmtiles', error: 'Second diagnostic' },
+        ],
+      }),
+    ).toBeUndefined();
+  });
+
   it('posts an override with the administrator session and reports success', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
     const ok = await putChartOverride(BASE, 'sf-pmtiles', { name: 'Renamed' }, fetchImpl);

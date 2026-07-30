@@ -24,12 +24,14 @@ export function createFakeMap() {
   // not a bare spy, so emit can fire them.
   const loadedSources = new Set<string>();
   const handlers = new Map<string, Set<(event: unknown) => void>>();
+  const delegatedLayers = new Map<string, readonly string[]>();
   const canvas = {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
     dispatchEvent: () => true,
     style: {} as CSSStyleDeclaration,
   };
-  const handlerKey = (type: string, layer?: string) => (layer ? `${type}:${layer}` : type);
+  const handlerKey = (type: string, layers?: readonly string[]) =>
+    layers ? `${type}:${JSON.stringify(layers)}` : type;
   return {
     sources,
     layers,
@@ -94,33 +96,60 @@ export function createFakeMap() {
     },
     on: (
       type: string,
-      layerOrHandler: string | ((event: unknown) => void),
+      layerOrHandler: string | readonly string[] | ((event: unknown) => void),
       delegatedHandler?: (event: unknown) => void,
     ) => {
-      const layer = typeof layerOrHandler === 'string' ? layerOrHandler : undefined;
+      const layers =
+        typeof layerOrHandler === 'string'
+          ? [layerOrHandler]
+          : Array.isArray(layerOrHandler)
+            ? layerOrHandler
+            : undefined;
       const handler = delegatedHandler ?? (layerOrHandler as (event: unknown) => void);
-      const key = handlerKey(type, layer);
+      const key = handlerKey(type, layers);
       const set = handlers.get(key) ?? new Set();
       set.add(handler);
       handlers.set(key, set);
+      if (layers) delegatedLayers.set(key, layers);
     },
     off: (
       type: string,
-      layerOrHandler: string | ((event: unknown) => void),
+      layerOrHandler: string | readonly string[] | ((event: unknown) => void),
       delegatedHandler?: (event: unknown) => void,
     ) => {
-      const layer = typeof layerOrHandler === 'string' ? layerOrHandler : undefined;
+      const layers =
+        typeof layerOrHandler === 'string'
+          ? [layerOrHandler]
+          : Array.isArray(layerOrHandler)
+            ? layerOrHandler
+            : undefined;
       const handler = delegatedHandler ?? (layerOrHandler as (event: unknown) => void);
-      handlers.get(handlerKey(type, layer))?.delete(handler);
+      const key = handlerKey(type, layers);
+      const set = handlers.get(key);
+      set?.delete(handler);
+      if (set?.size === 0) delegatedLayers.delete(key);
     },
     emit: (type: string, event: unknown) => {
       for (const handler of [...(handlers.get(type) ?? [])]) handler(event);
     },
     emitLayer: (type: string, layer: string, event: unknown) => {
-      for (const handler of [...(handlers.get(handlerKey(type, layer)) ?? [])]) handler(event);
+      for (const [key, set] of handlers) {
+        if (key.startsWith(`${type}:`) && delegatedLayers.get(key)?.includes(layer)) {
+          for (const handler of [...set]) handler(event);
+        }
+      }
     },
     handlerCount: (type: string, layer?: string) =>
-      handlers.get(handlerKey(type, layer))?.size ?? 0,
+      layer
+        ? [...handlers].reduce(
+            (count, [key, set]) =>
+              count +
+              (key.startsWith(`${type}:`) && delegatedLayers.get(key)?.includes(layer)
+                ? set.size
+                : 0),
+            0,
+          )
+        : (handlers.get(handlerKey(type))?.size ?? 0),
     once: vi.fn(),
     // Read-only accessors several overlays call (anchor, notes, ais-trails, wind, base-theme), with
     // benign defaults, so an overlay tested against the bare fake exercises its logic instead of

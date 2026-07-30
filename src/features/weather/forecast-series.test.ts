@@ -85,6 +85,22 @@ describe('pickForecast', () => {
     expect(result.rows.length).toBeGreaterThan(0);
     expect(result.rows.every((row) => row.provenance === 'Open-Meteo')).toBe(true);
   });
+
+  it('promotes a repeated provider timestamp to one forecast row', () => {
+    const result = pickForecast(
+      grid,
+      [
+        { timeMs: 3 * HOUR, pressurePa: 99_000, provenance: 'provider' },
+        { timeMs: 3 * HOUR, pressurePa: 99_000, provenance: 'provider' },
+      ],
+      [0.5, 0.5],
+      0,
+      0,
+      true,
+    );
+
+    expect(result.rows.filter(({ timeMs }) => timeMs === 3 * HOUR)).toHaveLength(1);
+  });
 });
 
 describe('forecastRiskCues', () => {

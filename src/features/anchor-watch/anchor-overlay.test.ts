@@ -131,6 +131,7 @@ function eventfulMap() {
   const base = createFakeMap();
   const listeners = new Map<string, Set<FiredHandler>>();
   const onceListeners = new Map<string, Set<FiredHandler>>();
+  const canvas = { style: { cursor: '' } };
   const key = (type: string, layer?: string) => (layer === undefined ? type : `${type}:${layer}`);
   const add = (bag: Map<string, Set<FiredHandler>>, k: string, handler: FiredHandler) => {
     const set = bag.get(k) ?? new Set<FiredHandler>();
@@ -160,7 +161,7 @@ function eventfulMap() {
         for (const handler of handlers) handler(e);
       }
     },
-    getCanvas: () => ({ style: { cursor: '' } }),
+    getCanvas: () => canvas,
   };
 }
 
@@ -174,13 +175,13 @@ function markerCoords(map: ReturnType<typeof eventfulMap>): unknown {
   return geometry?.coordinates;
 }
 
-async function dragSetup() {
+async function dragSetup(interactionsAllowed: () => boolean = () => true) {
   const store = new SignalKStore();
   const vessel = new OwnVessel(store);
   const anchor = new AnchorWatch(store, vessel, createFakeStorage());
   anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
   const onMoved = vi.fn();
-  const overlay = createAnchorOverlay(anchor, vessel, onMoved);
+  const overlay = createAnchorOverlay(anchor, vessel, onMoved, interactionsAllowed);
   const map = eventfulMap();
   const ctx = fakeOverlayContext(map);
   await overlay.add(ctx);
@@ -215,6 +216,49 @@ describe('anchor overlay marker drag', () => {
     // were detached with the cancel.
     map.fire('touchmove', touchEvent(5, 5));
     map.fire('touchend', touchEvent(5, 5));
+    overlay.sync(ctx);
+    expect(markerCoords(map)).toEqual([0, 0]);
+    expect(onMoved).not.toHaveBeenCalled();
+  });
+
+  it('blocks and cancels drag when another chart tool owns interactions', async () => {
+    let allowed = false;
+    const { map, overlay, ctx, onMoved } = await dragSetup(() => allowed);
+    map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
+    map.fire('touchmove', touchEvent(2, 2));
+    map.fire('touchend', touchEvent(2, 2));
+    expect(onMoved).not.toHaveBeenCalled();
+
+    allowed = true;
+    map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
+    map.fire('touchmove', touchEvent(2, 2));
+    overlay.sync(ctx);
+    expect(markerCoords(map)).toEqual([2, 2]);
+    allowed = false;
+    overlay.sync(ctx);
+    map.fire('touchend', touchEvent(3, 3));
+    overlay.sync(ctx);
+    expect(markerCoords(map)).toEqual([0, 0]);
+    expect(onMoved).not.toHaveBeenCalled();
+  });
+
+  it('cancels drag and cursor ownership when hidden or fully transparent', async () => {
+    const { map, overlay, ctx, onMoved } = await dragSetup();
+    map.fire('mouseenter', {}, 'binnacle-anchor-marker');
+    expect(map.getCanvas().style.cursor).toBe('move');
+
+    map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
+    map.fire('touchmove', touchEvent(2, 2));
+    overlay.setOpacity?.(ctx, 0);
+    expect(map.getCanvas().style.cursor).toBe('');
+    map.fire('touchend', touchEvent(3, 3));
+    expect(onMoved).not.toHaveBeenCalled();
+
+    overlay.setOpacity?.(ctx, 1);
+    map.fire('touchstart', touchEvent(1, 1), 'binnacle-anchor-marker');
+    map.fire('touchmove', touchEvent(2, 2));
+    overlay.setVisible(ctx, false);
+    map.fire('touchend', touchEvent(3, 3));
     overlay.sync(ctx);
     expect(markerCoords(map)).toEqual([0, 0]);
     expect(onMoved).not.toHaveBeenCalled();

@@ -20,6 +20,20 @@ describe('fetchCharts', () => {
     expect(charts.map((c) => c.identifier).sort()).toEqual(['enc', 'noaa']);
   });
 
+  it('uses unique resource keys when embedded identifiers collide', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        jsonResponse(200, {
+          primary: { identifier: 'shared', name: 'Primary', type: 'tilelayer' },
+          secondary: { identifier: 'shared', name: 'Secondary', type: 'tilelayer' },
+        }),
+      ),
+    );
+    const charts = (await fetchCharts('http://pi.local')) ?? [];
+    expect(charts.map((chart) => chart.identifier)).toEqual(['primary', 'secondary']);
+  });
+
   it('falls back to v1 when v2 returns 404', async () => {
     const fetchMock = vi
       .fn()

@@ -1,11 +1,14 @@
 import {
+  cleanTideStationText,
+  MAX_TIDE_STATION_ID_LENGTH,
+  MAX_TIDE_STATION_NAME_LENGTH,
   TIDE_WINDOW_HOURS,
   type TideEvent,
   type TideReading,
   type TideStation,
 } from '$entities/tides';
 import { isLatitude, isLongitude } from '$shared/geo';
-import { HOUR_MS, hasControlCharacters } from '$shared/lib';
+import { HOUR_MS } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { fetchAuthedJson } from '$shared/signalk';
 
@@ -23,15 +26,6 @@ const RESOURCE_PATH = '/signalk/v2/api/resources/tides';
 // served them.
 const SYNTHETIC_STATION = 'Local tides (signalk-tides)';
 const MAX_EVENTS = 200;
-const MAX_STATION_ID_LENGTH = 128;
-const MAX_STATION_NAME_LENGTH = 256;
-
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
 
 export interface SignalkTidesOptions {
   origin?: string;
@@ -98,8 +92,8 @@ function parseStation(raw: unknown, lat: number, lon: number): TideStation {
   const latitude = isLatitude(rawLatitude) ? rawLatitude : undefined;
   const longitude = isLongitude(rawLongitude) ? rawLongitude : undefined;
   return {
-    id: cleanText(record.id, MAX_STATION_ID_LENGTH) ?? SIGNALK_TIDES_PLUGIN_ID,
-    name: cleanText(record.name, MAX_STATION_NAME_LENGTH) ?? SYNTHETIC_STATION,
+    id: cleanTideStationText(record.id, MAX_TIDE_STATION_ID_LENGTH) ?? SIGNALK_TIDES_PLUGIN_ID,
+    name: cleanTideStationText(record.name, MAX_TIDE_STATION_NAME_LENGTH) ?? SYNTHETIC_STATION,
     latitude: latitude ?? lat,
     longitude: longitude ?? lon,
   };

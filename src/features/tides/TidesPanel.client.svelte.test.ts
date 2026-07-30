@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TidesStore } from '$entities/tides';
+import { type NearbyTideStation, TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import TidesPanel from './TidesPanel.svelte';
 import type { TidesController } from './tides-controller.svelte';
@@ -14,12 +14,12 @@ const currentStation = {
 };
 const mounted: Array<() => void> = [];
 
-function mountPanel() {
+function mountPanel(
+  tideStations: NearbyTideStation[] = [{ station: tideStation, distanceMeters: 1000 }],
+  currentStations: NearbyTideStation[] = [{ station: currentStation, distanceMeters: 2000 }],
+) {
   const store = new TidesStore();
-  store.setCatalogs(
-    [{ station: tideStation, distanceMeters: 1000 }],
-    [{ station: currentStation, distanceMeters: 2000 }],
-  );
+  store.setCatalogs(tideStations, currentStations);
   const controller: TidesController = {
     load: vi.fn(async () => undefined),
     loadCurrent: vi.fn(async () => undefined),
@@ -88,5 +88,24 @@ describe('TidesPanel interactions', () => {
     expect(panel.target.querySelector('.panel-body')?.classList).not.toContain(
       'panel-body--collapsed',
     );
+  });
+
+  it('renders one station choice when a provider catalog repeats an id', () => {
+    const panel = mountPanel(
+      [
+        { station: tideStation, distanceMeters: 1000 },
+        { station: { ...tideStation, name: 'Duplicate tide' }, distanceMeters: 1100 },
+      ],
+      [
+        { station: currentStation, distanceMeters: 2000 },
+        { station: { ...currentStation, name: 'Duplicate current' }, distanceMeters: 2100 },
+        { station: { ...currentStation, name: 'Third current row' }, distanceMeters: 2200 },
+      ],
+    );
+
+    expect(panel.target.querySelectorAll('button.nav-row')).toHaveLength(4);
+    expect(panel.target.textContent).not.toContain('Duplicate tide');
+    expect(panel.target.textContent).not.toContain('Duplicate current');
+    expect(panel.target.textContent).not.toContain('Third current row');
   });
 });

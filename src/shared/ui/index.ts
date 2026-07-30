@@ -6,6 +6,7 @@ export { default as CustomizeToggle } from './CustomizeToggle.svelte';
 export { ConfirmArm } from './confirm-arm.svelte';
 export { default as Disclosure } from './Disclosure.svelte';
 export { dialog, registerDismiss } from './dialog';
+export { default as ErrorBoundary } from './ErrorBoundary.svelte';
 export { pickTextFile, readErrorMessage } from './file-pick';
 export {
   focusOnMount,
@@ -15,6 +16,7 @@ export {
 } from './focus';
 export { default as InlineConfirm } from './InlineConfirm.svelte';
 export { default as LayerToggle } from './LayerToggle.svelte';
+export { default as LazyPanelState } from './LazyPanelState.svelte';
 export { createMenuFocusMachine, initializeMenuFocus } from './menu-focus';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as NavSortControl } from './NavSortControl.svelte';

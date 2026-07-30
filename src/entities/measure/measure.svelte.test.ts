@@ -167,6 +167,18 @@ describe('MeasureStore', () => {
     expect(measure.points[0]).toEqual(C);
   });
 
+  it('does not reuse vertex ids across measurement sessions', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    const priorId = measure.vertices[0].id;
+
+    measure.start();
+    measure.add(B);
+
+    expect(measure.vertices[0].id).not.toBe(priorId);
+  });
+
   it('start gives a clean slate and stop clears everything', () => {
     const measure = new MeasureStore();
     measure.start();

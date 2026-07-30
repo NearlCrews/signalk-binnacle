@@ -1,4 +1,4 @@
-import { createRetryableLazyLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export {
   createMarineRadarController,
@@ -10,7 +10,7 @@ export { radarAreaChartInstruction } from './radar-area-geometry';
 export { radarChartEditBlockedReason } from './radar-controls-model';
 export type { RadarStatus } from './radar-types';
 
-const radarControlsLoader = createRetryableLazyLoader(() => import('./RadarControls.svelte'));
+const radarControlsLoader = createRetryableLazyUiLoader(() => import('./RadarControls.svelte'));
 
 export function loadRadarControls(): Promise<typeof import('./RadarControls.svelte')> {
   return radarControlsLoader();

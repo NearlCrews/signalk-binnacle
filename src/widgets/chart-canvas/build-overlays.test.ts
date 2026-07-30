@@ -66,7 +66,7 @@ vi.mock('$features/track-layer', () => ({
 vi.mock('$features/vessel-layer', () => ({ createVesselOverlay: factories.createVesselOverlay }));
 vi.mock('$features/waypoints', () => ({ createWaypointOverlay: factories.createWaypointOverlay }));
 
-function setup(marineRadarLayer?: { id: string }) {
+function setup(marineRadarLayer?: { id: string }, interactionsAllowed?: () => boolean) {
   const assessment = { contacts: [], worst: 'clear' };
   const deps = {
     origin: 'http://boat.local',
@@ -91,6 +91,7 @@ function setup(marineRadarLayer?: { id: string }) {
     savedTracks: { list: vi.fn() },
     notesOverlay: { id: 'notes' },
     onTideStationSelect: vi.fn(),
+    interactionsAllowed,
     onAnchorMoved: vi.fn(),
     aisTrailsAvailable: vi.fn(() => true),
     historyProviders: vi.fn(() => ({ providers: [] })),
@@ -166,6 +167,7 @@ describe('buildDynamicOverlays', () => {
       deps.anchor,
       deps.vessel,
       deps.onAnchorMoved,
+      deps.interactionsAllowed,
     );
     expect(factories.createMeasureOverlay).toHaveBeenCalledWith(deps.measure, deps.units);
     expect(factories.createRouteOverlay).toHaveBeenCalledWith(deps.routeStore);
@@ -189,6 +191,7 @@ describe('buildDynamicOverlays', () => {
     expect(factories.createAisOverlay).toHaveBeenCalledWith(deps.aisTargets, {
       onSelect: deps.onAisSelect,
       selectedId: deps.selectedAisId,
+      interactionsAllowed: deps.interactionsAllowed,
     });
     expect(factories.createHistoryTrackOverlay).toHaveBeenCalledWith(
       deps.origin,
@@ -214,5 +217,23 @@ describe('buildDynamicOverlays', () => {
     expect(historyReviewActive?.()).toBe(true);
     expect(factories.createTimeTravelTrackOverlay).toHaveBeenCalledWith(deps.timeTravel);
     expect(factories.createTimeTravelOverlay).toHaveBeenCalledWith(deps.timeTravel);
+  });
+
+  it('forwards one live chart-interaction gate to Tide and AIS hit surfaces', () => {
+    const interactionsAllowed = vi.fn(() => false);
+    const { deps } = setup(undefined, interactionsAllowed);
+
+    expect(factories.createTidesOverlay).toHaveBeenCalledWith(
+      deps.tides,
+      deps.units,
+      deps.onTideStationSelect,
+      Date.now,
+      interactionsAllowed,
+    );
+    expect(factories.createAisOverlay).toHaveBeenCalledWith(deps.aisTargets, {
+      onSelect: deps.onAisSelect,
+      selectedId: deps.selectedAisId,
+      interactionsAllowed,
+    });
   });
 });
