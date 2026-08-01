@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SignalKStore } from './store.svelte';
 import type { SKFrame } from './types';
+import { notificationState } from './types';
 
 function frame(self: Record<string, unknown>): SKFrame {
   return {
@@ -307,5 +308,43 @@ describe('SignalKStore', () => {
     expect(removed).toBe(1);
     expect(store.aisTargets.has('vessels.a')).toBe(false);
     expect(store.aisTargets.has('vessels.b')).toBe(true);
+  });
+
+  it('bounds the notification mirror, displacing only a less severe entry', () => {
+    const store = new SignalKStore();
+    const raise = (path: string, state: string, epoch = 1) => {
+      store.applyFrame({
+        self: new Map([[path, { state, message: state }]]) as SKFrame['self'],
+        connection: { phase: 'open', attempt: 0 },
+        epoch,
+      });
+    };
+    // A misbehaving producer holding a thousand alerts raised at once.
+    for (let i = 0; i < 1_000; i += 1) raise(`notifications.junk.${i}`, 'alert');
+    expect(store.notifications.size).toBe(1_000);
+
+    // Another low-grade alert cannot displace an equal one, so the flood stops growing.
+    raise('notifications.junk.overflow', 'alert');
+    expect(store.notifications.size).toBe(1_000);
+    expect(store.notifications.has('notifications.junk.overflow')).toBe(false);
+
+    // A real hazard still gets in, by displacing one of the alerts.
+    raise('notifications.mob', 'emergency');
+    expect(store.notifications.size).toBe(1_000);
+    expect(store.notifications.has('notifications.mob')).toBe(true);
+  });
+
+  it('still updates a path it already mirrors when the mirror is full', () => {
+    const store = new SignalKStore();
+    const raise = (path: string, state: string) => {
+      store.applyFrame({
+        self: new Map([[path, { state, message: state }]]) as SKFrame['self'],
+        connection: { phase: 'open', attempt: 0 },
+        epoch: 1,
+      });
+    };
+    for (let i = 0; i < 1_000; i += 1) raise(`notifications.junk.${i}`, 'alert');
+    raise('notifications.junk.0', 'emergency');
+    expect(notificationState(store.notifications.get('notifications.junk.0'))).toBe('emergency');
   });
 });

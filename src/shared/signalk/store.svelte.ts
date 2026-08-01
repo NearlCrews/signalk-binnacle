@@ -4,8 +4,14 @@ import {
   INITIAL_CONNECTION_STATE,
   isSoundingNotification,
   NOTIFICATIONS_PREFIX,
+  notificationSeverityRank,
   notificationState,
 } from './types';
+
+// How many distinct raised notification paths the mirror will hold. Comfortably above any
+// well-formed server (Signal K alarms are per hazard, not per sample) and far below a memory
+// problem. The alert list renders fewer still; this bounds what is retained, not what is shown.
+const MAX_MIRRORED_NOTIFICATIONS = 1_000;
 
 // The four v2 status flags the alert list renders, so the notification dedup compares them field by
 // field; serializing the status object would allocate per delta for active alarms. canClear is
@@ -217,8 +223,33 @@ export class SignalKStore {
         return;
       }
     }
+    if (!previous && !this.#admitNewNotification(value)) return;
     this.#notifications.set(path, value);
     this.notificationsVersion += 1;
+  }
+
+  // Whether a notification path Binnacle is not already mirroring may be added. Resolved
+  // notifications already leave the mirror, but nothing bounded the number of distinct paths a
+  // server can hold raised at once, so a buggy or hostile producer could grow memory and the
+  // list's per-change sort without limit. At the cap a newcomer is admitted only by displacing a
+  // strictly less severe entry, so an emergency always gets in and a flood of low-grade alerts
+  // cannot crowd one out. Only reached once the cap is hit, which a well-formed server never does.
+  #admitNewNotification(value: Value): boolean {
+    if (this.#notifications.size < MAX_MIRRORED_NOTIFICATIONS) return true;
+    const rank = notificationSeverityRank(value);
+    if (rank === undefined) return false;
+    let worstPath: string | undefined;
+    let worstRank = rank;
+    for (const [candidatePath, candidate] of this.#notifications) {
+      const candidateRank = notificationSeverityRank(candidate) ?? Number.POSITIVE_INFINITY;
+      if (candidateRank > worstRank) {
+        worstRank = candidateRank;
+        worstPath = candidatePath;
+      }
+    }
+    if (worstPath === undefined) return false;
+    this.#notifications.delete(worstPath);
+    return true;
   }
 
   pruneAis(now: number, ttlMs: number): number {

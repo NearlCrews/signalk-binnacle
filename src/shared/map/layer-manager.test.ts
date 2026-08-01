@@ -217,6 +217,27 @@ describe('LayerManager', () => {
     expect(manager.layers().map((l) => l.id)).toEqual(['ais']);
   });
 
+  it('keeps an unlisted overlay out of the persisted snapshot', async () => {
+    // The time-travel and measure overlays are registered for the life of the map, so without the
+    // filter their ids reached the profile document that merges across devices, on the very first
+    // persist, with no user action at all.
+    const changes: Array<Record<string, { visible: boolean; opacity: number }>> = [];
+    const manager = new LayerManager(fakeCtx(), { onChange: (s) => changes.push(s) });
+    await manager.register(fakeOverlay('chart'));
+    await manager.register({ ...fakeOverlay('time-travel-marker'), listed: false });
+    manager.toggle('chart', false);
+    expect(Object.keys(changes.at(-1) ?? {})).toEqual(['chart']);
+  });
+
+  it('does not reapply a transient id left in an older snapshot', async () => {
+    const manager = new LayerManager(fakeCtx());
+    const transient = { ...fakeOverlay('measure'), listed: false };
+    await manager.register(transient);
+    transient.events.length = 0;
+    manager.applySnapshot({ measure: { visible: false, opacity: 0.25 } }, []);
+    expect(transient.events).toEqual([]);
+  });
+
   it('rejects a duplicate id', async () => {
     const manager = new LayerManager(fakeCtx());
     await manager.register(fakeOverlay('ais'));

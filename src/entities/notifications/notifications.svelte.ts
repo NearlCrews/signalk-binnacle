@@ -2,18 +2,9 @@ import { hasControlCharacters, isRecord } from '$shared/lib';
 import {
   notificationState,
   type RaisedNotificationState,
+  NOTIFICATION_SEVERITY_RANK as SEVERITY_RANK,
   type SignalKStore,
 } from '$shared/signalk';
-
-// Sort rank for the raised grades; lower is more severe. Doubles as the membership test:
-// a state outside this table (normal, nominal, or junk) is not an active alert. Keyed by
-// RaisedNotificationState so the table provably covers every raised grade and nothing else.
-const SEVERITY_RANK: Record<RaisedNotificationState, number> = {
-  emergency: 0,
-  alarm: 1,
-  warn: 2,
-  alert: 3,
-};
 
 export const MAX_ACTIVE_NOTIFICATIONS = 500;
 const MAX_NOTIFICATION_PATH_LENGTH = 512;

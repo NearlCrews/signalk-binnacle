@@ -441,6 +441,9 @@ export class LayerManager {
   applySnapshot(settings: LayerSettings, order: string[]): void {
     if (this.#disposed) return;
     for (const [id, module] of this.#modules) {
+      // Same filter as #persist: an id left behind by a build that did persist these must not be
+      // able to reapply itself to a transient overlay.
+      if (module.listed === false) continue;
       const next = settings[id];
       const state = this.#state.get(id);
       if (!next || !state) continue;
@@ -464,10 +467,17 @@ export class LayerManager {
     this.#onOrderChange?.([...this.#explicitOrder]);
   }
 
+  // An unlisted overlay is transient session machinery (the time-travel marker and track, the
+  // measure overlay), not a layer the navigator owns. They are registered for the life of the map
+  // like every other overlay, so without this filter their ids landed in the persisted snapshot on
+  // the first persist of every session, and from there into the profile document that merges across
+  // devices. Nothing can toggle them from the panel, so the entries were pure noise in a record
+  // that is supposed to describe the navigator's choices.
   #persist(): void {
     if (!this.#onChange) return;
     const snapshot: LayerSettings = {};
     for (const [id, state] of this.#state) {
+      if (this.#modules.get(id)?.listed === false) continue;
       snapshot[id] = { visible: state.visible, opacity: state.opacity };
     }
     this.#onChange(snapshot);

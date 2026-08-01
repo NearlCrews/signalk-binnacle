@@ -51,6 +51,23 @@ export type NotificationState = 'nominal' | 'normal' | 'alert' | 'warn' | 'alarm
 // the quiet 'nominal' and 'normal'. A parsed active alert is always one of these.
 export type RaisedNotificationState = Exclude<NotificationState, 'nominal' | 'normal'>;
 
+// Sort rank for the raised grades; lower is more severe. Shared so the store's mirror bound and the
+// alert list order a notification by the same scale. A state outside the table is not raised.
+export const NOTIFICATION_SEVERITY_RANK: Record<RaisedNotificationState, number> = {
+  emergency: 0,
+  alarm: 1,
+  warn: 2,
+  alert: 3,
+};
+
+// How severe a raised notifications.* value is, or undefined when it is not raised at all.
+export function notificationSeverityRank(value: unknown): number | undefined {
+  const state = notificationState(value);
+  return state !== undefined && Object.hasOwn(NOTIFICATION_SEVERITY_RANK, state)
+    ? NOTIFICATION_SEVERITY_RANK[state as RaisedNotificationState]
+    : undefined;
+}
+
 export interface PathValue {
   path: Path;
   value: Value;
