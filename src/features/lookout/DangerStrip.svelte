@@ -69,8 +69,12 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
             class:sev-warning={contact.severity === 'warning'}
             >{vesselLabel(contact.name, contact.id)}</span
           >
-          <span class="metric">CPA <b>{formatNm(contact.cpaMeters)}</b> nm</span>
-          <span class="metric">TCPA <b>{formatTcpaMin(contact.tcpaSeconds, 1)}</b> min</span>
+          <span class="metric" title="Closest point of approach: how near this vessel will pass">
+            CPA <b>{formatNm(contact.cpaMeters)}</b> nm
+          </span>
+          <span class="metric" title="Time to the closest point of approach">
+            TCPA <b>{formatTcpaMin(contact.tcpaSeconds, 1)}</b> min
+          </span>
         </li>
       {/each}
     </ul>

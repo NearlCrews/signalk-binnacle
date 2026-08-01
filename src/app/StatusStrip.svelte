@@ -157,9 +157,11 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
   </div>
   <PinnedActions actions={pinnedActions} />
   <div class="center-cluster">
-    <span class="readout" title="Vessel position">Vessel</span>
-    <span class="readout"><b class="num">{formatLatitude(vessel.position?.latitude)}</b></span>
-    <span class="readout"><b class="num">{formatLongitude(vessel.position?.longitude)}</b></span>
+    <span class="readout" title="Vessel position"
+      >Vessel
+      <b class="num">{formatLatitude(vessel.position?.latitude)}</b>
+      <b class="num">{formatLongitude(vessel.position?.longitude)}</b></span
+    >
     <span class="readout" title="Local time"
       >Time
       <b class="num">{formatClockTime(clock.now)}</b></span

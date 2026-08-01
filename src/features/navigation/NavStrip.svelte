@@ -141,9 +141,9 @@ const eta = $derived.by(() => {
       </button>
     </div>
     <div class="row">
-      <span class="metric">DTW <b>{dtw}</b> nm</span>
-      <span class="metric">BTW <b>{btw}</b>&deg;T</span>
-      <span class="metric">
+      <span class="metric" title="Distance to waypoint">DTW <b>{dtw}</b> nm</span>
+      <span class="metric" title="Bearing to waypoint, degrees true">BTW <b>{btw}</b>&deg;T</span>
+      <span class="metric" title="Cross-track error: how far off the leg you are">
         XTE
         {#if cdi}
           <span class="cdi" aria-hidden="true">
@@ -161,11 +161,15 @@ const eta = $derived.by(() => {
         <b>{xte}</b>
         nm
       </span>
-      <span class="metric">VMG <b>{vmg}</b> kn</span>
-      <span class="metric">TTG <b>{ttg}</b></span>
+      <span class="metric" title="Velocity made good toward the waypoint">VMG <b>{vmg}</b> kn</span>
+      <span class="metric" title="Time to go to the waypoint at the present speed">
+        TTG <b>{ttg}</b>
+      </span>
       {#if routeProgress}
-        <span class="metric">RTE <b>{routeDtg}</b> nm</span>
-        <span class="metric">ETA <b>{eta}</b></span>
+        <span class="metric" title="Route distance still to run across the legs ahead">
+          RTE <b>{routeDtg}</b> nm
+        </span>
+        <span class="metric" title="Estimated time of arrival">ETA <b>{eta}</b></span>
       {/if}
     </div>
   </aside>

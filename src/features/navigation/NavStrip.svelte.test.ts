@@ -35,4 +35,17 @@ describe('NavStrip', () => {
     // "Confirm stop?", which contradicts the label-in-name rule.
     expect(body).not.toContain('aria-label="Stop navigation"');
   });
+
+  it('glosses every acronym it shows, for a navigator who does not know them', () => {
+    const html = renderStrip();
+    for (const gloss of [
+      'Distance to waypoint',
+      'Bearing to waypoint, degrees true',
+      'Cross-track error',
+      'Velocity made good toward the waypoint',
+      'Time to go to the waypoint',
+    ]) {
+      expect(html).toContain(gloss);
+    }
+  });
 });

@@ -73,7 +73,7 @@ dialog.modal-card {
   gap: 0.4rem;
   inline-size: 100%;
   min-block-size: var(--control-size);
-  padding: 0 0.7rem;
+  padding: 0 var(--space-3);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;

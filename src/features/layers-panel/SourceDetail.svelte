@@ -392,7 +392,9 @@ function changeSharing(share: boolean): void {
     </section>
 
     {#if writeBlocked && userSource?.serverCleanupRequired}
-      <p class="alert-note" role="status">
+      <!-- A prerequisite, not an alarm: it teaches what is missing before the delete can finish, so
+        it takes the quiet note styling that matches its polite announcement. -->
+      <p class="muted-note" role="status">
         Read/write Signal K access is needed to remove the remaining server copy before deleting
         this chart from the device.
       </p>

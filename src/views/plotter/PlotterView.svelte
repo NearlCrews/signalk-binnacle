@@ -766,8 +766,10 @@ $effect(() => {
     {#if arrivalBanner}
       <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
     {/if}
+    <!-- The toast channel carries failures and refusals only (see Toast), so it announces as an
+      alert, matching the alarm styling it already wears. -->
     {#if toastMessage}
-      <div class="alert-note alert-note--filled toast-banner" role="status">{toastMessage}</div>
+      <div class="alert-note alert-note--filled toast-banner" role="alert">{toastMessage}</div>
     {/if}
   </div>
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>

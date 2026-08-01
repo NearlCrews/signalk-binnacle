@@ -32,12 +32,14 @@ const { row, units, onBack, onLocate }: Props = $props();
 {#if row.navigationState}
   <p class="caps-label">{capitalize(row.navigationState)}</p>
 {/if}
+<!-- Safety state the server raised, not a response to anything the navigator did here, so it is
+  announced as an alert to match the alarm styling a sighted navigator sees. -->
 {#if row.severity === 'danger'}
-  <p class="alert-note alert-note--filled" role="status">
+  <p class="alert-note alert-note--filled" role="alert">
     Collision risk. Review the closest pass and time to closest values below.
   </p>
 {:else if row.severity === 'warning'}
-  <p class="alert-note" role="status">
+  <p class="alert-note" role="alert">
     Getting close. Continue monitoring this target and the surrounding traffic.
   </p>
 {/if}
