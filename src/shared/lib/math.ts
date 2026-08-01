@@ -4,6 +4,18 @@ export function lerp(a: number, b: number, f: number): number {
   return a + (b - a) * f;
 }
 
+// Interpolate between two angles in radians through the shorter arc, so a blend that crosses the
+// 0/2 pi seam passes through north rather than sweeping the long way around (350 degrees to 10
+// degrees yields about 0, never 180). Blending the unit-vector components is what makes that work,
+// and it also keeps the NaN discipline callers rely on: a missing or NaN input yields NaN rather
+// than silently borrowing the other side, so an existing Number.isNaN guard still rejects the
+// sample. The result is normalized into [0, 2 pi).
+export function lerpAngle(a: number, b: number, f: number): number {
+  const x = lerp(Math.sin(a), Math.sin(b), f);
+  const y = lerp(Math.cos(a), Math.cos(b), f);
+  return (Math.atan2(x, y) + 2 * Math.PI) % (2 * Math.PI);
+}
+
 // A finite-number type guard, shared so the persisted-state and descriptor validators do not each
 // re-declare it.
 export function isFiniteNumber(value: unknown): value is number {

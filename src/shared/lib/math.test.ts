@@ -1,5 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { compareOptionalNumber, isSafeNonNegativeInteger, nearestBySorted } from './math';
+import {
+  compareOptionalNumber,
+  isSafeNonNegativeInteger,
+  lerpAngle,
+  nearestBySorted,
+} from './math';
+
+const DEG = Math.PI / 180;
+
+describe('lerpAngle', () => {
+  it('blends across the 0/2 pi seam through the short arc', () => {
+    // A plain lerp would sweep 350 -> 10 through 180, pointing a wave arrow backwards.
+    const mid = lerpAngle(350 * DEG, 10 * DEG, 0.5);
+    expect(Math.min(mid, 2 * Math.PI - mid)).toBeCloseTo(0, 6);
+  });
+
+  it('blends within a quadrant like a linear interpolation', () => {
+    expect(lerpAngle(10 * DEG, 50 * DEG, 0.5)).toBeCloseTo(30 * DEG, 6);
+  });
+
+  it('returns the endpoints at the fraction bounds', () => {
+    expect(lerpAngle(45 * DEG, 200 * DEG, 0)).toBeCloseTo(45 * DEG, 6);
+    expect(lerpAngle(45 * DEG, 200 * DEG, 1)).toBeCloseTo(200 * DEG, 6);
+  });
+
+  it('normalizes into [0, 2 pi)', () => {
+    const blended = lerpAngle(350 * DEG, 350 * DEG, 0.5);
+    expect(blended).toBeGreaterThanOrEqual(0);
+    expect(blended).toBeLessThan(2 * Math.PI);
+  });
+
+  it('propagates NaN rather than borrowing the other side, so caller guards still reject', () => {
+    expect(lerpAngle(Number.NaN, 1, 0.5)).toBeNaN();
+    expect(lerpAngle(1, Number.NaN, 0.5)).toBeNaN();
+    expect(lerpAngle(Number.NaN, Number.NaN, 0.5)).toBeNaN();
+    expect(lerpAngle(undefined as unknown as number, 1, 0.5)).toBeNaN();
+  });
+});
 
 describe('compareOptionalNumber', () => {
   it('orders finite numbers ascending by default', () => {

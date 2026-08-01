@@ -18,6 +18,7 @@ export {
   isFiniteNumber,
   isSafeNonNegativeInteger,
   lerp,
+  lerpAngle,
   lowerBound,
   nearestBy,
   nearestBySorted,

@@ -36,4 +36,30 @@ describe('waveArrowFeatures', () => {
     g.waveDirection = undefined;
     expect(waveArrowFeatures(g, bracket).features).toHaveLength(0);
   });
+
+  it('blends direction the short way across the 0/2 pi seam', () => {
+    const g = grid();
+    const cells = 16;
+    // Two steps straddling north: 350 degrees and 10 degrees. Blended at the midpoint the travel
+    // vector must point south (the reverse of a from-north direction), not north.
+    g.waveDirection = [
+      new Array(cells).fill(350 * (Math.PI / 180)),
+      new Array(cells).fill(10 * (Math.PI / 180)),
+    ];
+    g.waveHeight = [new Array(cells).fill(2), new Array(cells).fill(2)];
+    const fc = waveArrowFeatures(g, { lo: 0, hi: 1, frac: 0.5 });
+    const [first] = fc.features;
+    expect(first).toBeDefined();
+    const line = first.geometry as GeoJSON.LineString;
+    const [[startLon, startLat], [endLon, endLat]] = line.coordinates;
+    // Travelling south: the arrow ends below where it starts, and does not swing east or west.
+    expect(endLat).toBeLessThan(startLat);
+    expect(endLon).toBeCloseTo(startLon, 6);
+  });
+
+  it('skips a cell whose direction is missing in both bracketing steps', () => {
+    const g = grid();
+    g.waveDirection = [new Array(16).fill(Number.NaN)];
+    expect(waveArrowFeatures(g, bracket).features).toHaveLength(0);
+  });
 });

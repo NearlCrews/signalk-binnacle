@@ -1,5 +1,12 @@
 import { bilinearAt, type TimeBracket, timeBracket, type WeatherGrid } from '$entities/weather';
-import { formatKnotsOr, HOUR_MS, lerp, precipRateUnit, type UnitsMode } from '$shared/lib';
+import {
+  formatKnotsOr,
+  HOUR_MS,
+  lerp,
+  lerpAngle,
+  precipRateUnit,
+  type UnitsMode,
+} from '$shared/lib';
 import type { PointConditions } from './signalk-weather';
 
 // Wind speed in whole knots (no decimals), the shared readout format for the conditions block and
@@ -202,13 +209,11 @@ function lerpOr(a: number | undefined, b: number | undefined, f: number): number
   return a ?? b;
 }
 
-// Angles blend through the shorter arc via the unit vector, never across the 0/360 seam.
+// Angles blend through the shorter arc, never across the 0/360 seam. Unlike the shared lerpAngle,
+// a readout keeps whichever side is present when the other step did not sample, so a chip shows the
+// one real direction rather than nothing.
 function circularOr(a: number | undefined, b: number | undefined, f: number): number | undefined {
-  if (a !== undefined && b !== undefined) {
-    const x = lerp(Math.sin(a), Math.sin(b), f);
-    const y = lerp(Math.cos(a), Math.cos(b), f);
-    return (Math.atan2(x, y) + 2 * Math.PI) % (2 * Math.PI);
-  }
+  if (a !== undefined && b !== undefined) return lerpAngle(a, b, f);
   return a ?? b;
 }
 

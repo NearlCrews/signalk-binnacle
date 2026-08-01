@@ -1,5 +1,5 @@
 import type { TimeBracket, WeatherGrid } from '$entities/weather';
-import { lerp } from '$shared/lib';
+import { lerp, lerpAngle } from '$shared/lib';
 import { emptyFeatureCollection } from '$shared/map';
 import { cellArrowFeatures } from './arrow-features';
 
@@ -8,8 +8,9 @@ const ARROW_FRACTION = 0.5;
 
 // One arrow per strided grid cell pointing the way the waves travel (the reverse of the
 // meteorological from-direction); the wave field already colors by height, so the arrows carry no
-// properties. Direction is blended across the bracketing steps, and cells missing direction or
-// height are skipped. Empty when the grid carries no wave direction or height.
+// properties. Direction is blended around the compass (lerpAngle, never a plain lerp: a linear
+// blend from 350 to 10 degrees sweeps through 180 and points the arrow backwards), and cells
+// missing direction or height are skipped. Empty when the grid carries no wave direction or height.
 export function waveArrowFeatures(
   grid: WeatherGrid,
   bracket: TimeBracket,
@@ -22,7 +23,7 @@ export function waveArrowFeatures(
   const h0 = height[bracket.lo] ?? [];
   const h1 = height[bracket.hi] ?? h0;
   return cellArrowFeatures(grid, STRIDE, ARROW_FRACTION, (i) => {
-    const direction = lerp(d0[i], d1[i], bracket.frac);
+    const direction = lerpAngle(d0[i], d1[i], bracket.frac);
     const waveHeight = lerp(h0[i], h1[i], bracket.frac);
     if (Number.isNaN(direction) || Number.isNaN(waveHeight)) return undefined;
     // Travel vector: the reverse of the from-direction, the same convention as the wind arrows.
