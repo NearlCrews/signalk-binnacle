@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Bbox4, bboxContains, padBbox } from '$shared/geo';
+import { type Bbox4, bboxContains, padBbox, splitAtAntimeridian } from '$shared/geo';
 import { bboxKey, NotesCache } from './notes-cache';
 import type { NotePoint } from './notes-client';
 
@@ -15,8 +15,13 @@ describe('padBbox', () => {
     expect(padBbox([0, 0, 10, 10], 0.5)).toEqual([-5, -5, 15, 15]);
   });
 
-  it('clamps to the world and the mercator latitude limit', () => {
-    expect(padBbox([-179, -84, 179, 84], 1)).toEqual([-180, -85, 180, 85]);
+  it('clamps latitude to the mercator limit and leaves longitude unwrapped', () => {
+    // Longitude is deliberately not clamped: the coverage check compares against the unwrapped
+    // viewport MapLibre reports, and splitAtAntimeridian normalizes at the request edge instead.
+    const padded = padBbox([-179, -84, 179, 84], 1);
+    expect(padded[1]).toBe(-85);
+    expect(padded[3]).toBe(85);
+    expect(splitAtAntimeridian(padded)).toEqual([[-180, -85, 180, 85]]);
   });
 });
 

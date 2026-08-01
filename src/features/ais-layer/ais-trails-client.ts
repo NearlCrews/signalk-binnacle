@@ -1,4 +1,4 @@
-import { type Bbox4, isLonLat, type LonLat } from '$shared/geo';
+import { type Bbox4, isLonLat, type LonLat, splitAtAntimeridian } from '$shared/geo';
 import { asKeyedObject, fetchAuthedJson } from '$shared/signalk';
 
 // One recent-track line for a vessel from the tracks plugin (@signalk/tracks-plugin): the Signal K
@@ -71,19 +71,32 @@ export async function fetchAisTrails(
   token: string | undefined,
   bbox: Bbox4,
 ): Promise<AisTrail[] | undefined> {
-  const keyed = asKeyedObject(
-    await fetchAuthedJson<unknown>(`${base}${TRACKS_PATH}?bbox=${bboxQuery(bbox)}`, token),
-  );
-  if (!keyed) return undefined;
+  // A padded viewport at the antimeridian carries unwrapped longitudes, which the plugin cannot
+  // match, so ask for each in-range piece. Away from the seam this is one box and one request.
+  const boxes = splitAtAntimeridian(bbox);
+  if (boxes.length === 0) return undefined;
   const trails: AisTrail[] = [];
+  const seenContexts = new Set<string>();
   let acceptedPoints = 0;
-  for (const [context, raw] of Object.entries(keyed)) {
-    const remainingPoints = MAX_POINTS_PER_RESPONSE - acceptedPoints;
-    if (trails.length >= MAX_TRAILS || remainingPoints === 0) break;
-    for (const line of linesFromEntry(raw, remainingPoints, MAX_TRAILS - trails.length)) {
-      trails.push({ context, line });
-      acceptedPoints += line.length;
-      if (trails.length >= MAX_TRAILS || acceptedPoints >= MAX_POINTS_PER_RESPONSE) break;
+  for (const box of boxes) {
+    const keyed = asKeyedObject(
+      await fetchAuthedJson<unknown>(`${base}${TRACKS_PATH}?bbox=${bboxQuery(box)}`, token),
+    );
+    // One failed piece leaves the area unanswered: a half-covered result would render as the whole
+    // picture and silently drop the wakes on the other side of the seam.
+    if (!keyed) return undefined;
+    for (const [context, raw] of Object.entries(keyed)) {
+      const remainingPoints = MAX_POINTS_PER_RESPONSE - acceptedPoints;
+      if (trails.length >= MAX_TRAILS || remainingPoints === 0) break;
+      // A vessel straddling the seam is returned by both pieces; keep the first line for it rather
+      // than drawing the same wake twice.
+      if (seenContexts.has(context)) continue;
+      for (const line of linesFromEntry(raw, remainingPoints, MAX_TRAILS - trails.length)) {
+        seenContexts.add(context);
+        trails.push({ context, line });
+        acceptedPoints += line.length;
+        if (trails.length >= MAX_TRAILS || acceptedPoints >= MAX_POINTS_PER_RESPONSE) break;
+      }
     }
   }
   return trails;

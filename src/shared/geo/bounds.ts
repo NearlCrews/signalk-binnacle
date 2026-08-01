@@ -68,20 +68,40 @@ export function bboxCenter(bbox: readonly [number, number, number, number]): Lat
   return { latitude: (south + north) / 2, longitude };
 }
 
-// Clamp a box to the world and the Web Mercator latitude limit, the bounds a map fit cannot exceed.
-// Shared by padBbox and the vessel area-of-interest fallback so the limits live in one place. Non-
-// crossing boxes only: it clamps each longitude into [-180, 180], so an antimeridian-crossing box
-// (east < west) would be flattened. padBbox keeps its crossing output within range, so the clamp is a
-// no-op there.
-// The Web Mercator projection is undefined toward the poles, so the world clamp stops at the
-// standard latitude limit on both sides.
+// The Web Mercator projection is undefined toward the poles, so a padded box stops at the standard
+// latitude limit on both sides.
 const WEB_MERCATOR_MAX_LAT = 85;
-function clampToWorld([west, south, east, north]: Bbox4): Bbox4 {
+function clampLatitudes([west, south, east, north]: Bbox4): Bbox4 {
   return [
-    Math.max(-180, west),
+    west,
     Math.max(-WEB_MERCATOR_MAX_LAT, south),
-    Math.min(180, east),
+    east,
     Math.min(WEB_MERCATOR_MAX_LAT, north),
+  ];
+}
+
+// Wrap one longitude into [-180, 180). 180 itself becomes -180, which is the same meridian; the
+// callers below only wrap an edge they are about to cut at the seam anyway.
+function wrapLongitude(lon: number): number {
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}
+
+// Cut an unwrapped box into the one or two in-range boxes that cover the same ground, for the
+// request edge. padBbox deliberately leaves longitude unwrapped (see below), but a longitude on the
+// wire has to be a real one: a Signal K bbox query carrying an east of 200 matches nothing, which
+// would trade a cache miss for an empty answer. A box that already sits inside [-180, 180] passes
+// through untouched, so the common case allocates one box and issues one request.
+export function splitAtAntimeridian([west, south, east, north]: Bbox4): Bbox4[] {
+  if (!allFinite(west, south, east, north)) return [];
+  if (east - west >= 360) return [[-180, south, 180, north]];
+  if (west >= -180 && east <= 180) return [[west, south, east, north]];
+  const w = wrapLongitude(west);
+  const e = wrapLongitude(east);
+  // Wrapping kept the edges in order, so the span never actually reached the seam.
+  if (w <= e) return [[w, south, e, north]];
+  return [
+    [w, south, 180, north],
+    [-180, south, e, north],
   ];
 }
 
@@ -90,9 +110,16 @@ function clampToWorld([west, south, east, north]: Bbox4): Bbox4 {
 // AIS-trail overlay pad by the same amount.
 export const VIEWPORT_FETCH_PAD_FRACTION = 0.5;
 
-// Expand a viewport bbox outward by `fraction` on each side, clamped to the world and the Web
-// Mercator latitude limit, so one padded fetch covers more than the visible area and a small pan
-// reuses it. Shared by the notes and AIS-trails overlays.
+// Expand a viewport bbox outward by `fraction` on each side, so one padded fetch covers more than
+// the visible area and a small pan reuses it. Shared by the notes and AIS-trails overlays.
+//
+// Latitude is clamped to the Web Mercator limit; longitude deliberately is NOT clamped into
+// [-180, 180]. MapLibre reports an unwrapped viewport at the antimeridian (LngLatBounds.extend
+// takes a plain min/max of lng, so a west of 178 with an east of 182 is exactly what getBounds
+// returns there). Clamping the padded east back to 180 made bboxContains fail against that
+// viewport every time, so the coverage cache missed on every move and the overlays refetched
+// continuously in the one region where boats cross oceans. Coverage comparisons therefore stay in
+// the unwrapped space MapLibre reports, and splitAtAntimeridian normalizes at the request edge.
 export function padBbox(
   [west, south, east, north]: Bbox4,
   fraction: number = VIEWPORT_FETCH_PAD_FRACTION,
@@ -102,12 +129,13 @@ export function padBbox(
   const lonSpan = unwrapEast(west, east) - west;
   const dx = lonSpan * fraction;
   const dy = (north - south) * fraction;
-  return clampToWorld([west - dx, south - dy, east + dx, north + dy]);
+  return clampLatitudes([west - dx, south - dy, east + dx, north + dy]);
 }
 
-// Whether outer fully encloses inner, for cache-coverage checks. Non-crossing boxes only: the edge
-// comparisons are meaningless for a box that wraps the antimeridian (east < west). Its callers pass
-// viewport boxes, which MapLibre reports non-crossing.
+// Whether outer fully encloses inner, for cache-coverage checks. Both boxes must be expressed the
+// same way: west below east, in the possibly-unwrapped space padBbox and the MapLibre viewport
+// share. The edge comparisons are meaningless for a box in the west greater than east crossing
+// convention (boundsOfPoints emits those; they are for fitting, not for coverage).
 export function bboxContains(outer: Bbox4, inner: Bbox4): boolean {
   return (
     outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3]

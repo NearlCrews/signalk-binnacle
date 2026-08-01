@@ -179,4 +179,60 @@ describe('fetchNotes', () => {
       description: undefined,
     });
   });
+
+  describe('at the antimeridian', () => {
+    const positioned = (name: string, longitude: number) => ({
+      name,
+      position: { latitude: 1, longitude },
+    });
+
+    it('splits an unwrapped area into two requests, each with an in-range bbox', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+      vi.stubGlobal('fetch', fetchMock);
+      await fetchNotes('http://pi', undefined, [170, 0, 190, 10]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const boxes = fetchMock.mock.calls.map((call) =>
+        JSON.parse(new URL(String(call[0])).searchParams.get('bbox') ?? '[]'),
+      );
+      expect(boxes).toEqual([
+        [170, 0, 180, 10],
+        [-180, 0, -170, 10],
+      ]);
+      for (const [west, , east] of boxes) {
+        expect(west).toBeGreaterThanOrEqual(-180);
+        expect(east).toBeLessThanOrEqual(180);
+      }
+    });
+
+    it('merges both sides and drops a note returned by both', async () => {
+      let call = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          call++ === 0
+            ? jsonResponse(200, {
+                seam: positioned('On the seam', 180),
+                w: positioned('West', 179),
+              })
+            : jsonResponse(200, {
+                seam: positioned('On the seam', -180),
+                e: positioned('East', -179),
+              }),
+        ),
+      );
+      const notes = await fetchNotes('http://pi', undefined, [170, 0, 190, 10]);
+      expect(notes?.map((note) => note.id)).toEqual(['seam', 'w', 'e']);
+    });
+
+    it('returns undefined when either side fails rather than caching half the area', async () => {
+      let call = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          call++ === 0 ? jsonResponse(200, { w: positioned('West', 179) }) : jsonResponse(500, {}),
+        ),
+      );
+      await expect(fetchNotes('http://pi', undefined, [170, 0, 190, 10])).resolves.toBeUndefined();
+    });
+  });
 });

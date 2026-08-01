@@ -164,4 +164,60 @@ describe('fetchAisTrails', () => {
     stubFetch({ ok: true, body: {} });
     await expect(fetchAisTrails(BASE, undefined, BBOX)).resolves.toEqual([]);
   });
+
+  describe('at the antimeridian', () => {
+    const UNWRAPPED: Bbox4 = [170, 0, 190, 10];
+
+    it('splits an unwrapped area into two in-range requests', async () => {
+      const mock = stubFetch({ ok: true, body: {} });
+      await fetchAisTrails(BASE, undefined, UNWRAPPED);
+      expect(mock).toHaveBeenCalledTimes(2);
+      expect(mock.mock.calls[0][0]).toBe(`${BASE}/signalk/v1/api/tracks?bbox=0,170,10,180`);
+      expect(mock.mock.calls[1][0]).toBe(`${BASE}/signalk/v1/api/tracks?bbox=0,-180,10,-170`);
+    });
+
+    it('merges both sides and keeps one line per vessel across the seam', async () => {
+      const multiLine = (...lines: Array<Array<[number, number]>>) => ({
+        type: 'MultiLineString',
+        coordinates: lines,
+      });
+      const west = {
+        'vessels.a': multiLine([
+          [179, 1],
+          [180, 1],
+        ]),
+      };
+      const east = {
+        'vessels.a': multiLine([
+          [-180, 1],
+          [-179, 1],
+        ]),
+        'vessels.b': multiLine([
+          [-178, 2],
+          [-177, 2],
+        ]),
+      };
+      let call = 0;
+      const mock = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => (call++ === 0 ? west : east),
+      }));
+      vi.stubGlobal('fetch', mock);
+      const trails = await fetchAisTrails(BASE, undefined, UNWRAPPED);
+      expect(trails?.map((trail) => trail.context)).toEqual(['vessels.a', 'vessels.b']);
+    });
+
+    it('returns undefined when either side fails rather than half the picture', async () => {
+      let call = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          const ok = call++ === 0;
+          return { ok, status: ok ? 200 : 500, json: async () => ({}) };
+        }),
+      );
+      await expect(fetchAisTrails(BASE, undefined, UNWRAPPED)).resolves.toBeUndefined();
+    });
+  });
 });

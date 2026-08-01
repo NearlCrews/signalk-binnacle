@@ -9,6 +9,7 @@ export {
   lngLatBoundsToBbox4,
   normalizeBounds,
   padBbox,
+  splitAtAntimeridian,
   VIEWPORT_FETCH_PAD_FRACTION,
 } from './bounds';
 export type { LatLon, LonLat } from './geo-guards';

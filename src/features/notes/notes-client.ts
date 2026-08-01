@@ -5,7 +5,7 @@ import {
   type PoiType,
   poiCategoryForType,
 } from '$entities/poi-icons';
-import { type Bbox4, isLatLon } from '$shared/geo';
+import { type Bbox4, isLatLon, splitAtAntimeridian } from '$shared/geo';
 import { hasControlCharacters } from '$shared/lib';
 import { fetchKeyedResource, str } from '$shared/signalk';
 import {
@@ -102,23 +102,42 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
 // fetch returns undefined so the overlay keeps the markers already shown rather than blanking
 // them on a transient hiccup (a slow or rate-limited provider); a reachable area with no notes
 // returns [].
-export function fetchNotes(
+export async function fetchNotes(
   serverBase: string,
   token: string | undefined,
   bbox: Bbox4,
 ): Promise<NotePoint[] | undefined> {
-  const params = new URLSearchParams({ bbox: JSON.stringify(bbox) });
+  // A padded viewport at the antimeridian carries unwrapped longitudes (an east past 180), which no
+  // server can match. Ask for each in-range piece and merge. Away from the seam this is one box and
+  // one request, the same as before.
+  const boxes = splitAtAntimeridian(bbox);
+  if (boxes.length === 0) return undefined;
   let accepted = 0;
-  return fetchKeyedResource(
-    serverBase,
-    [`${NOTES_PATH}?${params}`, `${NOTES_V1_PATH}?${params}`],
-    token,
-    (id, raw) => {
-      if (accepted >= MAX_NOTES_PER_VIEW) return undefined;
-      const note = noteFromEntry(id, raw);
-      if (note) accepted += 1;
-      return note;
-    },
-    (url, status) => console.warn(`[notes] ${url} returned ${status}`),
-  );
+  const seenIds = new Set<string>();
+  const merged: NotePoint[] = [];
+  for (const box of boxes) {
+    const params = new URLSearchParams({ bbox: JSON.stringify(box) });
+    const notes = await fetchKeyedResource(
+      serverBase,
+      [`${NOTES_PATH}?${params}`, `${NOTES_V1_PATH}?${params}`],
+      token,
+      (id, raw) => {
+        if (accepted >= MAX_NOTES_PER_VIEW) return undefined;
+        const note = noteFromEntry(id, raw);
+        if (note) accepted += 1;
+        return note;
+      },
+      (url, status) => console.warn(`[notes] ${url} returned ${status}`),
+    );
+    // One failed piece makes the whole area unanswered: reporting a half-covered result would let
+    // the overlay cache it as complete and hide the notes on the other side of the seam.
+    if (!notes) return undefined;
+    for (const note of notes) {
+      // The two pieces meet at the seam, so a note exactly on 180 can come back from both.
+      if (seenIds.has(note.id)) continue;
+      seenIds.add(note.id);
+      merged.push(note);
+    }
+  }
+  return merged;
 }
