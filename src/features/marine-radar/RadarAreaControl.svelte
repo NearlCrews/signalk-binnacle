@@ -227,9 +227,12 @@ $effect(() => {
   }
 });
 
+// Assigned, not latched: another station reverting its change, or a provider that bounced and
+// republished the original geometry, must clear the conflict and unblock this draft again rather
+// than forcing the navigator to discard work over a change that no longer exists.
 $effect(() => {
   if (!activeDraft || !accepted || !baselineSignature) return;
-  if (structuredSignature(accepted) !== baselineSignature) conflict = true;
+  conflict = structuredSignature(accepted) !== baselineSignature;
 });
 
 $effect(() => {

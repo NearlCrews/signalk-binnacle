@@ -238,8 +238,14 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
           }
           const spent = liveFrame;
           liveFrame = frame;
-          layer.pushFrame(frame);
-          if (spent) worker?.recycle(spent.buffer);
+          // The recycle is the worker's flush credit, so it has to happen even if the renderer
+          // throws: a swallowed buffer would permanently lower the flush budget and eventually
+          // stall the sweep.
+          try {
+            layer.pushFrame(frame);
+          } finally {
+            if (spent) worker?.recycle(spent.buffer);
+          }
           store.lastSpokeAt = Date.now();
           store.setStatus('live');
           reopenAttempt = 0;

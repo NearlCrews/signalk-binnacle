@@ -80,6 +80,27 @@ describe('RadarAreaControl interactions', () => {
     });
   });
 
+  it('clears the conflict when the accepted geometry returns to the draft baseline', () => {
+    const panel = mountArea();
+    panel.click('Edit no-transmit sector');
+    expect(panel.target.textContent).not.toContain('The radar changed this area');
+
+    // Another station moved the sector while this draft was open.
+    panel.props.entry = { value: -2, endValue: 1, enabled: false, allowed: true };
+    flushSync();
+    expect(panel.target.textContent).toContain('The radar changed this area');
+
+    // That station reverted it, or the provider bounced and republished the original geometry.
+    // The draft must become saveable again rather than staying blocked on a change that is gone.
+    panel.props.entry = { value: -1, endValue: 1, enabled: false, allowed: true };
+    flushSync();
+    expect(panel.target.textContent).not.toContain('The radar changed this area');
+    const save = [...panel.target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Review sector save',
+    );
+    expect(save?.disabled).toBe(false);
+  });
+
   it('starts explicit chart editing only from an active form draft', () => {
     const panel = mountArea();
     panel.click('Edit no-transmit sector');

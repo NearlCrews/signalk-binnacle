@@ -1,4 +1,5 @@
 import * as Comlink from 'comlink';
+import { RadarFlushGate } from './radar-flush-gate';
 import { type RadarFrame, RadarFrameCore } from './radar-frame-core';
 import { MAX_RADAR_MESSAGE_BYTES } from './radar-limits';
 import type { RadarStreamStatus } from './radar-worker-client';
@@ -15,6 +16,8 @@ class RadarWorker {
   // The Comlink callback proxies for the current open(), released on the next open() or on close() so
   // their MessagePorts do not accumulate across radar switches.
   #callbacks: Releasable[] = [];
+  // Backpressure: pauses the flush loop while the main thread is behind on the frames already sent.
+  readonly #flushGate = new RadarFlushGate();
 
   #stopTimer(): void {
     if (this.#timer) {
@@ -25,6 +28,7 @@ class RadarWorker {
 
   #teardown(): void {
     this.#stopTimer();
+    this.#flushGate.reset();
     if (this.#socket) {
       // Detach the handlers before closing so an intentional teardown (a new open() or a close()) does
       // not fire onStatus('closed'), which the controller would map to an error and flash on the panel.
@@ -98,15 +102,21 @@ class RadarWorker {
     this.#timer = setInterval(
       () => {
         if (!core.hasPendingSpokes) return;
+        // Hold the sweep here rather than queueing another frame the renderer has not asked for.
+        // Spokes keep integrating into the accumulator either way.
+        if (!this.#flushGate.ready) return;
         const frame = core.flush();
+        this.#flushGate.onFlush();
         onFrame(Comlink.transfer(frame, [frame.buffer]));
       },
       Math.max(1, Math.round(1000 / flushHz)),
     );
   }
 
-  // Take back a spent transfer buffer from the main thread so the next flush reuses it.
+  // Take back a spent transfer buffer from the main thread so the next flush reuses it. This is
+  // also the flush credit: returning a buffer is what proves the renderer consumed a frame.
   async recycle(buffer: ArrayBuffer): Promise<void> {
+    this.#flushGate.onConsumed();
     this.#core?.recycle(buffer);
   }
 
