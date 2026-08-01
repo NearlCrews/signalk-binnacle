@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { expectBearerAuth } from '$shared/testing';
+import { expectBearerAuth, stubFetch } from '$shared/testing';
 import {
   dropAnchorOnServer,
   putServerAnchorPosition,
@@ -8,15 +8,6 @@ import {
 } from './anchor-client';
 
 const BASE = 'https://boat.example';
-
-function stubFetch(response: { ok: boolean } | 'reject') {
-  const mock = vi.fn(async (_url: string, _init?: RequestInit) => {
-    if (response === 'reject') throw new TypeError('network down');
-    return { ok: response.ok } as Response;
-  });
-  vi.stubGlobal('fetch', mock);
-  return mock;
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();

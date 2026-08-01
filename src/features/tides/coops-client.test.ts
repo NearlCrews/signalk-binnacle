@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stubFetch } from '$shared/testing';
 import {
   fetchCurrentEvents,
   fetchCurrentStations,
@@ -7,11 +8,9 @@ import {
   utcYmd,
 } from './coops-client';
 
-function mockFetch(json: unknown, ok = true, status = 200): ReturnType<typeof vi.fn> {
-  const mock = vi.fn(async () => ({ ok, status, json: async () => json }));
-  vi.stubGlobal('fetch', mock);
-  return mock;
-}
+// This file's calls read json-first, which suits a client whose responses are all one body; the
+// stubbing itself is the shared helper's.
+const mockFetch = (json: unknown, ok = true, status = 200) => stubFetch({ body: json, ok, status });
 
 afterEach(() => {
   vi.unstubAllGlobals();

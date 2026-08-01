@@ -81,6 +81,21 @@ sessions.
 For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
 publishing.
 
+## Lint Rule Exceptions
+
+`biome.json` turns off three accessibility rules for `.svelte` only: `useValidAriaValues`,
+`useSemanticElements`, and `noLabelWithoutControl`. Biome's Svelte support is partial (it sees the
+script and style blocks, not the template's control flow), and on valid Svelte these three report
+false positives: a dynamic ARIA binding, a `role="group"` toolbar, and a label wrapping a child
+component's control. They are not waived, they are enforced elsewhere: Svelte's own compiler
+warnings surface through `svelte-check`, and `@axe-core/playwright` scans the running app in the E2E
+gate. Narrow the override if a rule is ever clean on this codebase; do not widen it.
+
+`noUnusedFunctionParameters` and `noUnusedVariables` are off for `.svelte` for the same reason (a
+`{#snippet}` parameter or a prop used only in the template reads as unused to Biome).
+`noUnusedLocals` and `noUnusedParameters` in `tsconfig.app.json`, which svelte-check enforces and
+which does see template usage, is the real backstop.
+
 ## Git Hygiene
 
 - The repo normally works directly on `main`.

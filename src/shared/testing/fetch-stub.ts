@@ -15,22 +15,29 @@ export function jsonResponse(status: number, body: unknown): Response {
   } as unknown as Response;
 }
 
+interface StubResponse {
+  ok: boolean;
+  status?: number;
+  body?: unknown;
+  rejectJson?: boolean;
+}
+
 // Test-only fetch stub shared by the REST client tests: stubs the global fetch with a mock that
 // answers { ok, body } or throws on 'reject', returning the mock for call assertions. Set rejectJson
 // to make response.json() throw, modeling a 200 with an empty or invalid body (which real Response
-// rejects on), so a client's parse-degrade path can be exercised. Callers own the
+// rejects on), so a client's parse-degrade path can be exercised. Pass a function instead to answer
+// per URL, which is what a client that probes several routes to pick one needs. Callers own the
 // vi.unstubAllGlobals() in their afterEach. Imported by *.test.ts files only.
-export function stubFetch(
-  response: { ok: boolean; status?: number; body?: unknown; rejectJson?: boolean } | 'reject',
-) {
-  const mock = vi.fn(async (_url: string, _init?: RequestInit) => {
+export function stubFetch(response: StubResponse | 'reject' | ((url: string) => StubResponse)) {
+  const mock = vi.fn(async (url: string, _init?: RequestInit) => {
     if (response === 'reject') throw new TypeError('network down');
+    const answer = typeof response === 'function' ? response(url) : response;
     return {
-      ok: response.ok,
-      status: response.status ?? (response.ok ? 200 : 500),
+      ok: answer.ok,
+      status: answer.status ?? (answer.ok ? 200 : 500),
       json: async () => {
-        if (response.rejectJson) throw new SyntaxError('Unexpected end of JSON input');
-        return response.body;
+        if (answer.rejectJson) throw new SyntaxError('Unexpected end of JSON input');
+        return answer.body;
       },
     } as Response;
   });

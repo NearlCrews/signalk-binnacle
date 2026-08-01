@@ -1,17 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stubFetch } from '$shared/testing';
 import { NO_ANCHOR_TRANSPORT, resolveAnchorTransport } from './anchor-transport';
 
 const BASE = 'https://boat.example';
 const API = `${BASE}/signalk/v2/api/vessels/self/navigation/anchor`;
 const PLUGIN = `${BASE}/plugins/anchoralarm`;
-
-function stubFetch(okFor: (url: string) => boolean = () => true) {
-  const mock = vi.fn(async (url: string, _init?: RequestInit) => {
-    return { ok: okFor(url) } as Response;
-  });
-  vi.stubGlobal('fetch', mock);
-  return mock;
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -19,7 +12,7 @@ afterEach(() => {
 
 describe('resolveAnchorTransport', () => {
   it('picks the standard API when the features endpoint advertises it', async () => {
-    const mock = stubFetch();
+    const mock = stubFetch({ ok: true });
     const transport = resolveAnchorTransport(BASE, () => 'tok', { standardApiAvailable: true });
     expect(transport.kind).toBe('standard');
     await expect(transport.raise()).resolves.toBe(true);
@@ -36,7 +29,7 @@ describe('resolveAnchorTransport', () => {
   });
 
   it('standard drop posts drop then the radius', async () => {
-    const mock = stubFetch();
+    const mock = stubFetch({ ok: true });
     const transport = resolveAnchorTransport(BASE, () => 'tok', { standardApiAvailable: true });
     await expect(transport.drop(45)).resolves.toBe(true);
     const urls = mock.mock.calls.map((call) => call[0]);
@@ -46,20 +39,20 @@ describe('resolveAnchorTransport', () => {
   });
 
   it('standard drop fails without attempting the radius when the drop is refused', async () => {
-    const mock = stubFetch(() => false);
+    const mock = stubFetch({ ok: false });
     const transport = resolveAnchorTransport(BASE, () => undefined, { standardApiAvailable: true });
     await expect(transport.drop(45)).resolves.toBe(false);
     expect(mock.mock.calls.map((call) => call[0])).toEqual([`${API}/drop`]);
   });
 
   it('standard drop still succeeds when only the radius call fails', async () => {
-    stubFetch((url) => !url.endsWith('/radius'));
+    stubFetch((url) => ({ ok: !url.endsWith('/radius') }));
     const transport = resolveAnchorTransport(BASE, () => undefined, { standardApiAvailable: true });
     await expect(transport.drop(45)).resolves.toBe(true);
   });
 
   it('falls back to the plugin endpoints when the standard API is absent', async () => {
-    const mock = stubFetch();
+    const mock = stubFetch({ ok: true });
     const transport = resolveAnchorTransport(BASE, () => 'tok', { standardApiAvailable: false });
     expect(transport.kind).toBe('plugin');
     expect(transport.reposition).toBeUndefined();
@@ -78,7 +71,7 @@ describe('resolveAnchorTransport', () => {
   });
 
   it('the none transport refuses every action without touching the network', async () => {
-    const mock = stubFetch();
+    const mock = stubFetch({ ok: true });
     expect(NO_ANCHOR_TRANSPORT.kind).toBe('none');
     await expect(NO_ANCHOR_TRANSPORT.drop(45)).resolves.toBe(false);
     await expect(NO_ANCHOR_TRANSPORT.raise()).resolves.toBe(false);
