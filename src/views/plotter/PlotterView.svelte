@@ -123,7 +123,7 @@ interface FlatProps {
   trends: import('$features/trends').TrendsController;
   weatherLoader: ReturnType<typeof import('$features/weather').createWeatherLoader>;
   pointConditionsLoader: ReturnType<typeof import('$features/weather').createPointConditionsLoader>;
-  planningSpeedKn: import('$shared/settings').PersistedValue<number>;
+  planningSpeedMps: import('$shared/settings').PersistedValue<number>;
   thresholds: import('$shared/settings').PersistedValue<import('$shared/settings').Thresholds>;
   routeDistanceToGoMeters: number | undefined;
 
@@ -249,7 +249,7 @@ type ServiceKey =
   | 'trends'
   | 'weatherLoader'
   | 'pointConditionsLoader'
-  | 'planningSpeedKn'
+  | 'planningSpeedMps'
   | 'thresholds'
   | 'trackSettings'
   | 'categoriesOpen'
@@ -400,7 +400,7 @@ const {
   trends,
   weatherLoader,
   pointConditionsLoader,
-  planningSpeedKn,
+  planningSpeedMps,
   thresholds,
   trackSettings,
   categoriesOpen,
@@ -935,7 +935,7 @@ $effect(() => {
           onReverse={routeController.onReverseRoute}
           onExportGpx={routeController.onExportRouteGpx}
           onImportGpx={routeController.onImportRouteGpx}
-          planningSpeed={planningSpeedKn}
+          planningSpeed={planningSpeedMps}
           onDelete={routeController.onDeleteRoute}
           onClose={closeRoutesPanel}
           onBack={backFromRoutesPanel}

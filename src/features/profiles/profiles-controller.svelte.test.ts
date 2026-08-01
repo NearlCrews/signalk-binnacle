@@ -25,7 +25,7 @@ function settings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
       warningTcpaSeconds: 1200,
     },
     trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-    planningSpeedKn: 6,
+    planningSpeedMps: 6,
     units: 'metric',
     pinnedActionIds: ['center'],
     instrumentTiles: ['depth'],
@@ -48,7 +48,7 @@ function profile(
     createdAt: 1,
     updatedAt,
     nameUpdatedAt: updatedAt,
-    settingUpdatedAt: { theme: updatedAt, planningSpeedKn: updatedAt },
+    settingUpdatedAt: { theme: updatedAt, planningSpeedMps: updatedAt },
   };
 }
 
@@ -127,7 +127,7 @@ describe('createProfilesController', () => {
 
   it('captures the current browser setup when synced profiles have no default', async () => {
     const remote = profile('remote', 'Remote helm', 10, { theme: 'night-red' });
-    const current = settings({ theme: 'dusk', planningSpeedKn: 8 });
+    const current = settings({ theme: 'dusk', planningSpeedMps: 8 });
     const store = new ProfileStore(localAdapter());
     const bound = bindings(current);
     const controller = createProfilesController({
@@ -172,11 +172,11 @@ describe('createProfilesController', () => {
     await controller.initialize();
     await tick();
 
-    bound.set(settings({ planningSpeedKn: 9 }));
+    bound.set(settings({ planningSpeedMps: 9 }));
     controller.observeSettings();
     await vi.advanceTimersByTimeAsync(20);
 
-    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.planningSpeedMps).toBe(9);
     controller.dispose();
     vi.useRealTimers();
   });
@@ -216,13 +216,13 @@ describe('createProfilesController', () => {
 
     expect(store.remoteUpdateAvailable).toBe(true);
     expect(bound.current().theme).toBe('day');
-    bound.set(settings({ theme: 'day', planningSpeedKn: 9 }));
+    bound.set(settings({ theme: 'day', planningSpeedMps: 9 }));
     controller.observeSettings();
     controller.applyRemoteUpdate();
     expect(store.active?.settings.theme).toBe('night-red');
-    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.planningSpeedMps).toBe(9);
     expect(bound.current().theme).toBe('night-red');
-    expect(bound.current().planningSpeedKn).toBe(9);
+    expect(bound.current().planningSpeedMps).toBe(9);
     expect(store.remoteUpdateAvailable).toBe(false);
   });
 
@@ -339,14 +339,14 @@ describe('createProfilesController', () => {
       applyRuntime: () => undefined,
     });
     controller.observeSettings();
-    bound.set(settings({ theme: 'dusk', planningSpeedKn: 8 }));
+    bound.set(settings({ theme: 'dusk', planningSpeedMps: 8 }));
     controller.observeSettings();
 
     await controller.initialize(remoteAdapter([{ ...emptySnapshot(), revision: 1 }]));
 
     expect(store.active?.name).toBe('Current setup');
     expect(store.active?.settings.theme).toBe('dusk');
-    expect(store.active?.settings.planningSpeedKn).toBe(8);
+    expect(store.active?.settings.planningSpeedMps).toBe(8);
   });
 
   it('treats a failed initial hydration as a replaceable offline fallback', async () => {
@@ -504,11 +504,11 @@ describe('createProfilesController', () => {
     throwNext = true;
 
     expect(() => controller.apply(second.id)).toThrow('map failed');
-    bound.set(settings({ planningSpeedKn: 9 }));
+    bound.set(settings({ planningSpeedMps: 9 }));
     controller.observeSettings();
     controller.flushAutosave();
 
-    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.planningSpeedMps).toBe(9);
   });
 });
 

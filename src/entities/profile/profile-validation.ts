@@ -4,11 +4,14 @@ import {
   isFiniteNumber,
   isRecord,
   isSafeNonNegativeInteger,
+  knotsToMetersPerSecond,
 } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
 import {
   isThresholds,
   isTrackSettings,
+  MAX_PLANNING_SPEED_KN,
+  MAX_PLANNING_SPEED_MPS,
   type Thresholds,
   type TrackSettings,
 } from '$shared/settings';
@@ -38,6 +41,9 @@ const KNOWN_SETTING_KEYS = new Set<string>([
   'layerCategories',
   'arrivalMuted',
   'mode',
+  // Retired in favor of planningSpeedMps, but still a known field rather than a user extension:
+  // a profile written before the SI migration carries it, and sanitizeProfileSettings drops it.
+  'planningSpeedKn',
 ]);
 const DANGEROUS_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
@@ -167,8 +173,43 @@ function validExtensionValue(
 }
 
 export function sanitizeProfileSettings(settings: ProfileSettings): ProfileSettings {
-  const { layerCategories: _layerCategories, arrivalMuted: _arrivalMuted, ...portable } = settings;
-  return portable;
+  const {
+    layerCategories: _layerCategories,
+    arrivalMuted: _arrivalMuted,
+    planningSpeedKn,
+    ...portable
+  } = settings;
+  // Convert a pre-SI profile's knots once, on the way in, so nothing downstream has to know the
+  // stored unit. An explicit SI value always wins: a document carrying both was written by a newer
+  // build, and its knots field is the stale one.
+  return portable.planningSpeedMps === undefined && planningSpeedKn !== undefined
+    ? { ...portable, planningSpeedMps: knotsToMetersPerSecond(planningSpeedKn) }
+    : portable;
+}
+
+// Adopt a stored or remote profile: convert its settings and carry the planning-speed merge clock
+// across the rename, so two devices that migrate the same legacy profile still resolve newest-wins
+// instead of tying at zero.
+export function adoptStoredProfile(profile: Profile): Profile {
+  const settings = sanitizeProfileSettings(profile.settings);
+  const clocks = profile.settingUpdatedAt;
+  if (clocks?.planningSpeedKn === undefined) return { ...profile, settings };
+  // Drop the retired clock as well as carrying it forward: left in place it would be an extension
+  // key with no value on either side, and the merge would copy it forward on every sync forever.
+  const { planningSpeedKn, ...rest } = clocks;
+  return {
+    ...profile,
+    settings,
+    settingUpdatedAt:
+      rest.planningSpeedMps === undefined ? { ...rest, planningSpeedMps: planningSpeedKn } : rest,
+  };
+}
+
+// A planning speed is valid when it is a finite number inside its unit's range. `legacyAlternative`
+// lets the SI field be absent when the document still carries the pre-migration knots field.
+function validPlanningSpeed(value: unknown, max: number, legacyAlternative?: unknown): boolean {
+  if (value === undefined && legacyAlternative !== undefined) return true;
+  return isFiniteNumber(value) && value >= 0 && value <= max;
 }
 
 export function isProfileSettings(value: unknown): value is ProfileSettings {
@@ -185,10 +226,15 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   ) {
     return false;
   }
+  // Either unit is accepted on read: profiles saved before the SI migration carry knots, and
+  // rejecting those would silently drop the whole profile rather than one stale field.
+  // sanitizeProfileSettings converts and drops the legacy field on the way in.
+  if (!validPlanningSpeed(value.planningSpeedMps, MAX_PLANNING_SPEED_MPS, value.planningSpeedKn)) {
+    return false;
+  }
   if (
-    !isFiniteNumber(value.planningSpeedKn) ||
-    value.planningSpeedKn < 0 ||
-    value.planningSpeedKn > 100
+    value.planningSpeedKn !== undefined &&
+    !validPlanningSpeed(value.planningSpeedKn, MAX_PLANNING_SPEED_KN)
   ) {
     return false;
   }

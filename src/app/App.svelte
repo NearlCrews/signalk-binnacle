@@ -142,6 +142,7 @@ import {
   booleanPersistedCodec,
   booleanRecordPersistedCodec,
   createMapView,
+  createPlanningSpeed,
   createThresholds,
   createTrackSettings,
   isMapView,
@@ -299,14 +300,9 @@ const arrivalMuted = new PersistedValue<boolean>(
   undefined,
   booleanPersistedCodec,
 );
-// The speed, in knots, used to turn a planned route's distance into per-waypoint passage times.
-const planningSpeedKn = new PersistedValue<number>(
-  binnacleStorageKey('planningSpeedKn'),
-  5,
-  undefined,
-  (value): value is number =>
-    typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100,
-);
+// The speed used to turn a planned route's distance into per-waypoint passage times. Stored in SI
+// (m/s), migrating a pre-SI device's knots on first read; the route plan converts at its field.
+const planningSpeedMps = createPlanningSpeed();
 
 // Whole-route distance still to run across the legs ahead, for the passage arrival readout. Only when
 // a multi-leg route is active and more than the current leg remains, so a single "go to" or the final
@@ -846,7 +842,7 @@ const profileBindings = createProfileBindings({
   weatherLayers: weatherLayerSettings,
   thresholds,
   trackSettings,
-  planningSpeedKn,
+  planningSpeedMps,
   unitsLocal: units.localSetting,
   pinnedActions,
   instrumentTiles,
@@ -2119,7 +2115,7 @@ const plotterServices = {
   trends,
   weatherLoader,
   pointConditionsLoader,
-  planningSpeedKn,
+  planningSpeedMps,
   thresholds,
   trackSettings,
   categoriesOpen: layerCategoriesOpen,

@@ -20,7 +20,7 @@ const settings = (overrides: Partial<ProfileSettings> = {}): ProfileSettings => 
     warningTcpaSeconds: 1200,
   },
   trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-  planningSpeedKn: 6,
+  planningSpeedMps: 6,
   arrivalMuted: false,
   ...overrides,
 });
@@ -88,9 +88,9 @@ describe('isProfileSettings', () => {
     ).toBe(false);
   });
 
-  it('rejects a non-number planningSpeedKn', () => {
-    expect(isProfileSettings(settings({ planningSpeedKn: '6' as never }))).toBe(false);
-    expect(isProfileSettings(settings({ planningSpeedKn: Number.NaN }))).toBe(false);
+  it('rejects a non-number planningSpeedMps', () => {
+    expect(isProfileSettings(settings({ planningSpeedMps: '6' as never }))).toBe(false);
+    expect(isProfileSettings(settings({ planningSpeedMps: Number.NaN }))).toBe(false);
   });
 
   it('rejects a non-boolean arrivalMuted', () => {
@@ -130,10 +130,10 @@ describe('isProfileSettings', () => {
 
 describe('parseProfilesJson', () => {
   it('reads a single exported Profile, keeping its name and settings', () => {
-    const out = parseProfilesJson(JSON.stringify(profile('Coastal', { planningSpeedKn: 9 })));
+    const out = parseProfilesJson(JSON.stringify(profile('Coastal', { planningSpeedMps: 9 })));
     expect(out).toHaveLength(1);
     expect(out[0].name).toBe('Coastal');
-    expect(out[0].settings.planningSpeedKn).toBe(9);
+    expect(out[0].settings.planningSpeedMps).toBe(9);
   });
 
   it('reads an array of two Profiles', () => {
@@ -147,10 +147,10 @@ describe('parseProfilesJson', () => {
   });
 
   it('reads a bare ProfileSettings object with a fallback name', () => {
-    const out = parseProfilesJson(JSON.stringify(settings({ planningSpeedKn: 7 })));
+    const out = parseProfilesJson(JSON.stringify(settings({ planningSpeedMps: 7 })));
     expect(out).toHaveLength(1);
     expect(out[0].name).toBe('Imported profile');
-    expect(out[0].settings.planningSpeedKn).toBe(7);
+    expect(out[0].settings.planningSpeedMps).toBe(7);
   });
 
   it('reads an array of bare ProfileSettings with fallback names', () => {
@@ -173,7 +173,7 @@ describe('parseProfilesJson', () => {
 
   it('drops a Profile whose settings are corrupt', () => {
     const bad = profile('Coastal');
-    (bad.settings as unknown as Record<string, unknown>).planningSpeedKn = 'fast';
+    (bad.settings as unknown as Record<string, unknown>).planningSpeedMps = 'fast';
     expect(parseProfilesJson(JSON.stringify(bad))).toEqual([]);
   });
 
@@ -236,9 +236,9 @@ describe('parseProfilesJson', () => {
 describe('downloadProfileJson', () => {
   it('is a safe no-op in a non-DOM environment', () => {
     const out: ImportedProfile[] = parseProfilesJson(
-      JSON.stringify(profile('Roundtrip', { planningSpeedKn: 8 })),
+      JSON.stringify(profile('Roundtrip', { planningSpeedMps: 8 })),
     );
-    expect(out[0].settings.planningSpeedKn).toBe(8);
+    expect(out[0].settings.planningSpeedMps).toBe(8);
     expect(() => downloadProfileJson(profile('Coastal'))).not.toThrow();
   });
 });

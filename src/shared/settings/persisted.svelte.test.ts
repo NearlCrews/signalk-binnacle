@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { knotsToMetersPerSecond } from '$shared/lib';
+import { binnacleStorageKey } from '$shared/persistence';
 import {
   booleanRecordPersistedCodec,
   createMapView,
   createPersistedCodec,
+  createPlanningSpeed,
   DEFAULT_THRESHOLDS,
   isMapView,
   isThresholds,
   isTrackSettings,
+  MAX_PLANNING_SPEED_MPS,
   PersistedValue,
   stringArrayPersistedCodec,
 } from './persisted.svelte';
@@ -263,5 +267,42 @@ describe('isTrackSettings', () => {
     expect(isTrackSettings({ intervalSeconds: 10, minMeters: 10_001, colorMode: 'speed' })).toBe(
       false,
     );
+  });
+});
+
+describe('createPlanningSpeed', () => {
+  const SI_KEY = binnacleStorageKey('planningSpeedMps');
+  const LEGACY_KEY = binnacleStorageKey('planningSpeedKn');
+
+  it('defaults to five knots in SI when nothing is stored', () => {
+    const speed = createPlanningSpeed(fakeStorage(new Map()));
+    expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
+  });
+
+  it('converts a legacy knots value once and writes it back in SI', () => {
+    const store = new Map([[LEGACY_KEY, '7']]);
+    const speed = createPlanningSpeed(fakeStorage(store));
+    expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(7), 9);
+    expect(JSON.parse(store.get(SI_KEY) ?? 'null')).toBeCloseTo(knotsToMetersPerSecond(7), 9);
+  });
+
+  it('prefers a stored SI value over a stale legacy one', () => {
+    const store = new Map([
+      [LEGACY_KEY, '7'],
+      [SI_KEY, String(knotsToMetersPerSecond(9))],
+    ]);
+    expect(createPlanningSpeed(fakeStorage(store)).value).toBeCloseTo(knotsToMetersPerSecond(9), 9);
+  });
+
+  it('ignores an out-of-range or malformed legacy value and keeps the default', () => {
+    for (const legacy of ['500', '-1', '"fast"', 'not json']) {
+      const speed = createPlanningSpeed(fakeStorage(new Map([[LEGACY_KEY, legacy]])));
+      expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
+    }
+  });
+
+  it('replaces a stored SI value above the ceiling with the default', () => {
+    const store = new Map([[SI_KEY, String(MAX_PLANNING_SPEED_MPS + 1)]]);
+    expect(createPlanningSpeed(fakeStorage(store)).value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
   });
 });

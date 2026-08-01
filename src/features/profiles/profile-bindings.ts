@@ -15,7 +15,7 @@ export interface ProfileBindingDeps {
   weatherLayers: PersistedValue<LayerSettings>;
   thresholds: PersistedValue<Thresholds>;
   trackSettings: PersistedValue<TrackSettings>;
-  planningSpeedKn: PersistedValue<number>;
+  planningSpeedMps: PersistedValue<number>;
   // The local units fallback (the server preference, when resolved, wins outside profiles).
   unitsLocal: PersistedValue<UnitsMode>;
   // The bottom-bar pinned action ids.
@@ -82,10 +82,10 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       write: (s) => deps.trackSettings.set(s.trackSettings),
       track: () => void deps.trackSettings.value,
     },
-    planningSpeedKn: {
-      read: () => ({ planningSpeedKn: deps.planningSpeedKn.snapshot() }),
-      write: (s) => deps.planningSpeedKn.set(s.planningSpeedKn),
-      track: () => void deps.planningSpeedKn.value,
+    planningSpeedMps: {
+      read: () => ({ planningSpeedMps: deps.planningSpeedMps.snapshot() }),
+      write: (s) => deps.planningSpeedMps.set(s.planningSpeedMps),
+      track: () => void deps.planningSpeedMps.value,
     },
     pinnedActionIds: {
       read: () => ({ pinnedActionIds: deps.pinnedActions.snapshot() }),

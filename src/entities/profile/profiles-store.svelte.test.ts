@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { knotsToMetersPerSecond } from '$shared/lib';
 import type {
   Profile,
   ProfileServerMutation,
@@ -39,7 +40,7 @@ function settings(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
       warningTcpaSeconds: 1200,
     },
     trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-    planningSpeedKn: 6,
+    planningSpeedMps: 6,
     units: 'metric',
     pinnedActionIds: ['center'],
     instrumentTiles: ['depth'],
@@ -410,12 +411,12 @@ describe('ProfileStore local behavior', () => {
   it('updates only changed portable fields and preserves forward-compatible settings', () => {
     const store = new ProfileStore(fakeAdapter());
     const saved = store.save('Anchor', settings({ mode: 'anchor' }));
-    store.update(saved.id, settings({ planningSpeedKn: 8 }));
+    store.update(saved.id, settings({ planningSpeedMps: 8 }));
     const updated = store.profileById(saved.id);
-    expect(updated?.settings.planningSpeedKn).toBe(8);
+    expect(updated?.settings.planningSpeedMps).toBe(8);
     expect(updated?.settings.mode).toBe('anchor');
-    expect(updated?.settingUpdatedAt?.planningSpeedKn).toBeGreaterThan(
-      saved.settingUpdatedAt?.planningSpeedKn ?? 0,
+    expect(updated?.settingUpdatedAt?.planningSpeedMps).toBeGreaterThan(
+      saved.settingUpdatedAt?.planningSpeedMps ?? 0,
     );
   });
 
@@ -583,10 +584,10 @@ describe('ProfileStore server synchronization', () => {
   });
 
   it('merges different fields from two stations instead of replacing the whole profile', async () => {
-    const local = profile('p1', 'Coastal', 4, { planningSpeedKn: 9, theme: 'day' });
-    local.settingUpdatedAt = { planningSpeedKn: 4, theme: 1 };
-    const remote = profile('p1', 'Coastal', 5, { planningSpeedKn: 6, theme: 'night-red' });
-    remote.settingUpdatedAt = { planningSpeedKn: 2, theme: 5 };
+    const local = profile('p1', 'Coastal', 4, { planningSpeedMps: 9, theme: 'day' });
+    local.settingUpdatedAt = { planningSpeedMps: 4, theme: 1 };
+    const remote = profile('p1', 'Coastal', 5, { planningSpeedMps: 6, theme: 'night-red' });
+    remote.settingUpdatedAt = { planningSpeedMps: 2, theme: 5 };
     const store = new ProfileStore(
       fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
     );
@@ -599,10 +600,10 @@ describe('ProfileStore server synchronization', () => {
 
     await store.syncWithServer(server);
     await flush();
-    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.planningSpeedMps).toBe(9);
     expect(store.active?.settings.theme).toBe('night-red');
     expect(store.activeId).toBe('p1');
-    expect(server.snapshot().profiles[0].settings.planningSpeedKn).toBe(9);
+    expect(server.snapshot().profiles[0].settings.planningSpeedMps).toBe(9);
     expect(server.snapshot().profiles[0].settings.theme).toBe('night-red');
   });
 
@@ -628,10 +629,10 @@ describe('ProfileStore server synchronization', () => {
   });
 
   it('preserves forward-compatible fields while merging a newer local portable setting', async () => {
-    const local = profile('p1', 'Coastal', 8, { planningSpeedKn: 9 });
+    const local = profile('p1', 'Coastal', 8, { planningSpeedMps: 9 });
     const remote = profile('p1', 'Coastal', 5, { mode: 'anchor' });
-    local.settingUpdatedAt = { planningSpeedKn: 8 };
-    remote.settingUpdatedAt = { planningSpeedKn: 2 };
+    local.settingUpdatedAt = { planningSpeedMps: 8 };
+    remote.settingUpdatedAt = { planningSpeedMps: 2 };
     const store = new ProfileStore(
       fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
     );
@@ -646,7 +647,7 @@ describe('ProfileStore server synchronization', () => {
     );
 
     expect(store.active?.settings.mode).toBe('anchor');
-    expect(store.active?.settings.planningSpeedKn).toBe(9);
+    expect(store.active?.settings.planningSpeedMps).toBe(9);
   });
 
   it('keeps each forward-compatible value paired with its winning field clock', async () => {
@@ -853,5 +854,48 @@ describe('ProfileStore server synchronization', () => {
 
     expect(persisted).toBeUndefined();
     expect(new ProfileStore(adapter).profiles).toEqual([]);
+  });
+});
+
+describe('planning speed SI migration', () => {
+  // A profile written before the planning speed moved to SI. `as` casts model the untyped document
+  // that actually arrives from storage or the server, not a shape this build can construct.
+  function legacyProfile(knots: number, clock?: number): Profile {
+    const { planningSpeedMps: _si, ...rest } = settings();
+    const legacySettings = { ...rest, planningSpeedKn: knots } as unknown as ProfileSettings;
+    return {
+      id: 'legacy',
+      name: 'Legacy',
+      settings: legacySettings,
+      createdAt: 1,
+      updatedAt: 2,
+      settingUpdatedAt: clock === undefined ? undefined : { planningSpeedKn: clock },
+    };
+  }
+
+  it('accepts a legacy profile and converts its knots to m/s on load', () => {
+    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(8)] }));
+    const loaded = store.profiles[0];
+    expect(loaded.settings.planningSpeedMps).toBeCloseTo(knotsToMetersPerSecond(8), 9);
+    expect(loaded.settings.planningSpeedKn).toBeUndefined();
+  });
+
+  it('carries the merge clock across the rename so newest still wins', () => {
+    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(8, 4)] }));
+    const clocks = store.profiles[0].settingUpdatedAt;
+    expect(clocks?.planningSpeedMps).toBe(4);
+    expect(clocks?.planningSpeedKn).toBeUndefined();
+  });
+
+  it('keeps an explicit SI value when a document carries both', () => {
+    const both = legacyProfile(8);
+    both.settings = { ...both.settings, planningSpeedMps: 2 };
+    const store = new ProfileStore(fakeAdapter({ profiles: [both] }));
+    expect(store.profiles[0].settings.planningSpeedMps).toBe(2);
+  });
+
+  it('rejects a legacy profile whose knots are out of range', () => {
+    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(500)] }));
+    expect(store.profiles).toHaveLength(0);
   });
 });

@@ -13,6 +13,7 @@ import type {
 } from './profile-types';
 import { PORTABLE_PROFILE_SETTING_KEYS } from './profile-types';
 import {
+  adoptStoredProfile,
   cleanProfileId,
   cleanProfileName,
   isProfileSettings,
@@ -130,7 +131,7 @@ function validProfiles(value: unknown): Profile[] {
   for (const profile of value) {
     if (!isStoredProfile(profile) || seen.has(profile.id)) continue;
     seen.add(profile.id);
-    profiles.push({ ...profile, settings: sanitizeProfileSettings(profile.settings) });
+    profiles.push(adoptStoredProfile(profile));
     if (profiles.length >= MAX_PROFILES) break;
   }
   return profiles;

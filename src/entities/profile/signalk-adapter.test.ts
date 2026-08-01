@@ -19,7 +19,7 @@ function settings(): ProfileSettings {
       warningTcpaSeconds: 1200,
     },
     trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-    planningSpeedKn: 6,
+    planningSpeedMps: 6,
   };
 }
 

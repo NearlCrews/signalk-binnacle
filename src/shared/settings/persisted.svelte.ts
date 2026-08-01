@@ -1,5 +1,10 @@
 import { isLatitude, isLongitude, type MapView } from '$shared/geo';
-import { isFiniteNumber, isRecord, nauticalMilesToMeters } from '$shared/lib';
+import {
+  isFiniteNumber,
+  isRecord,
+  knotsToMetersPerSecond,
+  nauticalMilesToMeters,
+} from '$shared/lib';
 import { binnacleStorageKey } from '$shared/persistence';
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -397,6 +402,42 @@ export function isThresholds(value: unknown): value is Thresholds {
         value.shallowDepthMeters >= 0 &&
         value.shallowDepthMeters <= MAX_SHALLOW_DEPTH_METERS))
   );
+}
+
+// The speed used to turn a planned route's distance into per-waypoint passage times. Stored in SI
+// (m/s) like every other persisted measure, and converted to knots only at the display field.
+export const MAX_PLANNING_SPEED_KN = 100;
+export const MAX_PLANNING_SPEED_MPS = knotsToMetersPerSecond(MAX_PLANNING_SPEED_KN);
+const DEFAULT_PLANNING_SPEED_MPS = knotsToMetersPerSecond(5);
+
+// Earlier builds stored this setting in knots under its own key. Read that once, only when the SI
+// key is absent, so an upgrading device keeps the speed it had. The legacy key is left in place: a
+// downgrade then still finds it, and the scope-based privacy erasure still clears it.
+function legacyPlanningSpeedMps(storage?: StorageLike): number | undefined {
+  const store = resolveStorage(storage);
+  if (!store) return undefined;
+  try {
+    const raw = store.getItem(binnacleStorageKey('planningSpeedKn'));
+    if (raw == null) return undefined;
+    const knots: unknown = JSON.parse(raw);
+    if (!isFiniteNumber(knots) || knots < 0 || knots > MAX_PLANNING_SPEED_KN) return undefined;
+    return knotsToMetersPerSecond(knots);
+  } catch {
+    return undefined;
+  }
+}
+
+export function createPlanningSpeed(storage?: StorageLike): PersistedValue<number> {
+  const speed = new PersistedValue(
+    binnacleStorageKey('planningSpeedMps'),
+    DEFAULT_PLANNING_SPEED_MPS,
+    storage,
+    boundedNumberPersistedCodec(0, MAX_PLANNING_SPEED_MPS),
+  );
+  if (speed.fromStorage) return speed;
+  const migrated = legacyPlanningSpeedMps(storage);
+  if (migrated !== undefined) speed.set(migrated);
+  return speed;
 }
 
 export function createThresholds(storage?: StorageLike): PersistedValue<Thresholds> {

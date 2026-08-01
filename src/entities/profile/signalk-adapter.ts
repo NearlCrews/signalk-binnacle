@@ -13,11 +13,11 @@ import type {
   RemoteProfilesSnapshot,
 } from './profile-types';
 import {
+  adoptStoredProfile,
   cleanProfileId,
   isProfileTombstone,
   isStoredProfile,
   MAX_PROFILES,
-  sanitizeProfileSettings,
 } from './profile-validation';
 import type {
   AsyncProfileAdapter,
@@ -91,7 +91,7 @@ function parseV2(value: unknown): ParsedV2Document | 'empty' | 'corrupt' {
     if (cleanProfileId(key) === undefined) return 'corrupt';
     profileKeys.add(key);
     if (!isStoredProfile(profile) || profile.id !== key) return 'corrupt';
-    profiles.push({ ...profile, settings: sanitizeProfileSettings(profile.settings) });
+    profiles.push(adoptStoredProfile(profile));
     settingKeys.set(key, new Set(Object.keys(profile.settings)));
   }
   const tombstones: ProfileTombstone[] = [];
@@ -128,10 +128,7 @@ function parseV1(value: unknown): Omit<RemoteProfilesSnapshot, 'revision'> | 'em
   if (!Array.isArray(value.profiles) || value.profiles.length > MAX_PROFILES) return 'corrupt';
   const storedProfiles = value.profiles.filter(isStoredProfile);
   if (storedProfiles.length !== value.profiles.length) return 'corrupt';
-  const profiles = storedProfiles.map((profile) => ({
-    ...profile,
-    settings: sanitizeProfileSettings(profile.settings),
-  }));
+  const profiles = storedProfiles.map(adoptStoredProfile);
   if (new Set(profiles.map((profile) => profile.id)).size !== profiles.length) return 'corrupt';
   return {
     profiles,

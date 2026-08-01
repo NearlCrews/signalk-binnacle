@@ -31,7 +31,7 @@ function makeDeps(): ProfileBindingDeps {
       warningTcpaSeconds: 1,
     }),
     trackSettings: pv({ intervalSeconds: 10, minMeters: 10, colorMode: 'speed' }),
-    planningSpeedKn: pv(5),
+    planningSpeedMps: pv(5),
     unitsLocal: pv('metric'),
     pinnedActions: pv<string[]>([]),
     instrumentTiles: pv<string[]>(['depth', 'speed']),
@@ -51,7 +51,7 @@ describe('createProfileBindings', () => {
     const bundle = bindings.capture();
     expect(bundle).toMatchObject({
       theme: 'day',
-      planningSpeedKn: 5,
+      planningSpeedMps: 5,
       units: 'metric',
       anchorRadiusMeters: 50,
     });
@@ -66,12 +66,12 @@ describe('createProfileBindings', () => {
     bindings.apply({
       ...bindings.capture(),
       theme: 'night-red',
-      planningSpeedKn: 7,
+      planningSpeedMps: 7,
       units: 'imperial',
       anchorRadiusMeters: 75,
     });
     expect(deps.theme.theme).toBe('night-red');
-    expect(deps.planningSpeedKn.value).toBe(7);
+    expect(deps.planningSpeedMps.value).toBe(7);
     expect(deps.unitsLocal.value).toBe('imperial');
     expect(deps.anchorRadius.get()).toBe(75);
   });

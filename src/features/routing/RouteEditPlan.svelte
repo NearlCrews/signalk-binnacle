@@ -6,10 +6,11 @@ import {
   formatDurationParts,
   formatNm,
   knotsToMetersPerSecond,
+  metersPerSecondToKnots,
   PLACEHOLDER,
 } from '$shared/lib';
 import { etaSeconds } from '$shared/nav';
-import type { PersistedValue } from '$shared/settings';
+import { MAX_PLANNING_SPEED_KN, type PersistedValue } from '$shared/settings';
 import { UnitField } from '$shared/ui';
 
 interface Props {
@@ -19,19 +20,23 @@ interface Props {
   highlight: RouteHighlight | undefined;
   // Tap a leg row to highlight it on the chart, and pan the chart to it when it is off-screen.
   onHighlightLeg: (index: number) => void;
-  // The planning speed (knots), persisted, that turns leg distances into per-waypoint passage times.
+  // The planning speed in m/s, persisted, that turns leg distances into per-waypoint passage times.
+  // SI in storage like every other measure; this panel is the only place it becomes knots.
   planningSpeed: PersistedValue<number>;
 }
 
 const { working, highlight, onHighlightLeg, planningSpeed }: Props = $props();
 
-const MAX_PLANNING_SPEED_KN = 100;
-const boundedPlanningSpeed = $derived(
+const planSpeedMps = $derived(
   Number.isFinite(planningSpeed.value)
-    ? Math.min(MAX_PLANNING_SPEED_KN, Math.max(0, planningSpeed.value))
+    ? Math.min(knotsToMetersPerSecond(MAX_PLANNING_SPEED_KN), Math.max(0, planningSpeed.value))
     : 0,
 );
-const planSpeedMps = $derived(knotsToMetersPerSecond(boundedPlanningSpeed));
+// The field speaks knots; the store stays SI. Rounded to the field's own step so a value that
+// round-trips through m/s does not render as 5.000000000000001.
+const boundedPlanningSpeed = $derived(
+  Math.round((metersPerSecondToKnots(planSpeedMps) ?? 0) * 100) / 100,
+);
 // Each leg's distance, bearing, and the cumulative distance to reach that leg's end waypoint, so the
 // plan reads as a leg table the way a navigator lays out a passage, updating live as waypoints are
 // dragged or inserted. The per-leg passage times are layered on at render so this geometry walk does
@@ -84,7 +89,9 @@ const totalTime = $derived.by(() => {
   ariaLabel="Planning speed in knots, used to estimate the time to each point"
   onCommit={(speed) =>
     planningSpeed.set(
-      Number.isFinite(speed) ? Math.min(MAX_PLANNING_SPEED_KN, Math.max(0, speed)) : 0,
+      knotsToMetersPerSecond(
+        Number.isFinite(speed) ? Math.min(MAX_PLANNING_SPEED_KN, Math.max(0, speed)) : 0,
+      ),
     )}
 />
 {#if workingLegs.length > 0}

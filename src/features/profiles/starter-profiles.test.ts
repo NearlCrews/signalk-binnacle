@@ -16,7 +16,7 @@ const base: ProfileSettings = {
   weatherLayers: {},
   thresholds: DEFAULT_THRESHOLDS,
   trackSettings: { intervalSeconds: 10, minMeters: 10, colorMode: 'speed' },
-  planningSpeedKn: 5,
+  planningSpeedMps: 5,
   arrivalMuted: false,
   pinnedActionIds: [],
   instrumentTiles: [],

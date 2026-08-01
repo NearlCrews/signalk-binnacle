@@ -12,7 +12,13 @@ export interface ProfileSettings {
   weatherLayers: LayerSettings;
   thresholds: Thresholds;
   trackSettings: TrackSettings;
-  planningSpeedKn: number;
+  // Route planning speed in m/s. SI like every other persisted measure; the route plan converts to
+  // knots at its field.
+  planningSpeedMps: number;
+  // Legacy: the same setting in knots, as profiles saved before the SI migration carry it. Accepted
+  // on read so an older document still validates; sanitizeProfileSettings converts it and drops it,
+  // so a profile this build writes never carries it.
+  planningSpeedKn?: number;
   // The LOCAL units fallback only; optional so profiles saved before it existed stay valid. When the
   // server's unit preferences resolve, they win and this field is inert.
   units?: UnitsMode;
@@ -42,7 +48,7 @@ export const PORTABLE_PROFILE_SETTING_KEYS = [
   'weatherLayers',
   'thresholds',
   'trackSettings',
-  'planningSpeedKn',
+  'planningSpeedMps',
   'units',
   'pinnedActionIds',
   'instrumentTiles',
