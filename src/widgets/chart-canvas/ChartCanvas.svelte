@@ -11,7 +11,7 @@ import type { PersonalNotesStore } from '$entities/poi';
 import type { RouteStore } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
-import type { TrackRecorder } from '$entities/track';
+import type { SavedTracksSource, TrackRecorder } from '$entities/track';
 import type { UnitsStore } from '$entities/units';
 import type { UserCharts } from '$entities/user-charts';
 import type { OwnVessel } from '$entities/vessel';
@@ -36,7 +36,6 @@ import { createWorkingRouteOverlay, type WorkingRouteOverlay } from '$features/r
 import { createSeamarkOverlay, SEAMARK_SOURCES } from '$features/seamark-overlay';
 import type { TideStationSelectionEvent } from '$features/tides';
 import type { TimeTravelController } from '$features/time-travel';
-import type { SavedTracksSource } from '$features/track-layer';
 import { OWN_VESSEL_OVERLAY_ID } from '$features/vessel-layer';
 import type { LatLon } from '$shared/geo';
 import { createRetryableLazyUiLoader, lengthUnit } from '$shared/lib';

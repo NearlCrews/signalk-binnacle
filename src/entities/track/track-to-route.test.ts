@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TrackPoint } from '$entities/track';
 import { trackToRoute } from './track-to-route';
+import type { TrackPoint } from './track-types';
 
 const pt = (lat: number, lon: number): TrackPoint => ({ lat, lon, t: 0, sog: 0 });
 

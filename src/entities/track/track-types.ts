@@ -15,3 +15,12 @@ export interface TrackStats {
   avgSog: number;
   maxSog: number;
 }
+
+// A FeatureCollection of saved-track segments plus a version that bumps when it changes, so a
+// renderer can pull and dirty-check it without rebuilding every frame. Declared with the other
+// track shapes rather than inside the overlay, so the tracks controller that produces one and the
+// overlay that consumes one do not have to reach across features for the contract between them.
+export interface SavedTracksSource {
+  features: () => GeoJSON.FeatureCollection;
+  version: () => number;
+}

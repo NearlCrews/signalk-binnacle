@@ -1,4 +1,5 @@
 export { computeStats, TrackRecorder } from './recorder.svelte';
+export { douglasPeucker } from './simplify';
 export {
   hasDrawableTrack,
   hasTrackGaps,
@@ -6,4 +7,5 @@ export {
   splitAtGaps,
   toLonLat,
 } from './track-geometry';
-export type { TrackPoint } from './track-types';
+export { trackToRoute } from './track-to-route';
+export type { SavedTracksSource, TrackPoint } from './track-types';

@@ -438,4 +438,19 @@ describe('createRouteController', () => {
       expect(toast.show).toHaveBeenCalledWith('A write token is needed to start navigation.');
     });
   });
+
+  it('refuses to start a new route over one already under edit', () => {
+    const { controller, routeStore, startRouteEdit, toast } = makeController();
+    controller.beginNewRoute();
+    expect(routeStore.working).toBeDefined();
+    const underEdit = routeStore.working;
+    startRouteEdit.mockClear();
+
+    controller.beginNewRoute();
+    expect(routeStore.working).toBe(underEdit);
+    expect(startRouteEdit).not.toHaveBeenCalled();
+    expect(toast.show).toHaveBeenCalledWith(
+      'Save or cancel the route under edit before starting a new one.',
+    );
+  });
 });

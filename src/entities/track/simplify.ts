@@ -1,4 +1,5 @@
-import { splitAtGaps, type TrackPoint } from '$entities/track';
+import { splitAtGaps } from './track-geometry';
+import type { TrackPoint } from './track-types';
 
 // Perpendicular distance from p to the segment a-b, in degree space. Planar is fine at the
 // scales a display track spans; it ignores the lon/lat scale difference (a degree of longitude

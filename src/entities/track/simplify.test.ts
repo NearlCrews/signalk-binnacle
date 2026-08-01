@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TrackPoint } from '$entities/track';
 import { douglasPeucker } from './simplify';
+import type { TrackPoint } from './track-types';
 
 const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   lat,

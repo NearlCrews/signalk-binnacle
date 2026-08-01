@@ -1,5 +1,10 @@
 import type { ExpressionSpecification, LineLayerSpecification } from 'maplibre-gl';
-import type { TrackPoint, TrackRecorder } from '$entities/track';
+import {
+  douglasPeucker,
+  type SavedTracksSource,
+  type TrackPoint,
+  type TrackRecorder,
+} from '$entities/track';
 import {
   emptyFeatureCollection,
   ensureGeoJsonSources,
@@ -12,7 +17,6 @@ import {
   setSourceData,
 } from '$shared/map';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
-import { douglasPeucker } from './simplify';
 import { trackSegments } from './track-geojson';
 
 const ACTIVE_SOURCE = 'binnacle-track-active';
@@ -32,13 +36,6 @@ const TAIL_WINDOW = 4096;
 // SOG color stops in m/s: 0 (slow), 2.5 (about 5 kn), 5 (about 10 kn, fast).
 const SOG_MID = 2.5;
 const SOG_FAST = 5;
-
-// A FeatureCollection of saved-track segments plus a version that bumps when it changes, so
-// the overlay can pull and dirty-check it without rebuilding every frame.
-export interface SavedTracksSource {
-  features: () => GeoJSON.FeatureCollection;
-  version: () => number;
-}
 
 // emptyFeatureCollection() is called per use site rather than aliasing one shared instance into
 // setData: MapLibre's setData may retain the reference, so two sources must not share one collection.

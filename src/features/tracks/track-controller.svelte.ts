@@ -1,5 +1,4 @@
-import { hasDrawableTrack, type TrackPoint } from '$entities/track';
-import type { SavedTracksSource } from '$features/track-layer';
+import { hasDrawableTrack, type SavedTracksSource, type TrackPoint } from '$entities/track';
 import { type Toast, uuidv4 } from '$shared/lib';
 import { writeRefusedMessage } from '$shared/signalk';
 import { downloadGeoJson } from './track-export';

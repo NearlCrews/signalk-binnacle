@@ -1,9 +1,8 @@
 import type { CourseGuidance } from '$entities/course';
 import type { Route, RouteStore } from '$entities/route';
 import { reverseRoute } from '$entities/route';
-import type { TrackPoint } from '$entities/track';
+import { type TrackPoint, trackToRoute } from '$entities/track';
 import { type Waypoint, waypointHref } from '$entities/waypoint';
-import { trackToRoute } from '$features/track-layer';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
 import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import { type ActiveRoute, type CourseInfo, writeRefusedMessage } from '$shared/signalk';
@@ -189,6 +188,14 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   function beginNewRoute(initialPoint?: LatLon): void {
     clearRouteError();
+    // The invariant is enforced twice in the UI today (the panel disables New route while a route
+    // is under edit, and the chart context menu is suppressed entirely), by two different
+    // mechanisms, and nowhere in the controller that owns it. Hold it here too, so a third caller
+    // cannot silently discard an in-progress edit.
+    if (routeStore.working) {
+      flagRouteError('Save or cancel the route under edit before starting a new one.');
+      return;
+    }
     if (deps.writeBlocked()) {
       flagRouteError('A write token is needed to create routes.');
       return;

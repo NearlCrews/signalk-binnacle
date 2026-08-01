@@ -1,8 +1,9 @@
 import type { Route, RouteWaypoint } from '$entities/route';
-import { latestTrackSegment, type TrackPoint } from '$entities/track';
 import { uuidv4 } from '$shared/lib';
 import { METERS_PER_DEG } from '$shared/nav';
 import { douglasPeucker } from './simplify';
+import { latestTrackSegment } from './track-geometry';
+import type { TrackPoint } from './track-types';
 
 // The default coarsening distance for a track-to-route conversion. A track is recorded at display
 // density (a point every few seconds); a route wants a handful of turning points, so a coarse

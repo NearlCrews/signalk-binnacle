@@ -7,7 +7,7 @@ import type { MobStore } from '$entities/mob';
 import type { RouteStore } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
-import type { TrackRecorder } from '$entities/track';
+import type { SavedTracksSource, TrackRecorder } from '$entities/track';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
@@ -29,11 +29,7 @@ import {
   createTimeTravelTrackOverlay,
   type TimeTravelController,
 } from '$features/time-travel';
-import {
-  createHistoryTrackOverlay,
-  createTrackOverlay,
-  type SavedTracksSource,
-} from '$features/track-layer';
+import { createHistoryTrackOverlay, createTrackOverlay } from '$features/track-layer';
 import { createVesselOverlay } from '$features/vessel-layer';
 import { createWaypointOverlay } from '$features/waypoints';
 import type { LatLon } from '$shared/geo';
