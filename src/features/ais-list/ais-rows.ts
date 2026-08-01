@@ -7,6 +7,9 @@ import { haversineMeters, rhumbBearingRad } from '$shared/nav';
 export type AisSort = 'range' | 'cpa' | 'name';
 export type AisRiskFilter = 'all' | 'danger' | 'warning';
 export const MAX_AIS_LIST_ROWS = 500;
+// How often the list re-reads traffic. The overlays use the same floor (ais-layer's refresh gate):
+// a rendered position does not need better than about 1 Hz, and a glanceable list needs it less.
+export const AIS_LIST_REFRESH_MS = 1_000;
 
 export interface AisListRow {
   id: string;

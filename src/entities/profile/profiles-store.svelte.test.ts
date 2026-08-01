@@ -874,14 +874,18 @@ describe('planning speed SI migration', () => {
   }
 
   it('accepts a legacy profile and converts its knots to m/s on load', () => {
-    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(8)] }));
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [legacyProfile(8)], activeId: undefined, defaultId: undefined }),
+    );
     const loaded = store.profiles[0];
     expect(loaded.settings.planningSpeedMps).toBeCloseTo(knotsToMetersPerSecond(8), 9);
     expect(loaded.settings.planningSpeedKn).toBeUndefined();
   });
 
   it('carries the merge clock across the rename so newest still wins', () => {
-    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(8, 4)] }));
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [legacyProfile(8, 4)], activeId: undefined, defaultId: undefined }),
+    );
     const clocks = store.profiles[0].settingUpdatedAt;
     expect(clocks?.planningSpeedMps).toBe(4);
     expect(clocks?.planningSpeedKn).toBeUndefined();
@@ -890,12 +894,16 @@ describe('planning speed SI migration', () => {
   it('keeps an explicit SI value when a document carries both', () => {
     const both = legacyProfile(8);
     both.settings = { ...both.settings, planningSpeedMps: 2 };
-    const store = new ProfileStore(fakeAdapter({ profiles: [both] }));
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [both], activeId: undefined, defaultId: undefined }),
+    );
     expect(store.profiles[0].settings.planningSpeedMps).toBe(2);
   });
 
   it('rejects a legacy profile whose knots are out of range', () => {
-    const store = new ProfileStore(fakeAdapter({ profiles: [legacyProfile(500)] }));
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [legacyProfile(500)], activeId: undefined, defaultId: undefined }),
+    );
     expect(store.profiles).toHaveLength(0);
   });
 });

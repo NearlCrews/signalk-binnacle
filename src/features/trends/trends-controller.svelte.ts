@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import {
   cleanTrendInstrumentIds,
   type InstrumentTrendCategory,
@@ -92,6 +93,30 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     return deps.getDescriptor(id) ?? deps.getCatalog().find((entry) => entry.id === id);
   }
 
+  // Which candidate paths have ever reported live. This is a latch by nature, not a pure function
+  // of current state, so an effect owns it: a path that has reported stays reported for the session
+  // (a cell's epoch never returns to zero). Keying the catalog on a version counter instead of on
+  // the raw epochs matters because epoch advances on every sample: reading it inside the catalog
+  // mapping re-ran that whole mapping several times a second while the panel was open, and minted a
+  // new TrendItem identity each pass, all to answer a boolean that flips once.
+  const liveReported = new Set<string>();
+  let liveVersion = $state(0);
+  $effect(() => {
+    let latched = false;
+    for (const descriptor of deps.getCatalog()) {
+      for (const candidate of descriptor.candidates) {
+        // A path already latched is skipped before its cell is read, so the effect's dependency set
+        // shrinks as paths report and stops re-running once they all have.
+        if (liveReported.has(candidate.path)) continue;
+        if (deps.store.cell(candidate.path).epoch > 0) {
+          liveReported.add(candidate.path);
+          latched = true;
+        }
+      }
+    }
+    if (latched) untrack(() => (liveVersion += 1));
+  });
+
   function itemFor(id: string): TrendItem {
     const descriptor = descriptorFor(id);
     if (!descriptor) {
@@ -105,8 +130,11 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
         hasLiveReport: false,
       };
     }
-    const hasLiveReport = descriptor.candidates.some(
-      (candidate) => deps.store.cell(candidate.path).epoch > 0,
+    // Reading the version, not the epochs: primitive equality then stops propagation, so the
+    // catalog re-maps when availability actually changes rather than on every stream delta.
+    void liveVersion;
+    const hasLiveReport = descriptor.candidates.some((candidate) =>
+      liveReported.has(candidate.path),
     );
     return {
       id,

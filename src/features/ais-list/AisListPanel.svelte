@@ -16,7 +16,13 @@ import {
 import type { ConnectionPhase } from '$shared/signalk';
 import { SlideOver } from '$shared/ui';
 import AisTargetDetail from './AisTargetDetail.svelte';
-import { type AisRiskFilter, type AisSort, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
+import {
+  AIS_LIST_REFRESH_MS,
+  type AisRiskFilter,
+  type AisSort,
+  buildAisRows,
+  MAX_AIS_LIST_ROWS,
+} from './ais-rows';
 
 interface Props {
   aisTargets: AisTargets;
@@ -68,8 +74,22 @@ const ownCellKey = $derived(
   vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
 );
 const parsedOwn = $derived<LatLon | undefined>(ownCellKey ? parseLatLonKey(ownCellKey) : undefined);
-// list() reads aisVersion, so the rows re-derive as traffic moves; the own cell re-sorts by range.
-const targets = $derived(aisTargets.list());
+// Traffic churn is coalesced to a bounded cadence rather than followed per worker flush. In a busy
+// anchorage the store's version advances several times a second, and every advance would re-filter
+// and re-sort hundreds of rows for a list a navigator glances at. The version is read inside
+// untrack so only the tick drives this; the selected target below stays live, since one open detail
+// row is cheap and should be current.
+let listTick = $state(0);
+$effect(() => {
+  const id = setInterval(() => {
+    listTick += 1;
+  }, AIS_LIST_REFRESH_MS);
+  return () => clearInterval(id);
+});
+const targets = $derived.by(() => {
+  void listTick;
+  return untrack(() => aisTargets.list());
+});
 const targetCount = $derived(targets.length);
 const matchingRows = $derived(
   buildAisRows(targets, parsedOwn, collision.assessment.contacts, sort, query, riskFilter),
