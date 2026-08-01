@@ -4,7 +4,7 @@ import { playwright } from '@vitest/browser-playwright';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 import packageJson from './package.json' with { type: 'json' };
-import { runtimeCaching } from './src/shared/pwa/sw-caching';
+import { runtimeCaching } from './src/shared/pwa/sw-caching.ts';
 
 const alias = {
   $app: fileURLToPath(new URL('./src/app', import.meta.url)),

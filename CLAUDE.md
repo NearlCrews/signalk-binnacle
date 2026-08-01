@@ -100,13 +100,14 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6.0.3,
-  Svelte 5.56.8, MapLibre GL JS 6.0.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  Svelte 5.56.8, MapLibre GL JS 6.1.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5.1.2 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder and
   test fixtures import `PbfWriter`). TypeScript 7.0.2 is outside the latest typescript-eslint
   8.65.0 peer range (`>=4.8.4 <6.1.0`), so do not raise the compiler until that integration supports
-  it. npm 11.18.0 is the newest package manager compatible with the Node 22.18 runtime floor; npm
-  12.0.1 requires Node 22.22.2 or later. Keep the Workbox off-main-thread override on its newest
+  it. npm 11.19.0 is the newest package manager compatible with the Node 22.18 runtime floor; npm
+  12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. Keep the Workbox
+  off-main-thread override on its newest
   4.0.0-pre2 beta until Workbox adopts that line; it replaces the older EJS 3 dependency with EJS 6.
   Workbox 7.4.1 is also the latest release and still constrains `glob` to major 11, whose publisher
   marks it deprecated. Do not force a newer `glob` across that unsupported major boundary; keep the

@@ -6,6 +6,25 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- No-transmit radar sectors can be edited again, and their safety warning now describes both angle
+  fields to assistive technology.
+- Chart tools now apply their cursor as soon as MapLibre creates the canvas, even when the base style
+  is still loading.
+- Data trends keeps one stable panel instance when a phone crosses its focus-trap breakpoint, so
+  orientation and viewport changes preserve panel scroll, focus, and child-local state.
+- Incremental MapLibre GeoJSON updates now use the library's exported diff contract, including its
+  keyed property-update payload.
+
+### Development
+
+- Runtime and build dependencies moved to their latest compatible releases, including Lucide 1.28,
+  MapLibre GL JS 6.1, Biome 2.5.6, Playwright 1.62.1, Size Limit 13.0.3, Knip 6.31, and Vite 8.2.
+  TypeScript stays on 6.0.3 while the current typescript-eslint integration requires a version below
+  6.1. Development and release workflows now use npm 11.19.0, the newest release compatible with the
+  Node 22.18 runtime floor.
+
 <a id="v0181"></a>
 
 ## [0.18.1] - 2026-07-30

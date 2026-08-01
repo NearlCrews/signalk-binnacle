@@ -97,8 +97,9 @@ temporary advisory measurement.
   distance labels, the total label, selection styling, the 44 px hit layer, and drag cleanup.
 - `src/features/measure/MeasureStrip.svelte` owns guidance, adjacent-leg readouts, keyboard-equivalent
   editing, Undo, confirmed Clear, Done, and nested Escape behavior.
-- `src/widgets/chart-canvas/ChartCanvas.svelte` resolves vertex hits before chart additions and gives
-  Measure one result per click.
+- `src/widgets/chart-canvas/ChartCanvas.svelte` resolves vertex hits before chart additions, gives
+  Measure one result per click, and applies the tool cursor as soon as MapLibre creates its canvas
+  without waiting for the base style to load.
 - `src/features/routing/route-controller.svelte.ts` and `src/app/App.svelte` enforce route exclusion at
   both tool entry points.
 

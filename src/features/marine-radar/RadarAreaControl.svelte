@@ -309,7 +309,7 @@ onDestroy(() => {
         />
       {:else if definition.type === 'sector' && 'value' in proposed && !('startDistance' in proposed)}
         {@const sector = proposed as RadarSectorValue}
-        <p class="alert-note">
+        <p id="radar-no-transmit-warning" class="alert-note">
           This is a no-transmit sector. Changing or enabling it alters where the radar can emit.
         </p>
         <UnitField
@@ -320,6 +320,7 @@ onDestroy(() => {
           max={angleMax}
           step={angleStep}
           disabled={pending}
+          ariaDescribedBy="radar-no-transmit-warning"
           onCommit={(value) => updateValue({ ...sector, value: value / RAD_TO_DEG })}
         />
         <UnitField
@@ -329,6 +330,7 @@ onDestroy(() => {
           min={angleMin}
           max={angleMax}
           step={angleStep}
+          ariaDescribedBy="radar-no-transmit-warning"
           disabled={pending}
           onCommit={(value) => updateValue({ ...sector, endValue: value / RAD_TO_DEG })}
         />

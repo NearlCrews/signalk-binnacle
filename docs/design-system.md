@@ -252,13 +252,15 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `SlideOver`: the docked panel shell. Props: `title`, `subtitle`, `ariaLabel`, `dock` (left default),
   `bodyFlex` (lay the body out as a 0.6rem gapped column; pass it on any panel whose body is a stack of
   controls), `closeLabel`, `onClose`, `onBack` (when set, a leading back arrow returns to the menu via
-  the App's `backToMenu`; omit on panels opened from the chart), `headerExtra`, `footer`, and `minimize`
-  (a phone collapse-to-header control). Use `minimize` when a phone workflow needs a chart gesture:
-  collapse before enabling the gesture, then restore the panel when it finishes or is canceled. The
-  body is hidden while collapsed, but the pinned `footer` remains visible. Put the active step and
-  Stop action in that footer when a multi-step chart gesture must remain understandable and
-  cancelable on a phone. Offline area drawing and radar-area placement are the canonical examples.
-  Every left-docked panel is a SlideOver.
+  the App's `backToMenu`; omit on panels opened from the chart), `focusTrap`, `headerExtra`, `footer`,
+  and `minimize` (a phone collapse-to-header control). Use `minimize` when a phone workflow needs a
+  chart gesture: collapse before enabling the gesture, then restore the panel when it finishes or is
+  canceled. The body is hidden while collapsed, but the pinned `footer` remains visible. Put the
+  active step and Stop action in that footer when a multi-step chart gesture must remain understandable
+  and cancelable on a phone. `focusTrap` changes dialog semantics and focus behavior on the existing
+  shell. A breakpoint change must not replace the `aside` or remount its child snippet because scroll,
+  focus, and child-local state belong to that stable panel instance. Offline area drawing and
+  radar-area placement are the canonical minimize examples. Every left-docked panel is a SlideOver.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
@@ -304,7 +306,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
   per-panel `confirmingDelete` id. `ConfirmArm` stays the single timed strip.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
   back to the effective value). Use it for a single number field with a unit; do not use it for a live
-  drag (that is a `.range` slider).
+  drag (that is a `.range` slider). Pass `ariaDescribedBy` when a safety or validation note describes
+  the field.
 - `SavedList`: the saved-item card list (used by routes, tracks, waypoints, profiles). Renders the
   `.saved` card frame and the actions row, plus the caps heading and the `empty` state; the panel
   supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list

@@ -6,11 +6,19 @@ const workflowPaths = [
   '.github/workflows/signalk-webapp-ci.yml',
 ];
 const runnerTempWorkingDirectory = `working-directory: ${'$'}{{ runner.temp }}`;
+const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+const packageManagerMatch = /^npm@(.+)$/u.exec(packageJson.packageManager ?? '');
+if (!packageManagerMatch) {
+  console.error('package.json packageManager must pin npm with the npm@<version> form.');
+  process.exit(1);
+}
+const supportedNpmVersion = packageManagerMatch[1];
 const failures = [];
 
 for (const path of workflowPaths) {
   const workflow = readFileSync(path, 'utf8');
   const lines = workflow.split('\n');
+  let npmInstallCount = 0;
 
   lines.forEach((line, index) => {
     if (line.includes('uses: actions/setup-node@')) {
@@ -24,12 +32,24 @@ for (const path of workflowPaths) {
     }
 
     if (line.includes('npm install --global npm@')) {
+      npmInstallCount += 1;
       const installBlock = lines.slice(Math.max(0, index - 4), index + 1).join('\n');
       if (!installBlock.includes(runnerTempWorkingDirectory)) {
         failures.push(`${path}:${index + 1} must install npm outside the repository checkout.`);
       }
+      if (!line.includes(`npm@${supportedNpmVersion}`)) {
+        failures.push(
+          `${path}:${index + 1} must install packageManager npm ${supportedNpmVersion}.`,
+        );
+      }
     }
   });
+
+  if (npmInstallCount === 0) {
+    failures.push(
+      `${path} must install the packageManager npm version before repository commands.`,
+    );
+  }
 
   if (
     path === '.github/workflows/publish.yml' &&

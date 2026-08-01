@@ -31,7 +31,7 @@ jobs:
           package-manager-cache: false
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
-        run: npm install --global npm@11.18.0
+        run: npm install --global npm@11.19.0
       # Fail fast when the release tag and the package.json version disagree, so a release can never
       # publish a version that does not match its tag. The tag arrives through an env var (not inline
       # interpolation) so it cannot be expanded as shell.
@@ -83,7 +83,7 @@ jobs:
           package-manager-cache: false
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
-        run: npm install --global npm@11.18.0
+        run: npm install --global npm@11.19.0
       # --access public is required for the first publish of a new package when generating
       # provenance; for later versions it is the default for an unscoped public package.
       # The explicit relative prefix keeps npm from interpreting the tarball path as GitHub shorthand.

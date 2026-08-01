@@ -213,6 +213,15 @@ describe('createThemedMap attribution', () => {
 });
 
 describe('createThemedMap onLoad', () => {
+  it('exposes the initialized map before the style loads', async () => {
+    const onLoad = vi.fn();
+    const handle = createThemedMap({ container, onLoad });
+    const map = await lastMap();
+
+    expect(handle.map).toBe(map);
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+
   it('logs a synchronous onLoad failure', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     createThemedMap({

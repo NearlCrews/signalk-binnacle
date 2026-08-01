@@ -253,6 +253,9 @@ let editGeneration = 0;
 // Captured from onLoad so the units effect below can reach
 // map.setGlobalStateProperty once the map exists. $state so the effect re-runs once it is assigned.
 let mapRef = $state<MapLibreMap | undefined>();
+// Available as soon as MapLibre creates its canvas. Chart tools can be armed before the base style
+// loads, so their cursor must not depend on the later onLoad callback that initializes overlays.
+let cursorMapRef = $state<MapLibreMap | undefined>();
 // Captured from onLoad alongside mapRef, so the off-screen vessel indicator can reuse the exact
 // same centerOnVessel behavior as the menu's Center action, rather than duplicating its fly-to math.
 let commandsRef = $state<MapCommands | undefined>();
@@ -295,7 +298,7 @@ $effect(() => {
 // A crosshair makes the chart's temporary tap mode visible. Deliberate move mode switches to a move
 // cursor, and route exclusion is still checked defensively in case external state changes overlap.
 $effect(() => {
-  const map = mapRef;
+  const map = cursorMapRef;
   if (!map) return;
   const radarEditing = marineRadarLayer?.chartEditing() === true;
   const routeEditing = routeStore.working !== undefined;
@@ -769,6 +772,7 @@ onMount(async () => {
       );
     },
   });
+  cursorMapRef = mapHandle.map;
 });
 
 onDestroy(() => {

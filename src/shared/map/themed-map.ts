@@ -74,6 +74,10 @@ export interface ThemedMapOptions {
 }
 
 export interface ThemedMapHandle {
+  // Available as soon as MapLibre has created a usable canvas, before the base style finishes
+  // loading. Consumers can provide immediate interaction feedback without treating the map as
+  // fully loaded or registering overlays early.
+  map?: maplibregl.Map;
   destroy: () => void;
 }
 
@@ -440,6 +444,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   });
 
   return {
+    map: mapInstance,
     destroy: () => {
       if (destroyed) return;
       destroyed = true;

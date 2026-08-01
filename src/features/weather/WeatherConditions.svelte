@@ -355,7 +355,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
     {:else if !effectiveProviderId}
       <!-- Silence must be labeled: an empty list would read as "no warnings active" when the free
            sources simply carry none. -->
-      <p class="muted-note">Warnings unavailable without a weather provider.</p>
+      <p class="muted-note" role="status">Warnings unavailable without a weather provider.</p>
     {:else if warningAvailability === 'unavailable'}
       <p class="muted-note">Warnings unavailable from this provider.</p>
     {:else if warningAvailability === 'stale'}

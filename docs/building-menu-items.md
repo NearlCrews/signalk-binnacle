@@ -115,7 +115,9 @@ level. Inside, in this order:
    `minimize` (the phone collapse, as one `{ collapsed, onToggle }` object), `dock`, `ariaLabel`.
    When a phone workflow needs a chart gesture, pass `minimize`, collapse the panel before enabling
    the gesture, and restore it when the gesture finishes or is canceled. Offline area drawing is the
-   canonical example.
+   canonical example. When `focusTrap` changes at a responsive breakpoint, update the prop on the one
+   stable `SlideOver`. Do not branch into duplicate panel shells because that discards scroll, focus,
+   and child-local state.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
    role="alert">{error}</p>`, and a write-gate teach note as `<p class="muted-note">A write token is
    needed to ...</p>` when `auth.writeBlocked`.
@@ -474,7 +476,7 @@ Tick all of these before you commit a new menu item.
       union member, mount block with matching guards, and the controller and services constructed and
       passed as props.
 - [ ] The panel is one `SlideOver` with a specific `closeLabel`, `bodyFlex` (unless it is an
-      accordion), and `onClose` and `onBack`.
+      accordion), and `onClose` and `onBack`. Responsive focus-trap changes preserve that same shell.
 - [ ] A teach line opens the body; sections are `<section aria-label>` with `<h3 class="caps-label">`
       headings.
 - [ ] Every control is a shared primitive (section 4), every row and section uses a shared class

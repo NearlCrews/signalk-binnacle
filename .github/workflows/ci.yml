@@ -26,7 +26,7 @@ jobs:
       # devEngines permits, so it cannot safely inspect this package before the upgrade.
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
-        run: npm install --global npm@11.18.0
+        run: npm install --global npm@11.19.0
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run verify:release

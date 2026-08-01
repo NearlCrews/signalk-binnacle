@@ -41,7 +41,7 @@ jobs:
       # checkout before any npm command evaluates the repository package.
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
-        run: npm install --global npm@11.18.0
+        run: npm install --global npm@11.19.0
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm test

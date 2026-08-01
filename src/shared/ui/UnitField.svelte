@@ -12,6 +12,7 @@ interface Props {
   step?: number | 'any';
   inputWidth?: string;
   ariaLabel?: string;
+  ariaDescribedBy?: string;
   // Grays out and blocks the input, for a field whose feature is currently switched off.
   disabled?: boolean;
   onCommit: (value: number) => void;
@@ -26,6 +27,7 @@ const {
   step = 'any',
   inputWidth = '5.5rem',
   ariaLabel,
+  ariaDescribedBy,
   disabled = false,
   onCommit,
 }: Props = $props();
@@ -54,6 +56,7 @@ function commit(event: Event): void {
     {disabled}
     value={String(value)}
     aria-label={ariaLabel ?? (unit ? `${label} in ${unit}` : label)}
+    aria-describedby={ariaDescribedBy}
     style:inline-size={inputWidth}
     onchange={commit}
   >

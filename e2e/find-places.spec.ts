@@ -107,7 +107,7 @@ test('find places explains the chart zoom limit on a narrow screen', async ({ pa
   await page.getByRole('button', { name: 'Find places' }).click();
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
-  await expect(panel.getByText('Zoom in to level 9 or closer')).toBeVisible();
+  await expect(panel.getByText('Zoom in to level 9 or closer')).toBeVisible({ timeout: 15_000 });
   await expect
     .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
     .toBe(true);

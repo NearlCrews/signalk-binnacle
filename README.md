@@ -380,7 +380,7 @@ offline use.
 ## Development
 
 Development targets Node 22.18 or newer and npm 11.6 or newer. The recommended npm version is
-11.18.0. `.node-version` and `packageManager` record the project defaults, while `devEngines`
+11.19.0. `.node-version` and `packageManager` record the project defaults, while `devEngines`
 enforces the supported minimums. All tools use repository-local dependencies.
 
 ```bash
