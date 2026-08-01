@@ -6,6 +6,15 @@ import { fetchPathMeta, type PathMeta } from './meta';
 // quiet for the session.
 const MAX_ATTEMPTS = 3;
 
+// How many distinct paths one session's cache retains. In practice a server's distinct path count
+// is small and stable, so this never binds. It exists because the key space is not ours: pointed at
+// per-vessel (AIS context) paths, or at a server emitting novel paths, an uncapped Map would grow
+// for the life of the session. Eviction is oldest-first, which a Map gives for free through its
+// insertion order. MemoryCache is not used here because its get/put carry a clock this cache has no
+// use for, and because "cached as null" versus "never fetched" is load-bearing, which a
+// value-or-undefined lookup cannot express.
+const MAX_CACHED_PATHS = 500;
+
 // A per-session cache of path metadata with one in-flight sentinel per path, shared by every
 // surface that reads meta reactively (the instruments zones, the shallow monitor's server
 // threshold). A null entry means a fetch is in flight, or that the path gave up after
@@ -19,10 +28,19 @@ export function createPathMetaCache(origin: string, getToken: () => string | und
   const attempts = new Map<string, number>();
   let version = $state(0);
 
+  function evictOldestIfFull(): void {
+    if (cache.size < MAX_CACHED_PATHS) return;
+    const oldest = cache.keys().next();
+    if (oldest.done) return;
+    cache.delete(oldest.value);
+    attempts.delete(oldest.value);
+  }
+
   // Resolve a path's meta once. Safe to call from an effect: the sentinel makes repeat calls
   // no-ops while a fetch is in flight, after one resolved, and after the attempt cap is spent.
   function load(path: string): void {
     if (cache.has(path)) return;
+    evictOldestIfFull();
     const tried = attempts.get(path) ?? 0;
     if (tried >= MAX_ATTEMPTS) {
       cache.set(path, null);

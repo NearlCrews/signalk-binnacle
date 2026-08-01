@@ -1,3 +1,4 @@
+import { isRecord } from '$shared/lib';
 import {
   type Context,
   type Delta,
@@ -14,10 +15,6 @@ const MAX_VALUES_PER_DELTA = 8_192;
 const MAX_CONTEXT_LENGTH = 512;
 const MAX_PATH_LENGTH = 512;
 const MAX_SOURCE_LABEL_LENGTH = 256;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 function boundedText(value: unknown, maximum: number): string | undefined {
   if (typeof value !== 'string') return undefined;

@@ -146,19 +146,14 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   $effect(() => {
     deps.genericAlarm.update(genericNotifications);
   });
-  let genericNotificationAlert = $state('');
-  let lastGenericNotificationKey = '';
-  $effect(() => {
+  // A pure function of the worst generic notification, so it is a derived. It used to be an effect
+  // with a hand-tracked key, which re-implemented what a derived does and could desynchronize on any
+  // future early return. Assigning an equal string to the live region is already a no-op, so the key
+  // was buying nothing the runtime does not do itself.
+  const genericNotificationAlert = $derived.by(() => {
     const notification = genericNotifications[0];
-    if (!notification) {
-      lastGenericNotificationKey = '';
-      genericNotificationAlert = '';
-      return;
-    }
-    const key = `${notification.path}:${notification.state}:${notification.message}`;
-    if (key === lastGenericNotificationKey) return;
-    lastGenericNotificationKey = key;
-    genericNotificationAlert = `${notification.state}: ${notificationLabel(notification)}. Open Alarms for details.`;
+    if (!notification) return '';
+    return `${notification.state}: ${notificationLabel(notification)}. Open Alarms for details.`;
   });
 
   const muteAlert = $derived(deps.collisionMute.active ? 'Collision alarm muted.' : '');

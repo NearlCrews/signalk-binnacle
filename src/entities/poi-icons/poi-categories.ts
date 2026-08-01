@@ -154,7 +154,12 @@ export function asPoiCategory(raw: string, fallback: PoiCategory = 'generic'): P
 
 // Resolved skIcon strings memoized across calls: the same provider icon value repeats across many
 // notes and the resolver runs per note per overlay refresh, so the keyword scan runs once per
-// distinct string instead of per call. Bounded by the small set of icon names providers emit.
+// distinct string instead of per call.
+//
+// Capped because the keys are provider-controlled, not ours: a well-formed provider emits a handful
+// of icon names, but nothing stops one from emitting a novel string per note, and this map lives
+// for the session. Eviction is oldest-first, which a Map gives for free through its insertion order.
+const MAX_SKICON_CACHE_ENTRIES = 500;
 const SKICON_CACHE = new Map<string, PoiCategory>();
 
 export function categoryForSkIcon(skIcon: string | undefined): PoiCategory {
@@ -168,6 +173,10 @@ export function categoryForSkIcon(skIcon: string | undefined): PoiCategory {
     SKICON_CATEGORY[lower] ??
     KEYWORD_CATEGORY.find(([needle]) => lower.includes(needle))?.[1] ??
     'generic';
+  if (SKICON_CACHE.size >= MAX_SKICON_CACHE_ENTRIES) {
+    const oldest = SKICON_CACHE.keys().next();
+    if (!oldest.done) SKICON_CACHE.delete(oldest.value);
+  }
   SKICON_CACHE.set(skIcon, resolved);
   return resolved;
 }

@@ -51,7 +51,10 @@ export function crossTrackErrorMeters(from: LatLon, to: LatLon, position: LatLon
   const d13 = haversineMeters(from.latitude, from.longitude, position.latitude, position.longitude);
   const theta13 = greatCircleBearingRad(from, position);
   const theta12 = greatCircleBearingRad(from, to);
-  const ratio = Math.max(-1, Math.min(1, (d13 / EARTH_RADIUS_M) * Math.sin(theta13 - theta12)));
+  const ratio = Math.max(
+    -1,
+    Math.min(1, Math.sin(d13 / EARTH_RADIUS_M) * Math.sin(theta13 - theta12)),
+  );
   // Starboard-positive, matching the server's calcValues.crossTrackError convention (reconciled
   // during live verification), so the computed fallback agrees with a provider value.
   return Math.asin(ratio) * EARTH_RADIUS_M;

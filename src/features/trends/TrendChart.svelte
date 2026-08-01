@@ -79,8 +79,23 @@ $effect(() => {
   };
 });
 
+// The series arrays are rebuilt (mapped through the unit conversion) whenever anything upstream
+// recomputes, so identity alone cannot tell a real new sample from the same data in a new array.
+// uPlot redraws on every setData, so compare the values and skip the redundant ones.
+let drawnTimes: readonly number[] | undefined;
+let drawnValues: readonly (number | null)[] | undefined;
+function sameSeries(a: readonly unknown[] | undefined, b: readonly unknown[]): boolean {
+  return a !== undefined && a.length === b.length && a.every((value, i) => value === b[i]);
+}
 $effect(() => {
-  chart?.setData([times as number[], values as (number | null)[]] as AlignedData);
+  const plot = chart;
+  if (!plot) return;
+  if (sameSeries(drawnTimes, times) && sameSeries(drawnValues, values)) return;
+  // Recorded only alongside a real setData, so a change that lands between a teardown and the next
+  // construction cannot mark itself drawn against a chart that never received it.
+  drawnTimes = times;
+  drawnValues = values;
+  plot.setData([times as number[], values as (number | null)[]] as AlignedData);
 });
 
 $effect(() => {

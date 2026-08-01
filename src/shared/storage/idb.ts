@@ -27,17 +27,33 @@ export function txDone(tx: IDBTransaction): Promise<void> {
 // from an onsuccess of a request already on the transaction), because an await inside it would let
 // the transaction auto-commit. Owning the completion promise here keeps the transaction-lifetime
 // rules in the storage slice instead of leaking the raw txDone primitive across slices.
+function isThenable(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
 export async function runTransaction<T>(
   conn: IDBDatabase,
   storeNames: string | string[],
   mode: IDBTransactionMode,
-  run: (tx: IDBTransaction) => T,
+  // Synchronous only, enforced at the type level: an IndexedDB transaction auto-commits as soon as
+  // its microtask queue drains, so an async callback would have its later work run outside the
+  // transaction, and its rejection would escape the catch below without aborting anything.
+  run: (tx: IDBTransaction) => T extends Promise<unknown> ? never : T,
 ): Promise<T> {
   const tx = conn.transaction(storeNames, mode);
   const completion = txDone(tx);
   let result: T;
   try {
-    result = run(tx);
+    result = run(tx) as T;
+    // The type rules an async callback out, but the boundary is worth holding at runtime too: an
+    // untyped or `any`-typed caller would otherwise get a silently half-applied transaction.
+    if (isThenable(result)) {
+      throw new TypeError('runTransaction callback must be synchronous');
+    }
   } catch (error) {
     try {
       tx.abort();

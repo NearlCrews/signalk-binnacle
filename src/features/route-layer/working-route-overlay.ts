@@ -13,6 +13,7 @@ import {
   type MapThemePaint,
   mapThemePaint,
   type OverlayContext,
+  removeLayersAndSources,
   setSourceData,
 } from '$shared/map';
 import type { Theme } from '$shared/ui';
@@ -52,6 +53,10 @@ export interface WorkingRouteOverlay {
   // Which waypoint index a chart tap hits, or undefined. Owned here so the widget needs neither the
   // layer id nor the feature property shape.
   hitTestWaypoint(point: { x: number; y: number }): number | undefined;
+  // Detach the sources and layers. Unused today (ChartCanvas destroys the map, which takes them
+  // with it), but an overlay that can be added and not removed leaves zombie sources behind the
+  // first time anyone detaches one without destroying its map.
+  remove(ctx: OverlayContext): void;
 }
 
 export function createWorkingRouteOverlay(
@@ -177,6 +182,15 @@ export function createWorkingRouteOverlay(
       for (const id of LAYERS) {
         if (ctx.map.getLayer(id)) ctx.map.moveLayer(id, before);
       }
+    },
+    remove(ctx) {
+      removeLayersAndSources(ctx.map, LAYERS, [WPT_SRC, HL_SEG_SRC, HL_DOT_SRC]);
+      // Reset the dirty checks too, so a later add() repopulates rather than trusting caches that
+      // describe sources this just deleted.
+      ctxRef = undefined;
+      lastEditVersion = -1;
+      lastWorking = undefined;
+      lastHighlight = undefined;
     },
     hitTestWaypoint(point) {
       const map = ctxRef?.map;

@@ -1893,7 +1893,10 @@ const streamController = createStreamController({
       frame.generation === undefined
         ? Math.max(store.generation, workerGenerationBase)
         : workerGenerationBase + frame.generation;
-    if (!store.applyFrame({ ...frame, generation })) return;
+    // Assigned, not spread: the frame is a fresh structured clone this callback owns, and the
+    // spread rebuilt it once per flush on a documented hot path.
+    frame.generation = generation;
+    if (!store.applyFrame(frame)) return;
     for (const [path, value] of frame.self) marineRadar.applyControlDelta(path, value);
   },
   onInitialSubscription: async () => {

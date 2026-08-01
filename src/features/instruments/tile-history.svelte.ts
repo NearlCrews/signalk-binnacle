@@ -19,6 +19,9 @@ export function createTileHistory(opts: TileHistoryOptions = {}): TileHistory {
   const minSpacingMs = opts.minSpacingMs ?? DEFAULT_MIN_SPACING_MS;
 
   // Reactive buffers keyed by tile id, so a component reading series(id) re-renders on each append.
+  // Deeply reactive on purpose: at one write per tile every minSpacingMs into a buffer of capacity
+  // entries, the proxy overhead is nothing next to the ergonomics. If the sampling cadence ever
+  // rises materially, this wants $state.raw plus a version counter instead.
   const buffers = $state<Record<string, number[]>>({});
   // Last accepted sample time per id; drives the min-spacing throttle and needs no reactivity.
   const lastMs = new Map<string, number>();

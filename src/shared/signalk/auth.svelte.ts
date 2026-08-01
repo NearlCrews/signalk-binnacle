@@ -158,7 +158,10 @@ export class AuthController {
   #stopped = false;
   #checking = false;
   #watching = false;
-  #upgradeClientId?: string;
+  // Reactive: today every write is paired with a reactive sibling (upgrading, upgradeOutcome) so
+  // the banner happens to update, but a later path that changes one without the other would leave
+  // the banner naming a stale request id.
+  #upgradeClientId = $state<string | undefined>();
   // One poll loop per flow: the initial access request and the read/write upgrade. Each owns its href,
   // attempt budget, and scheduled flag; the shared driver keeps the cadence identical across both.
   #accessPoll: AccessRequestPoll;
