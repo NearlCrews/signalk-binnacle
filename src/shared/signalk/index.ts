@@ -76,7 +76,6 @@ export {
   isSoundingNotification,
   NOTIFICATION_SEVERITY_RANK,
   NOTIFICATIONS_PREFIX,
-  notificationSeverityRank,
   notificationState,
   SELF_CONTEXT,
 } from './types';
