@@ -203,7 +203,7 @@ describe('saveTrack', () => {
     vi.stubGlobal('fetch', fetchMock);
     const points = [p(42.6, -83.5), p(42.7, -83.4), p(42.8, -83.3, true), p(42.9, -83.2)];
     const ok = await saveTrack('http://pi', 'tok', 'abc', 'Day 1', points);
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://pi/signalk/v2/api/resources/tracks/abc');
     expect((init as RequestInit).method).toBe('PUT');
@@ -222,14 +222,14 @@ describe('saveTrack', () => {
     expect(body.properties).toMatchObject({ name: 'Day 1', source: 'binnacle' });
   });
 
-  it('returns false on a non-ok response', async () => {
+  it('reports a refusal as access-denied, so the caller can request write access', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(403, {})));
-    expect(await saveTrack('http://pi', 't', 'id', 'n', [p(0, 0), p(1, 1)])).toBe(false);
+    expect(await saveTrack('http://pi', 't', 'id', 'n', [p(0, 0), p(1, 1)])).toBe('access-denied');
   });
 
-  it('returns false when the fetch throws', async () => {
+  it('reports a network failure as failed, not as a refusal', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
-    expect(await saveTrack('http://pi', 't', 'id', 'n', [p(0, 0), p(1, 1)])).toBe(false);
+    expect(await saveTrack('http://pi', 't', 'id', 'n', [p(0, 0), p(1, 1)])).toBe('failed');
   });
 });
 
@@ -282,17 +282,17 @@ describe('savedTracksToFeatures', () => {
 describe('deleteTrack', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('DELETEs the track and returns true', async () => {
+  it('DELETEs the track and reports ok', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal('fetch', fetchMock);
-    expect(await deleteTrack('http://pi', 'tok', 'abc')).toBe(true);
+    expect(await deleteTrack('http://pi', 'tok', 'abc')).toBe('ok');
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://pi/signalk/v2/api/resources/tracks/abc');
     expect((init as RequestInit).method).toBe('DELETE');
   });
 
-  it('returns false on an error response', async () => {
+  it('reports a 404 as unavailable rather than a plain failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(404, {})));
-    expect(await deleteTrack('http://pi', 't', 'id')).toBe(false);
+    expect(await deleteTrack('http://pi', 't', 'id')).toBe('unavailable');
   });
 });

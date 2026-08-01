@@ -43,14 +43,19 @@ export {
   asKeyedObject,
   authInit,
   deleteResource,
+  deleteResourceOutcome,
   fetchAuthedJson,
   fetchAuthedJsonOutcome,
   fetchKeyedResource,
+  mutationResultFor,
   postResource,
   putResource,
+  putResourceOutcome,
+  type ResourceMutationResult,
   sendJson,
   setWriteOutcomeListener,
   str,
+  writeRefusedMessage,
 } from './resource';
 export { SignalKStore } from './store.svelte';
 export type { SkSymbol } from './symbols-client';

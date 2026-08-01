@@ -954,7 +954,7 @@ $effect(() => {
           persistenceDegraded={trackPersistenceDegraded}
           onRetry={() => void trackController.refreshSavedTracks()}
           onSave={trackController.onSaveTrack}
-          onSaveAsRoute={routeController.onSaveTrackAsRoute}
+          onSaveAsRoute={async (name) => (await routeController.onSaveTrackAsRoute(name)) ?? false}
           onTrackHome={routeController.onTrackHome}
           onDelete={trackController.onDeleteSavedTrack}
           onToggleSaved={trackController.onToggleSaved}

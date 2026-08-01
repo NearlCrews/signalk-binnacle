@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CourseGuidance } from '$entities/course';
 import { RouteStore } from '$entities/route';
 import type { Toast } from '$shared/lib';
+import type { ResourceMutationResult } from '$shared/signalk';
 import * as courseClient from './course-client';
 import { createRouteController } from './route-controller.svelte';
 import * as routesClient from './routes-client';
@@ -55,10 +56,12 @@ function makeController(
   } as unknown as CourseGuidance;
   const fitBounds = vi.fn();
   const startRouteEdit = vi.fn(() => true);
+  const requestWriteAccess = vi.fn(async () => {});
   const controller = createRouteController({
     origin: 'http://sk',
     getToken: () => 'token',
     writeBlocked: () => writeBlocked,
+    requestWriteAccess,
     editBlockedReason,
     routeStore,
     courseGuidance: guidance,
@@ -70,7 +73,7 @@ function makeController(
     getTrackPoints: () => [],
     wait,
   });
-  return { controller, routeStore, toast, guidance, fitBounds, startRouteEdit };
+  return { controller, routeStore, toast, guidance, fitBounds, startRouteEdit, requestWriteAccess };
 }
 
 describe('createRouteController', () => {
@@ -79,8 +82,8 @@ describe('createRouteController', () => {
     vi.mocked(courseClient.hydrateCourse).mockResolvedValue({});
     vi.mocked(courseClient.activationFromCourse).mockReturnValue({});
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue([]);
-    vi.mocked(routesClient.saveRoute).mockResolvedValue(true);
-    vi.mocked(routesClient.deleteRoute).mockResolvedValue(true);
+    vi.mocked(routesClient.saveRoute).mockResolvedValue('ok');
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue('ok');
     vi.mocked(courseClient.clearCourse).mockResolvedValue(true);
     vi.mocked(courseClient.activateRoute).mockResolvedValue(true);
     vi.mocked(courseClient.refreshActiveRoute).mockResolvedValue(true);
@@ -124,7 +127,7 @@ describe('createRouteController', () => {
   it('prevents duplicate route mutations while one is in flight', async () => {
     const { controller, routeStore } = makeController();
     routeStore.setWorking(route);
-    let resolveSave = (_value: boolean): void => {};
+    let resolveSave = (_value: ResourceMutationResult): void => {};
     vi.mocked(routesClient.saveRoute).mockImplementation(
       () => new Promise((resolve) => (resolveSave = resolve)),
     );
@@ -132,7 +135,7 @@ describe('createRouteController', () => {
     const second = controller.onSaveRoute('Passage');
     expect(controller.busy).toBe(true);
     expect(routesClient.saveRoute).toHaveBeenCalledTimes(1);
-    resolveSave(true);
+    resolveSave('ok');
     await Promise.all([first, second]);
     expect(controller.busy).toBe(false);
   });
@@ -141,7 +144,7 @@ describe('createRouteController', () => {
     const { controller, routeStore, toast } = makeController();
     routeStore.setRoutes([route]);
     routeStore.setActive('r1');
-    vi.mocked(routesClient.deleteRoute).mockResolvedValue(false);
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue('failed');
 
     await controller.onDeleteRoute('r1');
 
@@ -161,7 +164,7 @@ describe('createRouteController', () => {
     const { controller, routeStore, toast } = makeController();
     routeStore.setRoutes([route]);
     routeStore.setActive('r1');
-    vi.mocked(routesClient.deleteRoute).mockResolvedValue(false);
+    vi.mocked(routesClient.deleteRoute).mockResolvedValue('failed');
     vi.mocked(courseClient.activateRoute).mockResolvedValue(false);
 
     await controller.onDeleteRoute('r1');

@@ -5,7 +5,12 @@ import {
   waypointToFeature,
 } from '$entities/waypoint';
 import { isLatLon } from '$shared/geo';
-import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
+import {
+  deleteResourceOutcome,
+  fetchKeyedResource,
+  putResourceOutcome,
+  type ResourceMutationResult,
+} from '$shared/signalk';
 
 const V2 = '/signalk/v2/api/resources/waypoints';
 const V1 = '/signalk/v1/api/resources/waypoints';
@@ -38,18 +43,22 @@ export function saveWaypoint(
   base: string,
   token: string | undefined,
   waypoint: Waypoint,
-): Promise<boolean> {
+): Promise<ResourceMutationResult> {
   const id = cleanWaypointId(waypoint.id);
-  if (!id || !isLatLon(waypoint.position)) return Promise.resolve(false);
-  return putResource(`${base}${V2}/${encodeURIComponent(id)}`, token, waypointToFeature(waypoint));
+  if (!id || !isLatLon(waypoint.position)) return Promise.resolve('failed');
+  return putResourceOutcome(
+    `${base}${V2}/${encodeURIComponent(id)}`,
+    token,
+    waypointToFeature(waypoint),
+  );
 }
 
 export function deleteWaypoint(
   base: string,
   token: string | undefined,
   id: string,
-): Promise<boolean> {
+): Promise<ResourceMutationResult> {
   const safeId = cleanWaypointId(id);
-  if (!safeId) return Promise.resolve(false);
-  return deleteResource(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
+  if (!safeId) return Promise.resolve('failed');
+  return deleteResourceOutcome(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
 }

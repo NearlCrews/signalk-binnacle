@@ -3,10 +3,11 @@ import { isLonLat } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
 import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 import {
-  deleteResource,
+  deleteResourceOutcome,
   fetchKeyedResource,
   fetchProviderIdList,
-  putResource,
+  putResourceOutcome,
+  type ResourceMutationResult,
 } from '$shared/signalk';
 import { toGeoJsonFeature } from './track-export';
 
@@ -206,7 +207,7 @@ export function saveTrack(
   id: string,
   name: string,
   points: readonly TrackPoint[],
-): Promise<boolean> {
+): Promise<ResourceMutationResult> {
   const stats = computeStats(points);
   // Reuse the export's Feature (geometry plus the name and source tag); add the SI stats.
   const baseFeature = toGeoJsonFeature(name, points);
@@ -218,9 +219,13 @@ export function saveTrack(
       timespan: stats.durationSeconds,
     },
   };
-  return putResource(`${base}${V2}/${encodeURIComponent(id)}`, token, feature);
+  return putResourceOutcome(`${base}${V2}/${encodeURIComponent(id)}`, token, feature);
 }
 
-export function deleteTrack(base: string, token: string | undefined, id: string): Promise<boolean> {
-  return deleteResource(`${base}${V2}/${encodeURIComponent(id)}`, token);
+export function deleteTrack(
+  base: string,
+  token: string | undefined,
+  id: string,
+): Promise<ResourceMutationResult> {
+  return deleteResourceOutcome(`${base}${V2}/${encodeURIComponent(id)}`, token);
 }

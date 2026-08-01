@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Waypoint, WaypointsStore } from '$entities/waypoint';
 import type { Toast } from '$shared/lib';
+import type { ResourceMutationResult } from '$shared/signalk';
 import { createWaypointsController } from './waypoint-controller.svelte';
 import * as waypointsClient from './waypoints-client';
 
@@ -19,22 +20,24 @@ const waypoint = (id: string, name = id): Waypoint => ({
 function makeController(writeBlocked = false) {
   const waypointsStore = new WaypointsStore();
   const toast = { show: vi.fn() } as unknown as Toast;
+  const requestWriteAccess = vi.fn(async () => {});
   const controller = createWaypointsController({
     origin: 'http://sk',
     getToken: () => 'token',
     writeBlocked: () => writeBlocked,
+    requestWriteAccess,
     waypointsStore,
     toast,
   });
-  return { controller, waypointsStore, toast };
+  return { controller, waypointsStore, toast, requestWriteAccess };
 }
 
 describe('createWaypointsController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(waypointsClient.fetchWaypoints).mockResolvedValue([]);
-    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue(true);
-    vi.mocked(waypointsClient.deleteWaypoint).mockResolvedValue(true);
+    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('ok');
+    vi.mocked(waypointsClient.deleteWaypoint).mockResolvedValue('ok');
   });
 
   it('does not let an older refresh overwrite a newer response', async () => {
@@ -52,7 +55,7 @@ describe('createWaypointsController', () => {
 
   it('keeps the add dialog and input available after a failed save', async () => {
     const { controller } = makeController();
-    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue(false);
+    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('failed');
     controller.onDropWaypoint({ latitude: 44, longitude: -86 });
     await controller.confirmAddWaypoint({ name: 'Harbor' });
     expect(controller.addWaypointAt).toEqual({ latitude: 44, longitude: -86 });
@@ -78,9 +81,30 @@ describe('createWaypointsController', () => {
     expect(toast.show).not.toHaveBeenCalled();
   });
 
+  it('requests write access after a refused save, without closing the dialog', async () => {
+    const { controller, toast, requestWriteAccess } = makeController();
+    // A token revoked or a session expired mid-passage. The navigator should not have to retype.
+    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('access-denied');
+    controller.onDropWaypoint({ latitude: 44, longitude: -86 });
+    await controller.confirmAddWaypoint({ name: 'Harbor' });
+    expect(requestWriteAccess).toHaveBeenCalledOnce();
+    expect(toast.show).toHaveBeenCalledWith(
+      'Signal K refused the write. Your waypoint is kept while read/write access is requested.',
+    );
+    expect(controller.addWaypointAt).toEqual({ latitude: 44, longitude: -86 });
+  });
+
+  it('does not request write access for an ordinary failure', async () => {
+    const { controller, requestWriteAccess } = makeController();
+    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('failed');
+    controller.onDropWaypoint({ latitude: 44, longitude: -86 });
+    await controller.confirmAddWaypoint({ name: 'Harbor' });
+    expect(requestWriteAccess).not.toHaveBeenCalled();
+  });
+
   it('keeps the edit dialog open after a failed edit', async () => {
     const { controller } = makeController();
-    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue(false);
+    vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('failed');
     controller.onOpenEditWaypoint(waypoint('a', 'Old'));
     await controller.onSaveWaypointEdit({ name: 'New' });
     expect(controller.editingWaypoint?.name).toBe('Old');
@@ -88,7 +112,7 @@ describe('createWaypointsController', () => {
 
   it('blocks overlapping writes', async () => {
     const { controller } = makeController();
-    let resolveSave!: (ok: boolean) => void;
+    let resolveSave!: (result: ResourceMutationResult) => void;
     vi.mocked(waypointsClient.saveWaypoint).mockImplementationOnce(
       () => new Promise((resolve) => (resolveSave = resolve)),
     );
@@ -96,7 +120,7 @@ describe('createWaypointsController', () => {
     const first = controller.confirmAddWaypoint({ name: 'One' });
     const second = controller.confirmAddWaypoint({ name: 'Two' });
     expect(waypointsClient.saveWaypoint).toHaveBeenCalledOnce();
-    resolveSave(true);
+    resolveSave('ok');
     await Promise.all([first, second]);
   });
 

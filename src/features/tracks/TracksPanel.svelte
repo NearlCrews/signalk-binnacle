@@ -44,9 +44,10 @@ interface Props {
   routeBusy: boolean;
   persistenceDegraded: boolean;
   onRetry: () => void;
-  onSave: (name: string) => void;
+  // Resolves whether the write succeeded, so a failure keeps the name form and its entered value.
+  onSave: (name: string) => Promise<boolean>;
   // Save the current track as a reusable route, and navigate back along it (retrace home).
-  onSaveAsRoute: (name: string) => void;
+  onSaveAsRoute: (name: string) => Promise<boolean>;
   onTrackHome: () => void;
   onDelete: (id: string) => void;
   onToggleSaved: (id: string, shown: boolean) => void;
@@ -115,12 +116,23 @@ const savedEmptyText = $derived(savedEmptyMessage(loadState, storageMissing));
 // Naming a save happens inline through NameEntry rather than a native prompt; one state drives both
 // the Save and the Save-as-route flows, so only one name form is open at a time.
 let naming = $state<'track' | 'route' | null>(null);
-function confirmName(value: string): void {
-  const kind = naming === 'route' ? 'Route' : 'Track';
-  const trimmed = resolveSaveName(value, kind);
-  if (naming === 'track') onSave(trimmed);
-  else if (naming === 'route') onSaveAsRoute(trimmed);
-  naming = null;
+let savingName = $state(false);
+// The form closes only once the write is accepted. Closing it on submit discarded the name the
+// navigator typed the moment a save failed, which is exactly when it is worth keeping: the failure
+// itself is reported on the app-wide toast, so there would be nothing left to retry from.
+async function confirmName(value: string): Promise<boolean> {
+  if (savingName) return false;
+  const target = naming;
+  if (!target) return false;
+  const trimmed = resolveSaveName(value, target === 'route' ? 'Route' : 'Track');
+  savingName = true;
+  try {
+    const ok = target === 'track' ? await onSave(trimmed) : await onSaveAsRoute(trimmed);
+    if (ok) naming = null;
+    return ok;
+  } finally {
+    savingName = false;
+  }
 }
 
 // Discarding the live recording is destructive, so it arms the same inline confirm as the
@@ -205,6 +217,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       label="Save track as"
       value={defaultSaveName('Track')}
       onConfirm={confirmName}
+      busy={savingName}
       onCancel={() => (naming = null)}
     />
   {/if}
@@ -266,6 +279,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       label="Save as route"
       value={defaultSaveName('Route')}
       onConfirm={confirmName}
+      busy={savingName}
       onCancel={() => (naming = null)}
     />
   {/if}

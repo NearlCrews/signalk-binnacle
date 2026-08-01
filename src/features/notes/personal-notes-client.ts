@@ -1,5 +1,10 @@
 import type { NotePoint } from '$entities/poi';
-import { fetchAuthedJsonOutcome, sendJson } from '$shared/signalk';
+import {
+  fetchAuthedJsonOutcome,
+  mutationResultFor,
+  type ResourceMutationResult,
+  sendJson,
+} from '$shared/signalk';
 import { NOTES_PATH } from './notes-client';
 import {
   cleanPersonalNoteInput,
@@ -17,14 +22,9 @@ export type PersonalNotesCapability =
   | 'unavailable'
   | 'error';
 
-export type PersonalNoteMutationResult = 'ok' | 'access-denied' | 'unavailable' | 'failed';
-
-function mutationResult(response: Response | undefined): PersonalNoteMutationResult {
-  if (response?.ok) return 'ok';
-  if (response?.status === 401 || response?.status === 403) return 'access-denied';
-  if (response?.status === 404 || response?.status === 405) return 'unavailable';
-  return 'failed';
-}
+// Retained as an alias so the notes call sites keep reading in their own vocabulary; the shape and
+// the status mapping are the shared resource-write ones.
+export type PersonalNoteMutationResult = ResourceMutationResult;
 
 // Probe only one entry. The v2 route is the sole write transport; a v1-only response is useful for
 // display but must never be mistaken for edit capability.
@@ -57,7 +57,7 @@ export async function savePersonalNote(
     'PUT',
     resource,
   );
-  const result = mutationResult(response);
+  const result = mutationResultFor(response);
   return {
     result,
     ...(result === 'ok'
@@ -83,7 +83,7 @@ export async function deletePersonalNote(
   note: Pick<NotePoint, 'id' | 'ownedByBinnacle'>,
 ): Promise<PersonalNoteMutationResult> {
   if (!note.ownedByBinnacle || !isPersonalNoteId(note.id)) return 'failed';
-  return mutationResult(
+  return mutationResultFor(
     await sendJson(`${base}${NOTES_PATH}/${encodeURIComponent(note.id)}`, token, 'DELETE'),
   );
 }

@@ -13,8 +13,14 @@ interface Props {
   value?: string;
   confirmLabel?: string;
   maxLength?: number;
-  onConfirm: (value: string) => void;
+  // Typed as returning unknown because this form deliberately ignores the result: closing (or
+  // keeping) the form is the caller's decision, so a caller that saves asynchronously can hold it
+  // open with what the navigator typed until its write is accepted. Pair that with `busy`.
+  onConfirm: (value: string) => unknown;
   onCancel: () => void;
+  // A write is in flight: the controls are inert and the form announces itself as busy, so a second
+  // submit cannot start another write against the same entry.
+  busy?: boolean;
 }
 
 const {
@@ -24,6 +30,7 @@ const {
   maxLength = 256,
   onConfirm,
   onCancel,
+  busy = false,
 }: Props = $props();
 
 // Seed the editable text from the prop once: the form is freshly mounted per use, so it takes a
@@ -33,17 +40,19 @@ let text = $state(untrack(() => value));
 
 function submit(event: SubmitEvent): void {
   event.preventDefault();
-  onConfirm(text);
+  if (busy) return;
+  void onConfirm(text);
 }
 </script>
 
-<form class="name-entry" aria-label={label} onsubmit={submit}>
+<form class="name-entry" aria-label={label} aria-busy={busy} onsubmit={submit}>
   <label class="name-entry-field">
     <span class="caps-label">{label}</span>
     <input
       class="input"
       type="text"
       maxlength={maxLength}
+      disabled={busy}
       bind:value={text}
       use:focusSelectOnMount
       onkeydown={(event) => {
@@ -52,8 +61,10 @@ function submit(event: SubmitEvent): void {
     >
   </label>
   <div class="panel-controls">
-    <button type="submit" class="btn btn-primary">{confirmLabel}</button>
-    <button type="button" class="btn" onclick={onCancel}>Cancel</button>
+    <button type="submit" class="btn btn-primary" disabled={busy}>
+      {busy ? 'Saving…' : confirmLabel}
+    </button>
+    <button type="button" class="btn" disabled={busy} onclick={onCancel}>Cancel</button>
   </div>
 </form>
 

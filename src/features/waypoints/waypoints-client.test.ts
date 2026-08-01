@@ -67,7 +67,7 @@ describe('saveWaypoint', () => {
       description: 'D',
     };
     const ok = await saveWaypoint('http://pi', 'tok', waypoint);
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     expect(fetchMock.mock.calls[0][0]).toBe('http://pi/signalk/v2/api/resources/waypoints/abc');
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('PUT');
@@ -85,14 +85,14 @@ describe('saveWaypoint', () => {
         name: 'W',
         position: { latitude: 2, longitude: 1 },
       }),
-    ).toBe(false);
+    ).toBe('failed');
     expect(
       await saveWaypoint('http://pi', 'tok', {
         id: 'abc',
         name: 'W',
         position: { latitude: 200, longitude: 1 },
       }),
-    ).toBe(false);
+    ).toBe('failed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -101,13 +101,13 @@ describe('deleteWaypoint', () => {
   it('DELETEs the waypoint id and returns ok', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, {}));
     const ok = await deleteWaypoint('http://pi', 'tok', 'abc');
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
   });
 
   it('rejects an unsafe id before fetching', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
-    expect(await deleteWaypoint('http://pi', 'tok', '')).toBe(false);
+    expect(await deleteWaypoint('http://pi', 'tok', '')).toBe('failed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -259,6 +259,28 @@ export async function sendJson(
   }).sendJson(url, method, body);
 }
 
+// What a resource write actually did, for the callers that can recover from the specific cause
+// rather than only reporting "it failed". `access-denied` is the one worth separating: a token
+// revoked or a session expired mid-passage is recoverable by asking the server for write access
+// again, and the caller can keep the navigator's typing on screen while that happens.
+export type ResourceMutationResult = 'ok' | 'access-denied' | 'unavailable' | 'failed';
+
+// The one wording for a refused write, so the routes, waypoints, tracks, and notes flows all say
+// the same thing about the same server answer. It lives beside the outcome it explains: the point
+// of separating `access-denied` is that this sentence is true and "could not save" is not.
+export function writeRefusedMessage(noun: string): string {
+  return `Signal K refused the write. Your ${noun} is kept while read/write access is requested.`;
+}
+
+// Undefined means the request never completed (a network failure or a timeout), which is transient,
+// not a refusal.
+export function mutationResultFor(response: Response | undefined): ResourceMutationResult {
+  if (response?.ok) return 'ok';
+  if (response?.status === 401 || response?.status === 403) return 'access-denied';
+  if (response?.status === 404 || response?.status === 405) return 'unavailable';
+  return 'failed';
+}
+
 // PUT a JSON body to a resource URL, returning whether the write succeeded. Never throws: a network
 // failure becomes false so the caller can surface a transient error rather than crash.
 export async function putResource(
@@ -267,6 +289,23 @@ export async function putResource(
   body: unknown,
 ): Promise<boolean> {
   return (await sendJson(url, token, 'PUT', body))?.ok ?? false;
+}
+
+// PUT as above, reporting why it failed. Prefer this wherever the caller has a draft to preserve.
+export async function putResourceOutcome(
+  url: string,
+  token: string | undefined,
+  body: unknown,
+): Promise<ResourceMutationResult> {
+  return mutationResultFor(await sendJson(url, token, 'PUT', body));
+}
+
+// DELETE as below, reporting why it failed.
+export async function deleteResourceOutcome(
+  url: string,
+  token: string | undefined,
+): Promise<ResourceMutationResult> {
+  return mutationResultFor(await sendJson(url, token, 'DELETE'));
 }
 
 // POST a JSON body (or no body) to a URL, returning whether it succeeded. Never throws (see

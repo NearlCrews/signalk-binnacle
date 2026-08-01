@@ -6,7 +6,12 @@ import {
   routeToFeature,
 } from '$entities/route';
 import { isLatLon } from '$shared/geo';
-import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
+import {
+  deleteResourceOutcome,
+  fetchKeyedResource,
+  putResourceOutcome,
+  type ResourceMutationResult,
+} from '$shared/signalk';
 
 const V2 = '/signalk/v2/api/resources/routes';
 const V1 = '/signalk/v1/api/resources/routes';
@@ -41,8 +46,14 @@ export function routeHref(id: string): string {
   return `/resources/routes/${encodeURIComponent(id)}`;
 }
 
-// PUT the route to its client-chosen id. Returns whether the write succeeded.
-export function saveRoute(base: string, token: string | undefined, route: Route): Promise<boolean> {
+// PUT the route to its client-chosen id. Reports why a write failed, so a refusal the navigator can
+// recover from (a token revoked mid-passage) is not flattened into the same message as a dropped
+// connection. A route that fails validation here never reached the server, so it is 'failed'.
+export function saveRoute(
+  base: string,
+  token: string | undefined,
+  route: Route,
+): Promise<ResourceMutationResult> {
   const id = cleanRouteId(route.id);
   if (
     !id ||
@@ -50,13 +61,17 @@ export function saveRoute(base: string, token: string | undefined, route: Route)
     route.waypoints.length > MAX_ROUTE_WAYPOINTS ||
     route.waypoints.some((waypoint) => !isLatLon(waypoint.position))
   ) {
-    return Promise.resolve(false);
+    return Promise.resolve('failed');
   }
-  return putResource(`${base}${V2}/${encodeURIComponent(id)}`, token, routeToFeature(route));
+  return putResourceOutcome(`${base}${V2}/${encodeURIComponent(id)}`, token, routeToFeature(route));
 }
 
-export function deleteRoute(base: string, token: string | undefined, id: string): Promise<boolean> {
+export function deleteRoute(
+  base: string,
+  token: string | undefined,
+  id: string,
+): Promise<ResourceMutationResult> {
   const safeId = cleanRouteId(id);
-  if (!safeId) return Promise.resolve(false);
-  return deleteResource(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
+  if (!safeId) return Promise.resolve('failed');
+  return deleteResourceOutcome(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
 }

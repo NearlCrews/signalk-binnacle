@@ -67,7 +67,7 @@ describe('saveRoute', () => {
       ],
     };
     const ok = await saveRoute('http://pi', 'tok', route);
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     expect(fetchMock.mock.calls[0][0]).toBe('http://pi/signalk/v2/api/resources/routes/abc');
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe('PUT');
@@ -85,7 +85,7 @@ describe('saveRoute', () => {
           position: { latitude, longitude },
         })),
       }),
-    ).toBe(false);
+    ).toBe('failed');
     expect(
       await saveRoute('http://pi', 'tok', {
         id: 'abc',
@@ -95,7 +95,7 @@ describe('saveRoute', () => {
           { position: { latitude: 100, longitude: 1 } },
         ],
       }),
-    ).toBe(false);
+    ).toBe('failed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -104,13 +104,13 @@ describe('deleteRoute', () => {
   it('DELETEs the route id and returns ok', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(200, {}));
     const ok = await deleteRoute('http://pi', 'tok', 'abc');
-    expect(ok).toBe(true);
+    expect(ok).toBe('ok');
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
   });
 
   it('rejects an unsafe id before fetching', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
-    expect(await deleteRoute('http://pi', 'tok', '')).toBe(false);
+    expect(await deleteRoute('http://pi', 'tok', '')).toBe('failed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

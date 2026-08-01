@@ -1530,6 +1530,7 @@ const routeController = createRouteController({
   origin,
   getToken: () => chartsToken,
   writeBlocked: () => auth.writeBlocked,
+  requestWriteAccess: () => auth.requestWriteAccess(),
   editBlockedReason: () =>
     measure.active
       ? 'Finish the measurement before editing a route.'
@@ -1555,6 +1556,7 @@ const waypointsController = createWaypointsController({
   origin,
   getToken: () => chartsToken,
   writeBlocked: () => auth.writeBlocked,
+  requestWriteAccess: () => auth.requestWriteAccess(),
   waypointsStore,
   toast,
 });
@@ -1576,6 +1578,7 @@ const personalNotesController = createPersonalNotesController({
 const trackController = createTrackController({
   origin,
   getToken: () => chartsToken,
+  requestWriteAccess: () => auth.requestWriteAccess(),
   getRecorderPoints: () => recorder.points,
   clearRecorderThrough: (savedThroughT) => recorder.clearThrough(savedThroughT),
   toast,

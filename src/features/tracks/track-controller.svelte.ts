@@ -1,6 +1,7 @@
 import { hasDrawableTrack, type TrackPoint } from '$entities/track';
 import type { SavedTracksSource } from '$features/track-layer';
 import { type Toast, uuidv4 } from '$shared/lib';
+import { writeRefusedMessage } from '$shared/signalk';
 import { downloadGeoJson } from './track-export';
 import {
   deleteTrack,
@@ -24,6 +25,9 @@ export interface TrackControllerDeps {
   getToken: () => string | undefined;
   getRecorderPoints: () => TrackPoint[];
   clearRecorderThrough: (savedThroughT: number) => void;
+  // Ask the server for read/write access again after it refuses a write mid-session (a revoked
+  // token, an expired session). The name form stays open while it is outstanding.
+  requestWriteAccess: () => Promise<void>;
   // A load, save, or delete failure surfaces here instead of a panel-local error, so it is
   // visible even after the panel that triggered the action closes.
   toast: Toast;
@@ -72,15 +76,23 @@ export function createTrackController(deps: TrackControllerDeps) {
     loadState = 'error';
   }
 
-  async function onSaveTrack(name: string): Promise<void> {
-    if (busy) return;
+  // Resolves whether the track was saved, so the panel can keep its name form (and the name the
+  // navigator typed) on screen when it was not.
+  async function onSaveTrack(name: string): Promise<boolean> {
+    if (busy) return false;
     const points = deps.getRecorderPoints().map((point) => ({ ...point }));
-    if (!hasDrawableTrack(points)) return;
+    if (!hasDrawableTrack(points)) return false;
     busy = true;
     refreshGeneration += 1;
     const id = uuidv4();
     try {
-      if (!(await saveTrack(origin, deps.getToken(), id, name, points))) {
+      const outcome = await saveTrack(origin, deps.getToken(), id, name, points);
+      if (outcome !== 'ok') {
+        if (outcome === 'access-denied') {
+          deps.toast.show(writeRefusedMessage('track'));
+          void deps.requestWriteAccess();
+          return false;
+        }
         // With provisioning unconfirmed (an older server whose probe route never answered), a
         // missing tracks provider is just as likely as a connection problem, so the copy must not
         // point at only the wrong causes.
@@ -89,7 +101,7 @@ export function createTrackController(deps: TrackControllerDeps) {
             ? 'Could not save the track. Check the connection and access.'
             : 'Could not save the track. Check the connection and access, and whether this server has track storage.',
         );
-        return;
+        return false;
       }
       const saved = savedTrackFromPoints(id, name, points);
       savedTracks = [saved, ...savedTracks.filter((track) => track.id !== id)];
@@ -101,6 +113,7 @@ export function createTrackController(deps: TrackControllerDeps) {
       bumpSaved();
       deps.clearRecorderThrough(points[points.length - 1].t);
       await refreshSavedTracks();
+      return true;
     } finally {
       busy = false;
     }
@@ -111,7 +124,13 @@ export function createTrackController(deps: TrackControllerDeps) {
     busy = true;
     refreshGeneration += 1;
     try {
-      if (!(await deleteTrack(origin, deps.getToken(), id))) {
+      const deleted = await deleteTrack(origin, deps.getToken(), id);
+      if (deleted !== 'ok') {
+        if (deleted === 'access-denied') {
+          deps.toast.show('Signal K refused the delete. Read/write access is being requested.');
+          void deps.requestWriteAccess();
+          return;
+        }
         deps.toast.show('Could not delete the track. Check the connection and access.');
         return;
       }

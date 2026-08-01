@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TrackPoint } from '$entities/track';
 import type { Toast } from '$shared/lib';
+import type { ResourceMutationResult } from '$shared/signalk';
 import { createTrackController } from './track-controller.svelte';
 import * as tracksClient from './tracks-client';
 
@@ -27,14 +28,16 @@ const points: TrackPoint[] = [
 function makeController() {
   const clearRecorderThrough = vi.fn();
   const toast = { show: vi.fn() } as unknown as Toast;
+  const requestWriteAccess = vi.fn(async () => {});
   const controller = createTrackController({
     origin: 'http://sk',
     getToken: () => 'token',
+    requestWriteAccess,
     getRecorderPoints: () => points,
     clearRecorderThrough,
     toast,
   });
-  return { controller, clearRecorderThrough, toast };
+  return { controller, clearRecorderThrough, toast, requestWriteAccess };
 }
 
 describe('createTrackController', () => {
@@ -42,8 +45,8 @@ describe('createTrackController', () => {
     vi.clearAllMocks();
     vi.mocked(tracksClient.fetchSavedTracks).mockResolvedValue([]);
     vi.mocked(tracksClient.fetchTracksProvisioned).mockResolvedValue(true);
-    vi.mocked(tracksClient.saveTrack).mockResolvedValue(true);
-    vi.mocked(tracksClient.deleteTrack).mockResolvedValue(true);
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('ok');
+    vi.mocked(tracksClient.deleteTrack).mockResolvedValue('ok');
   });
 
   it('does not let an older refresh overwrite a newer response', async () => {
@@ -75,13 +78,13 @@ describe('createTrackController', () => {
     // On a server whose probe route never answered, a missing tracks provider is as likely as a
     // connection problem, so the toast must not point at only the wrong causes.
     const { controller, toast } = makeController();
-    vi.mocked(tracksClient.saveTrack).mockResolvedValue(false);
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('failed');
     await controller.onSaveTrack('Passage');
     expect(toast.show).toHaveBeenCalledWith(
       'Could not save the track. Check the connection and access, and whether this server has track storage.',
     );
 
-    vi.mocked(tracksClient.saveTrack).mockResolvedValue(false);
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('failed');
     await controller.refreshSavedTracks();
     await controller.onSaveTrack('Passage two');
     expect(toast.show).toHaveBeenLastCalledWith(
@@ -89,16 +92,44 @@ describe('createTrackController', () => {
     );
   });
 
+  it('reports a save as failed so the name form can stay open', async () => {
+    const { controller } = makeController();
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('failed');
+    await expect(controller.onSaveTrack('Passage')).resolves.toBe(false);
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('ok');
+    await expect(controller.onSaveTrack('Passage')).resolves.toBe(true);
+  });
+
+  it('requests write access after a refused save and reports it as not saved', async () => {
+    const { controller, toast, requestWriteAccess } = makeController();
+    vi.mocked(tracksClient.saveTrack).mockResolvedValue('access-denied');
+    await expect(controller.onSaveTrack('Passage')).resolves.toBe(false);
+    expect(requestWriteAccess).toHaveBeenCalledOnce();
+    expect(toast.show).toHaveBeenCalledWith(
+      'Signal K refused the write. Your track is kept while read/write access is requested.',
+    );
+  });
+
+  it('requests write access after a refused delete', async () => {
+    const { controller, toast, requestWriteAccess } = makeController();
+    vi.mocked(tracksClient.deleteTrack).mockResolvedValue('access-denied');
+    await controller.onDeleteSavedTrack('a');
+    expect(requestWriteAccess).toHaveBeenCalledOnce();
+    expect(toast.show).toHaveBeenCalledWith(
+      'Signal K refused the delete. Read/write access is being requested.',
+    );
+  });
+
   it('blocks overlapping saves', async () => {
     const { controller } = makeController();
-    let resolveSave!: (ok: boolean) => void;
+    let resolveSave!: (result: ResourceMutationResult) => void;
     vi.mocked(tracksClient.saveTrack).mockImplementationOnce(
       () => new Promise((resolve) => (resolveSave = resolve)),
     );
     const first = controller.onSaveTrack('One');
     const second = controller.onSaveTrack('Two');
     expect(tracksClient.saveTrack).toHaveBeenCalledOnce();
-    resolveSave(true);
+    resolveSave('ok');
     await Promise.all([first, second]);
   });
 
