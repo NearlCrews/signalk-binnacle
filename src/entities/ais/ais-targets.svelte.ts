@@ -56,11 +56,29 @@ export interface AisTargetView {
   navigationState?: string;
 }
 
+// One memoized view plus what it was derived from, so an unchanged vessel keeps its object
+// identity across a rebuild and every downstream identity check (rows, overlays, keyed each blocks)
+// stops there instead of treating the whole fleet as new.
+interface CachedView {
+  view: AisTargetView;
+  // A reconnect invalidates every path, so the view has to be rebuilt even if nothing else moved.
+  generation: number;
+  // The store's per-target change counter, not its lastUpdate: an identical republish advances
+  // freshness without changing anything renderable, and two frames can land in the same millisecond,
+  // which would make a timestamp key reuse a view that is genuinely out of date.
+  revision: number;
+  // When the next clock-driven staleness boundary makes this view wrong, independent of any new
+  // data: a motion field aging out changes the view with no update to trigger it.
+  expiresAt: number;
+}
+
 export class AisTargets {
   #store: SignalKStore;
   #cache: AisTargetView[] | undefined;
   #cacheVersion = -1;
   #cacheExpiresAt = 0;
+  // Rebuilt (not mutated) on every list rebuild, so a pruned vessel's entry cannot outlive it.
+  #views = new Map<string, CachedView>();
   #now: () => number;
 
   constructor(store: SignalKStore, now: () => number = Date.now) {
@@ -100,8 +118,26 @@ export class AisTargets {
       return this.#cache;
     }
     const out: AisTargetView[] = [];
+    const views = new Map<string, CachedView>();
     let expiresAt = Number.POSITIVE_INFINITY;
     for (const [id, target] of this.#store.aisTargets) {
+      // A vessel nobody heard from since its view was built, still inside every freshness window,
+      // renders exactly the same. Reuse the object rather than minting an equal one.
+      const cached = this.#views.get(id);
+      if (
+        cached &&
+        cached.generation === this.#store.generation &&
+        cached.revision === target.revision &&
+        now < cached.expiresAt
+      ) {
+        out.push(cached.view);
+        views.set(id, cached);
+        expiresAt = Math.min(expiresAt, cached.expiresAt);
+        continue;
+      }
+      // Tracked per vessel as well as for the whole list, so one vessel's boundary passing does not
+      // invalidate every other vessel's memoized view.
+      let vesselExpiresAt = Number.POSITIVE_INFINITY;
       const current = (path: string, maxAgeMs?: number): unknown => {
         if (target.generations.get(path) !== this.#store.generation) return undefined;
         const epoch = target.epochs.get(path);
@@ -109,7 +145,7 @@ export class AisTargets {
           return undefined;
         }
         if (maxAgeMs !== undefined && epoch !== undefined) {
-          expiresAt = Math.min(expiresAt, epoch + maxAgeMs + 1);
+          vesselExpiresAt = Math.min(vesselExpiresAt, epoch + maxAgeMs + 1);
         }
         return target.values.get(path);
       };
@@ -126,10 +162,10 @@ export class AisTargets {
       const tcpa = this.#timeToSeconds(rawApproach);
       const approach = cpa !== undefined && tcpa !== undefined ? { cpa, tcpa } : undefined;
       if (approachFresh && approachEpoch !== undefined) {
-        expiresAt = Math.min(expiresAt, approachEpoch + AIS_APPROACH_STALE_TTL_MS + 1);
+        vesselExpiresAt = Math.min(vesselExpiresAt, approachEpoch + AIS_APPROACH_STALE_TTL_MS + 1);
       }
       const navState = current(SK_PATHS.navigationState);
-      out.push({
+      const view: AisTargetView = {
         id,
         name: typeof name === 'string' ? name : undefined,
         position,
@@ -140,11 +176,20 @@ export class AisTargets {
         cpaMeters: approach?.cpa,
         tcpaSeconds: approach?.tcpa,
         navigationState: typeof navState === 'string' ? navState : undefined,
+      };
+      out.push(view);
+      views.set(id, {
+        view,
+        generation: this.#store.generation,
+        revision: target.revision,
+        expiresAt: vesselExpiresAt,
       });
+      expiresAt = Math.min(expiresAt, vesselExpiresAt);
     }
     this.#cache = out;
     this.#cacheVersion = version;
     this.#cacheExpiresAt = expiresAt;
+    this.#views = views;
     return out;
   }
 

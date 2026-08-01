@@ -1,3 +1,4 @@
+import { sameJsonValue } from '$shared/lib';
 import type { AisTargetState, ConnectionState, PathSource, SKFrame, Value } from './types';
 import {
   INITIAL_CONNECTION_STATE,
@@ -129,6 +130,12 @@ export class SignalKStore {
       if (path.startsWith(NOTIFICATIONS_PREFIX)) this.#mirrorNotification(path, value);
     }
     if (frame.ais) {
+      // Whether any path carried a value different from the one already mirrored. A target at
+      // anchor republishes the same position on its own schedule, and every version bump makes the
+      // list, the collision assessment, and the traffic overlays rebuild and re-clone the whole
+      // fleet. Freshness still advances on an identical republish (the epoch is what keeps the
+      // target from aging out), so only the value comparison gates the bump.
+      let changed = false;
       for (const [context, incoming] of frame.ais) {
         let target = this.#aisTargets.get(context);
         if (!target) {
@@ -137,21 +144,27 @@ export class SignalKStore {
             epochs: new Map(),
             generations: new Map(),
             lastUpdate: frame.epoch,
+            revision: 0,
           };
           this.#aisTargets.set(context, target);
+          changed = true;
         }
+        let targetChanged = false;
         for (const [path, value] of incoming) {
           const receivedAt = frame.aisEpochs?.get(context)?.get(path) ?? frame.epoch;
+          targetChanged ||=
+            !target.values.has(path) ||
+            target.generations.get(path) !== generation ||
+            !sameJsonValue(target.values.get(path), value);
           target.values.set(path, value);
           target.epochs.set(path, receivedAt);
           target.generations.set(path, generation);
           target.lastUpdate = Math.max(target.lastUpdate, receivedAt);
         }
+        if (targetChanged) target.revision += 1;
+        changed ||= targetChanged;
       }
-      // Bump only when a context actually updated. The worker emits an `ais` Map on every frame
-      // (empty when only self moved), so guarding on size keeps the version stable when nothing
-      // moved and the consumers' version guards still hold.
-      if (frame.ais.size > 0) this.aisVersion += 1;
+      if (changed) this.aisVersion += 1;
     }
     // The worker sends a fresh connection object on every frame; assigning it unconditionally
     // would re-run every connection-derived consumer once per animation frame.

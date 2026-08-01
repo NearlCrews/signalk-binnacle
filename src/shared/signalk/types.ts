@@ -122,6 +122,10 @@ export interface AisTargetState {
   epochs: Map<string, number>;
   generations: Map<string, number>;
   lastUpdate: number;
+  // Bumped only when a mirrored value actually changes, so a consumer can memoize per target
+  // without re-deriving what changed. Deliberately not lastUpdate: an identical republish advances
+  // freshness without changing anything renderable, and two frames can share a millisecond.
+  revision: number;
 }
 
 // Mirrors the Signal K v2 navigation.course shapes Binnacle reads. Units: meters, radians, m/s,

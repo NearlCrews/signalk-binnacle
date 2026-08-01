@@ -204,3 +204,63 @@ describe('parseIso8601DurationSeconds', () => {
     expect(parseIso8601DurationSeconds(Number.NaN)).toBeUndefined();
   });
 });
+
+describe('AisTargets view memoization', () => {
+  const at = (latitude: number) => ({ 'navigation.position': { latitude, longitude: -121 } });
+  // A controllable clock: the freshness windows are compared against it, so a fixed epoch keeps the
+  // memo behavior, not staleness, as the only thing under test.
+  const clocked = (store: SignalKStore, now: () => number) => new AisTargets(store, now);
+
+  it('keeps an unchanged vessel object identity across a rebuild', () => {
+    const store = new SignalKStore();
+    let now = 1_000;
+    const ais = clocked(store, () => now);
+    store.applyFrame(frame({ 'vessels.a': at(36), 'vessels.b': at(37) }, now));
+    const [firstA, firstB] = ais.list();
+
+    // Only b moved. Every identity check downstream (rows, overlay features, keyed each blocks)
+    // should stop at a, instead of treating the whole fleet as new.
+    now = 2_000;
+    store.applyFrame(frame({ 'vessels.b': at(37.5) }, now));
+    const [nextA, nextB] = ais.list();
+    expect(nextA).toBe(firstA);
+    expect(nextB).not.toBe(firstB);
+    expect(nextB.position.latitude).toBe(37.5);
+  });
+
+  it('rebuilds a view when a value changes inside the same millisecond', () => {
+    const store = new SignalKStore();
+    const now = 5_000;
+    const ais = clocked(store, () => now);
+    // Two worker flushes can share a wall-clock millisecond, so a timestamp is not a safe memo key:
+    // keying on one would serve the stale view here, silently.
+    store.applyFrame(frame({ 'vessels.a': at(36) }, now));
+    expect(ais.list()[0].position.latitude).toBe(36);
+    store.applyFrame(frame({ 'vessels.a': at(38) }, now));
+    expect(ais.list()[0].position.latitude).toBe(38);
+  });
+
+  it('reuses the view when a target republishes an identical fix', () => {
+    const store = new SignalKStore();
+    let now = 1_000;
+    const ais = clocked(store, () => now);
+    store.applyFrame(frame({ 'vessels.a': at(36) }, now));
+    const first = ais.list()[0];
+    now = 2_000;
+    store.applyFrame(frame({ 'vessels.a': at(36) }, now));
+    expect(ais.list()[0]).toBe(first);
+  });
+
+  it('drops the memo for a pruned vessel rather than holding it for the session', () => {
+    const store = new SignalKStore();
+    let now = 1_000;
+    const ais = clocked(store, () => now);
+    store.applyFrame(frame({ 'vessels.a': at(36) }, now));
+    const first = ais.list()[0];
+    now = 1_000_000;
+    store.pruneAis(now, 30_000);
+    expect(ais.list()).toHaveLength(0);
+    store.applyFrame(frame({ 'vessels.a': at(36) }, now));
+    expect(ais.list()[0]).not.toBe(first);
+  });
+});

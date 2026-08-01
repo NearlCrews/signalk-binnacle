@@ -66,6 +66,60 @@ describe('SignalKStore', () => {
     expect(store.aisVersion).toBe(before + 1);
   });
 
+  it('holds aisVersion steady when a target republishes an identical value', () => {
+    const store = new SignalKStore();
+    const position = { latitude: 42, longitude: -83 };
+    store.applyFrame({
+      self: new Map(),
+      ais: aisMap({ 'vessels.a': { 'navigation.position': position } }),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const after = store.aisVersion;
+    // A target at anchor keeps transmitting the same fix. Bumping on that made the list, the
+    // collision assessment, and the traffic overlays rebuild and re-clone the whole fleet for
+    // nothing. A fresh object with equal fields is what actually arrives off the wire.
+    store.applyFrame({
+      self: new Map(),
+      ais: aisMap({ 'vessels.a': { 'navigation.position': { latitude: 42, longitude: -83 } } }),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+    });
+    expect(store.aisVersion).toBe(after);
+  });
+
+  it('still advances freshness on an identical republish, so the target does not age out', () => {
+    const store = new SignalKStore();
+    const send = (epoch: number) =>
+      store.applyFrame({
+        self: new Map(),
+        ais: aisMap({ 'vessels.a': { 'navigation.position': { latitude: 42, longitude: -83 } } }),
+        connection: { phase: 'open', attempt: 0 },
+        epoch,
+      });
+    send(1000);
+    send(60_000);
+    expect(store.pruneAis(70_000, 30_000)).toBe(0);
+  });
+
+  it('bumps aisVersion when a republished value actually differs', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      self: new Map(),
+      ais: aisMap({ 'vessels.a': { 'navigation.position': { latitude: 42, longitude: -83 } } }),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const after = store.aisVersion;
+    store.applyFrame({
+      self: new Map(),
+      ais: aisMap({ 'vessels.a': { 'navigation.position': { latitude: 42.001, longitude: -83 } } }),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+    });
+    expect(store.aisVersion).toBe(after + 1);
+  });
+
   it('updates connection state reactively', () => {
     const store = new SignalKStore();
     store.applyFrame(frame({}));
