@@ -1,9 +1,8 @@
 import {
-  arcgisExportTiles,
+  catalogSource,
   createSafetyOverlay,
   type OverlayModule,
   type RasterOverlaySource,
-  wmsTiles,
 } from '$shared/map';
 
 // Marine protected and regulated areas, so a cruiser sees no-anchor and protected zones before
@@ -11,43 +10,29 @@ import {
 // 2000 nested under it as a facet); the NOAA MPA Inventory covers US waters from the same host as the
 // NOAA chart. The two authorities cover different regions, so they are not grouped together. All
 // default hidden.
-const EMODNET_HA_WMS = 'https://ows.emodnet-humanactivities.eu/wms';
-const EMODNET_MPA_GROUP = { id: 'emodnet-mpa', title: 'Protected areas (EU)' };
-const NOAA_MPA_SERVER =
-  'https://gis.charttools.noaa.gov/arcgis/rest/services/survey_priorities2_national/MPA_Inventory_Separates/MapServer';
-
+//
+// Every upstream fact comes from the shared catalog through catalogSource, including the bounds.
+// This module used to hardcode the NOAA box as [-180, 15, -60, 75], which excluded Guam, the
+// Northern Mariana Islands, American Samoa, Wake Island, and the Pacific Remote Islands: the overlay
+// simply did not draw there. The catalog now derives that coverage from the inventory's own
+// geometry, so reading it is what fixes the gap and what keeps it fixed.
 export const MPA_SOURCES: RasterOverlaySource[] = [
-  {
-    id: 'mpa-emodnet',
-    title: 'Marine protected areas',
+  catalogSource('mpa-emodnet', {
+    region: 'EU',
+    category: 'reference',
     description:
       'EU protected and regulated sea areas, so you see no-anchor zones before you stop.',
+  }),
+  catalogSource('mpa-natura2000', {
     region: 'EU',
-    tiles: [wmsTiles(EMODNET_HA_WMS, 'marineprotectedareas')],
-    attribution: 'EMODnet Human Activities',
-    group: EMODNET_MPA_GROUP,
-    category: 'reference',
-  },
-  {
-    id: 'mpa-natura2000',
-    title: 'Natura 2000',
-    description: 'The EU Natura 2000 network of protected nature sites.',
-    region: 'EU',
-    tiles: [wmsTiles(EMODNET_HA_WMS, 'natura2000areas')],
-    attribution: 'EMODnet Human Activities',
     parent: 'mpa-emodnet',
-    group: EMODNET_MPA_GROUP,
-  },
-  {
-    id: 'mpa-noaa',
-    title: 'NOAA MPA inventory',
-    description: 'US marine protected areas from the NOAA inventory.',
+    description: 'The EU Natura 2000 network of protected nature sites.',
+  }),
+  catalogSource('mpa-noaa', {
     region: 'US',
-    tiles: [arcgisExportTiles(NOAA_MPA_SERVER)],
-    bounds: [-180, 15, -60, 75],
-    attribution: 'NOAA National Marine Protected Areas Center',
     category: 'reference',
-  },
+    description: 'US marine protected areas from the NOAA inventory.',
+  }),
 ];
 
 // The protected-area overlays draw in the safety band, bound through the shared createSafetyOverlay

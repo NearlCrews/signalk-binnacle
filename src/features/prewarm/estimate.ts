@@ -22,16 +22,31 @@ export { estimateBytes };
  * auto-select exclude it (it is global and large). */
 const BASEMAP_SOURCE_ID = 'basemap';
 
+/**
+ * A time-dynamic source, which the catalog marks with maxAgeSeconds. Weather radar and hazard
+ * overlays go stale in minutes, so downloading them for later is worse than useless: the tiles are
+ * wrong before anyone reads them, and the companion cache refuses to warm them anyway. Offering them
+ * here would let a region spend its byte budget on tiles that are never stored.
+ */
+function isVolatile(source: ChartSource): boolean {
+  // Read structurally rather than off the type: maxAgeSeconds arrives in the catalog release after
+  // the one this pins, and the guard has to be in place before those sources can appear. It reads
+  // as undefined on every source in the pinned version, so the filter is a no-op until the bump.
+  return (source as { maxAgeSeconds?: number }).maxAgeSeconds !== undefined;
+}
+
 /** The registry sources offered for a region download, including the vector basemap so a region can
  * pin the base layer for offline geometry. */
 export function regionSources(): ChartSource[] {
-  return CHART_SOURCES.filter((s) => s.upstream.mode !== 'style' || s.id === BASEMAP_SOURCE_ID);
+  return CHART_SOURCES.filter(
+    (s) => !isVolatile(s) && (s.upstream.mode !== 'style' || s.id === BASEMAP_SOURCE_ID),
+  );
 }
 
 /** The sources offered for position warm: never the basemap (warming a whole basemap per GPS fix is
- * wrong) and never any other style source. */
+ * wrong), never any other style source, and never a time-dynamic one. */
 export function positionWarmSources(): ChartSource[] {
-  return CHART_SOURCES.filter((s) => s.upstream.mode !== 'style');
+  return CHART_SOURCES.filter((s) => !isVolatile(s) && s.upstream.mode !== 'style');
 }
 
 /** Sources that cover the drawn bbox: region sources where tileCountInBbox > 0. Sources with no

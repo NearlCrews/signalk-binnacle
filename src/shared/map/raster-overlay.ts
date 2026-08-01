@@ -1,5 +1,10 @@
 import type { RasterLayerSpecification, RasterSourceSpecification } from 'maplibre-gl';
-import type { ChartGroup, LngLatBbox } from 'signalk-chart-sources';
+import {
+  type ChartGroup,
+  type ChartSource,
+  chartSourceById,
+  type LngLatBbox,
+} from 'signalk-chart-sources';
 import { applyRasterTheme } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
 import type { OverlayModule, ZBand } from './types';
@@ -53,9 +58,64 @@ export const wmsTiles = (base: string, layers: string, styles = ''): string =>
 
 // An ArcGIS MapServer export raster tile template: a 256px EPSG:3857 PNG with the {bbox-epsg-3857}
 // token MapLibre substitutes per tile. Some marine services (the NOAA MPA Inventory) serve only this
-// ArcGIS REST export, not WMS. The base is the MapServer URL without a trailing slash.
-export const arcgisExportTiles = (base: string): string =>
+// ArcGIS REST export, not WMS. The base is the MapServer URL without a trailing slash. Reached only
+// through catalogSource now, since every such service in use is a catalog entry.
+const arcgisExportTiles = (base: string): string =>
   `${base}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image`;
+
+/** The tile template for a catalog source, built the way the companion proxy builds the same request. */
+const catalogTiles = (source: ChartSource): string[] => {
+  switch (source.upstream.mode) {
+    case 'wms':
+      return [wmsTiles(source.upstream.base, source.upstream.layers, source.upstream.styles)];
+    case 'arcgis':
+      return [arcgisExportTiles(source.upstream.base)];
+    case 'wmts':
+    case 'xyz':
+      return [source.upstream.urlTemplate];
+    default:
+      throw new TypeError(`Chart source ${source.id} is not a streamable raster source`);
+  }
+};
+
+/**
+ * Build a raster overlay from the shared catalog, which owns every upstream fact: the service URL,
+ * the layer and style names, the zoom range, the bounds, the group, and the attribution. Callers add
+ * only what the catalog deliberately does not carry, the UI-facing description, region, category,
+ * parent, and default visibility.
+ *
+ * No caller may re-state a catalog value. Hand-copying one is how the webapp and the companion proxy
+ * drift apart, which is the whole reason the shared package exists: copies of the EMODnet bounds and
+ * the NOAA protected-area bounds had both gone stale before this helper existed.
+ */
+export const catalogSource = (
+  id: string,
+  opts: {
+    description?: string;
+    region?: string;
+    category?: string;
+    parent?: string;
+    defaultVisible?: boolean;
+    defaultOpacity?: number;
+  } = {},
+): RasterOverlaySource => {
+  const source = chartSourceById(id);
+  if (!source) {
+    throw new TypeError(`Missing chart source metadata for ${id}`);
+  }
+  return {
+    id: source.id,
+    title: source.title,
+    tiles: catalogTiles(source),
+    tileSize: source.tileSize,
+    minzoom: source.minzoom,
+    maxzoom: source.maxzoom,
+    bounds: source.bounds,
+    attribution: source.attribution,
+    group: source.group,
+    ...opts,
+  };
+};
 
 // The safety band hosts the navigation-hazard rasters (seamarks, protected areas, and maritime
 // boundaries): they draw above charts and routes so a hazard mark always reads over the chart

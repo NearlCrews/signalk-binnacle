@@ -43,11 +43,10 @@ export type { Syncable } from './overlay-tick';
 export { registerPmtilesProtocol } from './pmtiles';
 export { readPmtilesMeta } from './pmtiles-metadata';
 export {
-  arcgisExportTiles,
+  catalogSource,
   createRasterOverlay,
   createSafetyOverlay,
   type RasterOverlaySource,
-  wmsTiles,
 } from './raster-overlay';
 export { decodeSvgToImageData } from './svg-raster';
 export type { SymbolOverlay } from './symbol-overlay';
