@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CompanionSource, createArchiveSource, NoStoreSource } from './pmtiles';
+import {
+  CompanionSource,
+  createArchiveSource,
+  NoStoreSource,
+  pmtilesArchiveReferences,
+  registerPmtilesArchive,
+  unregisterPmtilesArchive,
+} from './pmtiles';
 import { BlockCachedSource } from './pmtiles-block-cache';
 
 function response(status: number, bytes = 4, start = 0): Response {
@@ -510,5 +517,41 @@ describe('CompanionSource.getBytes auth header', () => {
       'outside',
     );
     expect(redirected.cancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe('archive registration reference counting', () => {
+  // Two chart entries can name the same archive url: a user-added chart is minted with a fresh
+  // uuid, so it never collides with a server-discovered entry on id, only on url.
+  const SHARED = 'https://charts.example/shared.pmtiles';
+
+  afterEach(() => {
+    while (pmtilesArchiveReferences(SHARED) > 0) unregisterPmtilesArchive(SHARED);
+  });
+
+  it('counts each registration of the same url', () => {
+    registerPmtilesArchive(SHARED);
+    registerPmtilesArchive(SHARED);
+    expect(pmtilesArchiveReferences(SHARED)).toBe(2);
+  });
+
+  it('keeps the archive registered while another chart still references it', () => {
+    registerPmtilesArchive(SHARED);
+    registerPmtilesArchive(SHARED);
+    unregisterPmtilesArchive(SHARED);
+    expect(pmtilesArchiveReferences(SHARED)).toBe(1);
+  });
+
+  it('drops the archive once the last reference goes', () => {
+    registerPmtilesArchive(SHARED);
+    registerPmtilesArchive(SHARED);
+    unregisterPmtilesArchive(SHARED);
+    unregisterPmtilesArchive(SHARED);
+    expect(pmtilesArchiveReferences(SHARED)).toBe(0);
+  });
+
+  it('does not go negative when an unregister arrives without a matching register', () => {
+    unregisterPmtilesArchive('https://charts.example/never-registered.pmtiles');
+    expect(pmtilesArchiveReferences('https://charts.example/never-registered.pmtiles')).toBe(0);
   });
 });

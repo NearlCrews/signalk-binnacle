@@ -341,19 +341,39 @@ export function createArchiveSource(httpUrl: string, getToken?: () => string | u
   return new BlockCachedSource(inner, blockStore);
 }
 
+// How many chart entries currently reference each registered archive url. Two entries can name the
+// same archive (a user-added chart duplicating a server-discovered one: only ids are deduplicated,
+// and a user chart is minted with a fresh uuid), so unregistering on the first removal would drop
+// the archive and purge its blocks out from under the survivor, which then silently loses tiles
+// until something re-registers it.
+const archiveReferences = new Map<string, number>();
+
+// How many chart entries still hold an archive url. Exported for testing: the reference count is
+// the whole point of the fix, and the protocol's own instance map is private to this module.
+export function pmtilesArchiveReferences(httpUrl: string): number {
+  return archiveReferences.get(httpUrl) ?? 0;
+}
+
 // Register a PMTiles archive with the appropriate source so MapLibre resolves `pmtiles://<httpUrl>`
 // to it. Pass getToken for companion-provided archives so each fetch carries the current auth token.
 export function registerPmtilesArchive(httpUrl: string, getToken?: () => string | undefined): void {
   if (!protocol) registerPmtilesProtocol();
+  archiveReferences.set(httpUrl, (archiveReferences.get(httpUrl) ?? 0) + 1);
   if (protocol?.get(httpUrl)) return;
   protocol?.add(new PMTiles(createArchiveSource(httpUrl, getToken)));
 }
 
-// Drop a registered archive when its chart is removed, or each user-chart delete would leak a
+// Drop a registered archive when its last chart is removed, or each user-chart delete would leak a
 // PMTiles instance (for a blob: URL, a permanently dead one). The protocol exposes add and get
 // but no remove, so this reaches into its keyed instance map directly. The archive's cached
 // blocks are dropped too, best-effort, so a deleted chart stops holding cache budget.
 export function unregisterPmtilesArchive(httpUrl: string): void {
+  const remaining = (archiveReferences.get(httpUrl) ?? 0) - 1;
+  if (remaining > 0) {
+    archiveReferences.set(httpUrl, remaining);
+    return;
+  }
+  archiveReferences.delete(httpUrl);
   // Guard against an internal property rename across pmtiles versions: if `tiles` is not a Map,
   // the delete would be a silent no-op that leaks the archive, so warn instead of failing hard.
   if (protocol && protocol.tiles instanceof Map) {
