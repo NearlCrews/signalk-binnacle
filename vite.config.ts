@@ -159,6 +159,17 @@ export default defineConfig({
       },
       {
         extends: true,
+        // Vite's dependency optimizer must not discover anything after the run starts. When it
+        // does, it re-optimizes and reloads the browser, and whichever test modules were mid-import
+        // at that moment fail with "Failed to fetch dynamically imported module" and report zero
+        // tests. It hits a different file each run and only under load, so on a slow machine it is
+        // indistinguishable from a real failure; it blocked a push here. The scan at startup finds
+        // what these tests need, so holding the optimizer to that is enough, and anything it did not
+        // find is served as source. Verified with the dependency caches deleted, the state CI and a
+        // fresh clone always start from.
+        optimizeDeps: {
+          noDiscovery: true,
+        },
         test: {
           name: 'client-svelte',
           // Browser compilation executes client-side rune lifecycle, which the Node SSR compiler
