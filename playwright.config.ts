@@ -9,6 +9,14 @@ export default defineConfig({
   // independent (each does a fresh page.goto), parallel execution could be safe.
   fullyParallel: false,
   workers: 1,
+  // Playwright's default is 30 seconds, tuned for CI-class hardware. Several of these specs boot the
+  // map, wait for a style and its overlays, and then interact, which takes about 29 seconds on the
+  // Raspberry Pi 5 this project develops on: repeated runs of one spec measured 29.0, 29.1, and
+  // 29.8 seconds, so whether the gate passed was decided by fractions of a second of machine load
+  // rather than by anything the test asserts. CI retries once and hides it; the local pre-push hook
+  // does not, and it blocked a push on it. This is a hang watchdog, not a performance assertion,
+  // and every expect() keeps its own much shorter timeout, so doubling it costs no coverage.
+  timeout: 60_000,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:4173/signalk-binnacle/',
