@@ -76,7 +76,7 @@
     "maplibre-gl": "6.1.0",
     "pbf": "^5.1.2",
     "pmtiles": "^4.4.1",
-    "signalk-chart-sources": "^0.5.0",
+    "signalk-chart-sources": "^0.7.0",
     "terra-draw": "^1.32.2",
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "uplot": "^1.6.32"
@@ -112,11 +112,12 @@
     "size": "size-limit",
     "package:check": "publint --pack npm --strict && node scripts/check-package.mjs",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
+    "audit:full": "npm audit --audit-level=high",
     "verify:commit": "npm run ci:biome && npm run ci:workflows && npm run lint && npm run cruise && npm run deadcode",
     "verify:fast": "npm run verify:commit && npm run check",
     "verify": "npm run verify:fast && npm run test:coverage && npm run build && npm run size",
     "verify:browser": "npm run verify && npm run test:e2e:gate",
-    "verify:release": "npm run verify && playwright test && npm run package:check && npm run audit:runtime",
+    "verify:release": "npm run verify && playwright test && npm run package:check && npm run audit:runtime && npm run audit:full",
     "hooks": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push"
   },
   "size-limit": [

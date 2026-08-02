@@ -117,7 +117,9 @@ describe('coveringSources', () => {
   });
 
   it('excludes a bounded source with no overlap with the bbox', () => {
-    // depth-emodnet bounds are [-73.125, 5.625, 45.0, 90.0]; a Pacific bbox has no overlap.
+    // depth-emodnet is European: its bounds and its seven coverage regions are all east of the
+    // Atlantic, so a Pacific bbox has no overlap. Read from the catalog rather than restated here,
+    // since the 0.7.0 release derived both from the live terrain model.
     const pacific: [number, number, number, number] = [-150.0, 20.0, -120.0, 50.0];
     expect(coveringSources(pacific, [6, 12]).some((s) => s.id === 'depth-emodnet')).toBe(false);
   });
@@ -165,5 +167,22 @@ describe('formatBySource', () => {
     expect(out[0].source).toBe('seamark');
     expect(typeof out[0].value).toBe('string');
     expect(typeof out[0].unit).toBe('string');
+  });
+
+  it('treats a zero-area box as covering nothing rather than throwing', () => {
+    // The enumerator rejects a degenerate box, and this runs inside the draw library's finish
+    // callback, so a tap without a drag must not raise through its event dispatch. Before 0.6.0 the
+    // package expanded such a box to worldwide coverage, which is where an absurd estimate for a
+    // mis-drawn rectangle came from.
+    const zeroWidth: [number, number, number, number] = [10, 20, 10, 25];
+    const zeroHeight: [number, number, number, number] = [10, 20, 20, 20];
+    expect(() => coveringSources(zeroWidth, [6, 12])).not.toThrow();
+    expect(coveringSources(zeroWidth, [6, 12])).toEqual([]);
+    expect(coveringSources(zeroHeight, [6, 12])).toEqual([]);
+  });
+
+  it('still covers a box that is thin but real', () => {
+    const thin: [number, number, number, number] = [10, 20, 10.001, 20.001];
+    expect(coveringSources(thin, [6, 12]).length).toBeGreaterThan(0);
   });
 });

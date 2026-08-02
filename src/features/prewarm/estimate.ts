@@ -29,10 +29,7 @@ const BASEMAP_SOURCE_ID = 'basemap';
  * here would let a region spend its byte budget on tiles that are never stored.
  */
 function isVolatile(source: ChartSource): boolean {
-  // Read structurally rather than off the type: maxAgeSeconds arrives in the catalog release after
-  // the one this pins, and the guard has to be in place before those sources can appear. It reads
-  // as undefined on every source in the pinned version, so the filter is a no-op until the bump.
-  return (source as { maxAgeSeconds?: number }).maxAgeSeconds !== undefined;
+  return source.maxAgeSeconds !== undefined;
 }
 
 /** The registry sources offered for a region download, including the vector basemap so a region can
@@ -53,7 +50,18 @@ export function positionWarmSources(): ChartSource[] {
  * bounds are global and always included for a non-empty bbox; the basemap (global, no bounds) covers
  * any non-empty box. */
 export function coveringSources(bbox: LngLatBbox, zoomRange: ZoomRange): ChartSource[] {
+  // A zero-area box covers nothing, and the enumerator rejects one outright (it used to expand
+  // silently to worldwide coverage, which is where the estimate for a mis-drawn rectangle came
+  // from). This runs inside the draw library's finish callback, where a throw would escape into its
+  // event dispatch, so the degenerate case is answered here rather than raised.
+  if (!hasArea(bbox)) return [];
   return regionSources().filter((s) => tileCountInBbox(s, bbox, zoomRange) > 0);
+}
+
+/** Whether a box covers real ground. A tap without a drag, or a drag along one axis, yields a ring
+ * whose corners share a longitude or a latitude. */
+export function hasArea([west, south, east, north]: LngLatBbox): boolean {
+  return west !== east && south !== north;
 }
 
 /** Room for new real-region pins. Prefers the server-computed regionsFreeBytes (which already accounts
