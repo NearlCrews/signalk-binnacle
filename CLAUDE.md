@@ -94,6 +94,35 @@ not have to be corrected after the fact.
   files, exports, and dependencies, markdownlint and cspell own maintained prose, Vitest V8 owns
   the coverage floor, Size Limit owns built asset budgets, and publint plus
   `scripts/check-package.mjs` own package integrity.
+- Workflow gates are split by what they can prove. `scripts/check-workflows.mjs` (`npm run
+  ci:workflows`) owns this repository's own CI invariants: the pinned npm bootstrap, its location
+  outside the checkout, and setup-node's disabled package-manager cache. zizmor owns generic GitHub
+  Actions security (token persistence, injection through untrusted expressions, unpinned action
+  references) and runs as its own `workflow-security` job in `ci.yml` at a medium severity floor.
+  Every action reference is pinned to an immutable commit SHA with a version comment, and every
+  checkout sets `persist-credentials: false` because no workflow pushes, tags, or uses the ambient
+  token. The ad-hoc installs zizmor flags (the pinned npm, and the packed tarball the App Store
+  simulation installs) are deliberate and carry `# zizmor: ignore[adhoc-packages]` with the reason
+  at the step.
+- Dependency audits are two distinct gates and stay that way: `npm run audit:runtime`
+  (`--omit=dev`) is what the community registry scores, and `npm run audit:full` covers the build
+  and test toolchain a maintainer still has to keep clean. `verify:release` runs both.
+- `signalk-chart-sources` is the single upstream authority for a raster overlay's service URL, layer
+  name, zoom range, bounds, coverage, and attribution. A feature declares only what the catalog
+  deliberately does not carry: the plain-language description, the region tag, the panel category,
+  and the parent. Never restate an upstream fact in a feature module; that is what let a stale NOAA
+  bounding box silently drop Guam, the Northern Marianas, American Samoa, Wake, and the Pacific
+  Remote Islands off the protected-area overlay.
+  - A source carrying `maxAgeSeconds` is time-dynamic (weather radar, NWS alerts, sea surface
+    temperature). It must never be offered for offline pre-warm: a stored weather frame is wrong
+    before anyone sails into it, and the companion cache refuses to store it anyway. `isVolatile`
+    in `features/prewarm/estimate.ts` is the one gate.
+  - A zero-area bbox is rejected by the enumerator rather than silently expanded to worldwide
+    coverage. `coveringSources` answers a degenerate box locally, because it runs inside the draw
+    library's finish callback where a throw would escape into its event dispatch.
+  - Whole families belong to the offline builder's Advanced bucket together. A new upstream sibling
+    left off `SPECIALIST` renders as an ordinary reference layer beside its own family; the
+    source-summary test derives the families from the catalog so that drift fails there.
 - Additional libraries are allowed when they genuinely beat building in-house (user rule,
   2026-06-12), but only after EXTENSIVE research for the best one: compare the real candidates on
   maintenance activity, weekly downloads, bundle cost, API fit, license, and issue health, and
