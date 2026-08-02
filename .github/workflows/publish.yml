@@ -25,12 +25,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          # The tag check below reads history; nothing pushes, and npm auth comes from NPM_TOKEN,
+          # so the git credential does not need to persist into .git/config.
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           package-manager-cache: false
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
+        # zizmor: ignore[adhoc-packages] The pinned npm from packageManager, installed before any
+        # npm command reads this repository. It is the version the lockfile was resolved with,
+        # and Node 22 bundles one devEngines rejects, so there is no lockfile to install it from.
         run: npm install --global npm@11.19.0
       # Fail fast when the release tag and the package.json version disagree, so a release can never
       # publish a version that does not match its tag. The tag arrives through an env var (not inline
@@ -83,6 +89,9 @@ jobs:
           package-manager-cache: false
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
+        # zizmor: ignore[adhoc-packages] The pinned npm from packageManager, installed before any
+        # npm command reads this repository. It is the version the lockfile was resolved with,
+        # and Node 22 bundles one devEngines rejects, so there is no lockfile to install it from.
         run: npm install --global npm@11.19.0
       # --access public is required for the first publish of a new package when generating
       # provenance; for later versions it is the default for an unscoped public package.

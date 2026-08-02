@@ -33,6 +33,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # No step pushes, tags, or uses the ambient token, so the checkout does not leave it in
+          # .git/config where an uploaded artifact could carry it off.
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
@@ -41,6 +45,9 @@ jobs:
       # checkout before any npm command evaluates the repository package.
       - name: Install supported npm
         working-directory: ${{ runner.temp }}
+        # zizmor: ignore[adhoc-packages] The pinned npm from packageManager, installed before any
+        # npm command reads this repository. It is the version the lockfile was resolved with,
+        # and Node 22 bundles one devEngines rejects, so there is no lockfile to install it from.
         run: npm install --global npm@11.19.0
       - run: npm ci
       - run: npx playwright install chromium
@@ -52,6 +59,9 @@ jobs:
       # Simulate the App Store install: pack with lifecycle scripts disabled and confirm the tarball
       # path is clean. Binnacle defines no prepare or prepack script, so no lifecycle banner can
       # corrupt the captured path with the repository's pinned npm version.
+      # zizmor: ignore[adhoc-packages] Installing the tarball this job just packed is the point: it
+      # simulates what the Signal K App Store does to a published webapp. There is no lockfile to
+      # install this from, because the artifact under test is the pack output itself.
       - name: Simulate App Store install (npm pack --ignore-scripts)
         shell: bash
         run: |
