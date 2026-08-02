@@ -25,3 +25,13 @@ export function sameJsonValue(left: unknown, right: unknown): boolean {
     leftKeys.every((key) => Object.hasOwn(right, key) && sameJsonValue(left[key], right[key]))
   );
 }
+
+// Drop a Map's oldest entry and return its key, or undefined when the Map is empty. A Map iterates
+// in insertion order, so its first key is its oldest; the caller gets the key back because a capped
+// cache usually has a parallel Map (attempt counts, timestamps) to clear alongside it.
+export function evictOldestKey<K, V>(map: Map<K, V>): K | undefined {
+  const oldest = map.keys().next();
+  if (oldest.done) return undefined;
+  map.delete(oldest.value);
+  return oldest.value;
+}

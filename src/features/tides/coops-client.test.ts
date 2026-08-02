@@ -8,8 +8,6 @@ import {
   utcYmd,
 } from './coops-client';
 
-// This file's calls read json-first, which suits a client whose responses are all one body; the
-// stubbing itself is the shared helper's.
 const mockFetch = (json: unknown, ok = true, status = 200) => stubFetch({ body: json, ok, status });
 
 afterEach(() => {

@@ -132,8 +132,43 @@ export function padBbox(
   return clampLatitudes([west - dx, south - dy, east + dx, north + dy]);
 }
 
-// Whether outer fully encloses inner, for cache-coverage checks. Both boxes must be expressed the
-// same way: west below east, in the possibly-unwrapped space padBbox and the MapLibre viewport
+// Fetch an area that may cross the antimeridian, as one request away from the seam and as two
+// concurrent ones across it, merged into a single list. The all-or-nothing rule is the point: a
+// piece that fails leaves the whole area unanswered, because reporting half of it would let a
+// caller cache a partial answer as complete and hide everything on the other side of the seam.
+//
+// `keyOf` identifies the subject an item belongs to, so an item whose subject an EARLIER piece
+// already reported is dropped. Deduplicating across pieces rather than across items is what lets a
+// subject legitimately carry several items (a vessel with several track lines) while still
+// collapsing what both pieces return for whatever sits on 180 itself.
+export async function fetchAcrossSeam<T>(
+  bbox: Bbox4,
+  fetchBox: (box: Bbox4) => Promise<T[] | undefined>,
+  keyOf: (item: T) => string,
+): Promise<T[] | undefined> {
+  const boxes = splitAtAntimeridian(bbox);
+  if (boxes.length === 0) return undefined;
+  const answers = await Promise.all(boxes.map(fetchBox));
+  const merged: T[] = [];
+  const seen = new Set<string>();
+  for (const answer of answers) {
+    if (!answer) return undefined;
+    const fromThisPiece = new Set<string>();
+    for (const item of answer) {
+      const key = keyOf(item);
+      if (seen.has(key)) continue;
+      fromThisPiece.add(key);
+      merged.push(item);
+    }
+    for (const key of fromThisPiece) seen.add(key);
+  }
+  return merged;
+}
+
+// Whether outer fully encloses inner, for cache-coverage checks. Not to be confused with the
+// same-named check in $entities/weather, which normalizes both boxes itself; this one deliberately
+// does not, and leaves seam normalization to the request edge (fetchAcrossSeam). Both boxes must be
+// expressed the same way: west below east, in the possibly-unwrapped space padBbox and the MapLibre viewport
 // share. The edge comparisons are meaningless for a box in the west greater than east crossing
 // convention (boundsOfPoints emits those; they are for fitting, not for coverage).
 export function bboxContains(outer: Bbox4, inner: Bbox4): boolean {

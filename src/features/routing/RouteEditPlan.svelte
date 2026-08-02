@@ -27,13 +27,11 @@ interface Props {
 
 const { working, highlight, onHighlightLeg, planningSpeed }: Props = $props();
 
-const planSpeedMps = $derived(
-  Number.isFinite(planningSpeed.value)
-    ? Math.min(knotsToMetersPerSecond(MAX_PLANNING_SPEED_KN), Math.max(0, planningSpeed.value))
-    : 0,
-);
-// The field speaks knots; the store stays SI. Rounded to the field's own step so a value that
-// round-trips through m/s does not render as 5.000000000000001.
+// The persisted value is already bounded by its codec on both read and write, so this only guards
+// against a non-finite reaching the arithmetic below.
+const planSpeedMps = $derived(Number.isFinite(planningSpeed.value) ? planningSpeed.value : 0);
+// The field speaks knots; the store stays SI. Rounded to two decimals so a value that round-trips
+// through m/s does not render as 5.000000000000001.
 const boundedPlanningSpeed = $derived(
   Math.round((metersPerSecondToKnots(planSpeedMps) ?? 0) * 100) / 100,
 );

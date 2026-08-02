@@ -1,3 +1,4 @@
+import { evictOldestKey } from '$shared/lib';
 import { fetchPathMeta, type PathMeta } from './meta';
 
 // How many failed fetches one path may burn before the cache settles on an empty sentinel. A
@@ -30,10 +31,8 @@ export function createPathMetaCache(origin: string, getToken: () => string | und
 
   function evictOldestIfFull(): void {
     if (cache.size < MAX_CACHED_PATHS) return;
-    const oldest = cache.keys().next();
-    if (oldest.done) return;
-    cache.delete(oldest.value);
-    attempts.delete(oldest.value);
+    const evicted = evictOldestKey(cache);
+    if (evicted !== undefined) attempts.delete(evicted);
   }
 
   // Resolve a path's meta once. Safe to call from an effect: the sentinel makes repeat calls

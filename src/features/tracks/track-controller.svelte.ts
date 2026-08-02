@@ -1,6 +1,10 @@
 import { hasDrawableTrack, type SavedTracksSource, type TrackPoint } from '$entities/track';
 import { type Toast, uuidv4 } from '$shared/lib';
-import { writeRefusedMessage } from '$shared/signalk';
+import {
+  deleteRefusedMessage,
+  type ResourceMutationResult,
+  writeRefusedMessage,
+} from '$shared/signalk';
 import { downloadGeoJson } from './track-export';
 import {
   deleteTrack,
@@ -34,6 +38,19 @@ export interface TrackControllerDeps {
 
 export function createTrackController(deps: TrackControllerDeps) {
   const { origin } = deps;
+
+  // One place to turn a write outcome into a toast and, when the server refused, into a fresh
+  // access request.
+  function accepted(
+    outcome: ResourceMutationResult,
+    refused: string,
+    failed: string,
+  ): outcome is 'ok' {
+    if (outcome === 'ok') return true;
+    if (outcome === 'access-denied') void deps.requestWriteAccess();
+    deps.toast.show(outcome === 'access-denied' ? refused : failed);
+    return false;
+  }
 
   let savedTracks = $state.raw<SavedTrack[]>([]);
   let shownSaved = $state<ReadonlySet<string>>(new Set());
@@ -86,20 +103,18 @@ export function createTrackController(deps: TrackControllerDeps) {
     const id = uuidv4();
     try {
       const outcome = await saveTrack(origin, deps.getToken(), id, name, points);
-      if (outcome !== 'ok') {
-        if (outcome === 'access-denied') {
-          deps.toast.show(writeRefusedMessage('track'));
-          void deps.requestWriteAccess();
-          return false;
-        }
-        // With provisioning unconfirmed (an older server whose probe route never answered), a
-        // missing tracks provider is just as likely as a connection problem, so the copy must not
-        // point at only the wrong causes.
-        deps.toast.show(
+      // With provisioning unconfirmed (an older server whose probe route never answered), a missing
+      // tracks provider is just as likely as a connection problem, so the copy must not point at
+      // only the wrong causes.
+      if (
+        !accepted(
+          outcome,
+          writeRefusedMessage('track'),
           provisioning === 'provisioned'
             ? 'Could not save the track. Check the connection and access.'
             : 'Could not save the track. Check the connection and access, and whether this server has track storage.',
-        );
+        )
+      ) {
         return false;
       }
       const saved = savedTrackFromPoints(id, name, points);
@@ -124,13 +139,13 @@ export function createTrackController(deps: TrackControllerDeps) {
     refreshGeneration += 1;
     try {
       const deleted = await deleteTrack(origin, deps.getToken(), id);
-      if (deleted !== 'ok') {
-        if (deleted === 'access-denied') {
-          deps.toast.show('Signal K refused the delete. Read/write access is being requested.');
-          void deps.requestWriteAccess();
-          return;
-        }
-        deps.toast.show('Could not delete the track. Check the connection and access.');
+      if (
+        !accepted(
+          deleted,
+          deleteRefusedMessage(),
+          'Could not delete the track. Check the connection and access.',
+        )
+      ) {
         return;
       }
       savedTracks = savedTracks.filter((track) => track.id !== id);

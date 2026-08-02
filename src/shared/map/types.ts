@@ -78,6 +78,10 @@ export interface OverlayModule {
   // When false the overlay is not shown as a Layers-panel row: it is a tool (Measure, Time travel)
   // controlled from the menu, not a layer the navigator toggles or reorders. It is still registered
   // and rendered. Absent means listed.
+  //
+  // It also governs persistence: an overlay with no panel row has no navigator-owned visibility to
+  // remember, so the layer manager keeps it out of the saved snapshot and ignores any entry an
+  // older build left there. An overlay whose state should survive a reload must be listed.
   readonly listed?: boolean;
   readonly supportsOpacity: boolean;
   // Initial visibility when there is no saved state. Defaults to visible; the reference and depth

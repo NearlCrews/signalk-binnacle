@@ -5,6 +5,7 @@ import type { CollisionAssessment, DangerContact } from '$entities/collision';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
+import { fakeVesselFix } from '$shared/testing';
 import AisListPanel from './AisListPanel.svelte';
 
 const mounted: Array<() => void> = [];
@@ -39,10 +40,8 @@ function mountPanel(options: {
       target,
       props: {
         aisTargets,
-        vessel: {
-          position: { latitude: 42, longitude: -83 },
-          positionStale: false,
-        } as OwnVessel,
+        clock: { now: Date.now() },
+        vessel: fakeVesselFix({ latitude: 42, longitude: -83 }) as unknown as OwnVessel,
         collision: {
           assessment: { contacts: options.contacts ?? [], worst: 'clear' },
         } as CollisionAssessment,

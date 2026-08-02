@@ -4,6 +4,7 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
 import type { AuthController } from '$shared/signalk';
+import { fakeVesselFix } from '$shared/testing';
 import WaypointsPanel from './WaypointsPanel.svelte';
 import { MAX_WAYPOINTS } from './waypoints-client';
 
@@ -13,7 +14,7 @@ const waypoint: Waypoint = {
   position: { latitude: 44, longitude: -86 },
 };
 
-const boat = { position: { latitude: 0, longitude: 0 }, positionStale: false };
+const boat = fakeVesselFix({ latitude: 0, longitude: 0 });
 
 function marks(count: number): Waypoint[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -28,7 +29,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
     props: {
       auth: { writeBlocked: false } as AuthController,
       waypoints: [],
-      vessel: { position: undefined, positionStale: false } as unknown as OwnVessel,
+      vessel: fakeVesselFix(undefined) as unknown as OwnVessel,
       units: { mode: 'metric' } as UnitsStore,
       loadState: 'ready',
       busy: false,

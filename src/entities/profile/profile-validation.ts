@@ -205,10 +205,8 @@ export function adoptStoredProfile(profile: Profile): Profile {
   };
 }
 
-// A planning speed is valid when it is a finite number inside its unit's range. `legacyAlternative`
-// lets the SI field be absent when the document still carries the pre-migration knots field.
-function validPlanningSpeed(value: unknown, max: number, legacyAlternative?: unknown): boolean {
-  if (value === undefined && legacyAlternative !== undefined) return true;
+// A planning speed is valid when it is a finite number inside its unit's range.
+function inPlanningSpeedRange(value: unknown, max: number): boolean {
   return isFiniteNumber(value) && value >= 0 && value <= max;
 }
 
@@ -229,12 +227,14 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   // Either unit is accepted on read: profiles saved before the SI migration carry knots, and
   // rejecting those would silently drop the whole profile rather than one stale field.
   // sanitizeProfileSettings converts and drops the legacy field on the way in.
-  if (!validPlanningSpeed(value.planningSpeedMps, MAX_PLANNING_SPEED_MPS, value.planningSpeedKn)) {
+  const hasLegacySpeed = value.planningSpeedKn !== undefined;
+  if (hasLegacySpeed && !inPlanningSpeedRange(value.planningSpeedKn, MAX_PLANNING_SPEED_KN)) {
     return false;
   }
+  // The SI field may be absent only while the legacy one carries the value.
   if (
-    value.planningSpeedKn !== undefined &&
-    !validPlanningSpeed(value.planningSpeedKn, MAX_PLANNING_SPEED_KN)
+    !(value.planningSpeedMps === undefined && hasLegacySpeed) &&
+    !inPlanningSpeedRange(value.planningSpeedMps, MAX_PLANNING_SPEED_MPS)
   ) {
     return false;
   }

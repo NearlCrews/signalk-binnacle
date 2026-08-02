@@ -125,6 +125,10 @@ export function normalizeBbox(bbox: Bbox): Bbox {
   return { west, south, east, north };
 }
 
+// Distinct from $shared/geo's bboxContains, which compares in the unwrapped space MapLibre
+// reports and leaves seam normalization to the request edge. This one normalizes both boxes itself
+// (normalizeBbox), so the weather path is seam-safe on its own terms. Do not carry a rule from one
+// to the other.
 export function bboxContains(coverage: Bbox, viewport: Bbox): boolean {
   const outer = normalizeBbox(coverage);
   const inner = normalizeBbox(viewport);

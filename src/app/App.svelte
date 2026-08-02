@@ -2113,6 +2113,7 @@ const plotterServices = {
   origin,
   store,
   vessel,
+  clock,
   aisTargets,
   units,
   auth,

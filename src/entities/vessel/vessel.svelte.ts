@@ -1,4 +1,4 @@
-import { asNumber, isLatLon, type LatLon } from '$shared/geo';
+import { asNumber, isLatLon, type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
 import type { ReactiveClock } from '$shared/lib';
 import { type SignalKStore, SK_PATHS } from '$shared/signalk';
 
@@ -102,6 +102,23 @@ export class OwnVessel {
   get position(): LatLon | undefined {
     const value = this.#raw(SK_PATHS.position);
     return isLatLon(value) ? value : undefined;
+  }
+
+  // The own fix rounded to about 110 m, and undefined while it is stale. This is what a sortable
+  // list should measure from: distance and bearing to every row would otherwise be recomputed on
+  // every 1 Hz GPS tick, for a change no navigator can see. The key is a string, so the derived
+  // halts when the rounded cell is unchanged, and the parse below only re-runs when it moves.
+  // Owned here rather than repeated per panel, so the three lists cannot drift apart on how coarse
+  // "coarse" is.
+  #coarseCellKey = $derived(
+    this.position && !this.positionStale ? quantizeLatLonKey(this.position) : '',
+  );
+  #coarsePosition = $derived<LatLon | undefined>(
+    this.#coarseCellKey ? parseLatLonKey(this.#coarseCellKey) : undefined,
+  );
+
+  get coarsePosition(): LatLon | undefined {
+    return this.#coarsePosition;
   }
 
   // Depth in meters (SI) for the safety surfaces: the status chip, the shallow monitor, and the

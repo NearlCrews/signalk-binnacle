@@ -24,7 +24,7 @@ export {
   nearestBySorted,
 } from './math';
 export { prefersReducedMotion } from './motion';
-export { isRecord, sameJsonValue } from './object';
+export { evictOldestKey, isRecord, sameJsonValue } from './object';
 export {
   createRetryableLazyLoader,
   createRetryableLazyUiLoader,

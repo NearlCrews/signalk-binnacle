@@ -5,7 +5,6 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
-import { type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
 import { formatBearingOr, formatLatitude, formatLongitude, formatMetersOrNm } from '$shared/lib';
 import {
   defaultNavSort,
@@ -79,15 +78,7 @@ let sortState = $state<NavSortState>(defaultNavSort(false));
 let sortTouched = $state(false);
 const minimize = createPanelMinimize();
 
-// The own fix is quantized to about 110 m before it reaches the metric stage, so 1 Hz GPS jitter
-// does not recompute the range and bearing of every mark on every tick; a glanceable list does
-// not need finer. The key is a string, so the derived halts when the rounded cell is unchanged.
-const ownCellKey = $derived(
-  vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
-);
-const vesselPosition = $derived<LatLon | undefined>(
-  ownCellKey ? parseLatLonKey(ownCellKey) : undefined,
-);
+const vesselPosition = $derived(vessel.coarsePosition);
 // The metrics stage stands alone: computing rhumb distance and bearing for thousands of marks is
 // the expensive part, and it depends only on the collection and the fix, so a keystroke in the
 // search box or a sort tap re-runs just the cheap filter and sort below.

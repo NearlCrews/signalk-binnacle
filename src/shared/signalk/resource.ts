@@ -272,6 +272,12 @@ export function writeRefusedMessage(noun: string): string {
   return `Signal K refused the write. Your ${noun} is kept while read/write access is requested.`;
 }
 
+// The delete counterpart. A delete has no draft to keep, so it says less; it is here for the same
+// reason as its sibling, which is that one server answer should read the same everywhere.
+export function deleteRefusedMessage(): string {
+  return 'Signal K refused the delete. Read/write access is being requested.';
+}
+
 // Undefined means the request never completed (a network failure or a timeout), which is transient,
 // not a refusal.
 export function mutationResultFor(response: Response | undefined): ResourceMutationResult {

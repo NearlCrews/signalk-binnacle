@@ -12,11 +12,6 @@ const MAX_OUTSTANDING_FRAMES = 2;
 // actually consumed a frame.
 export class RadarFlushGate {
   #outstanding = 0;
-  readonly #max: number;
-
-  constructor(max: number = MAX_OUTSTANDING_FRAMES) {
-    this.#max = max;
-  }
 
   get outstanding(): number {
     return this.#outstanding;
@@ -24,7 +19,7 @@ export class RadarFlushGate {
 
   // Whether another frame may be transferred right now.
   get ready(): boolean {
-    return this.#outstanding < this.#max;
+    return this.#outstanding < MAX_OUTSTANDING_FRAMES;
   }
 
   onFlush(): void {

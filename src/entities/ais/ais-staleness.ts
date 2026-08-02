@@ -20,3 +20,9 @@ export const AIS_APPROACH_STALE_TTL_MS = 30_000;
 // position. Class B targets can report at 30-second intervals, so leave one interval of margin for
 // delivery jitter without retaining a velocity vector through multiple missed reports.
 export const AIS_MOTION_STALE_TTL_MS = 60_000;
+
+// The floor for how often a rendered view of the traffic is rebuilt. A rendered position does not
+// need better than about 1 Hz, and a glanceable list needs it less. Declared here with the other
+// AIS timings so the overlays and the list cannot be tuned apart, which a comment in each feature
+// asserting they agree would not prevent.
+export const AIS_REFRESH_MIN_MS = 1_000;

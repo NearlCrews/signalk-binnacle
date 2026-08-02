@@ -1,3 +1,4 @@
+import { evictOldestKey } from '$shared/lib';
 // Crow's Nest explicit POI type, from the Signal K notes resource.
 export type PoiType =
   | 'Marina'
@@ -173,10 +174,7 @@ export function categoryForSkIcon(skIcon: string | undefined): PoiCategory {
     SKICON_CATEGORY[lower] ??
     KEYWORD_CATEGORY.find(([needle]) => lower.includes(needle))?.[1] ??
     'generic';
-  if (SKICON_CACHE.size >= MAX_SKICON_CACHE_ENTRIES) {
-    const oldest = SKICON_CACHE.keys().next();
-    if (!oldest.done) SKICON_CACHE.delete(oldest.value);
-  }
+  if (SKICON_CACHE.size >= MAX_SKICON_CACHE_ENTRIES) evictOldestKey(SKICON_CACHE);
   SKICON_CACHE.set(skIcon, resolved);
   return resolved;
 }

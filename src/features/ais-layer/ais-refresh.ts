@@ -1,10 +1,4 @@
-import type { AisTargets } from '$entities/ais';
-
-// Steady-state AIS churn (a position in nearly every worker flush) advances targets.version
-// several times per second in a busy anchorage, and each advance used to rebuild the whole
-// feature collection and push setData. Rendered positions do not need better than about 1 Hz,
-// so version-only churn is held to this floor.
-const AIS_REFRESH_MIN_MS = 1_000;
+import { AIS_REFRESH_MIN_MS, type AisTargets } from '$entities/ais';
 
 interface AisRefreshGate {
   reset(): void;

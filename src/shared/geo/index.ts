@@ -4,6 +4,7 @@ export {
   bboxContains,
   bboxContainsPoint,
   boundsOfPoints,
+  fetchAcrossSeam,
   formatBounds,
   isBbox4,
   lngLatBoundsToBbox4,

@@ -39,18 +39,18 @@ export async function runTransaction<T>(
   conn: IDBDatabase,
   storeNames: string | string[],
   mode: IDBTransactionMode,
-  // Synchronous only, enforced at the type level: an IndexedDB transaction auto-commits as soon as
-  // its microtask queue drains, so an async callback would have its later work run outside the
-  // transaction, and its rejection would escape the catch below without aborting anything.
-  run: (tx: IDBTransaction) => T extends Promise<unknown> ? never : T,
+  // Synchronous only: an IndexedDB transaction auto-commits as soon as its microtask queue drains,
+  // so an async callback would have its later work run outside the transaction, and its rejection
+  // would escape the catch below without aborting anything. Enforced at runtime rather than by a
+  // conditional return type, so an `any`-typed caller is caught too and the cast a conditional type
+  // would force here is not needed.
+  run: (tx: IDBTransaction) => T,
 ): Promise<T> {
   const tx = conn.transaction(storeNames, mode);
   const completion = txDone(tx);
   let result: T;
   try {
-    result = run(tx) as T;
-    // The type rules an async callback out, but the boundary is worth holding at runtime too: an
-    // untyped or `any`-typed caller would otherwise get a silently half-applied transaction.
+    result = run(tx);
     if (isThenable(result)) {
       throw new TypeError('runTransaction callback must be synchronous');
     }

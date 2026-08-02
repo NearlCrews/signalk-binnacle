@@ -1,4 +1,4 @@
-import { type Bbox4, isLonLat, type LonLat, splitAtAntimeridian } from '$shared/geo';
+import { type Bbox4, fetchAcrossSeam, isLonLat, type LonLat } from '$shared/geo';
 import { asKeyedObject, fetchAuthedJson } from '$shared/signalk';
 
 // One recent-track line for a vessel from the tracks plugin (@signalk/tracks-plugin): the Signal K
@@ -66,38 +66,37 @@ function linesFromEntry(
 // returns undefined so the overlay keeps the wakes already shown; the plugin also answers 404 when
 // installed but not running, and the route is absent without it, so undefined doubles as the
 // degrade signal on a stock server.
-export async function fetchAisTrails(
+export function fetchAisTrails(
   base: string,
   token: string | undefined,
   bbox: Bbox4,
 ): Promise<AisTrail[] | undefined> {
-  // A padded viewport at the antimeridian carries unwrapped longitudes, which the plugin cannot
-  // match, so ask for each in-range piece. Away from the seam this is one box and one request.
-  const boxes = splitAtAntimeridian(bbox);
-  if (boxes.length === 0) return undefined;
-  const trails: AisTrail[] = [];
-  const seenContexts = new Set<string>();
+  // A padded viewport at the antimeridian carries unwrapped longitudes the plugin cannot match, so
+  // fetchAcrossSeam asks for each in-range piece concurrently and merges. Away from the seam that is
+  // one box and one request. The caps apply across the merged result, not per piece, and a vessel
+  // straddling the seam is returned by both pieces, which the context key deduplicates.
   let acceptedPoints = 0;
-  for (const box of boxes) {
-    const keyed = asKeyedObject(
-      await fetchAuthedJson<unknown>(`${base}${TRACKS_PATH}?bbox=${bboxQuery(box)}`, token),
-    );
-    // One failed piece leaves the area unanswered: a half-covered result would render as the whole
-    // picture and silently drop the wakes on the other side of the seam.
-    if (!keyed) return undefined;
-    for (const [context, raw] of Object.entries(keyed)) {
-      const remainingPoints = MAX_POINTS_PER_RESPONSE - acceptedPoints;
-      if (trails.length >= MAX_TRAILS || remainingPoints === 0) break;
-      // A vessel straddling the seam is returned by both pieces; keep the first line for it rather
-      // than drawing the same wake twice.
-      if (seenContexts.has(context)) continue;
-      for (const line of linesFromEntry(raw, remainingPoints, MAX_TRAILS - trails.length)) {
-        seenContexts.add(context);
-        trails.push({ context, line });
-        acceptedPoints += line.length;
-        if (trails.length >= MAX_TRAILS || acceptedPoints >= MAX_POINTS_PER_RESPONSE) break;
+  let acceptedTrails = 0;
+  return fetchAcrossSeam(
+    bbox,
+    async (box) => {
+      const keyed = asKeyedObject(
+        await fetchAuthedJson<unknown>(`${base}${TRACKS_PATH}?bbox=${bboxQuery(box)}`, token),
+      );
+      if (!keyed) return undefined;
+      const trails: AisTrail[] = [];
+      for (const [context, raw] of Object.entries(keyed)) {
+        const remainingPoints = MAX_POINTS_PER_RESPONSE - acceptedPoints;
+        if (acceptedTrails >= MAX_TRAILS || remainingPoints === 0) break;
+        for (const line of linesFromEntry(raw, remainingPoints, MAX_TRAILS - acceptedTrails)) {
+          trails.push({ context, line });
+          acceptedTrails += 1;
+          acceptedPoints += line.length;
+          if (acceptedTrails >= MAX_TRAILS || acceptedPoints >= MAX_POINTS_PER_RESPONSE) break;
+        }
       }
-    }
-  }
-  return trails;
+      return trails;
+    },
+    (trail) => trail.context,
+  );
 }

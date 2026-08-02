@@ -42,6 +42,7 @@ export {
   adminSessionInit,
   asKeyedObject,
   authInit,
+  deleteRefusedMessage,
   deleteResource,
   deleteResourceOutcome,
   fetchAuthedJson,

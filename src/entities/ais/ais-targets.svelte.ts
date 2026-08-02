@@ -77,7 +77,9 @@ export class AisTargets {
   #cache: AisTargetView[] | undefined;
   #cacheVersion = -1;
   #cacheExpiresAt = 0;
-  // Rebuilt (not mutated) on every list rebuild, so a pruned vessel's entry cannot outlive it.
+  // Long-lived and mutated in place: rebuilding it per pass allocated a whole Map, plus one set
+  // per unchanged vessel, on every AIS change. Entries for vessels the store dropped are pruned
+  // below, only when the sizes disagree.
   #views = new Map<string, CachedView>();
   #now: () => number;
 
@@ -118,7 +120,6 @@ export class AisTargets {
       return this.#cache;
     }
     const out: AisTargetView[] = [];
-    const views = new Map<string, CachedView>();
     let expiresAt = Number.POSITIVE_INFINITY;
     for (const [id, target] of this.#store.aisTargets) {
       // A vessel nobody heard from since its view was built, still inside every freshness window,
@@ -131,7 +132,6 @@ export class AisTargets {
         now < cached.expiresAt
       ) {
         out.push(cached.view);
-        views.set(id, cached);
         expiresAt = Math.min(expiresAt, cached.expiresAt);
         continue;
       }
@@ -150,7 +150,11 @@ export class AisTargets {
         return target.values.get(path);
       };
       const position = current(SK_PATHS.position, AIS_STALE_TTL_MS);
-      if (!isLatLon(position)) continue;
+      if (!isLatLon(position)) {
+        // No renderable position, so no view: drop any memo from when it had one.
+        this.#views.delete(id);
+        continue;
+      }
       const name = current(SK_PATHS.name);
       const approachEpoch = target.epochs.get(SK_PATHS.closestApproach);
       const approachFresh =
@@ -178,7 +182,7 @@ export class AisTargets {
         navigationState: typeof navState === 'string' ? navState : undefined,
       };
       out.push(view);
-      views.set(id, {
+      this.#views.set(id, {
         view,
         generation: this.#store.generation,
         revision: target.revision,
@@ -186,10 +190,16 @@ export class AisTargets {
       });
       expiresAt = Math.min(expiresAt, vesselExpiresAt);
     }
+    // Only when a vessel was pruned from the store, which is the one way #views can hold an id the
+    // loop above never visited.
+    if (this.#views.size > this.#store.aisTargets.size) {
+      for (const id of this.#views.keys()) {
+        if (!this.#store.aisTargets.has(id)) this.#views.delete(id);
+      }
+    }
     this.#cache = out;
     this.#cacheVersion = version;
     this.#cacheExpiresAt = expiresAt;
-    this.#views = views;
     return out;
   }
 

@@ -158,10 +158,11 @@ export class SignalKStore {
         let targetChanged = false;
         for (const [path, value] of incoming) {
           const receivedAt = frame.aisEpochs?.get(context)?.get(path) ?? frame.epoch;
+          const previous = target.values.get(path);
           targetChanged ||=
-            !target.values.has(path) ||
+            (previous === undefined && !target.values.has(path)) ||
             target.generations.get(path) !== generation ||
-            !sameJsonValue(target.values.get(path), value);
+            !sameJsonValue(previous, value);
           target.values.set(path, value);
           target.epochs.set(path, receivedAt);
           target.generations.set(path, generation);

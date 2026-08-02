@@ -419,9 +419,10 @@ function legacyPlanningSpeedMps(storage?: StorageLike): number | undefined {
   try {
     const raw = store.getItem(binnacleStorageKey('planningSpeedKn'));
     if (raw == null) return undefined;
-    const knots: unknown = JSON.parse(raw);
-    if (!isFiniteNumber(knots) || knots < 0 || knots > MAX_PLANNING_SPEED_KN) return undefined;
-    return knotsToMetersPerSecond(knots);
+    // Validated through the same codec shape the SI key uses, so the legacy bound is stated once.
+    const decoded = boundedNumberPersistedCodec(0, MAX_PLANNING_SPEED_KN).decode(JSON.parse(raw));
+    if (decoded.state === 'invalid') return undefined;
+    return knotsToMetersPerSecond(decoded.value);
   } catch {
     return undefined;
   }

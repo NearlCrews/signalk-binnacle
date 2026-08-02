@@ -102,6 +102,11 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
   const liveReported = new Set<string>();
   let liveVersion = $state(0);
   $effect(() => {
+    // Only while the panel is open. The latch is monotonic, so a path that reported earlier still
+    // latches on the first run after opening; running it app-wide rebuilt the whole catalog (which
+    // getCatalog mints fresh on every read) once per path-meta fetch during startup, for a panel
+    // the navigator may never open.
+    if (!open) return;
     let latched = false;
     for (const descriptor of deps.getCatalog()) {
       for (const candidate of descriptor.candidates) {

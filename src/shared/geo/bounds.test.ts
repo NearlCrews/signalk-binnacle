@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type Bbox4,
   bboxCenter,
   bboxContains,
   bboxContainsPoint,
   boundsOfPoints,
+  fetchAcrossSeam,
   normalizeBounds,
   padBbox,
   splitAtAntimeridian,
@@ -184,5 +185,84 @@ describe('splitAtAntimeridian', () => {
         expect(box[0]).toBeLessThanOrEqual(box[2]);
       }
     }
+  });
+});
+
+describe('fetchAcrossSeam', () => {
+  const inRange: Bbox4 = [10, 0, 20, 5];
+  const crossing: Bbox4 = [170, 0, 190, 10];
+
+  it('issues one request away from the seam', async () => {
+    const fetchBox = vi.fn(async () => [{ id: 'a' }]);
+    await expect(fetchAcrossSeam(inRange, fetchBox, (item) => item.id)).resolves.toEqual([
+      { id: 'a' },
+    ]);
+    expect(fetchBox).toHaveBeenCalledOnce();
+  });
+
+  it('issues the two seam requests concurrently, not one after the other', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchBox = vi.fn(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return [];
+    });
+    await fetchAcrossSeam(crossing, fetchBox, () => 'k');
+    expect(fetchBox).toHaveBeenCalledTimes(2);
+    expect(maxInFlight).toBe(2);
+  });
+
+  it('drops what a later piece repeats from an earlier one', async () => {
+    const answers = [
+      [{ id: 'seam' }, { id: 'west' }],
+      [{ id: 'seam' }, { id: 'east' }],
+    ];
+    let call = 0;
+    const merged = await fetchAcrossSeam(
+      crossing,
+      async () => answers[call++],
+      (item) => item.id,
+    );
+    expect(merged?.map((item) => item.id)).toEqual(['seam', 'west', 'east']);
+  });
+
+  it('keeps several items that share one key within a single piece', async () => {
+    // A vessel reports several track lines under one context. Deduplicating per item rather than
+    // per piece would silently collapse them into one wake.
+    const answers = [
+      [
+        { context: 'a', line: 1 },
+        { context: 'a', line: 2 },
+      ],
+      [{ context: 'a', line: 3 }],
+    ];
+    let call = 0;
+    const merged = await fetchAcrossSeam(
+      crossing,
+      async () => answers[call++],
+      (item) => item.context,
+    );
+    expect(merged?.map((item) => item.line)).toEqual([1, 2]);
+  });
+
+  it('reports the whole area as unanswered when either piece fails', async () => {
+    let call = 0;
+    const merged = await fetchAcrossSeam(
+      crossing,
+      async () => (call++ === 0 ? [{ id: 'west' }] : undefined),
+      (item) => item.id,
+    );
+    expect(merged).toBeUndefined();
+  });
+
+  it('yields no request at all for a non-finite box', async () => {
+    const fetchBox = vi.fn(async () => []);
+    await expect(
+      fetchAcrossSeam([Number.NaN, 0, 10, 5], fetchBox, () => 'k'),
+    ).resolves.toBeUndefined();
+    expect(fetchBox).not.toHaveBeenCalled();
   });
 });

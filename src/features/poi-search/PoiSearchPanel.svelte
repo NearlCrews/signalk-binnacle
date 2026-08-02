@@ -4,7 +4,6 @@ import type { PoiViewState } from '$entities/poi';
 import { categoryLabel, poiInlineIconSvg } from '$entities/poi-icons';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
-import { type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
 import { MAX_NAV_ROWS, type NavSortState, toggleSort } from '$shared/nav';
 import { createPanelMinimize, NavSortControl, ShowOnChartToggle, SlideOver } from '$shared/ui';
@@ -53,15 +52,7 @@ let sortState = $state<NavSortState<PoiSort>>(defaultSort(false));
 let sortTouched = $state(false);
 let previewedId = $state<string | undefined>();
 const minimize = createPanelMinimize();
-// The own fix is quantized to about 110 m before it reaches the metric stage, so 1 Hz GPS jitter
-// does not recompute the range and bearing of every place on every tick; a glanceable list does
-// not need finer. The key is a string, so the derived halts when the rounded cell is unchanged.
-const ownCellKey = $derived(
-  vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
-);
-const vesselPosition = $derived<LatLon | undefined>(
-  ownCellKey ? parseLatLonKey(ownCellKey) : undefined,
-);
+const vesselPosition = $derived(vessel.coarsePosition);
 
 const allRows = $derived(
   sortRows(filterRows(toRows(pois, vesselPosition), query), sortState.key, sortState.dir),

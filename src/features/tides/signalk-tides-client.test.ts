@@ -4,8 +4,6 @@ import { fetchSignalkTidesReading, parseTidesResource } from './signalk-tides-cl
 
 const NOW_MS = Date.UTC(2026, 5, 8, 12, 0);
 
-// This file's calls read json-first, which suits a client whose responses are all one body; the
-// stubbing itself is the shared helper's.
 const mockFetch = (json: unknown, ok = true, status = 200) => stubFetch({ body: json, ok, status });
 
 afterEach(() => {

@@ -5,7 +5,13 @@ import { type TrackPoint, trackToRoute } from '$entities/track';
 import { type Waypoint, waypointHref } from '$entities/waypoint';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
 import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
-import { type ActiveRoute, type CourseInfo, writeRefusedMessage } from '$shared/signalk';
+import {
+  type ActiveRoute,
+  type CourseInfo,
+  deleteRefusedMessage,
+  type ResourceMutationResult,
+  writeRefusedMessage,
+} from '$shared/signalk';
 import { defaultSaveName } from '$shared/ui';
 import {
   activateRoute,
@@ -87,6 +93,21 @@ export function createRouteController(deps: RouteControllerDeps) {
     deps.toast.show(message);
   }
 
+  // One place to turn a write outcome into a message and, when the server refused, into a fresh
+  // access request. Returns whether the write landed, so a caller reads as
+  // `if (!accepted(outcome, ...)) return;`. Without this the refusal branch was copied at every
+  // mutation, which is one more place per write to forget the re-request.
+  function accepted(
+    outcome: ResourceMutationResult,
+    refused: string,
+    failed: string,
+  ): outcome is 'ok' {
+    if (outcome === 'ok') return true;
+    if (outcome === 'access-denied') void deps.requestWriteAccess();
+    flagRouteError(outcome === 'access-denied' ? refused : failed);
+    return false;
+  }
+
   function clearRouteError(): void {
     routeError.clear();
   }
@@ -107,13 +128,15 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   // Generic over the result so an action that reports success (a save whose form must stay open on
-  // failure) keeps reporting it. A call dropped because another is already running resolves to the
-  // action's falsy default, which reads as "not saved" for the boolean cases.
+  // failure) keeps reporting it. `dropped` is what a call resolves to when another action is
+  // already running, so the wrapper's return type stays the action's own and no wiring site has to
+  // normalize a sentinel: for a save, a dropped call did not save.
   function withBusy<Args extends unknown[], Result = void>(
     action: (...args: Args) => Promise<Result>,
-  ): (...args: Args) => Promise<Result | undefined> {
+    dropped: Result = undefined as Result,
+  ): (...args: Args) => Promise<Result> {
     return async (...args) => {
-      if (busy) return undefined;
+      if (busy) return dropped;
       busy = true;
       try {
         return await action(...args);
@@ -274,15 +297,15 @@ export function createRouteController(deps: RouteControllerDeps) {
     if (!working || working.waypoints.length < 2) return;
     invalidateRefresh();
     const route = { ...working, name: name.trim() || defaultSaveName('Route') };
+    // The route stays under edit either way, so a refusal is recoverable without redrawing it.
     const saved = await saveRoute(origin, deps.getToken(), route);
-    if (saved !== 'ok') {
-      // Either way the route stays under edit; only the explanation and the recovery differ.
-      if (saved === 'access-denied') {
-        flagRouteError(writeRefusedMessage('route'));
-        void deps.requestWriteAccess();
-      } else {
-        flagRouteError('Could not save the route. It is kept under edit so you can retry.');
-      }
+    if (
+      !accepted(
+        saved,
+        writeRefusedMessage('route'),
+        'Could not save the route. It is kept under edit so you can retry.',
+      )
+    ) {
       routeStore.setWorking(route);
       return;
     }
@@ -318,15 +341,11 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     const deleted = await deleteRoute(origin, deps.getToken(), id);
     if (deleted !== 'ok') {
-      if (deleted === 'access-denied') void deps.requestWriteAccess();
       if (!wasActive) {
-        flagRouteError(
-          deleted === 'access-denied'
-            ? 'Signal K refused the delete. Read/write access is being requested.'
-            : 'Could not delete the route.',
-        );
+        accepted(deleted, deleteRefusedMessage(), 'Could not delete the route.');
         return;
       }
+      if (deleted === 'access-denied') void deps.requestWriteAccess();
       if (await activateRoute(origin, deps.getToken(), routeHref(id))) {
         routeStore.setActive(id);
         routeStore.toggleShown(id, true);
@@ -448,13 +467,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     invalidateRefresh();
     const savedAsRoute = await saveRoute(origin, deps.getToken(), route);
-    if (savedAsRoute !== 'ok') {
-      if (savedAsRoute === 'access-denied') void deps.requestWriteAccess();
-      flagRouteError(
-        savedAsRoute === 'access-denied'
-          ? writeRefusedMessage('track')
-          : 'Could not save the track as a route.',
-      );
+    if (
+      !accepted(savedAsRoute, writeRefusedMessage('track'), 'Could not save the track as a route.')
+    ) {
       return false;
     }
     routeStore.upsertRoute(route);
@@ -478,13 +493,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     invalidateRefresh();
     route.waypoints.reverse();
     const savedHome = await saveRoute(origin, deps.getToken(), route);
-    if (savedHome !== 'ok') {
-      if (savedHome === 'access-denied') void deps.requestWriteAccess();
-      flagRouteError(
-        savedHome === 'access-denied'
-          ? 'Signal K refused the write, so the route home was not built. Read/write access is being requested.'
-          : 'Could not build the route home.',
-      );
+    if (
+      !accepted(savedHome, writeRefusedMessage('route home'), 'Could not build the route home.')
+    ) {
       return;
     }
     routeStore.upsertRoute(route);
@@ -512,13 +523,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     invalidateRefresh();
     const reversed = reverseRoute(route);
     const savedReverse = await saveRoute(origin, deps.getToken(), reversed);
-    if (savedReverse !== 'ok') {
-      if (savedReverse === 'access-denied') void deps.requestWriteAccess();
-      flagRouteError(
-        savedReverse === 'access-denied'
-          ? 'Signal K refused the write, so the route was not reversed. Read/write access is being requested.'
-          : 'Could not reverse the route.',
-      );
+    if (
+      !accepted(savedReverse, writeRefusedMessage('reversed route'), 'Could not reverse the route.')
+    ) {
       return;
     }
     routeStore.upsertRoute(reversed);
@@ -563,15 +570,15 @@ export function createRouteController(deps: RouteControllerDeps) {
         routeStore.upsertRoute(route);
       }
     }
-    if (refused) void deps.requestWriteAccess();
     if (saved.length === 0) {
-      flagRouteError(
-        refused
-          ? 'Signal K refused the write, so nothing was imported. Read/write access is being requested.'
-          : 'Could not save the imported route.',
+      accepted(
+        refused ? 'access-denied' : 'failed',
+        writeRefusedMessage('import'),
+        'Could not save the imported route.',
       );
       return;
     }
+    if (refused) void deps.requestWriteAccess();
     if (saved.length < parsed.length) {
       flagRouteError(`Imported ${saved.length} of ${parsed.length} routes; the rest did not save.`);
     }
@@ -630,7 +637,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onStopCourse: withBusy(onStopCourse),
     onSkipPoint,
     onArrivalAdvance,
-    onSaveTrackAsRoute: withBusy(onSaveTrackAsRoute),
+    onSaveTrackAsRoute: withBusy(onSaveTrackAsRoute, false),
     onTrackHome: withBusy(onTrackHome),
     onReverseRoute: withBusy(onReverseRoute),
     onExportRouteGpx,

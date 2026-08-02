@@ -86,6 +86,8 @@ interface FlatProps {
   origin: string;
   store: SignalKStore;
   vessel: OwnVessel;
+  // The app-wide 1 Hz clock, shared by the surfaces that pace themselves off it.
+  clock: import('$shared/lib').ReactiveClock;
   aisTargets: AisTargets;
   units: UnitsStore;
   auth: AuthController;
@@ -241,6 +243,7 @@ type ServiceKey =
   | 'origin'
   | 'store'
   | 'vessel'
+  | 'clock'
   | 'aisTargets'
   | 'units'
   | 'auth'
@@ -392,6 +395,7 @@ const {
   origin,
   store,
   vessel,
+  clock,
   aisTargets,
   units,
   auth,
@@ -956,7 +960,7 @@ $effect(() => {
           persistenceDegraded={trackPersistenceDegraded}
           onRetry={() => void trackController.refreshSavedTracks()}
           onSave={trackController.onSaveTrack}
-          onSaveAsRoute={async (name) => (await routeController.onSaveTrackAsRoute(name)) ?? false}
+          onSaveAsRoute={routeController.onSaveTrackAsRoute}
           onTrackHome={routeController.onTrackHome}
           onDelete={trackController.onDeleteSavedTrack}
           onToggleSaved={trackController.onToggleSaved}
@@ -1095,6 +1099,7 @@ $effect(() => {
               {units}
               {aisTargets}
               {vessel}
+              {clock}
               {collision}
               selectedId={selectedAisId}
               onSelect={onAisSelect}

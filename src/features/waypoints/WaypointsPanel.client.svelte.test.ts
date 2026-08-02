@@ -4,6 +4,7 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import type { Waypoint } from '$entities/waypoint';
 import type { AuthController } from '$shared/signalk';
+import { fakeVesselFix } from '$shared/testing';
 import WaypointsPanel from './WaypointsPanel.svelte';
 
 const waypoints: Waypoint[] = [
@@ -29,7 +30,7 @@ function mountPanel() {
       props: {
         auth: { writeBlocked: false } as AuthController,
         waypoints,
-        vessel: { position: undefined, positionStale: false } as unknown as OwnVessel,
+        vessel: fakeVesselFix(undefined) as unknown as OwnVessel,
         units: { mode: 'metric' } as UnitsStore,
         loadState: 'ready',
         busy: false,

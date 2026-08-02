@@ -4,7 +4,8 @@ import type { AisTargets } from '$entities/ais';
 import type { CollisionAssessment } from '$entities/collision';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
-import { type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
+import type { LatLon } from '$shared/geo';
+import type { ReactiveClock } from '$shared/lib';
 import {
   capitalize,
   formatBearingOr,
@@ -16,17 +17,13 @@ import {
 import type { ConnectionPhase } from '$shared/signalk';
 import { SlideOver } from '$shared/ui';
 import AisTargetDetail from './AisTargetDetail.svelte';
-import {
-  AIS_LIST_REFRESH_MS,
-  type AisRiskFilter,
-  type AisSort,
-  buildAisRows,
-  MAX_AIS_LIST_ROWS,
-} from './ais-rows';
+import { type AisRiskFilter, type AisSort, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
 
 interface Props {
   aisTargets: AisTargets;
   vessel: OwnVessel;
+  // The app-wide 1 Hz clock, which paces how often the rows are rebuilt.
+  clock: ReactiveClock;
   collision: CollisionAssessment;
   units: UnitsStore;
   connectionPhase: ConnectionPhase;
@@ -41,6 +38,7 @@ interface Props {
 const {
   aisTargets,
   vessel,
+  clock,
   collision,
   units,
   connectionPhase,
@@ -66,28 +64,15 @@ const RISK_FILTERS: { id: AisRiskFilter; label: string }[] = [
   { id: 'warning', label: 'Getting close' },
 ];
 
-// The own fix is quantized to about 110 m before it reaches buildAisRows, so a 1 Hz GPS jitter does
-// not recompute the range and bearing of every target on every tick; the list does not need finer.
-// The key is a string so the derived halts when the rounded cell is unchanged, then parsedOwn (and
-// the rows below) only recompute when the cell, the traffic, the risks, or the sort actually change.
-const ownCellKey = $derived(
-  vessel.position && !vessel.positionStale ? quantizeLatLonKey(vessel.position) : '',
-);
-const parsedOwn = $derived<LatLon | undefined>(ownCellKey ? parseLatLonKey(ownCellKey) : undefined);
-// Traffic churn is coalesced to a bounded cadence rather than followed per worker flush. In a busy
-// anchorage the store's version advances several times a second, and every advance would re-filter
-// and re-sort hundreds of rows for a list a navigator glances at. The version is read inside
-// untrack so only the tick drives this; the selected target below stays live, since one open detail
-// row is cheap and should be current.
-let listTick = $state(0);
-$effect(() => {
-  const id = setInterval(() => {
-    listTick += 1;
-  }, AIS_LIST_REFRESH_MS);
-  return () => clearInterval(id);
-});
+const parsedOwn = $derived(vessel.coarsePosition);
+// Traffic churn is coalesced to the shared 1 Hz floor rather than followed per worker flush. In a
+// busy anchorage the store's version advances several times a second, and every advance would
+// re-filter and re-sort hundreds of rows for a list a navigator glances at. The cadence comes from
+// the app-wide clock, which already ticks at that interval, so this panel owns no timer of its own.
+// The version is read inside untrack so only the tick drives it; the selected target below stays
+// live, since one open detail row is cheap and should be current.
 const targets = $derived.by(() => {
-  void listTick;
+  void clock.now;
   return untrack(() => aisTargets.list());
 });
 const targetCount = $derived(targets.length);

@@ -2,6 +2,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
+import { fakeVesselFix } from '$shared/testing';
 import PoiSearchPanel from './PoiSearchPanel.svelte';
 
 const place = {
@@ -16,7 +17,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
   return render(PoiSearchPanel, {
     props: {
       pois: [],
-      vessel: { position: undefined, positionStale: false } as unknown as OwnVessel,
+      vessel: fakeVesselFix(undefined) as unknown as OwnVessel,
       units: { mode: 'metric' } as UnitsStore,
       viewState: { phase: 'ready', offline: false },
       placesShown: true,
