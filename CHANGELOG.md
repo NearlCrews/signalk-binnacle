@@ -6,6 +6,18 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Eleven more chart overlays. GEBCO bathymetry can now be read as flat color bands, or restricted to
+  where the seabed was actually surveyed rather than interpolated. EMODnet adds depth contour lines.
+  The jurisdiction set gains the 24 nm contiguous zone, the high seas, and the IHO named sea areas,
+  and the protected-area set gains UNESCO marine World Heritage sites, which is the first
+  protected-area layer here that covers the whole world rather than one region.
+- Seabed infrastructure overlays: submarine power cables, telecom cables, pipelines, and offshore
+  wind farms. These answer an anchoring question the panel could not before, since dragging across a
+  submarine cable can part it and anchoring on one is both a hazard and, in most places, an offense.
+  All four default hidden and draw with the other safety overlays.
+
 ### Fixed
 
 - No-transmit radar sectors can be edited again, and their safety warning now describes both angle
@@ -19,6 +31,16 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Development
 
+- The chart-source catalog moved to 0.7.0. A zero-area area-download rectangle is now answered as
+  covering nothing instead of reaching an enumerator that rejects it, so finishing a draw with a tap
+  rather than a drag no longer raises. The catalog's time-dynamic weather and ocean sources are
+  recognized from their declared maximum age and stay excluded from offline pre-warming, because a
+  stored weather frame is wrong before anyone sails into it.
+- GitHub Actions workflows are now checked by zizmor in their own CI job. It found that every
+  checkout left the repository token in `.git/config`, where an uploaded artifact can carry it off;
+  no workflow pushes or uses that token, so none of them persists it any more. A full dependency
+  audit joins the runtime audit in the release gate, kept as two separate gates because the
+  community registry scores only the runtime one.
 - Runtime and build dependencies moved to their latest compatible releases, including Lucide 1.28,
   MapLibre GL JS 6.1, Biome 2.5.6, Playwright 1.62.1, Size Limit 13.0.3, Knip 6.31, and Vite 8.2.
   TypeScript stays on 6.0.3 while the current typescript-eslint integration requires a version below

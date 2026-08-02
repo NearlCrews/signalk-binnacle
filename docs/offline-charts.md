@@ -67,7 +67,15 @@ API responses or PMTiles range responses; PMTiles blocks use their dedicated Ind
 5. Name the area and start the download.
 6. Wait for **Saved, works offline**, then verify coverage and the update date.
 
-On a phone, the panel collapses while drawing so the chart receives the gesture.
+On a phone, the panel collapses while drawing so the chart receives the gesture. Finishing a draw
+without dragging selects nothing rather than covering the whole world, which is what a zero-area
+rectangle used to mean.
+
+Step 3 lists the charts that actually cover the drawn area, with the specialist layers grouped last
+under **Advanced layers**: the coarse worldwide bathymetry, the second US depth layer, and the
+jurisdiction, protected-area, and seabed-infrastructure sets. Weather and ocean overlays are never
+offered here. They expire in minutes to hours, so storing them for a passage would spend the area's
+byte budget on tiles that are wrong before anyone reads them.
 
 If Chart Locker accepts a download but loses the immediate job response, Binnacle keeps the area in
 **Starting download** while Chart Locker recovers the job by area identifier. A temporary status

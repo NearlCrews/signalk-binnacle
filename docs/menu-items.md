@@ -60,7 +60,11 @@ source, and surrounding traffic before relying on it.
   opacity, and stack position. A failed replacement restores the accepted chart. Overlays remain in
   their own tab with visibility, opacity, management, and stacking controls. Signal K style-document
   sources remain listed with details available for inspection, but they are disabled, forced off,
-  and identified as unsupported instead of appearing as blank charts.
+  and identified as unsupported instead of appearing as blank charts. Chart overlays under
+  **Chart overlays and marks** include seabed infrastructure (power cables, telecom cables,
+  pipelines, and wind farms), maritime jurisdiction lines, and protected areas. All default hidden;
+  the infrastructure layers exist for anchoring decisions, since a submarine cable or pipeline is
+  no-anchor ground.
 
 ## Safety
 
