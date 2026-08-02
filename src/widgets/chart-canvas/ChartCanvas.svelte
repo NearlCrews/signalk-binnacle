@@ -18,6 +18,10 @@ import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import { BOUNDARY_SOURCES, createBoundaryOverlay } from '$features/boundaries-overlay';
 import { fetchCharts } from '$features/charts';
+import {
+  createInfrastructureOverlay,
+  INFRASTRUCTURE_SOURCES,
+} from '$features/infrastructure-overlay';
 import { LayersView } from '$features/layers-panel';
 import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
@@ -568,6 +572,9 @@ onMount(async () => {
         // the reference area fills and boundary lines beneath them.
         ...proxiedSources(BOUNDARY_SOURCES, companionBase).map((source) =>
           createBoundaryOverlay(source),
+        ),
+        ...proxiedSources(INFRASTRUCTURE_SOURCES, companionBase).map((source) =>
+          createInfrastructureOverlay(source),
         ),
         ...proxiedSources(MPA_SOURCES, companionBase).map((source) => createMpaOverlay(source)),
         ...proxiedSources(SEAMARK_SOURCES, companionBase).map((source) =>

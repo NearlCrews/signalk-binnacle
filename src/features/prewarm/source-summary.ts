@@ -7,6 +7,7 @@
 import type { ChartSource } from 'signalk-chart-sources';
 import { BOUNDARY_SOURCES } from '$features/boundaries-overlay';
 import { STREAMING_CHART_SOURCES } from '$features/depth-charts';
+import { INFRASTRUCTURE_SOURCES } from '$features/infrastructure-overlay';
 import { CATEGORY_ORDER, CATEGORY_TITLES } from '$features/layers-panel';
 import { MPA_SOURCES } from '$features/mpa-overlays';
 import { SEAMARK_SOURCES } from '$features/seamark-overlay';
@@ -21,7 +22,13 @@ interface SourceMeta {
 // One by-id catalog assembled from every augmented source module plus the base map. The depth sources
 // declare no category (they draw in the bathymetry band), so they default to the charts category, the
 // same fallback layer-category applies.
-const SOURCE_MODULES = [STREAMING_CHART_SOURCES, MPA_SOURCES, BOUNDARY_SOURCES, SEAMARK_SOURCES];
+const SOURCE_MODULES = [
+  STREAMING_CHART_SOURCES,
+  MPA_SOURCES,
+  BOUNDARY_SOURCES,
+  INFRASTRUCTURE_SOURCES,
+  SEAMARK_SOURCES,
+];
 const META: Record<string, SourceMeta> = (() => {
   const map: Record<string, SourceMeta> = {};
   for (const module of SOURCE_MODULES) {
@@ -39,16 +46,29 @@ export function isFacet(source: { id: string }): boolean {
 }
 
 // Specialist layers a typical recreational boater rarely needs: the heavy second US depth layer, the
-// coarse worldwide bathymetry, the boundary lines, and the protected-area zones. They are off by
-// default and grouped apart so they do not clutter the layers that cover the area.
+// coarse worldwide bathymetry, the jurisdiction lines, the protected-area zones, and the seabed
+// infrastructure sets. They are off by default and grouped apart so they do not clutter the layers
+// that cover the area.
+//
+// Whole families belong here together. A boundary or protected-area layer left out would show up as
+// an ordinary reference layer beside its own siblings in the Advanced bucket, which is the drift a
+// hand-maintained list invites; the test asserts every member of each family is present.
 const SPECIALIST = new Set([
   'depth-bluetopo',
   'depth-gebco',
   'bound-eez',
   'bound-12nm',
+  'bound-24nm',
+  'bound-high-seas',
+  'bound-iho',
   'mpa-emodnet',
   'mpa-natura2000',
   'mpa-noaa',
+  'mpa-unesco',
+  'infra-power-cables',
+  'infra-telecom-cables',
+  'infra-pipelines',
+  'infra-wind-farms',
 ]);
 
 /** True for a specialist layer that is off by default and belongs in the Advanced bucket. */

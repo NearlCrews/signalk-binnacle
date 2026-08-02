@@ -29,6 +29,16 @@ export const STREAMING_CHART_SOURCES: StreamingChartSource[] = [
     description:
       'Coarse global seabed-depth shading. Use BlueTopo, EMODnet, or the ENC for inshore detail.',
   }),
+  catalogSource('depth-gebco-color', {
+    parent: 'depth-gebco',
+    description:
+      'The same global grid in flat color bands, easier to read at a glance than shading.',
+  }),
+  catalogSource('depth-gebco-measured', {
+    parent: 'depth-gebco',
+    description:
+      'Only where the seabed was actually surveyed. Everywhere else in GEBCO is interpolated.',
+  }),
   // Registration order is z-order, so each base sits below its quality facet. EMODnet and BlueTopo
   // each render a bathymetry base plus a survey-confidence facet from one service, so each is a
   // group: the base, and nested under it the facet (EMODnet's combined quality index, BlueTopo's
@@ -40,6 +50,10 @@ export const STREAMING_CHART_SOURCES: StreamingChartSource[] = [
   catalogSource('depth-emodnet-quality', {
     parent: 'depth-emodnet',
     description: 'How reliable each EMODnet depth cell is.',
+  }),
+  catalogSource('depth-emodnet-contours', {
+    parent: 'depth-emodnet',
+    description: 'Depth contour lines, for reading the slope rather than the shading.',
   }),
   catalogSource('depth-bluetopo', {
     region: 'US',

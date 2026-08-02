@@ -26,6 +26,21 @@ export const BOUNDARY_SOURCES: RasterOverlaySource[] = [
     category: 'reference',
     description: "The 12 nm limit where a country's customs and clearance rules begin.",
   }),
+  catalogSource('bound-24nm', {
+    region: 'Global',
+    category: 'reference',
+    description: 'The 24 nm limit where a country may still enforce customs and immigration.',
+  }),
+  catalogSource('bound-high-seas', {
+    region: 'Global',
+    category: 'reference',
+    description: 'Water beyond every national claim, where no coastal state sets the rules.',
+  }),
+  catalogSource('bound-iho', {
+    region: 'Global',
+    category: 'reference',
+    description: 'The named sea areas the IHO defines, for reading a forecast by its sea name.',
+  }),
 ];
 
 // The boundary lines draw in the safety band, bound through the shared createSafetyOverlay so the

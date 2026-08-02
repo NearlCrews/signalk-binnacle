@@ -33,6 +33,13 @@ export const MPA_SOURCES: RasterOverlaySource[] = [
     category: 'reference',
     description: 'US marine protected areas from the NOAA inventory.',
   }),
+  // The first protected-area layer here that is not regional: it covers marine World Heritage sites
+  // anywhere, so it stays useful on a passage that leaves both the EU and US sets behind.
+  catalogSource('mpa-unesco', {
+    region: 'Global',
+    category: 'reference',
+    description: 'UNESCO World Heritage sites at sea, which usually carry their own restrictions.',
+  }),
 ];
 
 // The protected-area overlays draw in the safety band, bound through the shared createSafetyOverlay

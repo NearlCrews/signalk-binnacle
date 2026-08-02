@@ -1,6 +1,6 @@
 import { CHART_SOURCES } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
-import { coveringGroups, includedSummary, isFacet } from './source-summary.js';
+import { coveringGroups, includedSummary, isFacet, isSpecialist } from './source-summary.js';
 
 const byId = Object.fromEntries(CHART_SOURCES.map((s) => [s.id, s]));
 const pick = (...ids: string[]) => ids.map((id) => byId[id]);
@@ -41,5 +41,16 @@ describe('source-summary', () => {
     );
     expect(includedSummary(pick('basemap', 'depth-noaa-enc-quality'))).toBe('The base map.');
     expect(includedSummary([])).toBe('No charts selected for this area.');
+  });
+
+  it('treats every member of a family as specialist, so none drifts out of Advanced', () => {
+    // A layer left off the list renders as an ordinary reference layer beside its own siblings in
+    // the Advanced bucket. Deriving the families from the catalog means a new sibling upstream is
+    // caught here rather than in the builder.
+    const families = ['bound-', 'mpa-', 'infra-'];
+    const members = CHART_SOURCES.filter((s) => families.some((f) => s.id.startsWith(f)));
+    expect(members.length).toBeGreaterThan(0);
+    const stray = members.filter((s) => !isSpecialist(s.id) && !isFacet(s));
+    expect(stray.map((s) => s.id)).toEqual([]);
   });
 });
