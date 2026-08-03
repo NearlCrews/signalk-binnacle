@@ -76,7 +76,7 @@
     "maplibre-gl": "6.1.0",
     "pbf": "^5.1.2",
     "pmtiles": "^4.4.1",
-    "signalk-chart-sources": "^0.7.0",
+    "signalk-chart-sources": "^0.7.1",
     "terra-draw": "^1.32.2",
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "uplot": "^1.6.32"
