@@ -1,45 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { chartSourceById } from 'signalk-chart-sources';
+import { describe, expect, it } from 'vitest';
 import { mapThemePaint } from '$shared/map';
-import { fakeOverlayContext } from '$shared/testing';
+import { createFakeMap, declaredSource, type FakeMap, fakeOverlayContext } from '$shared/testing';
 import { createSeascapeDemOverlay } from './seascape-dem-overlay';
-import type { SeascapeDemSource } from './seascape-sources';
+import { SEASCAPE_DEM_SOURCES, type SeascapeDemSource } from './seascape-sources';
 
+// Synthetic on purpose: this fixture exercises wiring, so a real catalog value here would read as
+// an upstream fact and go stale whenever Seascape republishes its TileJSON.
 const SOURCE: SeascapeDemSource = {
   id: 'seascape-dem',
-  tiles: ['https://tiles.openwaters.io/seascape/{z}/{x}/{y}.webp'],
+  tiles: ['https://tiles.example.test/dem/{z}/{x}/{y}.webp'],
   tileSize: 512,
-  maxzoom: 17,
+  maxzoom: 9,
   attribution: 'test attribution',
 };
 
-// A minimal fake of the MapLibre map surface the two overlays touch, enough to prove the
-// shared-source contract without a real MapLibre instance.
-function fakeMap() {
-  const sources = new Set<string>();
-  const layers = new Map<string, { type: string }>();
-  const setPaintProperty = vi.fn();
-  return {
-    sources,
-    layers,
-    getSource: (id: string) => (sources.has(id) ? {} : undefined),
-    addSource: (id: string) => sources.add(id),
-    removeSource: (id: string) => sources.delete(id),
-    getLayer: (id: string) => layers.get(id),
-    addLayer: (layer: { id: string; type: string }) => layers.set(layer.id, layer),
-    removeLayer: (id: string) => layers.delete(id),
-    setPaintProperty,
-  };
-}
-
-const ctx = (map: ReturnType<typeof fakeMap>) => fakeOverlayContext(map);
+const ctx = (map: FakeMap) => fakeOverlayContext(map);
 
 // setPaintProperty is a vi.fn(), so its .mock.calls is already properly typed; these two just
 // name the two operations the applyTheme assertions below repeat.
-function getMockCalls(map: ReturnType<typeof fakeMap>) {
+function getMockCalls(map: FakeMap) {
   return map.setPaintProperty.mock.calls;
 }
 
-function clearMock(map: ReturnType<typeof fakeMap>): void {
+function clearMock(map: FakeMap): void {
   map.setPaintProperty.mockClear();
 }
 
@@ -55,8 +39,20 @@ describe('createSeascapeDemOverlay', () => {
     expect(hillshade.group).toEqual({ id: 'seascape', title: 'Seascape bathymetry' });
   });
 
+  it("declares the source's zoom ceiling on the map, so a catalog correction reaches MapLibre", async () => {
+    // seascape-sources.test.ts proves the module reads maxzoom from the catalog; this proves the
+    // overlay then hands it on. Either link alone lets a corrected ceiling vanish silently.
+    const map = createFakeMap();
+    const { depthShading } = createSeascapeDemOverlay(SEASCAPE_DEM_SOURCES[0]);
+    await depthShading.add(ctx(map));
+    const expected = chartSourceById('seascape-dem')?.maxzoom;
+    // Pinned so a missing catalog entry cannot make undefined match undefined and pass vacuously.
+    expect(expected).toBeTypeOf('number');
+    expect(declaredSource(map, 'seascape-dem').maxzoom).toBe(expected);
+  });
+
   it('both rows share one raster-dem source, created once', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     await depthShading.add(ctx(map));
     expect(map.sources.has('seascape-dem')).toBe(true);
@@ -69,7 +65,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('removing one row does not remove the shared source out from under the other', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     await depthShading.add(ctx(map));
     await hillshade.add(ctx(map));
@@ -81,7 +77,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('removing rows in reverse order also preserves the shared source until both are gone', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { depthShading, hillshade } = createSeascapeDemOverlay(SOURCE);
     await depthShading.add(ctx(map));
     await hillshade.add(ctx(map));
@@ -99,7 +95,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('depth shading applyTheme with different themes produces different color-relief-color expressions', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { depthShading } = createSeascapeDemOverlay(SOURCE);
     await depthShading.add(ctx(map));
 
@@ -118,7 +114,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('depth shading applyTheme with same theme reuses the memoized color-relief-color expression', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { depthShading } = createSeascapeDemOverlay(SOURCE);
     await depthShading.add(ctx(map));
 
@@ -137,7 +133,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('hillshade applyTheme with different themes produces different shadow and highlight colors', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { hillshade } = createSeascapeDemOverlay(SOURCE);
     await hillshade.add(ctx(map));
 
@@ -167,7 +163,7 @@ describe('createSeascapeDemOverlay', () => {
   });
 
   it('hillshade applyTheme with same theme reuses memoized shadow and highlight colors', async () => {
-    const map = fakeMap();
+    const map = createFakeMap();
     const { hillshade } = createSeascapeDemOverlay(SOURCE);
     await hillshade.add(ctx(map));
 

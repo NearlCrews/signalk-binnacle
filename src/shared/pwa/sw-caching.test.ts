@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { baseStyleUrl } from '$shared/map';
 import {
   isBasemapAsset,
   isBasemapStyle,
@@ -18,6 +19,17 @@ describe('service worker route matchers', () => {
     expect(isBasemapStyle(ctx('https://tiles.openfreemap.org/planet/1/1/1.pbf'))).toBe(false);
     expect(isBasemapAsset(ctx('https://tiles.openfreemap.org/planet/1/1/1.pbf'))).toBe(true);
     expect(isBasemapAsset(ctx('https://example.com/styles/liberty'))).toBe(false);
+  });
+
+  // This file cannot import the base style URL: the build serializes each matcher through
+  // Function.toString without its module scope, so a matcher referencing an imported constant
+  // throws ReferenceError in the worker (see the file header). base-style.ts now reads that URL
+  // from the shared catalog, so the two can drift silently: a catalog host move would simply stop
+  // matching here, and base map offline caching would switch off with nothing failing. This is the
+  // seam that catches it.
+  it('matches the base style URL the map actually requests', () => {
+    expect(isBasemapStyle(ctx(baseStyleUrl()))).toBe(true);
+    expect(isBasemapAsset(ctx(baseStyleUrl()))).toBe(true);
   });
 
   it('matches plugin chart tiles only same-origin and only tile-shaped paths', () => {

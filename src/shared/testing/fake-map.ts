@@ -12,8 +12,22 @@ type FakeSource = {
   tiles?: unknown;
 };
 
+// The known fields addSource reads, plus an open index so an assertion can read any other field the
+// overlay declared (tileSize, minzoom, bounds) without widening what addSource itself depends on.
+type SourceSpec = {
+  type?: string;
+  data?: unknown;
+  maxzoom?: number;
+  tiles?: unknown;
+  [field: string]: unknown;
+};
+
 export function createFakeMap() {
   const sources = new Map<string, FakeSource>();
+  // What the overlay passed to addSource, kept beside the runtime source below. The two differ on
+  // purpose: the runtime source pins maxzoom to MapLibre's constructor default, so only this
+  // records whether a declared zoom ceiling reached the map at all.
+  const declaredSources = new Map<string, SourceSpec>();
   const layers = new Map<string, Record<string, unknown>>();
   const images = new Set<string>();
   const updatedImages: string[] = [];
@@ -45,10 +59,9 @@ export function createFakeMap() {
       updatedImages.push(id);
       images.add(id);
     },
-    addSource: (
-      id: string,
-      spec: { type?: string; data?: unknown; maxzoom?: number; tiles?: unknown },
-    ) => {
+    declaredSources,
+    addSource: (id: string, spec: SourceSpec) => {
+      declaredSources.set(id, spec);
       // A real MapLibre source carries only its own type's mutator, so attach just that one: a
       // wrong-type call then throws in tests as in the browser instead of silently succeeding.
       const isTileSource =
@@ -79,7 +92,10 @@ export function createFakeMap() {
     addLayer: (layer: { id: string }) => layers.set(layer.id, layer),
     removeLayer: (id: string) => layers.delete(id),
     moveLayer: vi.fn(),
-    removeSource: (id: string) => sources.delete(id),
+    removeSource: (id: string) => {
+      declaredSources.delete(id);
+      return sources.delete(id);
+    },
     setLayerZoomRange: vi.fn(),
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
@@ -176,6 +192,18 @@ export type FakeMap = ReturnType<typeof createFakeMap>;
 // bespoke stubs alike.
 export function fakeOverlayContext(map: object): OverlayContext {
   return { map: map as never, beforeIdFor: () => undefined };
+}
+
+// Reads back the source specification an overlay declared, for assertions that a value reached the
+// map rather than only the module that computed it. Throws on a missing source for the same reason
+// sourceFeatures does: a test that forgot overlay.add would otherwise pass by coincidence.
+export function declaredSource(
+  map: { declaredSources: Map<string, SourceSpec> },
+  id: string,
+): SourceSpec {
+  const spec = map.declaredSources.get(id);
+  if (!spec) throw new Error(`no source declared for "${id}"`);
+  return spec;
 }
 
 // Reads back a geojson source's current features for assertions. Throws rather than defaulting to

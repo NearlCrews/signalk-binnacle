@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeMap, fakeOverlayContext } from '$shared/testing';
+import { createFakeMap, declaredSource, fakeOverlayContext } from '$shared/testing';
 import {
   createRasterOverlay,
   RASTER_ID_PREFIX,
@@ -47,6 +47,35 @@ describe('createRasterOverlay', () => {
     await overlay.add(ctx);
     expect(ctx.map.getSource(`${RASTER_ID_PREFIX}demo`)).toBeTruthy();
     expect(ctx.map.getLayer(`${RASTER_ID_PREFIX}demo-layer`)).toBeTruthy();
+  });
+
+  // Every catalog-backed overlay (seamark, boundaries, seabed infrastructure, protected areas)
+  // reaches MapLibre through this one function, so a dropped upstream fact would show here. The
+  // runtime source cannot answer it: MapLibre pins a tile source's maxzoom to its constructor
+  // default until the declared option is applied asynchronously, so this reads what was declared.
+  it('declares the zoom range and tile size on the map, not just on the descriptor', async () => {
+    const map = createFakeMap();
+    const overlay = createRasterOverlay(
+      { ...source, tileSize: 512, minzoom: 3, maxzoom: 18 },
+      'safety',
+    );
+    await overlay.add(fakeOverlayContext(map));
+    expect(declaredSource(map, `${RASTER_ID_PREFIX}demo`)).toMatchObject({
+      type: 'raster',
+      tileSize: 512,
+      minzoom: 3,
+      maxzoom: 18,
+    });
+  });
+
+  it('omits an undeclared zoom range rather than inventing one', async () => {
+    const map = createFakeMap();
+    await createRasterOverlay(source, 'safety').add(fakeOverlayContext(map));
+    const spec = declaredSource(map, `${RASTER_ID_PREFIX}demo`);
+    expect(spec.minzoom).toBeUndefined();
+    expect(spec.maxzoom).toBeUndefined();
+    // The catalog default, applied here rather than left for MapLibre to guess.
+    expect(spec.tileSize).toBe(256);
   });
 });
 

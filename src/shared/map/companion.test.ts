@@ -167,18 +167,21 @@ describe('proxiedSources', () => {
 
 describe('proxiedSources with a non-raster-overlay shape', () => {
   it('rewrites tiles for any source shaped with id and tiles', () => {
+    // The zoom ceiling here is deliberately synthetic: this test is about the proxy preserving
+    // whatever it is handed, not about what Seascape currently serves. A real catalog value would
+    // read as an upstream fact and go stale every time that TileJSON is republished.
     const sources = [
       {
         id: 'seascape-dem',
-        tiles: ['https://tiles.openwaters.io/seascape/{z}/{x}/{y}.webp'],
-        maxzoom: 17,
+        tiles: ['https://tiles.example.test/dem/{z}/{x}/{y}.webp'],
+        maxzoom: 9,
       },
     ];
     const out = proxiedSources(sources, 'http://pi.local/plugins/signalk-chart-locker');
     expect(out[0].tiles).toEqual([
       'http://pi.local/plugins/signalk-chart-locker/tile/seascape-dem/{z}/{x}/{y}',
     ]);
-    expect(out[0].maxzoom).toBe(17);
+    expect(out[0].maxzoom).toBe(9);
   });
 });
 
