@@ -18,6 +18,17 @@ All notable changes to Binnacle are documented here. The format follows
   submarine cable can part it and anchoring on one is both a hazard and, in most places, an offense.
   All four default hidden and draw with the other safety overlays.
 
+### Changed
+
+- Seascape draws one zoom level deeper: depth shading and hillshade now reach zoom 18, and contours,
+  soundings, and drying areas reach zoom 15, following the tiles the service actually publishes.
+  Two consequences at those zooms. A saved area that includes Seascape contours at Harbor detail is
+  roughly three times the download it used to be (about 592 MB rather than 178 MB for that layer on
+  a San Francisco Bay box), so an area that used to fit may now report insufficient space. And
+  browsing past zoom 17 fetches genuine depth-shading tiles instead of stretching the last
+  generation, which is sharper but caches about four times the data.
+- The Seascape credit shown on the chart now reads "Open Waters", the provider's current name.
+
 ### Fixed
 
 - No-transmit radar sectors can be edited again, and their safety warning now describes both angle
@@ -31,7 +42,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Development
 
-- The chart-source catalog moved to 0.7.0. A zero-area area-download rectangle is now answered as
+- The chart-source catalog moved to 0.7.1. The seamark overlay and the base map style URL now read
+  their upstream facts from it rather than keeping private copies, which is what let the old Seascape
+  zoom ceilings sit in the tests until a correct upstream release broke the build. A zero-area
+  area-download rectangle is now answered as
   covering nothing instead of reaching an enumerator that rejects it, so finishing a draw with a tap
   rather than a drag no longer raises. The catalog's time-dynamic weather and ocean sources are
   recognized from their declared maximum age and stay excluded from offline pre-warming, because a

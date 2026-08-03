@@ -85,7 +85,7 @@ origin. It does not revoke the device in Signal K, sign out an administrator ses
 server resource. Full erasure is blocked during active safety and unsaved navigation workflows.
 
 For map and weather data it calls public services including OpenFreeMap, Open-Meteo, RainViewer,
-NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, Open Water Software's Seascape, and the VLIZ Marine
+NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, Open Waters' Seascape, and the VLIZ Marine
 Regions service. Enabled online layers disclose the viewed tile area to their providers. Weather
 and tide requests disclose the viewed, selected, or vessel coordinates needed for the requested
 conditions. Providers also receive ordinary network metadata such as the public IP address and user

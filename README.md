@@ -256,8 +256,9 @@ anchor watch, navigation, route editing, measurement, or an unsaved recorded tra
 
 Binnacle gets boat data from your Signal K server and loads its vector base map from OpenFreeMap when
 the chart opens. When their chart or overlay layers are visible, the browser can also request tiles
-from OpenSeaMap, NASA GIBS, Open Water Seascape, GEBCO, EMODnet, and NOAA services for ENC,
-BlueTopo, and marine protected areas. The maritime-boundaries overlay requests VLIZ Marine Regions.
+from OpenSeaMap, NASA GIBS, Open Waters Seascape, GEBCO, EMODnet, and NOAA services for ENC,
+BlueTopo, marine protected areas, and seabed infrastructure. The maritime-jurisdiction and UNESCO
+site overlays request VLIZ Marine Regions.
 
 Opening weather or enabling its optional layers can contact Open-Meteo and RainViewer. Opening tides
 can contact NOAA CO-OPS for automatic fallback, tidal-current predictions, or a manually selected
@@ -450,13 +451,15 @@ open data and open source:
   [RainViewer](https://www.rainviewer.com/) for precipitation radar.
 - [NOAA](https://www.noaa.gov/) for the ENC chart, BlueTopo bathymetry, the MPA Inventory, and the
   CO-OPS tide and current predictions; [EMODnet](https://emodnet.ec.europa.eu/) for European
-  bathymetry and protected areas; [GEBCO](https://www.gebco.net/) for global bathymetry;
-  [Open Water Software](https://openwaters.io/charts/seascape) for Seascape, merging GEBCO, EMODnet,
+  bathymetry, protected areas, and the seabed infrastructure layers (power cables, telecom cables,
+  pipelines, and wind farms); [GEBCO](https://www.gebco.net/) for global bathymetry;
+  [Open Waters](https://openwaters.io/charts/seascape) for Seascape, merging GEBCO, EMODnet,
   NOAA CUDEM, and other regional sources into worldwide depth shading, hillshade, contours, and
   soundings; [NASA EOSDIS GIBS](https://www.earthdata.nasa.gov/engage/gibs) for the ocean-conditions imagery;
   [OpenSeaMap](https://www.openseamap.org/) for the seamark overlay; and the
   [Flanders Marine Institute (VLIZ)](https://www.vliz.be/) Marine Regions service for the maritime
-  boundaries.
+  boundaries, the 12 nm, 24 nm, and high seas limits, the IHO sea areas, and the UNESCO marine
+  sites.
 
 Custom chart symbols come from
 [`signalk-symbol-manager`](https://github.com/joelkoz/signalk-symbol-manager) by
