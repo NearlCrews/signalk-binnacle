@@ -113,21 +113,27 @@ not have to be corrected after the fact.
   and the parent. Never restate an upstream fact in a feature module; that is what let a stale NOAA
   bounding box silently drop Guam, the Northern Marianas, American Samoa, Wake, and the Pacific
   Remote Islands off the protected-area overlay.
+  - Every catalog read goes through `requireCatalogSource(id)` in `$shared/map`, which also narrows
+    to an upstream mode when the caller needs one. Do not hand-roll the lookup and guard; three
+    modules each spelled their own and produced three different messages for one missing entry.
   - The rule covers TESTS too. A literal is load-bearing when Binnacle misbehaves if the value
     changes, and a restatement when Binnacle only passes the value through and the catalog's own
     monitor already checks it against the live TileJSON. Restated ones fail the build on a correct
     upstream release, which is what the Seascape zoom ceilings did. Assert the whole descriptor
-    against the catalog instead, and keep hand-built fixtures obviously synthetic so they cannot be
-    mistaken for upstream truth. What stays pinned is ours: the source count, the id, and the tile
-    extension an overlay type requires.
-  - A `style` mode source (the basemap) cannot go through `catalogSource`, since `catalogTiles`
-    rejects it: a style document is not a tile template. That is not license to hardcode it. Take a
-    direct guarded read, and place it so a shape mismatch cannot take an offline fallback down with
-    it: `baseStyleUrl` reads lazily for exactly that reason.
+    against the catalog instead (`expectCatalogFacts` in `$shared/testing` is the shared form), and
+    keep hand-built fixtures obviously synthetic so they cannot be mistaken for upstream truth. What
+    stays pinned is whatever is ours rather than upstream's, the source count and the tile extension
+    an overlay type requires among them.
+  - A `style` mode source cannot go through `catalogSource`, since `catalogTiles` rejects it: a
+    style document is not a tile template. The catalog carries more than one. That is not license to
+    hardcode them. Take a direct guarded read, and place it so a shape mismatch cannot take an
+    offline fallback down with it, which for the base map means reading lazily rather than at module
+    scope so a bad catalog cannot leave the map with no style at all.
   - Where a value cannot be imported at all, pin the seam with a test. `sw-caching.ts` must inline
     its hosts, because the build serializes each matcher through `Function.toString` without its
-    module scope, so a matcher closing over an import throws `ReferenceError` in the worker. A test
-    asserting `isBasemapStyle` matches `baseStyleUrl()` is what keeps that copy honest.
+    module scope, so a matcher closing over an import throws `ReferenceError` in the worker. The
+    invariant: every host inlined there that the catalog also owns must be asserted against the
+    catalog, so enumerate `CHART_SOURCES` rather than pinning one matcher against one URL.
   - A source carrying `maxAgeSeconds` is time-dynamic (weather radar, NWS alerts, sea surface
     temperature). It must never be offered for offline pre-warm: a stored weather frame is wrong
     before anyone sails into it, and the companion cache refuses to store it anyway. `isVolatile`

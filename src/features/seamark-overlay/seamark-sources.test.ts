@@ -1,5 +1,5 @@
-import { chartSourceById } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
+import { expectCatalogFacts } from '$shared/testing';
 import { createSeamarkOverlay, SEAMARK_SOURCES } from './seamark-sources';
 
 describe('SEAMARK_SOURCES', () => {
@@ -9,24 +9,7 @@ describe('SEAMARK_SOURCES', () => {
   // stale NOAA bounds went unnoticed. Reading it means that cannot recur, and this pins it.
   it('takes every upstream fact from the catalog', () => {
     expect(SEAMARK_SOURCES).toHaveLength(1);
-    const [seamark] = SEAMARK_SOURCES;
-    const catalog = chartSourceById('seamark');
-    if (catalog?.upstream.mode !== 'xyz') throw new TypeError('seamark is not an XYZ source');
-    expect(seamark).toMatchObject({
-      id: 'seamark',
-      title: catalog.title,
-      tiles: [catalog.upstream.urlTemplate],
-      tileSize: catalog.tileSize,
-      minzoom: catalog.minzoom,
-      maxzoom: catalog.maxzoom,
-      attribution: catalog.attribution,
-    });
-  });
-
-  // MapLibre round-robins a tiles array by tile coordinate rather than failing over, so a second
-  // host that went dark would blank half the tiles rather than degrade.
-  it('lists exactly one tile host', () => {
-    expect(SEAMARK_SOURCES[0].tiles).toHaveLength(1);
+    expectCatalogFacts(SEAMARK_SOURCES[0], 'seamark');
   });
 
   it('declares only the description, region, and category the catalog does not carry', () => {
@@ -39,11 +22,12 @@ describe('SEAMARK_SOURCES', () => {
 
 describe('createSeamarkOverlay', () => {
   // Seamarks are navigation aids, so they must draw above charts and routes: a hazard mark hidden
-  // under a chart raster is worse than no mark at all.
-  it('binds the source into the safety band, hidden until the user enables it', () => {
+  // under a chart raster is worse than no mark at all. Hidden-by-default and the rest of the band
+  // wiring come from createSafetyOverlay, covered in raster-overlay.test.ts, so this pins the
+  // binding only.
+  it('binds the seamark source into the safety band', () => {
     const overlay = createSeamarkOverlay(SEAMARK_SOURCES[0]);
     expect(overlay.id).toBe('seamark');
     expect(overlay.band).toBe('safety');
-    expect(overlay.defaultVisible).toBe(false);
   });
 });

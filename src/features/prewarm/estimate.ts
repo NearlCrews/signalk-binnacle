@@ -13,14 +13,14 @@ import {
 } from 'signalk-chart-sources';
 import { boundsOfPoints, isLatitude } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
+import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { CacheStats, WarmStatus } from './regions-client.js';
 
 /** Re-exported from the shared package so the panel, the plugin, and any caller share one estimate. */
 export { estimateBytes };
 
-/** The basemap source id; the region list includes it, the position-warm list and the new-box
- * auto-select exclude it (it is global and large). */
-const BASEMAP_SOURCE_ID = 'basemap';
+// The region list includes the basemap, while the position-warm list and the new-box auto-select
+// exclude it: it is global and large.
 
 /**
  * A time-dynamic source, which the catalog marks with maxAgeSeconds. Weather radar and hazard

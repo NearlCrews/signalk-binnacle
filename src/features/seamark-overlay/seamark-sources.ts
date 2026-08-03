@@ -12,11 +12,9 @@ import {
 // and dims with the other rasters (applyRasterTheme): the marks read by symbol shape and position
 // rather than color, since preserving saturated green would break the night-red contract.
 //
-// Every upstream fact comes from the shared catalog through catalogSource: the service URL, the
-// zoom range, the tile size, and the attribution. That includes the choice of a single host, since
-// MapLibre round-robins a tiles array by tile coordinate rather than failing over, so a second host
-// that went dark would blank half the tiles. Only the plain-language description, the region tag,
-// and the panel category are ours to declare.
+// The catalog owns every upstream fact here, including the choice of a single host: MapLibre
+// round-robins a tiles array by tile coordinate rather than failing over, so a second host that
+// went dark would blank half the tiles instead of degrading.
 export const SEAMARK_SOURCES: RasterOverlaySource[] = [
   catalogSource('seamark', {
     region: 'Global',

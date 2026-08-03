@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createFakeMap, declaredSource, fakeOverlayContext } from '$shared/testing';
 import {
   createRasterOverlay,
+  createSafetyOverlay,
   RASTER_ID_PREFIX,
   type RasterOverlaySource,
   wmsTiles,
@@ -74,8 +75,15 @@ describe('createRasterOverlay', () => {
     const spec = declaredSource(map, `${RASTER_ID_PREFIX}demo`);
     expect(spec.minzoom).toBeUndefined();
     expect(spec.maxzoom).toBeUndefined();
-    // The catalog default, applied here rather than left for MapLibre to guess.
+    // Stated rather than omitted: MapLibre defaults a raster source to 512, which would halve the
+    // effective resolution of the 256 px services most of these overlays serve.
     expect(spec.tileSize).toBe(256);
+  });
+
+  // Each band helper is a one-line wrapper, and every catalog-backed slice reaches its band through
+  // one of them, so the band each passes is pinned here rather than re-pinned per slice.
+  it('binds each band helper to its own band', () => {
+    expect(createSafetyOverlay(source).band).toBe('safety');
   });
 });
 

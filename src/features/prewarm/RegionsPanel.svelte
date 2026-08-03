@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
+import { BASEMAP_SOURCE_ID } from '$shared/map';
 import { isInsecureTransportOrigin, serverOrigin } from '$shared/signalk';
 import {
   AccessRecoveryNote,
@@ -297,7 +298,7 @@ function chartLabel(id: string): string {
             {#each group.sources as source (source.id)}
               <div class="list-row">
                 <LayerToggle
-                  title={source.id === 'basemap'
+                  title={source.id === BASEMAP_SOURCE_ID
                     ? 'Base map: land, roads, and place names'
                     : source.title}
                   description={sourceDescription(source.id)}

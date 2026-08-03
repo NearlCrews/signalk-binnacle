@@ -1,5 +1,6 @@
 export { antimeridianLineGeometry } from './antimeridian';
-export { baseStyleUrl } from './base-style';
+export type { XyzCatalogSource } from './catalog';
+export { BASEMAP_SOURCE_ID, requireCatalogSource } from './catalog';
 export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';

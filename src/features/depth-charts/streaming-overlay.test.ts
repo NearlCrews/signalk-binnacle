@@ -1,5 +1,5 @@
-import { chartSourceById } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
+import { expectCatalogFacts } from '$shared/testing';
 import { createStreamingChartOverlay } from './streaming-overlay';
 import { STREAMING_CHART_SOURCES } from './streaming-sources';
 
@@ -32,17 +32,10 @@ describe('streaming chart sources', () => {
 
   it('uses shared NOAA ENC display metadata', () => {
     for (const id of ['depth-noaa-enc', 'depth-noaa-enc-quality']) {
-      const rendered = STREAMING_CHART_SOURCES.find((source) => source.id === id);
-      const catalog = chartSourceById(id);
-      expect(rendered).toMatchObject({
-        title: catalog?.title,
-        tileSize: catalog?.tileSize,
-        minzoom: catalog?.minzoom,
-        maxzoom: catalog?.maxzoom,
-        bounds: catalog?.bounds,
-        attribution: catalog?.attribution,
-        group: catalog?.group,
-      });
+      expectCatalogFacts(
+        STREAMING_CHART_SOURCES.find((source) => source.id === id),
+        id,
+      );
     }
   });
 

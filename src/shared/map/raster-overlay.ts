@@ -1,10 +1,6 @@
 import type { RasterLayerSpecification, RasterSourceSpecification } from 'maplibre-gl';
-import {
-  type ChartGroup,
-  type ChartSource,
-  chartSourceById,
-  type LngLatBbox,
-} from 'signalk-chart-sources';
+import type { ChartGroup, ChartSource, LngLatBbox } from 'signalk-chart-sources';
+import { requireCatalogSource } from './catalog';
 import { applyRasterTheme } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
 import type { OverlayModule, ZBand } from './types';
@@ -99,10 +95,7 @@ export const catalogSource = (
     defaultOpacity?: number;
   } = {},
 ): RasterOverlaySource => {
-  const source = chartSourceById(id);
-  if (!source) {
-    throw new TypeError(`Missing chart source metadata for ${id}`);
-  }
+  const source = requireCatalogSource(id);
   return {
     id: source.id,
     title: source.title,

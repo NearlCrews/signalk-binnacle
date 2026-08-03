@@ -12,21 +12,23 @@ type FakeSource = {
   tiles?: unknown;
 };
 
-// The known fields addSource reads, plus an open index so an assertion can read any other field the
-// overlay declared (tileSize, minzoom, bounds) without widening what addSource itself depends on.
+// The fields addSource reads, plus the three an assertion reads back off a declared spec. Closed
+// rather than an open index signature, so a misspelled field fails at type-check instead of
+// resolving to unknown and failing later with a confusing runtime message.
 type SourceSpec = {
   type?: string;
   data?: unknown;
-  maxzoom?: number;
   tiles?: unknown;
-  [field: string]: unknown;
+  tileSize?: number;
+  minzoom?: number;
+  maxzoom?: number;
+  bounds?: unknown;
 };
 
 export function createFakeMap() {
   const sources = new Map<string, FakeSource>();
-  // What the overlay passed to addSource, kept beside the runtime source below. The two differ on
-  // purpose: the runtime source pins maxzoom to MapLibre's constructor default, so only this
-  // records whether a declared zoom ceiling reached the map at all.
+  // What the overlay passed to addSource, kept beside the runtime source below for the reason the
+  // addSource comment gives: only this records whether a declared value reached the map at all.
   const declaredSources = new Map<string, SourceSpec>();
   const layers = new Map<string, Record<string, unknown>>();
   const images = new Set<string>();

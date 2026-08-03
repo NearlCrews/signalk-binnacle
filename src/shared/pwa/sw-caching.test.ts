@@ -1,5 +1,5 @@
+import { CHART_SOURCES, type ChartSource } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
-import { baseStyleUrl } from '$shared/map';
 import {
   isBasemapAsset,
   isBasemapStyle,
@@ -13,6 +13,21 @@ import {
 
 const ctx = (url: string, sameOrigin = false) => ({ url: new URL(url), sameOrigin });
 
+// The catalog's own URL for a source, whichever shape its mode carries. Only the host matters to
+// these matchers, so an unexpanded {z}/{x}/{y} template parses fine.
+function upstreamUrl(source: ChartSource): string {
+  const upstream = source.upstream;
+  switch (upstream.mode) {
+    case 'style':
+      return upstream.styleUrl;
+    case 'wms':
+    case 'arcgis':
+      return upstream.base;
+    default:
+      return upstream.urlTemplate;
+  }
+}
+
 describe('service worker route matchers', () => {
   it('matches the base style separately from base tiles', () => {
     expect(isBasemapStyle(ctx('https://tiles.openfreemap.org/styles/liberty'))).toBe(true);
@@ -21,15 +36,30 @@ describe('service worker route matchers', () => {
     expect(isBasemapAsset(ctx('https://example.com/styles/liberty'))).toBe(false);
   });
 
-  // This file cannot import the base style URL: the build serializes each matcher through
-  // Function.toString without its module scope, so a matcher referencing an imported constant
-  // throws ReferenceError in the worker (see the file header). base-style.ts now reads that URL
-  // from the shared catalog, so the two can drift silently: a catalog host move would simply stop
-  // matching here, and base map offline caching would switch off with nothing failing. This is the
-  // seam that catches it.
-  it('matches the base style URL the map actually requests', () => {
-    expect(isBasemapStyle(ctx(baseStyleUrl()))).toBe(true);
-    expect(isBasemapAsset(ctx(baseStyleUrl()))).toBe(true);
+  // Every host below is also owned by the catalog, but the matchers must keep their own copies: the
+  // build serializes each one through Function.toString without its module scope, so a matcher that
+  // closed over an import would throw ReferenceError in the worker (see the file header). A copy is
+  // only safe while something checks it, because a catalog host move would otherwise stop matching
+  // and switch that layer's offline caching off on a green build. These two are that check.
+  it('routes every style-mode catalog source as a base style', () => {
+    const styles = CHART_SOURCES.filter((source) => source.upstream.mode === 'style');
+    expect(styles.length).toBeGreaterThan(0);
+    for (const source of styles) {
+      const request = ctx(upstreamUrl(source));
+      expect(isBasemapStyle(request), `${source.id} is not routed as a base style`).toBe(true);
+      expect(isBasemapAsset(request), `${source.id} is not routed as a base asset`).toBe(true);
+    }
+  });
+
+  it('routes every other catalog source as an overlay tile', () => {
+    for (const source of CHART_SOURCES) {
+      if (source.upstream.mode === 'style') continue;
+      const request = ctx(upstreamUrl(source));
+      expect(
+        isOverlayTile(request),
+        `${source.id} (${request.url.hostname}) is cached by no runtime route`,
+      ).toBe(true);
+    }
   });
 
   it('matches plugin chart tiles only same-origin and only tile-shaped paths', () => {

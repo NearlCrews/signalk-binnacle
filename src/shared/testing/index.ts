@@ -1,3 +1,4 @@
+export * from './catalog-facts';
 export * from './fake-alarm';
 export * from './fake-map';
 export * from './fake-storage';
