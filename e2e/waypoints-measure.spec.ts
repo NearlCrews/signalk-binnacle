@@ -86,8 +86,16 @@ test('measure edits middle points with pointer and keyboard paths, then restores
     };
   }
 
-  await clickChart(0.3, 0.35);
-  await expect(strip.getByText('Tap the chart to set the next point')).toBeVisible();
+  // A chart tool arms its crosshair as soon as MapLibre creates the canvas, but the tap handler is
+  // only registered once the base style finishes loading, so the opening tap can land in between
+  // and be dropped. Retrying is safe rather than double-adding: a tap with no handler attached is
+  // discarded outright, never queued for delivery once one appears.
+  await expect(async () => {
+    await clickChart(0.3, 0.35);
+    await expect(strip.getByText('Tap the chart to set the next point')).toBeVisible({
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 30_000 });
   const middleOffset = await clickChart(0.55, 0.45);
   await expect(strip.getByText('2 points. Tap the chart to add another')).toBeVisible();
   await expect(strip.getByText('Bearing')).toBeVisible();
