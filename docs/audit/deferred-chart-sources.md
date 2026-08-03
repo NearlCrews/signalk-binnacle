@@ -41,8 +41,14 @@ here to reuse.
 4. Confirmation that the companion cache passes them through without storing them. They are already
    excluded from pre-warm by `isVolatile` in `features/prewarm/estimate.ts`; rendering is a
    different path and has not been checked against Chart Locker.
+5. A service-worker route keyed on `maxAgeSeconds`, not the shared overlay cache. All seven sit on
+   `nowcoast.noaa.gov`, a host `isOverlayTile` in `sw-caching.ts` already matches, so today they
+   would land in `binnacle-overlay-tiles` and its seven-day expiry. A seven-day runtime cache on a
+   five-minute product is the same staleness this section exists to prevent, arriving through the
+   browser rather than through pre-warm. The catalog states the real budget outright, so route from
+   it rather than adding a second copy of the number.
 
-Until all four exist, these stay out of the panel. The pre-warm exclusion is already in place and
+Until all five exist, these stay out of the panel. The pre-warm exclusion is already in place and
 tested, so nothing can accidentally download them for later in the meantime.
 
 ## Held: `basemap-dark`
