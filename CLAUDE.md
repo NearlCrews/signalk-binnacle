@@ -63,6 +63,11 @@ not have to be corrected after the fact.
   `no-misused-promises` for all TypeScript, tests included (an unawaited async assertion is a
   test that silently passes). Do not add general, stylistic, unused-code, or
   import-boundary ESLint rules that duplicate Biome, Knip, or dependency-cruiser.
+  typescript-eslint is not only those three rules: `tseslint.parser` is also the TypeScript parser
+  in `eslint.config.js`, both for `**/*.ts` and inside `**/*.svelte` so eslint-plugin-svelte can
+  read a `lang="ts"` script block. Dropping it costs a parser too. Biome is not a substitute here:
+  as of 2.5.6 its `noFloatingPromises` and `noMisusedPromises` are Nursery, and it has no
+  `await-thenable` equivalent, since its `useAwait` is ESLint's `require-await` instead.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
@@ -84,9 +89,11 @@ not have to be corrected after the fact.
 - Type-check: `npm run check` runs svelte-check with `--tsgo` against `tsconfig.app.json`, then
   `tsgo` against `tsconfig.node.json` (Vite, Playwright, Vitest setup, and E2E code; requires the
   direct `@types/node` development dependency), then `tsgo` against `tsconfig.scripts.json`
-  (`checkJs` over `scripts/*.mjs`). `tsgo` is the `@typescript/native-preview` compiler, used as
-  the check engine only: the `typescript` dependency stays on 6.x because typescript-eslint's peer
-  range does not admit 7.x yet. svelte-check `--tsgo` writes transpiled Svelte files to
+  (`checkJs` over `scripts/*.mjs`). `tsgo` is the `@typescript/native-preview` compiler, and it is
+  the real check engine, so the code is ALREADY validated against TypeScript 7 semantics. The
+  `typescript` dependency on 6.x is only what satisfies the peers of svelte-check and
+  typescript-eslint; nothing type-checks with it. See the version note below before trying to raise
+  it. svelte-check `--tsgo` writes transpiled Svelte files to
   `.svelte-check/`, which is gitignored and ESLint-ignored. A Svelte file deleted from `src/`
   leaves a stale transpiled copy there that keeps failing the check; `.svelte-check/` is a
   disposable cache, so delete it and re-run.
@@ -153,9 +160,16 @@ not have to be corrected after the fact.
   Svelte 5.56.8, MapLibre GL JS 6.1.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5.1.2 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder and
-  test fixtures import `PbfWriter`). TypeScript 7.0.2 is outside the latest typescript-eslint
-  8.65.0 peer range (`>=4.8.4 <6.1.0`), so do not raise the compiler until that integration supports
-  it. npm 11.19.0 is the newest package manager compatible with the Node 22.18 runtime floor; npm
+  test fixtures import `PbfWriter`). The `typescript` package stays on 6.x, and TWO tools cap it,
+  not one: typescript-eslint (8.66.0 peers `>=4.8.4 <6.1.0`, and its alpha line still does) and
+  svelte-check (4.7.4, the latest, peers `^5.0.0 || ^6.0.0`). Replacing typescript-eslint therefore
+  does NOT unblock the upgrade, so do not go down that road: svelte-check is the harder cap, since
+  no alternative Svelte type checker exists. The cause is upstream of both. `typescript@7.0.2`
+  ships only `bin/tsc`, while 6.x ships `tsc` and `tsserver`, and both tools drive the programmatic
+  language-service API that `tsserver` backs. Raising the compiler is also worth less than it looks,
+  because `tsgo` already checks everything with TypeScript 7 semantics (see the type-check bullet
+  above). The actual prize is retiring the `@typescript/native-preview` dev build in favor of stable
+  `tsc`, and that unlocks on svelte-check. Re-check when svelte-check accepts TypeScript 7. npm
   12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. Keep the Workbox
   off-main-thread override on its newest
   4.0.0-pre2 beta until Workbox adopts that line; it replaces the older EJS 3 dependency with EJS 6.
