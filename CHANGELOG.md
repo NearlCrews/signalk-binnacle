@@ -6,6 +6,10 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0190"></a>
+
+## [0.19.0] - 2026-08-03
+
 ### Added
 
 - Eleven more chart overlays. GEBCO bathymetry can now be read as flat color bands, or restricted to

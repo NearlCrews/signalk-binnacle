@@ -1,6 +1,6 @@
 {
   "name": "signalk-binnacle",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "WebGL chartplotter for Signal K",
   "type": "module",
   "license": "Apache-2.0",
@@ -57,7 +57,8 @@
     "recommends": [
       "signalk-chart-locker",
       "signalk-crows-nest",
-      "signalk-virtual-weather-sensors"
+      "signalk-virtual-weather-sensors",
+      "signalk-ssl"
     ]
   },
   "files": [

@@ -14,19 +14,28 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.18.1
+## What's new in 0.19.0
 
-This patch makes chart interaction reliable across mouse, touchscreen, and hybrid devices. Tide and
-current markers and prediction labels consistently open their controls, overlapping map surfaces
-route one gesture to the highest visible target, hidden overlays release touch and cursor ownership,
-and stale AIS, Measure, and working-route hits are rejected.
+This release adds fifteen chart overlays. Seabed infrastructure is the headline: submarine power
+cables, telecom cables, pipelines, and offshore wind farms now draw with the other safety layers,
+because dragging an anchor across a submarine cable can part it, and anchoring on one is both a
+hazard and, in most places, an offense.
 
-Optional panels now preserve contextual Back, Close, Exit, Done, and Escape controls while loading,
-then offer Retry after an import timeout or render failure. Full-screen Instruments and other chart
-panels yield ownership cleanly on phones and tablets, including dirty Radar draft confirmation.
-Provider identities and persisted Tide and weather data are validated before display or cache reuse,
-so malformed, repeated, or conflicting records degrade safely instead of wedging the interface. See
-the changelog for the complete details.
+The reference layers grow too. GEBCO bathymetry can be read as flat color bands, or restricted to
+where the seabed was actually surveyed rather than interpolated, and EMODnet adds depth contour
+lines. The jurisdiction set gains the 24 nm contiguous zone, the high seas, and the IHO named sea
+areas, and the protected-area set gains UNESCO marine World Heritage sites, the first protected-area
+layer here that covers the whole world rather than one region.
+
+Seascape now draws a zoom level deeper, following the tiles the service actually publishes: depth
+shading and hillshade reach zoom 18, and contours, soundings, and drying areas reach zoom 15. That
+is sharper detail close in, and it costs more storage, so a saved area including Seascape contours at
+Harbor detail is roughly three times the download it used to be. An area that used to fit may now
+report insufficient space.
+
+Also fixed: no-transmit radar sectors can be edited again, chart tools apply their cursor while the
+base map is still loading, and Data trends keeps its panel state when a phone crosses the focus-trap
+breakpoint. See the changelog for the complete details.
 
 ## What it does
 
