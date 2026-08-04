@@ -160,16 +160,23 @@ not have to be corrected after the fact.
   Svelte 5.56.8, MapLibre GL JS 6.1.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5.1.2 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder and
-  test fixtures import `PbfWriter`). The `typescript` package stays on 6.x, and TWO tools cap it,
-  not one: typescript-eslint (8.66.0 peers `>=4.8.4 <6.1.0`, and its alpha line still does) and
-  svelte-check (4.7.4, the latest, peers `^5.0.0 || ^6.0.0`). Replacing typescript-eslint therefore
-  does NOT unblock the upgrade, so do not go down that road: svelte-check is the harder cap, since
-  no alternative Svelte type checker exists. The cause is upstream of both. `typescript@7.0.2`
-  ships only `bin/tsc`, while 6.x ships `tsc` and `tsserver`, and both tools drive the programmatic
-  language-service API that `tsserver` backs. Raising the compiler is also worth less than it looks,
-  because `tsgo` already checks everything with TypeScript 7 semantics (see the type-check bullet
-  above). The actual prize is retiring the `@typescript/native-preview` dev build in favor of stable
-  `tsc`, and that unlocks on svelte-check. Re-check when svelte-check accepts TypeScript 7. npm
+  test fixtures import `PbfWriter`). The `typescript` package stays on 6.x, and raising it to 7 is
+  NOT an upgrade to chase: it would install a second copy of a compiler this repo already runs, and
+  break the two tools that still need the old API. TypeScript 7 stopped being a library. The whole
+  of `typescript@7.0.2`'s default export is `lib/version.cjs`, three lines returning `version` and
+  `versionMajorMinor`; there is no `lib/typescript.js`, and `lib/` holds only a binary launcher.
+  The compiler API now lives behind `./unstable/*` (`unstable/ast`, `unstable/sync`, and kin) next
+  to twenty platform Go binaries. So `createProgram`, the `TypeChecker`, the language service, and
+  `tsserver` are all unreachable from `typescript@7`, which is why every type-reading tool peer-caps
+  below it. Here that is typescript-eslint (peers `>=4.8.4 <6.1.0`) and svelte-check (4.7.4, the
+  latest, peers `^5.0.0 || ^6.0.0`). Replacing typescript-eslint does NOT unblock it, so do not go
+  down that road: svelte-check is the binding cap and has no substitute, since `sv` is a scaffolding
+  CLI and `svelte-language-server` is an editor LSP with the same dependency. Nor is anything being
+  missed meanwhile: `@typescript/native-preview` exports the exact same shape as `typescript@7.0.2`,
+  because it IS that compiler, so `npm run check` already runs TypeScript 7. The only prize is
+  retiring one of the two package names once the API stabilizes. WATCH TRIGGER, and it is one
+  command, not a calendar entry: re-check when `npm view svelte-check peerDependencies` admits `^7`.
+  typescript-eslint should clear near the same time, as both wait on `unstable/*`. npm
   12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. Keep the Workbox
   off-main-thread override on its newest
   4.0.0-pre2 beta until Workbox adopts that line; it replaces the older EJS 3 dependency with EJS 6.
