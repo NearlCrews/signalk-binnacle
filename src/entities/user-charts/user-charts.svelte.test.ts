@@ -369,6 +369,57 @@ describe('UserCharts replacement and sharing', () => {
     expect(transitions).toHaveLength(1);
   });
 
+  it('commits against the current position when another chart is deleted mid-replacement', async () => {
+    const other: UserChartSource = { ...saved, id: 'chart-0', name: 'Approach chart' };
+    const charts = new UserCharts([other, saved], () => {});
+    let finishReplace = () => {};
+    charts.setReplaceHandler(
+      () =>
+        new Promise<void>((resolve) => {
+          finishReplace = resolve;
+        }),
+    );
+    const draft = await charts.stageReplacement(saved.id, 'https://example.com/new.pmtiles');
+
+    const pending = charts.replace(draft, true);
+    charts.remove(other.id);
+    finishReplace();
+    await pending;
+
+    expect(charts.sources).toHaveLength(1);
+    expect(charts.sources[0]).toMatchObject({
+      id: saved.id,
+      name: saved.name,
+      origin: { type: 'url', url: 'https://example.com/new.pmtiles' },
+    });
+  });
+
+  it('does not resurrect a chart deleted while its own replacement was resolving', async () => {
+    const other: UserChartSource = { ...saved, id: 'chart-0', name: 'Approach chart' };
+    const persist = vi.fn();
+    const transition = vi.fn();
+    const charts = new UserCharts([other, saved], persist);
+    let finishReplace = () => {};
+    charts.setReplaceHandler(
+      () =>
+        new Promise<void>((resolve) => {
+          finishReplace = resolve;
+        }),
+    );
+    charts.setTransitionHandler(transition);
+    const draft = await charts.stageReplacement(saved.id, 'https://example.com/new.pmtiles');
+
+    const pending = charts.replace(draft, true);
+    charts.remove(saved.id);
+    persist.mockClear();
+    finishReplace();
+
+    await expect(pending).rejects.toThrow('That chart is no longer available.');
+    expect(charts.sources).toEqual([other]);
+    expect(persist).not.toHaveBeenCalled();
+    expect(transition).not.toHaveBeenCalled();
+  });
+
   it('keeps the accepted chart when live replacement fails and hides transport details', async () => {
     const persist = vi.fn();
     const transition = vi.fn();

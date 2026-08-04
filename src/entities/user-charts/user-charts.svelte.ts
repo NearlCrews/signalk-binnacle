@@ -370,9 +370,8 @@ export class UserCharts {
     draft: DraftChart,
     shareWithServer = shouldShareUserChart(draft.source),
   ): Promise<void> {
-    const index = this.sources.findIndex((source) => source.id === draft.source.id);
-    if (index < 0) throw new Error('That chart is no longer available.');
-    const previous = this.sources[index];
+    const previous = this.sources.find((source) => source.id === draft.source.id);
+    if (!previous) throw new Error('That chart is no longer available.');
     const replacement = cleanUserChartSource({
       ...draft.source,
       id: previous.id,
@@ -387,6 +386,11 @@ export class UserCharts {
     } catch {
       throw new Error('Could not apply the replacement chart.');
     }
+    // A chart can be removed while the replacement resolves, so the position has to be resolved
+    // again: an index captured before the await would overwrite an unrelated chart, or throw past
+    // the end of a shrunken list.
+    const index = this.sources.findIndex((source) => source.id === replacement.id);
+    if (index < 0) throw new Error('That chart is no longer available.');
     this.#commitUpdate(index, previous, replacement);
   }
 

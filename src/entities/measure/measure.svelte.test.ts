@@ -146,6 +146,30 @@ describe('MeasureStore', () => {
     expect(measure.points).toEqual([A]);
   });
 
+  // The overlay reads these on every tick of the shared overlay clock and skips its repaint when
+  // the identity is unchanged, so a repeated read during an armed move must not allocate again.
+  it('holds the display memo across repeated reads outside a reactive context', () => {
+    const measure = new MeasureStore();
+    measure.start();
+    measure.add(A);
+    measure.add(B);
+    measure.selectIndex(1);
+    measure.armMove();
+    measure.previewSelected({ latitude: 0.001, longitude: 0.001 });
+
+    const vertices = measure.displayVertices;
+    const legs = measure.displayLegs;
+    expect(measure.displayVertices).toBe(vertices);
+    expect(measure.displayLegs).toBe(legs);
+
+    measure.previewSelected({ latitude: 0.002, longitude: 0.002 });
+    expect(measure.displayVertices).not.toBe(vertices);
+    expect(measure.displayVertices[1].position).toEqual({ latitude: 0.002, longitude: 0.002 });
+
+    measure.cancelMove();
+    expect(measure.displayVertices).toBe(measure.vertices);
+  });
+
   it('accepts a seed point immediately after arming, the "Measure from here" contract', () => {
     const measure = new MeasureStore();
     measure.start();

@@ -16,6 +16,19 @@ function samePoint(left: NotePoint, right: NotePoint): boolean {
   );
 }
 
+// Upserts and tombstones live in separate maps, so each carries the sequence it was recorded at.
+// Insertion order alone only ranks entries within one map, and trimming has to rank them across
+// both.
+interface PendingUpsert {
+  note: NotePoint;
+  sequence: number;
+}
+
+interface PendingDeletion {
+  position: NotePoint['position'];
+  sequence: number;
+}
+
 // Session-scoped confirmed-write overlay. Signal K remains the source of record. These entries only
 // bridge the interval between a successful write and a later collection refresh, so a slow or failed
 // refresh cannot undo an accepted create, edit, move, or delete on the chart.
@@ -23,14 +36,15 @@ export class PersonalNotesStore {
   version = $state(0);
   refreshVersion = $state(0);
 
-  #upserts = new Map<string, NotePoint>();
-  #deletions = new Map<string, NotePoint['position']>();
+  #upserts = new Map<string, PendingUpsert>();
+  #deletions = new Map<string, PendingDeletion>();
+  #sequence = 0;
 
   upsert(note: NotePoint): void {
     if (!note.ownedByBinnacle) return;
     this.#deletions.delete(note.id);
     this.#upserts.delete(note.id);
-    this.#upserts.set(note.id, note);
+    this.#upserts.set(note.id, { note, sequence: this.#nextSequence() });
     this.#trim();
     this.version += 1;
   }
@@ -39,7 +53,7 @@ export class PersonalNotesStore {
     if (!note.ownedByBinnacle) return;
     this.#upserts.delete(note.id);
     this.#deletions.delete(note.id);
-    this.#deletions.set(note.id, note.position);
+    this.#deletions.set(note.id, { position: note.position, sequence: this.#nextSequence() });
     this.#trim();
     this.version += 1;
   }
@@ -52,7 +66,7 @@ export class PersonalNotesStore {
   // tombstones suppress stale cached copies. The hard cap is applied after local notes are admitted
   // so a just-created mark cannot disappear behind a full third-party result set.
   merge(remote: readonly NotePoint[], viewport: Bbox4, limit: number): NotePoint[] {
-    const allPersonal = [...this.#upserts.values()];
+    const allPersonal = [...this.#upserts.values()].map((entry) => entry.note);
     const personal = allPersonal.filter((note) => bboxContainsPoint(viewport, note.position));
     // Suppress every provider copy, including a stale pre-move copy whose old position remains in
     // this viewport after the confirmed note moved outside it.
@@ -69,16 +83,16 @@ export class PersonalNotesStore {
   reconcile(remote: readonly NotePoint[], viewport: Bbox4, complete: boolean): void {
     const byId = new Map(remote.map((note) => [note.id, note]));
     let changed = false;
-    for (const [id, note] of this.#upserts) {
+    for (const [id, entry] of this.#upserts) {
       const accepted = byId.get(id);
-      if (accepted && samePoint(note, accepted)) {
+      if (accepted && samePoint(entry.note, accepted)) {
         this.#upserts.delete(id);
         changed = true;
       }
     }
     if (complete) {
-      for (const [id, position] of this.#deletions) {
-        if (bboxContainsPoint(viewport, position) && !byId.has(id)) {
+      for (const [id, entry] of this.#deletions) {
+        if (bboxContainsPoint(viewport, entry.position) && !byId.has(id)) {
           this.#deletions.delete(id);
           changed = true;
         }
@@ -95,16 +109,27 @@ export class PersonalNotesStore {
     return this.#deletions.has(id);
   }
 
+  #nextSequence(): number {
+    this.#sequence += 1;
+    return this.#sequence;
+  }
+
+  // Evicts oldest-first across both maps, so a confirmed create cannot disappear from the chart
+  // while an older tombstone survives. Each map stays in ascending sequence order because a
+  // re-recorded id is deleted before it is set again, so the first entry of each is its oldest.
   #trim(): void {
     while (this.#upserts.size + this.#deletions.size > MAX_PENDING_MUTATIONS) {
-      const oldestUpsert = this.#upserts.keys().next().value as string | undefined;
-      if (oldestUpsert !== undefined) {
-        this.#upserts.delete(oldestUpsert);
-        continue;
+      const upsert = this.#upserts.entries().next().value as [string, PendingUpsert] | undefined;
+      const deletion = this.#deletions.entries().next().value as
+        | [string, PendingDeletion]
+        | undefined;
+      if (upsert && (!deletion || upsert[1].sequence < deletion[1].sequence)) {
+        this.#upserts.delete(upsert[0]);
+      } else if (deletion) {
+        this.#deletions.delete(deletion[0]);
+      } else {
+        break;
       }
-      const oldestDeletion = this.#deletions.keys().next().value as string | undefined;
-      if (oldestDeletion !== undefined) this.#deletions.delete(oldestDeletion);
-      else break;
     }
   }
 }

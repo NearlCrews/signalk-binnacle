@@ -59,6 +59,26 @@ describe('AisTargets', () => {
     expect(ais.find('vessels.missing')).toBeUndefined();
   });
 
+  // find() indexes the memoized list, so it must hand back the very object the list holds and it
+  // must follow a rebuild rather than answer from a stale index.
+  it('returns the listed view object and tracks it across a rebuild', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({ 'vessels.a': { 'navigation.position': { latitude: 36, longitude: -121 } } }),
+    );
+    expect(ais.find('vessels.a')).toBe(ais.list()[0]);
+
+    store.applyFrame(
+      frame({
+        'vessels.a': { 'navigation.position': { latitude: 37, longitude: -121 } },
+        'vessels.b': { 'navigation.position': { latitude: 38, longitude: -121 } },
+      }),
+    );
+    expect(ais.find('vessels.a')?.position.latitude).toBe(37);
+    expect(ais.find('vessels.b')).toBe(ais.list()[1]);
+  });
+
   it('exposes closestApproach as cpa and tcpa from a raw-number timeTo', () => {
     const store = new SignalKStore();
     const ais = new AisTargets(store);

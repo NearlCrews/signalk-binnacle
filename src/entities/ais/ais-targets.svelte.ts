@@ -81,6 +81,9 @@ export class AisTargets {
   // per unchanged vessel, on every AIS change. Entries for vessels the store dropped are pruned
   // below, only when the sizes disagree.
   #views = new Map<string, CachedView>();
+  // The id index for find(), refilled inside list()'s rebuild loop so it costs one Map insertion
+  // per visited vessel and no second pass.
+  #index = new Map<string, AisTargetView>();
   #now: () => number;
 
   constructor(store: SignalKStore, now: () => number = Date.now) {
@@ -120,6 +123,7 @@ export class AisTargets {
       return this.#cache;
     }
     const out: AisTargetView[] = [];
+    this.#index.clear();
     let expiresAt = Number.POSITIVE_INFINITY;
     for (const [id, target] of this.#store.aisTargets) {
       // A vessel nobody heard from since its view was built, still inside every freshness window,
@@ -132,6 +136,7 @@ export class AisTargets {
         now < cached.expiresAt
       ) {
         out.push(cached.view);
+        this.#index.set(id, cached.view);
         expiresAt = Math.min(expiresAt, cached.expiresAt);
         continue;
       }
@@ -182,6 +187,7 @@ export class AisTargets {
         navigationState: typeof navState === 'string' ? navState : undefined,
       };
       out.push(view);
+      this.#index.set(id, view);
       this.#views.set(id, {
         view,
         generation: this.#store.generation,
@@ -203,8 +209,11 @@ export class AisTargets {
     return out;
   }
 
+  // list() keeps the index current, so a selected target looked up on every version bump costs
+  // one hash instead of a scan of the whole fleet.
   find(id: string): AisTargetView | undefined {
-    return this.list().find((target) => target.id === id);
+    this.list();
+    return this.#index.get(id);
   }
 
   #numField(value: unknown, key: string): number | undefined {

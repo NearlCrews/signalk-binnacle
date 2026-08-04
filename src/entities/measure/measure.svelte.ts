@@ -54,8 +54,17 @@ export class MeasureStore {
   #selectedId = $state<string | undefined>();
   #moveArmed = $state(false);
   #movePreview = $state<LatLon | undefined>();
-  #history = $state<MeasureHistoryEntry[]>([]);
+  // Raw: every write replaces the array wholesale and undo copies what it restores, so deep
+  // reactivity would only cost a proxy per entry, up to MAX_MEASURE_HISTORY, on every edit.
+  #history = $state.raw<MeasureHistoryEntry[]>([]);
   #nextId = 1;
+  #display?: {
+    vertices: readonly MeasureVertex[];
+    selectedId: string | undefined;
+    preview: LatLon | undefined;
+    result: readonly MeasureVertex[];
+  };
+  #displayLegs?: { vertices: readonly MeasureVertex[]; result: MeasureLeg[] };
 
   get active(): boolean {
     return this.#active;
@@ -69,13 +78,33 @@ export class MeasureStore {
     return this.#vertices.map((vertex) => vertex.position);
   }
 
+  // Memoized on the identity of its inputs rather than recomputed per read. The overlay reads this
+  // on every tick of the shared overlay clock and skips its repaint when the identity is unchanged,
+  // so an armed move would otherwise allocate a fresh array per tick, never match the guard, and
+  // schedule a repaint that sustains itself. A $derived does not cover it: a derived created
+  // outside a reaction recomputes on every read, and the overlay tick is exactly that context.
+  // Every input is replaced wholesale on change, so an identity match cannot be stale.
   get displayVertices(): readonly MeasureVertex[] {
-    if (!this.#movePreview || !this.#selectedId) return this.#vertices;
-    return this.#vertices.map((vertex) =>
-      vertex.id === this.#selectedId
-        ? { ...vertex, position: this.#movePreview as LatLon }
-        : vertex,
-    );
+    const vertices = this.#vertices;
+    const selectedId = this.#selectedId;
+    const preview = this.#movePreview;
+    const memo = this.#display;
+    if (
+      memo &&
+      memo.vertices === vertices &&
+      memo.selectedId === selectedId &&
+      memo.preview === preview
+    ) {
+      return memo.result;
+    }
+    const result =
+      preview && selectedId
+        ? vertices.map((vertex) =>
+            vertex.id === selectedId ? { ...vertex, position: preview } : vertex,
+          )
+        : vertices;
+    this.#display = { vertices, selectedId, preview, result };
+    return result;
   }
 
   get displayPoints(): readonly LatLon[] {
@@ -120,13 +149,18 @@ export class MeasureStore {
     return out;
   });
 
+  // Memoized on the display vertices it was built from, so the overlay's per-tick read costs one
+  // identity check instead of up to 999 rhumb distance and bearing pairs.
   get displayLegs(): MeasureLeg[] {
-    const out: MeasureLeg[] = [];
     const vertices = this.displayVertices;
+    const memo = this.#displayLegs;
+    if (memo && memo.vertices === vertices) return memo.result;
+    const result: MeasureLeg[] = [];
     for (let index = 1; index < vertices.length; index += 1) {
-      out.push(leg(vertices[index - 1], vertices[index]));
+      result.push(leg(vertices[index - 1], vertices[index]));
     }
-    return out;
+    this.#displayLegs = { vertices, result };
+    return result;
   }
 
   get lastLeg(): MeasureLeg | undefined {
