@@ -124,6 +124,14 @@ const LABELS: Record<Theme, string> = {
 
 const Icon = $derived(ICONS[controller.theme]);
 const label = $derived(LABELS[controller.theme]);
+// On night-red the hold has nothing left to jump to, so neither string may promise it.
+const onNight = $derived(controller.theme === 'night-red');
+const ariaLabel = $derived(
+  onNight
+    ? `Switch theme (currently ${label})`
+    : `Switch theme (currently ${label}); hold to jump to night theme`,
+);
+const title = $derived(onNight ? label : `${label} (hold for night)`);
 
 // A long hold jumps straight to night-red, skipping the day -> dusk leg of the cycle: cycling
 // through dusk's brighter palette first would hit dark-adapted eyes with exactly the flash a
@@ -155,8 +163,8 @@ function onKeyUp(event: KeyboardEvent): void {
 <button
   type="button"
   class="icon-pill"
-  aria-label={`Switch theme (currently ${label}); hold to jump to night theme`}
-  title={`${label} (hold for night)`}
+  aria-label={ariaLabel}
+  {title}
   onpointerdown={onPointerDown}
   onpointerup={() => hold.releasePointer()}
   onpointerleave={() => hold.cancel()}

@@ -12,6 +12,7 @@ import {
   type AsyncProfileAdapter,
   type ProfileAdapter,
   ProfileStore,
+  type ProfileSyncState,
 } from './profiles-store.svelte';
 
 function fakeAdapter(initial?: ProfilesState): ProfileAdapter & { saved: ProfilesState[] } {
@@ -758,6 +759,28 @@ describe('ProfileStore server synchronization', () => {
     expect(store.remoteUpdateAvailable).toBe(true);
   });
 
+  it('names the portable settings a pending remote update would change', async () => {
+    const local = profile('p1', 'Coastal', 1, { theme: 'day', anchorRadiusMeters: 50 });
+    const remote = profile('p1', 'Coastal', 2, { theme: 'dusk', anchorRadiusMeters: 80 });
+    const store = new ProfileStore(
+      fakeAdapter({ profiles: [local], activeId: 'p1', defaultId: undefined }),
+    );
+    await store.syncWithServer(
+      fakeServer({
+        profiles: [remote],
+        tombstones: [],
+        defaultId: undefined,
+        revision: 2,
+      }),
+    );
+
+    expect([...store.remoteUpdateChanges]).toEqual(['theme', 'anchorRadiusMeters']);
+
+    store.markRemoteUpdateApplied();
+    expect([...store.remoteUpdateChanges]).toEqual([]);
+    expect(store.remoteUpdateAvailable).toBe(false);
+  });
+
   it('persists the last-applied setup when a remote update awaits approval', async () => {
     const local = profile('p1', 'Coastal', 1, { theme: 'day' });
     const remote = profile('p1', 'Coastal', 2, { theme: 'dusk' });
@@ -781,6 +804,29 @@ describe('ProfileStore server synchronization', () => {
     expect(restarted.active?.settings.theme).toBe('dusk');
     expect(restarted.appliedSettings?.theme).toBe('day');
     expect(restarted.remoteUpdateAvailable).toBe(true);
+  });
+
+  it('keeps a rebased retry in the syncing state', async () => {
+    const store = new ProfileStore(fakeAdapter());
+    store.save('Coastal', settings());
+    const server = fakeServer(emptyRemote());
+    const mutate = server.mutate.bind(server);
+    const seen: ProfileSyncState[] = [];
+    let conflicted = false;
+    server.mutate = async (revision, mutation) => {
+      seen.push(store.syncState);
+      if (!conflicted) {
+        conflicted = true;
+        return 'conflict';
+      }
+      return mutate(revision, mutation);
+    };
+    await store.syncWithServer(server);
+    await flush();
+    await flush();
+
+    expect(seen).toEqual(['syncing', 'syncing']);
+    expect(store.syncState).toBe('synced');
   });
 
   it('rebases and retries a revision conflict', async () => {

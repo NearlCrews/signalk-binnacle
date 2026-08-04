@@ -1,5 +1,30 @@
+import { render } from 'svelte/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HoldActivation } from './ThemeToggle.svelte';
+import { ThemeController } from '$shared/ui';
+import ThemeToggle, { HoldActivation } from './ThemeToggle.svelte';
+
+function renderToggle(theme: string): string {
+  return render(ThemeToggle, {
+    props: { controller: new ThemeController(theme, () => {}) },
+  }).body;
+}
+
+describe('ThemeToggle labels', () => {
+  it('promises the night jump only while there is somewhere to jump to', () => {
+    const day = renderToggle('day');
+
+    expect(day).toContain('aria-label="Switch theme (currently Day theme); hold to jump to night');
+    expect(day).toContain('title="Day theme (hold for night)"');
+  });
+
+  it('drops the hold promise once night-red is already showing', () => {
+    const night = renderToggle('night-red');
+
+    expect(night).toContain('aria-label="Switch theme (currently Night theme)"');
+    expect(night).toContain('title="Night theme"');
+    expect(night).not.toContain('hold');
+  });
+});
 
 describe('HoldActivation', () => {
   beforeEach(() => vi.useFakeTimers());

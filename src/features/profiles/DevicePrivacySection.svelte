@@ -50,7 +50,14 @@ const reportText = $derived.by(() => {
   if (!report) return undefined;
   if (report.status === 'blocked') return report.reason ?? 'The action is blocked for safety.';
   if (report.status === 'partial') {
-    return `Some local data could not be removed. ${report.failures.map((failure) => failureText(failure.ownerId, failure.message)).join(' ')} Reloading shortly.`;
+    // Semicolons and a closing period, not spaces: each failure message is raw provider text that
+    // usually has no terminal punctuation, so joining with a space runs the failures together and
+    // into the sentence that follows.
+    const failures = report.failures
+      .map((failure) => failureText(failure.ownerId, failure.message))
+      .join('; ');
+    const sentence = /[.!?]$/.test(failures) ? failures : `${failures}.`;
+    return `Some local data could not be removed. ${sentence} Reloading shortly.`;
   }
   return report.operation === 'forget-credentials'
     ? 'Binnacle credentials were removed from this device. Reloading…'

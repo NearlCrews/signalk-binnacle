@@ -20,6 +20,24 @@ describe('AuthBanner', () => {
     expect(body).toContain('role="status"');
   });
 
+  it('names the declined device id and what a fresh request does', () => {
+    const body = render(AuthBanner, {
+      props: {
+        auth: {
+          status: 'denied',
+          clientId: 'binnacle-9f3a21bc',
+          upgrading: false,
+          writeBlocked: false,
+        } as AuthController,
+        requestsUrl: 'http://boat.local/admin/#/security/access-requests',
+      },
+    }).body;
+    expect(body).toContain('binnacle-9f3a21bc');
+    expect(body).toContain('new device ID');
+    expect(body).toContain('Access Requests');
+    expect(body).toContain('Request again');
+  });
+
   it('explains a declined write upgrade with a retry, over the generic read-only copy', () => {
     const body = render(AuthBanner, {
       props: {

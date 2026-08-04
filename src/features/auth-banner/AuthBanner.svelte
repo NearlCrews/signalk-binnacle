@@ -33,10 +33,20 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
   </div>
 {:else if auth.status === 'denied'}
   <div class="auth-banner denied" role="alert">
-    Access was denied.
-    <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestAccess()}>
-      Request again
-    </button>
+    <p>
+      Signal K declined access for <strong>{auth.clientId}</strong>, so Binnacle cannot read or save
+      boat data.
+      <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestAccess()}>
+        Request again
+      </button>
+    </p>
+    <p class="muted-note">
+      Requesting again introduces Binnacle under a new device ID, since a refused one stays refused.
+      Approve the newest entry in Signal K under Security, then Access Requests, and grant
+      <strong>read and write</strong>
+      so routes, waypoints, personal notes, tracks, course control, alarms, and profiles can use the
+      server.
+    </p>
   </div>
 {:else if auth.upgrading}
   <div class="auth-banner" role="status" aria-live="polite">

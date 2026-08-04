@@ -6,7 +6,12 @@ import SquarePen from '@lucide/svelte/icons/square-pen';
 import Star from '@lucide/svelte/icons/star';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import Upload from '@lucide/svelte/icons/upload';
-import { MAX_PROFILES, type Profile, type ProfileSyncState } from '$entities/profile';
+import {
+  MAX_PROFILES,
+  type PortableProfileSettingKey,
+  type Profile,
+  type ProfileSyncState,
+} from '$entities/profile';
 import type { PrivacyReport } from '$shared/privacy';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -19,9 +24,11 @@ import {
   readErrorMessage,
   SavedList,
   SlideOver,
+  WriteAccessNote,
 } from '$shared/ui';
 import DevicePrivacySection from './DevicePrivacySection.svelte';
 import { type ImportedProfile, parseProfilesJson } from './profile-io';
+import { profileChangeSummary } from './setting-labels';
 
 interface Props {
   auth: AuthController;
@@ -30,6 +37,9 @@ interface Props {
   defaultId: string | undefined;
   syncState: ProfileSyncState;
   remoteUpdateAvailable: boolean;
+  // Which portable settings the pending remote update would change, so the prompt is not a blind
+  // choice between two destructive actions.
+  remoteUpdateChanges: readonly PortableProfileSettingKey[];
   onRetrySync: () => void;
   onApply: (id: string) => void;
   onApplyRemoteUpdate: () => void;
@@ -54,6 +64,7 @@ const {
   defaultId,
   syncState,
   remoteUpdateAvailable,
+  remoteUpdateChanges,
   onRetrySync,
   onApply,
   onApplyRemoteUpdate,
@@ -69,6 +80,9 @@ const {
   onClose,
   onBack,
 }: Props = $props();
+
+const changeSummary = $derived(profileChangeSummary(remoteUpdateChanges));
+const atProfileLimit = $derived(profiles.length >= MAX_PROFILES);
 
 // Naming a new profile or renaming an existing one happens inline through NameEntry rather than a
 // native prompt. One state drives both: 'new' for the top Save button, or a rename keyed by id.
@@ -141,16 +155,21 @@ function useProfile(id: string): void {
     </p>
     <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
   {:else if syncState === 'syncing'}
-    <p class="muted-note">Syncing profiles with this Signal K account…</p>
+    <p class="muted-note" role="status">Syncing profiles with this Signal K account…</p>
   {:else if auth.writeBlocked}
-    <p class="muted-note">
-      Profiles are saved on this device. A write token is needed to sync them to other stations.
-    </p>
+    <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
+         request stays one tap away from the block it explains. -->
+    <WriteAccessNote
+      message="Profiles are saved on this device. A write token is needed to sync them to other stations."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {:else if syncState === 'synced'}
-    <p class="muted-note">Profiles are synced with this Signal K account.</p>
+    <p class="muted-note" role="status">Profiles are synced with this Signal K account.</p>
   {:else if syncState === 'waiting'}
     <p class="muted-note" role="status">
-      Profiles are saved on this device and are waiting to sync.
+      Profiles are saved on this device. They will sync automatically when the Signal K connection
+      is ready.
     </p>
   {:else}
     <p class="muted-note">Profiles are saved on this device.</p>
@@ -161,7 +180,12 @@ function useProfile(id: string): void {
   </p>
   {#if remoteUpdateAvailable}
     <div class="alert-note remote-update">
-      <p role="status">The active profile was updated on another station.</p>
+      <p role="status">
+        The active profile was updated on another station.
+        {#if changeSummary}
+          Changed: {changeSummary}.
+        {/if}
+      </p>
       <p>Apply the shared update, or sync this station's current setup back to the profile.</p>
       <div class="panel-controls">
         <button type="button" class="btn btn-ghost" onclick={onApplyRemoteUpdate}>
@@ -177,6 +201,8 @@ function useProfile(id: string): void {
     <button
       type="button"
       class="btn btn-primary btn--grow"
+      disabled={atProfileLimit}
+      aria-describedby={atProfileLimit ? 'profile-limit-note' : undefined}
       onclick={() => (naming = { mode: 'new' })}
     >
       <Save size={16} aria-hidden="true" />
@@ -193,6 +219,12 @@ function useProfile(id: string): void {
       {importing ? 'Importing…' : 'Import'}
     </button>
   </div>
+  {#if atProfileLimit}
+    <p id="profile-limit-note" class="muted-note" role="status">
+      This device holds the {MAX_PROFILES.toLocaleString('en-US')}-profile limit. Delete a profile
+      before saving another.
+    </p>
+  {/if}
 
   {#if naming?.mode === 'new'}
     <NameEntry
@@ -212,7 +244,7 @@ function useProfile(id: string): void {
   <SavedList
     heading="Saved profiles"
     items={profiles}
-    empty="No profiles yet. Configure the helm, then tap Save current as profile."
+    empty="No profiles yet. Configure the helm, then select Save current as profile."
     key={(profile) => profile.id}
     isActive={(profile) => profile.id === activeId}
   >

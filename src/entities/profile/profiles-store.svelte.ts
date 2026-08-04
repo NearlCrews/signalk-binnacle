@@ -347,6 +347,9 @@ export class ProfileStore {
   remoteUpdateAvailable = $state(false);
 
   #defaultId = $state<string | undefined>(undefined);
+  // Which portable settings a pending remote update would change, so the prompt can name them
+  // instead of asking for a blind choice.
+  #remoteUpdateChanges = $state<PortableProfileSettingKey[]>([]);
   #tombstones: ProfileTombstone[] = [];
   #pending: ProfilePendingJournal = {
     profiles: Object.create(null) as Record<string, PendingProfileChange>,
@@ -404,6 +407,10 @@ export class ProfileStore {
 
   get defaultId(): string | undefined {
     return this.#defaultId;
+  }
+
+  get remoteUpdateChanges(): readonly PortableProfileSettingKey[] {
+    return this.#remoteUpdateChanges;
   }
 
   get hasPendingChanges(): boolean {
@@ -562,7 +569,7 @@ export class ProfileStore {
     this.#applied = active
       ? { profileId: active.id, settings: cloneSettings(active.settings) }
       : undefined;
-    this.remoteUpdateAvailable = false;
+    this.#refreshRemoteUpdateState();
     this.#persist(false);
   }
 
@@ -925,7 +932,9 @@ export class ProfileStore {
     while (this.#server && this.#hasPending()) {
       const built = this.#buildMutation();
       if (!built) break;
-      this.syncState = retries > 0 ? 'conflict' : 'syncing';
+      // A rebased retry is still ordinary syncing. Only an exhausted retry budget below is a
+      // conflict the navigator has to act on.
+      this.syncState = 'syncing';
       const result = await this.#server.mutate(this.#serverRevision, built.mutation);
       if (this.#persistenceSuspended) return;
       if (result === 'ok') {
@@ -965,9 +974,18 @@ export class ProfileStore {
   }
 
   #refreshRemoteUpdateState(): void {
-    this.remoteUpdateAvailable =
-      this.active !== undefined &&
-      this.#applied?.profileId === this.active.id &&
-      !sameJsonValue(this.#applied.settings, this.active.settings);
+    const active = this.active;
+    const applied = this.#applied;
+    if (active === undefined || applied === undefined || applied.profileId !== active.id) {
+      this.remoteUpdateAvailable = false;
+      this.#remoteUpdateChanges = [];
+      return;
+    }
+    const appliedSettings = applied.settings;
+    const activeSettings = active.settings;
+    this.remoteUpdateAvailable = !sameJsonValue(appliedSettings, activeSettings);
+    this.#remoteUpdateChanges = PORTABLE_PROFILE_SETTING_KEYS.filter(
+      (key) => !sameJsonValue(appliedSettings[key], activeSettings[key]),
+    );
   }
 }
