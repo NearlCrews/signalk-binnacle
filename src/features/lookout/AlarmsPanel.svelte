@@ -1,6 +1,7 @@
 <script lang="ts">
 import Bell from '@lucide/svelte/icons/bell';
 import BellOff from '@lucide/svelte/icons/bell-off';
+import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 import { untrack } from 'svelte';
 import {
   type ActiveNotification,
@@ -25,8 +26,8 @@ import {
   type PersistedValue,
   type Thresholds,
 } from '$shared/settings';
-import type { AuthController, ConnectionPhase } from '$shared/signalk';
-import { Disclosure, SlideOver, UnitField } from '$shared/ui';
+import { type AuthController, type ConnectionPhase, isConnectionDown } from '$shared/signalk';
+import { Disclosure, InlineConfirm, SlideOver, UnitField } from '$shared/ui';
 import {
   canAcknowledgeNotification,
   canSilenceNotification,
@@ -89,6 +90,7 @@ const {
 const t = $derived(thresholds.value);
 const alerts = $derived(notifications.list());
 let pendingAction = $state<string | undefined>();
+let confirmingReset = $state(false);
 
 const alertTime = (n: ActiveNotification): string | undefined => {
   const ms = n.timestamp ? Date.parse(n.timestamp) : Number.NaN;
@@ -177,7 +179,7 @@ $effect(() => {
       continue.
     </p>
   {/if}
-  {#if connectionPhase === 'reconnecting' || connectionPhase === 'closed'}
+  {#if isConnectionDown(connectionPhase)}
     <p class="alert-note" role="alert">
       Signal K is disconnected. Active alarm status may be stale until the stream reconnects.
     </p>
@@ -260,7 +262,11 @@ $effect(() => {
       <span>Mute collision alarm</span>
     </button>
     {#if collisionMuted && collisionMuteRemainingMin !== undefined}
-      <p class="muted-note">Turns back on in {collisionMuteRemainingMin} min</p>
+      <!-- A status region, like every other state line here. It re-announces once a minute while
+           this panel is open, which is the intended cadence: a running silence on the collision
+           alarm is worth a minute-by-minute reminder for as long as the navigator keeps the panel
+           up, and the text changes no faster than that. -->
+      <p class="muted-note" role="status">Turns back on in {collisionMuteRemainingMin} min</p>
     {/if}
     <button
       type="button"
@@ -284,7 +290,7 @@ $effect(() => {
       much time.
     </p>
     <Disclosure label="Adjust collision alarm sensitivity">
-      <div class="group">
+      <div class="group card-frame">
         <span class="group-title caps-label danger">Danger</span>
         <UnitField
           label="Closest pass (CPA)"
@@ -307,7 +313,7 @@ $effect(() => {
           onCommit={(minutes) => setSeconds('dangerTcpaSeconds', minutes)}
         />
       </div>
-      <div class="group">
+      <div class="group card-frame">
         <span class="group-title caps-label warning">Warning</span>
         <UnitField
           label="Closest pass (CPA)"
@@ -333,13 +339,23 @@ $effect(() => {
       {#if caution}
         <p class="muted-note sev-warning" role="status">{caution}</p>
       {/if}
-      <button
-        type="button"
-        class="btn btn-ghost reset"
-        onclick={() => thresholds.set({ ...DEFAULT_THRESHOLDS })}
-      >
-        Reset to defaults
-      </button>
+      <!-- Reset discards four tuned safety thresholds and the shallow depth at once, so it takes the
+           deliberate second tap every other destructive action here takes. -->
+      {#if confirmingReset}
+        <InlineConfirm
+          question="Reset all thresholds?"
+          confirmLabel="Reset"
+          onConfirm={() => {
+            thresholds.set({ ...DEFAULT_THRESHOLDS });
+            confirmingReset = false;
+          }}
+          onCancel={() => (confirmingReset = false)}
+        />
+      {:else}
+        <button type="button" class="btn btn-ghost reset" onclick={() => (confirmingReset = true)}>
+          Reset to defaults
+        </button>
+      {/if}
     </Disclosure>
   </section>
   <section class="panel-section" aria-label="Shallow water threshold">
@@ -348,13 +364,21 @@ $effect(() => {
       Warn me when the depth under the boat reads under this much. Binnacle uses depth below the
       keel when the server provides it.
     </p>
+    <!-- A monitor that cannot see the bottom is a degraded safety state, not ordinary guidance, so
+         it carries the caution color and icon rather than reading like the copy above it. The
+         threshold field deliberately stays enabled: it is persisted configuration that takes effect
+         the moment a depth source appears, and dockside setup is exactly when neither is true. -->
     {#if shallow?.monitorState === 'no-source'}
-      <p class="muted-note" role="status">
-        No depth source is publishing. The shallow alarm cannot monitor.
+      <p class="muted-note sev-warning icon-note" role="status">
+        <TriangleAlert size={14} aria-hidden="true" />
+        <span>No depth source is publishing. The shallow alarm cannot monitor.</span>
       </p>
     {:else if shallow?.monitorState === 'no-reading'}
-      <p class="muted-note" role="status">
-        The sounder is publishing no usable depth reading. The shallow alarm cannot monitor.
+      <p class="muted-note sev-warning icon-note" role="status">
+        <TriangleAlert size={14} aria-hidden="true" />
+        <span>
+          The sounder is publishing no usable depth reading. The shallow alarm cannot monitor.
+        </span>
       </p>
     {/if}
     {#if serverShallowBound !== undefined}
@@ -440,10 +464,14 @@ $effect(() => {
   gap: var(--space-2);
   text-align: start;
 }
+/* Each severity block is its own bordered card on the shared .card-frame surface, so Danger and
+   Warning read as two groups at a glance instead of one four-field stack; only the column layout
+   and its padding are scoped here. */
 .group {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  padding: var(--space-2);
 }
 /* The base look is the shared .caps-label; only the per-severity color is overridden here. */
 .group-title.danger {

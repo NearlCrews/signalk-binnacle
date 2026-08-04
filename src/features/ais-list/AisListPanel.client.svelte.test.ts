@@ -4,6 +4,7 @@ import { AisTargets } from '$entities/ais';
 import type { CollisionAssessment, DangerContact } from '$entities/collision';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
+import type { ConnectionPhase } from '$shared/signalk';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
 import { fakeVesselFix } from '$shared/testing';
 import AisListPanel from './AisListPanel.svelte';
@@ -26,12 +27,15 @@ function mountPanel(options: {
   targets: Record<string, Record<string, unknown>>;
   contacts?: DangerContact[];
   selectedId?: string;
+  connectionPhase?: ConnectionPhase;
+  noOwnPosition?: boolean;
 }) {
   const store = new SignalKStore();
   store.applyFrame(frame(options.targets));
   const aisTargets = new AisTargets(store);
   const onSelect = vi.fn();
   const onLocate = vi.fn();
+  const onClose = vi.fn();
   const target = document.createElement('div');
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
@@ -41,16 +45,18 @@ function mountPanel(options: {
       props: {
         aisTargets,
         clock: { now: Date.now() },
-        vessel: fakeVesselFix({ latitude: 42, longitude: -83 }) as unknown as OwnVessel,
+        vessel: fakeVesselFix(
+          options.noOwnPosition ? undefined : { latitude: 42, longitude: -83 },
+        ) as unknown as OwnVessel,
         collision: {
           assessment: { contacts: options.contacts ?? [], worst: 'clear' },
         } as CollisionAssessment,
         units: { mode: 'metric' } as UnitsStore,
-        connectionPhase: 'open',
+        connectionPhase: options.connectionPhase ?? 'open',
         selectedId: options.selectedId,
         onSelect,
         onLocate,
-        onClose: vi.fn(),
+        onClose,
       },
     });
   });
@@ -65,7 +71,7 @@ function mountPanel(options: {
     if (!found) throw new Error(`no button labeled ${text}`);
     return found;
   };
-  return { store, target, onSelect, onLocate, button };
+  return { store, target, onSelect, onLocate, onClose, button };
 }
 
 afterEach(() => {
@@ -163,6 +169,86 @@ describe('AisListPanel interactions', () => {
       .querySelector<HTMLButtonElement>('button[aria-label="Back to nearby vessels"]')
       ?.click();
     expect(panel.onSelect).toHaveBeenCalledWith(undefined);
+  });
+
+  it('clears the search from its own control and from Escape', () => {
+    const panel = mountPanel({
+      targets: {
+        'vessels.urn:mrn:imo:mmsi:111111111': {
+          name: 'RISK',
+          'navigation.position': { latitude: 42.01, longitude: -83 },
+        },
+        'vessels.urn:mrn:imo:mmsi:222222222': {
+          name: 'CLEAR',
+          'navigation.position': { latitude: 42.02, longitude: -83 },
+        },
+      },
+    });
+    const search = panel.target.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error('search input missing');
+    const type = (value: string): void => {
+      search.value = value;
+      search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      flushSync();
+    };
+
+    type('CLEAR');
+    expect(panel.target.textContent).not.toContain('RISK');
+    const clear = panel.target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear the vessel search"]',
+    );
+    if (!clear) throw new Error('clear control missing');
+    clear.click();
+    flushSync();
+    expect(search.value).toBe('');
+    expect(panel.target.textContent).toContain('RISK');
+
+    type('CLEAR');
+    search.focus();
+    flushSync();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushSync();
+    expect(search.value).toBe('');
+    expect(panel.onClose).not.toHaveBeenCalled();
+  });
+
+  it('leaves the distance sort in place through a lost fix, which orders by name meanwhile', () => {
+    const panel = mountPanel({
+      noOwnPosition: true,
+      targets: {
+        'vessels.urn:mrn:imo:mmsi:111111111': {
+          name: 'ZULU',
+          'navigation.position': { latitude: 42.01, longitude: -83 },
+        },
+        'vessels.urn:mrn:imo:mmsi:222222222': {
+          name: 'ALPHA',
+          'navigation.position': { latitude: 42.02, longitude: -83 },
+        },
+      },
+    });
+
+    expect(panel.button('Distance').getAttribute('aria-pressed')).toBe('true');
+    expect(panel.button('Distance').disabled).toBe(true);
+    const names = [...panel.target.querySelectorAll('.nav-name')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(names).toEqual(['ALPHA', 'ZULU']);
+    expect(panel.target.textContent?.replace(/\s+/g, ' ')).toContain('ordered by name');
+  });
+
+  it('labels a dropped stream above a populated list', () => {
+    const panel = mountPanel({
+      connectionPhase: 'closed',
+      targets: {
+        'vessels.urn:mrn:imo:mmsi:111111111': {
+          name: 'FROZEN',
+          'navigation.position': { latitude: 42.01, longitude: -83 },
+        },
+      },
+    });
+
+    expect(panel.target.textContent).toContain('FROZEN');
+    expect(panel.target.textContent).toContain('Signal K is disconnected.');
   });
 
   it('clears a selected target when the live entity expires it', () => {

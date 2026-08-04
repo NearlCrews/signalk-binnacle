@@ -17,10 +17,11 @@ function renderPanel(
   mode: 'imperial' | 'metric',
   anchorDepth: DepthReading = NO_DEPTH,
   safetyDepth: DepthReading = NO_DEPTH,
+  auth: AuthController = { writeBlocked: false } as AuthController,
 ): string {
   return render(AnchorPanel, {
     props: {
-      auth: { writeBlocked: false } as AuthController,
+      auth,
       anchor: {
         watching: false,
         fixLost: false,
@@ -44,6 +45,14 @@ function renderPanel(
       onClose: vi.fn(),
     },
   }).body;
+}
+
+function blockedAuth(upgrading: boolean): AuthController {
+  return {
+    writeBlocked: true,
+    upgrading,
+    requestWriteAccess: vi.fn(),
+  } as unknown as AuthController;
 }
 
 describe('AnchorPanel', () => {
@@ -77,6 +86,19 @@ describe('AnchorPanel', () => {
 
   it('omits the depth row until a depth source reports', () => {
     expect(renderPanel('metric')).not.toContain('Depth (');
+  });
+
+  it('offers the read/write request while server anchor changes are blocked', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, blockedAuth(false));
+
+    expect(body).toContain('Server anchor changes need a write token.');
+    expect(body).toContain('Request read/write access');
+  });
+
+  it('rests the request control while a request is outstanding', () => {
+    expect(renderPanel('metric', NO_DEPTH, NO_DEPTH, blockedAuth(true))).toMatch(
+      /<button[^>]+disabled[^>]*>\s*Requesting access/,
+    );
   });
 
   it('explains the missing depth row on a keel-only sounder', () => {

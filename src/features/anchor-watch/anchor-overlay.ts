@@ -35,7 +35,7 @@ const MARKER_LAYER = 'binnacle-anchor-marker';
 const BAND = 'routes';
 const LAYERS = [FILL_LAYER, RING_LAYER, RODE_LAYER, MARKER_LAYER];
 
-const ANCHOR_OVERLAY_ID = 'anchor-watch';
+export const ANCHOR_OVERLAY_ID = 'anchor-watch';
 
 // The swing fill is a faint wash so the chart reads through it; the ring and marker carry the color.
 const FILL_OPACITY = 0.1;

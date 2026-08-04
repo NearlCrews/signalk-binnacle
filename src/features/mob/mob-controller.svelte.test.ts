@@ -90,6 +90,44 @@ describe('createMobController', () => {
     expect(signalk.resolveNotification).toHaveBeenCalledWith('http://sk', 'token', 'mob-id');
   });
 
+  it('announces the bearing and range back to the mark while one is active', () => {
+    vi.mocked(signalk.postMobNotification).mockResolvedValue('mob-id');
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    const mob = new MobStore(store, vessel, undefined, createFakeStorage());
+    const controller = createMobController({
+      origin: 'http://sk',
+      getToken: () => 'token',
+      mob,
+      mobAlarm: { update: vi.fn() } as unknown as GatedAlarm,
+      units: { mode: 'metric' },
+      notificationsApi: () => false,
+      publishDelta: vi.fn(),
+      flyTo: vi.fn(),
+      goTo: vi.fn(async () => undefined),
+    });
+    store.applyFrame(
+      createFrameFactory()({ 'navigation.position': { latitude: 42, longitude: -83 } }),
+    );
+
+    controller.onTrigger({ epochMs: 1, position: { latitude: 42.001, longitude: -83 } });
+    // 111 m rounds to the 10 m announcement step: quantized so the assertive region settles
+    // between meaningful changes instead of restarting the screen reader on every fix.
+    expect(controller.mobAlert).toBe(
+      'Man overboard. Mark is 000 degrees, 110 meters. Steer back to the mark.',
+    );
+
+    // A sub-step drift leaves the announcement string identical, so the region does not re-fire.
+    const before = controller.mobAlert;
+    store.applyFrame(
+      createFrameFactory()({ 'navigation.position': { latitude: 42.00002, longitude: -83 } }),
+    );
+    expect(controller.mobAlert).toBe(before);
+
+    mob.acknowledge();
+    expect(controller.mobAlert).toBe('');
+  });
+
   it('retains and clears every v2 raise after repeated triggers', async () => {
     const first = deferred<string | undefined>();
     const second = deferred<string | undefined>();

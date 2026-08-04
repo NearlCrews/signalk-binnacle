@@ -18,7 +18,7 @@ import {
   lengthUnit,
   type ReactiveClock,
 } from '$shared/lib';
-import type { ConnectionPhase } from '$shared/signalk';
+import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
 
 let {
   connectionLabel,
@@ -55,7 +55,7 @@ let {
 // COG is meaningless while the boat is stationary; under this speed the readout dashes.
 const COG_MIN_SOG_MPS = 0.15;
 
-const connectionDown = $derived(connectionPhase === 'reconnecting' || connectionPhase === 'closed');
+const connectionDown = $derived(isConnectionDown(connectionPhase));
 
 const depth = $derived(vessel.safetyDepth);
 
@@ -86,7 +86,9 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>
     {:else if connectionDown}
-      <span class="readout fix-lost" role="status" aria-live="polite">
+      <!-- Not a live region: the always-mounted conn dot above already announces every phase, and a
+           second region carrying the same label announced the drop twice. This is the sighted half. -->
+      <span class="readout fix-lost">
         {connectionLabel}
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
       </span>
@@ -121,7 +123,10 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
         {/if}
       </span>
     {/if}
-    <span class="readout sog-readout" class:fix-lost={vessel.sogStale} title="Speed over ground"
+    <span
+      class="readout sog-readout"
+      class:fix-lost={fixStale || vessel.sogStale}
+      title="Speed over ground"
       >SOG
       <b class="num">{formatKnotsOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps)}</b>
       kn</span

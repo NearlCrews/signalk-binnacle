@@ -13,7 +13,13 @@ import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
-import { createPanelMinimize, InlineConfirm, SlideOver, UnitField } from '$shared/ui';
+import {
+  createPanelMinimize,
+  InlineConfirm,
+  SlideOver,
+  UnitField,
+  WriteAccessNote,
+} from '$shared/ui';
 
 interface Props {
   auth: AuthController;
@@ -115,10 +121,13 @@ function captureFromDistance(): void {
   {minimize}
 >
   {#if auth.writeBlocked}
-    <p class="muted-note" role="status">
-      Server anchor changes need a write token. A browser-only watch remains available when no
-      server watch is active.
-    </p>
+    <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
+         request stays one tap away from the block it explains. -->
+    <WriteAccessNote
+      message="Server anchor changes need a write token. A browser-only watch remains available when no server watch is active."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {/if}
   <p class="muted-note">
     Drop the anchor to start a drift alarm that sounds if the boat swings past the watch radius.

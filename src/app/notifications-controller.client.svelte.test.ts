@@ -36,6 +36,7 @@ function setup(
     timeTravelActive?: boolean;
     mobActive?: boolean;
     ownedDepthPath?: string;
+    notifications?: unknown[];
   } = {},
 ) {
   const assessment = options.assessment ?? DANGER;
@@ -70,7 +71,7 @@ function setup(
     collisionMute: collisionMute as never,
     lookoutAlarm: lookoutAlarm as never,
     anchor: { watching: false } as never,
-    notificationsStore: { list: () => [] } as never,
+    notificationsStore: { list: () => options.notifications ?? [] } as never,
     companionStatus: { state: 'ready', down: false } as never,
     timeTravel: timeTravel as never,
     mob: mob as never,
@@ -170,6 +171,38 @@ describe('createNotificationsController', () => {
     test.controller.onAcknowledgeNotification({ id: 'n1' } as never);
     await vi.waitFor(() =>
       expect(test.controller.alarmActionError).toContain('Could not acknowledge'),
+    );
+  });
+
+  it('keeps a non-audible warning out of the assertive live region', () => {
+    const test = mount({
+      notifications: [
+        { path: 'notifications.environment.wind', state: 'warn', message: 'Gust', activation: 1 },
+      ],
+    });
+    expect(test.controller.genericAlarms).toHaveLength(1);
+    expect(test.controller.notificationAlert).toBe('');
+  });
+
+  it('announces a raised alarm in helm voice, worst grade first', () => {
+    const test = mount({
+      notifications: [
+        { path: 'notifications.environment.wind', state: 'warn', message: 'Gust', activation: 1 },
+        { path: 'notifications.propulsion.oil', state: 'alarm', message: 'Oil pressure' },
+        { path: 'notifications.electrical.fire', state: 'emergency', message: 'Engine room fire' },
+      ],
+    });
+    expect(test.controller.notificationAlert).toBe(
+      'Emergency: Engine room fire. Open Alarms for details.',
+    );
+
+    const alarmOnly = mount({
+      notifications: [
+        { path: 'notifications.propulsion.oil', state: 'alarm', message: 'Oil pressure' },
+      ],
+    });
+    expect(alarmOnly.controller.notificationAlert).toBe(
+      'Alarm: Oil pressure. Open Alarms for details.',
     );
   });
 

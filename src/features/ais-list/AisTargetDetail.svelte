@@ -13,7 +13,9 @@ import {
   formatNm,
   formatTcpaMin,
 } from '$shared/lib';
+import type { ConnectionPhase } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
+import AisStreamNote from './AisStreamNote.svelte';
 import type { AisListRow } from './ais-rows';
 
 interface Props {
@@ -21,14 +23,16 @@ interface Props {
   // as it stays open rather than a snapshot from the moment it was opened.
   row: AisListRow;
   units: UnitsStore;
+  connectionPhase: ConnectionPhase;
   onBack: () => void;
   onLocate: (position: LatLon) => void;
 }
 
-const { row, units, onBack, onLocate }: Props = $props();
+const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
 </script>
 
 <SubViewHeader title={row.label} backLabel="Back to nearby vessels" {onBack} />
+<AisStreamNote {connectionPhase} />
 {#if row.navigationState}
   <p class="caps-label">{capitalize(row.navigationState)}</p>
 {/if}

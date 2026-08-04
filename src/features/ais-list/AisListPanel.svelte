@@ -15,7 +15,8 @@ import {
   formatTcpaMin,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
-import { SlideOver } from '$shared/ui';
+import { SearchInput, SlideOver } from '$shared/ui';
+import AisStreamNote from './AisStreamNote.svelte';
 import AisTargetDetail from './AisTargetDetail.svelte';
 import { type AisRiskFilter, type AisSort, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
 
@@ -93,10 +94,6 @@ const subtitle = $derived(
 );
 
 $effect(() => {
-  if (!parsedOwn && sort === 'range') untrack(() => (sort = 'name'));
-});
-
-$effect(() => {
   if (selectedId && !selectedTarget) untrack(() => onSelect(undefined));
 });
 </script>
@@ -110,28 +107,36 @@ $effect(() => {
   bodyFlex
 >
   {#if selectedRow}
-    <AisTargetDetail row={selectedRow} {units} onBack={() => onSelect(undefined)} {onLocate} />
+    <AisTargetDetail
+      row={selectedRow}
+      {units}
+      {connectionPhase}
+      onBack={() => onSelect(undefined)}
+      {onLocate}
+    />
   {:else}
+    <AisStreamNote {connectionPhase} />
     <p class="muted-note">
       Other boats and navigation aids broadcasting over the automatic identification system (AIS).
       Search by name or Maritime Mobile Service Identity (MMSI), or tap a target on the chart.
     </p>
     {#if vessel.positionStale}
       <p class="muted-note" role="status">
-        Own GPS fix is stale. Distance and bearing are unavailable until a fresh fix arrives.
+        Own GPS fix is stale. Distance and bearing are unavailable, and the list is ordered by name
+        until a fresh fix arrives.
       </p>
     {:else if !vessel.position}
       <p class="muted-note" role="status">
-        Waiting for own GPS position. Distance and bearing are unavailable.
+        Waiting for own GPS position. Distance and bearing are unavailable, and the list is ordered
+        by name.
       </p>
     {/if}
-    <input
-      class="input search-input"
-      type="search"
-      placeholder="Search vessel name or MMSI"
-      aria-label="Search nearby vessels by name or MMSI"
+    <SearchInput
       bind:value={query}
-    >
+      placeholder="Search vessel name or MMSI"
+      ariaLabel="Search nearby vessels by name or MMSI"
+      clearLabel="Clear the vessel search"
+    />
     <div class="nav-sort">
       <span class="caps-label">Risk filter</span>
       <div class="segmented" role="group" aria-label="Filter vessels by collision risk">
@@ -173,7 +178,7 @@ $effect(() => {
             ? 'No AIS targets are available right now. This list fills as traffic is received.'
             : connectionPhase === 'connecting'
               ? 'Connecting to Signal K. AIS targets will appear when the stream opens.'
-              : 'Signal K is disconnected. AIS targets may be unavailable or stale.'}
+              : 'No AIS targets were received before the stream dropped.'}
       </p>
     {:else}
       <ul class="nav-list bare-list" aria-label="Nearby vessels">

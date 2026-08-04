@@ -4,6 +4,7 @@ import type { LatLon } from '$shared/geo';
 import type { UnitsMode } from '$shared/lib';
 import { postMobNotification, resolveNotification, SK_PATHS } from '$shared/signalk';
 import { shouldSoundMobAlarm } from './mob-alarm';
+import { mobAlertText } from './mob-format';
 import { mobClearNotification, mobNotification } from './mob-notification';
 
 const NOTIFICATION_RESOLVE_CONCURRENCY = 4;
@@ -67,10 +68,23 @@ export function createMobController(deps: MobControllerDeps) {
     mobAlarm.update(shouldSoundMobAlarm(mob.active, mob.acknowledged));
   });
 
-  // The MOB channel of the assertive live region, the most urgent announcement in the app.
+  // The MOB channel of the assertive live region, the most urgent announcement in the app. The
+  // bearing and range are quantized (5 degrees, 10 meters) so the string settles between
+  // meaningful changes: re-deriving on every GPS fix would restart the screen reader
+  // mid-sentence for a shift no helm order follows, exactly when the announcement matters most.
+  const BEARING_STEP_RAD = (5 * Math.PI) / 180;
+  const RANGE_STEP_M = 10;
   const mobAlert = $derived.by(() => {
     if (!mob.active || mob.acknowledged) return '';
-    return 'Man overboard. Steer back to the mark.';
+    const bearing =
+      mob.bearingRad === undefined
+        ? undefined
+        : Math.round(mob.bearingRad / BEARING_STEP_RAD) * BEARING_STEP_RAD;
+    const distance =
+      mob.distanceMeters === undefined
+        ? undefined
+        : Math.round(mob.distanceMeters / RANGE_STEP_M) * RANGE_STEP_M;
+    return mobAlertText(bearing, distance, deps.units.mode);
   });
 
   // Commit the press-time mark, tell the whole boat, and bring the mark into view. Guidance only;

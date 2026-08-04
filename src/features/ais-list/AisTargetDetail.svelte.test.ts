@@ -1,10 +1,14 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import { UnitsStore } from '$entities/units';
+import type { ConnectionPhase } from '$shared/signalk';
 import AisTargetDetail from './AisTargetDetail.svelte';
 import type { AisListRow } from './ais-rows';
 
-function detail(severity: AisListRow['severity']): string {
+function detail(
+  severity: AisListRow['severity'],
+  connectionPhase: ConnectionPhase = 'open',
+): string {
   const row = {
     id: 'vessels.urn:mrn:imo:mmsi:111111111',
     identifier: '111111111',
@@ -19,7 +23,7 @@ function detail(severity: AisListRow['severity']): string {
     tcpaSeconds: 300,
   } as AisListRow;
   return render(AisTargetDetail, {
-    props: { row, units: new UnitsStore(), onBack: vi.fn(), onLocate: vi.fn() },
+    props: { row, units: new UnitsStore(), connectionPhase, onBack: vi.fn(), onLocate: vi.fn() },
   }).body;
 }
 
@@ -43,5 +47,19 @@ describe('AisTargetDetail', () => {
     const html = detail(undefined);
     expect(html).not.toContain('Collision risk.');
     expect(html).not.toContain('Getting close.');
+  });
+
+  // A detail view left open through a stream drop keeps rendering the last position, CPA, and TCPA,
+  // so it has to say that they stopped updating.
+  it('labels a dropped stream over the frozen readouts', () => {
+    // Source line wrapping survives into the rendered text, so copy is asserted against a
+    // whitespace-normalized body.
+    const html = detail(undefined, 'closed').replace(/\s+/g, ' ');
+    expect(html).toContain('Signal K is disconnected.');
+    expect(html).toContain('frozen at the last update received');
+  });
+
+  it('says nothing about the stream while it is open', () => {
+    expect(detail(undefined)).not.toContain('Signal K is disconnected.');
   });
 });

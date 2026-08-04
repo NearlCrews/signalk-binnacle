@@ -6,7 +6,13 @@ import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
 import { MAX_NAV_ROWS, type NavSortState, toggleSort } from '$shared/nav';
-import { createPanelMinimize, NavSortControl, ShowOnChartToggle, SlideOver } from '$shared/ui';
+import {
+  createPanelMinimize,
+  NavSortControl,
+  SearchInput,
+  ShowOnChartToggle,
+  SlideOver,
+} from '$shared/ui';
 import {
   defaultSort,
   filterRows,
@@ -132,13 +138,12 @@ onDestroy(() => onHover(undefined));
       Distance and bearing need a fresh GPS fix. Results are sorted by name until one arrives.
     </p>
   {/if}
-  <input
-    class="input search-input"
-    type="search"
-    placeholder="Search name, category, or source"
-    aria-label="Search places by name, category, or source"
+  <SearchInput
     bind:value={query}
-  >
+    placeholder="Search name, category, or source"
+    ariaLabel="Search places by name, category, or source"
+    clearLabel="Clear the place search"
+  />
   <NavSortControl
     sorts={SORTS}
     state={sortState}
@@ -229,9 +234,9 @@ onDestroy(() => onHover(undefined));
 </SlideOver>
 
 <style>
-/* The search field, the sort header, the result rows, the selected-row accent, and the readout line
-   come from the global .search-input and shared .nav-* family in cards.css. Only the leading category
-   icon is local. */
+/* The search field comes from the shared SearchInput primitive, and the sort header, the result rows,
+   the selected-row accent, and the readout line from the shared .nav-* family in cards.css. Only the
+   leading category icon is local. */
 .poi-head {
   display: flex;
   align-items: center;

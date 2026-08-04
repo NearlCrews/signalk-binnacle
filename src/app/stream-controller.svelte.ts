@@ -2,6 +2,7 @@ import type { OnlineStatus } from '$shared/pwa';
 import {
   ALL_VESSELS_CONTEXT,
   type ConnectionPhase,
+  isConnectionDown,
   type Path,
   type SignalKClient,
   type SignalKStore,
@@ -166,7 +167,7 @@ export function createStreamController(deps: StreamControllerDeps) {
   $effect(() => {
     const online = deps.net.online;
     const phase = deps.store.connection.phase;
-    const down = phase === 'reconnecting' || phase === 'closed';
+    const down = isConnectionDown(phase);
     if (online && !wasOnline && down && !error) void reconnectClient();
     wasOnline = online;
   });

@@ -8,6 +8,24 @@ const NOTIFICATIONS_PATH_PREFIX = /^notifications\./;
 export const notificationLabel = (n: ActiveNotification): string =>
   n.message || n.path.replace(NOTIFICATIONS_PATH_PREFIX, '');
 
+// The grades that raise a surface: the alarm strip renders these two and nothing else, and the
+// assertive live region announces the same two, so a low-grade "warn" cannot interrupt a screen
+// reader for an alert that produces neither sound nor strip.
+export const isRaisedNotification = (n: ActiveNotification): boolean =>
+  n.state === 'alarm' || n.state === 'emergency';
+
+// The alert a surface speaks for: worst first by grade, never by list order, so neither the strip
+// nor the announcement can be captured by whichever alert the caller sorted to the front. Takes a
+// raw or an already-filtered list, since both callers hold one or the other.
+export const worstRaisedNotification = (
+  list: readonly ActiveNotification[],
+): ActiveNotification | undefined =>
+  list.find((n) => n.state === 'emergency') ?? list.find(isRaisedNotification);
+
+// Helm voice for a raised grade, so a surface never shows or speaks the raw Signal K enum.
+export const notificationGrade = (n: ActiveNotification): 'Alarm' | 'Emergency' =>
+  n.state === 'emergency' ? 'Emergency' : 'Alarm';
+
 // Whether the v2 silence route can act on this alert: it needs a server-assigned id and an explicit
 // capability flag, and an emergency is deliberately not silenceable. Shared by the alarms panel and
 // the alarm strip so one alert cannot offer Silence in one surface and refuse it in the other.

@@ -3,7 +3,10 @@ import type { ActiveNotification } from '$entities/notifications';
 import {
   canAcknowledgeNotification,
   canSilenceNotification,
+  isRaisedNotification,
+  notificationGrade,
   notificationLabel,
+  worstRaisedNotification,
 } from './notification-actions';
 
 interface Props {
@@ -35,16 +38,12 @@ const {
 
 // Only the audible grades raise a strip. A warning or an alert is real, but it belongs to the
 // badge and the panel: a strip that appears for every low-grade notice stops meaning "act now".
-const raised = $derived(
-  notifications.filter((n) => n.state === 'alarm' || n.state === 'emergency'),
-);
-// Worst first by grade, not by list order, so the strip cannot be captured by whichever alert the
-// caller happened to sort to the front.
-const worst = $derived(raised.find((n) => n.state === 'emergency') ?? raised[0]);
+const raised = $derived(notifications.filter(isRaisedNotification));
+const worst = $derived(worstRaisedNotification(raised));
 const others = $derived(raised.length - 1);
 
 const label = $derived(worst ? notificationLabel(worst) : undefined);
-const title = $derived(worst?.state === 'emergency' ? 'Emergency' : 'Alarm');
+const title = $derived(worst ? notificationGrade(worst) : 'Alarm');
 
 const canSilence = $derived(worst !== undefined && canSilenceNotification(worst));
 const canAcknowledge = $derived(worst !== undefined && canAcknowledgeNotification(worst));

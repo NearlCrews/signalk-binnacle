@@ -7,7 +7,11 @@ export { COLLISION_OVERLAY_ID, createCollisionOverlay } from './collision-overla
 export { default as DangerStrip } from './DangerStrip.svelte';
 export { GenericAlarm, selectGenericAlarms } from './generic-alarm.svelte';
 export { LookoutAlarm } from './lookout-alarm';
-export { notificationLabel } from './notification-actions';
+export {
+  notificationGrade,
+  notificationLabel,
+  worstRaisedNotification,
+} from './notification-actions';
 export { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
 export type {
   ShallowMonitorSnapshot,

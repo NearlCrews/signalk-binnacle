@@ -4,7 +4,7 @@ import { AnchorWatch } from '$entities/anchor';
 import { UnitsStore } from '$entities/units';
 import { OwnVessel } from '$entities/vessel';
 import type { ReactiveClock } from '$shared/lib';
-import type { SKFrame } from '$shared/signalk';
+import type { ConnectionPhase, SKFrame } from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
 import { createFakeStorage } from '$shared/testing';
 import StatusStrip from './StatusStrip.svelte';
@@ -20,7 +20,9 @@ function baseProps() {
     streamError: false,
     online: true,
     fixStale: false,
-    connectionPhase: 'open' as const,
+    // The whole union, not the literal: a case that overrides this on a spread of baseProps() has
+    // to stay assignable to the fixture's own type.
+    connectionPhase: 'open' as ConnectionPhase,
     aisCount: 0,
     anchor,
     units: new UnitsStore(),
@@ -92,6 +94,28 @@ describe('StatusStrip depth alarm', () => {
     expect(html).toContain('depth-alarm');
     expect(html).toContain('Shallow water: depth below the alarm threshold');
     expect(html).toContain('Shallow');
+  });
+
+  it('warns the SOG readout when the fix is lost but the speed path is still fresh', () => {
+    const props = baseProps();
+    expect(props.vessel.sogStale).toBe(false);
+    const html = body({ ...props, fixStale: true });
+    const start = html.indexOf('sog-readout');
+    expect(html.slice(start, html.indexOf('</span>', start))).toContain('fix-lost');
+    expect(html).toContain('No GPS fix');
+  });
+
+  it('leaves the reconnecting readout out of the live regions the conn dot already covers', () => {
+    const html = body({
+      ...baseProps(),
+      connectionLabel: 'Reconnecting…',
+      connectionPhase: 'reconnecting',
+    });
+    const reconnect = html.slice(0, html.indexOf('Reconnect</button>'));
+    expect(reconnect).toContain('Reconnecting…');
+    // One live region for the phase: the always-mounted dot, whose visually-hidden label is the
+    // only copy of connectionLabel inside a role="status".
+    expect(reconnect.match(/role="status"/g) ?? []).toHaveLength(1);
   });
 
   it('replaces a stale depth with an explicit unavailable state', () => {

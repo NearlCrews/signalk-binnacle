@@ -5,7 +5,13 @@ import type { CollisionAssessment } from '$entities/collision';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
 import type { CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
-import { CollisionNotifier, notificationLabel, selectGenericAlarms } from '$features/lookout';
+import {
+  CollisionNotifier,
+  notificationGrade,
+  notificationLabel,
+  selectGenericAlarms,
+  worstRaisedNotification,
+} from '$features/lookout';
 import type { CompanionStatus } from '$features/prewarm';
 import type { TimeTravelController } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
@@ -150,10 +156,16 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   // with a hand-tracked key, which re-implemented what a derived does and could desynchronize on any
   // future early return. Assigning an equal string to the live region is already a no-op, so the key
   // was buying nothing the runtime does not do itself.
+  //
+  // Only the grades the alarm strip renders reach the assertive region: a "warn" that produces no
+  // sound and no strip must not interrupt a screen reader mid-sentence. The gate is deliberately the
+  // strip's grade test rather than isAudibleAlarmNotification, which is also false for a silenced
+  // alarm and for an explicit method list without 'sound', both of which the strip still shows.
   const genericNotificationAlert = $derived.by(() => {
-    const notification = genericNotifications[0];
+    const notification = worstRaisedNotification(genericNotifications);
     if (!notification) return '';
-    return `${notification.state}: ${notificationLabel(notification)}. Open Alarms for details.`;
+    const grade = notificationGrade(notification);
+    return `${grade}: ${notificationLabel(notification)}. Open Alarms for details.`;
   });
 
   const muteAlert = $derived(deps.collisionMute.active ? 'Collision alarm muted.' : '');

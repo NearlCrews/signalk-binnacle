@@ -13,6 +13,7 @@ type ShallowProps = ComponentProps<typeof AlarmsPanel>['shallow'];
 function renderPanel(
   capabilities: { canSilence?: boolean; canAcknowledge?: boolean },
   shallow?: ShallowProps,
+  mute: { collisionMuted?: boolean; collisionMuteRemainingMin?: number } = {},
 ): string {
   const notifications = {
     list: () => [
@@ -41,8 +42,8 @@ function renderPanel(
         } as unknown as PersistedValue<Thresholds>,
         units: { mode: 'metric' } as UnitsStore,
         shallow,
-        collisionMuted: false,
-        collisionMuteRemainingMin: undefined,
+        collisionMuted: mute.collisionMuted ?? false,
+        collisionMuteRemainingMin: mute.collisionMuteRemainingMin,
         onToggleCollisionMute: () => {},
         arrivalMuted: false,
         onToggleArrivalMute: () => {},
@@ -159,5 +160,30 @@ describe('AlarmsPanel shallow water section', () => {
     expect(body).toContain(
       'The sounder is publishing no usable depth reading. The shallow alarm cannot monitor.',
     );
+  });
+
+  // A monitor that cannot see the bottom has to look different from the guidance copy above it, and
+  // the threshold has to stay editable: it is configuration that takes effect the moment a source
+  // appears, which is exactly the dockside setup case.
+  it('marks a degraded monitor as a caution and keeps the threshold editable', () => {
+    for (const monitorState of ['no-source', 'no-reading'] as const) {
+      const body = renderPanel(
+        {},
+        { monitorState, serverLimitMeters: undefined, serverZonesActive: false },
+      );
+      expect(body).toMatch(/class="[^"]*sev-warning[^"]*"[^>]*role="status"/);
+      expect(body).toContain(THRESHOLD_FIELD);
+      expect(body).not.toMatch(new RegExp(`aria-label="${THRESHOLD_FIELD}"[^>]*disabled`));
+    }
+  });
+});
+
+describe('AlarmsPanel mutes', () => {
+  it('announces the collision mute countdown as a status', () => {
+    const body = renderPanel({}, undefined, {
+      collisionMuted: true,
+      collisionMuteRemainingMin: 12,
+    });
+    expect(body).toMatch(/role="status">Turns back on in 12 min/);
   });
 });
