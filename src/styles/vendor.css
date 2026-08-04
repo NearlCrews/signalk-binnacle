@@ -72,3 +72,22 @@
 .maplibregl-ctrl-bottom-right {
   inset-block-end: var(--space-3);
 }
+/* MapLibre docks its controls to the trailing edge, which is exactly where the note detail panel
+   docks, and both sit at the same stacking level, so the panel covered the zoom buttons, the scale
+   bar, and the attribution. Shift the control containers clear for as long as that slot is
+   occupied. The host sets .chart-host--end-panel from the same condition that renders the slot,
+   which keeps the app's most mutation-heavy subtree out of a :has() invalidation scope. Scoped
+   through .chart-canvas so a mini-map hosted inside a panel keeps its own controls where they
+   are. */
+.chart-host--end-panel .chart-canvas .maplibregl-ctrl-top-right,
+.chart-host--end-panel .chart-canvas .maplibregl-ctrl-bottom-right {
+  inset-inline-end: var(--panel-width);
+}
+@media (max-width: 600px) {
+  /* The slot is a full-width bottom sheet at this width, so there is no inline room to move into;
+     the controls stay put and the sheet covers the bottom ones, as it does for every docked panel. */
+  .chart-host--end-panel .chart-canvas .maplibregl-ctrl-top-right,
+  .chart-host--end-panel .chart-canvas .maplibregl-ctrl-bottom-right {
+    inset-inline-end: 0;
+  }
+}

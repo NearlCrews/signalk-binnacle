@@ -2,7 +2,7 @@
    surface with a caps title, a pill action button, and mono readouts. Each sets --strip-accent (the
    route accent or the alarm) for the border and the title. */
 .bottom-strip {
-  inline-size: min(28rem, calc(100% - 1.5rem));
+  inline-size: min(var(--strip-max-width), calc(100% - var(--space-5)));
   padding: var(--space-2) var(--space-3);
   background: var(--surface-overlay);
   border: 1px solid var(--strip-accent);

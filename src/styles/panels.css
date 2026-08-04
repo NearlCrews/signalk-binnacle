@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  inline-size: 22rem;
+  inline-size: var(--panel-width);
   max-inline-size: 100%;
   background: var(--surface-overlay);
   box-shadow: var(--shadow-side), var(--edge-light);
@@ -24,7 +24,7 @@
   .slide-over {
     inline-size: 100%;
     block-size: auto;
-    max-block-size: 60vh;
+    max-block-size: calc(60 * var(--dvh));
     border-block-start: 1px solid var(--border);
   }
   .slide-over--dock-left,
@@ -135,7 +135,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  min-block-size: 8rem;
+  min-block-size: var(--panel-state-min-height);
   padding: var(--space-4);
   text-align: center;
 }

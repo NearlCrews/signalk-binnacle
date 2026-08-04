@@ -4,7 +4,7 @@ import { scale } from 'svelte/transition';
 import { prefersReducedMotion } from '$shared/lib';
 import { registerDismiss } from './dialog';
 import { type FloatingAlign, type FloatingPlacement, floatingPosition } from './floating-position';
-import { onKeydownAction } from './focus';
+import { onKeydownAction, trapFocus } from './focus';
 import { menuFocusLeft } from './menu-focus';
 
 interface Props {
@@ -28,6 +28,9 @@ interface Props {
   // The surface role, 'group' by default; a true menu passes 'menu' so its role="menuitem" rows
   // are exposed as a menu rather than a generic group.
   role?: string;
+  // Trap Tab navigation inside the surface, for a consumer that turns the menu into a modal step
+  // (role="dialog") in place. It also declares aria-modal, matching SlideOver's contract.
+  focusTrap?: boolean;
   id?: string;
   // Optional ref binding and keyboard handler forwarded to the surface element, so consumers
   // that need arrow-key navigation can attach their handler without wrapping the content in an
@@ -55,6 +58,7 @@ let {
   anchorAlign = 'start',
   ariaLabel,
   role = 'group',
+  focusTrap = false,
   id,
   surfaceRef = $bindable(),
   onKeydown,
@@ -133,7 +137,9 @@ $effect(() => {
     onclick={onClose}
   ></button>
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a prop (group by default, menu for
-       context menus); both support aria-label, but biome cannot resolve the dynamic role statically. -->
+       context menus, dialog for a modal step); all support aria-label, and aria-modal is set only
+       with the focus trap, which is what a dialog consumer turns on. Biome cannot resolve the
+       dynamic role statically. -->
   <!-- biome-ignore lint/a11y/noStaticElementInteractions: role is a dynamic prop, and menu consumers
        delegate activation from their semantic button children. -->
   <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the delegated handler observes button clicks,
@@ -142,10 +148,12 @@ $effect(() => {
     class={surfaceClass ? `anchored-menu-surface ${surfaceClass}` : 'anchored-menu-surface'}
     {role}
     aria-label={ariaLabel}
+    aria-modal={focusTrap ? 'true' : undefined}
     style={resolvedSurfaceStyle}
     {id}
     bind:this={surfaceRef}
     use:onKeydownAction={onKeydown}
+    use:trapFocus={focusTrap}
     onfocusout={handleFocusOut}
     onclick={onClick}
     transition:scale={{

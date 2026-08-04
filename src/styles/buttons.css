@@ -127,7 +127,7 @@
 /* A compact pill toggle (the weather layer bar): control-height for touch but a tighter inline
    box and a muted resting label, lighting up through the shared .is-on. */
 .btn-compact {
-  min-inline-size: 3rem;
+  min-inline-size: var(--btn-compact-min-width);
   padding: 0 0.6rem;
   color: var(--text-muted);
   white-space: nowrap;

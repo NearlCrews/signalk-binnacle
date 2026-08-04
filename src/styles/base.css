@@ -9,16 +9,13 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--font-ui);
-  /* The app is a fixed-viewport shell (a 100vh grid; panels scroll internally), so the document
-     itself never scrolls. Locking it prevents a stray scrollbar from sub-pixel content overflow. */
+  /* The app is a fixed-viewport shell (a viewport-height grid; panels scroll internally), so the
+     document itself never scrolls. Locking it prevents a stray scrollbar from sub-pixel overflow. */
   overflow: hidden;
 }
 
 #app {
-  /* vh fallback for browsers predating dvh support; dvh overrides it where available. */
-  block-size: 100vh;
-  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback pair */
-  block-size: 100dvh;
+  block-size: calc(100 * var(--dvh));
 }
 
 /* A bare list with no markers, margin, or padding. Compose on any <ul> or <ol> that is a layout

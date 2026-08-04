@@ -19,10 +19,18 @@
   opacity: 1;
 }
 
-/* The panel-wide search field: the .input box stretched across the panel, shared by the Find places
-   and Waypoints lists so both present the same search affordance at the same width. */
+/* The panel-wide search field: the .input box stretched across the panel, shared by the nearby
+   vessels, Find places, and Waypoints lists through the SearchInput primitive so all three present
+   the same search affordance at the same width. The primitive draws its own control-size clear
+   button, so the browser's own decoration is suppressed here: Chromium and WebKit draw a small
+   unthemed one and Firefox draws none at all, which is exactly the inconsistency the primitive
+   removes. */
 .search-input {
   inline-size: 100%;
+}
+.search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* Theme native checkboxes and radios so they match the accent color in every theme, instead of

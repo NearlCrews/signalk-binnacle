@@ -298,7 +298,10 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   against its own surface while open, so consumers pass their close function instead of re-deriving
   the check from a surface binding), the isTabKey helper, the pickTextFile importer, the NameEntry name
   form with its defaultSaveName and resolveSaveName helpers, NavSortControl (the generic segmented sort
-  control over `$shared/nav`'s NavSortState, shared by the POI search and Waypoints panels), and the
+  control over `$shared/nav`'s NavSortState, shared by the POI search and Waypoints panels), SearchInput
+  (the filter-as-you-type field with a 44px clear button and Escape-to-clear, shared by the AIS, POI
+  search, and Waypoints panels), WriteAccessNote (the write-blocked notice plus request-access button
+  shared by the waypoints, tracks, and note-detail panels), and the
   PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.pill-count` (the small count
   chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`, the

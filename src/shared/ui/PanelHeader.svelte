@@ -24,6 +24,10 @@ interface Props {
   // When supplied, a phone-only minimize control collapses the panel to its header. One object so the
   // collapsed state and its toggle always travel together.
   minimize?: { collapsed: boolean; onToggle: () => void };
+  // The id of the panel body the minimize control collapses. The header does not render the body, so
+  // the id comes from whichever shell does, and it points aria-controls at the region aria-expanded
+  // describes.
+  bodyId?: string;
   // Extra classes forwarded onto the header element, for a consumer that needs a denser variant.
   extraClass?: string;
 }
@@ -37,6 +41,7 @@ const {
   backLabel = 'Back to menu',
   headerExtra,
   minimize,
+  bodyId,
   extraClass,
 }: Props = $props();
 </script>
@@ -69,6 +74,7 @@ const {
       class="panel-minimize"
       aria-label={minimize.collapsed ? 'Expand panel' : 'Minimize panel'}
       aria-expanded={!minimize.collapsed}
+      aria-controls={bodyId}
       title={minimize.collapsed ? 'Expand panel' : 'Minimize panel'}
       onclick={minimize.onToggle}
     >

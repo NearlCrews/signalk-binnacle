@@ -37,7 +37,10 @@
 @container (max-width: 26rem) {
   .scrubber {
     display: grid;
-    grid-template-columns: repeat(3, var(--control-size)) minmax(4rem, 1fr);
+    grid-template-columns: repeat(3, var(--control-size)) minmax(
+        var(--scrubber-track-min-width),
+        1fr
+      );
     gap: var(--space-1);
   }
   .scrubber .track-wrap {

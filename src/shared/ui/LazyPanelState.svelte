@@ -7,19 +7,33 @@ interface Props {
   closeLabel: string;
   state: 'loading' | 'error';
   message: string;
+  // The edge the pending frame docks to. It must match the dock of the SlideOver being loaded, since
+  // the two dock modifiers carry different border sides and the frame would otherwise border the
+  // wrong edge until the import settles.
+  dock?: 'left' | 'right';
   onClose: () => void;
   onBack?: () => void;
   backLabel?: string;
   onRetry?: () => void;
 }
 
-const { title, closeLabel, state, message, onClose, onBack, backLabel, onRetry }: Props = $props();
+const {
+  title,
+  closeLabel,
+  state,
+  message,
+  dock = 'left',
+  onClose,
+  onBack,
+  backLabel,
+  onRetry,
+}: Props = $props();
 </script>
 
 <!-- The pending frame deliberately has no outro. When the import settles it must leave before the
      real, animated SlideOver mounts, or both named landmarks and both sets of controls coexist. -->
 <aside
-  class="slide-over slide-over--dock-left"
+  class="slide-over slide-over--dock-{dock}"
   aria-label={title}
   tabindex="-1"
   use:dialog={onClose}

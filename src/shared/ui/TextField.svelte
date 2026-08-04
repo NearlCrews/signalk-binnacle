@@ -18,6 +18,9 @@ interface Props {
   large?: boolean;
   // Focus the input when it mounts, for a field revealed in place (an import review row, a dialog).
   focusOnOpen?: boolean;
+  // The input type, for a field whose content deserves a specialized mobile keyboard (the chart
+  // URL). Text-like types only; the field stays a controlled string either way.
+  type?: 'text' | 'url';
   // Fired on the native change (a commit on blur or Enter), carrying the entered text.
   onCommit: (value: string) => void;
   // Fired on every keystroke, so a parent can validate live (disable a Save button while empty).
@@ -36,6 +39,7 @@ const {
   ariaLabel,
   large = false,
   focusOnOpen = false,
+  type = 'text',
   onCommit,
   onInput,
   onEnter,
@@ -53,7 +57,7 @@ function commit(event: Event): void {
   <span class="name" class:caps-label={variant === 'stacked'}>{label}</span>
   <input
     class="input"
-    type="text"
+    {type}
     {value}
     {placeholder}
     {disabled}

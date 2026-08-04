@@ -34,6 +34,11 @@
   --text-xl: 1.15rem;
   --text-readout: 1.25rem;
   --text-readout-lg: 1.75rem;
+  /* One percent of the viewport height, dynamic where the browser supports it (so expanding mobile
+     browser chrome cannot push a sheet past the visible viewport) and static everywhere else. Every
+     viewport-height size multiplies this, calc(60 * var(--dvh)), instead of writing its own
+     vh-then-dvh declaration pair. */
+  --dvh: 1vh;
   --z-overlay: 1;
   --z-panel: 2;
   /* Safety strips (collision danger and its actions) sit above every panel but below the menu. */
@@ -42,10 +47,9 @@
 
   /* The Forecast panel's height, defined once because two rules compose from it: the panel's own
      block-size, and the lifted bottom-stack that clears the panel while it is open. */
-  --weather-panel-height: min(74vh, 36rem);
-  /* The touch target for action controls (buttons, the strip pills, icon buttons). A denser size
-     for list rows (menu items, layer toggles), still a comfortable tap target, keeps lists compact
-     without shrinking the primary actions. */
+  --weather-panel-height: min(calc(74 * var(--dvh)), 36rem);
+  /* The touch target for action controls (buttons, the strip pills, icon buttons). List rows read
+     denser through tighter padding and type, not through a smaller target: see --row-size below. */
   --control-size: 2.75rem;
   /* Space kept below helm controls when an installed touch PWA reaches into Android system chrome.
      Browsers that report a real safe-area inset supply it automatically. Some Samsung PWA shells
@@ -67,6 +71,25 @@
   --range-track-h: 6px;
   --range-thumb-size: 22px;
   --active-bar-width: 3px;
+
+  /* Component dimensions no scale token covers, gathered here so every non-scale size in the UI is
+     visible in one place instead of scattered across the modules that happen to use it. A
+     breakpoint condition still takes a literal: a custom property cannot be read inside a @media or
+     @container condition, and one used there drops the whole block. */
+  --panel-width: 22rem;
+  /* The floor for a panel's loading and error block, so a state swap does not collapse the panel. */
+  --panel-state-min-height: 8rem;
+  --strip-max-width: 28rem;
+  /* The instrument tile's floor, so a tile reads as a gauge face before the dock stretches it. */
+  --tile-min-height: 4rem;
+  /* Wider than tall, so a one- or two-character compact pill label does not read as a square. */
+  --btn-compact-min-width: 3rem;
+  /* The scrubber track's floor once the narrow-container grid takes over, so the slider stays
+     draggable beside the step controls. */
+  --scrubber-track-min-width: 4rem;
+  --checkbox-size: 1.25rem;
+  /* The stat-grid unit column's floor, so short and empty units keep the values in one column. */
+  --stat-unit-min-width: 1.25rem;
 
   --surface: #cfe0ec;
   --surface-raised: #ffffff;
@@ -129,7 +152,7 @@
 
 @supports (height: 100dvh) {
   :root {
-    --weather-panel-height: min(74dvh, 36rem);
+    --dvh: 1dvh;
   }
 }
 

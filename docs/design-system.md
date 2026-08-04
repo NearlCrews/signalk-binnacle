@@ -26,7 +26,9 @@ is not done.
 All geometry, type, color, depth, and timing come from CSS custom properties defined in
 `src/styles/tokens.css`. Never hardcode a literal where a token exists. The sanctioned off-scale
 exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine values 0.3, 0.35, 0.4,
-0.45, 0.55, and 0.6 rem; anything else is a token.
+0.45, 0.55, and 0.6 rem; anything else is a token. The one further exception is a `@media` or
+`@container` condition, which must carry a literal length: a custom property cannot be read inside a
+query condition, and one used there drops the whole block.
 
 ### Geometry and type (theme-independent)
 
@@ -39,8 +41,10 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
   type-role table below; a new size or a new token-role pairing is a design-system change, never a
   per-component decision.
 - Targets: `--control-size` 2.75rem is the action tap target (buttons, pills, icon buttons);
-  `--row-size` 2.5rem is the denser list-row height (menu items, layer toggles). Lists use the denser
-  size, primary actions use the full size.
+  `--row-size` is the list-row height (menu items, layer toggles) and is defined as
+  `var(--control-size)`, so the two are the same 2.75rem. WCAG 2.5.5 sets 44px as the
+  touch-target minimum, and pinning them together keeps a list row from drifting below it. A row reads denser through
+  tighter padding and smaller type, never through a smaller target.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.
@@ -49,6 +53,20 @@ exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine
   landscape-edge chrome must also include the appropriate `safe-area-inset-*` value.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
+- Component dimensions no scale covers live in `tokens.css` too, so every non-scale size in the UI
+  stays visible in one place: `--panel-width` 22rem (the docked slide-over), `--panel-state-min-height`
+  8rem (a panel's loading and error block), `--strip-max-width` 28rem (the centered bottom strips),
+  `--tile-min-height` 4rem (the instrument tile floor), `--btn-compact-min-width` 3rem
+  (`.btn-compact`), `--scrubber-track-min-width` 4rem (the scrubber track once its narrow-container
+  grid takes over), `--checkbox-size` 1.25rem (the native checkbox box), `--stat-unit-min-width`
+  1.25rem (the stat-grid unit column), and `--weather-panel-height` (the Forecast panel, composed by
+  both the panel and the bottom stack that clears it).
+- Viewport height goes through `--dvh`, one percent of the viewport height: `1dvh` where the browser
+  supports it, `1vh` everywhere else, resolved once in `tokens.css` behind an `@supports` query. Any
+  size measured against the viewport multiplies it, `block-size: calc(100 * var(--dvh))` or
+  `max-block-size: min(calc(60 * var(--dvh)), 24rem)`. Never write a `vh`-then-`dvh` declaration pair
+  at the site; that idiom carried a duplicate-property lint suppression and a repeated comment at
+  every copy.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
   (panel + 2), and `--z-menu` 5. The MOB confirm is a native top-layer `<dialog>`, above everything without a z-index.
 
@@ -59,9 +77,9 @@ Pick the token by role, never by eye:
 | Token | rem | Roles |
 | --- | --- | --- |
 | `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
-| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles |
+| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, the form-control baseline (`.input`) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), form-control input text (`.input`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), stepped-up form-control text (`UnitField` numerals, `.text-field.large`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
 | `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates |
@@ -146,10 +164,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   border, accent-tint fill) that lights any composing control.
 - Forms (`forms.css`): `.input` (text inputs and selects, 44px, raised fill), `.range` (the live
   slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header),
-  and `.search-input` (the full-width search field shared by the Find places and Waypoints panels).
+  and `.search-input` (the full-width search field with its 44px clear affordance, applied through
+  the `SearchInput` primitive in the AIS, Find places, and Waypoints panels).
 - Text (`text.css`): `.caps-label` (the uppercase, tracked, muted SECTION heading), `.muted-note` (a
   quiet hint for empty states and inline guidance), `.alert-note` (an outline alarm banner) and its
-  `.alert-note--filled` tinted variant, `.sev-danger` and `.sev-warning` (severity text coloring),
+  `.alert-note--filled` tinted variant, `.icon-note` (a note led by a status icon, with the text
+  wrapping under itself rather than under the icon; composed over the note's own look and severity
+  color by the weather warning banners and the degraded-monitor notes), `.sev-danger` and
+  `.sev-warning` (severity text coloring),
   `.panel-title` and `.panel-title--sub` (the panel header title and subtitle), `.num` (mono tabular
   numerals for any aligned readout). The status strip's own `.readout` spans (StatusStrip.svelte,
   component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
@@ -325,8 +347,17 @@ Shared behavior lives here. Compose these; do not re-implement them.
   it is open, so only one back control shows.
 - `TextField`: the labeled text-input row (inline or stacked variant), a controlled value that
   commits on blur or Enter. It also offers a live `onInput` (validate while typing), a `focusOnOpen`,
-  an `onEnter` submit, `disabled`, `maxLength`, and a `large` deck-glove size. Use it for any labeled
-  text field; never a raw `<input type="text">`.
+  an `onEnter` submit, `disabled`, `maxLength`, a `large` deck-glove size, and a text-like `type`
+  (`'url'` for a field that deserves the mobile URL keyboard). Use it for any labeled text field;
+  never a raw `<input type="text">`.
+- `SearchInput`: the filter-as-you-type search field with a 44px clear button and Escape-to-clear,
+  consistent across browsers (Firefox renders no native clear control on `type="search"`). Used by
+  the AIS, Find places, and Waypoints list panels; use it for any list filter field, never a raw
+  `<input type="search">`.
+- `WriteAccessNote`: the write-blocked notice plus its "Request read/write access" button, rendered
+  inside a panel whose writes are blocked (waypoints, tracks, note detail). Pass the panel's own
+  `message` with plain `requesting` and `onRequest` values; it never reads the auth store itself.
+  Use it instead of an inline note-plus-button block.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
   seeded default starts selected). Seed it with `defaultSaveName`.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
@@ -510,7 +541,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 ## 9. Interaction and accessibility
 
-- 44 px (`--control-size`) for every action target; the denser `--row-size` for list rows.
+- 44 px (`--control-size`) for every action target; `--row-size` for list rows, defined as the same
+  value so a row can never fall below that floor.
 - Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
   fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened

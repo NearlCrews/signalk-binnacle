@@ -59,6 +59,21 @@
   font-size: var(--text-sm);
 }
 
+/* An inline note led by a status icon, with the text wrapping under itself rather than under the
+   icon: the weather warning banners and the degraded-monitor notes both read this way. The 0.15rem
+   icon nudge is the settled offset that sits a 14px glyph on the first line's cap height at the
+   --text-sm body size both notes use; one rule so the two cannot drift apart. Composed over the
+   note's own look (.alert-note, .muted-note) and its severity color. */
+.icon-note {
+  display: flex;
+  align-items: start;
+  gap: 0.35rem;
+}
+.icon-note svg {
+  flex: 0 0 auto;
+  margin-block-start: 0.15rem;
+}
+
 /* Severity name coloring shared by the two collision surfaces (the danger strip and the AIS list),
    so how a contact name reads by collision grade cannot drift between them. */
 .sev-danger {

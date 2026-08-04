@@ -17,7 +17,7 @@
   align-items: center;
   text-align: center;
   gap: var(--space-1);
-  min-block-size: 4rem;
+  min-block-size: var(--tile-min-height);
   padding: var(--space-2);
   cursor: pointer;
 }

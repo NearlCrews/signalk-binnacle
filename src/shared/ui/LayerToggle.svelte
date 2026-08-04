@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { VisibilityToggleProps } from './visibility-toggle';
+import { resolveToggleDescription, type VisibilityToggleProps } from './visibility-toggle';
 
 interface Props extends VisibilityToggleProps {
   title: string;
@@ -8,6 +8,11 @@ interface Props extends VisibilityToggleProps {
 // disabled: a sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled
 // without the chart it annotates. description falls back to the visible title.
 const { title, visible, onToggle, disabled = false, description, describedBy }: Props = $props();
+
+const ownDescriptionId = $props.id();
+const described = $derived(
+  resolveToggleDescription({ description, describedBy }, ownDescriptionId),
+);
 </script>
 
 <label class="layer-toggle" class:disabled>
@@ -17,11 +22,16 @@ const { title, visible, onToggle, disabled = false, description, describedBy }: 
     type="checkbox"
     checked={visible}
     {disabled}
-    aria-describedby={describedBy}
+    aria-describedby={described.describedBy}
     onchange={(e) => onToggle(e.currentTarget.checked)}
   >
   <span class="title" title={description ?? title}>{title}</span>
 </label>
+<!-- Outside the label: text inside it would join the checkbox's accessible name, which must stay the
+     visible title alone. -->
+{#if described.ownText}
+  <span id={described.describedBy} class="visually-hidden">{described.ownText}</span>
+{/if}
 
 <style>
 .layer-toggle {
@@ -42,8 +52,8 @@ const { title, visible, onToggle, disabled = false, description, describedBy }: 
   opacity: var(--disabled-opacity);
 }
 .layer-toggle input[type="checkbox"] {
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
   /* Never let a long layer name shrink the box: the title ellipsizes, the checkbox stays square. */
   flex-shrink: 0;
 }

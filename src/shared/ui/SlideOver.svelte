@@ -57,6 +57,10 @@ const {
   minimize,
   children,
 }: Props = $props();
+
+// Two panels can be open at once (a note detail beside a docked panel), so the body id is generated
+// per instance rather than fixed, and the header's minimize control points aria-controls at it.
+const bodyId = $props.id();
 </script>
 
 <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
@@ -83,8 +87,10 @@ const {
     {backLabel}
     {headerExtra}
     {minimize}
+    {bodyId}
   />
   <div
+    id={bodyId}
     class="panel-body"
     class:panel-body--flex={bodyFlex}
     class:panel-body--collapsed={minimize?.collapsed}
