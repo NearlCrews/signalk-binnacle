@@ -2,7 +2,7 @@
 import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
-import { AnchoredMenu, CustomizeToggle, UnavailableHint } from '$shared/ui';
+import { AnchoredMenu, CustomizeToggle, menuFocusLeft, UnavailableHint } from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -122,7 +122,11 @@ function onCardKeydown(event: KeyboardEvent): void {
 
 function onCardFocusOut(event: FocusEvent): void {
   const next = event.relatedTarget;
-  if (next instanceof Node && (card?.contains(next) || next === trigger)) return;
+  if (next === trigger) return;
+  // The shared focus-left test ignores a transient loss to the body (relatedTarget null), which is
+  // what an in-place content swap fires when it unmounts the focused control: arming the toolbar
+  // Reset confirm replaces its trigger and must not close the whole menu.
+  if (!menuFocusLeft(next, card)) return;
   closeMenu(false);
 }
 </script>
@@ -155,47 +159,51 @@ function onCardFocusOut(event: FocusEvent): void {
   {#if items.length === 0}
     <span class="muted-note">No options</span>
   {:else}
-    <div class="menu-head">
-      <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
-    </div>
     {#if blockedNote.message}
       <div class="blocked-note-slot popover-card" role="status" aria-live="polite">
         <p class="blocked-note muted-note">{blockedNote.message}</p>
       </div>
     {/if}
-    {#if editing}
-      <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
+    <div class="launcher-scroll">
+      <div class="menu-head">
+        <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
+      </div>
+      {#if editing}
+        <!-- Announce the mode change: in edit mode the tile accent means "pinned to the bar", not
              "panel open", which is invisible to a screen reader without this. -->
-      <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
-      <ToolbarEditor items={pinnedItems} onReorder={onReorderPinned} onReset={onResetPinned} />
-    {/if}
-    {#each groups as group, gi (gi)}
-      <!-- Every menu item carries a group label, so role="group" always has an accessible name
+        <p class="muted-note">Tap an action to pin or unpin it on the bottom toolbar.</p>
+        <ToolbarEditor items={pinnedItems} onReorder={onReorderPinned} onReset={onResetPinned} />
+      {/if}
+      {#each groups as group, gi (gi)}
+        <!-- Every menu item carries a group label, so role="group" always has an accessible name
              here; the static role is required by the linter's valid-role rule. -->
-      <section class="group" role="group" aria-label={group.label || undefined}>
-        {#if group.label}
-          <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
-        {/if}
-        <div class="tiles">
-          {#each group.items as item (item.id)}
-            <button
-              type="button"
-              class="tile"
-              class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
-              aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
-              aria-disabled={!editing && itemBlocked(item) ? true : undefined}
-              title={!editing ? blockedReason(item) : undefined}
-              onclick={() => select(item)}
-            >
-              <UnavailableHint hint={item.available === false ? item.unavailableHint : undefined} />
-              <MenuItemIcon {item} size={28} />
-              <span class="tile-label">{item.label}</span>
-              <MenuItemCount {item} />
-            </button>
-          {/each}
-        </div>
-      </section>
-    {/each}
+        <section class="group" role="group" aria-label={group.label || undefined}>
+          {#if group.label}
+            <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
+          {/if}
+          <div class="tiles">
+            {#each group.items as item (item.id)}
+              <button
+                type="button"
+                class="tile"
+                class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
+                aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
+                aria-disabled={!editing && itemBlocked(item) ? true : undefined}
+                title={!editing ? blockedReason(item) : undefined}
+                onclick={() => select(item)}
+              >
+                <UnavailableHint
+                  hint={item.available === false ? item.unavailableHint : undefined}
+                />
+                <MenuItemIcon {item} size={28} />
+                <span class="tile-label">{item.label}</span>
+                <MenuItemCount {item} />
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </div>
   {/if}
 </AnchoredMenu>
 
@@ -216,9 +224,18 @@ function onCardFocusOut(event: FocusEvent): void {
      the topbar is one --control-size tall, and --space-6 leaves a small margin above and below. A
      short helm display still caps here and scrolls. */
   max-block-size: calc(100 * var(--dvh) - var(--control-size) - var(--space-6));
-  overflow-y: auto;
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
+}
+/* The scroll region is an inner wrapper rather than the surface itself, so the blocked-note toast
+   can anchor absolutely to the surface: it stays over the visible window at any scroll position
+   while contributing no layout height, so blocked feedback never shifts the groups. */
+:global(.launcher) .launcher-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-block-size: 0;
+  overflow-y: auto;
 }
 /* Matches the StatusStrip's own 900px stack breakpoint, so a landscape tablet never lands in the
    gap where the menu is still a corner dropdown but the status strip below it has already
@@ -279,9 +296,10 @@ function onCardFocusOut(event: FocusEvent): void {
    phone sheet never sees the explanation for the tile they just tapped. In flow and sticky, it
    stays at the top of the scrollport for as long as it is shown. */
 .blocked-note-slot {
-  position: sticky;
-  inset-block-start: 0;
-  align-self: center;
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
   z-index: var(--z-menu);
   max-inline-size: min(18rem, calc(100% - 2 * var(--space-3)));
   padding: var(--space-2) var(--space-3);

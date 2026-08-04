@@ -9,7 +9,7 @@ async function openInstruments(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instruments', exact: true })
+    .getByRole('button', { name: 'Instrument dock', exact: true })
     .click();
 }
 
@@ -337,6 +337,7 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
 
   await menu.getByRole('button', { name: 'Customize toolbar' }).click();
   await menu.getByRole('button', { name: 'Reset toolbar' }).click();
+  await menu.getByRole('button', { name: 'Reset', exact: true }).click();
   await menu
     .getByRole('button', { name: /Move Layers and charts, position 3 of 4/ })
     .press('ArrowUp');
@@ -667,7 +668,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instruments', exact: true })
+    .getByRole('button', { name: 'Instrument dock', exact: true })
     .click();
   await expect(discardConfirm).toBeVisible();
   await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
@@ -677,7 +678,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instruments', exact: true })
+    .getByRole('button', { name: 'Instrument dock', exact: true })
     .click();
   await expect(discardConfirm).toBeVisible();
   await discardConfirm.getByRole('button', { name: 'Discard' }).click();
@@ -1315,7 +1316,7 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
   await page.goto('/');
   await openTrends(page);
   const panel = page.locator('.slide-over[aria-label="Data trends"]');
-  const scrubber = panel.getByRole('slider', { name: 'Inspect Depth timeline' });
+  const scrubber = panel.getByRole('slider', { name: 'Browse Depth history' });
   await expect.poll(() => historyValueRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(scrubber).toBeVisible({ timeout: 10_000 });
   await expect(panel).toHaveAttribute('role', 'dialog');
@@ -1365,7 +1366,7 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
 
   await panel.focus();
   await page.keyboard.press('Shift+Tab');
-  const lastScrubber = panel.getByRole('slider', { name: 'Inspect Speed timeline' });
+  const lastScrubber = panel.getByRole('slider', { name: 'Browse Speed history' });
   await expect(lastScrubber).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(panel.getByRole('button', { name: 'Back to menu' })).toBeFocused();
@@ -1442,7 +1443,7 @@ test('full-screen instruments and chart panels yield ownership to each other', a
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instruments', exact: true })
+    .getByRole('button', { name: 'Instrument dock', exact: true })
     .click();
   await expect(tracks).not.toBeVisible();
   await expect(instruments).toBeVisible();
