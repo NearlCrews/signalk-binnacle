@@ -6,6 +6,68 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0191"></a>
+
+## [0.19.1] - 2026-08-04
+
+### Added
+
+- Tapping a waypoint on the chart opens the Waypoints panel with that mark's card current, the way
+  a tapped note opens its details. A hidden or fully faded waypoint layer is not a tap target, and
+  chart editing tools keep the tap.
+- A profile updated on another station now lists which setting categories changed before you choose
+  Apply update or Keep current setup, and the profile switcher in the top bar carries an update
+  indicator, so an update arriving mid-passage is discoverable without opening the panel.
+- Panels that cannot save because Signal K write access is missing (waypoints, tracks, notes,
+  layers, anchor, and profiles) now offer the request-access button in place, one tap from the
+  block it explains.
+- The man-overboard announcement for screen readers carries the bearing and range to the mark, the
+  same guidance the strip shows visually.
+- The app manifest ships true maskable icons, so Android adaptive launchers no longer clip the
+  compass badge.
+
+### Changed
+
+- Follow mode survives a GPS outage: it pauses recentering while the fix is stale and resumes on
+  the next fresh fix, instead of silently disarming during a docking approach. The menu tile stays
+  enabled while armed, so follow can still be switched off under a bridge without panning.
+- One launcher order at every width: the phone-only group reorder is gone, the launcher groups no
+  longer repeat their name as a tile (the dock tile is Instrument dock, the one-tile group is
+  Offline), Waypoints precedes Tracks, and the dock leads its group. Below 480 px the pinned
+  toolbar pills go icon-only, so all four defaults keep a 44 px target on the narrowest phones.
+- Time travel renames Now to Latest, since it moves to the newest loaded sample, and names its
+  speeds Slow, Normal, and Fast.
+- Radar copy is honest about its sources: the arming button reads Save sector, angle fields say
+  they measure from heading, the static "Latest spoke received now" line is gone, and a stock
+  server with no radar provider keeps the plain install hint instead of an HTTP status.
+- GPX import and Reverse pan the chart to the route start the way a manual show does, and a
+  trk-only GPX file explains that Binnacle imports routes rather than reporting none found.
+
+### Fixed
+
+- The chart context menu is no longer dismissed by a follow recenter, so Go to here and Start a
+  route here can be completed while following with live GPS.
+- Arming the toolbar Reset confirm no longer closes the whole menu, blocked-tile feedback cannot
+  shift the menu layout or scroll out of view, and resetting the toolbar now asks before
+  discarding, as does resetting the alarm thresholds.
+- A delete can no longer race an in-flight chart replacement and resurrect the removed chart or
+  overwrite an unrelated one, in the store and in the panel controls.
+- Turning a parent overlay off and back on restores its children's visibility choices, and a
+  parent with several children stacks them in registration order.
+- Alarm tones no longer accumulate while a tab is suspended, which used to fire one distorted
+  blast when the tab returned.
+- A cached empty weather-warnings list reads as unavailable when a refresh fails, not as stale
+  hidden data, and the forecast list names the provider and shows wind-wave height.
+- A dropped Signal K stream is labeled on the populated AIS list and in the target detail, not
+  only in the empty state.
+- Alarm announcements use helm voice and fire only for grades that also sound or render, so a lone
+  warn cannot interrupt a screen reader with nothing to show for it.
+- Assorted accessibility associations across the panels: slider value text and labels, the panel
+  minimize button's target, layer-toggle descriptions for touch and keyboard users, live regions
+  for sync states and chart draw mode, and keyboard focus returning to the chart after a context
+  menu action.
+- The service worker precache lists each icon exactly once.
+
 <a id="v0190"></a>
 
 ## [0.19.0] - 2026-08-03

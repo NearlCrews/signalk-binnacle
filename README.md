@@ -14,28 +14,25 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.19.0
+## What's new in 0.19.1
 
-This release adds fifteen chart overlays. Seabed infrastructure is the headline: submarine power
-cables, telecom cables, pipelines, and offshore wind farms now draw with the other safety layers,
-because dragging an anchor across a submarine cable can part it, and anchoring on one is both a
-hazard and, in most places, an offense.
+A polish and hardening release across the whole chartplotter. Follow mode now survives a GPS
+outage: it pauses recentering while the fix is stale and resumes on the next fresh fix, instead of
+silently disarming during a docking approach, and the chart context menu is no longer dismissed by
+a follow recenter, so Go to here can be completed while following with live GPS.
 
-The reference layers grow too. GEBCO bathymetry can be read as flat color bands, or restricted to
-where the seabed was actually surveyed rather than interpolated, and EMODnet adds depth contour
-lines. The jurisdiction set gains the 24 nm contiguous zone, the high seas, and the IHO named sea
-areas, and the protected-area set gains UNESCO marine World Heritage sites, the first protected-area
-layer here that covers the whole world rather than one region.
+Waypoints join the chart's tap targets: tapping a mark opens the Waypoints panel with that card
+current, the way a tapped note opens its details. A profile updated on another station now says
+which setting categories changed before you choose, and the profile switcher carries an update
+indicator so the offer is discoverable mid-passage. Panels that cannot save because Signal K write
+access is missing now offer the request button in place.
 
-Seascape now draws a zoom level deeper, following the tiles the service actually publishes: depth
-shading and hillshade reach zoom 18, and contours, soundings, and drying areas reach zoom 15. That
-is sharper detail close in, and it costs more storage, so a saved area including Seascape contours at
-Harbor detail is roughly three times the download it used to be. An area that used to fit may now
-report insufficient space.
-
-Also fixed: no-transmit radar sectors can be edited again, chart tools apply their cursor while the
-base map is still loading, and Data trends keeps its panel state when a phone crosses the focus-trap
-breakpoint. See the changelog for the complete details.
+Assistive technology gets real attention: the man-overboard announcement carries bearing and range
+to the mark, alarm announcements use helm voice and fire only for grades that sound or render, and
+a long list of association gaps closes across sliders, toggles, and live regions. On the narrowest
+phones the toolbar pills go icon-only so all four defaults stay one tap away, Android launchers get
+true maskable icons instead of a clipped compass badge, and one launcher order applies at every
+width. See the changelog for the complete list.
 
 ## What it does
 
