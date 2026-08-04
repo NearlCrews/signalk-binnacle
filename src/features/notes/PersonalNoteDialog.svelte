@@ -8,7 +8,7 @@ import {
 } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
 import type { AuthController } from '$shared/signalk';
-import { dialog, TextField, UnitField } from '$shared/ui';
+import { dialog, TextField, UnitField, WriteAccessNote } from '$shared/ui';
 import {
   MAX_PERSONAL_NOTE_NAME_LENGTH,
   MAX_PERSONAL_NOTE_TEXT_LENGTH,
@@ -105,22 +105,18 @@ function chooseCategory(event: Event): void {
   <header><h2>{title}</h2></header>
   <div class="note-body">
     {#if auth.writeBlocked}
-      <div class="muted-note" role="status">
-        <p>
-          Binnacle has read-only access. Your entries stay in this editor while access is requested.
-        </p>
-        <button
-          type="button"
-          class="btn btn-ghost"
-          disabled={auth.upgrading}
-          onclick={() => void auth.requestWriteAccess()}
-        >
-          {auth.upgrading ? 'Requesting access…' : 'Request read/write access'}
-        </button>
+      <!-- Grouped into one grid cell so the note and its request button stay together in the body's
+           row rhythm, matching the provider block below. -->
+      <div class="note-block">
+        <WriteAccessNote
+          message="Binnacle has read-only access. Your entries stay in this editor while access is requested."
+          requesting={auth.upgrading}
+          onRequest={() => void auth.requestWriteAccess()}
+        />
       </div>
     {/if}
     {#if capabilityMessage}
-      <div class="muted-note" role="status">
+      <div class="muted-note note-block" role="status">
         <p>{capabilityMessage}</p>
         <button type="button" class="btn btn-ghost" disabled={probing} onclick={onProbe}>
           {probing ? 'Checking…' : 'Check provider'}
@@ -212,7 +208,7 @@ function chooseCategory(event: Event): void {
 <style>
 .note-dialog {
   inline-size: min(25rem, calc(100dvw - 2 * var(--space-4)));
-  max-block-size: calc(100dvh - 2 * var(--space-4));
+  max-block-size: calc(100 * var(--dvh) - 2 * var(--space-4));
 }
 .note-dialog header {
   padding: var(--space-3) var(--space-4);
@@ -230,6 +226,13 @@ function chooseCategory(event: Event): void {
 }
 .note-body p {
   margin: 0;
+}
+/* The note and its action read as one block, and the button keeps its own width rather than
+   stretching the way a direct child of the body grid would. */
+.note-block {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
 }
 .note-field {
   display: grid;

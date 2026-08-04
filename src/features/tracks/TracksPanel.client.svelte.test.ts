@@ -13,7 +13,10 @@ const points = [
   { lat: 1.001, lon: 1, t: 10_000, sog: 1 },
 ];
 
-function mountPanel(onSave: (name: string) => Promise<boolean>) {
+function mountPanel(
+  onSave: (name: string) => Promise<boolean>,
+  auth: Partial<AuthController> = { writeBlocked: false },
+) {
   const target = document.createElement('div');
   document.body.append(target);
   const recorder = {
@@ -25,7 +28,7 @@ function mountPanel(onSave: (name: string) => Promise<boolean>) {
     clear: vi.fn(),
   } as unknown as TrackRecorder;
   const props: ComponentProps<typeof TracksPanel> = {
-    auth: { writeBlocked: false } as AuthController,
+    auth: auth as unknown as AuthController,
     recorder,
     settings: new PersistedValue('tracks-panel-client-test', {
       intervalSeconds: 10,
@@ -128,5 +131,19 @@ describe('TracksPanel save naming', () => {
     settle(true);
     await Promise.resolve();
     flushSync();
+  });
+});
+
+describe('TracksPanel write access', () => {
+  it('requests read/write access from inside the panel that is blocked', () => {
+    const requestWriteAccess = vi.fn(async () => {});
+    const panel = mountPanel(
+      vi.fn(async () => true),
+      { writeBlocked: true, requestWriteAccess },
+    );
+
+    panel.click('Request read/write access');
+
+    expect(requestWriteAccess).toHaveBeenCalledOnce();
   });
 });

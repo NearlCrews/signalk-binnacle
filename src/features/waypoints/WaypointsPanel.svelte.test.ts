@@ -64,6 +64,12 @@ describe('WaypointsPanel', () => {
     expect(body).toContain('A write token is needed');
   });
 
+  it('marks the mark selected on the chart as the current card', () => {
+    const body = renderPanel({ waypoints: [waypoint], selectedId: waypoint.id });
+    expect(body).toContain('aria-current="true"');
+    expect(renderPanel({ waypoints: [waypoint] })).not.toContain('aria-current="true"');
+  });
+
   it('disables navigation while route work is busy', () => {
     const body = renderPanel({ waypoints: [waypoint], routeBusy: true });
     expect(body).toMatch(/aria-label="Navigate to waypoint"[^>]*disabled/);

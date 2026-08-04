@@ -26,6 +26,7 @@ import {
   SavedList,
   SlideOver,
   VisibilityToggle,
+  WriteAccessNote,
 } from '$shared/ui';
 import type { TrackLoadState, TracksProvisioning } from './track-controller.svelte';
 import type { SavedTrack } from './tracks-client';
@@ -155,9 +156,11 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 
 <SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack} {minimize}>
   {#if auth.writeBlocked}
-    <p class="muted-note" role="status">
-      A write token is needed to save or delete tracks. Request a read/write token to continue.
-    </p>
+    <WriteAccessNote
+      message="A write token is needed to save or delete tracks. Request a read/write token to continue."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {/if}
   {#if storageMissing}
     <p class="alert-note" role="alert">

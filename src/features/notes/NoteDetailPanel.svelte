@@ -4,8 +4,9 @@ import ExternalLink from '@lucide/svelte/icons/external-link';
 import SquarePen from '@lucide/svelte/icons/square-pen';
 import Star from '@lucide/svelte/icons/star';
 import Trash2 from '@lucide/svelte/icons/trash-2';
+import X from '@lucide/svelte/icons/x';
 import { categoryLabel } from '$entities/poi-icons';
-import { InlineConfirm, SlideOver } from '$shared/ui';
+import { InlineConfirm, SlideOver, WriteAccessNote } from '$shared/ui';
 import type { NoteSelection } from './notes-client';
 import type { NormalizedItem, NoteDetail } from './notes-detail';
 import { safeHttpUrl } from './notes-detail';
@@ -21,8 +22,15 @@ interface Props {
   onEdit?: () => void;
   onDelete?: () => void;
   writeBlocked?: boolean;
+  // Ask the server for read/write access from inside the panel. The action renders only when the
+  // host wires it.
+  onRequestWriteAccess?: () => void;
+  // A read/write request is already outstanding, so the request action reports itself and rests.
+  requestingWriteAccess?: boolean;
   busy?: boolean;
   mutationError?: string;
+  // Dismiss the mutation error. The panel does not own the message, so it cannot clear it itself.
+  onDismissMutationError?: () => void;
 }
 
 const {
@@ -34,8 +42,11 @@ const {
   onEdit,
   onDelete,
   writeBlocked = false,
+  onRequestWriteAccess,
+  requestingWriteAccess = false,
   busy = false,
   mutationError,
+  onDismissMutationError,
 }: Props = $props();
 
 let detail = $state<NoteDetail | undefined>();
@@ -123,9 +134,11 @@ function measure(item: NormalizedItem): string {
     {/if}
   </div>
   {#if selection.ownedByBinnacle && writeBlocked}
-    <p class="muted-note" role="status">
-      A read/write token is needed to edit or delete this personal note.
-    </p>
+    <WriteAccessNote
+      message="A read/write token is needed to edit or delete this personal note."
+      requesting={requestingWriteAccess}
+      onRequest={onRequestWriteAccess}
+    />
   {/if}
   {#if confirmingDelete && onDelete}
     <InlineConfirm
@@ -135,13 +148,27 @@ function measure(item: NormalizedItem): string {
     />
   {/if}
   {#if mutationError}
-    <p class="alert-note" role="alert">{mutationError}</p>
+    <p class="alert-note error-note" role="alert">
+      <span>{mutationError}</span>
+      {#if onDismissMutationError}
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Dismiss error"
+          onclick={onDismissMutationError}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      {/if}
+    </p>
   {/if}
   {#if loading}
     <p class="muted-note" role="status">Loading…</p>
   {:else if failed}
     <p class="alert-note" role="alert">Could not load the details for this place.</p>
-    <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>Retry</button>
+    <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>
+      Retry place details
+    </button>
   {:else if sections}
     {#each sections as section (section.id)}
       {@const danger = section.items.find((item) => isDangerFlag(item.label, item.kind))}
@@ -247,6 +274,16 @@ function measure(item: NormalizedItem): string {
   flex-wrap: wrap;
   gap: var(--space-2);
   align-self: flex-start;
+}
+/* The mutation error keeps its message and its dismiss control on one row, with the message taking
+   the free space so the control stays at the end. */
+.error-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.error-note span {
+  flex: 1;
 }
 /* dl, dt, dd, and .item come from the shared .detail-list utility in panels.css. */
 /* A note carries prose, so it spans the full width below its label instead of being squeezed

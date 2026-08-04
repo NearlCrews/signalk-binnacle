@@ -16,6 +16,8 @@ hazards, conditions, and direct observation.
    confirmation prevents a rolling-deck mis-tap from replacing an active course.
 5. Select the waypoint name to move the chart to it without changing navigation. On a phone, this
    also minimizes the panel so the mark remains visible.
+6. Tap a mark on the chart to open the Waypoints panel with that mark's card current. A hidden or
+   fully faded waypoint layer is not a tap target, and chart editing tools keep the tap.
 
 Adding, editing, deleting, and starting navigation require read/write access on a secured Signal K
 server. The panel leaves local read actions available and explains when writes are blocked.

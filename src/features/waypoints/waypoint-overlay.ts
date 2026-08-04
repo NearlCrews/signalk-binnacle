@@ -8,9 +8,11 @@ import { createOverlayIconResolver, type SymbolsStore } from '$entities/symbols'
 import type { Waypoint, WaypointsStore } from '$entities/waypoint';
 import { latLonToLonLat } from '$shared/geo';
 import {
+  createLayerHitHandlers,
   ensureGeoJsonSource,
   featureCollection,
   iconOffsetExpression,
+  type LayerHitEvent,
   type MapThemePaint,
   mapThemePaint,
   markerIconSizeExpression,
@@ -30,6 +32,15 @@ const BAND = 'routes';
 
 export interface WaypointOverlay extends OverlayModule, Syncable {}
 
+export interface WaypointOverlayOptions {
+  // A mark tapped on the chart, by resource id. The host resolves the waypoint from the store and
+  // decides what to open, the way the notes overlay hands back a note selection.
+  onSelect?: (id: string) => void;
+  // The chart tool that currently owns taps (Measure, route editing), so a mark cannot be selected
+  // out from under it.
+  interactionsAllowed?: () => boolean;
+}
+
 // Standalone waypoints. Each waypoint renders as a provided symbol when its icon resolves to one
 // (the Symbols API: an explicit `custom:`/`binnacle:` reference, or the `waypoint` built-in's
 // override), otherwise as a small marker disc with its name beside it. A symbol-keyed feature
@@ -39,13 +50,33 @@ export interface WaypointOverlay extends OverlayModule, Syncable {}
 export function createWaypointOverlay(
   store: WaypointsStore,
   symbols?: SymbolsStore,
+  options: WaypointOverlayOptions = {},
 ): WaypointOverlay {
   let paint: MapThemePaint = mapThemePaint('day');
   let lastVersion = -1;
   let mounted = false;
   let lifecycle = 0;
   let iconGeneration = 0;
+  let visible = true;
+  let opacity = 1;
   const layers = [MARKER_LAYER, SYMBOL_MARKER_LAYER, LABEL_LAYER];
+  const externalInteractionsAllowed = options.interactionsAllowed ?? (() => true);
+  // A mark hidden or faded out of the chart is not a tap target, so the hit test follows what the
+  // navigator can actually see, as the notes overlay does. The notes markers draw above these and
+  // claim an overlapping tap first through their higher within-band order.
+  const hit = createLayerHitHandlers(
+    [MARKER_LAYER, SYMBOL_MARKER_LAYER],
+    (event: LayerHitEvent) => {
+      const id = String(event.features?.[0]?.properties?.id ?? '');
+      if (!id) return false;
+      options.onSelect?.(id);
+      return true;
+    },
+    {
+      band: BAND,
+      interactionsAllowed: () => visible && opacity > 0 && externalInteractionsAllowed(),
+    },
+  );
   // Provided symbols (signalk-symbol-manager), absent on a stock server. The resolver owns the
   // per-overlay icon registry and the pending-symbol queue; a waypoint's icon resolves to a provided
   // symbol via the `waypoint` role, defaulting to the 'waypoint' built-in id so a `binnacle:waypoint`
@@ -90,6 +121,7 @@ export function createWaypointOverlay(
           coordinates: latLonToLonLat(waypoint.position),
         },
         properties: {
+          id: waypoint.id,
           name: waypoint.name,
           ...(iconImage ? { iconImage } : {}),
           // All icons in the symbol layer scale with zoom via the icon-size expression; property
@@ -223,6 +255,9 @@ export function createWaypointOverlay(
         };
         ctx.map.addLayer(layer, before);
       }
+      // Idempotent: the handlers survive a base-style swap (the map keeps its listeners), so a
+      // reattach must not register them twice and fire onSelect twice per tap.
+      hit.attach(ctx);
       redraw(ctx, generation);
       registerBuiltInIcons(ctx, paint, generation);
     },
@@ -233,13 +268,17 @@ export function createWaypointOverlay(
       redraw(ctx);
     },
     setVisible(ctx, isVisible) {
+      visible = isVisible;
+      hit.refreshInteractionState();
       setLayersVisibility(ctx.map, layers, isVisible);
     },
-    setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-opacity', opacity);
-      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-stroke-opacity', opacity);
-      ctx.map.setPaintProperty(SYMBOL_MARKER_LAYER, 'icon-opacity', opacity);
-      ctx.map.setPaintProperty(LABEL_LAYER, 'text-opacity', opacity);
+    setOpacity(ctx, next) {
+      opacity = next;
+      hit.refreshInteractionState();
+      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-opacity', next);
+      ctx.map.setPaintProperty(MARKER_LAYER, 'circle-stroke-opacity', next);
+      ctx.map.setPaintProperty(SYMBOL_MARKER_LAYER, 'icon-opacity', next);
+      ctx.map.setPaintProperty(LABEL_LAYER, 'text-opacity', next);
     },
     applyTheme(ctx, next) {
       paint = next;
@@ -253,6 +292,7 @@ export function createWaypointOverlay(
     },
     remove(ctx) {
       reset();
+      hit.detach(ctx);
       removeLayersAndSources(ctx.map, layers, [SOURCE_ID]);
     },
   };

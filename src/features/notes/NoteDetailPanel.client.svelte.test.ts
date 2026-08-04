@@ -50,3 +50,46 @@ describe('NoteDetailPanel identity', () => {
     expect(target.textContent).toContain('Reading');
   });
 });
+
+describe('NoteDetailPanel recovery', () => {
+  it('dismisses a mutation error and names what a failed load retries', async () => {
+    const onDismissMutationError = vi.fn();
+    const target = document.createElement('div');
+    document.body.append(target);
+    let component!: ReturnType<typeof mount>;
+    flushSync(() => {
+      component = mount(NoteDetailPanel, {
+        target,
+        props: {
+          selection: {
+            id: 'note-1',
+            name: 'Quiet cove',
+            category: 'anchorage',
+            position: { latitude: 44, longitude: -86 },
+            ownedByBinnacle: true,
+          },
+          load: vi.fn().mockResolvedValue(undefined),
+          onClose: vi.fn(),
+          onDelete: vi.fn(),
+          mutationError: 'Could not delete the note. Check the connection, then try again.',
+          onDismissMutationError,
+        },
+      });
+    });
+    mounted.push(() => {
+      void unmount(component);
+      target.remove();
+    });
+
+    await vi.waitFor(() => {
+      expect(target.textContent).toContain('Retry place details');
+    });
+
+    const dismiss = target.querySelector<HTMLButtonElement>('button[aria-label="Dismiss error"]');
+    expect(dismiss).not.toBeNull();
+    dismiss?.click();
+    flushSync();
+
+    expect(onDismissMutationError).toHaveBeenCalledOnce();
+  });
+});

@@ -20,7 +20,7 @@ const waypoints: Waypoint[] = [
 
 const mounted: Array<() => void> = [];
 
-function mountPanel() {
+function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }) {
   const target = document.createElement('div');
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
@@ -28,7 +28,7 @@ function mountPanel() {
     component = mount(WaypointsPanel, {
       target,
       props: {
-        auth: { writeBlocked: false } as AuthController,
+        auth: auth as unknown as AuthController,
         waypoints,
         vessel: fakeVesselFix(undefined) as unknown as OwnVessel,
         units: { mode: 'metric' } as UnitsStore,
@@ -118,5 +118,24 @@ describe('WaypointsPanel search', () => {
     nameSort?.click();
     flushSync();
     expect(panel.names()).toEqual(['Quiet Cove', 'North Basin', 'Harbor Marina']);
+  });
+});
+
+describe('WaypointsPanel write access', () => {
+  it('requests read/write access from inside the panel that is blocked', () => {
+    const requestWriteAccess = vi.fn(async () => {});
+    const panel = mountPanel({ writeBlocked: true, requestWriteAccess });
+
+    panel.click('Request read/write access');
+
+    expect(requestWriteAccess).toHaveBeenCalledOnce();
+  });
+
+  it('rests the request control while one is outstanding', () => {
+    const panel = mountPanel({ writeBlocked: true, upgrading: true });
+    const button = [...panel.target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Requesting access…',
+    );
+    expect(button?.disabled).toBe(true);
   });
 });

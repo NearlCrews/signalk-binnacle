@@ -62,7 +62,7 @@ describe('waypoint overlay', () => {
     expect(fc.features).toHaveLength(1);
     expect((fc.features[0].geometry as GeoJSON.Point).coordinates).toEqual([-86.5, 44.1]);
     // No symbols store: the waypoint renders as the disc, so it carries no iconImage.
-    expect(fc.features[0].properties).toEqual({ name: 'Anchorage' });
+    expect(fc.features[0].properties).toEqual({ id: 'w1', name: 'Anchorage' });
   });
 
   it('sync is a no-op when the store version is unchanged', async () => {
@@ -107,7 +107,7 @@ describe('waypoint overlay', () => {
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
     // Before the image loads the waypoint stays a disc (no iconImage).
-    expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
+    expect(featureCollection(map).features[0].properties).toEqual({ id: 'w1', name: 'Anchorage' });
     await settle();
     expect(map.hasImage(symbolIconId('w9'))).toBe(true);
     // Once registered, the feature carries the icon and the per-symbol anchor offset is applied.
@@ -131,7 +131,7 @@ describe('waypoint overlay', () => {
     await overlay.add(fakeOverlayContext(map));
     await settle();
     expect(map.hasImage(symbolIconId('w9'))).toBe(false);
-    expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
+    expect(featureCollection(map).features[0].properties).toEqual({ id: 'w1', name: 'Anchorage' });
   });
 
   it('leaves a waypoint as a disc when no symbol matches its role', async () => {
@@ -140,7 +140,7 @@ describe('waypoint overlay', () => {
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
     expect(map.getLayer('binnacle-waypoint-symbol')).toBeTruthy();
-    expect(featureCollection(map).features[0].properties).toEqual({ name: 'Anchorage' });
+    expect(featureCollection(map).features[0].properties).toEqual({ id: 'w1', name: 'Anchorage' });
   });
 
   it('cancels a deferred symbol registration when removed', async () => {
@@ -178,5 +178,78 @@ describe('waypoint overlay', () => {
     expect(map.hasImage(symbolIconId('w9'))).toBe(false);
     expect(map.sources.size).toBe(0);
     expect(map.layers.size).toBe(0);
+  });
+
+  describe('marker taps', () => {
+    function markerHit(id: unknown) {
+      return {
+        features: [{ geometry: { type: 'Point', coordinates: [-86.5, 44.1] }, properties: { id } }],
+      };
+    }
+
+    it('selects the tapped mark from either marker layer', async () => {
+      const onSelect = vi.fn();
+      const overlay = createWaypointOverlay(storeWith(), undefined, { onSelect });
+      const map = createFakeMap();
+      await overlay.add(fakeOverlayContext(map));
+
+      map.emitLayer('click', 'binnacle-waypoint-marker', markerHit('w1'));
+      map.emitLayer('click', 'binnacle-waypoint-symbol', markerHit('w1'));
+
+      expect(onSelect).toHaveBeenCalledTimes(2);
+      expect(onSelect).toHaveBeenCalledWith('w1');
+    });
+
+    it('ignores a feature with no resource id', async () => {
+      const onSelect = vi.fn();
+      const overlay = createWaypointOverlay(storeWith(), undefined, { onSelect });
+      const map = createFakeMap();
+      await overlay.add(fakeOverlayContext(map));
+
+      map.emitLayer('click', 'binnacle-waypoint-marker', markerHit(undefined));
+
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('does not select while another chart tool owns taps, or once faded out', async () => {
+      const onSelect = vi.fn();
+      const overlay = createWaypointOverlay(storeWith(), undefined, {
+        onSelect,
+        interactionsAllowed: () => false,
+      });
+      const map = createFakeMap();
+      const ctx = fakeOverlayContext(map);
+      await overlay.add(ctx);
+
+      map.emitLayer('click', 'binnacle-waypoint-marker', markerHit('w1'));
+      expect(onSelect).not.toHaveBeenCalled();
+
+      const visible = createWaypointOverlay(storeWith(), undefined, { onSelect });
+      const otherMap = createFakeMap();
+      const otherCtx = fakeOverlayContext(otherMap);
+      await visible.add(otherCtx);
+      visible.setOpacity?.(otherCtx, 0);
+      otherMap.emitLayer('click', 'binnacle-waypoint-marker', markerHit('w1'));
+      expect(onSelect).not.toHaveBeenCalled();
+
+      visible.setVisible?.(otherCtx, false);
+      visible.setOpacity?.(otherCtx, 1);
+      otherMap.emitLayer('click', 'binnacle-waypoint-marker', markerHit('w1'));
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('drops its listeners when removed', async () => {
+      const onSelect = vi.fn();
+      const overlay = createWaypointOverlay(storeWith(), undefined, { onSelect });
+      const map = createFakeMap();
+      const ctx = fakeOverlayContext(map);
+      await overlay.add(ctx);
+      overlay.remove(ctx);
+
+      map.emitLayer('click', 'binnacle-waypoint-marker', markerHit('w1'));
+
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(map.handlerCount('click', 'binnacle-waypoint-marker')).toBe(0);
+    });
   });
 });

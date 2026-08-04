@@ -20,7 +20,9 @@ import {
   InlineConfirm,
   NavSortControl,
   SavedList,
+  SearchInput,
   SlideOver,
+  WriteAccessNote,
 } from '$shared/ui';
 import type { WaypointLoadState } from './waypoint-controller.svelte';
 import { filterWaypointRows, sortWaypointRows, toWaypointRows } from './waypoint-rows';
@@ -34,6 +36,9 @@ interface Props {
   loadState: WaypointLoadState;
   busy: boolean;
   routeBusy: boolean;
+  // The mark last tapped on the chart, so its card reads as the current one. Undefined when the
+  // selection is cleared or its card is filtered out of the list.
+  selectedId?: string;
   onRetry: () => void;
   // Pan the chart to the waypoint without changing anything else.
   onLocate: (waypoint: Waypoint) => void;
@@ -54,6 +59,7 @@ const {
   loadState,
   busy,
   routeBusy,
+  selectedId,
   onRetry,
   onLocate,
   onGoTo,
@@ -148,10 +154,11 @@ $effect(() => {
   {minimize}
 >
   {#if auth.writeBlocked}
-    <p class="muted-note" role="status">
-      A write token is needed to add, edit, or delete waypoints. Request a read/write token to
-      continue.
-    </p>
+    <WriteAccessNote
+      message="A write token is needed to add, edit, or delete waypoints. Request a read/write token to continue."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {/if}
 
   <p class="muted-note">
@@ -177,13 +184,12 @@ $effect(() => {
 
   <!-- No marks means nothing to search or order, so the controls stay out of the empty locker. -->
   {#if waypoints.length > 0}
-    <input
-      class="input search-input"
-      type="search"
-      placeholder="Search name or description"
-      aria-label="Search waypoints by name or description"
+    <SearchInput
       bind:value={query}
-    >
+      placeholder="Search name or description"
+      ariaLabel="Search waypoints by name or description"
+      clearLabel="Clear the waypoint search"
+    />
     <NavSortControl
       sorts={SORTS}
       state={sortState}
@@ -192,7 +198,13 @@ $effect(() => {
     />
   {/if}
 
-  <SavedList heading="Saved waypoints" items={rows} empty={emptyMessage} key={(row) => row.id}>
+  <SavedList
+    heading="Saved waypoints"
+    items={rows}
+    empty={emptyMessage}
+    key={(row) => row.id}
+    isActive={(row) => row.id === selectedId}
+  >
     {#snippet card(row)}
       {@const waypoint = row.waypoint}
       <div class="card-head">
@@ -294,8 +306,8 @@ $effect(() => {
 
 <style>
 /* The card list, wrapper, stats, and actions come from the shared SavedList plus the global .saved
-   system in app.css, and the search field and sort header from the global .search-input and .nav-sort
-   classes; only the optional description line is Waypoints-specific. */
+   system in app.css, the search field from the shared SearchInput primitive, and the sort header from
+   the global .nav-sort class; only the optional description line is Waypoints-specific. */
 .description {
   margin: 0;
   font-size: var(--text-sm);
