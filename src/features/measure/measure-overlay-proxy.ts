@@ -2,7 +2,7 @@ import type { MeasureStore } from '$entities/measure';
 import type { UnitsMode } from '$shared/lib';
 import { createRetryableLazyLoader } from '$shared/lib';
 import type { MeasureOverlay } from './measure-overlay';
-import { MEASURE_LAYER_IDS } from './measure-overlay-contract';
+import { MEASURE_LAYER_IDS, MEASURE_OVERLAY_ID } from './measure-overlay-contract';
 
 const loadMeasureOverlay = createRetryableLazyLoader(() => import('./measure-overlay'));
 
@@ -17,7 +17,7 @@ export function createMeasureOverlay(
   let generation = 0;
 
   return {
-    id: 'measure',
+    id: MEASURE_OVERLAY_ID,
     title: 'Measure',
     band: 'routes',
     listed: false,

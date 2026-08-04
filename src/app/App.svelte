@@ -71,6 +71,7 @@ import {
   type RadarStatus,
   radarChartEditBlockedReason,
 } from '$features/marine-radar';
+import { MEASURE_OVERLAY_ID } from '$features/measure';
 import {
   AppMenu,
   DEFAULT_PINNED,
@@ -123,8 +124,15 @@ import {
   type WeatherProvider,
 } from '$features/weather';
 import { alarmAudioPrimed, GatedAlarm, primeAlarmAudio } from '$shared/audio';
-import { type Bbox4, bboxContainsPoint, boundsOfPoints, type LatLon, padBbox } from '$shared/geo';
-import { Clock, hasControlCharacters, isRecord, Toast } from '$shared/lib';
+import {
+  type Bbox4,
+  bboxContainsPoint,
+  boundsOfPoints,
+  type LatLon,
+  padBbox,
+  quantizeViewCellKey,
+} from '$shared/geo';
+import { Clock, createMediaQuery, hasControlCharacters, isRecord, Toast } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
 import { probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
@@ -180,6 +188,7 @@ import {
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
+import { createFollowController } from './follow-controller.svelte';
 import LiveRegions from './LiveRegions.svelte';
 import { createNotificationsController } from './notifications-controller.svelte';
 import StatusStrip from './StatusStrip.svelte';
@@ -404,6 +413,7 @@ let layersView = $state<LayersView | undefined>();
 // opening one closes whatever was open without each opener having to clear the others by hand.
 let activePanel = $state<PanelId | null>(null);
 let selectedAisId = $state<string | undefined>();
+let selectedWaypointId = $state<string | undefined>();
 let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
 let personalNoteDialogAttempt = $state(0);
@@ -420,6 +430,7 @@ const closePanel = (): void => {
     trendReturnInstrumentId = undefined;
   }
   if (activePanel === 'ais') selectedAisId = undefined;
+  if (activePanel === 'waypoints') selectedWaypointId = undefined;
   activePanel = null;
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
@@ -431,6 +442,7 @@ const backToMenu = (): void => {
     trendReturnInstrumentId = undefined;
   }
   if (activePanel === 'ais') selectedAisId = undefined;
+  if (activePanel === 'waypoints') selectedWaypointId = undefined;
   activePanel = null;
   menuOpen = true;
 };
@@ -448,10 +460,17 @@ function instrumentsPanelForAttempt() {
 }
 const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
+// The phone breakpoint, in CSS pixels. A media query cannot reference this constant, so the same
+// 600px literal is mirrored in the `@media (max-width: 600px)` blocks in styles/panels.css and the
+// scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
+// scoped CSS below. This const is the source of truth; retune all of them together.
+const NARROW_BREAKPOINT_PX = 600;
+const INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX = 900;
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
-// coexist, so this exclusion only applies when `narrow` is set (tracked by a matchMedia listener).
-let narrow = $state(false);
+// coexist, so this exclusion only applies while the phone query matches.
+const narrowQuery = createMediaQuery(`(max-width: ${NARROW_BREAKPOINT_PX}px)`);
+const narrow = $derived(narrowQuery.matches);
 let instrumentsFullScreen = $state(false);
 const openPanel = (panel: PanelId): void => {
   if (instrumentsFullScreen && instruments.open) instruments.setOpen(false);
@@ -461,6 +480,8 @@ const openPanel = (panel: PanelId): void => {
     trendReturnInstrumentId = undefined;
   }
   if (panel !== 'ais') selectedAisId = undefined;
+  if (panel !== 'waypoints') selectedWaypointId = undefined;
+  if (panel !== 'poi-search') hoveredPoi = undefined;
   activePanel = panel;
   if (panel === 'trends') trends.setOpen(true);
   if (narrow) selectedNote = undefined;
@@ -514,12 +535,15 @@ let mapView = $state<MapView | undefined>();
 // Replace-only (reassigned wholesale from onNotes), so raw state skips the wasted deep proxy.
 let poiNotes = $state.raw<NotePoint[]>([]);
 let poiViewState = $state<PoiViewState>({ phase: 'idle', offline: false });
-// Reading mapView ties this to every map move, so the in-view clip recomputes on pan and zoom; the
-// live bounds come from the map. The clip is gated behind the panel being open so it does not
-// recompute on every pan frame while the POI search panel is hidden.
+// The clip is gated behind the panel being open so it does not recompute while the POI search
+// panel is hidden, and the viewport is quantized so the in-view clip re-runs when the chart
+// meaningfully moves, not at GPS rate while follow recenters on every fix.
+const poiViewCellKey = $derived(
+  activePanel === 'poi-search' && mapView ? quantizeViewCellKey(mapView) : '',
+);
 const poiInView = $derived.by<Poi[]>(() => {
   if (activePanel !== 'poi-search') return [];
-  void mapView;
+  void poiViewCellKey;
   const bounds = mapCommands?.getBounds();
   const source = bounds
     ? poiNotes.filter((note) => bboxContainsPoint(bounds, note.position))
@@ -1035,9 +1059,12 @@ if (profileStore.profiles.length > 0) {
   });
 }
 
-// Follow lock: while on, the map recenters on the boat as each fix arrives. A manual pan
-// (dragging the chart) releases it; it does not persist across reloads.
-let following = $state(false);
+// Follow lock orchestration (recenter per fix, stale pause with auto recovery, release on manual
+// pan) lives in the controller; the host wires the menu tile and onUserPan to it.
+const follow = createFollowController({
+  vessel,
+  commands: () => mapCommands,
+});
 
 // Show a chart layer at full registration (the persisted snapshot plus the live map), so a feature
 // surface can turn its own layer on: starting Measure must reveal a hidden measure layer (or it
@@ -1086,7 +1113,7 @@ function armMeasure(reset = false): boolean {
     toast.show('Save or cancel the route edit before starting Measure.');
     return false;
   }
-  setLayerVisible('measure', true);
+  setLayerVisible(MEASURE_OVERLAY_ID, true);
   if (!measure.active || reset) measure.start();
   return true;
 }
@@ -1222,14 +1249,16 @@ const menuItems = $derived<MenuItem[]>([
     shortLabel: 'Follow',
     icon: Navigation,
     group: 'Map',
-    disabled: !mapCommands || !vessel.position || vessel.positionStale,
+    // While armed, the tile stays enabled through a stale fix so follow can still be toggled off
+    // during a GPS outage without panning the chart.
+    disabled: !mapCommands || (!follow.following && (!vessel.position || vessel.positionStale)),
     disabledLabel: !mapCommands
       ? 'Follow (chart is loading)'
       : vessel.positionStale
         ? 'Follow needs a fresh GPS fix.'
         : 'Follow needs a GPS position.',
-    pressed: following,
-    onSelect: () => (following = !following),
+    pressed: follow.following,
+    onSelect: () => follow.toggle(),
   },
   {
     id: 'routes',
@@ -1237,16 +1266,9 @@ const menuItems = $derived<MenuItem[]>([
     icon: Route,
     group: 'Navigate',
     disabled: !mapCommands,
+    disabledLabel: 'Routes (chart is loading)',
     pressed: activePanel === 'routes',
     onSelect: () => togglePanel('routes'),
-  },
-  {
-    id: 'tracks',
-    label: 'Tracks',
-    icon: Spline,
-    group: 'Navigate',
-    pressed: activePanel === 'tracks',
-    onSelect: () => togglePanel('tracks'),
   },
   {
     id: 'waypoints',
@@ -1255,6 +1277,14 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Navigate',
     pressed: activePanel === 'waypoints',
     onSelect: () => togglePanel('waypoints'),
+  },
+  {
+    id: 'tracks',
+    label: 'Tracks',
+    icon: Spline,
+    group: 'Navigate',
+    pressed: activePanel === 'tracks',
+    onSelect: () => togglePanel('tracks'),
   },
   {
     id: 'poi-search',
@@ -1352,6 +1382,7 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Safety',
     pressed: activePanel === 'alarms',
     count: genericAlarms.length,
+    countNoun: 'alarm',
     onSelect: () => togglePanel('alarms'),
   },
   {
@@ -1382,6 +1413,15 @@ const menuItems = $derived<MenuItem[]>([
     },
   },
   {
+    id: 'instruments',
+    label: 'Instrument dock',
+    shortLabel: 'Instruments',
+    icon: Gauge,
+    group: 'Instruments',
+    pressed: instruments.open,
+    onSelect: toggleInstrumentsPanel,
+  },
+  {
     id: 'trends',
     label: 'Data trends',
     shortLabel: 'Trends',
@@ -1393,14 +1433,6 @@ const menuItems = $derived<MenuItem[]>([
       trendReturnInstrumentId = undefined;
       togglePanel('trends');
     },
-  },
-  {
-    id: 'instruments',
-    label: 'Instruments',
-    icon: Gauge,
-    group: 'Instruments',
-    pressed: instruments.open,
-    onSelect: toggleInstrumentsPanel,
   },
   {
     id: 'open-kip',
@@ -1424,7 +1456,6 @@ const menuItems = $derived<MenuItem[]>([
   {
     id: 'time-travel',
     label: 'Time travel',
-    shortLabel: 'Replay',
     icon: History,
     group: 'Instruments',
     available: (historyProviders?.ids.length ?? 0) > 0,
@@ -1445,7 +1476,7 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Offline charts',
     shortLabel: 'Offline',
     icon: DownloadCloud,
-    group: 'Offline charts',
+    group: 'Offline',
     available: companionBase !== null,
     unavailableHint:
       companionProbe === undefined
@@ -1617,19 +1648,6 @@ $effect(() => {
   }
 });
 
-// While following, keep the map centered on the boat. Enabling it recenters immediately, and
-// each new fix recenters again; a manual pan clears `following` (via onUserPan) and stops it.
-$effect(() => {
-  const commands = mapCommands;
-  const position = vessel.position;
-  const positionStale = vessel.positionStale;
-  if (following && positionStale) {
-    following = false;
-    return;
-  }
-  if (following && position) commands?.recenterOnVessel(position.latitude, position.longitude);
-});
-
 // A fresh install (no saved view at all) otherwise leaves the map at the meaningless whole-world
 // default forever, since centering only happens while following (off by default) or via an
 // explicit tap: a new user's first impression is an empty planet with no boat on it. Fly to the
@@ -1653,6 +1671,12 @@ function selectAisTarget(id: string | undefined): void {
   if (id && !aisTargets.find(id)) return;
   selectedAisId = id;
   if (id) openPanel('ais');
+}
+
+function selectWaypointFromChart(id: string): void {
+  if (!waypointsStore.waypoints.some((waypoint) => waypoint.id === id)) return;
+  openPanel('waypoints');
+  selectedWaypointId = id;
 }
 
 function selectPoi(poi: Poi): void {
@@ -1783,6 +1807,7 @@ function selectNote(selection: NoteSelection | undefined, fromPlaces = false): v
   // Only yield a leading panel when actually opening a note, not when the selection clears.
   if (narrow && selection) {
     if (activePanel === 'ais') selectedAisId = undefined;
+    if (activePanel === 'waypoints') selectedWaypointId = undefined;
     activePanel = null;
   }
 }
@@ -1962,12 +1987,6 @@ $effect(() => {
   void refreshSymbols();
 });
 
-// The phone breakpoint, in CSS pixels. A media query cannot reference this constant, so the same
-// 600px literal is mirrored in the `@media (max-width: 600px)` blocks in styles/panels.css and the
-// scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
-// scoped CSS below. This const is the source of truth; retune all of them together.
-const NARROW_BREAKPOINT_PX = 600;
-const INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX = 900;
 const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 
 onMount(() => {
@@ -1996,16 +2015,9 @@ onMount(() => {
   // Every write flows through sendJson, so this one hook lets a refused write (read-only token) raise
   // the read-only banner app-wide, and a later successful write clears it.
   setWriteOutcomeListener((ok, status) => auth.reportWriteOutcome(ok, status));
-  // Track the phone breakpoint so the note detail and a leading panel can be made mutually exclusive
-  // at narrow widths, where they would otherwise both bottom-dock and overlap. The scoped CSS media
-  // queries hardcode the same value, since a media query cannot reference a JS constant or CSS var.
-  const narrowQuery = window.matchMedia(`(max-width: ${NARROW_BREAKPOINT_PX}px)`);
   const instrumentsFullScreenQuery = window.matchMedia(
     `(max-width: ${INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX}px)`,
   );
-  const syncNarrow = (): void => {
-    narrow = narrowQuery.matches;
-  };
   const syncInstrumentsFullScreen = (): void => {
     const next = instrumentsFullScreenQuery.matches;
     instrumentsFullScreen = next;
@@ -2017,9 +2029,7 @@ onMount(() => {
       instruments.setOpen(false);
     }
   };
-  syncNarrow();
   syncInstrumentsFullScreen();
-  narrowQuery.addEventListener('change', syncNarrow);
   instrumentsFullScreenQuery.addEventListener('change', syncInstrumentsFullScreen);
   // Another open Binnacle tab may erase the shared browser storage. Reset this tab's in-memory token
   // and reload so it cannot keep using credentials or cached state that the navigator just removed.
@@ -2067,7 +2077,6 @@ onMount(() => {
     };
   }
   return () => {
-    narrowQuery.removeEventListener('change', syncNarrow);
     instrumentsFullScreenQuery.removeEventListener('change', syncInstrumentsFullScreen);
     window.removeEventListener('focus', refreshProfiles);
     document.removeEventListener('visibilitychange', refreshProfiles);
@@ -2172,9 +2181,10 @@ const plotterActions = {
   onUserChartsReady: userChartsController.onUserChartsReady,
   onMapInstance: (map: MapLibreMap) => (mapInstance = map),
   onMapDestroyed: () => (mapInstance = undefined),
-  onUserPan: () => (following = false),
+  onUserPan: () => follow.release(),
   onNoteSelect: selectNote,
   onAisSelect: selectAisTarget,
+  onWaypointSelect: selectWaypointFromChart,
   onTideStationSelect,
   onNotes: (notes: NotePoint[]) => (poiNotes = notes),
   onPoiStatus: (state: PoiViewState) => (poiViewState = state),
@@ -2257,7 +2267,7 @@ const plotterActions = {
           onclick={() => collisionMute.unmute()}
         >
           <VolumeX size={16} aria-hidden="true" />
-          Muted {muteRemainingMin}m
+          Muted {muteRemainingMin}min
         </button>
       {/if}
       {#if updateReady}
@@ -2273,7 +2283,11 @@ const plotterActions = {
         onOpen={() => openPanel('regions')}
         onRetry={() => void companionStatus.refresh()}
       />
-      <ProfileSwitcher active={profileStore.active} onClick={() => openPanel('profiles')} />
+      <ProfileSwitcher
+        active={profileStore.active}
+        hasUpdate={profileStore.remoteUpdateAvailable}
+        onClick={() => openPanel('profiles')}
+      />
       <ThemeToggle controller={theme} />
     </span>
   </header>
@@ -2293,6 +2307,7 @@ const plotterActions = {
     {trackPersistenceDegraded}
     {activePanel}
     {selectedAisId}
+    {selectedWaypointId}
     {tidesOpenedFrom}
     bind:menuOpen
     {layersView}
@@ -2351,6 +2366,7 @@ const plotterActions = {
             defaultId={profileStore.defaultId}
             syncState={profileStore.syncState}
             remoteUpdateAvailable={profileStore.remoteUpdateAvailable}
+            remoteUpdateChanges={profileStore.remoteUpdateChanges}
             onRetrySync={() => void syncProfiles()}
             onApply={onApplyProfile}
             onApplyRemoteUpdate={profilesController.applyRemoteUpdate}

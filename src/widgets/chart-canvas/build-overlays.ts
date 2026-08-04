@@ -47,6 +47,8 @@ export interface DynamicOverlaysDeps {
   aisTargets: AisTargets;
   onAisSelect?: (id: string) => void;
   selectedAisId?: () => string | undefined;
+  // A waypoint marker tapped on the chart, by resource id.
+  onWaypointSelect?: (id: string) => void;
   anchor: AnchorWatch;
   mob: MobStore;
   measure: MeasureStore;
@@ -87,6 +89,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     aisTargets,
     onAisSelect,
     selectedAisId,
+    onWaypointSelect,
     anchor,
     mob,
     measure,
@@ -117,7 +120,10 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     createMeasureOverlay(measure, units),
     createRouteOverlay(routeStore),
     createCourseOverlay(guidance, vessel),
-    createWaypointOverlay(waypoints, symbols),
+    createWaypointOverlay(waypoints, symbols, {
+      onSelect: onWaypointSelect,
+      interactionsAllowed,
+    }),
     notesOverlay,
     createAisTrailsOverlay(origin, getToken, aisTrailsAvailable, () => store.selfContext),
     createAisVectorsOverlay(aisTargets, () => collision.assessment),

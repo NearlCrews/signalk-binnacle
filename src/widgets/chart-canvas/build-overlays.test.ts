@@ -76,6 +76,7 @@ function setup(marineRadarLayer?: { id: string }, interactionsAllowed?: () => bo
     aisTargets: { name: 'ais-targets' },
     onAisSelect: vi.fn(),
     selectedAisId: vi.fn(() => 'vessels.selected'),
+    onWaypointSelect: vi.fn(),
     anchor: { name: 'anchor' },
     mob: { name: 'mob' },
     measure: { name: 'measure' },
@@ -171,7 +172,10 @@ describe('buildDynamicOverlays', () => {
     );
     expect(factories.createMeasureOverlay).toHaveBeenCalledWith(deps.measure, deps.units);
     expect(factories.createRouteOverlay).toHaveBeenCalledWith(deps.routeStore);
-    expect(factories.createWaypointOverlay).toHaveBeenCalledWith(deps.waypoints, deps.symbols);
+    expect(factories.createWaypointOverlay).toHaveBeenCalledWith(deps.waypoints, deps.symbols, {
+      onSelect: deps.onWaypointSelect,
+      interactionsAllowed: deps.interactionsAllowed,
+    });
     expect(factories.createAisTrailsOverlay).toHaveBeenCalledWith(
       deps.origin,
       deps.getToken,

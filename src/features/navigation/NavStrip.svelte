@@ -94,7 +94,7 @@ const eta = $derived.by(() => {
     if (!Number.isNaN(at)) return formatClockTime(at);
   }
   const ttgSeconds = routeProgress.timeToGoSeconds;
-  if (ttgSeconds == null) return PLACEHOLDER;
+  if (ttgSeconds == null || !Number.isFinite(ttgSeconds)) return PLACEHOLDER;
   return formatClockTime(Date.now() + ttgSeconds * 1000);
 });
 </script>

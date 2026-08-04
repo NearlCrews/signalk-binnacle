@@ -64,7 +64,12 @@ import {
   type Theme,
   type ThemeController,
 } from '$shared/ui';
-import { ChartCanvas, type MapCommands, type UserChartRegistrar } from '$widgets/chart-canvas';
+import {
+  ChartCanvas,
+  CRITICAL_OVERLAY_LABELS,
+  type MapCommands,
+  type UserChartRegistrar,
+} from '$widgets/chart-canvas';
 import { loadWeatherMap } from '$widgets/weather-map';
 
 type AnchorController = ReturnType<typeof import('$features/anchor-watch').createAnchorController>;
@@ -146,6 +151,7 @@ interface FlatProps {
   // Panel state
   activePanel: PanelId | null;
   selectedAisId: string | undefined;
+  selectedWaypointId: string | undefined;
   tidesOpenedFrom: 'menu' | 'chart';
   menuOpen: boolean;
   layersView: LayersView | undefined;
@@ -194,6 +200,7 @@ interface FlatProps {
   onUserPan: () => void;
   onNoteSelect: (selection: NoteSelection | undefined) => void;
   onAisSelect: (id: string | undefined) => void;
+  onWaypointSelect: (id: string) => void;
   onTideStationSelect: (selection: TideStationSelectionEvent) => void;
   onNotes: (notes: NotePoint[]) => void;
   onPoiStatus: (state: PoiViewState) => void;
@@ -296,6 +303,7 @@ type ActionKey =
   | 'onUserPan'
   | 'onNoteSelect'
   | 'onAisSelect'
+  | 'onWaypointSelect'
   | 'onTideStationSelect'
   | 'onNotes'
   | 'onPoiStatus'
@@ -356,6 +364,7 @@ let {
   trackPersistenceDegraded,
   activePanel,
   selectedAisId,
+  selectedWaypointId,
   tidesOpenedFrom,
   menuOpen = $bindable(),
   layersView,
@@ -452,6 +461,7 @@ const {
   onUserPan,
   onNoteSelect,
   onAisSelect,
+  onWaypointSelect,
   onTideStationSelect,
   onNotes,
   onPoiStatus,
@@ -508,15 +518,6 @@ let pendingRadarPanelAction = $state<
   | { kind: 'instruments' }
   | undefined
 >(undefined);
-
-const CRITICAL_OVERLAY_LABELS: Record<string, string> = {
-  'own-vessel': 'vessel position',
-  collision: 'collision warnings',
-  mob: 'man-overboard marker',
-  'anchor-watch': 'anchor watch',
-  course: 'active course',
-  routes: 'routes',
-};
 
 function retryLazyPanel(): void {
   lazyPanelAttempt += 1;
@@ -693,7 +694,11 @@ $effect(() => {
   {/if}
 {/snippet}
 
-<section class="chart-host" aria-label="Chart">
+<section
+  class="chart-host"
+  class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
+  aria-label="Chart"
+>
   <ChartCanvas
     {origin}
     {units}
@@ -711,6 +716,7 @@ $effect(() => {
     {aisTargets}
     {selectedAisId}
     onAisSelect={(id) => onAisSelect(id)}
+    onWaypointSelect={(id) => onWaypointSelect(id)}
     {anchor}
     {mob}
     {measure}
@@ -888,8 +894,11 @@ $effect(() => {
           ? () => selectedNote && void personalNotesController.remove(selectedNote)
           : undefined}
         writeBlocked={auth.writeBlocked}
+        onRequestWriteAccess={() => void auth.requestWriteAccess()}
+        requestingWriteAccess={auth.upgrading}
         busy={personalNotesController.busy}
         mutationError={personalNotesController.error}
+        onDismissMutationError={personalNotesController.clearError}
       />
     </div>
   {/if}
@@ -973,6 +982,7 @@ $effect(() => {
           {auth}
           {vessel}
           {units}
+          selectedId={selectedWaypointId}
           waypoints={waypointsStore.waypoints}
           loadState={waypointsController.loadState}
           busy={waypointsController.busy}
@@ -1463,7 +1473,7 @@ $effect(() => {
   inset-inline: var(--space-3);
   inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
   margin-inline: auto;
-  max-block-size: min(60dvh, calc(100% - 2 * var(--space-3)));
+  max-block-size: min(calc(60 * var(--dvh)), calc(100% - 2 * var(--space-3)));
   display: flex;
   flex-direction: column;
   align-items: center;

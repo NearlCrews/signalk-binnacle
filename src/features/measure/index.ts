@@ -7,4 +7,5 @@ export function loadMeasureStrip(): Promise<typeof import('./MeasureStrip.svelte
 }
 
 export type { MeasureOverlay } from './measure-overlay';
+export { MEASURE_OVERLAY_ID } from './measure-overlay-contract';
 export { createMeasureOverlay } from './measure-overlay-proxy';

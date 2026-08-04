@@ -83,6 +83,7 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   surfaceClass="popover-card chart-context-menu"
   ariaLabel={confirmingGoTo ? 'Confirm chart navigation' : 'Chart actions'}
   role={confirmingGoTo ? 'dialog' : 'menu'}
+  focusTrap={confirmingGoTo}
   surfaceStyle={`left: ${left}px; top: ${top}px; inline-size: ${MENU_WIDTH}px; transform: translate(-50%, ${above ? '-100%' : '0'});`}
   onFocusLeft={close}
 >

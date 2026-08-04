@@ -25,7 +25,7 @@ import {
 import { LayersView } from '$features/layers-panel';
 import { COLLISION_OVERLAY_ID } from '$features/lookout';
 import type { PpiLayer } from '$features/marine-radar';
-import type { MeasureOverlay } from '$features/measure';
+import { MEASURE_OVERLAY_ID, type MeasureOverlay } from '$features/measure';
 import { MOB_OVERLAY_ID } from '$features/mob';
 import { createMpaOverlay, MPA_SOURCES } from '$features/mpa-overlays';
 import {
@@ -45,6 +45,7 @@ import type { LatLon } from '$shared/geo';
 import { createRetryableLazyUiLoader, lengthUnit } from '$shared/lib';
 import {
   activeLayerHitCursor,
+  CONTEXT_MENU_KEYSHORTCUTS,
   chartSourceId,
   createChartOverlay,
   createMapTapRecognizer,
@@ -64,6 +65,7 @@ import { buildMapCommands } from './build-commands';
 import { buildDynamicOverlays } from './build-overlays';
 import ChartContextMenu from './ChartContextMenu.svelte';
 import type { MapCommands, UserChartRegistrar } from './commands';
+import { CRITICAL_OVERLAY_IDS } from './critical-overlays';
 import VesselOffScreenIndicator from './VesselOffScreenIndicator.svelte';
 
 const loadRouteEditorModule = createRetryableLazyUiLoader(() => import('$features/route-edit'));
@@ -77,6 +79,8 @@ interface Props {
   aisTargets: AisTargets;
   selectedAisId?: string;
   onAisSelect?: (id: string) => void;
+  // A waypoint marker tapped on the chart, by resource id.
+  onWaypointSelect?: (id: string) => void;
   // The anchor watch, drawn as the swing circle, rode line, and draggable drop-point marker.
   anchor: AnchorWatch;
   // The man-overboard mark, pinned with the collision ring so nothing can hide it.
@@ -176,6 +180,7 @@ const {
   aisTargets,
   selectedAisId,
   onAisSelect,
+  onWaypointSelect,
   anchor,
   mob,
   measure,
@@ -269,6 +274,12 @@ let chartMenu = $state<
 >();
 const CONTEXT_HINT_KEY = binnacleStorageKey('chartActionsHint');
 let showContextHint = $state(false);
+// The touch hint below is shown to coarse pointers only, and a right click advertises itself to
+// mouse users, so the keyboard path (installContextMenu's Shift+F10 and Context Menu key, which
+// opens the menu at the center of the view) had nothing naming it. The canvas carries it as a
+// declared shortcut for assistive technology and as a tooltip.
+const CHART_ACTIONS_TITLE =
+  'Press Shift+F10 or the Context Menu key for chart actions at the center of the view.';
 
 function dismissContextHint(): void {
   showContextHint = false;
@@ -315,6 +326,20 @@ $effect(() => {
       canvas.style.cursor = activeLayerHitCursor(canvas) ?? (prior === 'pointer' ? '' : prior);
     }
   };
+});
+
+// Activating a menu item from the keyboard unmounts the focused row, which strands focus on the
+// body. Hand it back to the chart canvas so the next keystroke still reaches the map. The body
+// check is what keeps a pointer dismissal from moving focus at all.
+let menuOpen = false;
+$effect(() => {
+  const open = chartMenu !== undefined;
+  const justClosed = menuOpen && !open;
+  menuOpen = open;
+  if (!justClosed || document.activeElement !== document.body) return;
+  // The handle has no map when the WebGL2 probe refused to start one, the cannot-start path.
+  const map = mapHandle?.map;
+  if (map) map.getCanvas().focus({ preventScroll: true });
 });
 
 onMount(async () => {
@@ -374,8 +399,11 @@ onMount(async () => {
       // units effect (mapRef-gated, further down) keeps it live after this initial seed.
       map.setGlobalStateProperty('unit', lengthUnit(units.mode));
       // A pan or zoom moves the chart out from under the menu's pixel anchor, so dismiss it on move.
-      map.on('movestart', () => {
-        chartMenu = undefined;
+      // Only on a move the user drove: MapLibre sets originalEvent for handler-driven moves (drag,
+      // wheel, keyboard, the zoom control) and leaves it unset for a programmatic camera call, and
+      // follow mode recenters on every fix, which would otherwise close the menu within one fix.
+      map.on('movestart', (e) => {
+        if (e.originalEvent) chartMenu = undefined;
       });
       // One mouse-or-touch tap handler gives the active chart tool one outcome per gesture. Measure
       // resolves a generous vertex hit before an empty-water add, and it suppresses the trailing
@@ -467,6 +495,9 @@ onMount(async () => {
         onAisSelect: (id) => {
           if (markerInteractionsAllowed()) onAisSelect?.(id);
         },
+        onWaypointSelect: (id) => {
+          if (markerInteractionsAllowed()) onWaypointSelect?.(id);
+        },
         anchor,
         mob,
         measure,
@@ -492,32 +523,24 @@ onMount(async () => {
         marineRadarLayer,
       });
       measureOverlay = dynamicOverlays.find(
-        (overlay): overlay is MeasureOverlay => overlay.id === 'measure',
+        (overlay): overlay is MeasureOverlay => overlay.id === MEASURE_OVERLAY_ID,
       );
-      const criticalOverlayIds: readonly string[] = [
-        OWN_VESSEL_OVERLAY_ID,
-        COLLISION_OVERLAY_ID,
-        MOB_OVERLAY_ID,
-        'anchor-watch',
-        'course',
-        'routes',
-      ];
       const criticalOverlays = dynamicOverlays.filter((overlay) =>
-        criticalOverlayIds.includes(overlay.id),
+        CRITICAL_OVERLAY_IDS.includes(overlay.id),
       );
       let criticalFailureIds: string[] = [];
       const reportCriticalFailures = (): void => {
         onCriticalOverlayError?.([...criticalFailureIds]);
       };
       const onOverlaySyncStatus = (id: string | undefined, error: unknown | undefined): void => {
-        if (!id || !criticalOverlayIds.includes(id)) return;
+        if (!id || !CRITICAL_OVERLAY_IDS.includes(id)) return;
         if (error === undefined)
           criticalFailureIds = criticalFailureIds.filter((value) => value !== id);
         else if (!criticalFailureIds.includes(id)) criticalFailureIds.push(id);
         reportCriticalFailures();
       };
       const supportingOverlays = dynamicOverlays.filter(
-        (overlay) => !criticalOverlayIds.includes(overlay.id),
+        (overlay) => !CRITICAL_OVERLAY_IDS.includes(overlay.id),
       );
       const criticalResults = await mgr.registerBatch(criticalOverlays);
       if (isDestroyed()) return;
@@ -778,7 +801,15 @@ onMount(async () => {
       );
     },
   });
-  cursorMapRef = mapHandle.map;
+  const map = mapHandle.map;
+  cursorMapRef = map;
+  if (map && onGoToHere) {
+    // MapLibre's own aria-label names the canvas, so this only adds the shortcut: the label itself
+    // is left alone because the chart host section already carries the "Chart" region name.
+    const canvas = map.getCanvas();
+    canvas.setAttribute('aria-keyshortcuts', CONTEXT_MENU_KEYSHORTCUTS);
+    canvas.title = CHART_ACTIONS_TITLE;
+  }
 });
 
 onDestroy(() => {

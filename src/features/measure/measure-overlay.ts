@@ -23,7 +23,7 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
-import { MEASURE_LAYER_IDS } from './measure-overlay-contract';
+import { MEASURE_LAYER_IDS, MEASURE_OVERLAY_ID } from './measure-overlay-contract';
 
 const SRC = 'binnacle-measure';
 const [LINE_LAYER, HIT_LAYER, SELECTED_LAYER, VERTEX_LAYER, LEG_LABEL_LAYER, TOTAL_LABEL_LAYER] =
@@ -150,7 +150,7 @@ export function createMeasureOverlay(
   }
 
   return {
-    id: 'measure',
+    id: MEASURE_OVERLAY_ID,
     title: 'Measure',
     band: 'routes',
     listed: false,
