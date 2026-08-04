@@ -26,6 +26,11 @@ const textExtensions = new Set([
   '.yml',
 ]);
 const proseExtensions = new Set(['.md', '.mdx', '.txt']);
+// The two files the Signal K App Store renders from the published tarball.
+const storeRenderedFiles = new Set(['README.md', 'CHANGELOG.md']);
+const markdownImage = /!\[[^\]]*\]\([^)]*\)/gu;
+const markdownLinkTarget = /\]\(\s*([^)\s]+)/gu;
+const resolvableLinkTarget = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/iu;
 
 function verifyProse() {
   const workingTree = spawnSync(
@@ -52,6 +57,7 @@ function verifyProse() {
   for (const path of checked) {
     const lines = readFileSync(path, 'utf8').split('\n');
     const prose = proseExtensions.has(posix.extname(path));
+    const storeRendered = storeRenderedFiles.has(path);
     let inFence = false;
     lines.forEach((line, index) => {
       const at = `${path}:${index + 1}`;
@@ -70,6 +76,25 @@ function verifyProse() {
       if (!inFence && /(?:^|\s)&(?:\s|$)/u.test(line)) {
         failures.push(`${at} uses "&" where prose requires "and".`);
       }
+      if (inFence || !storeRendered) return;
+      // The App Store README view renders link targets unmodified, so a relative file link is
+      // dead there. In-page anchors still work, and image paths are rewritten against the
+      // package root, so both are dropped before the remaining targets are checked.
+      for (const [, target] of line.replace(markdownImage, '').matchAll(markdownLinkTarget)) {
+        if (!resolvableLinkTarget.test(target)) {
+          failures.push(
+            `${at} links to "${target}"; the Signal K App Store cannot resolve a relative link.`,
+          );
+        }
+      }
+      // A reference-style definition carries a target the inline scan above cannot see. Footnote
+      // definitions ([^1]:) carry prose, not a target, so they are excluded.
+      const reference = /^\s{0,3}\[[^\]^][^\]]*\]:\s*(\S+)/u.exec(line);
+      if (reference && !resolvableLinkTarget.test(reference[1])) {
+        failures.push(
+          `${at} defines a reference link to "${reference[1]}"; the Signal K App Store cannot resolve a relative link.`,
+        );
+      }
     });
   }
 
@@ -87,7 +112,6 @@ if (proseOnly) process.exit(0);
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const packageLock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
-const readme = readFileSync('README.md', 'utf8');
 const metadataFailures = [];
 
 if (packageLock.version !== packageJson.version) {
@@ -136,11 +160,6 @@ const screenshots = Array.isArray(screenshotValues)
       .filter(Boolean)
   : [];
 
-const readmeGuides = new Set();
-for (const match of readme.matchAll(/\]\((docs\/[^\s)#?]+\.md)(?:#[^)]*)?\)/gu)) {
-  readmeGuides.add(match[1]);
-}
-
 if (metadataFailures.length > 0) {
   console.error(metadataFailures.join('\n'));
   process.exit(1);
@@ -180,15 +199,17 @@ const required = [
   'README.md',
   'package.json',
   'public/apple-touch-icon.png',
+  'public/binnacle-icon-maskable.svg',
   'public/icon-192.png',
   'public/icon-512.png',
+  'public/icon-maskable-192.png',
+  'public/icon-maskable-512.png',
   'public/index.html',
   'public/manifest.webmanifest',
   'public/sw.js',
   appIcon,
   ...screenshots,
-  ...readmeGuides,
-].filter(Boolean);
+].filter((path) => path !== undefined);
 const missing = required.filter((path) => !paths.has(path));
 const forbidden = [...paths].filter(
   (path) =>

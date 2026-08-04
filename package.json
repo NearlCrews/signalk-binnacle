@@ -105,7 +105,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test --project=chromium",
+    "test:e2e:fast": "npm run build && playwright test --project=chromium",
     "test:e2e:gate": "playwright test --project=chromium --project=chromium-pwa --project=webkit-smoke",
     "test:e2e:cross-browser": "npm run build && playwright test",
     "format": "biome format --write .",

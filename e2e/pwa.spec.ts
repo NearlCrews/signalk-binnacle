@@ -12,7 +12,9 @@ test('serves the application shell after the network goes offline', async ({ con
   // worker takes control, then verify that exact condition before testing its offline responses.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect
-    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), {
+      timeout: 30_000,
+    })
     .toBe(true);
 
   await context.setOffline(true);

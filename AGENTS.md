@@ -66,7 +66,7 @@ Dependency-cruiser enforces the rule.
 - Coverage: `npm run test:coverage`
 - Build: `npm run build`
 - Full gate: `npm run verify`
-- E2E smoke: `npm run test:e2e`
+- E2E smoke, Chromium only: `npm run test:e2e:fast` (the offline/PWA and WebKit specs run in `test:e2e:gate`)
 - Release gate: `npm run verify:release`
 
 ## Verification
