@@ -147,11 +147,53 @@ describe('Trends UI', () => {
     }).body;
     expect(body).toContain('type="range"');
     expect(body).toContain('aria-valuetext=');
+    expect(body).toContain(
+      'aria-label="Browse A very long depth transducer label for a narrow phone history"',
+    );
     expect(body).toContain('Latest 6');
     expect(body).toContain('minimum 2');
     expect(body).toContain('maximum 6');
     expect(body).toContain('start 4');
     expect(body).toContain('end 6');
+  });
+
+  it('ties the scrubber readout to the scrubber it reports', () => {
+    const depth = descriptor('depth', 'Depth');
+    const depthItem = item(depth);
+    const body = render(TrendCharts, {
+      props: {
+        controller: controller({
+          selectedIds: ['depth'],
+          selected: [depthItem],
+          charts: [depthItem],
+          sessionSeries: () => ({ times: [1, 2, 3], values: [4, 2, 6], path: 'path.depth' }),
+        }),
+        mode: 'metric',
+        theme: 'day',
+      },
+    }).body;
+
+    const inputId = /<input id="([^"]+)"/.exec(body)?.[1];
+    expect(inputId).toBeDefined();
+    expect(body).toContain(`<output for="${inputId}"`);
+  });
+
+  it('names each available category list with its own heading', () => {
+    const wind = descriptor('wind-speed', 'Wind speed');
+    const body = render(TrendsCustomize, {
+      props: {
+        controller: controller({
+          selectedIds: [],
+          selected: [],
+          charts: [],
+          catalog: [item({ ...wind, category: 'wind' })],
+        }),
+      },
+    }).body;
+
+    const headingId = /<h4[^>]*id="([^"]+)"/.exec(body)?.[1];
+    expect(headingId).toBeDefined();
+    expect(body).toContain(`aria-labelledby="${headingId}"`);
   });
 
   it('states when an unselected focused trend starts its shorter session window', () => {

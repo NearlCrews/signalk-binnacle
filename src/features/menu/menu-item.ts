@@ -35,6 +35,10 @@ export interface MenuItem {
   // number. Rendered as a count chip on the tile, the bar pill, and the overflow row, so a closed
   // panel still shows that it has something waiting. Absent or zero renders nothing.
   count?: number;
+  // The singular noun the spoken count suffix names, so a screen reader hears "3 active alarms"
+  // rather than a bare "3 active". Pluralized with a trailing "s" when the count is not 1. Only
+  // meaningful alongside `count`.
+  countNoun?: string;
   onSelect: () => void;
 }
 
@@ -54,6 +58,18 @@ export function countBadge(item: MenuItem): string | undefined {
   // contract is a whole number and every caller passes an array length.
   const count = Math.floor(item.count);
   return count > 99 ? '99+' : String(count);
+}
+
+// The spoken suffix that follows the label wherever a count chip is shown. It carries the exact
+// count (the chip caps at "99+") and the item's noun when it has one, pluralized so both "1 active
+// alarm" and "3 active alarms" read naturally. Undefined exactly when countBadge is, so the chip
+// and the suffix can never disagree about whether there is something to announce.
+export function countSuffix(item: MenuItem): string | undefined {
+  if (countBadge(item) === undefined || item.count === undefined) return undefined;
+  const count = Math.floor(item.count);
+  const noun = item.countNoun?.trim();
+  if (!noun) return `, ${count} active`;
+  return `, ${count} active ${count === 1 ? noun : `${noun}s`}`;
 }
 
 // The reason a blocked item is grayed, for its hover tooltip and screen-reader text: the provider-absent

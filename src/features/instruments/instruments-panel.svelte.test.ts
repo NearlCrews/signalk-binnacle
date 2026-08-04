@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import InstrumentsPanel from './InstrumentsPanel.svelte';
+import INSTRUMENTS_PANEL_SOURCE from './InstrumentsPanel.svelte?raw';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import type { TileDeps } from './tile-catalog';
 import { TILE_CATALOG, tileById } from './tile-catalog';
@@ -272,6 +273,23 @@ describe('InstrumentsPanel', () => {
     for (const def of TILE_CATALOG) {
       expect(body).not.toContain(`Move ${def.label}, position`);
     }
+  });
+
+  // Dense flow backfills a hole by pulling a later narrow tile above the full-row tile that made
+  // it, which Tab (DOM order) does not follow. A rendered-DOM assertion cannot see grid placement,
+  // so the guard is on the source.
+  it('lays the tile grid out in source order, not dense', () => {
+    expect(INSTRUMENTS_PANEL_SOURCE).not.toMatch(/grid-auto-flow:[^;]*dense/);
+  });
+
+  it('names each available category list with its own heading', () => {
+    const controller = makeController({ selectedIds: SELECTED_IDS });
+    const deps = makeDeps();
+    const { body } = render(InstrumentsCustomize, { props: { controller, deps } });
+
+    const headingId = /<h4[^>]*id="([^"]+)"/.exec(body)?.[1];
+    expect(headingId).toBeDefined();
+    expect(body).toContain(`aria-labelledby="${headingId}"`);
   });
 
   it('carries no aria-live attribute anywhere in the panel', () => {

@@ -1,7 +1,7 @@
 <script lang="ts">
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-import { createReorder, UnavailableHint } from '$shared/ui';
+import { createReorder, InlineConfirm, UnavailableHint } from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, type MenuItem } from './menu-item';
 
@@ -13,6 +13,7 @@ interface Props {
 
 const { items, onReorder, onReset }: Props = $props();
 let list: HTMLElement | undefined = $state(undefined);
+let resetArmed = $state(false);
 
 const reorder = createReorder({
   getItems: () => items.map((item) => ({ id: item.id, title: item.label })),
@@ -32,11 +33,24 @@ function handleKeydown(id: string, event: KeyboardEvent): void {
 <section class="toolbar-editor" aria-label="Toolbar">
   <div class="toolbar-editor-head">
     <h3 class="caps-label toolbar-title">Toolbar</h3>
-    <button type="button" class="btn btn-ghost reset-toolbar" onclick={() => onReset?.()}>
-      <RotateCcw size={16} aria-hidden="true" />
-      Reset toolbar
-    </button>
+    {#if !resetArmed}
+      <button type="button" class="btn btn-ghost reset-toolbar" onclick={() => (resetArmed = true)}>
+        <RotateCcw size={16} aria-hidden="true" />
+        Reset toolbar
+      </button>
+    {/if}
   </div>
+  {#if resetArmed}
+    <InlineConfirm
+      question="Reset to defaults?"
+      confirmLabel="Reset"
+      onConfirm={() => {
+        resetArmed = false;
+        onReset?.();
+      }}
+      onCancel={() => (resetArmed = false)}
+    />
+  {/if}
   {#if items.length === 0}
     <p class="muted-note">No toolbar actions pinned.</p>
   {:else}

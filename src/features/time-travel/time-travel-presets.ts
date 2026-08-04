@@ -53,6 +53,23 @@ export const TIME_TRAVEL_PRESETS: readonly TimeTravelPreset[] = [
 export const DEFAULT_TIME_TRAVEL_RANGE: TimeTravelRangeId = '24h';
 export const TIME_TRAVEL_SPEEDS: readonly TimeTravelSpeed[] = [0.5, 1, 2] as const;
 
+// Plain-language playback speeds, so the visible control says what it does rather than asking the
+// navigator to read a multiplier at the helm. The rate stays in the accessible name, spelled out
+// per speed because "1 times real time" is not a sentence.
+const SPEED_TEXT: Readonly<Record<TimeTravelSpeed, { label: string; description: string }>> = {
+  0.5: { label: 'Slow', description: 'Slow playback, 0.5 times real time' },
+  1: { label: 'Normal', description: 'Normal playback, real time' },
+  2: { label: 'Fast', description: 'Fast playback, 2 times real time' },
+};
+
+export function timeTravelSpeedLabel(speed: TimeTravelSpeed): string {
+  return SPEED_TEXT[speed].label;
+}
+
+export function timeTravelSpeedDescription(speed: TimeTravelSpeed): string {
+  return SPEED_TEXT[speed].description;
+}
+
 export function timeTravelPreset(id: TimeTravelRangeId): TimeTravelPreset {
   return TIME_TRAVEL_PRESETS.find((candidate) => candidate.id === id) ?? DEFAULT_PRESET;
 }

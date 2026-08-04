@@ -28,18 +28,18 @@ source, and surrounding traffic before relying on it.
   overflow menu. Route ids, names, geometry, and collection size are bounded before use. GPX imports
   accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
   coordinates are skipped, but their records still count toward the limits.
-- **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
-  remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
-  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
-  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
-  panel names the one-time Resources Provider step with a Check again action. See
-  [Tracks](tracks.md).
 - **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
   location, and confirmed navigation. Navigation sends the waypoint's resource reference so the
   destination name reaches the navigation strip and other stations. The panel searches name and
   description ignoring case and accents, sorts by name, distance, or bearing with fresh-fix-only
   metrics, and states its render and ingestion caps. Locate collapses the phone panel so the chart
   stays visible, and failed loads offer Retry. See [Waypoints](waypoints.md).
+- **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
+  remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
+  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
+  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
+  panel names the one-time Resources Provider step with a Check again action. See
+  [Tracks](tracks.md).
 - **Find places** searches chart notes and points of interest, including cached offline results.
   Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
   distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
@@ -128,21 +128,7 @@ source, and surrounding traffic before relying on it.
 
 ## Instruments
 
-- **Data trends** shows zero to eight profile-owned instrument trends in saved order.
-  Customize groups the available readings by category, supports touch and keyboard reordering, keeps
-  unavailable saved selections removable, and disables a ninth addition without hiding it. Opening
-  the panel discovers live dynamic instruments even when Instruments has never opened. Rescan also
-  checks registered history providers for previously seen readings and marks those without live data.
-  Each chart resolves an ordered Signal K path fallback and one history provider without merging
-  sources. A nonempty 24-hour history series wins per chart; otherwise the bounded, in-memory
-  session recorder is used. That session window does not survive reload, and an unselected focused
-  instrument starts recording only when its focused chart opens. Provider checking, partial failure,
-  total failure, true empty history, session fallback, and no samples remain distinct. Every chart
-  identifies its provider, path, and reference and includes a touch and keyboard timeline scrubber
-  plus a textual latest, minimum, maximum, start, and end summary. Eligible instrument details can
-  open one focused trend without changing the saved overview. Back restores the same detail and
-  focus, while Close returns to the chart.
-- **Instruments** opens the live instrument dock. Customize can show, hide, and reorder tiles,
+- **Instrument dock** opens the live instrument tiles. Customize can show, hide, and reorder tiles,
   including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. A
   Rescan checks the live Signal K model first. When a registered history provider is available, it
   also checks the preceding year for concrete paths that populated under `vessels.self`, so seasonal
@@ -153,18 +139,32 @@ source, and surrounding traffic before relying on it.
   provider leaves live discovery working and reports the reduced scan. An intentionally empty
   selection explains how to add a tile. Duplicate, invalid, and oversized saved selections are
   normalized.
+- **Data trends** shows zero to eight profile-owned instrument trends in saved order.
+  Customize groups the available readings by category, supports touch and keyboard reordering, keeps
+  unavailable saved selections removable, and disables a ninth addition without hiding it. Opening
+  the panel discovers live dynamic instruments even when the Instrument dock has never opened. Rescan also
+  checks registered history providers for previously seen readings and marks those without live data.
+  Each chart resolves an ordered Signal K path fallback and one history provider without merging
+  sources. A nonempty 24-hour history series wins per chart; otherwise the bounded, in-memory
+  session recorder is used. That session window does not survive reload, and an unselected focused
+  instrument starts recording only when its focused chart opens. Provider checking, partial failure,
+  total failure, true empty history, session fallback, and no samples remain distinct. Every chart
+  identifies its provider, path, and reference and includes a touch and keyboard timeline scrubber
+  plus a textual latest, minimum, maximum, start, and end summary. Eligible instrument details can
+  open one focused trend without changing the saved overview. Back restores the same detail and
+  focus, while Close returns to the chart.
 - **Open KIP** opens the installed KIP webapp in a new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
 - **Time travel** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
   history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
   scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
-  offer 0.5x, 1x, and 2x speeds, pause when the document is hidden, and stay disabled for reduced
+  offer Slow, Normal, and Fast (0.5x, 1x, and 2x) speeds, pause when the document is hidden, and stay disabled for reduced
   motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
-  correctly labels the accepted range, Retry repeats the failed request, and Now moves to its newest
+  correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
   loaded sample without another network query.
 
-## Offline charts
+## Offline
 
 - **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
   and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
@@ -186,7 +186,9 @@ source, and surrounding traffic before relying on it.
   automatically after a short debounce. Each device keeps its own active choice, while profiles and
   the default sync
   through the authenticated Signal K account. A remote change to the active profile is offered for
-  explicit application or rejection so the chart does not change underneath the navigator. The
+  explicit application or rejection so the chart does not change underneath the navigator; the
+  prompt names the setting categories that differ, and the profile switcher in the top bar carries
+  an update indicator so the offer is discoverable without opening the panel. The
   browser persists the last-applied setup separately, so an unresolved update survives reload.
   Imports are
   size-limited, deeply validated, bounded, and report the number saved. Profile names, ids, settings,

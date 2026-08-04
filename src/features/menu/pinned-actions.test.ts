@@ -3,6 +3,7 @@ import type { MenuItem } from './menu-item';
 import {
   DEFAULT_PINNED,
   MAX_BAR_PILLS,
+  MAX_COMPACT_BAR_PILLS,
   reorderPinned,
   resolvePinned,
   splitBarActions,
@@ -79,6 +80,19 @@ describe('splitBarActions', () => {
 
   it('MAX_BAR_PILLS is 6', () => {
     expect(MAX_BAR_PILLS).toBe(6);
+  });
+
+  // The phone bar is where hiding an action costs the most, and at a lower cap the reserved More
+  // slot buried three of the four defaults behind a second tap.
+  it('shows every default pinned action on a phone-width bar', () => {
+    const defaults = [...DEFAULT_PINNED].map(item);
+    const r = splitBarActions(defaults, MAX_COMPACT_BAR_PILLS);
+    expect(r.visible.map((i) => i.id)).toEqual([...DEFAULT_PINNED]);
+    expect(r.overflow).toEqual([]);
+  });
+
+  it('MAX_COMPACT_BAR_PILLS covers the whole default set', () => {
+    expect(MAX_COMPACT_BAR_PILLS).toBe(DEFAULT_PINNED.length);
   });
 });
 

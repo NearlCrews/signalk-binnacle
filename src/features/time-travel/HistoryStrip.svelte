@@ -14,7 +14,13 @@ import {
   pressureUnit,
 } from '$shared/lib';
 import type { TimeTravelController } from './time-travel-controller.svelte';
-import { TIME_TRAVEL_PRESETS, TIME_TRAVEL_SPEEDS, timeTravelPreset } from './time-travel-presets';
+import {
+  TIME_TRAVEL_PRESETS,
+  TIME_TRAVEL_SPEEDS,
+  timeTravelPreset,
+  timeTravelSpeedDescription,
+  timeTravelSpeedLabel,
+} from './time-travel-presets';
 import {
   formatTimeTravelTimestamp,
   relativeTimeText,
@@ -28,6 +34,10 @@ interface Props {
 }
 
 const { controller, units, onExit }: Props = $props();
+
+// One strip is mounted at a time (App renders it for the single time-travel session), so a constant
+// id is enough to point every reduced-motion-disabled control at the one explanation.
+const MOTION_NOTE_ID = 'time-travel-motion-note';
 
 const current = $derived(controller.current);
 const acceptedPreset = $derived(controller.accepted?.preset);
@@ -110,7 +120,9 @@ const liveMessage = $derived.by(() => {
           >
             Refresh
           </button>
-          <button type="button" class="ack" onclick={() => controller.goToLatest()}>Now</button>
+          <!-- "Latest", not "Now": this jumps to the newest loaded sample and stays in time
+               travel, so naming it for the current time would promise live data. -->
+          <button type="button" class="ack" onclick={() => controller.goToLatest()}>Latest</button>
         {/if}
         <button type="button" class="ack" onclick={onExit}>Exit</button>
       </div>
@@ -184,6 +196,7 @@ const liveMessage = $derived.by(() => {
           type="button"
           class="icon-btn step"
           aria-label={controller.playing ? 'Pause history playback' : 'Play history'}
+          aria-describedby={controller.reducedMotion ? MOTION_NOTE_ID : undefined}
           disabled={controller.samples.length < 2 || controller.reducedMotion || controller.refreshing}
           onclick={() => (controller.playing ? controller.pause() : controller.play())}
         >
@@ -220,24 +233,30 @@ const liveMessage = $derived.by(() => {
 
       <div class="speed-row">
         <span class="control-label" id="time-travel-speed-label">Playback speed</span>
-        <div class="segmented speed-options" role="group" aria-labelledby="time-travel-speed-label">
+        <div
+          class="segmented speed-options"
+          role="group"
+          aria-labelledby="time-travel-speed-label"
+          aria-describedby={controller.reducedMotion ? MOTION_NOTE_ID : undefined}
+        >
           {#each TIME_TRAVEL_SPEEDS as speed (speed)}
             <button
               type="button"
               class="btn"
               class:is-on={controller.speed === speed}
               aria-pressed={controller.speed === speed}
+              aria-label={timeTravelSpeedDescription(speed)}
               disabled={controller.reducedMotion}
               onclick={() => controller.setSpeed(speed)}
             >
-              {speed}×
+              {timeTravelSpeedLabel(speed)}
             </button>
           {/each}
         </div>
       </div>
 
       {#if controller.reducedMotion}
-        <p class="muted-note" role="status">
+        <p class="muted-note" id={MOTION_NOTE_ID} role="status">
           Automatic playback is off because reduced motion is enabled. Manual stepping and scrubbing
           remain available.
         </p>

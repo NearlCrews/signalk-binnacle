@@ -121,6 +121,12 @@ function sourceLabel(section: Section): string {
   return 'No samples for this instrument yet.';
 }
 
+// A trend id can be a discovered instrument id carrying dots and colons, so it is encoded before it
+// becomes an id attribute the output's `for` has to match.
+function scrubberInputId(id: string): string {
+  return `trend-scrubber-${encodeURIComponent(id)}`;
+}
+
 function valueText(section: Section, index: number): string {
   const time = section.times[index];
   const timeLabel = Number.isFinite(time) ? formatClockTime(time * 1000) : 'Unknown time';
@@ -132,6 +138,7 @@ function valueText(section: Section, index: number): string {
   {#each sections as section (section.item.id)}
     {@const index = inspectIndex(section)}
     {@const hasData = section.values.some((value) => value != null)}
+    {@const scrubberId = scrubberInputId(section.item.id)}
     <section class="panel-section trend-section" aria-label="{section.item.label} trend">
       <div class="head">
         <h3 class="caps-label">{section.item.label}</h3>
@@ -154,19 +161,20 @@ function valueText(section: Section, index: number): string {
         />
         <div class="timeline">
           <input
+            id={scrubberId}
             class="range"
             type="range"
             min="0"
             max={Math.max(0, section.times.length - 1)}
             step="1"
             value={index}
-            aria-label={`Inspect ${section.item.label} timeline`}
+            aria-label={`Browse ${section.item.label} history`}
             aria-valuetext={valueText(section, index)}
             oninput={(event) => {
               inspected[section.item.id] = event.currentTarget.valueAsNumber;
             }}
           >
-          <output>{valueText(section, index)}</output>
+          <output for={scrubberId}>{valueText(section, index)}</output>
         </div>
         <p class="summary">{summary(section)}</p>
       {:else}

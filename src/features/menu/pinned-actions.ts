@@ -25,6 +25,11 @@ export function resolvePinned(items: MenuItem[], pinnedIds: unknown): MenuItem[]
 // pinned set exceeds this, one slot is reserved for the More pill itself.
 export const MAX_BAR_PILLS = 6;
 
+// The same cap on a phone-width bar. It matches DEFAULT_PINNED's length on purpose: at a lower cap
+// the reserved More slot pushes all but the first default action two taps away on the form factor
+// most likely to be at a helm.
+export const MAX_COMPACT_BAR_PILLS = 4;
+
 export function splitBarActions(
   actions: MenuItem[],
   max: number,

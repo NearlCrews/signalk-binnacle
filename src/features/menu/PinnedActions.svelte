@@ -1,7 +1,7 @@
 <script lang="ts">
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
-import { onDestroy, onMount } from 'svelte';
-import { Toast } from '$shared/lib';
+import { onDestroy } from 'svelte';
+import { createMediaQuery, Toast } from '$shared/lib';
 import {
   AnchoredMenu,
   createMenuFocusMachine,
@@ -11,14 +11,18 @@ import {
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
-import { MAX_BAR_PILLS, splitBarActions } from './pinned-actions';
+import { MAX_BAR_PILLS, MAX_COMPACT_BAR_PILLS, splitBarActions } from './pinned-actions';
 
 interface Props {
   actions: MenuItem[];
 }
 
 const { actions }: Props = $props();
-let compactPhone = $state(false);
+const compactPhone = createMediaQuery('(max-width: 600px)');
+// Below 480px the four default pills exceed the strip's width with labels on, so the pills go
+// icon-only: the label collapses to visually-hidden, keeping the accessible name and the 44px
+// target while all pinned actions stay one tap away.
+const iconOnlyPills = createMediaQuery('(max-width: 480px)');
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
@@ -32,21 +36,14 @@ const machine = createMenuFocusMachine({
     moreOpen = false;
   },
 });
-const split = $derived(splitBarActions(actions, compactPhone ? 2 : MAX_BAR_PILLS));
+const split = $derived(
+  splitBarActions(actions, compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS),
+);
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
 const NOTE_MS = 5_000;
 
 onDestroy(() => blockedNote.dispose());
-onMount(() => {
-  const query = window.matchMedia('(max-width: 600px)');
-  const sync = (): void => {
-    compactPhone = query.matches;
-  };
-  sync();
-  query.addEventListener('change', sync);
-  return () => query.removeEventListener('change', sync);
-});
 
 function run(action: MenuItem, after?: () => void): void {
   if (itemBlocked(action)) {
@@ -95,7 +92,7 @@ $effect(() => {
     >
       <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
       <MenuItemIcon item={action} size={16} />
-      {action.shortLabel ?? action.label}
+      <span class:visually-hidden={iconOnlyPills.matches}>{action.shortLabel ?? action.label}</span>
       <MenuItemCount item={action} />
     </button>
   {/each}
@@ -114,7 +111,7 @@ $effect(() => {
         onclick={() => (moreOpen = !moreOpen)}
       >
         <Ellipsis size={16} aria-hidden="true" />
-        More
+        <span class:visually-hidden={iconOnlyPills.matches}>More</span>
         {#if split.overflow.length > 1}
           <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
         {/if}
@@ -201,7 +198,7 @@ $effect(() => {
   flex-direction: column;
   gap: var(--space-1);
   inline-size: min(12rem, calc(100vw - 1rem));
-  max-block-size: calc(100dvh - 1rem);
+  max-block-size: calc(100 * var(--dvh) - 1rem);
   overflow-y: auto;
   padding: var(--space-1);
 }
@@ -209,6 +206,12 @@ $effect(() => {
   .pinned-actions {
     flex-wrap: nowrap;
     gap: var(--space-1);
+  }
+}
+@media (max-width: 480px) {
+  .btn-pill {
+    min-inline-size: var(--control-size);
+    justify-content: center;
   }
 }
 </style>

@@ -2,7 +2,7 @@
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCw from '@lucide/svelte/icons/rotate-cw';
 import { MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
-import { createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
+import { CustomizeCategory, createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
 interface Props {
@@ -112,32 +112,33 @@ function statusText(item: TrendItem): string | undefined {
     <p class="limit-note" role="status">Remove a trend before adding another.</p>
   {/if}
   {#each groups as group (group.id)}
-    <h4 class="caps-label group-label">{group.title}</h4>
-    <ul class="trend-list bare-list">
-      {#each group.rows as item (item.id)}
-        {@const itemStatus = statusText(item)}
-        {@const describedBy = atLimit
-          ? hintId('trend-limit', item.id)
-          : itemStatus
-            ? hintId('available-trend', item.id)
-            : undefined}
-        <li class="row-interactive" class:unavailable={!atLimit && !item.hasLiveReport}>
-          <LayerToggle
-            title={item.label}
-            description={item.description}
-            visible={false}
-            disabled={atLimit}
-            onToggle={() => controller.toggle(item.id)}
-            {describedBy}
-          />
-          {#if atLimit}
-            <UnavailableHint id={describedBy} hint="Remove a trend before adding another." />
-          {:else if itemStatus}
-            <span id={describedBy} class="row-note">{itemStatus}</span>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+    <CustomizeCategory id={`trend-category-${group.id}`} label={group.title}>
+      <ul class="trend-list bare-list">
+        {#each group.rows as item (item.id)}
+          {@const itemStatus = statusText(item)}
+          {@const describedBy = atLimit
+            ? hintId('trend-limit', item.id)
+            : itemStatus
+              ? hintId('available-trend', item.id)
+              : undefined}
+          <li class="row-interactive" class:unavailable={!atLimit && !item.hasLiveReport}>
+            <LayerToggle
+              title={item.label}
+              description={item.description}
+              visible={false}
+              disabled={atLimit}
+              onToggle={() => controller.toggle(item.id)}
+              {describedBy}
+            />
+            {#if atLimit}
+              <UnavailableHint id={describedBy} hint="Remove a trend before adding another." />
+            {:else if itemStatus}
+              <span id={describedBy} class="row-note">{itemStatus}</span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </CustomizeCategory>
   {/each}
   {#if groups.length === 0}
     <p class="muted-note empty-note">No other trendable instruments found yet.</p>
@@ -161,7 +162,6 @@ function statusText(item: TrendItem): string | undefined {
 }
 .selection-head,
 .available-head,
-.group-label,
 .limit-note,
 .empty-note {
   padding-inline: var(--space-3);
@@ -169,9 +169,6 @@ function statusText(item: TrendItem): string | undefined {
 .selection-head h3,
 .available-head h3 {
   margin: 0;
-}
-.group-label {
-  margin-block: var(--space-2) var(--space-1);
 }
 .limit-note {
   margin: 0 0 var(--space-2);

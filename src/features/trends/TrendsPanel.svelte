@@ -1,5 +1,5 @@
 <script lang="ts">
-import { createRetryableLazyUiLoader, type UnitsMode } from '$shared/lib';
+import { createMediaQuery, createRetryableLazyUiLoader, type UnitsMode } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
 import TrendsCustomize from './TrendsCustomize.svelte';
@@ -18,23 +18,13 @@ const { controller, onRetryProvider, mode, theme, onClose, onBack }: Props = $pr
 let customizing = $state(false);
 const loadTrendCharts = createRetryableLazyUiLoader(() => import('./TrendCharts.svelte'));
 let chartsAttempt = $state(0);
-let phoneFocusTrap = $state(false);
+// The panel fills a phone screen, so it traps focus there and does not on a wider window.
+const phone = createMediaQuery('(max-width: 600px)');
 
 function trendChartsForAttempt() {
   void chartsAttempt;
   return loadTrendCharts();
 }
-
-$effect(() => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-  const query = window.matchMedia('(max-width: 600px)');
-  phoneFocusTrap = query.matches;
-  const update = (event: MediaQueryListEvent) => {
-    phoneFocusTrap = event.matches;
-  };
-  query.addEventListener('change', update);
-  return () => query.removeEventListener('change', update);
-});
 
 const sourceNote = $derived.by(() => {
   const retained = (controller.history?.series.size ?? 0) > 0;
@@ -88,7 +78,7 @@ const focused = $derived(controller.focusedId !== undefined);
   {onBack}
   backLabel={focused ? 'Back to instrument details' : 'Back to menu'}
   bodyFlex
-  focusTrap={phoneFocusTrap}
+  focusTrap={phone.matches}
 >
   {#snippet headerExtra()}
     {#if !focused}

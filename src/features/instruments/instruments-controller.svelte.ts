@@ -1,3 +1,4 @@
+import { untrack } from 'svelte';
 import type { InstrumentTrendDescriptor } from '$entities/instrument-trend';
 import { hasControlCharacters } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
@@ -99,6 +100,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   let liveDiscoveryGeneration = 0;
   let historyDiscoveryGeneration = 0;
   let historyDiscoveryAbort: AbortController | undefined;
+  // A history scan asked for while the provider probe was still in flight. Plain, not $state: the
+  // probe watcher below reads it untracked, so it must not enlarge that effect's dependency set.
+  let historyScanArmed = false;
   let disposed = false;
 
   // Tracks which paths are currently subscribed via deps.subscribe, so syncSubscriptions can
@@ -229,57 +233,67 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
         if (!disposed && liveGeneration === liveDiscoveryGeneration) liveDiscovering = false;
       });
 
-    if (includeHistory) {
-      const historyGeneration = ++historyDiscoveryGeneration;
-      historyDiscoveryAbort?.abort();
-      historyDiscoveryAbort = undefined;
-      const providerState = deps.getHistoryProviderState();
-      const providers = deps.getHistoryProviders();
-      if (providerState === 'checking' || providerState === 'retrying') {
-        historyStatus = 'checking';
-        historyDiscovering = false;
-      } else if (providerState !== 'available' || !providers || providers.ids.length === 0) {
-        historyStatus = providerState === 'failed' ? 'failed' : 'unavailable';
-        historyDiscovering = false;
-        if (providerState === 'absent') {
-          historicalCatalog = [];
-          rebuildDynamicCatalog();
-        }
-      } else {
-        const abort = new AbortController();
-        historyDiscoveryAbort = abort;
-        historyStatus = 'scanning';
-        historyDiscovering = true;
-        void discoverHistoricalInstrumentInstances(deps.origin, token, providers, abort.signal)
-          .then(
-            (result) => {
-              if (disposed || historyGeneration !== historyDiscoveryGeneration) return;
-              historyStatus = result.state;
-              const next = defsForObservedPaths(result.instances);
-              historicalCatalog =
-                result.state === 'complete'
-                  ? next
-                  : [
-                      ...new Map(
-                        [...historicalCatalog, ...next].map((def) => [def.id, def]),
-                      ).values(),
-                    ];
-              rebuildDynamicCatalog();
-            },
-            () => {
-              if (!disposed && historyGeneration === historyDiscoveryGeneration) {
-                historyStatus = 'failed';
-              }
-            },
-          )
-          .finally(() => {
-            if (!disposed && historyGeneration === historyDiscoveryGeneration) {
-              historyDiscovering = false;
-              if (historyDiscoveryAbort === abort) historyDiscoveryAbort = undefined;
-            }
-          });
-      }
+    if (includeHistory) scanHistory();
+  }
+
+  function scanHistory(): void {
+    const historyGeneration = ++historyDiscoveryGeneration;
+    historyDiscoveryAbort?.abort();
+    historyDiscoveryAbort = undefined;
+    const providerState = deps.getHistoryProviderState();
+    const providers = deps.getHistoryProviders();
+    if (providerState === 'checking' || providerState === 'retrying') {
+      // The probe is still in flight. Arm it instead of scanning against an unknown provider set,
+      // so the settle runs the scan and the panel does not sit on "Checking" until someone
+      // happens to press Rescan.
+      historyStatus = 'checking';
+      historyDiscovering = false;
+      historyScanArmed = true;
+      return;
     }
+    historyScanArmed = false;
+    if (providerState !== 'available' || !providers || providers.ids.length === 0) {
+      historyStatus = providerState === 'failed' ? 'failed' : 'unavailable';
+      historyDiscovering = false;
+      if (providerState === 'absent') {
+        historicalCatalog = [];
+        rebuildDynamicCatalog();
+      }
+      return;
+    }
+    const abort = new AbortController();
+    historyDiscoveryAbort = abort;
+    historyStatus = 'scanning';
+    historyDiscovering = true;
+    void discoverHistoricalInstrumentInstances(
+      deps.origin,
+      deps.getToken(),
+      providers,
+      abort.signal,
+    )
+      .then(
+        (result) => {
+          if (disposed || historyGeneration !== historyDiscoveryGeneration) return;
+          historyStatus = result.state;
+          const next = defsForObservedPaths(result.instances);
+          historicalCatalog =
+            result.state === 'complete'
+              ? next
+              : [...new Map([...historicalCatalog, ...next].map((def) => [def.id, def])).values()];
+          rebuildDynamicCatalog();
+        },
+        () => {
+          if (!disposed && historyGeneration === historyDiscoveryGeneration) {
+            historyStatus = 'failed';
+          }
+        },
+      )
+      .finally(() => {
+        if (!disposed && historyGeneration === historyDiscoveryGeneration) {
+          historyDiscovering = false;
+          if (historyDiscoveryAbort === abort) historyDiscoveryAbort = undefined;
+        }
+      });
   }
 
   function refreshCatalog(): void {
@@ -382,8 +396,22 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     return zoneStateFor(value, CLIENT_DEFAULT_ZONES.get(def.zonesPath));
   }
 
+  // The dock can be opened, or restored open, while the history-provider probe is still running.
+  // Watch the probe and run the armed scan the moment it settles. $effect.root, not a bare $effect:
+  // the controller is a plain factory, constructed outside a component by its own tests.
+  const stopProbeWatch = $effect.root(() => {
+    $effect(() => {
+      const state = deps.getHistoryProviderState();
+      if (state === 'checking' || state === 'retrying') return;
+      untrack(() => {
+        if (historyScanArmed && !disposed) scanHistory();
+      });
+    });
+  });
+
   function dispose(): void {
     disposed = true;
+    stopProbeWatch();
     liveDiscoveryGeneration += 1;
     historyDiscoveryGeneration += 1;
     historyDiscoveryAbort?.abort();

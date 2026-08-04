@@ -172,12 +172,7 @@ function onCardFocusOut(event: FocusEvent): void {
     {#each groups as group, gi (gi)}
       <!-- Every menu item carries a group label, so role="group" always has an accessible name
              here; the static role is required by the linter's valid-role rule. -->
-      <section
-        class="group"
-        role="group"
-        aria-label={group.label || undefined}
-        data-group={group.label || undefined}
-      >
+      <section class="group" role="group" aria-label={group.label || undefined}>
         {#if group.label}
           <div class="group-label caps-label" aria-hidden="true">{group.label}</div>
         {/if}
@@ -220,7 +215,7 @@ function onCardFocusOut(event: FocusEvent): void {
   /* Fill the space below the topbar so the grouped grid fits without a scrollbar on a normal screen;
      the topbar is one --control-size tall, and --space-6 leaves a small margin above and below. A
      short helm display still caps here and scrolls. */
-  max-block-size: calc(100dvh - var(--control-size) - var(--space-6));
+  max-block-size: calc(100 * var(--dvh) - var(--control-size) - var(--space-6));
   overflow-y: auto;
   padding: var(--space-3);
   /* The surface, border, radius, and shadow come from the shared .surface-elevated frame. */
@@ -238,7 +233,7 @@ function onCardFocusOut(event: FocusEvent): void {
     transform-origin: bottom center;
     inline-size: 100dvw;
     max-inline-size: none;
-    max-block-size: 80dvh;
+    max-block-size: calc(80 * var(--dvh));
     padding-block-end: calc(var(--space-3) + var(--system-bar-clearance));
     padding-inline-start: calc(var(--space-3) + env(safe-area-inset-left, 0px));
     padding-inline-end: calc(var(--space-3) + env(safe-area-inset-right, 0px));
@@ -260,29 +255,6 @@ function onCardFocusOut(event: FocusEvent): void {
     opacity: 0.5;
   }
 }
-@media (max-width: 600px) {
-  :global(.launcher) .group[data-group="Map"] {
-    order: 1;
-  }
-  :global(.launcher) .group[data-group="Safety"] {
-    order: 2;
-  }
-  :global(.launcher) .group[data-group="Navigate"] {
-    order: 3;
-  }
-  :global(.launcher) .group[data-group="Weather"] {
-    order: 4;
-  }
-  :global(.launcher) .group[data-group="Instruments"] {
-    order: 5;
-  }
-  :global(.launcher) .group[data-group="Offline charts"] {
-    order: 6;
-  }
-  :global(.launcher) .group[data-group="Settings"] {
-    order: 7;
-  }
-}
 /* Edit mode is a distinct interaction (tapping a tile pins or unpins it rather than opening it),
    so the whole surface carries a visible mode cue, not just the CustomizeToggle button and the
    muted-note text below: a navigator who taps the menu open mid-edit-mode should see the mode
@@ -302,11 +274,14 @@ function onCardFocusOut(event: FocusEvent): void {
   display: flex;
   justify-content: flex-end;
 }
+/* Sticky, not absolute: .launcher is both the containing block and the scroll container, so an
+   absolutely positioned note scrolls away with the tiles and a navigator who has scrolled down the
+   phone sheet never sees the explanation for the tile they just tapped. In flow and sticky, it
+   stays at the top of the scrollport for as long as it is shown. */
 .blocked-note-slot {
-  position: absolute;
-  inset-block-start: calc(var(--space-3) + var(--control-size) + var(--space-1));
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
+  position: sticky;
+  inset-block-start: 0;
+  align-self: center;
   z-index: var(--z-menu);
   max-inline-size: min(18rem, calc(100% - 2 * var(--space-3)));
   padding: var(--space-2) var(--space-3);
@@ -315,6 +290,9 @@ function onCardFocusOut(event: FocusEvent): void {
 .blocked-note {
   margin: 0;
 }
+/* Groups render in the order of the items the launcher is given, at every viewport. Do not add a
+   width-conditional `order` here: the phone-only reorder this replaces gave a navigator two mental
+   models of the same chartplotter. */
 .group {
   display: flex;
   flex-direction: column;

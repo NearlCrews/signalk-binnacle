@@ -71,8 +71,11 @@ describe('HistoryStrip', () => {
     expect(body).toContain('>7 d</button>');
     expect(body).toContain('aria-label="Play history"');
     expect(body).toContain('Playback speed');
-    expect(body).toContain('0.5×');
-    expect(body).toContain('2×');
+    expect(body).toContain('>Slow</button>');
+    expect(body).toContain('>Normal</button>');
+    expect(body).toContain('>Fast</button>');
+    expect(body).toContain('aria-label="Slow playback, 0.5 times real time"');
+    expect(body).toContain('aria-label="Fast playback, 2 times real time"');
     expect(body).toContain('2026');
     expect(body).toContain('Source: <span class="num">provider-a</span>');
     controller.dispose();
@@ -88,8 +91,38 @@ describe('HistoryStrip', () => {
     const body = strip(controller);
 
     expect(body).toContain('Automatic playback is off because reduced motion is enabled.');
-    expect(body).toMatch(/aria-label="Play history" disabled/);
-    expect(body).toMatch(/aria-pressed="true" disabled[^>]*>1×/);
+    expect(body).toMatch(/aria-label="Play history" aria-describedby="[^"]+" disabled/);
+    expect(body).toMatch(/aria-pressed="true"[^>]*disabled[^>]*>Normal/);
+    controller.dispose();
+  });
+
+  it('links every reduced-motion-disabled control to the one explanation', async () => {
+    const controller = makeController(
+      vi.fn<typeof loadTimeTravelHistory>().mockResolvedValue(data()),
+      true,
+    );
+    await controller.enter();
+
+    const body = strip(controller);
+    const described = /aria-label="Play history" aria-describedby="([^"]+)"/.exec(body)?.[1];
+
+    expect(described).toBeDefined();
+    // The explanation paragraph carries that id, and the speed group points at the same one.
+    expect(body).toContain(`id="${described}"`);
+    expect([...body.matchAll(new RegExp(`aria-describedby="${described}"`, 'g'))]).toHaveLength(2);
+    controller.dispose();
+  });
+
+  it('names the jump-to-newest control for what it does, not for live data', async () => {
+    const controller = makeController(
+      vi.fn<typeof loadTimeTravelHistory>().mockResolvedValue(data()),
+    );
+    await controller.enter();
+
+    const body = strip(controller);
+
+    expect(body).toContain('>Latest</button>');
+    expect(body).not.toContain('>Now</button>');
     controller.dispose();
   });
 

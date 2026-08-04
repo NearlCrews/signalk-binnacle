@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockedReason, countBadge, itemBlocked, type MenuItem } from './menu-item';
+import { blockedReason, countBadge, countSuffix, itemBlocked, type MenuItem } from './menu-item';
 
 const noop = () => {};
 const item = (extra: Partial<MenuItem> = {}): MenuItem => ({
@@ -88,5 +88,27 @@ describe('countBadge', () => {
     expect(countBadge(item({ count: -3 }))).toBeUndefined();
     expect(countBadge(item({ count: Number.NaN }))).toBeUndefined();
     expect(countBadge(item({ count: Number.POSITIVE_INFINITY }))).toBe('99+');
+  });
+});
+
+describe('countSuffix', () => {
+  it('is undefined exactly when there is no chip to explain', () => {
+    expect(countSuffix(item())).toBeUndefined();
+    expect(countSuffix(item({ count: 0 }))).toBeUndefined();
+    expect(countSuffix(item({ count: -1, countNoun: 'alarm' }))).toBeUndefined();
+  });
+
+  it('names the counted thing, singular and plural', () => {
+    expect(countSuffix(item({ count: 1, countNoun: 'alarm' }))).toBe(', 1 active alarm');
+    expect(countSuffix(item({ count: 3, countNoun: 'alarm' }))).toBe(', 3 active alarms');
+  });
+
+  it('keeps the exact count past the chip cap', () => {
+    expect(countSuffix(item({ count: 240, countNoun: 'alarm' }))).toBe(', 240 active alarms');
+  });
+
+  it('falls back to the nounless suffix for an item that names nothing', () => {
+    expect(countSuffix(item({ count: 2 }))).toBe(', 2 active');
+    expect(countSuffix(item({ count: 2, countNoun: '  ' }))).toBe(', 2 active');
   });
 });

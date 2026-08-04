@@ -154,10 +154,12 @@ $effect(() => {
   /* The 40% arm caps the full-screen phone layout at two readable columns (and one column on a
      very narrow phone), while staying under the 9rem floor inside the 16-22rem dock. */
   grid-template-columns: repeat(auto-fill, minmax(max(9rem, 40%), 1fr));
-  /* Dense flow backfills the hole a wide tile leaves after a lone half tile; rows split the
-     leftover dock height so the grid spans the dock, collapsing to min-content (and the existing
-     scroll) when the tile set outgrows it. */
-  grid-auto-flow: row dense;
+  /* Not dense: a full-row tile after a lone half tile leaves a hole, and dense fills it by pulling
+     a later narrow tile backward, which Tab (DOM order) does not follow. The gap costs a little
+     space; a tab order that disagrees with the visual order costs a keyboard navigator the dock.
+     Rows split the leftover dock height so the grid spans the dock, collapsing to min-content (and
+     the existing scroll) when the tile set outgrows it. */
+  grid-auto-flow: row;
   grid-auto-rows: minmax(min-content, 1fr);
   gap: var(--space-2);
   flex: 1;

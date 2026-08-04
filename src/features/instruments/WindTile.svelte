@@ -43,12 +43,14 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   {:else}
     <div class="wind-body">
       <svg class="rose" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <!-- 4 major cardinal ticks: N, E, S, W -->
-        <line x1="50" y1="6" x2="50" y2="16" stroke="var(--text-muted)" stroke-width="2" />
+        <!-- The bow marker at 12 o'clock. A filled arrowhead rather than a fourth identical tick,
+             so the rose says which way the boat is pointing without a legend. -->
+        <polygon points="50,3 45.5,13 54.5,13" fill="var(--text-muted)" />
+        <!-- 3 major quarter ticks: starboard beam, stern, port beam -->
         <line x1="94" y1="50" x2="84" y2="50" stroke="var(--text-muted)" stroke-width="2" />
         <line x1="50" y1="94" x2="50" y2="84" stroke="var(--text-muted)" stroke-width="2" />
         <line x1="6" y1="50" x2="16" y2="50" stroke="var(--text-muted)" stroke-width="2" />
-        <!-- 4 minor intercardinal ticks: NE, SE, SW, NW -->
+        <!-- 4 minor ticks on the 45s -->
         <line x1="81" y1="19" x2="75" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
         <line x1="81" y1="81" x2="75" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
         <line x1="19" y1="81" x2="25" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />

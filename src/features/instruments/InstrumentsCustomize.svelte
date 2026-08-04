@@ -1,7 +1,7 @@
 <script lang="ts">
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCw from '@lucide/svelte/icons/rotate-cw';
-import { createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
+import { CustomizeCategory, createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import { instrumentOptionLabels, type TileDef, type TileDeps } from './tile-catalog';
 
@@ -141,38 +141,39 @@ const historyStatusMessage = $derived(
   {/if}
   {#if availableGroups.length > 0}
     {#each availableGroups as group (group.id)}
-      <h4 class="caps-label group-label">{group.title}</h4>
-      <ul class="tile-list bare-list">
-        {#each group.rows as def (def.id)}
-          {@const title = optionTitle(def)}
-          {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
-          {@const unavailable = neverReported(def.paths) &&
-            !controller.isLiveDiscovered(def.id) &&
-            !historicalOnly}
-          {@const unavailableHint = historicalOnly
-            ? 'Seen in history, but not reporting live now'
-            : 'No data received from this sensor yet'}
-          {@const hintId = historicalOnly || unavailable ? historyHintId(def.id) : undefined}
-          <li
-            class="row-interactive"
-            class:unavailable
-            title={historicalOnly || unavailable ? unavailableHint : undefined}
-          >
-            <LayerToggle
-              {title}
-              description={def.description}
-              visible={false}
-              onToggle={() => controller.toggleTile(def.id)}
-              describedBy={hintId}
-            />
-            {#if historicalOnly}
-              <span id={hintId} class="history-note">Previously seen, no live data</span>
-            {:else if unavailable}
-              <UnavailableHint id={hintId} hint={unavailableHint} />
-            {/if}
-          </li>
-        {/each}
-      </ul>
+      <CustomizeCategory id={`instrument-category-${group.id}`} label={group.title}>
+        <ul class="tile-list bare-list">
+          {#each group.rows as def (def.id)}
+            {@const title = optionTitle(def)}
+            {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
+            {@const unavailable = neverReported(def.paths) &&
+              !controller.isLiveDiscovered(def.id) &&
+              !historicalOnly}
+            {@const unavailableHint = historicalOnly
+              ? 'Seen in history, but not reporting live now'
+              : 'No data received from this sensor yet'}
+            {@const hintId = historicalOnly || unavailable ? historyHintId(def.id) : undefined}
+            <li
+              class="row-interactive"
+              class:unavailable
+              title={historicalOnly || unavailable ? unavailableHint : undefined}
+            >
+              <LayerToggle
+                {title}
+                description={def.description}
+                visible={false}
+                onToggle={() => controller.toggleTile(def.id)}
+                describedBy={hintId}
+              />
+              {#if historicalOnly}
+                <span id={hintId} class="history-note">Previously seen, no live data</span>
+              {:else if unavailable}
+                <UnavailableHint id={hintId} hint={unavailableHint} />
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </CustomizeCategory>
     {/each}
   {:else}
     <p class="muted-note empty-note">No other instruments found yet.</p>
@@ -201,9 +202,6 @@ const historyStatusMessage = $derived(
 }
 .rescan {
   min-block-size: var(--row-size);
-}
-.group-label {
-  padding: var(--space-1) var(--space-3);
 }
 .empty-note {
   padding: 0 var(--space-3) var(--space-2);
