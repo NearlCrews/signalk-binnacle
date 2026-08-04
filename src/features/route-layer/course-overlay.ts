@@ -19,6 +19,8 @@ import {
   setSourceData,
 } from '$shared/map';
 
+export const COURSE_OVERLAY_ID = 'course';
+
 const LINE_SRC = 'binnacle-course-line-src';
 const POINT_SRC = 'binnacle-course-point-src';
 const LINE_LAYER = 'binnacle-course-line';
@@ -56,7 +58,7 @@ export function createCourseOverlay(guidance: CourseGuidance, vessel: OwnVessel)
   }
 
   return {
-    id: 'course',
+    id: COURSE_OVERLAY_ID,
     title: 'Course',
     band: BAND,
     supportsOpacity: true,

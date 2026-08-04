@@ -55,7 +55,8 @@ interface Props {
   onNew: () => void;
   onEditRoute: (id: string) => void;
   // Called with the name the user enters; the panel collects it via the inline NameEntry form.
-  onSave: (name: string) => void;
+  // Resolves whether the write succeeded, so a failure keeps the name form and its entered value.
+  onSave: (name: string) => Promise<boolean>;
   onCancelEdit: () => void;
   onToggleShown: (id: string, shown: boolean) => void;
   // Pan the chart to a route's start without changing its shown state.
@@ -120,6 +121,7 @@ let actionMenuId = $state<string | undefined>();
 // destructive answers on screen at once.
 function requestActivation(id: string): void {
   confirmingStopId = undefined;
+  armedDelete.cancel();
   confirmingActivateId = id;
 }
 
@@ -134,6 +136,7 @@ function confirmActivation(): void {
 function requestStop(id: string): void {
   actionMenuId = undefined;
   confirmingActivateId = undefined;
+  armedDelete.cancel();
   confirmingStopId = id;
 }
 
@@ -141,6 +144,12 @@ function confirmStop(): void {
   const id = confirmingStopId;
   confirmingStopId = undefined;
   if (id && !writesDisabled) onStop();
+}
+
+function requestDelete(id: string): void {
+  confirmingActivateId = undefined;
+  confirmingStopId = undefined;
+  armedDelete.arm(id);
 }
 
 // Navigation can also be stopped from the nav strip or another station while this confirm is open;
@@ -163,11 +172,21 @@ async function importGpx(): Promise<void> {
   onImportGpx(picked.text);
 }
 
-// Saving a route names it inline through NameEntry rather than a native prompt.
+// Saving a route names it inline through NameEntry rather than a native prompt. The form closes
+// only once the write is accepted: closing it on submit would discard the name the navigator typed
+// at the moment a save failed, which is exactly when it is worth keeping.
 let naming = $state(false);
-function confirmName(value: string): void {
-  onSave(resolveSaveName(value, 'Route'));
-  naming = false;
+let savingName = $state(false);
+async function confirmName(value: string): Promise<boolean> {
+  if (savingName) return false;
+  savingName = true;
+  try {
+    const ok = await onSave(resolveSaveName(value, 'Route'));
+    if (ok) naming = false;
+    return ok;
+  } finally {
+    savingName = false;
+  }
 }
 
 type ExitIntent = 'cancel' | 'close' | 'back';
@@ -273,6 +292,7 @@ $effect(() => {
           label="Save route as"
           value={working.name.trim() || defaultSaveName('Route')}
           onConfirm={confirmName}
+          busy={savingName}
           onCancel={() => (naming = false)}
         />
       {:else}
@@ -460,7 +480,7 @@ $effect(() => {
               disabled={writesDisabled}
               onclick={() => {
                 actionMenuId = undefined;
-                armedDelete.arm(route.id);
+                requestDelete(route.id);
               }}
             >
               <Trash2 size={18} aria-hidden="true" />

@@ -287,14 +287,16 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
   }
 
-  async function onSaveRoute(name: string): Promise<void> {
+  // Resolves whether the route was saved, so the panel can keep its name form (and the name the
+  // navigator typed) on screen when it was not.
+  async function onSaveRoute(name: string): Promise<boolean> {
     clearRouteError();
     if (deps.writeBlocked()) {
       flagRouteError('A write token is needed to save routes.');
-      return;
+      return false;
     }
     const working = routeStore.working;
-    if (!working || working.waypoints.length < 2) return;
+    if (!working || working.waypoints.length < 2) return false;
     invalidateRefresh();
     const route = { ...working, name: name.trim() || defaultSaveName('Route') };
     // The route stays under edit either way, so a refusal is recoverable without redrawing it.
@@ -307,7 +309,7 @@ export function createRouteController(deps: RouteControllerDeps) {
       )
     ) {
       routeStore.setWorking(route);
-      return;
+      return false;
     }
     deps.stopRouteEdit();
     routeStore.setWorking(undefined);
@@ -320,6 +322,7 @@ export function createRouteController(deps: RouteControllerDeps) {
       await hydrateAndSeedCourse();
     }
     await refreshRoutes();
+    return true;
   }
 
   function onCancelRouteEdit(): void {
@@ -530,7 +533,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     routeStore.upsertRoute(reversed);
     await refreshRoutes();
-    routeStore.toggleShown(reversed.id, true);
+    // The reversed route starts at the original's far end, so showing it moves the viewport away
+    // from the boat on purpose: that end is where the return leg begins.
+    onToggleRouteShown(reversed.id, true);
   }
 
   function onExportRouteGpx(id: string): void {
@@ -556,11 +561,15 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     const parsed = parsedResult.routes;
     if (parsed.length === 0) {
-      flagRouteError('No routes found in that GPX file.');
+      flagRouteError(
+        parsedResult.sawTracks
+          ? 'That GPX file holds tracks, not routes. Binnacle imports routes only.'
+          : 'No routes found in that GPX file.',
+      );
       return;
     }
     invalidateRefresh();
-    const saved = [];
+    const saved: string[] = [];
     let refused = false;
     for (const route of parsed) {
       const outcome = await saveRoute(origin, deps.getToken(), route);
@@ -584,6 +593,10 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     await refreshRoutes();
     for (const id of saved) routeStore.toggleShown(id, true);
+    // One pan for the whole import: showing each route through onToggleRouteShown would fly once per
+    // route and leave the viewport on whichever imported last.
+    const [firstSaved] = saved;
+    if (firstSaved) flyToRouteStart(firstSaved);
   }
 
   // Both goto entry points share the write guard, the sequence bumps that discard an in-flight
@@ -630,7 +643,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onToggleRouteShown,
     beginNewRoute,
     onEditRoute,
-    onSaveRoute: withBusy(onSaveRoute),
+    onSaveRoute: withBusy(onSaveRoute, false),
     onCancelRouteEdit,
     onDeleteRoute: withBusy(onDeleteRoute),
     onActivateRoute: withBusy(onActivateRoute),

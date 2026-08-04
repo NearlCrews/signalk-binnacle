@@ -55,6 +55,7 @@ function makeController(
     clear: vi.fn(),
   } as unknown as CourseGuidance;
   const fitBounds = vi.fn();
+  const flyTo = vi.fn();
   const startRouteEdit = vi.fn(() => true);
   const requestWriteAccess = vi.fn(async () => {});
   const controller = createRouteController({
@@ -66,14 +67,33 @@ function makeController(
     routeStore,
     courseGuidance: guidance,
     toast,
-    flyTo: vi.fn(),
+    flyTo,
     fitBounds,
     startRouteEdit,
     stopRouteEdit: vi.fn(),
     getTrackPoints: () => [],
     wait,
   });
-  return { controller, routeStore, toast, guidance, fitBounds, startRouteEdit, requestWriteAccess };
+  return {
+    controller,
+    routeStore,
+    toast,
+    guidance,
+    fitBounds,
+    flyTo,
+    startRouteEdit,
+    requestWriteAccess,
+  };
+}
+
+// The server keeps what was just written, so the refresh that follows a mutation returns it. Without
+// this the default empty fetch would clear the store and hide any follow-up the saved route drives.
+function echoStoreOnRefresh(routeStore: RouteStore): void {
+  vi.mocked(routesClient.fetchRoutes).mockImplementation(async () => [...routeStore.routes]);
+}
+
+function gpxRoute(name: string, lat: number, lon: number): string {
+  return `<rte><name>${name}</name><rtept lat="${lat}" lon="${lon}"/><rtept lat="${lat + 1}" lon="${lon + 1}"/></rte>`;
 }
 
 describe('createRouteController', () => {
@@ -328,6 +348,53 @@ describe('createRouteController', () => {
     routeStore.setRoutes([route]);
     controller.showRoute('r1');
     expect(fitBounds).toHaveBeenCalledWith([-83, 42, -82, 43]);
+  });
+
+  it('pans once to the first imported route', async () => {
+    const { controller, routeStore, flyTo } = makeController();
+    echoStoreOnRefresh(routeStore);
+
+    await controller.onImportRouteGpx(
+      `<gpx>${gpxRoute('First', 42, -83)}${gpxRoute('Second', 50, -70)}</gpx>`,
+    );
+
+    expect(routeStore.routes).toHaveLength(2);
+    expect(routeStore.shownIds.size).toBe(2);
+    expect(flyTo).toHaveBeenCalledOnce();
+    expect(flyTo).toHaveBeenCalledWith(42, -83);
+  });
+
+  it('names tracks as the reason a GPX file imported no routes', async () => {
+    const { controller, toast } = makeController();
+
+    await controller.onImportRouteGpx(
+      '<gpx><trk><name>Yesterday</name><trkseg><trkpt lat="42" lon="-83"/></trkseg></trk></gpx>',
+    );
+
+    expect(toast.show).toHaveBeenCalledWith(
+      'That GPX file holds tracks, not routes. Binnacle imports routes only.',
+    );
+  });
+
+  it('pans to the reversed route start, the far end of the original', async () => {
+    const { controller, routeStore, flyTo } = makeController();
+    routeStore.setRoutes([route]);
+    echoStoreOnRefresh(routeStore);
+
+    await controller.onReverseRoute('r1');
+
+    expect(flyTo).toHaveBeenCalledWith(43, -82);
+  });
+
+  it('reports whether a route save was accepted', async () => {
+    const { controller, routeStore } = makeController();
+    routeStore.setWorking(route);
+    vi.mocked(routesClient.saveRoute).mockResolvedValueOnce('failed');
+
+    expect(await controller.onSaveRoute('Passage')).toBe(false);
+    expect(routeStore.working).toEqual(route);
+    expect(await controller.onSaveRoute('Passage')).toBe(true);
+    expect(routeStore.working).toBeUndefined();
   });
 
   it('reports load failure without turning it into a real empty result', async () => {

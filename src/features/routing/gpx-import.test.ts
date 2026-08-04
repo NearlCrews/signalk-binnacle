@@ -65,6 +65,13 @@ describe('parseGpxRoutes', () => {
     expect(parseGpxRoutes('not xml at all')).toEqual([]);
   });
 
+  it('reports a file that carries tracks instead of routes', () => {
+    const trkOnly = `<gpx><trk><name>Yesterday</name>
+      <trkseg><trkpt lat="42" lon="-83"/><trkpt lat="43" lon="-82"/></trkseg></trk></gpx>`;
+    expect(parseGpxRoutesDetailed(trkOnly)).toEqual({ routes: [], sawTracks: true });
+    expect(parseGpxRoutesDetailed('<gpx></gpx>')).toEqual({ routes: [] });
+  });
+
   it('rejects partially numeric and non-finite coordinates', () => {
     const malformed = `<gpx><rte>
       <rtept lat="42north" lon="-83"/><rtept lat="42" lon="-83west"/>

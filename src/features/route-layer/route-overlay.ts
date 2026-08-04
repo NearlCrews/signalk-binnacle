@@ -24,6 +24,10 @@ const WPT_LABEL_LAYER = 'binnacle-route-waypoint-label';
 const BAND = 'routes';
 const LAYERS = [LINE_CASING_LAYER, LINE_LAYER, WPT_LAYER, WPT_LABEL_LAYER];
 
+// The overlay's registered id. Exported because the chart canvas treats this overlay as critical to
+// startup and matches it by id; a rename there has to be a compile error, not a silent miss.
+export const ROUTE_OVERLAY_ID = 'routes';
+
 // The active route draws in the selection accent and a touch heavier, every other shown route in
 // the note color, so the route being followed stands apart from the planned ones.
 function lineColor(paint: MapThemePaint): ExpressionSpecification {
@@ -47,7 +51,7 @@ export function createRouteOverlay(store: RouteStore): RouteOverlay {
   let lastVersion = -1;
 
   return {
-    id: 'routes',
+    id: ROUTE_OVERLAY_ID,
     title: 'Routes',
     band: BAND,
     supportsOpacity: true,
@@ -109,6 +113,7 @@ export function createRouteOverlay(store: RouteStore): RouteOverlay {
       ctx.map.setPaintProperty(LINE_CASING_LAYER, 'line-opacity', opacity);
       ctx.map.setPaintProperty(LINE_LAYER, 'line-opacity', opacity);
       ctx.map.setPaintProperty(WPT_LAYER, 'circle-opacity', opacity);
+      ctx.map.setPaintProperty(WPT_LAYER, 'circle-stroke-opacity', opacity);
       // Dim the waypoint labels with the rest, so the opacity slider fades the whole route, matching
       // the tides and notes overlays.
       ctx.map.setPaintProperty(WPT_LABEL_LAYER, 'text-opacity', opacity);

@@ -13,6 +13,9 @@ type GpxParseError = 'file-too-large' | 'too-many-routes' | 'too-many-waypoints'
 export interface GpxParseResult {
   routes: Route[];
   error?: GpxParseError;
+  // The document held at least one <trk>. A file exported as tracks elsewhere parses to no routes
+  // at all, which is worth saying rather than reporting an empty file.
+  sawTracks?: boolean;
 }
 
 interface XmlTag {
@@ -127,7 +130,8 @@ function parsedName(raw: string): string | undefined {
 // Parse the <rte> elements of a GPX document into routes, the inverse of routeToGpx. Coordinates are
 // WGS84 decimal degrees, so rtept lat/lon map straight to a waypoint position. Tolerant of namespace
 // prefixes, attribute order, and self-closing rtepts; routes with fewer than two valid points are
-// dropped. Returns an empty array when the text holds no usable route.
+// dropped. Returns an empty array when the text holds no usable route, with sawTracks set when the
+// document carried <trk> elements, which a file exported as tracks elsewhere does.
 export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
   if (
     xml.length > MAX_GPX_CHARACTERS ||
@@ -141,6 +145,7 @@ export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
   let route: RouteDraft | undefined;
   let point: PointDraft | undefined;
   let nameCapture: NameCapture | undefined;
+  let sawTracks = false;
   let cursor = 0;
 
   const closeName = (at: number): void => {
@@ -217,6 +222,10 @@ export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
       continue;
     }
 
+    if (tag.name === 'trk') {
+      sawTracks = true;
+      continue;
+    }
     if (tag.name === 'rte') {
       routeCount += 1;
       if (routeCount > MAX_GPX_ROUTES) return { routes: [], error: 'too-many-routes' };
@@ -250,7 +259,7 @@ export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
       if (tag.selfClosing) closeName(tag.end);
     }
   }
-  return { routes };
+  return sawTracks ? { routes, sawTracks } : { routes };
 }
 
 export function parseGpxRoutes(xml: string): Route[] {

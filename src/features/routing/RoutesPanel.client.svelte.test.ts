@@ -19,7 +19,7 @@ const spare: Route = { ...route, id: 'r2', name: 'Return' };
 
 const mounted: Array<() => void> = [];
 
-function mountPanel() {
+function mountPanel(overrides: Partial<ComponentProps<typeof RoutesPanel>> = {}) {
   const onStop = vi.fn();
   const target = document.createElement('div');
   document.body.append(target);
@@ -56,6 +56,7 @@ function mountPanel() {
     }),
     onDelete: vi.fn(),
     onClose: vi.fn(),
+    ...overrides,
   });
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
@@ -79,7 +80,16 @@ function mountPanel() {
   return {
     onStop,
     props,
+    target,
     clickLabel,
+    nameForm: () => target.querySelector<HTMLFormElement>('form.name-entry'),
+    submitNameForm: () => {
+      const form = target.querySelector<HTMLFormElement>('form.name-entry');
+      if (!form) throw new Error('no name form open');
+      form.requestSubmit();
+      flushSync();
+    },
+    openMenu: (name: string) => clickLabel(`More actions for ${name}`),
     question: () => target.querySelector('[role="group"] .confirm-text')?.textContent?.trim(),
     questions: () =>
       [...target.querySelectorAll('[role="group"] .confirm-text')].map((node) =>
@@ -149,5 +159,55 @@ describe('RoutesPanel stop', () => {
     expect(panel.onStop).not.toHaveBeenCalled();
     expect(panel.question()).toBeUndefined();
     expect(panel.hasStopControl()).toBe(true);
+  });
+});
+
+describe('RoutesPanel confirmations', () => {
+  it('cancels an armed delete when another row asks about navigation', () => {
+    const panel = mountPanel();
+    panel.openMenu('Passage');
+    panel.click('Delete route');
+    expect(panel.questions()).toEqual(['Delete this route and stop navigating?']);
+
+    panel.clickLabel('Start navigation on route');
+
+    expect(panel.questions()).toEqual([
+      'Start navigation on Return? Check the route before relying on it.',
+    ]);
+  });
+
+  it('cancels a navigation question when a delete is armed elsewhere', () => {
+    const panel = mountPanel();
+    panel.clickLabel('Start navigation on route');
+    panel.openMenu('Passage');
+    panel.click('Delete route');
+
+    expect(panel.questions()).toEqual(['Delete this route and stop navigating?']);
+  });
+});
+
+describe('RoutesPanel naming', () => {
+  it('keeps the name form and its entered name when the save is refused', async () => {
+    const onSave = vi.fn(async () => false);
+    const panel = mountPanel({ working: route, onSave });
+    panel.click('Save');
+    expect(panel.nameForm()).not.toBeNull();
+
+    panel.submitNameForm();
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    flushSync();
+
+    expect(panel.nameForm()).not.toBeNull();
+  });
+
+  it('closes the name form once the save is accepted', async () => {
+    const onSave = vi.fn(async () => true);
+    const panel = mountPanel({ working: route, onSave });
+    panel.click('Save');
+    panel.submitNameForm();
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    flushSync();
+
+    expect(panel.nameForm()).toBeNull();
   });
 });

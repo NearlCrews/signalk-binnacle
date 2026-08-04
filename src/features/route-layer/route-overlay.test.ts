@@ -56,6 +56,23 @@ describe('route overlay', () => {
     expect(map.setPaintProperty).toHaveBeenCalled();
   });
 
+  it('setOpacity dims the waypoint dot stroke with the rest of the route', async () => {
+    const overlay = createRouteOverlay(storeWithShownRoute());
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+    overlay.setOpacity?.(fakeOverlayContext(map), 0.4);
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-route-waypoint',
+      'circle-opacity',
+      0.4,
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-route-waypoint',
+      'circle-stroke-opacity',
+      0.4,
+    );
+  });
+
   it('remove tears down layers and sources', async () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();
