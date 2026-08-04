@@ -251,6 +251,7 @@ function discardActiveDraft(): void {
         disabled={controlDisabled(def)}
         value={typeof value === 'number' ? displayNumber(def, value) : displayBound(def, def.range?.min ?? 0)}
         aria-labelledby={labelId}
+        aria-valuetext={value === undefined ? 'No value reported' : readout(def)}
         onchange={(e) => onSetControl(def.id, siNumber(def, Number(e.currentTarget.value)))}
       >
     {:else if kind === 'toggle'}
@@ -365,13 +366,13 @@ function discardActiveDraft(): void {
     {#if store.statusDetail}
       <p class="muted-note">{store.statusDetail}</p>
     {/if}
-    {#if store.status === 'live'}
-      <p class="muted-note">Latest spoke received now.</p>
-    {/if}
   {/if}
   {#if store.radars.length === 0}
     <p class="muted-note">
       {store.unavailableHint}
+      {#if store.discoveryDetail}
+        {store.discoveryDetail}
+      {/if}
     </p>
   {/if}
   {#if store.radars.length > 1}

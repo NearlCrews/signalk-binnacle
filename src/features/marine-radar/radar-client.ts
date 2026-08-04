@@ -389,6 +389,8 @@ export async function discoverRadars(
       if (response.status !== 404) {
         console.warn(`[marine-radar] radar discovery returned ${response.status}`);
       }
+      // A 404 is the ordinary no-provider signal on a stock server, so like the console warning
+      // above it carries no detail: the plain install hint reads better than an HTTP status.
       return {
         radars: [],
         availability:
@@ -397,7 +399,8 @@ export async function discoverRadars(
             : response.status === 404
               ? 'absent'
               : 'unreachable',
-        detail: `Radar discovery returned HTTP ${response.status}.`,
+        detail:
+          response.status === 404 ? undefined : `Radar discovery returned HTTP ${response.status}.`,
       };
     }
     const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);

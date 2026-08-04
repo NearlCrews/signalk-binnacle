@@ -102,8 +102,8 @@ Enabled means the area is configured and active at the provider. It is not write
 not mean a guard zone is alarming. Alarm styling and copy remain reserved for a provider-reported
 notification. Live `allowed: false`, static read-only state, missing write access, and an in-flight
 write all block Save independently. A no-transmit sector keeps its safety warning associated with
-both angle fields for assistive technology. Saving it also requires a separate confirmation because
-the change can alter the radar emission envelope.
+both angle fields and both Area enabled buttons for assistive technology. Saving it also requires a
+separate confirmation because the change can alter the radar emission envelope.
 
 The form is the complete keyboard-accessible workflow. **Edit on chart** is an optional, explicit
 placement mode for a form draft:

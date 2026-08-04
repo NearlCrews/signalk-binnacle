@@ -25,6 +25,19 @@ describe('controlWriteBlockReason', () => {
     );
     expect(controlWriteBlockReason(writable, { value: 10 }, true)).toContain('Read-write');
   });
+
+  it('does not attribute a Binnacle-built fallback definition to the radar', () => {
+    const fallback: ControlDefinition = {
+      id: 'gain',
+      name: 'gain',
+      dialect: 'fallback',
+      type: 'number',
+      readOnly: true,
+    };
+    const reason = controlWriteBlockReason(fallback, { value: 10 }, false);
+    expect(reason).toBe('Control type information is not available for this provider.');
+    expect(reason).not.toContain('The radar reports');
+  });
 });
 
 describe('widgetKind', () => {

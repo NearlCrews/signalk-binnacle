@@ -49,6 +49,9 @@ export class MarineRadarStore {
   availability = $state<RadarAvailability>('idle');
   status = $state<RadarConnectionStatus>('idle');
   statusDetail = $state<string | undefined>(undefined);
+  // Separate from statusDetail because a failed discovery is followed by the stream settling to
+  // idle, and that setStatus would clear a shared detail before the panel could render it.
+  discoveryDetail = $state<string | undefined>(undefined);
   rendererStatus = $state<RadarRendererStatus>('idle');
   rendererDetail = $state<string | undefined>(undefined);
   lastSpokeAt = $state<number | undefined>(undefined);
@@ -116,8 +119,9 @@ export class MarineRadarStore {
     }
   }
 
-  setAvailability(availability: RadarAvailability): void {
+  setAvailability(availability: RadarAvailability, detail?: string): void {
     this.availability = availability;
+    this.discoveryDetail = detail;
   }
 
   select(id: string): void {
@@ -146,15 +150,15 @@ export class MarineRadarStore {
     controls: Record<string, RadarControlEntry | undefined>,
     pending: ReadonlySet<string>,
   ): void {
-    // POWER_PENDING_KEY guards the operational status the same way a control id guards its value: a
-    // poll landing right after an optimistic transmit/standby must not flip the pill back to stale.
+    // The loop-top pending guard covers POWER_PENDING_KEY too, which is what keeps a poll landing
+    // right after an optimistic transmit or standby from flipping the pill back to the stale value.
     for (const [id, entry] of Object.entries(controls)) {
       if (!entry || pending.has(id)) continue;
       this.controlEntries[id] = entry;
       this.areaVersion += 1;
       if (entry.value !== undefined) this.controlValues[id] = entry.value;
       if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
-      if (id === POWER_PENDING_KEY && !pending.has(POWER_PENDING_KEY)) {
+      if (id === POWER_PENDING_KEY) {
         const status = statusFromPower(entry.value);
         if (status) this.operationalStatus = status;
       }

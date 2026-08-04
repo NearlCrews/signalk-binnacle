@@ -569,7 +569,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   });
   await panel.getByRole('button', { name: 'Edit no-transmit sector' }).click();
   await panel.getByRole('spinbutton', { name: 'Start angle' }).fill('-30');
-  await panel.getByRole('button', { name: 'Review sector save' }).click();
+  await panel.getByRole('button', { name: 'Save sector' }).click();
   const sectorConfirm = panel.getByRole('group', {
     name: 'Apply this no-transmit sector and change the radar emission envelope?',
   });

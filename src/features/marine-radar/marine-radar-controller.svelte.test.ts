@@ -693,4 +693,88 @@ describe('createMarineRadarController', () => {
     await controller.dispose();
     vi.useRealTimers();
   });
+
+  it('leaves the waiting status to its own label rather than repeating it as detail', async () => {
+    const testDocument = new EventTarget();
+    Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
+    vi.stubGlobal('document', testDocument);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([{ ...fakeRadar, status: 'transmit' }]), {
+            status: 200,
+          });
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: 'http://pi',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    controller.store.setOperationalStatus('transmit');
+    controller.layer.setVisible(
+      fakeOverlayContext({ getLayer: () => undefined, triggerRepaint: vi.fn() }),
+      true,
+    );
+    await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledOnce());
+
+    const onWorkerStatus = workerMock.open.mock.calls[0]?.[6] as
+      | ((status: 'open' | 'closed') => void)
+      | undefined;
+    onWorkerStatus?.('open');
+    expect(controller.store.status).toBe('waiting');
+    expect(controller.store.statusDetail).toBeUndefined();
+    await controller.dispose();
+  });
+
+  it('keeps a discovery failure detail through the stream settling to idle', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 503 })),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    expect(controller.store.availability).toBe('unreachable');
+    expect(controller.store.discoveryDetail).toBe('Radar discovery returned HTTP 503.');
+    // The zero-radar path settles the stream to idle, whose setStatus clears the shared detail.
+    expect(controller.store.status).toBe('idle');
+    expect(controller.store.statusDetail).toBeUndefined();
+    await controller.dispose();
+  });
+
+  it('clears a stale discovery detail once the provider answers', async () => {
+    let failing = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (failing) return new Response('', { status: 503 });
+        if (url.endsWith('/radars'))
+          return new Response(JSON.stringify([fakeRadar]), { status: 200 });
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+    const controller = createMarineRadarController({
+      origin: '',
+      getToken: () => undefined,
+      getCenter: () => ({ latitude: 0, longitude: 0 }),
+      radarAvailable: () => true,
+    });
+    await controller.start();
+    expect(controller.store.discoveryDetail).toBe('Radar discovery returned HTTP 503.');
+
+    failing = false;
+    await controller.refresh();
+    expect(controller.store.availability).toBe('available');
+    expect(controller.store.discoveryDetail).toBeUndefined();
+    await controller.dispose();
+  });
 });

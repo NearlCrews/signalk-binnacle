@@ -66,7 +66,7 @@ describe('RadarAreaControl interactions', () => {
   it('requires a second explicit confirmation before saving a no-transmit sector', () => {
     const panel = mountArea();
     panel.click('Edit no-transmit sector');
-    panel.click('Review sector save');
+    panel.click('Save sector');
     expect(panel.target.textContent).toContain(
       'Apply this no-transmit sector and change the radar emission envelope?',
     );
@@ -96,9 +96,47 @@ describe('RadarAreaControl interactions', () => {
     flushSync();
     expect(panel.target.textContent).not.toContain('The radar changed this area');
     const save = [...panel.target.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Review sector save',
+      (button) => button.textContent?.trim() === 'Save sector',
     );
     expect(save?.disabled).toBe(false);
+  });
+
+  it('describes the sector enabled buttons with the no-transmit warning', () => {
+    const panel = mountArea();
+    panel.click('Edit no-transmit sector');
+    const warning = panel.target.querySelector('#radar-no-transmit-warning');
+    expect(warning?.textContent).toContain('no-transmit sector');
+    const enabled = [...panel.target.querySelectorAll<HTMLButtonElement>('button')].filter(
+      (button) => button.textContent?.trim() === 'Off' || button.textContent?.trim() === 'On',
+    );
+    expect(enabled).toHaveLength(2);
+    for (const button of enabled) {
+      expect(button.getAttribute('aria-describedby')).toBe('radar-no-transmit-warning');
+    }
+  });
+
+  it('leaves the rectangle enabled buttons undescribed, so the reference cannot dangle', () => {
+    const panel = mountArea(
+      {
+        id: 'exclusionRect1',
+        name: 'Exclusion rectangle 1',
+        dialect: 'native',
+        type: 'rect',
+        range: { min: 0, max: 100_000, unit: 'm' },
+        hasEnabled: true,
+        maxDistance: 100_000,
+      },
+      { value: 0, x1: 0, y1: 10, x2: 10, y2: 10, width: 5, allowed: true },
+    );
+    panel.click('Edit exclusion rectangle');
+    expect(panel.target.querySelector('#radar-no-transmit-warning')).toBeNull();
+    const enabled = [...panel.target.querySelectorAll<HTMLButtonElement>('button')].filter(
+      (button) => button.textContent?.trim() === 'Off' || button.textContent?.trim() === 'On',
+    );
+    expect(enabled).toHaveLength(2);
+    for (const button of enabled) {
+      expect(button.hasAttribute('aria-describedby')).toBe(false);
+    }
   });
 
   it('starts explicit chart editing only from an active form draft', () => {

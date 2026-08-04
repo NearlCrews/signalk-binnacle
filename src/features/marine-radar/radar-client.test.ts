@@ -106,12 +106,14 @@ describe('discoverRadars', () => {
     expect(result.radars.map(({ id }) => id)).toEqual(['nav1034A']);
   });
 
-  it('reports an absent provider on a 404', async () => {
+  it('reports an absent provider on a 404 with no discovery detail', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('', { status: 404 })),
     );
-    expect((await discoverRadars('http://boat.local', undefined)).availability).toBe('absent');
+    const result = await discoverRadars('http://boat.local', undefined);
+    expect(result.availability).toBe('absent');
+    expect(result.detail).toBeUndefined();
   });
 
   it('reports auth-required on a 403 auth refusal', async () => {

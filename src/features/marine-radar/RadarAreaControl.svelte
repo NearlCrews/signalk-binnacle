@@ -34,6 +34,8 @@ import {
 
 type EditState = 'idle' | 'editing' | 'dirty';
 
+const NO_TRANSMIT_WARNING_ID = 'radar-no-transmit-warning';
+
 let {
   definition,
   entry,
@@ -97,6 +99,15 @@ const distanceMax = $derived(
 const angleMin = $derived((definition.range?.min ?? 0) * RAD_TO_DEG);
 const angleMax = $derived((definition.range?.max ?? 0) * RAD_TO_DEG);
 const angleStep = $derived((definition.range?.step ?? 1 / RAD_TO_DEG) * RAD_TO_DEG);
+// One spelling of the no-transmit-sector test, shared by the warning id below and the template's
+// editor branch, so the description reference cannot dangle on a zone or rectangle editor.
+const isNoTransmitSector = $derived(
+  definition.type === 'sector' &&
+    proposed !== undefined &&
+    'value' in proposed &&
+    !('startDistance' in proposed),
+);
+const noTransmitWarningId = $derived(isNoTransmitSector ? NO_TRANSMIT_WARNING_ID : undefined);
 
 function definitionSupported(): boolean {
   if (definition.type === 'zone') return isNativeZoneDefinition(definition);
@@ -214,7 +225,7 @@ function editLabel(): string {
 }
 
 function saveLabel(): string {
-  if (definition.type === 'sector') return 'Review sector save';
+  if (definition.type === 'sector') return 'Save sector';
   if (definition.type === 'rect') return 'Save rectangle';
   return 'Save zone';
 }
@@ -269,7 +280,7 @@ onDestroy(() => {
       {#if definition.type === 'zone' && 'startDistance' in proposed}
         {@const zone = proposed as RadarZoneValue}
         <UnitField
-          label="Start angle"
+          label="Start angle (from heading)"
           unit="°"
           value={zone.value * RAD_TO_DEG}
           min={angleMin}
@@ -279,7 +290,7 @@ onDestroy(() => {
           onCommit={(value) => updateValue({ ...zone, value: value / RAD_TO_DEG })}
         />
         <UnitField
-          label="End angle"
+          label="End angle (from heading)"
           unit="°"
           value={zone.endValue * RAD_TO_DEG}
           min={angleMin}
@@ -310,30 +321,30 @@ onDestroy(() => {
           onCommit={(value) =>
             updateValue({ ...zone, endDistance: siRadarDistance(value, unitsMode) })}
         />
-      {:else if definition.type === 'sector' && 'value' in proposed && !('startDistance' in proposed)}
+      {:else if isNoTransmitSector && proposed !== undefined}
         {@const sector = proposed as RadarSectorValue}
-        <p id="radar-no-transmit-warning" class="alert-note">
+        <p id={NO_TRANSMIT_WARNING_ID} class="alert-note">
           This is a no-transmit sector. Changing or enabling it alters where the radar can emit.
         </p>
         <UnitField
-          label="Start angle"
+          label="Start angle (from heading)"
           unit="°"
           value={sector.value * RAD_TO_DEG}
           min={angleMin}
           max={angleMax}
           step={angleStep}
           disabled={pending}
-          ariaDescribedBy="radar-no-transmit-warning"
+          ariaDescribedBy={NO_TRANSMIT_WARNING_ID}
           onCommit={(value) => updateValue({ ...sector, value: value / RAD_TO_DEG })}
         />
         <UnitField
-          label="End angle"
+          label="End angle (from heading)"
           unit="°"
           value={sector.endValue * RAD_TO_DEG}
           min={angleMin}
           max={angleMax}
           step={angleStep}
-          ariaDescribedBy="radar-no-transmit-warning"
+          ariaDescribedBy={NO_TRANSMIT_WARNING_ID}
           disabled={pending}
           onCommit={(value) => updateValue({ ...sector, endValue: value / RAD_TO_DEG })}
         />
@@ -399,6 +410,7 @@ onDestroy(() => {
             class="btn"
             class:is-on={!proposed.enabled}
             aria-pressed={!proposed.enabled}
+            aria-describedby={noTransmitWarningId}
             disabled={pending}
             onclick={() => updateEnabled(false)}
           >
@@ -409,6 +421,7 @@ onDestroy(() => {
             class="btn"
             class:is-on={proposed.enabled}
             aria-pressed={proposed.enabled}
+            aria-describedby={noTransmitWarningId}
             disabled={pending}
             onclick={() => updateEnabled(true)}
           >

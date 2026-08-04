@@ -10,20 +10,53 @@ afterEach(() => {
   for (const dispose of mounted.splice(0).reverse()) dispose();
 });
 
+function mountControls(store: MarineRadarStore, onSetControl = vi.fn()) {
+  const target = document.createElement('div');
+  document.body.append(target);
+  let component!: ReturnType<typeof mount>;
+  flushSync(() => {
+    component = mount(RadarControls, {
+      target,
+      props: {
+        store,
+        onSetControl,
+        onSetAuto: vi.fn(),
+        onSetAreaControl: vi.fn(),
+        onSetAreaDraft: vi.fn(),
+        onStartAreaChartEdit: vi.fn(),
+        onStopAreaChartEdit: vi.fn(),
+        onSetPower: vi.fn(),
+        echoShown: true,
+        onToggleEcho: vi.fn(),
+        unitsMode: 'metric' as UnitsMode,
+      },
+    });
+  });
+  mounted.push(() => {
+    void unmount(component);
+    target.remove();
+  });
+  return { target, onSetControl };
+}
+
+function discoverRadar(store: MarineRadarStore, controls: Record<string, { value: number }> = {}) {
+  store.setDiscovered([
+    {
+      id: 'radar',
+      name: 'Radar',
+      status: 'standby',
+      spokesPerRevolution: 2048,
+      maxSpokeLen: 1024,
+      range: 1852,
+      controls,
+    },
+  ]);
+}
+
 describe('RadarControls enum values', () => {
   it('keeps typed values and whitespace-bearing wire ids distinct from DOM ids', () => {
     const store = new MarineRadarStore();
-    store.setDiscovered([
-      {
-        id: 'radar',
-        name: 'Radar',
-        status: 'standby',
-        spokesPerRevolution: 2048,
-        maxSpokeLen: 1024,
-        range: 1852,
-        controls: { 'mode port': { value: 1 }, 'mode-port': { value: 2 } },
-      },
-    ]);
+    discoverRadar(store, { 'mode port': { value: 1 }, 'mode-port': { value: 2 } });
     store.setCapabilities([
       {
         id: 'mode port',
@@ -43,32 +76,7 @@ describe('RadarControls enum values', () => {
         values: [{ value: 2, label: 'Second mode' }],
       },
     ]);
-    const onSetControl = vi.fn();
-    const target = document.createElement('div');
-    document.body.append(target);
-    let component!: ReturnType<typeof mount>;
-    flushSync(() => {
-      component = mount(RadarControls, {
-        target,
-        props: {
-          store,
-          onSetControl,
-          onSetAuto: vi.fn(),
-          onSetAreaControl: vi.fn(),
-          onSetAreaDraft: vi.fn(),
-          onStartAreaChartEdit: vi.fn(),
-          onStopAreaChartEdit: vi.fn(),
-          onSetPower: vi.fn(),
-          echoShown: true,
-          onToggleEcho: vi.fn(),
-          unitsMode: 'metric' as UnitsMode,
-        },
-      });
-    });
-    mounted.push(() => {
-      void unmount(component);
-      target.remove();
-    });
+    const { target, onSetControl } = mountControls(store);
 
     const selects = [...target.querySelectorAll<HTMLSelectElement>('select[aria-labelledby]')];
     expect(selects).toHaveLength(2);
@@ -87,5 +95,56 @@ describe('RadarControls enum values', () => {
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(onSetControl).toHaveBeenCalledWith('mode port', '1');
+  });
+});
+
+describe('RadarControls status', () => {
+  it('reports a live stream without claiming a spoke arrival time it cannot know', () => {
+    const store = new MarineRadarStore();
+    discoverRadar(store);
+    store.setStatus('live');
+    const { target } = mountControls(store);
+
+    expect(target.textContent).toContain('Connected');
+    expect(target.textContent).not.toContain('Latest spoke received');
+  });
+
+  it('keeps the discovery detail visible beside the unavailable hint', () => {
+    const store = new MarineRadarStore();
+    store.setAvailability('unreachable', 'Radar discovery returned HTTP 503.');
+    const { target } = mountControls(store);
+
+    expect(target.textContent).toContain('The Signal K radar provider could not be reached.');
+    expect(target.textContent).toContain('Radar discovery returned HTTP 503.');
+  });
+});
+
+describe('RadarControls sliders', () => {
+  it('announces the live value with its unit, and says so when no value has arrived', () => {
+    const store = new MarineRadarStore();
+    discoverRadar(store, { gain: { value: 50 }, range: { value: 1852 } });
+    store.setCapabilities([
+      { id: 'gain', name: 'Gain', dialect: 'v5', type: 'number', range: { min: 0, max: 100 } },
+      {
+        id: 'range',
+        name: 'Range',
+        dialect: 'v5',
+        type: 'number',
+        range: { min: 0, max: 100_000, unit: 'm' },
+      },
+      {
+        id: 'bearing',
+        name: 'Bearing alignment',
+        dialect: 'v5',
+        type: 'number',
+        range: { min: 0, max: Math.PI, unit: 'rad' },
+      },
+    ]);
+    const { target } = mountControls(store);
+
+    const sliders = [...target.querySelectorAll<HTMLInputElement>('input[type="range"]')];
+    expect(sliders).toHaveLength(3);
+    const valueTexts = sliders.map((slider) => slider.getAttribute('aria-valuetext'));
+    expect(valueTexts).toEqual(['50', '1852.0 m', 'No value reported']);
   });
 });

@@ -199,10 +199,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     staleTimer = setInterval(() => {
       if (!shouldStream() || store.lastSpokeAt === undefined) return;
       if (Date.now() - store.lastSpokeAt > STALE_MS && store.status !== 'stale') {
-        store.setStatus(
-          'stale',
-          'No fresh spokes have arrived. The old radar picture was cleared.',
-        );
+        store.setStatus('stale', `No new spokes in ${STALE_MS / 1000} s. Echo cleared.`);
         layer.clearFrame();
       }
     }, 1000);
@@ -252,8 +249,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         },
         (status) => {
           if (disposed || generation !== streamGeneration) return;
-          if (status === 'open')
-            store.setStatus('waiting', 'Connected and waiting for radar spokes.');
+          if (status === 'open') store.setStatus('waiting');
           else scheduleReopen();
         },
       );
@@ -310,11 +306,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     const result = await discoverRadars(deps.origin, deps.getToken());
     if (disposed || generation !== discoveryGeneration) return;
     const priorSelectedId = store.selectedId;
-    store.setAvailability(result.availability);
+    store.setAvailability(result.availability, result.detail);
     store.setDiscovered(result.radars);
     if (store.selectedId !== priorSelectedId) selectionEpoch += 1;
     if (result.availability === 'auth-required') store.setControlsForbidden(true);
-    store.statusDetail = result.detail;
     await loadSelected();
   }
 

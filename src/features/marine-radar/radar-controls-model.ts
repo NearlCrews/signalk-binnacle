@@ -38,6 +38,10 @@ export function controlWriteBlockReason(
 ): string | undefined {
   if (!def) return 'The radar did not report a capability for this control.';
   if (controlsForbidden) return 'Read-write radar access is required.';
+  // A fallback definition is Binnacle's own, built from the controls discovery reported when the
+  // provider serves no capabilities, so its read-only state is not something the radar said.
+  if (def.dialect === 'fallback')
+    return 'Control type information is not available for this provider.';
   if (def.readOnly) return 'The radar reports this control as read-only.';
   if (entry?.allowed === false)
     return 'The radar is not allowing changes to this control right now.';
