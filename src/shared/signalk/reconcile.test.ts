@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_VALUES_PER_UPDATE, reconcileDelta } from './reconcile';
+import { MAX_VALUES_PER_DELTA, MAX_VALUES_PER_UPDATE, reconcileDelta } from './reconcile';
 import type { Context, Delta, Path, Value } from './types';
 
 interface Collected {
@@ -133,6 +133,25 @@ describe('reconcileDelta', () => {
         ],
       } as unknown as Delta),
     ).toHaveLength(1);
+  });
+
+  it('stops at the cumulative value cap spanning several updates', () => {
+    // Each update sits under the per-update guard, so only the cumulative cap can truncate this
+    // delta, and it lands mid-update rather than on an update boundary.
+    const perUpdate = 2_000;
+    const updates = Array.from({ length: 5 }, (_, update) => ({
+      values: Array.from({ length: perUpdate }, (_, index) => ({
+        path: `navigation.test.${update}.${index}`,
+        value: index,
+      })),
+    }));
+    expect(perUpdate).toBeLessThan(MAX_VALUES_PER_UPDATE);
+
+    const collected = collect({ context: 'vessels.self', updates } as unknown as Delta);
+
+    expect(collected).toHaveLength(MAX_VALUES_PER_DELTA);
+    const acceptedFromLast = MAX_VALUES_PER_DELTA - 4 * perUpdate;
+    expect(collected.at(-1)?.path).toBe(`navigation.test.4.${acceptedFromLast - 1}`);
   });
 
   it('drops an oversized update before iterating its values', () => {

@@ -104,6 +104,10 @@ export class LayerManager {
   #onOrderChange?: (order: string[]) => void;
   #pinned: Set<string>;
   #exclusive: string[][];
+  // Sub-layers hidden because their parent was switched off, keyed by parent id. Turning the parent
+  // back on restores exactly those facets, so an off-and-on round trip does not silently discard the
+  // navigator's per-facet choices. Session-scoped: a reload starts from the persisted state.
+  #suppressedChildren = new Map<string, Set<string>>();
   // The last theme paint broadcast, so a module registered after the first recolor (an imported
   // user chart) is themed at add time instead of staying day-colored until the next theme change.
   #lastPaint?: MapThemePaint;
@@ -341,6 +345,8 @@ export class LayerManager {
       this.#state.delete(id);
       this.#availability.delete(id);
     }
+    this.#suppressedChildren.delete(id);
+    if (module.parent !== undefined) this.#suppressedChildren.get(module.parent)?.delete(id);
     // Drop the state and order entries too, and persist, so a deleted overlay (a removed user
     // chart) does not live on in the saved snapshot forever.
     if (this.#explicitOrder.includes(id)) {
@@ -362,6 +368,7 @@ export class LayerManager {
     this.#modules.clear();
     this.#state.clear();
     this.#availability.clear();
+    this.#suppressedChildren.clear();
     for (const module of modules) {
       try {
         module.remove(this.#ctx);
@@ -390,20 +397,46 @@ export class LayerManager {
     }
     state.visible = visible;
     this.#syncVisibility(module, state, true);
-    // Turning a parent off hides its sub-layers, so a facet (the data-quality overlay) never lingers
-    // on the map without the chart it annotates. The panel also disables a sub-layer's toggle while
-    // its parent is off, so this only fires when the parent goes off with a child still on.
-    if (!visible) {
-      for (const [childId, child] of this.#modules) {
-        if (child.parent !== id) continue;
-        const childState = this.#state.get(childId);
-        if (childState?.visible) {
-          childState.visible = false;
-          this.#syncVisibility(child, childState, true);
-        }
+    // A choice made on the sub-layer itself supersedes whatever its parent remembered for it.
+    if (module.parent !== undefined) this.#suppressedChildren.get(module.parent)?.delete(id);
+    if (visible) this.#restoreChildren(id);
+    else this.#suppressChildren(id);
+    this.#persist();
+  }
+
+  // Turning a parent off hides its sub-layers, so a facet (the data-quality overlay) never lingers
+  // on the map without the chart it annotates. The panel also disables a sub-layer's toggle while
+  // its parent is off, so this only fires when the parent goes off with a child still on.
+  #suppressChildren(id: string): void {
+    const suppressed = new Set<string>();
+    for (const [childId, child] of this.#modules) {
+      if (child.parent !== id) continue;
+      const childState = this.#state.get(childId);
+      if (childState?.visible) {
+        childState.visible = false;
+        this.#syncVisibility(child, childState, true);
+        suppressed.add(childId);
       }
     }
-    this.#persist();
+    // A repeat toggle-off finds nothing visible; keep the earlier memory rather than clearing it.
+    if (suppressed.size > 0) this.#suppressedChildren.set(id, suppressed);
+  }
+
+  #restoreChildren(id: string): void {
+    const suppressed = this.#suppressedChildren.get(id);
+    if (!suppressed) return;
+    this.#suppressedChildren.delete(id);
+    for (const childId of suppressed) {
+      const child = this.#modules.get(childId);
+      const childState = this.#state.get(childId);
+      if (!child || !childState || childState.visible) continue;
+      // Honor exclusion on restore too, as #addModule does: a sibling turned on while the parent
+      // was off must not end up visible alongside the facet being restored.
+      const group = this.#groupOf(childId);
+      if (group?.some((other) => other !== childId && this.#state.get(other)?.visible)) continue;
+      childState.visible = true;
+      this.#syncVisibility(child, childState, true);
+    }
   }
 
   setOpacity(id: string, opacity: number): void {
@@ -461,6 +494,9 @@ export class LayerManager {
         module.setOpacity?.(this.#ctx, opacity);
       }
     }
+    // The snapshot is the authoritative desired state, so an earlier parent-off memory must not
+    // reinstate a facet the profile deliberately left off.
+    this.#suppressedChildren.clear();
     this.#explicitOrder = [...order];
     this.#applyOrder();
     this.#persist();
@@ -551,14 +587,20 @@ export class LayerManager {
       // missing id, not per element per insertion.
       for (let k = at; k < seq.length; k++) posInSeq.set(seq[k], k);
     }
+    // How many children each parent has already taken, so the next one lands above its siblings
+    // rather than at parent + 1 again: inserting every child at the same slot would stack them in
+    // reverse registration order, against this file's bottom-to-top registration invariant.
+    const childCount = new Map<string, number>();
     for (const id of nonPinned) {
       const parent = this.#modules.get(id)?.parent;
       if (parent === undefined) continue;
       const at = posInSeq.get(parent);
       if (at !== undefined) {
-        seq.splice(at + 1, 0, id);
+        const offset = (childCount.get(parent) ?? 0) + 1;
+        childCount.set(parent, offset);
+        seq.splice(at + offset, 0, id);
         // Update posInSeq for the inserted child and every element that shifted right.
-        for (let k = at + 1; k < seq.length; k++) posInSeq.set(seq[k], k);
+        for (let k = at + offset; k < seq.length; k++) posInSeq.set(seq[k], k);
       } else seq.push(id);
     }
     const pinned = [...this.#pinned].filter((id) => this.#modules.has(id));

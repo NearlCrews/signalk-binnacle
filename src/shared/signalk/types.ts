@@ -91,6 +91,12 @@ export interface Delta {
 
 export type ConnectionPhase = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
+// The one definition of "the stream is down" for every surface that labels or reacts to a broken
+// connection, so a future phase cannot leave one panel silently claiming the stream is healthy.
+export function isConnectionDown(phase: ConnectionPhase): boolean {
+  return phase === 'reconnecting' || phase === 'closed';
+}
+
 export interface ConnectionState {
   phase: ConnectionPhase;
   attempt: number;

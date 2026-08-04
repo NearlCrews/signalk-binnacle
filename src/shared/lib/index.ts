@@ -23,6 +23,7 @@ export {
   nearestBy,
   nearestBySorted,
 } from './math';
+export { createMediaQuery, type ReactiveMediaQuery } from './media.svelte';
 export { prefersReducedMotion } from './motion';
 export { evictOldestKey, isRecord, sameJsonValue } from './object';
 export {

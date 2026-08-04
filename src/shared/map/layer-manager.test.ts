@@ -575,6 +575,16 @@ describe('LayerManager', () => {
     expect(manager.layers().map((l) => l.id)).toEqual(['quality', 'chart', 'gebco']);
   });
 
+  it('stacks several sub-layers above one parent in registration order', async () => {
+    const manager = new LayerManager(fakeCtx());
+    await manager.register(fakeOverlay('chart', 'bathymetry'));
+    await manager.register({ ...fakeOverlay('first', 'bathymetry'), parent: 'chart' });
+    await manager.register({ ...fakeOverlay('second', 'bathymetry'), parent: 'chart' });
+    await manager.register({ ...fakeOverlay('third', 'bathymetry'), parent: 'chart' });
+    // Registration order is z, bottom to top, so reading from the top of the map reverses it.
+    expect(manager.layers().map((l) => l.id)).toEqual(['third', 'second', 'first', 'chart']);
+  });
+
   it('turning a parent off hides its sub-layer', async () => {
     const manager = new LayerManager(fakeCtx());
     await manager.register(fakeOverlay('chart', 'bathymetry'));
@@ -582,6 +592,21 @@ describe('LayerManager', () => {
     manager.toggle('quality', true);
     manager.toggle('chart', false);
     expect(manager.layers().find((l) => l.id === 'quality')?.visible).toBe(false);
+  });
+
+  it('restores the sub-layers it hid when the parent comes back on', async () => {
+    const manager = new LayerManager(fakeCtx());
+    await manager.register(fakeOverlay('chart', 'bathymetry'));
+    await manager.register({ ...fakeOverlay('quality', 'bathymetry'), parent: 'chart' });
+    await manager.register({ ...fakeOverlay('coverage', 'bathymetry'), parent: 'chart' });
+    // The navigator turns one facet off deliberately, then switches the parent off and on.
+    manager.toggle('coverage', false);
+    manager.toggle('chart', false);
+    manager.toggle('chart', true);
+    const visible = (id: string) => manager.layers().find((l) => l.id === id)?.visible;
+    expect(visible('quality')).toBe(true);
+    // Only what the parent hid returns: the facet already switched off stays off.
+    expect(visible('coverage')).toBe(false);
   });
 
   it('applySnapshot drives setVisible and setOpacity for known layers', async () => {

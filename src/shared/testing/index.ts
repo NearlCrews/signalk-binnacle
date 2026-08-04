@@ -1,8 +1,10 @@
 export * from './catalog-facts';
 export * from './fake-alarm';
+export { failingIdbFactory, fakeIdbFactory } from './fake-idb';
 export * from './fake-map';
 export * from './fake-storage';
 export * from './fake-vessel';
 export * from './fake-websocket';
 export * from './fetch-stub';
+export { attribute } from './markup';
 export * from './sk-frame';

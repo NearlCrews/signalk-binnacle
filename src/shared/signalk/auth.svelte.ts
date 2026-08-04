@@ -157,6 +157,7 @@ export class AuthController {
   #identityGeneration = 0;
   #stopped = false;
   #checking = false;
+  #checkingUpgrade = false;
   #watching = false;
   // Reactive: today every write is paired with a reactive sibling (upgrading, upgradeOutcome) so
   // the banner happens to update, but a later path that changes one without the other would leave
@@ -311,6 +312,10 @@ export class AuthController {
 
   async requestAccess(): Promise<void> {
     if (this.#stopped) return;
+    // A declined clientId stays declined: the server re-returns the existing refused grant, so a
+    // retry has to introduce Binnacle as a new device or it is a silent no-op. Same reasoning as
+    // requestWriteAccess, which mints a fresh id for exactly this reason.
+    if (this.status === 'denied') this.forgetDeviceCredentials();
     const identityGeneration = this.#identityGeneration;
     const clientId = this.clientId;
     this.status = 'requesting';
@@ -451,32 +456,39 @@ export class AuthController {
   }
 
   async checkUpgrade(): Promise<void> {
+    // Skip if a check is already in flight, as checkRequest does: a tab return fires focus and
+    // visibilitychange together, so two polls would otherwise reach #applyIdentity or #endUpgrade.
     const href = this.#upgradePoll.href;
-    if (this.#stopped || !href) return;
+    if (this.#stopped || this.#checkingUpgrade || !href) return;
+    this.#checkingUpgrade = true;
     const identityGeneration = this.#identityGeneration;
     const upgradeClientId = this.#upgradeClientId;
-    const result = await this.#pollAccessRequest(href);
-    if (
-      this.#stopped ||
-      identityGeneration !== this.#identityGeneration ||
-      href !== this.#upgradePoll.href ||
-      upgradeClientId !== this.#upgradeClientId
-    )
-      return;
-    if (result === 'pending') {
-      this.#upgradePoll.schedule(() => void this.checkUpgrade());
-      return;
+    try {
+      const result = await this.#pollAccessRequest(href);
+      if (
+        this.#stopped ||
+        identityGeneration !== this.#identityGeneration ||
+        href !== this.#upgradePoll.href ||
+        upgradeClientId !== this.#upgradeClientId
+      )
+        return;
+      if (result === 'pending') {
+        this.#upgradePoll.schedule(() => void this.checkUpgrade());
+        return;
+      }
+      // On approval adopt the new read/write identity wholesale (which ends the upgrade and clears
+      // the outcome), leaving the live read token in place until then so the chart keeps updating.
+      if (typeof result === 'object' && this.#upgradeClientId) {
+        this.#applyIdentity({ clientId: this.#upgradeClientId, token: result.token }, true);
+        return;
+      }
+      // The admin refused it ('denied'), or the request expired or vanished without an answer
+      // ('gone'); either way the read-only token stays. The server answered in both cases, so
+      // neither is 'unreachable'. Record which so the banner explains it and offers a retry.
+      this.#endUpgrade(result === 'denied' ? 'declined' : 'unanswered');
+    } finally {
+      this.#checkingUpgrade = false;
     }
-    // On approval adopt the new read/write identity wholesale (which ends the upgrade and clears the
-    // outcome), leaving the live read token in place until then so the chart keeps updating.
-    if (typeof result === 'object' && this.#upgradeClientId) {
-      this.#applyIdentity({ clientId: this.#upgradeClientId, token: result.token }, true);
-      return;
-    }
-    // The admin refused it ('denied'), or the request expired or vanished without an answer
-    // ('gone'); either way the read-only token stays. The server answered in both cases, so
-    // neither is 'unreachable'. Record which so the banner explains it and offers a retry.
-    this.#endUpgrade(result === 'denied' ? 'declined' : 'unanswered');
   }
 
   stop(): void {

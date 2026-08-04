@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseLatLonKey, quantizeCellDeg, quantizeLatLonKey } from './quantize';
+import {
+  parseLatLonKey,
+  quantizeCellDeg,
+  quantizeLatLonKey,
+  quantizeViewCellKey,
+} from './quantize';
 
 describe('quantizeCellDeg', () => {
   it('snaps to the nearest tenth of a degree and always keeps one decimal', () => {
@@ -85,5 +90,22 @@ describe('parseLatLonKey', () => {
     expect(parseLatLonKey('90,180')).toEqual({ latitude: 90, longitude: 180 });
     expect(parseLatLonKey('-90,-180')).toEqual({ latitude: -90, longitude: -180 });
     expect(parseLatLonKey('0,0')).toEqual({ latitude: 0, longitude: 0 });
+  });
+});
+
+describe('quantizeViewCellKey', () => {
+  const cellDeg = 360 / 2 ** 12;
+  const base = { lat: 684 * cellDeg, lon: 283 * cellDeg, zoom: 12 };
+
+  it('holds one key for a sub-cell move, so a follow recenter does not churn the clip', () => {
+    const nudged = { ...base, lat: base.lat + cellDeg * 0.2, lon: base.lon + cellDeg * 0.2 };
+    expect(quantizeViewCellKey(nudged)).toBe(quantizeViewCellKey(base));
+  });
+
+  it('changes across a cell boundary and on a zoom change', () => {
+    expect(quantizeViewCellKey({ ...base, lon: base.lon + cellDeg * 1.1 })).not.toBe(
+      quantizeViewCellKey(base),
+    );
+    expect(quantizeViewCellKey({ ...base, zoom: 13 })).not.toBe(quantizeViewCellKey(base));
   });
 });

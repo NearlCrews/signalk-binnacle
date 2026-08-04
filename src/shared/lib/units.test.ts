@@ -76,6 +76,12 @@ describe('formatClockTime', () => {
     expect(formatClockTime(at).match(/\d+/g)).toHaveLength(2);
     expect(formatClockTime(at, { seconds: true }).match(/\d+/g)).toHaveLength(3);
   });
+
+  it('is blank for NaN rather than rendering an invalid date', () => {
+    expect(formatClockTime(Number.NaN)).toBe('');
+    expect(formatClockTime(Number.NaN, { seconds: true })).toBe('');
+    expect(formatClockTime(Number.NaN, { utc: true })).toBe('');
+  });
 });
 
 describe('formatDayClock', () => {

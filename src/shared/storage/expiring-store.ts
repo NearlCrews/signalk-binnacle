@@ -100,34 +100,38 @@ export function createExpiringStore<T>(dbName: string, options: Options = {}): E
       idb.write(
         async () => {
           const conn = await db();
-          const readTx = conn.transaction(META, 'readonly');
-          const expiriesReq = readTx.objectStore(META).getAll();
-          const keysReq = readTx.objectStore(META).getAllKeys();
-          const [expiries, keys] = await Promise.all([
-            reqPromise<number[]>(expiriesReq),
-            reqPromise<IDBValidKey[]>(keysReq),
-          ]);
-          const expired: string[] = [];
-          const live: { key: string; expires: number }[] = [];
-          for (let i = 0; i < keys.length; i += 1) {
-            const key = String(keys[i]);
-            const expires = expiries[i];
-            if (expires <= now) expired.push(key);
-            else live.push({ key, expires });
-          }
-          live.sort((a, b) => a.expires - b.expires);
-          const overflow =
-            live.length > maxEntries
-              ? live.slice(0, live.length - maxEntries).map((it) => it.key)
-              : [];
-          const toDelete = [...expired, ...overflow];
-          if (toDelete.length === 0) return;
-          const writeTx = conn.transaction([VALUES, META], 'readwrite');
-          for (const k of toDelete) {
-            writeTx.objectStore(VALUES).delete(k);
-            writeTx.objectStore(META).delete(k);
-          }
-          await txDone(writeTx);
+          // One readwrite transaction for the whole pass. Reading in a readonly transaction and
+          // deleting in a second one leaves a window where a concurrent put (point-conditions puts
+          // then prunes without awaiting) lands between classifying an entry and evicting it, so
+          // the fresh entry is the one dropped. Every request below is issued either synchronously
+          // or from a cursor event on this transaction, which is what keeps it alive: an await
+          // between requests would let it auto-commit.
+          const tx = conn.transaction([VALUES, META], 'readwrite');
+          const meta = tx.objectStore(META);
+          const values = tx.objectStore(VALUES);
+          const live: { key: IDBValidKey; expires: number }[] = [];
+          const cursorReq = meta.openCursor();
+          cursorReq.onsuccess = () => {
+            const cursor = cursorReq.result;
+            if (cursor) {
+              const expires = cursor.value as number;
+              if (expires <= now) {
+                values.delete(cursor.primaryKey);
+                cursor.delete();
+              } else live.push({ key: cursor.primaryKey, expires });
+              cursor.continue();
+              return;
+            }
+            // The store has been walked: evict the oldest live entries beyond the cap. These
+            // deletes are issued from a cursor event, so they still belong to this transaction.
+            if (live.length <= maxEntries) return;
+            live.sort((a, b) => a.expires - b.expires);
+            for (const entry of live.slice(0, live.length - maxEntries)) {
+              values.delete(entry.key);
+              meta.delete(entry.key);
+            }
+          };
+          await txDone(tx);
         },
         () => memory.prune(now),
       ),

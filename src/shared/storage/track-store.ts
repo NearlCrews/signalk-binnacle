@@ -49,8 +49,8 @@ export function createTrackStore<T>(
   );
   // Observable rather than silent: a track-recording IDB failure (quota, blocked upgrade,
   // corruption) stops the boat's track surviving reloads, which a field report needs to diagnose.
-  const idb = degradeToMemory(() => {
-    console.warn(`Track persistence "${DB_NAME}" degraded to memory for this session.`);
+  const idb = degradeToMemory((error) => {
+    console.warn(`Track persistence "${DB_NAME}" degraded to memory for this session.`, error);
     onDegrade?.();
   });
 

@@ -1,4 +1,5 @@
 import { isLatitude, isLongitude, type LatLon } from './geo-guards';
+import type { MapView } from './view';
 
 // A tenth of a degree (about 11 km): position-keyed caches treat a cell as one spot, so GPS
 // drift at anchor or a small pan maps to one key instead of refetching per fix.
@@ -27,4 +28,13 @@ export function parseLatLonKey(key: string): LatLon | undefined {
   const longitude = Number(parts[1]);
   if (!isLatitude(latitude) || !isLongitude(longitude)) return undefined;
   return { latitude, longitude };
+}
+
+// A viewport quantized to one tile cell at its zoom (roughly a quarter of a typical viewport
+// width), so a viewport-keyed derivation re-runs when the chart meaningfully moves rather than at
+// GPS rate while follow recenters on every fix. The quarter-zoom step lets a pinch settle into a
+// new key without churning per animation frame.
+export function quantizeViewCellKey(view: MapView): string {
+  const cellDeg = 360 / 2 ** view.zoom;
+  return `${Math.round(view.lat / cellDeg)}:${Math.round(view.lon / cellDeg)}:${Math.round(view.zoom * 4)}`;
 }

@@ -131,6 +131,35 @@ describe('AuthController', () => {
     expect(auth.status).toBe('denied');
   });
 
+  it('requests again as a new device after a denial', async () => {
+    const fetchFn = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/r1' });
+      if (url.endsWith('/requests/r1'))
+        return res(true, { state: 'COMPLETED', accessRequest: { permission: 'DENIED' } });
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: noSchedule,
+    });
+    await auth.requestAccess();
+    await auth.checkRequest();
+    expect(auth.status).toBe('denied');
+    const declined = auth.clientId;
+
+    await auth.requestAccess();
+
+    // A refused client id stays refused: the server re-returns the same declined grant, so the
+    // retry has to introduce Binnacle as a new device to reach the admin's approval list at all.
+    expect(auth.status).toBe('requesting');
+    expect(auth.clientId).not.toBe(declined);
+    const requested = fetchFn.mock.calls
+      .filter(([url]) => url.endsWith('/access/requests'))
+      .map(([, init]) => JSON.parse(typeof init?.body === 'string' ? init.body : '{}').clientId);
+    expect(requested).toEqual([declined, auth.clientId]);
+  });
+
   it('uses a recognizable binnacle- client id', () => {
     const auth = new AuthController(BASE, {
       fetch: (async () => res(true)) as unknown as typeof fetch,
@@ -639,6 +668,34 @@ describe('AuthController', () => {
     expect(auth.writeBlocked).toBe(false);
     expect(auth.upgrading).toBe(false);
     expect(auth.upgradeOutcome).toBeUndefined();
+  });
+
+  it('polls an upgrade once when two checks overlap', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/up1' });
+      if (url.endsWith('/requests/up1'))
+        return res(true, {
+          state: 'COMPLETED',
+          accessRequest: { permission: 'APPROVED', token: 'rwtok' },
+        });
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'old' }),
+      }),
+      schedule: noSchedule,
+    });
+    await auth.requestWriteAccess();
+
+    // A tab return fires focus and visibilitychange together, so both land before the first poll
+    // resolves and each would otherwise reach #applyIdentity.
+    await Promise.all([auth.checkUpgrade(), auth.checkUpgrade()]);
+
+    expect(fetchFn.mock.calls.filter(([url]) => url.endsWith('/requests/up1'))).toHaveLength(1);
+    expect(auth.token).toBe('rwtok');
+    expect(auth.upgrading).toBe(false);
   });
 
   it('records an unreachable upgrade outcome when the request POST fails', async () => {

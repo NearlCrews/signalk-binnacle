@@ -86,3 +86,8 @@ export function installContextMenu(
   };
   return { cancel, remove };
 }
+
+// The advertised chord list for the keyboard handler above, in aria-keyshortcuts format
+// (space-separated alternatives). It lives beside the key test so the chart canvas cannot
+// advertise keys this file stopped listening for.
+export const CONTEXT_MENU_KEYSHORTCUTS = 'Shift+F10 ContextMenu';

@@ -24,5 +24,10 @@ export {
   lonLatToLatLon,
   roundLatLon,
 } from './geo-guards';
-export { parseLatLonKey, quantizeCellDeg, quantizeLatLonKey } from './quantize';
+export {
+  parseLatLonKey,
+  quantizeCellDeg,
+  quantizeLatLonKey,
+  quantizeViewCellKey,
+} from './quantize';
 export type { MapView } from './view';

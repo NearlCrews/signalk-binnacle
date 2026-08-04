@@ -269,6 +269,7 @@ export function formatClockTime(
   timeMs: number,
   opts?: { seconds?: boolean; utc?: boolean },
 ): string {
+  if (!Number.isFinite(timeMs)) return '';
   if (opts?.utc) return new Date(timeMs).toLocaleTimeString([], CLOCK_OPTS_HM_UTC);
   return new Date(timeMs).toLocaleTimeString([], opts?.seconds ? CLOCK_OPTS_HMS : CLOCK_OPTS_HM);
 }
@@ -281,7 +282,7 @@ export function formatDayClock(
   timeMs: number,
   opts?: { zone?: boolean; minute?: boolean },
 ): string {
-  if (Number.isNaN(timeMs)) return '';
+  if (!Number.isFinite(timeMs)) return '';
   const noMinute = opts?.minute === false;
   const zone = opts?.zone;
   let fmt: Intl.DateTimeFormatOptions;

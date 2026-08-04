@@ -1,5 +1,6 @@
 import type { Source } from 'pmtiles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { failingIdbFactory, fakeIdbFactory } from '$shared/testing';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';
 
 const URL_A = 'http://x/a.pmtiles';
@@ -439,112 +440,6 @@ describe('createBlockStore in-memory fallback', () => {
   });
 });
 
-// A minimal IDBFactory over in-memory maps: enough for the open/upgrade handshake, keyed
-// get/getAll/getAllKeys/put/delete, transaction oncomplete once every request (including
-// ones issued inside onsuccess handlers) has settled, and a per-store value-read counter
-// so a test can prove prune never reads block bytes.
-function fakeIdbFactory(): { factory: IDBFactory; valueReads: Map<string, number> } {
-  const stores = new Map<string, Map<string, unknown>>();
-  const valueReads = new Map<string, number>();
-  const countRead = (name: string) => valueReads.set(name, (valueReads.get(name) ?? 0) + 1);
-
-  const makeTx = () => {
-    const tx = {
-      oncomplete: null as null | (() => void),
-      onerror: null as null | (() => void),
-      onabort: null as null | (() => void),
-      error: null,
-      objectStore: (name: string) => objectStore(name),
-    };
-    let pending = 0;
-    const request = <R>(op: () => R) => {
-      pending += 1;
-      const req = {
-        onsuccess: null as null | (() => void),
-        onerror: null as null | (() => void),
-        result: undefined as R | undefined,
-        error: null,
-      };
-      queueMicrotask(() => {
-        req.result = op();
-        req.onsuccess?.();
-        pending -= 1;
-        if (pending === 0) {
-          queueMicrotask(() => {
-            if (pending === 0) tx.oncomplete?.();
-          });
-        }
-      });
-      return req;
-    };
-    const objectStore = (name: string) => {
-      const map = stores.get(name);
-      if (!map) throw new Error(`no store ${name}`);
-      const sortedKeys = () => [...map.keys()].sort();
-      return {
-        get: (key: string) =>
-          request(() => {
-            countRead(name);
-            return map.get(key);
-          }),
-        getAll: () =>
-          request(() => {
-            countRead(name);
-            return sortedKeys().map((key) => map.get(key));
-          }),
-        getAllKeys: () => request(() => sortedKeys()),
-        put: (value: unknown, key: string) =>
-          request(() => {
-            map.set(key, value);
-          }),
-        delete: (key: string) =>
-          request(() => {
-            map.delete(key);
-          }),
-      };
-    };
-    return tx;
-  };
-
-  const db = {
-    createObjectStore: (name: string) => {
-      stores.set(name, new Map());
-    },
-    transaction: () => makeTx(),
-  };
-
-  const factory = {
-    open: () => {
-      const req = {
-        onupgradeneeded: null as null | (() => void),
-        onsuccess: null as null | (() => void),
-        onerror: null as null | (() => void),
-        onblocked: null as null | (() => void),
-        result: db,
-        error: null,
-      };
-      queueMicrotask(() => {
-        req.onupgradeneeded?.();
-        req.onsuccess?.();
-      });
-      return req;
-    },
-  };
-
-  return { factory: factory as unknown as IDBFactory, valueReads };
-}
-
-// An IDBFactory whose open() always errors, to exercise the degrade-to-memory path.
-function failingFactory(): IDBFactory {
-  return {
-    open() {
-      const req = { onerror: null as null | (() => void), error: new Error('open failed') };
-      queueMicrotask(() => req.onerror?.());
-      return req as unknown as IDBOpenDBRequest;
-    },
-  } as unknown as IDBFactory;
-}
-
 describe('createBlockStore over IndexedDB', () => {
   it('round-trips blocks and validators', async () => {
     const { factory } = fakeIdbFactory();
@@ -611,7 +506,7 @@ describe('createBlockStore over IndexedDB', () => {
   });
 
   it('degrades to memory when IndexedDB fails to open, never throwing', async () => {
-    const store = createBlockStore({ factory: failingFactory() });
+    const store = createBlockStore({ factory: failingIdbFactory() });
     await store.putBlocks(URL_A, new Map([[0, block(7)]]), 1);
 
     const out = await store.getBlocks(URL_A, [0]);

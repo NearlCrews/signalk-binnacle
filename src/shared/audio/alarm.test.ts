@@ -24,19 +24,25 @@ function fakeGain() {
   };
 }
 
-function fakeOscillator() {
+function fakeOscillator(starts: number[]) {
   return {
     type: '',
     frequency: { value: 0 },
     onended: undefined as (() => void) | undefined,
     connect: (node: unknown) => node,
-    start: () => undefined,
+    start: (when: number) => {
+      starts.push(when);
+    },
     stop: () => undefined,
   };
 }
 
 function createAudioStub({ resumeRejects = false } = {}) {
   const contexts: FakeAudioContext[] = [];
+  // Every beep's scheduled start time, so a test can count what a burst actually queued.
+  const starts: number[] = [];
+  // Mutable so a test can grant the gesture partway through, the way a returning navigator does.
+  const gesture = { refused: resumeRejects };
   class FakeAudioContext {
     state: AudioContextState = 'suspended';
     currentTime = 0;
@@ -45,18 +51,18 @@ function createAudioStub({ resumeRejects = false } = {}) {
       contexts.push(this);
     }
     resume(): Promise<void> {
-      if (resumeRejects) return Promise.reject(new Error('gesture required'));
+      if (gesture.refused) return Promise.reject(new Error('gesture required'));
       this.state = 'running';
       return Promise.resolve();
     }
     createOscillator() {
-      return fakeOscillator();
+      return fakeOscillator(starts);
     }
     createGain() {
       return fakeGain();
     }
   }
-  return { contexts, AudioContext: FakeAudioContext };
+  return { contexts, starts, gesture, AudioContext: FakeAudioContext };
 }
 
 async function loadAudio(audio?: { AudioContext: unknown }) {
@@ -70,6 +76,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -113,6 +120,26 @@ describe('shared alarm audio context', () => {
     primeAlarmAudio();
     expect(stub.contexts).toHaveLength(1);
     expect(alarmAudioPrimed()).toBe(false);
+  });
+
+  it('schedules nothing while the context is suspended, so a resume cannot fire a pile-up', async () => {
+    vi.useFakeTimers();
+    const stub = createAudioStub({ resumeRejects: true });
+    const { Alarm } = await loadAudio(stub);
+    const alarm = new Alarm();
+
+    alarm.start(TONE);
+    vi.advanceTimersByTime(TONE.periodMs * 6);
+    // A suspended context freezes currentTime, so every skipped burst would have queued its beeps
+    // at the same instant and blasted them together on the next gesture.
+    expect(stub.starts).toEqual([]);
+
+    stub.gesture.refused = false;
+    vi.advanceTimersByTime(TONE.periodMs);
+
+    // One burst's worth of beeps, at the burst spacing, not seven bursts stacked on one timestamp.
+    expect(stub.starts).toEqual([0, (TONE.beepMs + TONE.gapMs) / 1000]);
+    alarm.stop();
   });
 
   it('stays quiet and unprimed without Web Audio', async () => {

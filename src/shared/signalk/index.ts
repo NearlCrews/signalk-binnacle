@@ -74,6 +74,7 @@ export type {
 } from './types';
 export {
   ALL_VESSELS_CONTEXT,
+  isConnectionDown,
   isSoundingNotification,
   NOTIFICATION_SEVERITY_RANK,
   NOTIFICATIONS_PREFIX,

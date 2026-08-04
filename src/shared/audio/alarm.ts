@@ -119,6 +119,10 @@ export class Alarm implements AlarmControl {
 
   #burst(ctx: AudioContext, tone: AlarmTone): void {
     if (ctx.state === 'suspended') resumeContext(ctx);
+    // A suspended context freezes currentTime, so scheduling anyway would pile every tick's beeps
+    // onto the same timestamp and fire them as one distorted blast the moment a gesture resumes it.
+    // Skip the burst until the context runs; the interval keeps retrying the resume above.
+    if (ctx.state !== 'running') return;
     const step = (tone.beepMs + tone.gapMs) / 1000;
     for (let i = 0; i < tone.beeps; i += 1) {
       this.#beep(ctx, tone, ctx.currentTime + i * step);
