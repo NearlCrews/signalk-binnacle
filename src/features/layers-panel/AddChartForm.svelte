@@ -1,5 +1,4 @@
 <script lang="ts">
-import Link2 from '@lucide/svelte/icons/link-2';
 import {
   type DraftChart,
   MAX_USER_CHART_NAME_LENGTH,
@@ -115,7 +114,7 @@ function cancelDraft(): void {
 <div class="add-form">
   {#if staged}
     <div class="review" role="group" aria-label="Review imported chart">
-      <span class="field-label caps-label">Review and save</span>
+      <span class="caps-label">Review and save</span>
       <TextField
         variant="stacked"
         label="Name"
@@ -149,7 +148,7 @@ function cancelDraft(): void {
     </div>
   {:else}
     <section class="server-path" aria-label="Chart files on this server">
-      <span class="field-label caps-label">Chart files on this server</span>
+      <span class="caps-label">Chart files on this server</span>
       <p class="hint">
         Put PMTiles files in your server chart provider, such as Chart Locker or
         signalk-pmtiles-plugin. Server charts appear in this list automatically and are available to
@@ -157,27 +156,26 @@ function cancelDraft(): void {
       </p>
     </section>
     <div class="field">
-      <span class="field-label caps-label" id="add-chart-url-label">
-        <Link2 size={14} aria-hidden="true" />
-        From a PMTiles URL
-      </span>
-      <div class="url-row">
-        <input
-          class="input url"
-          type="url"
-          placeholder="https://.../chart.pmtiles"
-          aria-labelledby="add-chart-url-label"
-          bind:value={url}
-          maxlength={MAX_USER_CHART_URL_LENGTH}
-          disabled={busy}
-        >
+      <TextField
+        variant="stacked"
+        type="url"
+        label="From a PMTiles URL"
+        value={url}
+        placeholder="https://.../chart.pmtiles"
+        disabled={busy}
+        maxLength={MAX_USER_CHART_URL_LENGTH}
+        onInput={(value) => (url = value)}
+        onCommit={(value) => (url = value)}
+        onEnter={stageUrl}
+      />
+      <div class="panel-controls">
         <button
           type="button"
           class="btn btn-ghost"
           onclick={stageUrl}
           disabled={busy || !url.trim()}
         >
-          Add
+          Import
         </button>
       </div>
       <p class="hint">
@@ -216,20 +214,6 @@ function cancelDraft(): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
-}
-.field-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.url-row {
-  display: flex;
-  gap: var(--space-2);
-}
-/* The box styling comes from the shared .input; only the flex sizing is local. */
-.url {
-  flex: 1;
-  min-inline-size: 0;
 }
 .hint {
   margin: 0;

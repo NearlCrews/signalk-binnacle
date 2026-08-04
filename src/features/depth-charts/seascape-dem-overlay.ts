@@ -101,9 +101,7 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     defaultVisible: false,
     layerIds: [DEPTH_SHADING_LAYER_ID],
     add(ctx) {
-      if (!ctx.map.getSource(DEM_SOURCE_ID)) {
-        ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
-      }
+      ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
       if (!ctx.map.getLayer(DEPTH_SHADING_LAYER_ID)) {
         const layer: ColorReliefLayerSpecification = {
           id: DEPTH_SHADING_LAYER_ID,
@@ -153,9 +151,7 @@ export function createSeascapeDemOverlay(source: SeascapeDemSource): SeascapeDem
     defaultVisible: false,
     layerIds: [HILLSHADE_LAYER_ID],
     add(ctx) {
-      if (!ctx.map.getSource(DEM_SOURCE_ID)) {
-        ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
-      }
+      ensureSource(ctx.map, DEM_SOURCE_ID, demSourceSpec(source));
       if (ctx.map.getLayer(HILLSHADE_LAYER_ID)) return;
       const colors = hillshadeColors(DAY_PAINT);
       const layer: HillshadeLayerSpecification = {

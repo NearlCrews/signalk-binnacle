@@ -22,7 +22,14 @@ describe('AddChartForm', () => {
   it('keeps device-only URL import available while server writes are blocked', () => {
     const html = body(true);
 
-    expect(html).not.toMatch(/<input[^>]+type="url"[^>]+disabled/);
+    expect(html).not.toMatch(/<input[^>]+disabled/);
     expect(html).toMatch(/URLs with query values\s+stay on this device by default/);
+  });
+
+  it('labels the URL action as an import, since saving happens after review', () => {
+    const html = body();
+
+    expect(html).toContain('Import');
+    expect(html).not.toMatch(/>\s*Add\s*</);
   });
 });

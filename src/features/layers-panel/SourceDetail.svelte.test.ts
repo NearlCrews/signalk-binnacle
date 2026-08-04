@@ -100,6 +100,61 @@ describe('SourceDetail', () => {
     expect(html).toContain('stacking position');
   });
 
+  it('explains the disabled Name field on a shared chart without write access', () => {
+    const html = body(true, { ...source, shareWithServer: true });
+    const nameInput = /<input[^>]*aria-label="Chart name"[^>]*>/.exec(html)?.[0] ?? '';
+
+    expect(nameInput).toContain('disabled');
+    expect(html).toContain('needed to rename this shared chart');
+  });
+
+  it('offers the read/write request beside the blocked rename', () => {
+    const html = render(SourceDetail, {
+      props: {
+        item,
+        userCharts: {} as UserCharts,
+        userSource: { ...source, shareWithServer: true },
+        writeBlocked: true,
+        onRequestWriteAccess: noop,
+        onBack: noop,
+      },
+    }).body;
+
+    expect(html).toContain('needed to rename this shared chart');
+    expect(html).toContain('Request read/write access');
+  });
+
+  it('rests the request control while a request is outstanding', () => {
+    const html = render(SourceDetail, {
+      props: {
+        item,
+        userCharts: {} as UserCharts,
+        userSource: { ...source, shareWithServer: true },
+        writeBlocked: true,
+        onRequestWriteAccess: noop,
+        requestingWriteAccess: true,
+        onBack: noop,
+      },
+    }).body;
+
+    expect(html).toContain('Requesting access');
+    expect(html).toMatch(/<button[^>]+disabled[^>]*>\s*Requesting access/);
+  });
+
+  it('leaves the Name field editable and unexplained while writes are allowed', () => {
+    const html = body(false, { ...source, shareWithServer: true });
+    const nameInput = /<input[^>]*aria-label="Chart name"[^>]*>/.exec(html)?.[0] ?? '';
+
+    expect(nameInput).not.toContain('disabled');
+    expect(html).not.toContain('needed to rename this shared chart');
+  });
+
+  it('offers deletion while no source write is in flight', () => {
+    const html = body(false);
+
+    expect(html).not.toMatch(/<button[^>]+disabled[^>]*>.*Delete chart/s);
+  });
+
   it('keeps repair available for a device-only chart when server writes are blocked', () => {
     const deviceOnly = {
       ...source,

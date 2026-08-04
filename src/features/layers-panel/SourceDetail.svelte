@@ -15,7 +15,7 @@ import {
 } from '$entities/user-charts';
 import { type Bbox4, formatBounds } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
-import { InlineConfirm, SubViewHeader, TextField } from '$shared/ui';
+import { InlineConfirm, SubViewHeader, TextField, WriteAccessNote } from '$shared/ui';
 import ChartSourceReview from './ChartSourceReview.svelte';
 import ChartSpecList from './ChartSpecList.svelte';
 
@@ -24,6 +24,11 @@ interface Props {
   userCharts?: UserCharts;
   userSource?: UserChartSource;
   writeBlocked?: boolean;
+  // Ask the server for read/write access from inside the detail. The action renders only when the
+  // host wires it.
+  onRequestWriteAccess?: () => void;
+  // A read/write request is already outstanding, so the request action reports itself and rests.
+  requestingWriteAccess?: boolean;
   onBack: () => void;
   onShowBounds?: (bounds: Bbox4) => void;
 }
@@ -33,6 +38,8 @@ const {
   userCharts,
   userSource,
   writeBlocked = false,
+  onRequestWriteAccess,
+  requestingWriteAccess = false,
   onBack,
   onShowBounds,
 }: Props = $props();
@@ -56,12 +63,14 @@ const canEdit = $derived(userSource !== undefined && userCharts !== undefined);
 const renameBlocked = $derived(
   writeBlocked && userSource !== undefined && shouldShareUserChart(userSource),
 );
-const deleteBlocked = $derived(
-  writeBlocked && userSource !== undefined && userChartNeedsServerDelete(userSource),
-);
 const sourceMutationBlocked = $derived(
   writeBlocked && userSource !== undefined && userChartNeedsServerDelete(userSource),
 );
+// Deleting during an in-flight source write would resurrect the chart: remove() drops the overlay and
+// the server resource, then the pending replace resolves and swaps the overlay back in for a chart
+// that no longer exists. So a running operation blocks the delete the same way it blocks every other
+// mutation in this panel.
+const deleteBlocked = $derived(operation !== undefined || sourceMutationBlocked);
 const chartBounds = $derived(chart?.bounds ?? userSource?.bounds);
 const rawChartUrl = $derived(chart?.url ?? userSource?.origin.url);
 const chartUrl = $derived(rawChartUrl ? userChartUrlForDisplay(rawChartUrl) : undefined);
@@ -101,6 +110,13 @@ $effect(() => {
     stageController?.abort(new DOMException('Chart source canceled', 'AbortError'));
     stageController = undefined;
   };
+});
+
+// An armed confirm survives a source write starting under it, and its Confirm would then press
+// against a blocked delete and do nothing. Disarm instead, so the row goes back to a disabled
+// Delete the navigator can see rather than a live button that silently refuses.
+$effect(() => {
+  if (deleteBlocked) confirming = false;
 });
 
 function saveName(): void {
@@ -244,6 +260,15 @@ function changeSharing(share: boolean): void {
         saveName();
       }}
     />
+    {#if renameBlocked}
+      <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
+           request stays one tap away from the block it explains. -->
+      <WriteAccessNote
+        message="Read/write Signal K access is needed to rename this shared chart."
+        requesting={requestingWriteAccess}
+        onRequest={onRequestWriteAccess}
+      />
+    {/if}
   {/if}
 
   <ChartSpecList rows={specRows} />

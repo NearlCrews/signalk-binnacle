@@ -89,6 +89,11 @@ const subView = $derived(controller.subView);
 const subViewTitle = $derived(controller.subViewTitle);
 const panelCollapsed = $derived(controller.panelCollapsed);
 const drawing = $derived(controller.drawing);
+// Draw mode announces itself only through the header subtitle, which is not a live region, so this
+// carries the same instruction to a screen reader when the chart starts waiting for a drag.
+const drawAnnouncement = $derived(
+  drawing ? 'Draw mode on. Drag over the chart to select the area.' : '',
+);
 const namePrep = $derived(controller.namePrep);
 const regionName = $derived(controller.regionName);
 const submitting = $derived(controller.submitting);
@@ -168,6 +173,7 @@ function chartLabel(id: string): string {
     : undefined}
   bodyFlex
 >
+  <p class="visually-hidden" aria-live="polite">{drawAnnouncement}</p>
   {#if error !== null}
     <p class="alert-note" role="alert">{error}</p>
   {/if}

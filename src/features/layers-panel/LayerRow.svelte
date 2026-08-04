@@ -144,7 +144,6 @@ $effect(() => {
           bind:this={tuneTrigger}
           class:icon-btn--accent={dimmed}
           aria-label={`Adjust ${item.title} opacity`}
-          aria-haspopup="dialog"
           aria-expanded={tuneOpen}
           onclick={() => (tuneOpen = !tuneOpen)}
         >
@@ -155,7 +154,6 @@ $effect(() => {
           onClose={() => (tuneOpen = false)}
           backdropLabel={`Close ${item.title} opacity`}
           ariaLabel={`${item.title} opacity`}
-          role="dialog"
           surfaceClass="popover-card tune-pop"
           anchor={tuneTrigger}
           preferredPlacement="below"
@@ -171,6 +169,7 @@ $effect(() => {
               step="0.05"
               value={item.opacity}
               aria-label={`${item.title} opacity`}
+              aria-valuetext={`${percent}%`}
               bind:this={tuneControl}
               oninput={(e) => view.setOpacity(item.id, Number(e.currentTarget.value))}
             >

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from 'svelte';
 import {
   type UserChartSource,
   userChartUrlForDisplay,
@@ -40,6 +41,15 @@ const rows = $derived.by(() => {
   ];
 });
 const hasQuery = $derived(userChartUrlHasQuery(source.origin.url));
+// The query-value warning is styled as an alert, so it announces with matching urgency once sharing
+// is turned on. It stays polite until the navigator changes the choice: this step can mount with
+// sharing already on, where an assertive announcement would interrupt the review as it opens.
+const initialShare = untrack(() => shareWithServer);
+let shareChanged = $state(false);
+$effect(() => {
+  if (shareWithServer !== initialShare) shareChanged = true;
+});
+const queryNoteRole = $derived(shareWithServer && shareChanged ? 'alert' : 'status');
 </script>
 
 {#if showSpecs}
@@ -61,7 +71,7 @@ const hasQuery = $derived(userChartUrlHasQuery(source.origin.url));
       : 'This chart stays on this device. Read/write Signal K access is needed to share it with the server.'}
   </p>
 {:else if hasQuery}
-  <p class:alert-note={shareWithServer} class="privacy-note" role="status">
+  <p class:alert-note={shareWithServer} class="privacy-note" role={queryNoteRole}>
     {shareWithServer
       ? 'Sharing sends the full URL, including every query value, to the Signal K server.'
       : 'This URL contains query values that may be private. It stays on this device unless you choose to share the full URL.'}

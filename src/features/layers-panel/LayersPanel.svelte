@@ -8,7 +8,7 @@ import type { Bbox4 } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
-import { createPanelMinimize, SlideOver } from '$shared/ui';
+import { createPanelMinimize, SlideOver, WriteAccessNote } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
 import LayerRow from './LayerRow.svelte';
 import { CATEGORY_DEFAULT_OPEN, CATEGORY_ORDER, layerCategory } from './layer-category';
@@ -139,6 +139,8 @@ const reorder = createLayerReorder(
         {userCharts}
         userSource={detailUserSource}
         writeBlocked={auth.writeBlocked}
+        onRequestWriteAccess={() => void auth.requestWriteAccess()}
+        requestingWriteAccess={auth.upgrading}
         onBack={() => (detailId = undefined)}
         onShowBounds={(bounds) => {
           onShowChartBounds?.(bounds);
@@ -172,10 +174,13 @@ const reorder = createLayerReorder(
 
     {#if mode === 'charts'}
       {#if auth.writeBlocked}
-        <p class="muted-note" role="status">
-          URL charts can still be stored on this device. Read/write access is needed to share them
-          with Signal K or change charts that are already shared.
-        </p>
+        <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so
+             the request stays one tap away from the block it explains. -->
+        <WriteAccessNote
+          message="URL charts can still be stored on this device. Read/write access is needed to share them with Signal K or change charts that are already shared."
+          requesting={auth.upgrading}
+          onRequest={() => void auth.requestWriteAccess()}
+        />
       {/if}
       {#if chartsLoadState === 'loading'}
         <p class="muted-note" role="status">Loading Signal K chart sources…</p>

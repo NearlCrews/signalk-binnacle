@@ -193,6 +193,12 @@ describe('offline charts home view', () => {
   it('stays quiet about transport when the server is reached over HTTPS', () => {
     expect(renderHome(false)).not.toContain(PLAIN_HTTP_NOTE);
   });
+
+  // The region has to be mounted and empty before draw mode starts, or the instruction it later
+  // carries is inserted rather than changed and screen readers skip it.
+  it('keeps a polite live region mounted for the draw-mode instruction', () => {
+    expect(renderHome(false)).toContain('<p class="visually-hidden" aria-live="polite">');
+  });
 });
 
 it('persists position-warm settings through postConfig', async () => {
