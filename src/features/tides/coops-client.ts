@@ -17,11 +17,12 @@ const DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const MAX_STATIONS = 20_000;
 const MAX_EVENTS = 200;
 
-function safeStationId(value: unknown): value is string {
-  return (
-    cleanTideStationText(value, MAX_TIDE_STATION_ID_LENGTH) !== undefined &&
-    /^[A-Za-z0-9_-]+$/.test(value as string)
-  );
+// Validates and returns the cleaned id, so the string the pattern accepted is the same string that
+// reaches the request URL and the station map key. Testing the pattern against the untrimmed
+// original instead would reject a padded id outright.
+function safeStationId(value: unknown): string | undefined {
+  const id = cleanTideStationText(value, MAX_TIDE_STATION_ID_LENGTH);
+  return id !== undefined && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
 }
 
 function coopsUrl(base: string, params: Record<string, string>): string {
@@ -69,7 +70,7 @@ async function fetchStations(
   const stationsById = new Map<string, TideStation>();
   for (const station of data.stations) {
     if (!isRecord(station)) continue;
-    const id = safeStationId(station.id) ? station.id : undefined;
+    const id = safeStationId(station.id);
     const name = cleanTideStationText(station.name, MAX_TIDE_STATION_NAME_LENGTH);
     if (!id || !name || !isLatitude(station.lat) || !isLongitude(station.lng)) continue;
     if (!stationsById.has(id)) {
@@ -91,7 +92,8 @@ export async function fetchTideEvents(
   stationId: string,
   now: () => number = Date.now,
 ): Promise<TideEvent[]> {
-  if (!safeStationId(stationId)) throw new RangeError('Invalid CO-OPS station id');
+  const station = safeStationId(stationId);
+  if (!station) throw new RangeError('Invalid CO-OPS station id');
   // interval=hilo returns just the high and low turning points; units=metric puts the height in
   // meters, which is already SI.
   const url = coopsUrl(DATAGETTER, {
@@ -103,7 +105,7 @@ export async function fetchTideEvents(
     format: 'json',
     begin_date: utcYmd(now()),
     range: String(TIDE_WINDOW_HOURS),
-    station: stationId,
+    station,
   });
   const data = await fetchJson(url);
   if (!isRecord(data) || !Array.isArray(data.predictions) || data.predictions.length > MAX_EVENTS) {
@@ -129,7 +131,8 @@ export async function fetchCurrentEvents(
   stationId: string,
   now: () => number = Date.now,
 ): Promise<CurrentEvent[]> {
-  if (!safeStationId(stationId)) throw new RangeError('Invalid CO-OPS station id');
+  const station = safeStationId(stationId);
+  if (!station) throw new RangeError('Invalid CO-OPS station id');
   // units=metric returns Velocity_Major in cm/s (not knots, and not m/s), so divide by 100 for SI
   // m/s. It is signed (flood positive, ebb negative), but speed is a magnitude here: the flood-or-ebb
   // kind and the set in degrees carry the direction, so store the absolute value. The set is the mean
@@ -142,7 +145,7 @@ export async function fetchCurrentEvents(
     begin_date: utcYmd(now()),
     range: String(TIDE_WINDOW_HOURS),
     interval: 'MAX_SLACK',
-    station: stationId,
+    station,
   });
   const data = await fetchJson(url);
   const currentPredictions = isRecord(data) ? data.current_predictions : undefined;

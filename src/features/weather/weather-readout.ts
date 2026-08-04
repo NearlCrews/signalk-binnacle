@@ -7,6 +7,7 @@ import {
   precipRateUnit,
   type UnitsMode,
 } from '$shared/lib';
+import { GRID_SOURCE_LABEL } from './fills';
 import type { PointConditions } from './signalk-weather';
 
 // Wind speed in whole knots (no decimals), the shared readout format for the conditions block and
@@ -30,6 +31,18 @@ export const RAIN_VISIBLE_MM_H = 0.1;
 export function precipUnitLabel(isRate: boolean | undefined, mode: UnitsMode): string {
   if (isRate) return precipRateUnit(mode);
   return mode === 'imperial' ? 'in' : 'mm';
+}
+
+// The source name for a conditions row. 'provider' and 'mixed' are internal tokens and must never
+// reach the panel as written, so the conditions block and the forecast rows resolve them here and
+// cannot name the same source differently.
+export function provenanceLabel(
+  provenance: PointConditions['provenance'],
+  providerLabel: string | undefined,
+): string {
+  if (provenance === 'mixed' && providerLabel) return `${providerLabel} + ${GRID_SOURCE_LABEL}`;
+  if (provenance === 'provider') return providerLabel ?? GRID_SOURCE_LABEL;
+  return GRID_SOURCE_LABEL;
 }
 
 export interface WeatherReadout {

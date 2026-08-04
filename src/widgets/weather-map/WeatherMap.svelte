@@ -172,6 +172,13 @@ const readout = $derived(pointReadout.readout);
 const readoutSource = $derived(pointReadout.readoutSource);
 const readoutPending = $derived(pointReadout.readoutPending);
 
+// The conditions panel and the tapped-point readout share the trailing edge of the map, so opening
+// conditions clears the transient readout rather than burying it under the panel.
+function toggleConditions(): void {
+  conditionsOpen = !conditionsOpen;
+  if (conditionsOpen) pointReadout.dismiss();
+}
+
 const items = $derived(layersView?.items ?? []);
 const visibleItems = $derived(items.filter((i) => i.visible));
 const fills = $derived(items.filter((i) => WEATHER_FILL_ID_SET.has(i.id)));
@@ -461,7 +468,7 @@ onDestroy(() => {
         aria-controls={conditionsOpen ? 'weather-conditions' : undefined}
         aria-label="Conditions at the boat"
         title="Conditions at the boat: wind, pressure, waves, and any warnings"
-        onclick={() => (conditionsOpen = !conditionsOpen)}
+        onclick={toggleConditions}
       >
         Here
         {#if conditionsOpen}
@@ -562,8 +569,10 @@ onDestroy(() => {
         class:show={!!statusNote || !!zoomNote}
         role={store.status === 'error' ? 'alert' : 'status'}
       >
-        <span>{statusNote || zoomNote}</span>
-        {#if !zoomNote && (store.status === 'error' || store.status === 'stale')}
+        {#if statusNote}
+          <span>{statusNote}</span>
+        {/if}
+        {#if store.status === 'error' || store.status === 'stale'}
           <button
             type="button"
             class="btn btn-ghost retry"
@@ -573,6 +582,11 @@ onDestroy(() => {
             <RefreshCw size={14} aria-hidden="true" />
             Retry
           </button>
+        {/if}
+        <!-- Its own line: the zoom cap and a status note can both apply, and suppressing either one
+             would hide a data limit or an error the other does not explain. -->
+        {#if zoomNote}
+          <span class="zoom-note">{zoomNote}</span>
         {/if}
       </div>
     </div>
@@ -705,6 +719,9 @@ onDestroy(() => {
    leading edge; the status note re-centers itself (align-self below). */
 .map-notes {
   position: absolute;
+  /* Above the conditions panel (which has no z-index) but below the layer menu, so a readout that
+     lands while conditions is open stays readable and its Dismiss button stays clickable. */
+  z-index: var(--z-overlay);
   inset-block-start: var(--space-2);
   inset-inline: var(--space-2);
   display: flex;
@@ -735,6 +752,9 @@ onDestroy(() => {
 }
 .map-note--status .retry {
   margin-inline-start: var(--space-1);
+}
+.map-note--status .zoom-note {
+  display: block;
 }
 .map-note--readout {
   position: relative;

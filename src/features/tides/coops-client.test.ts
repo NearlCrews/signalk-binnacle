@@ -146,6 +146,26 @@ describe('coops-client', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('accepts a padded station id and consumes the trimmed one', async () => {
+    const fetchMock = mockFetch({
+      predictions: [{ t: '2026-06-08 09:34', v: '0.532', type: 'H' }],
+    });
+    await fetchTideEvents('  8726520  ');
+    const request = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(request.searchParams.get('station')).toBe('8726520');
+
+    mockFetch({ stations: [{ id: ' 9410230 ', name: 'La Jolla', lat: 32.87, lng: -117.26 }] });
+    expect(await fetchTideStations()).toEqual([
+      { id: '9410230', name: 'La Jolla', latitude: 32.87, longitude: -117.26 },
+    ]);
+  });
+
+  it('rejects a station id with embedded spaces', async () => {
+    const fetchMock = mockFetch({ predictions: [] });
+    await expect(fetchTideEvents('8726 520')).rejects.toThrow(/station id/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects oversized or malformed station and event arrays before iterating', async () => {
     mockFetch({ stations: Array.from({ length: 20_001 }, () => null) });
     await expect(fetchTideStations()).rejects.toThrow(/station response/);

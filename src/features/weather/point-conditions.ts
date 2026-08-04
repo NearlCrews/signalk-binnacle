@@ -192,7 +192,9 @@ function warningsAvailability(
   state: EndpointState,
   warnings: WeatherWarning[] | undefined,
 ): WarningAvailability {
-  if (state.status === 'failure') return warnings !== undefined ? 'stale' : 'unavailable';
+  // A cached EMPTY list is not stale data being withheld: the last answer was "no warnings here",
+  // so a failed refresh over it reports unavailable rather than implying hidden warnings.
+  if (state.status === 'failure') return (warnings?.length ?? 0) > 0 ? 'stale' : 'unavailable';
   if (state.status === 'unsupported') return 'unavailable';
   return 'fresh';
 }

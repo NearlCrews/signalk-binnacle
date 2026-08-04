@@ -15,6 +15,7 @@ import {
   DEGREES_TRUE_TITLE,
   formatWholeKnots,
   precipUnitLabel,
+  provenanceLabel,
   RAIN_VISIBLE_MM_H,
 } from './weather-readout';
 
@@ -22,9 +23,12 @@ interface Props {
   forecast: PointConditions[];
   horizonH: number;
   units: UnitsStore;
+  // The weather provider's display name, when one is configured, so a row's source reads as the
+  // provider rather than the internal provenance token.
+  providerLabel?: string;
 }
 
-const { forecast, horizonH, units }: Props = $props();
+const { forecast, horizonH, units, providerLabel }: Props = $props();
 
 const precip = (v: number | undefined) => formatPrecipRateOr(v, units.mode);
 const hasRiskCues = $derived(forecast.some((step) => (step.riskCues?.length ?? 0) > 0));
@@ -64,6 +68,12 @@ function stepLabel(timeMs: number): string {
             {lengthUnit(units.mode)}</span
           >
         {/if}
+        {#if step.windWaveHeightM !== undefined}
+          <span
+            >Wind waves <b class="num">{formatLengthOr(step.windWaveHeightM, units.mode)}</b>
+            {lengthUnit(units.mode)}</span
+          >
+        {/if}
         {#if step.swellHeightM !== undefined}
           <span
             >Swell <b class="num">{formatLengthOr(step.swellHeightM, units.mode)}</b>
@@ -95,7 +105,7 @@ function stepLabel(timeMs: number): string {
           {/each}
         {/if}
         {#if step.provenance}
-          <span class="f-source">{step.provenance}</span>
+          <span class="f-source">{provenanceLabel(step.provenance, providerLabel)}</span>
         {/if}
       </span>
     </li>

@@ -54,12 +54,13 @@ describe('weather condition displays', () => {
         ],
         horizonH: 6,
         units,
+        providerLabel: 'Test Provider',
       },
     }).body;
     expect(html).toContain('gust');
     expect(html).toContain('Waves');
     expect(html).toContain('Visibility');
     expect(html).toContain('Gale-force wind');
-    expect(html).toContain('mixed');
+    expect(html).toContain('Test Provider + Open-Meteo');
   });
 });

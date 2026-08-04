@@ -55,17 +55,28 @@ describe('ForecastList', () => {
             gustMs: 25,
             pressurePa: 99_500,
             waveHeightM: 3,
+            windWaveHeightM: 1.4,
             currentSpeedMs: 0.6,
             visibilityM: 800,
             provenance: 'mixed',
             riskCues: ['Storm-force wind', 'Dense fog'],
           },
         ],
+        providerLabel: 'Test Provider',
       },
     });
-    for (const text of ['gust', 'Waves', 'Current', 'Visibility', 'mixed', 'Storm-force wind']) {
+    for (const text of [
+      'gust',
+      'Waves',
+      'Wind waves',
+      'Current',
+      'Visibility',
+      'Test Provider + Open-Meteo',
+      'Storm-force wind',
+    ]) {
       expect(body).toContain(text);
     }
+    expect(body).not.toContain('mixed');
     expect(body).toContain('not official warnings');
   });
 });

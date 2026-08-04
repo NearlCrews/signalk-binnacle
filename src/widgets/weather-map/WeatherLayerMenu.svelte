@@ -84,7 +84,7 @@ const groups = $derived(
   inset-inline-start: var(--space-2);
   inline-size: 15rem;
   max-inline-size: calc(100cqw - 2 * var(--space-2));
-  max-block-size: min(60vh, 24rem);
+  max-block-size: min(calc(60 * var(--dvh)), 24rem);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -131,7 +131,7 @@ const groups = $derived(
     inset-inline: var(--space-2);
     inline-size: auto;
     max-inline-size: none;
-    max-block-size: min(50vh, 18rem);
+    max-block-size: min(calc(50 * var(--dvh)), 18rem);
     transform-origin: bottom center;
   }
 }

@@ -7,7 +7,6 @@ import { quantizeLatLonKey } from '$shared/geo';
 import { Clock, formatDayClock, MINUTE_MS } from '$shared/lib';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
-import { GRID_SOURCE_LABEL } from './fills';
 import { mergeConditions, pickForecast, tendencyText as tendencyTextFor } from './forecast-series';
 
 import {
@@ -30,7 +29,7 @@ import {
   weatherWarningIdentity,
 } from './signalk-weather';
 import { activeWarnings } from './warning-severity';
-import { conditionsFromReadout, readoutAtBracket } from './weather-readout';
+import { conditionsFromReadout, provenanceLabel, readoutAtBracket } from './weather-readout';
 
 interface Props {
   origin: string;
@@ -275,11 +274,7 @@ const currentCached = $derived(
   !!providerCurrent &&
     (providerCurrent.observed ? observationStatus === 'failure' : forecastStatus === 'failure'),
 );
-const sourceLabel = $derived.by(() => {
-  if (current?.provenance === 'mixed') return `${providerLabel} + ${GRID_SOURCE_LABEL}`;
-  if (current?.provenance === 'provider') return providerLabel ?? GRID_SOURCE_LABEL;
-  return GRID_SOURCE_LABEL;
-});
+const sourceLabel = $derived(provenanceLabel(current?.provenance, providerLabel));
 
 // The barometric tendency, the datum a sailor actually decides by. The provider's qualitative
 // string wins when present; otherwise the trailing 3-hour delta computed from the free grid.
@@ -336,7 +331,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
       <ul class="warnings bare-list" role="alert">
         {#each sortedWarnings as w, index (`${weatherWarningIdentity(w)}:${index}`)}
           {@const until = untilLabel(w.endTime)}
-          <li class="alert-note alert-note--filled warning">
+          <li class="alert-note alert-note--filled icon-note warning">
             <TriangleAlert size={14} aria-hidden="true" />
             <span>
               <b>{w.type}</b>
@@ -387,7 +382,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
     {/if}
 
     {#if forecast.length > 0}
-      <ForecastList {forecast} horizonH={forecastHorizonH} {units} />
+      <ForecastList {forecast} horizonH={forecastHorizonH} {units} {providerLabel} />
     {/if}
   {/if}
 </section>
@@ -422,18 +417,13 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
 }
 /* The warning banner reuses .alert-note .alert-note--filled for the alarm border, radius, alarm-tint
    fill, text color, and the small-panel body size (text-sm, never the smallest tier, since a gale
-   advisory must stay readable on a pitching deck); only the icon-and-text row layout and its tighter
-   padding are scoped here. */
+   advisory must stay readable on a pitching deck), and .icon-note for the icon-and-text row; only
+   the tighter padding and the alarm icon color are scoped here. */
 .warning {
-  display: flex;
-  align-items: start;
-  gap: 0.35rem;
   padding: 0.35rem 0.45rem;
 }
 .warning :global(svg) {
   color: var(--alarm);
-  flex: 0 0 auto;
-  margin-block-start: 0.1rem;
 }
 /* Let a long unbroken provider string wrap rather than overflow the fixed-width conditions panel. */
 .warning span {
@@ -450,7 +440,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
 @media (max-width: 600px) {
   .conditions {
     inline-size: 100%;
-    max-block-size: 45vh;
+    max-block-size: calc(45 * var(--dvh));
   }
 }
 </style>

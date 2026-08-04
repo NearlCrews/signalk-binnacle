@@ -286,4 +286,20 @@ describe('createPointConditionsLoader', () => {
     expect(deps.observations).toHaveBeenCalledTimes(1);
     expect(deps.forecasts).toHaveBeenCalledTimes(1);
   });
+
+  it('reports unavailable, not stale, when a refresh fails over a cached empty warning list', async () => {
+    const nowRef = { ms: 0 };
+    const deps = makeDeps(nowRef);
+    deps.warnings.mockResolvedValueOnce({ status: 'empty' });
+    const loader = createPointConditionsLoader(deps);
+    const first = await loader.load('http://pi', 'provider-id', 1, 2);
+    expect(first.warnings).toEqual([]);
+    expect(first.warningAvailability).toBe('fresh');
+
+    nowRef.ms = 10 * 60_000;
+    deps.warnings.mockResolvedValueOnce({ status: 'failure' });
+    const warningPoint = await loader.loadWarnings('http://pi', 'provider-id', 1, 2);
+    expect(warningPoint.warnings).toEqual([]);
+    expect(warningPoint.warningAvailability).toBe('unavailable');
+  });
 });

@@ -54,6 +54,13 @@ function renderedSelection(
   return { station, mode };
 }
 
+// Lower wins: a visible label outranks a transparent touch circle, and a tide station outranks a
+// current station within the same layer class.
+function hitRank(feature: NonNullable<LayerHitEvent['features']>[number]): number {
+  const layerRank = feature.layer?.id === TIDES_LABEL_LAYER ? 0 : 2;
+  return layerRank + (featureIdentity(feature)?.kind === 'tide' ? 0 : 1);
+}
+
 // Layer-delegated listeners survive a base-style reset on the same MapLibre map. Retain their exact
 // references, make reattachment idempotent, and resolve every untrusted feature through either its
 // validated rendered snapshot or the current bounded store.
@@ -66,11 +73,13 @@ export function createTideHitHandlers(
     if (!interactionsAllowed()) return false;
     const features = event.features ?? [];
     // The transparent touch circles render above labels. Prefer a visible label under the pointer,
-    // then preserve MapLibre's topmost-first order within each layer class.
-    const prioritizedFeatures = [
-      ...features.filter((feature) => feature.layer?.id === TIDES_LABEL_LAYER),
-      ...features.filter((feature) => feature.layer?.id !== TIDES_LABEL_LAYER),
-    ];
+    // then a tide station over a current station at the same spot: queryRenderedFeatures order is
+    // source-driven rather than specified, so an overlap would otherwise resolve differently for the
+    // same tap. Array sort is stable, so MapLibre's topmost-first order survives within one rank.
+    const prioritizedFeatures = features
+      .map((feature) => ({ feature, rank: hitRank(feature) }))
+      .sort((a, b) => a.rank - b.rank)
+      .map((entry) => entry.feature);
     for (const feature of prioritizedFeatures) {
       if (feature.geometry.type !== 'Point') continue;
       const identity = featureIdentity(feature);
