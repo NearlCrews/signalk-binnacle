@@ -1,3 +1,6 @@
+# A cooldown holds each new release for a week before Dependabot proposes it. A compromised package
+# is usually caught and yanked within hours of publication, so waiting is what keeps this repository
+# from being the first consumer of a malicious version. Security updates are exempt by design.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -5,6 +8,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       dev-dependencies:
@@ -32,6 +37,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:

@@ -61,9 +61,14 @@ All notable changes to Binnacle are documented here. The format follows
   community registry scores only the runtime one.
 - Runtime and build dependencies moved to their latest compatible releases, including Lucide 1.28,
   MapLibre GL JS 6.1, Biome 2.5.6, Playwright 1.62.1, Size Limit 13.0.3, Knip 6.31, and Vite 8.2.
-  TypeScript stays on 6.0.3 while the current typescript-eslint integration requires a version below
-  6.1. Development and release workflows now use npm 11.19.0, the newest release compatible with the
-  Node 22.18 runtime floor.
+  Every direct dependency is now at its latest release except the `typescript` package, which stays
+  on 6.x deliberately: TypeScript 7 moved the compiler API behind an unstable entry point, so the
+  tools that read types cap below it. Type checking already runs on the TypeScript 7 compiler
+  regardless, through `tsgo`. Development and release workflows now use npm 11.19.0, the newest
+  release compatible with the Node 22.18 runtime floor.
+- Dependabot now holds each new release for a week before proposing it, so this repository is not
+  the first consumer of a package version that turns out to be compromised. Security updates are
+  exempt.
 
 <a id="v0181"></a>
 
