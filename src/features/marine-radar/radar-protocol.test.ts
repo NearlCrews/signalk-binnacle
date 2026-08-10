@@ -56,4 +56,18 @@ describe('decodeRadarMessage', () => {
     expect(decodeRadarMessage(encodeSpokes(4), { maxSpokes: 2 }).spokes).toHaveLength(2);
     expect(decodeRadarMessage(encodeSpokes(1, 9), { maxSpokeBytes: 8 }).spokes).toEqual([]);
   });
+
+  it('keeps decoded spokes when a trailing unknown field is truncated', () => {
+    const spoke = encodeSpoke();
+    const truncated = new Uint8Array(spoke.length + 4);
+    truncated.set(spoke, 0);
+    // An unknown length-delimited field (id 15, wire type 2) whose length varint is cut off by the
+    // message boundary: every present byte keeps the continuation bit, so the read runs past the
+    // buffer and throws inside the decoder.
+    truncated.set([0x7a, 0xff, 0xff, 0xff], spoke.length);
+
+    const msg = decodeRadarMessage(truncated);
+    expect(msg.spokes).toHaveLength(1);
+    expect(msg.spokes[0].angle).toBe(10);
+  });
 });

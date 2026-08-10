@@ -1,6 +1,7 @@
 import { normalizeControlDefinitions, normalizeRadarIdentities } from './radar-client';
 import {
   type ControlDefinition,
+  POWER_CONTROL_IDS,
   POWER_PENDING_KEY,
   type RadarAreaDraft,
   type RadarAvailability,
@@ -93,6 +94,8 @@ export class MarineRadarStore {
     }
   });
 
+  // The store takes ownership of the RadarInfo objects: reconcile writes live control state back
+  // onto them, so a caller must hand over freshly built objects, never shared fixtures.
   setDiscovered(radars: RadarInfo[]): void {
     const normalized = normalizeRadarIdentities(radars);
     this.radars = normalized;
@@ -146,23 +149,64 @@ export class MarineRadarStore {
 
   // Reconcile live control values from the standard controls endpoint or Signal K stream. Skip pending
   // ids so a server echo cannot clobber an optimistic write that has not completed.
+  // Returns whether the operational status changed, so callers can resync the stream lifecycle
+  // exactly when gating moved rather than snapshotting the status around every call.
   reconcile(
     controls: Record<string, RadarControlEntry | undefined>,
     pending: ReadonlySet<string>,
-  ): void {
-    // The loop-top pending guard covers POWER_PENDING_KEY too, which is what keeps a poll landing
-    // right after an optimistic transmit or standby from flipping the pill back to the stale value.
+  ): boolean {
+    // While the dedicated power write is pending, every power-spelled id is skipped, which is what
+    // keeps a poll landing right after an optimistic transmit or standby from flipping the pill back
+    // to the stale value regardless of whether the provider spells it power or status.
+    const powerPending = pending.has(POWER_PENDING_KEY);
+    const statusBefore = this.operationalStatus;
+    const applied: Record<string, RadarControlEntry> = Object.create(null);
     for (const [id, entry] of Object.entries(controls)) {
-      if (!entry || pending.has(id)) continue;
+      if (!entry || pending.has(id) || (powerPending && POWER_CONTROL_IDS.has(id))) continue;
+      applied[id] = entry;
       this.controlEntries[id] = entry;
       this.areaVersion += 1;
       if (entry.value !== undefined) this.controlValues[id] = entry.value;
       if (entry.auto !== undefined) this.controlAuto[id] = entry.auto;
-      if (id === POWER_PENDING_KEY) {
+      if (POWER_CONTROL_IDS.has(id)) {
         const status = statusFromPower(entry.value);
         if (status) this.operationalStatus = status;
       }
     }
+    // The selected radar's discovery entry follows every applied reconcile, poll and delta
+    // alike, so a switch away and back seeds the live state rather than the discovery-time
+    // snapshot. Entries the pending guards skipped stay out, keeping echo suppression intact.
+    if (this.selectedId !== undefined) this.reconcileRadarControls(this.selectedId, applied);
+    return this.operationalStatus !== statusBefore;
+  }
+
+  // Reconcile a delta for a radar that is not selected: keep its reported controls and status
+  // current so a later select() seeds the live state rather than the discovery-time snapshot. The
+  // caller passes complete entries (scalars already merged), so assignment replaces the entry.
+  reconcileRadarControls(
+    radarId: string,
+    controls: Record<string, RadarControlEntry | undefined>,
+  ): void {
+    const radar = this.radars.find((r) => r.id === radarId);
+    if (!radar) return;
+    // radar.controls is a null-prototype map, which the $state proxy leaves unproxied, so a
+    // per-key write would be invisible to reactive readers; merging into a fresh map and
+    // reassigning through the proxied radar object is what signals the change.
+    const merged: Record<string, RadarControlEntry> = Object.assign(
+      Object.create(null),
+      radar.controls,
+    );
+    let changed = false;
+    for (const [id, entry] of Object.entries(controls)) {
+      if (!entry) continue;
+      merged[id] = entry;
+      changed = true;
+      if (POWER_CONTROL_IDS.has(id)) {
+        const status = statusFromPower(entry.value);
+        if (status) radar.status = status;
+      }
+    }
+    if (changed) radar.controls = merged;
   }
 
   setCapabilities(controls: ControlDefinition[]): void {
@@ -208,6 +252,13 @@ export class MarineRadarStore {
   setRendererStatus(status: RadarRendererStatus, detail?: string): void {
     this.rendererStatus = status;
     this.rendererDetail = detail;
+  }
+
+  // Withdraw an input-blocked report, and only that: 'error' and 'context-lost' describe the GL
+  // context rather than the inputs, so the precedence lives here once instead of at every
+  // teardown path that could otherwise forget it and strand a stale blocked message.
+  clearBlockedStatus(): void {
+    if (this.rendererStatus === 'blocked') this.setRendererStatus('ready');
   }
 
   setControlPending(id: string, value: boolean): void {

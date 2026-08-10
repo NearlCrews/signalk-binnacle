@@ -14,7 +14,8 @@ Binnacle uses the Signal K v2 Radar API:
 - `PUT /signalk/v2/api/vessels/self/radars/{id}/controls/{controlId}` writes a control.
 - `PUT /signalk/v2/api/vessels/self/radars/{id}` writes one complete structured area through the
   standard bulk-control envelope.
-- Signal K deltas at `radars.{radarId}.controls.{controlId}` reconcile live out-of-band changes.
+- Signal K deltas at `radars.{radarId}.controls.{controlId}` reconcile live out-of-band changes for
+  every discovered radar, not only the selected one, so switching radars seeds current values.
 - `RadarInfo.streamUrl`, or the built-in per-radar stream fallback, carries protobuf spokes over a
   WebSocket.
 
@@ -45,7 +46,8 @@ to same-origin streams.
 
 Discovery distinguishes checking, available, absent, restricted, unreachable, and invalid provider
 states. It refreshes after reconnects and token changes, and removes a radar that disappears. A selection
-generation prevents a late capability or control response for one radar from overwriting another.
+generation prevents a late capability or control response for one radar from overwriting another. A
+rediscovery that changes the selected radar's legend reapplies the echo color table.
 
 The spoke worker opens only when all of these are true:
 
@@ -56,13 +58,20 @@ The spoke worker opens only when all of these are true:
 
 The worker integrates spokes in a bounded polar buffer and transfers a frame only after new spokes
 arrive. If no spoke arrives for five seconds, Binnacle clears the echo and range rings and reports the
-picture as stale. Reconnect attempts use bounded jitter. Hiding the overlay, putting the radar in standby,
-or backgrounding the page closes the stream and clears the cached picture.
+picture as stale. Reconnect attempts use bounded jitter, and an armed reconnect backoff is the single
+reconnect authority: control deltas and other lifecycle syncs cannot preempt it, and they do not tear
+down a silent but still open stream. Hiding the overlay, putting the radar in standby,
+or backgrounding the page closes the stream and clears the cached picture. A standby or transmit
+change reconciled from the controls poll or a Signal K delta resyncs the stream the same way:
+standby closes it and clears the picture, and transmit reopens it. Providers spell the operational
+control `power` or `status`; both drive the TX and standby state.
 
 The chart renderer requires a fresh vessel position and heading. Spoke bearing supplies heading when
 present; otherwise Binnacle falls back to a fresh `navigation.headingTrue`. A reconnect generation and
 receipt-time check prevent pre-reconnect or timed-out center and heading values from positioning a new
-picture. Without fresh inputs, it suppresses the echo instead of guessing north-up. Stream health and
+picture. Without fresh inputs, it suppresses the echo instead of guessing north-up: a missing
+own-vessel position reports the same blocked state as a stale one, and clearing the picture withdraws
+an input-blocked report while GL context failures stay reported. Stream health and
 WebGL renderer health are reported separately.
 
 ## Controls and units
@@ -130,7 +139,9 @@ night-red themes.
 
 The echo, range rings, guard zones, and no-transmit sectors all use the same effective heading and
 range from the current spoke frame. Navigation true heading and the discovered radar range are
-fallbacks only when the frame does not supply those values. A live range change invalidates area
+fallbacks only when the frame does not supply those values, and the echo follows the live effective
+heading on every repaint rather than only when a new frame arrives, so the picture cannot lag a turn
+between frames. A live range change invalidates area
 geometry with the echo, so a sector cannot remain shorter or longer than the displayed radar picture.
 
 Radar API values remain SI in state and writes. Meters follow the server's metric or imperial display
@@ -142,9 +153,16 @@ is active, Binnacle coalesces unsent values to the newest snapshot so an older r
 radar after the desired final value. Polling stays excluded for the full request lifetime, then observes
 a short echo grace period. The panel shows pending state and rejected writes, restores the exact prior
 scalar or geometry entry after the final write fails, and explains when read-write access is required.
+A pending scalar write never disables its widget: the queue accepts the newer value, so rapid tuning
+stays possible on a slow link, while structured area saves and the power control stay blocked during
+their in-flight write.
 Every write rechecks static read-only state and the live allowed flag at the controller boundary.
-Dotted control ids reconcile from Signal K deltas without being mistaken for nested controls, and
-closing the radar controller stops its capability polling.
+A scalar or record-shaped Signal K delta merges into the stored entry, because a delta carries only
+what changed and a replace would clear the allowed, auto, or geometry fields; only a /controls
+hydration replaces entries whole. The selected radar's deltas also write back into its discovery
+entry, so switching away and back seeds live control state.
+Dotted radar and control ids reconcile from Signal K deltas without being mistaken for nested
+controls, and closing the radar controller stops its capability polling.
 
 The Signal K single-control route and some providers each unwrap or wrap `body.value`, which can nest
 a structured value and lose its required wire shape. Structured writes therefore use the standard
@@ -161,7 +179,8 @@ alpha, line weight, and dash patterns, never through a blue or green pixel.
 
 Focused tests cover Radar API parsing, bounded geometry, relative and cross-origin URLs, token handling,
 protobuf decoding, spoke integration, pending-frame state, buffer recycling, serialized control
-writes, whole-entry rollback, live permission changes, provider removal, heading math, WebGL setup,
+writes, whole-entry rollback, control-delta merging, stream resync on reconciled power changes,
+backoff-owned reconnects, live permission changes, provider removal, heading math, WebGL setup,
 theme tables, range geometry, vector overlays, and synthetic radar frames. The Playwright smoke suite
 verifies both the unavailable Radar menu path on a stock server and a provider-backed discovery,
 control hydration, identity, status, transmit confirmation, guarded radar switching and menu

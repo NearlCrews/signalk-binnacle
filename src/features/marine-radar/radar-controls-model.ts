@@ -1,10 +1,11 @@
 import { validateRadarRect } from './radar-rect-model';
 import { validateRadarSector } from './radar-sector-model';
-import type {
-  ControlDefinition,
-  RadarAreaDraft,
-  RadarControlEntry,
-  RadarStructuredValue,
+import {
+  type ControlDefinition,
+  POWER_CONTROL_IDS,
+  type RadarAreaDraft,
+  type RadarControlEntry,
+  type RadarStructuredValue,
 } from './radar-types';
 import { validateRadarZone } from './radar-zone-model';
 
@@ -134,8 +135,6 @@ export function isPrimaryControl(def: ControlDefinition): boolean {
 // The radar power/operational-state control. It is rendered as the dedicated TX/Standby section driven
 // by the live operational status, not as a generic slider or select in the controls list, so it is
 // excluded from both the primary and advanced groups.
-const POWER_CONTROL_IDS: ReadonlySet<string> = new Set(['power', 'status']);
-
 export function isPowerControl(def: ControlDefinition): boolean {
   return POWER_CONTROL_IDS.has(def.id);
 }

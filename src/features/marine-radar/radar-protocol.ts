@@ -58,9 +58,9 @@ function isValidSpoke(spoke: RadarSpoke, maxSpokeBytes: number): boolean {
 
 // Decode a Signal K radar spoke message (RadarMessage.proto: `repeated Spoke spokes = 2`, lat/lon as
 // double degrees). Unknown fields are skipped so a provider extension never breaks the decode. A
-// truncated or malformed trailing spoke is salvaged: the spokes that parsed before it are kept rather
-// than discarding the whole revolution's batch, so an occasional provider quirk thins the picture by one
-// spoke instead of blanking it.
+// truncated or malformed trailing field, spoke or not, is salvaged: the spokes that parsed before it
+// are kept rather than discarding the whole revolution's batch, so an occasional provider quirk or a
+// proxy-cut message thins the picture instead of blanking it.
 export function decodeRadarMessage(
   bytes: Uint8Array,
   limits: RadarDecodeLimits = {},
@@ -82,24 +82,26 @@ export function decodeRadarMessage(
   const pbf = new PbfReader(bytes);
   const msg: RadarMessage = { spokes: [] };
   const len = bytes.length;
+  // The whole loop body is the salvage boundary: a tag varint, an unknown-field skip, or a spoke
+  // read that runs past the buffer bails out keeping every spoke decoded so far.
   while (pbf.pos < len) {
-    const tag = pbf.readVarint();
-    const field = tag >> 3;
-    if (field === 2) {
+    try {
+      const tag = pbf.readVarint();
+      const field = tag >> 3;
+      if (field !== 2) {
+        pbf.skip(tag);
+        continue;
+      }
       if (msg.spokes.length >= maxSpokes) break;
-      // Clamp the sub-message end to the buffer so a corrupt length varint cannot drive a read past it,
-      // and bail out of the loop (keeping prior spokes) if a spoke field still reads out of range.
+      // Clamp the sub-message end to the buffer so a corrupt length varint cannot drive a read past
+      // it even before the catch below would contain it.
       const declaredLength = pbf.readVarint();
       if (!Number.isSafeInteger(declaredLength) || declaredLength < 0) break;
       const end = Math.min(declaredLength + pbf.pos, len);
-      try {
-        const spoke = readSpoke(pbf, end);
-        if (isValidSpoke(spoke, maxSpokeBytes)) msg.spokes.push(spoke);
-      } catch {
-        break;
-      }
-    } else {
-      pbf.skip(tag);
+      const spoke = readSpoke(pbf, end);
+      if (isValidSpoke(spoke, maxSpokeBytes)) msg.spokes.push(spoke);
+    } catch {
+      break;
     }
   }
   return msg;

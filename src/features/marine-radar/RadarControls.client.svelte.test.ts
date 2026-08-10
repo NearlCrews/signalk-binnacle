@@ -119,6 +119,36 @@ describe('RadarControls status', () => {
   });
 });
 
+describe('RadarControls pending writes', () => {
+  it('keeps a scalar widget usable while its write is pending, gating only power', () => {
+    const store = new MarineRadarStore();
+    discoverRadar(store, { gain: { value: 50 } });
+    store.setCapabilities([
+      {
+        id: 'gain',
+        name: 'Gain',
+        dialect: 'v5',
+        type: 'number',
+        range: { min: 0, max: 100 },
+        modes: ['auto', 'manual'],
+      },
+    ]);
+    store.setControlPending('gain', true);
+    store.setControlPending('power', true);
+    const { target } = mountControls(store);
+
+    const slider = target.querySelector<HTMLInputElement>('input[type="range"]');
+    expect(slider?.disabled).toBe(false);
+    const auto = target.querySelector<HTMLButtonElement>('button.auto-toggle');
+    expect(auto?.disabled).toBe(false);
+    expect(target.textContent).toContain('Applying');
+    const standby = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Standby',
+    );
+    expect(standby?.disabled).toBe(true);
+  });
+});
+
 describe('RadarControls sliders', () => {
   it('announces the live value with its unit, and says so when no value has arrived', () => {
     const store = new MarineRadarStore();

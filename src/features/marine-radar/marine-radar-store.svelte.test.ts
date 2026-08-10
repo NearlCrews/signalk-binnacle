@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { MarineRadarStore } from './marine-radar-store.svelte';
+import { makeRadar } from './radar-test-fixtures';
 import type { RadarInfo } from './radar-types';
 
-const radar: RadarInfo = {
-  id: 'a',
-  name: 'A',
-  status: 'standby',
-  spokesPerRevolution: 2048,
-  maxSpokeLen: 1024,
-  range: 1852,
-  controls: { gain: { value: 50 }, sea: { value: 20 } },
-};
+// Built per test rather than shared: reconcile writes the applied controls back onto the RadarInfo
+// the store was handed, so one fixture would carry a reconciled gain and status into the next test.
+const twoControlRadar = (): RadarInfo =>
+  makeRadar({ controls: { gain: { value: 50 }, sea: { value: 20 } } });
 
 describe('MarineRadarStore', () => {
   it('selects the first radar on discovery and exposes it via selected', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     expect(store.selectedId).toBe('a');
@@ -21,6 +18,7 @@ describe('MarineRadarStore', () => {
   });
 
   it('seeds controlValues from the discovered radar controls map', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     expect(store.controlValues.gain).toBe(50);
@@ -34,10 +32,9 @@ describe('MarineRadarStore', () => {
   });
 
   it('seeds controlAuto from the discovered radar, only for controls reporting auto', () => {
-    const autoRadar: RadarInfo = {
-      ...radar,
+    const autoRadar = makeRadar({
       controls: { gain: { value: 50, auto: true }, sea: { value: 20, auto: false } },
-    };
+    });
     const store = new MarineRadarStore();
     store.setDiscovered([autoRadar]);
     expect(store.controlAuto.gain).toBe(true);
@@ -51,6 +48,7 @@ describe('MarineRadarStore', () => {
   });
 
   it('clears selection and radars when discovery is empty', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     store.setDiscovered([]);
@@ -59,12 +57,8 @@ describe('MarineRadarStore', () => {
   });
 
   it('seeds control values from the newly selected radar when selection changes', () => {
-    const radarB: RadarInfo = {
-      ...radar,
-      id: 'b',
-      name: 'B',
-      controls: { gain: { value: 75 } },
-    };
+    const radar = twoControlRadar();
+    const radarB = makeRadar({ id: 'b', name: 'B', controls: { gain: { value: 75 } } });
     const store = new MarineRadarStore();
     store.setDiscovered([radar, radarB]);
     store.setControlValue('gain', 99);
@@ -74,6 +68,7 @@ describe('MarineRadarStore', () => {
   });
 
   it('clears a stale read-only warning on a fresh discovery', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setControlsForbidden(true);
     store.setDiscovered([radar]);
@@ -81,6 +76,7 @@ describe('MarineRadarStore', () => {
   });
 
   it('defends against duplicate radar and control identities', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([
       radar,
@@ -100,12 +96,14 @@ describe('MarineRadarStore', () => {
   });
 
   it('seeds the operational status from the discovered radar', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([{ ...radar, status: 'transmit' }]);
     expect(store.operationalStatus).toBe('transmit');
   });
 
   it('reconciles status and control values from a state snapshot', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     store.reconcile(
@@ -119,10 +117,50 @@ describe('MarineRadarStore', () => {
   });
 
   it('reconcile does not clobber an in-flight optimistic write (a pending control)', () => {
+    const radar = twoControlRadar();
     const store = new MarineRadarStore();
     store.setDiscovered([radar]);
     store.setControlValue('gain', 99);
     store.reconcile({ gain: { value: 50 } }, new Set(['gain']));
     expect(store.controlValues.gain).toBe(99);
+  });
+
+  it('reconciles a status-spelled power control to the operational state', () => {
+    const radar = twoControlRadar();
+    const store = new MarineRadarStore();
+    store.setDiscovered([radar]);
+    store.reconcile({ status: { value: 'transmit' } }, new Set());
+    expect(store.operationalStatus).toBe('transmit');
+  });
+
+  it('keeps the optimistic power pill against a status echo while the power write is pending', () => {
+    const radar = twoControlRadar();
+    const store = new MarineRadarStore();
+    store.setDiscovered([radar]);
+    store.setOperationalStatus('transmit');
+    store.reconcile({ status: { value: 'standby' } }, new Set(['power']));
+    expect(store.operationalStatus).toBe('transmit');
+  });
+
+  it('reconcileRadarControls updates a non-selected radar without touching the selection', () => {
+    const radar = twoControlRadar();
+    const radarB = makeRadar({ id: 'b', name: 'B', controls: { gain: { value: 25 } } });
+    const store = new MarineRadarStore();
+    store.setDiscovered([radar, radarB]);
+    store.reconcileRadarControls('b', {
+      gain: { value: 40 },
+      power: { value: 'transmit' },
+    });
+
+    const b = store.radars.find((r) => r.id === 'b');
+    expect(b?.controls.gain?.value).toBe(40);
+    expect(b?.status).toBe('transmit');
+    expect(store.selectedId).toBe('a');
+    expect(store.controlValues.gain).toBe(50);
+    expect(store.operationalStatus).toBe('standby');
+
+    store.select('b');
+    expect(store.operationalStatus).toBe('transmit');
+    expect(store.controlValues.gain).toBe(40);
   });
 });

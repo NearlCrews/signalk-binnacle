@@ -10,24 +10,24 @@ import {
   writeControl,
   writeStructuredControl,
 } from './radar-client';
+import { MAX_RADARS } from './radar-limits';
+import { makeRadar } from './radar-test-fixtures';
 import type { RadarInfo } from './radar-types';
 
 afterEach(() => vi.restoreAllMocks());
 
 const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
-const radar: RadarInfo = {
+const radar = makeRadar({
   id: 'nav1034A',
   name: 'Halo',
   brand: 'Navico',
   status: 'transmit',
-  spokesPerRevolution: 2048,
-  maxSpokeLen: 1024,
   range: 926,
   controls: { gain: { value: 50 }, rain: { value: 10, auto: false } },
   legend: [{ color: '#00ff00', label: 'weak', minValue: 0, maxValue: 63 }],
   streamUrl: 'ws://boat.local/signalk/v2/api/vessels/self/radars/nav1034A/stream',
-};
+});
 
 describe('discoverRadars', () => {
   it('returns the parsed array on a 200 response', async () => {
@@ -144,6 +144,21 @@ describe('discoverRadars', () => {
       ),
     );
     expect((await discoverRadars('http://boat.local', undefined)).radars).toEqual([]);
+  });
+
+  it('reports an oversized radar list distinctly from a non-array body', async () => {
+    const body = Array.from({ length: MAX_RADARS + 1 }, (_, index) => ({
+      ...radar,
+      id: `radar-${index}`,
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })),
+    );
+    const result = await discoverRadars('http://boat.local', undefined);
+    expect(result.radars).toEqual([]);
+    expect(result.availability).toBe('invalid');
+    expect(result.detail).toBe(`Radar discovery returned more than ${MAX_RADARS} radars.`);
   });
 
   it('skips entries that have no id field', async () => {

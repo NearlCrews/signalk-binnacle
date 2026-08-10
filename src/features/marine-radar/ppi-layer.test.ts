@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mapThemePaint } from '$shared/map';
 import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { MarineRadarStore } from './marine-radar-store.svelte';
@@ -12,6 +12,28 @@ import {
   RADAR_RINGS_LAYER_ID,
 } from './ppi-layer';
 import type { RadarFrame } from './radar-frame-core';
+import { makeRadar } from './radar-test-fixtures';
+
+// A recording RadarGl stand-in so the echo custom layer's onAdd and render can run without a real
+// WebGL2 context. Only the tests that drive render construct one.
+const glInstances = vi.hoisted(
+  () => [] as Array<Record<'setData' | 'setLegend' | 'setHeading', ReturnType<typeof vi.fn>>>,
+);
+vi.mock('./radar-gl', () => ({
+  RadarGl: class {
+    setData = vi.fn();
+    setLegend = vi.fn();
+    setOpacity = vi.fn();
+    setHeading = vi.fn();
+    setSweep = vi.fn();
+    setSweepColor = vi.fn();
+    render = vi.fn();
+    dispose = vi.fn();
+    constructor() {
+      glInstances.push(this as never);
+    }
+  },
+}));
 
 const RINGS_SOURCE_ID = 'marine-radar-rings-src';
 // Three rings, each a line feature plus a label point, and the heading line last.
@@ -27,6 +49,54 @@ function frameOf(range = 1852, heading?: number): RadarFrame {
     spokeCount: 1,
   };
 }
+
+const discoveredRadar = () => makeRadar({ status: 'transmit', controls: {} });
+
+// Mounts the echo custom layer far enough to drive its render callback directly: the fake map
+// records the layer, onAdd builds the mocked RadarGl, and the returned args carry a 16-entry main
+// matrix the way MapLibre's render call does.
+async function mountEcho(
+  options: {
+    getCenter?: () => { latitude: number; longitude: number } | undefined;
+    getHeading?: () => number | undefined;
+    centerFresh?: () => boolean;
+  } = {},
+) {
+  vi.stubGlobal('document', new EventTarget());
+  const store = new MarineRadarStore();
+  const layer = createPpiLayer(
+    store,
+    options.getCenter ?? (() => ({ latitude: 10, longitude: 20 })),
+    options.getHeading ?? (() => 0),
+    undefined,
+    { center: options.centerFresh },
+  );
+  const map = createFakeMap();
+  const ctx = fakeOverlayContext(map);
+  await layer.add(ctx);
+  const echo = map.layers.get(RADAR_ECHO_LAYER_ID) as unknown as {
+    onAdd: (map: unknown, gl: unknown) => void;
+    render: (gl: unknown, args: unknown) => void;
+  };
+  echo.onAdd(map, {});
+  layer.setVisible(ctx, true);
+  const gl = glInstances.at(-1);
+  if (!gl) throw new Error('expected a RadarGl instance');
+  return {
+    store,
+    layer,
+    map,
+    ctx,
+    echo,
+    gl,
+    renderArgs: { defaultProjectionData: { mainMatrix: new Array(16).fill(0) as number[] } },
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  glInstances.length = 0;
+});
 
 describe('createPpiLayer', () => {
   it('declares the marine-radar identity, the traffic band, and its managed layer ids', () => {
@@ -124,32 +194,17 @@ describe('createPpiLayer', () => {
     expect(layer.available?.()).toBe(false);
     expect(layer.unavailableHint).toBeTruthy();
     expect(layer.manageable).toBe(true);
-    store.setDiscovered([
-      {
-        id: 'a',
-        name: 'A',
-        status: 'standby',
-        spokesPerRevolution: 16,
-        maxSpokeLen: 8,
-        range: 100,
-        controls: {},
-      },
-    ]);
+    store.setDiscovered([makeRadar({ range: 100, controls: {} })]);
     expect(layer.available?.()).toBe(true);
   });
 
   it('routes deliberate chart points into the active structured draft', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([
-      {
-        id: 'a',
-        name: 'A',
-        status: 'standby',
-        spokesPerRevolution: 16,
-        maxSpokeLen: 8,
+      makeRadar({
         range: 1_000,
         controls: { noTransmitSector1: { value: -1, endValue: 1, enabled: false } },
-      },
+      }),
     ]);
     store.setCapabilities([
       {
@@ -185,15 +240,11 @@ describe('createPpiLayer', () => {
   it('uses the spoke-frame heading and range for radar-area geometry', async () => {
     const store = new MarineRadarStore();
     store.setDiscovered([
-      {
-        id: 'a',
-        name: 'A',
+      makeRadar({
         status: 'transmit',
-        spokesPerRevolution: 16,
-        maxSpokeLen: 8,
         range: 4_000,
         controls: { noTransmitSector1: { value: 0, endValue: Math.PI / 2, enabled: true } },
-      },
+      }),
     ]);
     store.setCapabilities([
       {
@@ -229,15 +280,11 @@ describe('createPpiLayer', () => {
   it('stops chart placement and reports when heading freshness is lost between taps', () => {
     const store = new MarineRadarStore();
     store.setDiscovered([
-      {
-        id: 'a',
-        name: 'A',
+      makeRadar({
         status: 'transmit',
-        spokesPerRevolution: 16,
-        maxSpokeLen: 8,
         range: 1_000,
         controls: { noTransmitSector1: { value: -1, endValue: 1, enabled: false } },
-      },
+      }),
     ]);
     store.setCapabilities([
       {
@@ -268,6 +315,65 @@ describe('createPpiLayer', () => {
     expect(layer.handleChartPoint({ latitude: 0, longitude: 0.01 })).toBe(false);
     expect(layer.chartEditing()).toBe(false);
     expect(store.areaDraft?.chartError).toContain('heading');
+  });
+
+  it('updates the echo heading every render, not only when a new frame arrives', async () => {
+    let heading = 0;
+    const { store, layer, echo, gl, renderArgs } = await mountEcho({ getHeading: () => heading });
+    store.setDiscovered([discoveredRadar()]);
+    layer.pushFrame(frameOf(1852, undefined));
+
+    echo.render({}, renderArgs);
+    expect(gl.setHeading).toHaveBeenLastCalledWith(0);
+    expect(gl.setData).toHaveBeenCalledTimes(1);
+
+    heading = Math.PI / 2;
+    echo.render({}, renderArgs);
+    expect(gl.setHeading).toHaveBeenLastCalledWith(Math.PI / 2);
+    // The frame upload stays dirty-gated; only the heading uniform tracks the live value.
+    expect(gl.setData).toHaveBeenCalledTimes(1);
+  });
+
+  it('reapplies a changed legend for the same radar id', async () => {
+    const { store, layer, ctx, gl } = await mountEcho();
+    store.setDiscovered([{ ...discoveredRadar(), legend: [{ color: '#00ff00', label: 'weak' }] }]);
+    layer.sync(ctx);
+    const applied = gl.setLegend.mock.calls.length;
+    layer.sync(ctx);
+    expect(gl.setLegend.mock.calls.length).toBe(applied);
+
+    store.setDiscovered([
+      { ...discoveredRadar(), legend: [{ color: '#ff0000', label: 'doppler' }] },
+    ]);
+    layer.sync(ctx);
+    expect(gl.setLegend.mock.calls.length).toBe(applied + 1);
+  });
+
+  it('reports blocked for a stale or missing fix and withdraws it when the frame clears', async () => {
+    let centerFresh = true;
+    let center: { latitude: number; longitude: number } | undefined;
+    const { store, layer, echo, renderArgs } = await mountEcho({
+      getCenter: () => center,
+      centerFresh: () => centerFresh,
+    });
+    store.setDiscovered([discoveredRadar()]);
+    layer.pushFrame(frameOf(1852, 0));
+
+    echo.render({}, renderArgs);
+    expect(store.rendererStatus).toBe('blocked');
+    expect(store.rendererDetail).toContain('No own-vessel position');
+
+    centerFresh = false;
+    echo.render({}, renderArgs);
+    expect(store.rendererStatus).toBe('blocked');
+    expect(store.rendererDetail).toContain('stale');
+
+    layer.clearFrame();
+    expect(store.rendererStatus).toBe('ready');
+
+    store.setRendererStatus('error', 'WebGL initialization failed.');
+    layer.clearFrame();
+    expect(store.rendererStatus).toBe('error');
   });
 
   it('uses zero-green, zero-blue colors for night radar vectors', async () => {

@@ -1,4 +1,5 @@
 import type { LatLon } from '$shared/geo';
+import { isRecord } from '$shared/lib';
 import { fullJitterDelay } from '$shared/signalk';
 import { MarineRadarStore } from './marine-radar-store.svelte';
 import { createPpiLayer, type PpiLayer } from './ppi-layer';
@@ -50,6 +51,11 @@ const REOPEN_MAX_MS = 30_000;
 const CONTROL_POLL_MS = 15_000;
 const ECHO_GRACE_MS = 3000;
 const STALE_MS = 5000;
+// A half-open socket (dead upstream with no close event, routine on boat WiFi) never reaches the
+// worker's close callback, so a stale picture would otherwise stay stale forever with only a
+// manual toggle as recovery. Past this window the freshness watch forces the reconnect the
+// transport never signaled.
+const STALE_ESCALATE_MS = 4 * STALE_MS;
 
 interface ControlSnapshot {
   entryExists: boolean;
@@ -133,6 +139,14 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     reopenTimer = undefined;
   }
 
+  // A selection change retires the whole backoff, timer and attempt count together. Distinct from
+  // clearReopen alone: closeStream and dispose cancel the timer but keep the attempt count, which
+  // the stale-escalation reopen still owes its delay to.
+  function retireReopenBackoff(): void {
+    clearReopen();
+    reopenAttempt = 0;
+  }
+
   function shouldStream(): boolean {
     return (
       !disposed &&
@@ -174,7 +188,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     const controls = await fetchRadarControls(deps.origin, deps.getToken(), radarId);
     if (disposed || generation !== selectionGeneration || store.selectedId !== radarId || !controls)
       return;
-    store.reconcile(controls, pendingIds());
+    // A poll can be the first place another station's standby or transmit shows up, and the stream
+    // must follow it: standby closes and clears the picture, transmit opens.
+    if (store.reconcile(controls, pendingIds())) void syncStreamLifecycle();
   }
 
   function setPolling(active: boolean): void {
@@ -198,9 +214,21 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     if (staleTimer) return;
     staleTimer = setInterval(() => {
       if (!shouldStream() || store.lastSpokeAt === undefined) return;
-      if (Date.now() - store.lastSpokeAt > STALE_MS && store.status !== 'stale') {
+      const quiet = Date.now() - store.lastSpokeAt;
+      if (quiet > STALE_MS && store.status !== 'stale') {
         store.setStatus('stale', `No new spokes in ${STALE_MS / 1000} s. Echo cleared.`);
         layer.clearFrame();
+      }
+      // Status leaves 'stale' synchronously so the next tick cannot double-escalate while the
+      // close is in flight; the lifecycle chain serializes against any concurrent transition.
+      if (quiet > STALE_ESCALATE_MS && store.status === 'stale' && !reopenTimer) {
+        store.setStatus('error', 'The radar spoke stream went quiet. Reconnecting.');
+        streamLifecycle = streamLifecycle
+          .catch(() => undefined)
+          .then(async () => {
+            await closeStream();
+            scheduleReopen();
+          });
       }
     }, 1000);
   }
@@ -208,9 +236,15 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   async function openSelectedStream(): Promise<void> {
     const radar = store.selected;
     if (!radar || !shouldStream()) return;
-    if (streamRadarId === radar.id && ['connecting', 'waiting', 'live'].includes(store.status))
+    // An armed backoff timer is the single reconnect authority: no other lifecycle sync may preempt
+    // it, or a chatty control-delta stream retries as fast as its deltas arrive. The stale state is
+    // deduplicated with the healthy ones so a silent but open stream is not torn down either.
+    if (reopenTimer) return;
+    if (
+      streamRadarId === radar.id &&
+      ['connecting', 'waiting', 'live', 'stale'].includes(store.status)
+    )
       return;
-    clearReopen();
     if (!worker) worker = createRadarWorkerClient();
     const generation = ++streamGeneration;
     streamRadarId = radar.id;
@@ -308,7 +342,12 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     const priorSelectedId = store.selectedId;
     store.setAvailability(result.availability, result.detail);
     store.setDiscovered(result.radars);
-    if (store.selectedId !== priorSelectedId) selectionEpoch += 1;
+    if (store.selectedId !== priorSelectedId) {
+      selectionEpoch += 1;
+      // A discovery-driven selection change retires the previous radar's reconnect backoff the same
+      // way selectRadar does, so the new radar's stream is not held behind a stale timer.
+      retireReopenBackoff();
+    }
     if (result.availability === 'auth-required') store.setControlsForbidden(true);
     await loadSelected();
   }
@@ -316,8 +355,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   function selectRadar(id: string): void {
     if (id === store.selectedId) return;
     selectionEpoch += 1;
-    clearReopen();
-    reopenAttempt = 0;
+    retireReopenBackoff();
     store.select(id);
     layer.clearFrame();
     void loadSelected();
@@ -566,24 +604,48 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     return true;
   }
 
-  // Apply standard Signal K control deltas such as radars.navico.controls.gain. The delta value can
-  // be a complete control object or a scalar value from providers that flatten the leaf.
+  // Apply standard Signal K control deltas such as radars.navico.controls.gain, for every
+  // discovered radar. The delta value can be a control record or a scalar value from providers
+  // that flatten the leaf; both merge into the stored entry, because a delta carries only what
+  // changed and a replace would wipe the allowed, auto, and geometry fields the /controls
+  // hydration established. Only hydration replaces entries whole. Radars are matched by their
+  // own per-radar prefix, which preserves dotted radar and control ids; if one radar id is a
+  // prefix of another's, the first discovered match wins, since the wire format offers no
+  // disambiguation.
   function applyControlDelta(path: string, value: unknown): void {
-    const selectedId = store.selectedId;
-    if (!selectedId) return;
-    const prefix = `radars.${selectedId}.controls.`;
-    if (!path.startsWith(prefix)) return;
-    const controlId = path.slice(prefix.length);
-    if (!controlId) return;
+    if (!path.startsWith('radars.')) return;
+    let radar: (typeof store.radars)[number] | undefined;
+    let controlId = '';
+    for (const candidate of store.radars) {
+      const prefix = `radars.${candidate.id}.controls.`;
+      if (path.startsWith(prefix)) {
+        radar = candidate;
+        controlId = path.slice(prefix.length);
+        break;
+      }
+    }
+    if (!radar || !controlId) return;
+    const selected = radar.id === store.selectedId;
+    const existing = selected ? store.controlEntries[controlId] : radar.controls[controlId];
     const controlValue =
       typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
-        ? { value }
-        : value;
+        ? { ...existing, value }
+        : isRecord(value)
+          ? { ...existing, ...value }
+          : value;
     const entry: RadarControlEntry | undefined = parseRadarControls({ [controlId]: controlValue })[
       controlId
     ];
-    if (entry) store.reconcile({ [controlId]: entry }, pendingIds());
-    void syncStreamLifecycle();
+    if (!entry) return;
+    if (!selected) {
+      store.reconcileRadarControls(radar.id, { [controlId]: entry });
+      return;
+    }
+    // Only a delta that changed the operational status can change stream gating, so only that
+    // resyncs the lifecycle; anything else would preempt an armed reconnect backoff. The
+    // reconcile also keeps the discovery snapshot current, so a switch away and back seeds live
+    // state.
+    if (store.reconcile({ [controlId]: entry }, pendingIds())) void syncStreamLifecycle();
   }
 
   function onDocumentVisibility(): void {

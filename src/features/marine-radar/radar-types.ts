@@ -19,6 +19,11 @@ export type RadarAvailability =
 // control id.
 export const POWER_PENDING_KEY = 'power';
 
+// The control ids providers use for the radar's operational power state. Both spellings drive the
+// TX/Standby pill and stream gating, and both are excluded from the generic controls list. The
+// pending sentinel for the dedicated power write stays POWER_PENDING_KEY alone.
+export const POWER_CONTROL_IDS: ReadonlySet<string> = new Set(['power', 'status']);
+
 // A live control value. `auto` is present on controls that support an automatic mode (gain, sea); a
 // value-only control (rain on some radars) omits it.
 type RadarControlScalar = number | string | boolean;

@@ -28,6 +28,7 @@ import { radarAreaFeatures, updateRadarAreaFromChart } from './radar-area-geomet
 import type { RadarFrame } from './radar-frame-core';
 import { rangeQuadHalfExtent } from './radar-geo';
 import { RadarGl } from './radar-gl';
+import type { LegendEntry } from './radar-types';
 import { headingLineFeature, rangeRingFeatures } from './radar-vectors';
 
 export const RADAR_ECHO_LAYER_ID = 'marine-radar-echo';
@@ -120,6 +121,10 @@ export function createPpiLayer(
   let frame: RadarFrame | undefined;
   let dirty = false;
   let legendVersion = '';
+  // The legend array applied to the GL color table, compared by reference: a rediscovery can change
+  // the same radar's legend (Doppler toggled, palette changed), and setDiscovered always builds
+  // fresh objects, so reference inequality is a safe change signal.
+  let lastLegend: LegendEntry[] | undefined;
   // The last ring geometry inputs, compared numerically so sync rewrites the rings source only when the
   // vessel position, range, or heading actually changed (no per-sync string allocation).
   let lastRingLat = Number.NaN;
@@ -167,8 +172,8 @@ export function createPpiLayer(
   }
 
   function applyLegend(): void {
-    const legend = store.selected?.legend ?? DEFAULT_RADAR_LEGEND;
-    if (gl) gl.setLegend(themedColorTable(legend, theme));
+    lastLegend = store.selected?.legend;
+    if (gl) gl.setLegend(themedColorTable(lastLegend ?? DEFAULT_RADAR_LEGEND, theme));
   }
 
   function addEcho(ctx: OverlayContext): void {
@@ -230,10 +235,14 @@ export function createPpiLayer(
         if (!gl || !visible || contextLost) return suppress('not-ready');
         const centerIsFresh = freshness.center?.() !== false;
         const center = centerIsFresh ? getCenter() : undefined;
-        if (frame && !centerIsFresh) {
+        // A wholly absent fix reports the same blocked state as a stale one, so the panel explains
+        // both suppressions instead of staying silently 'ready' on one of them.
+        if (frame && !center) {
           store.setRendererStatus(
             'blocked',
-            'The own-vessel position is stale, so the radar echo is suppressed.',
+            centerIsFresh
+              ? 'No own-vessel position is available, so the radar echo is suppressed.'
+              : 'The own-vessel position is stale, so the radar echo is suppressed.',
           );
         }
         if (!frame || !center) return suppress(frame ? 'no-fix' : 'no-frame');
@@ -245,14 +254,17 @@ export function createPpiLayer(
           );
           return suppress('no-heading');
         }
-        if (store.rendererStatus === 'blocked') store.setRendererStatus('ready');
+        store.clearBlockedStatus();
         const matrix = matrixOf(args);
         if (matrix.length !== 16) return suppress('bad-matrix');
         const range = effectiveRange();
         if (range <= 0) return suppress('no-range');
+        // The heading can advance between frames (the fallback vessel heading while no spoke
+        // carries a bearing), so the uniform updates every render, not only when a frame uploads;
+        // otherwise the echo lags a turn while the heading line keeps swinging.
+        gl.setHeading(heading);
         if (dirty) {
           gl.setData(frame.buffer, frame.spokesPerRev, frame.maxSpokeLen);
-          gl.setHeading(heading);
           gl.setSweep(frame.sweep);
           dirty = false;
         }
@@ -453,6 +465,8 @@ export function createPpiLayer(
       frame = undefined;
       dirty = true;
       ringsDrawn = false;
+      // With no frame, render can no longer reach the branch that withdraws a blocked status.
+      store.clearBlockedStatus();
       if (echoMap?.getSource(RINGS_SOURCE_ID)) {
         setSourceData(echoMap, RINGS_SOURCE_ID, emptyFeatureCollection());
       }
@@ -464,12 +478,14 @@ export function createPpiLayer(
       frame = undefined;
       dirty = true;
       legendVersion = '';
+      lastLegend = undefined;
       ringsDrawn = false;
       lastAreaVersion = -1;
+      store.clearBlockedStatus();
     },
     sync(ctx) {
       const version = store.selectedId ?? '';
-      if (version !== legendVersion) {
+      if (version !== legendVersion || store.selected?.legend !== lastLegend) {
         legendVersion = version;
         applyLegend();
       }

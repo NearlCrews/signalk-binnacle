@@ -177,8 +177,12 @@ function blockedReason(def: ControlDefinition): string | undefined {
   return controlWriteBlockReason(def, store.controlEntries[def.id], store.controlsForbidden);
 }
 
+// Pending never disables a scalar widget: the per-control write queue accepts a newer value while a
+// request is in flight and coalesces unsent values to the newest snapshot, and the Applying status
+// line reports the round trip. Structured area saves and the power segmented control keep their own
+// pending gates.
 function controlWriteDisabled(def: ControlDefinition): boolean {
-  return blockedReason(def) !== undefined || store.pendingControls[def.id] === true;
+  return blockedReason(def) !== undefined;
 }
 
 function controlDisabled(def: ControlDefinition): boolean {

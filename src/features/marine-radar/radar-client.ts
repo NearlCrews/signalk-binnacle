@@ -404,8 +404,14 @@ export async function discoverRadars(
       };
     }
     const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);
-    if (!Array.isArray(body) || body.length > MAX_RADARS)
+    if (!Array.isArray(body))
       return { radars: [], availability: 'invalid', detail: 'Radar discovery was not an array.' };
+    if (body.length > MAX_RADARS)
+      return {
+        radars: [],
+        availability: 'invalid',
+        detail: `Radar discovery returned more than ${MAX_RADARS} radars.`,
+      };
     const radars = normalizeRadarIdentities(
       body.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined),
     );
