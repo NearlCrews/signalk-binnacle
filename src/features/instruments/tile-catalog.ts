@@ -53,6 +53,9 @@ export interface TileReading {
   // arriving ('stale'), or it cannot be produced honestly right now ('unavailable', a missing
   // value or an incompatible reference). Absent when the angle is present or was never reported.
   angleState?: 'stale' | 'unavailable';
+  // The Signal K path this reading actually resolved on a fallback-chain tile, so the detail view
+  // names the path, source, and age of the value shown rather than the first populated path.
+  activePath?: string;
 }
 
 export type TileCategory =
@@ -246,18 +249,22 @@ const HDG_DEF: TileDef = {
     let gradingCell: PathCell;
     let value: number | undefined;
     let referenceLabel: string | undefined;
+    let activePath: string | undefined;
 
     if (trueCell.epoch > 0) {
       gradingCell = trueCell;
       value = vessel.headingRad;
+      activePath = SK_PATHS.headingTrue;
     } else if (magCell.epoch > 0) {
       gradingCell = magCell;
       value = asNumber(magCell.value);
       referenceLabel = 'M';
+      activePath = SK_PATHS.headingMagnetic;
     } else if (cogCell.epoch > 0) {
       gradingCell = cogCell;
       value = vessel.cogRad;
       referenceLabel = 'COG';
+      activePath = SK_PATHS.courseOverGroundTrue;
     } else {
       // Nothing has ever reported: grade on the primary, which returns 'never'.
       gradingCell = trueCell;
@@ -270,6 +277,7 @@ const HDG_DEF: TileDef = {
       unit: '',
       siValue: value,
       referenceLabel,
+      activePath,
     };
   },
 };
@@ -309,6 +317,7 @@ const DEPTH_DEF: TileDef = {
       unit: lengthUnit(mode),
       siValue: reading.meters,
       referenceLabel: reading.source ? DEPTH_SOURCE_LABELS[reading.source] : undefined,
+      activePath: reading.path,
     };
   },
 };
@@ -356,9 +365,11 @@ const WIND_APPARENT_DEF: TileDef = {
     let angleState: 'stale' | 'unavailable' | undefined;
     let referenceLabel: string | undefined;
 
+    let activePath: string | undefined;
     if (apparentSpeedCell.epoch > 0) {
       gradingCell = apparentSpeedCell;
       mps = vessel.windSpeedApparentMps;
+      activePath = SK_PATHS.windSpeedApparent;
       // The angle grades on its own epoch: a wind vane can go quiet while the anemometer keeps
       // reporting, and a retained angle must not steer anyone.
       const angleCell = store.cell(SK_PATHS.windAngleApparent);
@@ -368,6 +379,7 @@ const WIND_APPARENT_DEF: TileDef = {
       gradingCell = groundSpeedCell;
       mps = asNumber(groundSpeedCell.value);
       referenceLabel = 'GND';
+      activePath = SK_PATHS.windSpeedOverGround;
       const directionCell = store.cell(SK_PATHS.windDirectionTrue);
       const dirTrue =
         grade(directionCell, clock) === 'live' ? asNumber(directionCell.value) : undefined;
@@ -403,6 +415,7 @@ const WIND_APPARENT_DEF: TileDef = {
       angleRad,
       angleState,
       referenceLabel,
+      activePath,
     };
   },
 };

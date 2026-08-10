@@ -56,6 +56,10 @@ function ageLabel(epoch: number): string {
 }
 
 const primaryCell = $derived.by(() => {
+  // The reading's own resolved path first: on a fallback-chain tile the first populated path can
+  // differ from the path the shown value actually came from, and the detail must never name the
+  // wrong source or age for the number on screen.
+  if (reading.activePath) return deps.store.cell(reading.activePath);
   const live = def.paths.map((path) => deps.store.cell(path)).find((cell) => cell.epoch > 0);
   return live ?? (def.paths[0] ? deps.store.cell(def.paths[0]) : undefined);
 });

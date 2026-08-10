@@ -175,9 +175,12 @@ describe('StatusStrip depth alarm', () => {
   });
 
   it('names a paused shallow watch instead of a bare depth placeholder', () => {
+    // Never-had-a-source keeps the plain label: nothing was ever watching, so there is no pause
+    // to name, and the phone footer must not permanently wrap for a boat with no sounder. The
+    // title still explains that the watch cannot monitor.
     const noSource = body({ ...baseProps(), shallowState: 'no-source' as const });
-    expect(noSource).toContain('Depth unavailable, watch paused');
     expect(noSource).toContain('shallow watch cannot monitor');
+    expect(noSource).not.toContain('watch paused<');
     const stale = body({ ...baseProps(), shallowState: 'stale' as const });
     expect(stale).toContain('Depth stale, watch paused');
     const noReading = body({ ...baseProps(), shallowState: 'no-reading' as const });

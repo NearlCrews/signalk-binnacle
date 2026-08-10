@@ -360,6 +360,38 @@ test('stale wind angle is not presented as live beside fresh speed', async ({ pa
   await expect(tile).toHaveAttribute('aria-label', /angle (stale|unavailable)/i);
 });
 
+test('route editing stays visible with its exit actions when its panel is replaced', async ({
+  page,
+}) => {
+  // NAV-01: the persistent route-edit strip keeps the mode, count, and exit actions visible even
+  // after another panel replaces the Routes panel, so editing can never continue invisibly.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Routes', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'New route' }).click();
+  const strip = page.getByRole('complementary', { name: 'Route editing' });
+  await expect(strip).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Waypoints', exact: true })
+    .click();
+  await expect(strip).toBeVisible();
+  await expectActionReachable(strip.getByRole('button', { name: 'Open editor' }));
+  const cancel = strip.getByRole('button', { name: 'Cancel' });
+  await expectActionReachable(cancel);
+
+  // The armed cancel ends the edit and the mode strip leaves with it.
+  await cancel.click();
+  await strip.getByRole('button', { name: 'Confirm cancel?' }).click();
+  await expect(strip).toBeHidden();
+});
+
 test('emergency layout passes axe and the MOB actions are keyboard reachable', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);

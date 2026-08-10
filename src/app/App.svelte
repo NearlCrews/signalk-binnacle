@@ -2314,6 +2314,7 @@ const plotterActions = {
   onHighlightLeg,
   closeRoutesPanel,
   backFromRoutesPanel,
+  openRoutesPanel: () => openPanel('routes'),
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,

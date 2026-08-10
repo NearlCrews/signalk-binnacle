@@ -364,6 +364,38 @@ export class CourseGuidance {
     return this.timeToGoSeconds !== undefined ? 'vmg' : undefined;
   });
 
+  // Per-field provenance: a partial server course supplies some calcValues while Binnacle fills
+  // the rest locally, and flattening that mix to one source labeled local numbers as the
+  // server's. Undefined means the field is unavailable. Each check mirrors its getter's own
+  // validity guard.
+  fieldSources: {
+    distance: 'server' | 'local' | undefined;
+    bearing: 'server' | 'local' | undefined;
+    crossTrack: 'server' | 'local' | undefined;
+    vmg: 'server' | 'local' | undefined;
+    timeToGo: 'server' | 'local' | undefined;
+  } = $derived.by(() => {
+    const distanceSupplied = this.#finiteCalc('distance');
+    const bearingSupplied = this.#finiteCalc('bearingTrue');
+    const crossTrackSupplied = this.#finiteCalc('crossTrackError');
+    const vmgSupplied = this.#finiteCalc('velocityMadeGood');
+    const field = (supplied: boolean, available: boolean): 'server' | 'local' | undefined =>
+      supplied ? 'server' : available ? 'local' : undefined;
+    return {
+      distance: field(
+        distanceSupplied !== undefined && distanceSupplied >= 0,
+        this.distanceToNextMeters !== undefined,
+      ),
+      bearing: field(
+        bearingSupplied !== undefined && bearingSupplied >= 0 && bearingSupplied < 2 * Math.PI,
+        this.bearingToNextRad !== undefined,
+      ),
+      crossTrack: field(crossTrackSupplied !== undefined, this.crossTrackErrorMeters !== undefined),
+      vmg: field(vmgSupplied !== undefined, this.velocityMadeGoodMps !== undefined),
+      timeToGo: field(this.timeToGoBasis === 'server', this.timeToGoSeconds !== undefined),
+    };
+  });
+
   // Latch bookkeeping for the arrival hysteresis. Plain fields, not $state: they are internal to
   // the derived below (writing reactive state from inside a derived is unsafe), and the derived
   // already recomputes on every input that can change the latch.

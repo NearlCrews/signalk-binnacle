@@ -430,6 +430,23 @@ describe('CourseGuidance', () => {
     expect(g.timeToGoSeconds).toBeCloseTo((d as number) / knotsToMetersPerSecond(2), 0);
   });
 
+  it('labels only the supplied fields as server on a partial course', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.speedOverGround': 3,
+      'navigation.courseOverGroundTrue': Math.PI / 2,
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+      'navigation.course.previousPoint': { position: { latitude: 0, longitude: 0 } },
+      'navigation.course.calcValues.distance': 5_000,
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.fieldSources.distance).toBe('server');
+    expect(g.fieldSources.bearing).toBe('local');
+    expect(g.fieldSources.crossTrack).toBe('local');
+    expect(g.fieldSources.vmg).toBe('local');
+    expect(g.fieldSources.timeToGo).toBe('local');
+  });
+
   it('prefers a fresh server timeToGo over the VMG fallback', () => {
     const store = storeWith({
       'navigation.position': { latitude: 0, longitude: 0 },

@@ -10,7 +10,7 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import Upload from '@lucide/svelte/icons/upload';
 import X from '@lucide/svelte/icons/x';
 import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
-import { formatNm } from '$shared/lib';
+import { createMediaQuery, formatNm } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -218,16 +218,24 @@ const savedCards = $derived(
 );
 
 // Minimize collapses the panel to its header on a phone, so the chart is usable while waypoints are
-// tapped in. Expand it whenever an edit begins, so the edit controls are visible before the navigator
-// chooses to minimize; the transition check keeps a minimize during editing from springing back open
-// on the next waypoint.
+// tapped in. On a phone-width layout an edit BEGINNING collapses the sheet, because point placement
+// needs the chart and the persistent route-edit strip carries the mode, count, and exit actions; on
+// a wider layout it expands so the full editor is in view. The transition check keeps a manual
+// choice during editing from springing back on the next waypoint.
 const minimize = createPanelMinimize();
+// Matches the shell's narrow breakpoint: under it the panel behaves as a phone sheet over the
+// chart, so point placement needs the sheet out of the way.
+const PHONE_SHEET_BREAKPOINT_PX = 600;
+const phoneLayout = createMediaQuery(`(max-width: ${PHONE_SHEET_BREAKPOINT_PX}px)`);
 // A non-reactive edge sentinel, tracked by hand so the effect fires only on the false to true edit
 // transition; deliberately not $state, so writing it does not re-trigger the effect.
 let wasEditing = false;
 $effect(() => {
   const editing = working !== undefined;
-  if (editing && !wasEditing) minimize.expand();
+  if (editing && !wasEditing) {
+    if (phoneLayout.matches) minimize.collapse();
+    else minimize.expand();
+  }
   wasEditing = editing;
 });
 </script>

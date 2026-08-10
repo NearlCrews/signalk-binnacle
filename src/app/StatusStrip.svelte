@@ -101,12 +101,13 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
 }
 
 // The depth chip's visible label: a nonmonitoring watch says so instead of a bare placeholder.
+// A boat that never had a depth source keeps the plain label with the placeholder value (nothing
+// was ever watching, so there is no pause to name, and the title carries the explanation); the
+// degraded states that interrupt an active watch name the pause visibly.
 const depthLabel = $derived.by(() => {
   if (shallowAlarming) return 'Shallow';
   if (shallowState === 'stale' || depth.stale) return 'Depth stale, watch paused';
-  if (shallowState === 'no-reading' || shallowState === 'no-source') {
-    return 'Depth unavailable, watch paused';
-  }
+  if (shallowState === 'no-reading') return 'Depth unavailable, watch paused';
   return 'Depth';
 });
 </script>

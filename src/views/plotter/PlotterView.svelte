@@ -30,7 +30,7 @@ import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
 import { loadPoiSearchPanel, type Poi } from '$features/poi-search';
 import { loadRegionsPanel } from '$features/prewarm';
-import { loadRoutesPanel } from '$features/routing';
+import { loadRoutesPanel, RouteEditStrip } from '$features/routing';
 import {
   loadTidesPanel,
   type TideStationSelectionEvent,
@@ -237,6 +237,8 @@ interface FlatProps {
   onHighlightLeg: (index: number) => void;
   closeRoutesPanel: () => void;
   backFromRoutesPanel: () => void;
+  // Reopen the Routes panel from the persistent route-edit strip when another panel replaced it.
+  openRoutesPanel: () => void;
   closeTracksPanel: () => void;
   backFromTracksPanel: () => void;
   closeWaypointsPanel: () => void;
@@ -334,6 +336,7 @@ type ActionKey =
   | 'onHighlightLeg'
   | 'closeRoutesPanel'
   | 'backFromRoutesPanel'
+  | 'openRoutesPanel'
   | 'closeTracksPanel'
   | 'backFromTracksPanel'
   | 'closeWaypointsPanel'
@@ -494,6 +497,7 @@ const {
   onHighlightLeg,
   closeRoutesPanel,
   backFromRoutesPanel,
+  openRoutesPanel,
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,
@@ -894,6 +898,16 @@ $effect(() => {
         onStop={() => routeController.onStopCourse()}
         onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
       />
+      {#if routeStore.working}
+        <RouteEditStrip
+          working={routeStore.working}
+          editorOpen={activePanel === 'routes'}
+          onOpenEditor={openRoutesPanel}
+          onSave={() => void routeController.onSaveRoute('')}
+          canSave={routeStore.working.waypoints.length >= 2 && !routeController.busy}
+          onCancel={routeController.onCancelRouteEdit}
+        />
+      {/if}
       {#if measure.active}
         {#await measureStripForAttempt()}
           <aside class="bottom-strip bottom-strip--accent" aria-label="Measure">

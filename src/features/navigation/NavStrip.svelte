@@ -74,6 +74,14 @@ const canSkipBack = $derived(guidance.canRetreatRoute);
 const canSkipForward = $derived(guidance.canAdvanceRoute);
 
 const vmg = $derived(formatKnotsOr(guidance.velocityMadeGoodMps));
+// Per-field provenance for the hover and accessible titles: a partial server course supplies some
+// fields while Binnacle computes the rest, and each readout must say which it is.
+function sourceSuffix(field: keyof typeof guidance.fieldSources): string {
+  const source = guidance.fieldSources[field];
+  if (source === 'server') return ' (from the server course provider)';
+  if (source === 'local') return ' (computed in Binnacle)';
+  return ' (unavailable)';
+}
 const ttg = $derived(
   guidance.timeToGoSeconds != null ? formatDuration(guidance.timeToGoSeconds) : PLACEHOLDER,
 );
@@ -141,9 +149,16 @@ const eta = $derived.by(() => {
       </button>
     </div>
     <div class="row">
-      <span class="metric" title="Distance to waypoint">DTW <b>{dtw}</b> nm</span>
-      <span class="metric" title="Bearing to waypoint, degrees true">BTW <b>{btw}</b>&deg;T</span>
-      <span class="metric" title="Cross-track error: how far off the leg you are">
+      <span class="metric" title="Distance to waypoint{sourceSuffix('distance')}"
+        >DTW <b>{dtw}</b> nm</span
+      >
+      <span class="metric" title="Bearing to waypoint, degrees true{sourceSuffix('bearing')}"
+        >BTW <b>{btw}</b>&deg;T</span
+      >
+      <span
+        class="metric"
+        title="Cross-track error: how far off the leg you are{sourceSuffix('crossTrack')}"
+      >
         XTE
         {#if cdi}
           <span class="cdi" aria-hidden="true">
@@ -161,7 +176,9 @@ const eta = $derived.by(() => {
         <b>{xte}</b>
         nm
       </span>
-      <span class="metric" title="Velocity made good toward the waypoint">VMG <b>{vmg}</b> kn</span>
+      <span class="metric" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}"
+        >VMG <b>{vmg}</b> kn</span
+      >
       <span
         class="metric"
         title={guidance.timeToGoBasis === 'vmg'
