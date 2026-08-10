@@ -14,6 +14,7 @@ export function tileAccessibleLabel(
           reading.secondary ? `, ${reading.secondary}` : ''
         }`;
   const state = reading.state === 'stale' ? ', stale' : '';
+  const angle = reading.angleState ? `, wind angle ${reading.angleState}` : '';
   const alert = zone === 'alarm' ? ', alarm' : zone === 'warning' ? ', warning' : '';
-  return `${label}, ${value}${state}${alert}. Open details`;
+  return `${label}, ${value}${state}${angle}${alert}. Open details`;
 }

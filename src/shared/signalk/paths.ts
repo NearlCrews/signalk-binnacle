@@ -39,6 +39,7 @@ export const SK_PATHS = {
   courseCalcValuesAll: 'navigation.course.calcValues.*',
   speedThroughWater: 'navigation.speedThroughWater',
   headingMagnetic: 'navigation.headingMagnetic',
+  magneticVariation: 'navigation.magneticVariation',
   windAngleApparent: 'environment.wind.angleApparent',
   windSpeedTrue: 'environment.wind.speedTrue',
   windAngleTrueWater: 'environment.wind.angleTrueWater',

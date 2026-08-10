@@ -23,6 +23,9 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
     props: {
       auth: { writeBlocked: false } as AuthController,
       recorder,
+      positionStale: false,
+      hasPosition: true,
+      clock: { now: 1_000_000 },
       settings: new PersistedValue('tracks-panel-test', {
         intervalSeconds: 10,
         minMeters: 10,
@@ -53,6 +56,73 @@ describe('TracksPanel', () => {
     expect(renderPanel({ loadState: 'loading' })).toContain('Loading saved tracks…');
     expect(renderPanel({ loadState: 'error' })).toContain('Could not load saved tracks.');
     expect(renderPanel()).toContain('No saved tracks yet.');
+  });
+
+  it('says Recording only while fresh GPS is feeding the armed recorder', () => {
+    const healthy = renderPanel();
+    expect(healthy).toContain('status--on');
+    expect(healthy).not.toContain('Waiting for fresh GPS');
+    const stale = renderPanel({ positionStale: true });
+    expect(stale).not.toContain('status--on');
+    expect(stale).toContain('Waiting for fresh GPS');
+    const neverFixed = renderPanel({ hasPosition: false });
+    expect(neverFixed).toContain('Waiting for fresh GPS');
+    expect(neverFixed).toContain('starts automatically');
+  });
+
+  it('names the last accepted fix age while waiting', () => {
+    const recorder = {
+      points: [{ lat: 1, lon: 1, t: 1_000_000 - 120_000, sog: 1 }],
+      paused: false,
+      stats: { distanceMeters: 10, durationSeconds: 10, avgSog: 1, maxSog: 1 },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as TrackRecorder;
+    const body = renderPanel({ positionStale: true, recorder });
+    expect(body).toContain('Last accepted fix 2 min ago');
+    expect(body).toContain('resumes automatically');
+  });
+
+  it('keeps manual pause distinct from waiting for GPS', () => {
+    const recorder = {
+      points: [],
+      paused: true,
+      stats: { distanceMeters: 0, durationSeconds: 0, avgSog: 0, maxSog: 0 },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as TrackRecorder;
+    const body = renderPanel({ positionStale: true, recorder });
+    expect(body).toContain('Paused');
+    expect(body).not.toContain('Waiting for fresh GPS');
+  });
+
+  it('names a fresh segment after a recovery gap, and stays quiet after an old one', () => {
+    const gapPoints = [
+      { lat: 1, lon: 1, t: 1_000_000 - 400_000, sog: 1 },
+      { lat: 1.001, lon: 1, t: 1_000_000 - 60_000, sog: 1, gap: true },
+      { lat: 1.002, lon: 1, t: 1_000_000 - 30_000, sog: 1 },
+    ];
+    const recorder = {
+      points: gapPoints,
+      paused: false,
+      stats: { distanceMeters: 10, durationSeconds: 10, avgSog: 1, maxSog: 1 },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as TrackRecorder;
+    expect(renderPanel({ recorder })).toContain('new segment after a GPS gap');
+
+    const oldGap = {
+      ...recorder,
+      points: [
+        { lat: 1, lon: 1, t: 1_000_000 - 4_000_000, sog: 1 },
+        { lat: 1.001, lon: 1, t: 1_000_000 - 3_600_000, sog: 1, gap: true },
+        { lat: 1.002, lon: 1, t: 1_000_000 - 3_500_000, sog: 1 },
+      ],
+    } as unknown as TrackRecorder;
+    expect(renderPanel({ recorder: oldGap })).not.toContain('new segment after a GPS gap');
   });
 
   it('disables server writes without write access', () => {

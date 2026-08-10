@@ -104,6 +104,13 @@ export class OwnVessel {
     return isLatLon(value) ? value : undefined;
   }
 
+  // When the current fix arrived (store receipt time), for surfaces that must say how old a
+  // retained position is. Undefined before the first fix.
+  get positionEpochMs(): number | undefined {
+    const epoch = this.#store.cell(SK_PATHS.position).epoch;
+    return epoch > 0 ? epoch : undefined;
+  }
+
   // The own fix rounded to about 110 m, and undefined while it is stale. This is what a sortable
   // list should measure from: distance and bearing to every row would otherwise be recomputed on
   // every 1 Hz GPS tick, for a change no navigator can see. The key is a string, so the derived

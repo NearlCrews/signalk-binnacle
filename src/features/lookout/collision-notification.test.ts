@@ -17,7 +17,7 @@ function contact(over: Partial<DangerContact> = {}): DangerContact {
 
 describe('buildNotification', () => {
   it('raises an alarm with sound for a danger', () => {
-    const a: Assessment = { contacts: [contact()], worst: 'danger' };
+    const a: Assessment = { contacts: [contact()], worst: 'danger', unassessed: [] };
     const n = buildNotification(a);
     expect(n.state).toBe('alarm');
     expect(n.method).toEqual(['visual', 'sound']);
@@ -26,18 +26,28 @@ describe('buildNotification', () => {
   });
 
   it('warns visually for a warning', () => {
-    const a: Assessment = { contacts: [contact({ severity: 'warning' })], worst: 'warning' };
+    const a: Assessment = {
+      contacts: [contact({ severity: 'warning' })],
+      worst: 'warning',
+      unassessed: [],
+    };
     const n = buildNotification(a);
     expect(n.state).toBe('warn');
     expect(n.method).toEqual(['visual']);
   });
 
   it('returns normal when clear', () => {
-    expect(buildNotification({ contacts: [], worst: 'clear' }).state).toBe('normal');
+    expect(buildNotification({ contacts: [], worst: 'clear', unassessed: [] }).state).toBe(
+      'normal',
+    );
   });
 
   it('names an unnamed contact by its MMSI, not the raw context urn', () => {
-    const a: Assessment = { contacts: [contact({ name: undefined })], worst: 'danger' };
+    const a: Assessment = {
+      contacts: [contact({ name: undefined })],
+      worst: 'danger',
+      unassessed: [],
+    };
     const n = buildNotification(a);
     expect(n.message).toContain('123');
     expect(n.message).not.toContain('urn:mrn');
@@ -52,13 +62,14 @@ describe('CollisionNotifier', () => {
         sent.push({ path, value });
       },
     });
-    const danger: Assessment = { contacts: [contact()], worst: 'danger' };
+    const danger: Assessment = { contacts: [contact()], worst: 'danger', unassessed: [] };
 
     notifier.update(danger);
     // Same state, id, and coarse CPA/TCPA buckets: a per-tick wobble, not a republish.
     notifier.update({
       contacts: [contact({ cpaMeters: 470, tcpaSeconds: 320 })],
       worst: 'danger',
+      unassessed: [],
     });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual({
@@ -74,10 +85,11 @@ describe('CollisionNotifier', () => {
         sent.push({ value: value as { message: string } });
       },
     });
-    notifier.update({ contacts: [contact()], worst: 'danger' }); // CPA 463 m, TCPA 300 s
+    notifier.update({ contacts: [contact()], worst: 'danger', unassessed: [] }); // CPA 463 m, TCPA 300 s
     notifier.update({
       contacts: [contact({ cpaMeters: 200, tcpaSeconds: 120 })],
       worst: 'danger',
+      unassessed: [],
     });
     expect(sent).toHaveLength(2);
     expect(sent[1].value.message).toContain('TCPA 2 min');
@@ -92,7 +104,7 @@ describe('CollisionNotifier', () => {
         return true;
       },
     });
-    notifier.update({ contacts: [contact()], worst: 'danger' });
+    notifier.update({ contacts: [contact()], worst: 'danger', unassessed: [] });
     expect(sent).toEqual([
       { path: NOTIFICATION_PATH, value: expect.objectContaining({ state: 'alarm' }) },
     ]);
@@ -105,12 +117,12 @@ describe('CollisionNotifier', () => {
         sent.push({ value });
       },
     });
-    const clear: Assessment = { contacts: [], worst: 'clear' };
+    const clear: Assessment = { contacts: [], worst: 'clear', unassessed: [] };
 
     notifier.update(clear); // initial clear: nothing to clear, no publish
     expect(sent).toHaveLength(0);
 
-    notifier.update({ contacts: [contact()], worst: 'danger' }); // alarm
+    notifier.update({ contacts: [contact()], worst: 'danger', unassessed: [] }); // alarm
     notifier.update(clear); // now a real clear
     expect(sent).toHaveLength(2);
     expect(sent[1].value).toMatchObject({ state: 'normal' });

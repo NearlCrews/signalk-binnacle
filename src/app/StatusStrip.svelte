@@ -28,10 +28,13 @@ let {
   fixStale,
   connectionPhase,
   aisCount,
+  aisUnassessed = 0,
   anchor,
   units,
   vessel,
   shallowAlarming,
+  shallowState = 'monitoring',
+  radarHealth = { state: 'quiet' },
   audioState,
   onEnableSound,
   pinnedActions,
@@ -46,10 +49,18 @@ let {
   fixStale: boolean;
   connectionPhase: ConnectionPhase;
   aisCount: number;
+  // Retained targets the lookout cannot assess (course or motion missing), the persistent
+  // degraded-assessment cue a watch handoff must be able to see at a glance.
+  aisUnassessed?: number;
   anchor: AnchorWatch;
   units: UnitsStore;
   vessel: OwnVessel;
   shallowAlarming: boolean;
+  // The shallow watch's honest state: any nonmonitoring grade names the pause instead of showing
+  // a bare Depth placeholder.
+  shallowState?: import('$features/lookout').ShallowMonitorState;
+  // Helm-visible radar health: failure and staleness stay visible with Radar Controls closed.
+  radarHealth?: import('$features/marine-radar').RadarHelmHealth;
   // 'ready' hides the chip; 'blocked' offers Enable (a gesture helps); 'failed' offers Retry; and
   // 'unsupported' states that audible alarms are unavailable on this display, with no dead action.
   audioState: import('$shared/audio').AlarmAudioState;
@@ -67,13 +78,37 @@ const connectionDown = $derived(isConnectionDown(connectionPhase));
 
 const depth = $derived(vessel.safetyDepth);
 
+// A stale fix with retained coordinates: shown as "Last fix" with its age, never as current.
+const retainedFix = $derived(fixStale && vessel.position !== undefined);
+const fixAgeText = $derived.by(() => {
+  const epoch = vessel.positionEpochMs;
+  if (epoch === undefined) return '';
+  const seconds = Math.max(0, Math.round((clock.now - epoch) / 1000));
+  return seconds < 90 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+});
+
 // The depth chip's hover and accessible title, one branch per state, so the template stays flat.
 function depthTitle(reading: DepthReading, alarming: boolean): string {
-  if (reading.stale) return 'Depth data is stale';
+  if (shallowState === 'stale' || reading.stale)
+    return 'Depth data is stale; the shallow watch is paused';
+  if (shallowState === 'no-reading')
+    return 'The depth source is streaming unusable readings; the shallow watch is paused';
+  if (shallowState === 'no-source')
+    return 'No depth source is publishing; the shallow watch cannot monitor';
   if (alarming) return 'Shallow water: depth below the alarm threshold';
   if (reading.source) return DEPTH_SOURCE_TITLES[reading.source];
   return 'No depth source is publishing';
 }
+
+// The depth chip's visible label: a nonmonitoring watch says so instead of a bare placeholder.
+const depthLabel = $derived.by(() => {
+  if (shallowAlarming) return 'Shallow';
+  if (shallowState === 'stale' || depth.stale) return 'Depth stale, watch paused';
+  if (shallowState === 'no-reading' || shallowState === 'no-source') {
+    return 'Depth unavailable, watch paused';
+  }
+  return 'Depth';
+});
 </script>
 
 <footer class="status-strip" class:editing>
@@ -140,8 +175,16 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
       </span>
     {/if}
     {#if connectionPhase === 'open'}
-      <span class="readout lookout" title="AIS targets the lookout is tracking">
+      <span
+        class="readout lookout"
+        title={aisUnassessed > 0
+          ? `AIS targets the lookout is tracking; ${aisUnassessed} cannot be assessed for collision because course or motion data is missing or stale`
+          : 'AIS targets the lookout is tracking'}
+      >
         AIS <b class="num">{aisCount}</b>
+        {#if aisUnassessed > 0}
+          <span class="sev-warning">{aisUnassessed} unassessed</span>
+        {/if}
       </span>
     {/if}
     {#if anchor.watching}
@@ -190,23 +233,58 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
     <span
       class="readout depth-readout"
       class:depth-alarm={shallowAlarming}
-      class:fix-lost={depth.stale}
+      class:fix-lost={depth.stale || shallowState !== 'monitoring'}
       title={depthTitle(depth, shallowAlarming)}
-      >{shallowAlarming ? 'Shallow' : depth.stale ? 'Depth stale' : 'Depth'}
+      >{depthLabel}
       <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
       {lengthUnit(units.mode)}
       {#if depth.source}
         <span class="datum">{DEPTH_SOURCE_LABELS[depth.source]}</span>
       {/if}</span
     >
+    {#if radarHealth.state !== 'quiet'}
+      <!-- Radar trouble stays visible with Radar Controls closed: the picture the helm relies on
+           has quietly stopped, which the panel alone cannot say. role=status announces once. -->
+      <span
+        class="readout"
+        class:sev-danger={radarHealth.state === 'failed'}
+        class:sev-warning={radarHealth.state === 'stale'}
+        role="status"
+        aria-live="polite"
+        title={radarHealth.state === 'stale'
+          ? 'Radar is transmitting but no fresh echo frames are arriving'
+          : radarHealth.reason === 'renderer'
+            ? 'Radar is transmitting but the echo display failed on this device; open Radar controls'
+            : 'Radar is transmitting but its data stream failed; open Radar controls'}
+      >
+        {radarHealth.state === 'stale'
+          ? 'Radar stale'
+          : radarHealth.reason === 'renderer'
+            ? 'Radar display failed'
+            : 'Radar stream failed'}
+      </span>
+    {/if}
   </div>
   <PinnedActions actions={pinnedActions} />
   <div class="center-cluster">
-    <span class="readout" title="Vessel position"
-      >Vessel
-      <b class="num">{formatLatitude(vessel.position?.latitude)}</b>
-      <b class="num">{formatLongitude(vessel.position?.longitude)}</b></span
-    >
+    {#if retainedFix}
+      <!-- A stale fix never wears current-position styling: the label says what the coordinates
+           are (the last fix and its age), in the same caution treatment as the dashed readouts. -->
+      <span class="readout fix-lost" title="Last known position; the GPS fix is stale"
+        >Last fix
+        <b class="num">{formatLatitude(vessel.position?.latitude)}</b>
+        <b class="num">{formatLongitude(vessel.position?.longitude)}</b>
+        <span class="datum">{fixAgeText}</span></span
+      >
+    {:else}
+      <span class="readout" title="Vessel position"
+        >Vessel
+        <b class="num">{formatLatitude(fixStale ? undefined : vessel.position?.latitude)}</b>
+        <b class="num"
+          >{formatLongitude(fixStale ? undefined : vessel.position?.longitude)}</b
+        ></span
+      >
+    {/if}
     <span class="readout" title="Local time"
       >Time
       <b class="num">{formatClockTime(clock.now)}</b></span

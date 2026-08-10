@@ -6,6 +6,7 @@ import {
   formatTideHeight,
   formatTideHeightSecondary,
   nextCurrentEvent,
+  nextFlowEvent,
   nowFraction,
   tideCurvePoints,
   tideSourceNote,
@@ -40,14 +41,31 @@ describe('tides-display', () => {
     expect(upcomingEvents(events, 2000).map((e) => e.timeMs)).toEqual([3000]);
   });
 
-  it('finds the next non-slack current event after a reference time', () => {
+  it('returns the earliest chronological current event, slack included', () => {
+    // Slack water is the decisive event for a tidal-gate transit; skipping it for a later
+    // maximum told a navigator the wrong next event.
     const currents: CurrentEvent[] = [
       { timeMs: 1000, velocityMps: 0.5, directionRad: (100 * Math.PI) / 180, kind: 'flood' },
       { timeMs: 2000, velocityMps: 0, directionRad: undefined, kind: 'slack' },
       { timeMs: 3000, velocityMps: 0.4, directionRad: (280 * Math.PI) / 180, kind: 'ebb' },
     ];
-    expect(nextCurrentEvent(currents, 1500)?.kind).toBe('ebb');
+    expect(nextCurrentEvent(currents, 1500)?.kind).toBe('slack');
+    // An event exactly at now still counts as upcoming.
+    expect(nextCurrentEvent(currents, 2000)?.kind).toBe('slack');
+    // A passed slack yields the following maximum.
+    expect(nextCurrentEvent(currents, 2001)?.kind).toBe('ebb');
+    // An empty upcoming window yields nothing rather than a stale event.
     expect(nextCurrentEvent(currents, 4000)).toBeUndefined();
+    expect(nextCurrentEvent([], 0)).toBeUndefined();
+  });
+
+  it('finds the following flood or ebb maximum for the secondary row', () => {
+    const currents: CurrentEvent[] = [
+      { timeMs: 2000, velocityMps: 0, directionRad: undefined, kind: 'slack' },
+      { timeMs: 3000, velocityMps: 0.4, directionRad: (280 * Math.PI) / 180, kind: 'ebb' },
+    ];
+    expect(nextFlowEvent(currents, 1500)?.kind).toBe('ebb');
+    expect(nextFlowEvent(currents, 3500)).toBeUndefined();
   });
 
   it('normalizes tide curve points to a 0..1 box', () => {

@@ -13,7 +13,13 @@ import {
   latestTrackSegment,
   type TrackRecorder,
 } from '$entities/track';
-import { formatDuration, formatKnots, formatNm, PLACEHOLDER } from '$shared/lib';
+import {
+  formatDuration,
+  formatKnots,
+  formatNm,
+  PLACEHOLDER,
+  type ReactiveClock,
+} from '$shared/lib';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -34,6 +40,11 @@ import type { SavedTrack } from './tracks-client';
 interface Props {
   auth: AuthController;
   recorder: TrackRecorder;
+  // Whether the shell is currently feeding the recorder: stale or missing GPS keeps every fix out
+  // of consider(), so an armed recorder is waiting, not recording.
+  positionStale: boolean;
+  hasPosition: boolean;
+  clock: ReactiveClock;
   settings: PersistedValue<TrackSettings>;
   saved: SavedTrack[];
   shown: ReadonlySet<string>;
@@ -60,6 +71,9 @@ interface Props {
 const {
   auth,
   recorder,
+  positionStale,
+  hasPosition,
+  clock,
   settings,
   saved,
   shown,
@@ -83,6 +97,25 @@ const stats = $derived(recorder.stats);
 const colorMode = $derived(settings.value.colorMode);
 // Until the track has captured a point, its stats are absent, not zero, so show the placeholder.
 const hasTrack = $derived(recorder.points.length > 0);
+
+// An armed recorder with stale or missing GPS accepts no points: that is waiting, not recording.
+const waitingForGps = $derived(!recorder.paused && (positionStale || !hasPosition));
+const lastAccepted = $derived(recorder.points[recorder.points.length - 1]);
+const lastAcceptedAge = $derived.by(() => {
+  if (!lastAccepted) return '';
+  const seconds = Math.max(0, Math.round((clock.now - lastAccepted.t) / 1000));
+  return seconds < 90 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+});
+// The latest segment began with a gap recently: name the break so the trail is not mistaken for
+// a continuous line back through the outage.
+const RECENT_SEGMENT_MS = 10 * 60_000;
+const resumedNewSegment = $derived.by(() => {
+  const points = recorder.points;
+  for (let i = points.length - 1; i > 0; i -= 1) {
+    if (points[i].gap) return clock.now - points[i].t <= RECENT_SEGMENT_MS;
+  }
+  return false;
+});
 const canSaveTrack = $derived(hasDrawableTrack(recorder.points));
 const canMakeRoute = $derived(latestTrackSegment(recorder.points).length >= 2);
 const trackHasGaps = $derived(hasTrackGaps(recorder.points));
@@ -181,9 +214,18 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     A track is the breadcrumb trail of where the boat has been. Recording starts automatically while
     underway.
   </p>
-  <p class="muted-note status" class:status--on={!recorder.paused} role="status">
-    {recorder.paused ? 'Paused' : 'Recording'}
+  <p class="muted-note status" class:status--on={!recorder.paused && !waitingForGps} role="status">
+    {recorder.paused
+      ? 'Paused'
+      : waitingForGps
+        ? lastAccepted
+          ? `Waiting for fresh GPS. Last accepted fix ${lastAcceptedAge}. Recording resumes automatically.`
+          : 'Waiting for fresh GPS. Recording starts automatically.'
+        : 'Recording'}
   </p>
+  {#if !recorder.paused && !waitingForGps && resumedNewSegment}
+    <p class="muted-note" role="status">Recording resumed as a new segment after a GPS gap.</p>
+  {/if}
   <div class="panel-controls">
     {#if recorder.paused}
       <button type="button" class="btn" onclick={() => recorder.resume()}>

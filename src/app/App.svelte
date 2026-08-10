@@ -70,6 +70,7 @@ import {
   createMarineRadarController,
   type RadarStatus,
   radarChartEditBlockedReason,
+  radarHelmHealth,
 } from '$features/marine-radar';
 import { MEASURE_OVERLAY_ID } from '$features/measure';
 import {
@@ -2594,10 +2595,18 @@ const plotterActions = {
     {fixStale}
     connectionPhase={store.connection.phase}
     {aisCount}
+    aisUnassessed={collision.assessment.unassessed.length}
     {anchor}
     {units}
     {vessel}
     shallowAlarming={shallowController.alarming}
+    shallowState={shallowController.monitorState}
+    radarHealth={radarHelmHealth({
+      echoShown: layerSettings.value['marine-radar']?.visible ?? false,
+      operationalStatus: marineRadar.store.operationalStatus,
+      connection: marineRadar.store.status,
+      renderer: marineRadar.store.rendererStatus,
+    })}
     audioState={audioChipState}
     onEnableSound={primeAlarmAudio}
     pinnedActions={resolvedPinned}

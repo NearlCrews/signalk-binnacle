@@ -78,13 +78,30 @@ const targets = $derived.by(() => {
 });
 const targetCount = $derived(targets.length);
 const matchingRows = $derived(
-  buildAisRows(targets, parsedOwn, collision.assessment.contacts, sort, query, riskFilter),
+  buildAisRows(
+    targets,
+    parsedOwn,
+    collision.assessment.contacts,
+    sort,
+    query,
+    riskFilter,
+    collision.assessment.unassessed,
+  ),
 );
 const rows = $derived(matchingRows.slice(0, MAX_AIS_LIST_ROWS));
+const unassessedCount = $derived(collision.assessment.unassessed.length);
 const selectedTarget = $derived(selectedId ? aisTargets.find(selectedId) : undefined);
 const selectedRow = $derived(
   selectedTarget
-    ? buildAisRows([selectedTarget], parsedOwn, collision.assessment.contacts, sort)[0]
+    ? buildAisRows(
+        [selectedTarget],
+        parsedOwn,
+        collision.assessment.contacts,
+        sort,
+        '',
+        'all',
+        collision.assessment.unassessed,
+      )[0]
     : undefined,
 );
 const subtitle = $derived(
@@ -120,6 +137,14 @@ $effect(() => {
       Other boats and navigation aids broadcasting over the automatic identification system (AIS).
       Search by name or Maritime Mobile Service Identity (MMSI), or tap a target on the chart.
     </p>
+    {#if unassessedCount > 0}
+      <p class="muted-note" role="status">
+        Collision assessment is degraded: {unassessedCount}
+        {unassessedCount === 1 ? 'target' : 'targets'}
+        cannot be assessed because course or motion data is missing or stale. They are marked
+        Unassessed below and never counted as clear.
+      </p>
+    {/if}
     {#if vessel.positionStale}
       <p class="muted-note" role="status">
         Own GPS fix is stale. Distance and bearing are unavailable, and the list is ordered by name
@@ -202,6 +227,15 @@ $effect(() => {
                   <span class="caps-label sev-danger">Collision risk</span>
                 {:else if row.severity === 'warning'}
                   <span class="caps-label sev-warning">Getting close</span>
+                {:else if row.unassessedReason}
+                  <span
+                    class="caps-label sev-warning"
+                    title={row.unassessedReason === 'course-unavailable'
+                      ? 'CPA unavailable: the target course is missing or stale'
+                      : 'CPA unavailable: no fresh motion data from this target'}
+                  >
+                    Unassessed
+                  </span>
                 {/if}
                 {#if row.navigationState}
                   <span class="caps-label">{capitalize(row.navigationState)}</span>

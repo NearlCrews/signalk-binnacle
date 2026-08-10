@@ -30,6 +30,9 @@ function mountPanel(
   const props: ComponentProps<typeof TracksPanel> = {
     auth: auth as unknown as AuthController,
     recorder,
+    positionStale: false,
+    hasPosition: true,
+    clock: { now: Date.now() },
     settings: new PersistedValue('tracks-panel-client-test', {
       intervalSeconds: 10,
       minMeters: 10,

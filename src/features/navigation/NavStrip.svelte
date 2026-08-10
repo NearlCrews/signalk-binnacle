@@ -162,14 +162,30 @@ const eta = $derived.by(() => {
         nm
       </span>
       <span class="metric" title="Velocity made good toward the waypoint">VMG <b>{vmg}</b> kn</span>
-      <span class="metric" title="Time to go to the waypoint at the present speed">
+      <span
+        class="metric"
+        title={guidance.timeToGoBasis === 'vmg'
+          ? 'Time to go at the current velocity made good toward the waypoint; unavailable when not making progress'
+          : 'Time to go to the waypoint, from the server course provider'}
+      >
         TTG <b>{ttg}</b>
+        {#if guidance.timeToGoBasis === 'vmg'}
+          <span class="note">VMG</span>
+        {/if}
       </span>
       {#if routeProgress}
         <span class="metric" title="Route distance still to run across the legs ahead">
           RTE <b>{routeDtg}</b> nm
         </span>
-        <span class="metric" title="Estimated time of arrival">ETA <b>{eta}</b></span>
+        <span
+          class="metric"
+          title="Estimated arrival: the active leg's time to go plus the planning speed for the legs ahead. Not a weather-, current-, or tack-aware passage estimate."
+        >
+          ETA <b>{eta}</b>
+          {#if routeProgress.basis}
+            <span class="note">{routeProgress.basis === 'vmg-plan' ? 'VMG+plan' : 'plan'}</span>
+          {/if}
+        </span>
       {/if}
     </div>
   </aside>

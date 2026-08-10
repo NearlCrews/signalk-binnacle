@@ -5,7 +5,7 @@ import DangerStrip from './DangerStrip.svelte';
 
 function strip(contacts: DangerContact[]): string {
   const collision = {
-    assessment: { contacts, worst: contacts[0]?.severity ?? 'clear' },
+    assessment: { contacts, worst: contacts[0]?.severity ?? 'clear', unassessed: [] },
     suppressed: false,
     escalating: false,
   } as unknown as CollisionAssessment;

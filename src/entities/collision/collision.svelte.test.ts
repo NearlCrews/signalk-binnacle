@@ -47,9 +47,10 @@ describe('assessContacts', () => {
     expect(r.worst).toBe('danger');
   });
 
-  it('treats a target reporting SOG but no COG as stationary', () => {
-    // A fabricated due-north course for this southern target would read as closing and alarm;
-    // with no course it must count as stationary, and a stationary pair never closes.
+  it('grades a moving target without a fresh course as unassessed, never stationary or clear', () => {
+    // A fabricated due-north course for this southern target would read as closing and alarm, and
+    // pretending it is stationary would make degraded assessment look like clear water. It is
+    // unassessed: no contact, no fabricated CPA, and a visible data-quality state.
     const t = target({
       id: 'nocog',
       position: { latitude: -1852 / 111320, longitude: 0 },
@@ -57,6 +58,10 @@ describe('assessContacts', () => {
     });
     const r = assessContacts(ownStationary, [t], DEFAULT_THRESHOLDS);
     expect(r.contacts).toHaveLength(0);
+    expect(r.worst).toBe('clear');
+    expect(r.unassessed).toEqual([
+      { id: 'nocog', name: undefined, position: t.position, reason: 'course-unavailable' },
+    ]);
   });
 
   it('returns the same all-clear object every pass for stable identity', () => {
@@ -64,6 +69,63 @@ describe('assessContacts', () => {
     const b = assessContacts(undefined, [], DEFAULT_THRESHOLDS);
     expect(a).toBe(b);
     expect(a.worst).toBe('clear');
+    expect(a.unassessed).toHaveLength(0);
+  });
+
+  it('grades a target with no fresh motion data as unassessed unless its state says stationary', () => {
+    const silent = target({ id: 'silent' });
+    const anchoredTarget = target({ id: 'anchored', navigationState: 'anchored' });
+    const mooredTarget = target({ id: 'moored', navigationState: 'moored' });
+    const r = assessContacts(
+      ownStationary,
+      [silent, anchoredTarget, mooredTarget],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(r.contacts).toHaveLength(0);
+    expect(r.unassessed).toEqual([
+      { id: 'silent', name: undefined, position: silent.position, reason: 'motion-unknown' },
+    ]);
+  });
+
+  it('keeps a fresh provider CPA authoritative for a target the local branch cannot assess', () => {
+    const t = target({
+      id: 'provider',
+      sogMps: knotsToMetersPerSecond(10),
+      cpaMeters: 100,
+      tcpaSeconds: 120,
+    });
+    const r = assessContacts(ownStationary, [t], DEFAULT_THRESHOLDS);
+    expect(r.contacts[0]?.source).toBe('provider');
+    expect(r.unassessed).toHaveLength(0);
+  });
+
+  it('resumes assessment automatically when the course returns', () => {
+    const noCog = target({
+      id: 'recovers',
+      position: { latitude: 1852 / 111320, longitude: 0 },
+      sogMps: knotsToMetersPerSecond(10),
+    });
+    const first = assessContacts(
+      { ...ownStationary, sogMps: knotsToMetersPerSecond(5) },
+      [noCog],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(first.unassessed).toHaveLength(1);
+    const withCog = { ...noCog, cogRad: degreesToRadians(180) };
+    const second = assessContacts(
+      { ...ownStationary, sogMps: knotsToMetersPerSecond(5) },
+      [withCog],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(second.unassessed).toHaveLength(0);
+    expect(second.contacts[0]?.severity).toBe('danger');
+  });
+
+  it('keeps a fresh slow target in the stationary gate rather than unassessed', () => {
+    const slow = target({ id: 'slow', sogMps: knotsToMetersPerSecond(0.5) });
+    const r = assessContacts(ownStationary, [slow], DEFAULT_THRESHOLDS);
+    expect(r.contacts).toHaveLength(0);
+    expect(r.unassessed).toHaveLength(0);
   });
 
   it('prefers the provider CPA/TCPA when present and flags the source', () => {

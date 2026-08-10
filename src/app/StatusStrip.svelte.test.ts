@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'svelte';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import { AnchorWatch } from '$entities/anchor';
@@ -40,7 +41,7 @@ function baseProps() {
 // Rendered to an SSR HTML string (the suite runs in the node environment, no DOM), enough to pin
 // the Depth readout's alarm styling on and off, matching ChartLockerStatus's own SSR-string
 // verification pattern for a presentational strip component.
-function body(props: ReturnType<typeof baseProps>): string {
+function body(props: ComponentProps<typeof StatusStrip>): string {
   return render(StatusStrip, { props }).body;
 }
 
@@ -171,6 +172,33 @@ describe('StatusStrip depth alarm', () => {
     expect(failed).toContain('Sound unavailable');
     expect(failed).toContain('Retry');
     expect(failed).not.toContain('>Enable<');
+  });
+
+  it('names a paused shallow watch instead of a bare depth placeholder', () => {
+    const noSource = body({ ...baseProps(), shallowState: 'no-source' as const });
+    expect(noSource).toContain('Depth unavailable, watch paused');
+    expect(noSource).toContain('shallow watch cannot monitor');
+    const stale = body({ ...baseProps(), shallowState: 'stale' as const });
+    expect(stale).toContain('Depth stale, watch paused');
+    const noReading = body({ ...baseProps(), shallowState: 'no-reading' as const });
+    expect(noReading).toContain('Depth unavailable, watch paused');
+    expect(body(baseProps())).not.toContain('watch paused');
+  });
+
+  it('keeps radar trouble visible with the radar panel closed, and quiet otherwise', () => {
+    const stream = body({
+      ...baseProps(),
+      radarHealth: { state: 'failed', reason: 'stream' } as const,
+    });
+    expect(stream).toContain('Radar stream failed');
+    const renderer = body({
+      ...baseProps(),
+      radarHealth: { state: 'failed', reason: 'renderer' } as const,
+    });
+    expect(renderer).toContain('Radar display failed');
+    const stale = body({ ...baseProps(), radarHealth: { state: 'stale' } as const });
+    expect(stale).toContain('Radar stale');
+    expect(body(baseProps())).not.toContain('Radar');
   });
 
   it('states that audible alarms are unavailable with no action when unsupported', () => {

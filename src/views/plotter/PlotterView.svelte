@@ -684,13 +684,33 @@ function alarmsPanelForAttempt() {
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
+// Whole-route time: the active leg's own estimate (server timeToGo, else positive-VMG) plus the
+// explicit planning speed across the legs ahead. Never cross-track SOG for the whole route: an
+// off-course five knots would promise an arrival the boat is not making. Any missing input leaves
+// the estimate unavailable rather than optimistic.
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
   const distanceToGoMeters = routeDistanceToGoMeters;
   if (distanceToGoMeters == null) return undefined;
-  const sog = vessel.sogStale ? undefined : vessel.sogMps;
+  const legTtg = courseGuidance.timeToGoSeconds;
+  const legDistance = courseGuidance.distanceToNextMeters;
+  const planSpeed = planningSpeedMps.value;
+  const remainingMeters =
+    legDistance == null ? undefined : Math.max(0, distanceToGoMeters - legDistance);
+  const remainingSeconds =
+    remainingMeters == null || !(planSpeed > 0)
+      ? undefined
+      : etaSeconds(remainingMeters, planSpeed);
+  const timeToGoSeconds =
+    legTtg == null || remainingSeconds == null ? undefined : legTtg + remainingSeconds;
   return {
     distanceToGoMeters,
-    timeToGoSeconds: sog == null ? undefined : etaSeconds(distanceToGoMeters, sog),
+    timeToGoSeconds,
+    basis:
+      timeToGoSeconds === undefined
+        ? undefined
+        : courseGuidance.timeToGoBasis === 'server'
+          ? 'server-plan'
+          : 'vmg-plan',
   };
 });
 
@@ -1102,6 +1122,9 @@ $effect(() => {
             <module.default
               {auth}
               {recorder}
+              positionStale={vessel.positionStale}
+              hasPosition={vessel.position !== undefined}
+              {clock}
               settings={trackSettings}
               saved={trackController.savedTracks}
               shown={trackController.shownSaved}

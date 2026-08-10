@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OwnVessel } from '$entities/vessel';
+import { knotsToMetersPerSecond } from '$shared/lib';
 import { SignalKStore } from '$shared/signalk';
 import { CourseGuidance } from './course.svelte';
 
@@ -377,9 +378,68 @@ describe('CourseGuidance', () => {
     expect(g.source).toBe('computed');
     // VMG: SOG * cos(COG - bearingToMark). Mark is due east; COG is due east; cos(0) = 1.
     expect(g.velocityMadeGoodMps).toBeCloseTo(3, 4);
-    // TTG: distance / SOG. The distance to 1 degree of longitude at equator is ~111 km.
+    // TTG: distance / VMG, which equals SOG here (full projection).
     const d = g.distanceToNextMeters;
     expect(d).toBeDefined();
     expect(g.timeToGoSeconds).toBeCloseTo((d as number) / 3, 0);
+    expect(g.timeToGoBasis).toBe('vmg');
+  });
+
+  it('returns unavailable TTG for zero or negative VMG instead of an optimistic time', () => {
+    // Five knots of SOG sailing due north while the mark lies due east: VMG is zero, so no honest
+    // time to go exists. The old SOG fallback would promise distance over five knots.
+    const next = { latitude: 0, longitude: 1 };
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.speedOverGround': knotsToMetersPerSecond(5),
+      'navigation.courseOverGroundTrue': 0,
+      'navigation.course.nextPoint': { position: next },
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.velocityMadeGoodMps).toBeCloseTo(0, 4);
+    expect(g.timeToGoSeconds).toBeUndefined();
+    expect(g.timeToGoBasis).toBeUndefined();
+
+    // Sailing due west, away from the mark: negative VMG, still unavailable.
+    const awayStore = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.speedOverGround': knotsToMetersPerSecond(5),
+      'navigation.courseOverGroundTrue': (3 * Math.PI) / 2,
+      'navigation.course.nextPoint': { position: next },
+    });
+    const away = new CourseGuidance(awayStore, new OwnVessel(awayStore));
+    expect(away.velocityMadeGoodMps).toBeLessThan(0);
+    expect(away.timeToGoSeconds).toBeUndefined();
+  });
+
+  it('yields the longer VMG-based estimate when making partial progress', () => {
+    // Five knots of SOG at 66.4 degrees off the rhumb line is about two knots of VMG; the honest
+    // time is distance over two knots, not distance over five.
+    const next = { latitude: 0, longitude: 1 };
+    const offCourse = Math.PI / 2 - Math.acos(2 / 5);
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.speedOverGround': knotsToMetersPerSecond(5),
+      'navigation.courseOverGroundTrue': offCourse,
+      'navigation.course.nextPoint': { position: next },
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.velocityMadeGoodMps).toBeCloseTo(knotsToMetersPerSecond(2), 3);
+    const d = g.distanceToNextMeters;
+    expect(d).toBeDefined();
+    expect(g.timeToGoSeconds).toBeCloseTo((d as number) / knotsToMetersPerSecond(2), 0);
+  });
+
+  it('prefers a fresh server timeToGo over the VMG fallback', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.speedOverGround': 3,
+      'navigation.courseOverGroundTrue': Math.PI / 2,
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+      'navigation.course.calcValues.timeToGo': 1234,
+    });
+    const g = new CourseGuidance(store, new OwnVessel(store));
+    expect(g.timeToGoSeconds).toBe(1234);
+    expect(g.timeToGoBasis).toBe('server');
   });
 });

@@ -18,7 +18,7 @@ function noSeverity(): Map<string, Severity> {
 // A stable reference, like the production collision.assessment getter (a $derived that returns the
 // same object between recomputes, and a frozen singleton when clear); the overlay's dirty check is
 // reference-based, so a fresh object per call would defeat it.
-const EMPTY_ASSESSMENT: Assessment = { contacts: [], worst: 'clear' };
+const EMPTY_ASSESSMENT: Assessment = { contacts: [], worst: 'clear', unassessed: [] };
 function emptyAssessment(): Assessment {
   return EMPTY_ASSESSMENT;
 }
@@ -283,7 +283,7 @@ describe('createAisVectorsOverlay', () => {
     if (!source) throw new Error(`${SOURCE_ID} not added`);
     const spy = vi.spyOn(source, 'setData');
 
-    assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    assessment = { contacts: [dangerContact(target)], worst: 'danger', unassessed: [] };
     t = 100;
     overlay.sync(ctx);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -295,7 +295,11 @@ describe('createAisVectorsOverlay', () => {
     let t = 0;
     const target = movingTarget();
     const targets = makeTargets([target]);
-    let assessment: Assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    let assessment: Assessment = {
+      contacts: [dangerContact(target)],
+      worst: 'danger',
+      unassessed: [],
+    };
     const overlay = createAisVectorsOverlay(
       targets as never,
       () => assessment,
@@ -311,7 +315,7 @@ describe('createAisVectorsOverlay', () => {
 
     // The busy-anchorage steady state: each assessment recompute returns a fresh contacts array
     // carrying the same id-to-severity mapping, and that alone must not bypass the throttle.
-    assessment = { contacts: [dangerContact(target)], worst: 'danger' };
+    assessment = { contacts: [dangerContact(target)], worst: 'danger', unassessed: [] };
     targets.bump();
     t = 250;
     overlay.sync(ctx);

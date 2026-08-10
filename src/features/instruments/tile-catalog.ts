@@ -49,6 +49,10 @@ export interface TileReading {
   secondary?: string;
   referenceLabel?: string;
   angleRad?: number;
+  // Why a wind tile carries no angle even though its speed is live: the angle expired after
+  // arriving ('stale'), or it cannot be produced honestly right now ('unavailable', a missing
+  // value or an incompatible reference). Absent when the angle is present or was never reported.
+  angleState?: 'stale' | 'unavailable';
 }
 
 export type TileCategory =
@@ -189,6 +193,18 @@ function normalizeAngle(a: number): number {
   return ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
 }
 
+// A wind angle cell's honest freshness beside an independently graded speed. Only a cell that has
+// reported at least once makes a claim: a speed-only sensor is not "angle stale" forever.
+function angleFreshness(
+  cell: PathCell,
+  clock: ReactiveClock,
+  resolved: number | undefined,
+): 'stale' | 'unavailable' | undefined {
+  if (resolved !== undefined) return undefined;
+  if (cell.epoch === 0) return undefined;
+  return grade(cell, clock) === 'stale' ? 'stale' : 'unavailable';
+}
+
 const SOG_DEF: TileDef = {
   id: 'sog',
   label: 'Speed',
@@ -305,11 +321,14 @@ const WIND_APPARENT_DEF: TileDef = {
   sensorGloss: 'No wind sensor',
   // headingMagnetic is deliberately NOT listed: it would defeat the never-reported check on a
   // compass-only boat, and the heading cells are warmed by the heading tile and the master list.
+  // magneticVariation IS listed: the ground-wind branch needs it to bring a magnetic heading into
+  // the true reference frame, and nothing else warms it.
   paths: [
     SK_PATHS.windSpeedApparent,
     SK_PATHS.windAngleApparent,
     SK_PATHS.windSpeedOverGround,
     SK_PATHS.windDirectionTrue,
+    SK_PATHS.magneticVariation,
   ],
   zonesPath: SK_PATHS.windSpeedApparent,
   category: 'wind',
@@ -334,30 +353,57 @@ const WIND_APPARENT_DEF: TileDef = {
     let gradingCell: PathCell;
     let mps: number | undefined;
     let angleRad: number | undefined;
+    let angleState: 'stale' | 'unavailable' | undefined;
     let referenceLabel: string | undefined;
 
     if (apparentSpeedCell.epoch > 0) {
       gradingCell = apparentSpeedCell;
       mps = vessel.windSpeedApparentMps;
-      angleRad = asNumber(store.cell(SK_PATHS.windAngleApparent).value);
+      // The angle grades on its own epoch: a wind vane can go quiet while the anemometer keeps
+      // reporting, and a retained angle must not steer anyone.
+      const angleCell = store.cell(SK_PATHS.windAngleApparent);
+      angleRad = grade(angleCell, clock) === 'live' ? asNumber(angleCell.value) : undefined;
+      angleState = angleFreshness(angleCell, clock, angleRad);
     } else if (groundSpeedCell.epoch > 0) {
       gradingCell = groundSpeedCell;
       mps = asNumber(groundSpeedCell.value);
       referenceLabel = 'GND';
-      const dirTrue = asNumber(store.cell(SK_PATHS.windDirectionTrue).value);
+      const directionCell = store.cell(SK_PATHS.windDirectionTrue);
+      const dirTrue =
+        grade(directionCell, clock) === 'live' ? asNumber(directionCell.value) : undefined;
       if (dirTrue !== undefined) {
-        const hdg =
-          vessel.headingRad ??
-          asNumber(store.cell(SK_PATHS.headingMagnetic).value) ??
-          vessel.cogRad;
-        angleRad = hdg !== undefined ? normalizeAngle(dirTrue - hdg) : undefined;
+        // A bow-relative ground angle needs a fresh TRUE reference. A magnetic heading joins only
+        // through fresh navigation.magneticVariation: subtracting it raw is wrong by the local
+        // variation (past twenty degrees in places), a wrong number rather than a stale one.
+        // Fresh COG is the last resort, and no angle beats a wrong angle.
+        let reference = vessel.headingStale ? undefined : vessel.headingRad;
+        if (reference === undefined) {
+          const magneticCell = store.cell(SK_PATHS.headingMagnetic);
+          const variationCell = store.cell(SK_PATHS.magneticVariation);
+          const magnetic =
+            grade(magneticCell, clock) === 'live' ? asNumber(magneticCell.value) : undefined;
+          const variation =
+            grade(variationCell, clock) === 'live' ? asNumber(variationCell.value) : undefined;
+          if (magnetic !== undefined && variation !== undefined) reference = magnetic + variation;
+        }
+        if (reference === undefined) reference = vessel.cogStale ? undefined : vessel.cogRad;
+        angleRad = reference !== undefined ? normalizeAngle(dirTrue - reference) : undefined;
       }
+      angleState = angleFreshness(directionCell, clock, angleRad);
     } else {
       gradingCell = apparentSpeedCell;
     }
 
     const state = grade(gradingCell, clock);
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad, referenceLabel };
+    return {
+      state,
+      value: formatKnotsOr(mps),
+      unit: 'kn',
+      siValue: mps,
+      angleRad,
+      angleState,
+      referenceLabel,
+    };
   },
 };
 
@@ -400,8 +446,10 @@ const WIND_TRUE_DEF: TileDef = {
     const cell = store.cell(SK_PATHS.windSpeedTrue);
     const state = grade(cell, clock);
     const mps = asNumber(cell.value);
-    const angleRad = asNumber(store.cell(SK_PATHS.windAngleTrueWater).value);
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad };
+    const angleCell = store.cell(SK_PATHS.windAngleTrueWater);
+    const angleRad = grade(angleCell, clock) === 'live' ? asNumber(angleCell.value) : undefined;
+    const angleState = angleFreshness(angleCell, clock, angleRad);
+    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad, angleState };
   },
 };
 

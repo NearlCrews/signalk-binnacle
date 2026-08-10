@@ -65,9 +65,16 @@ export function upcomingEvents(events: TideEvent[], nowMs: number): TideEvent[] 
   return events.filter((event) => event.timeMs >= nowMs);
 }
 
-// The next flood or ebb at or after a reference time (slack is skipped), for the current readout.
+// The next current event at or after a reference time, slack included: slack water is the
+// decisive event for a tidal-gate transit, so it must never be skipped for a later maximum.
 // Events are pre-sorted ascending (see upcomingEvents), so the first match is the soonest.
 export function nextCurrentEvent(events: CurrentEvent[], nowMs: number): CurrentEvent | undefined {
+  return events.find((event) => event.timeMs >= nowMs);
+}
+
+// The next flood or ebb maximum at or after a reference time, for the secondary row shown when
+// the soonest event is slack.
+export function nextFlowEvent(events: CurrentEvent[], nowMs: number): CurrentEvent | undefined {
   return events.find((event) => event.timeMs >= nowMs && event.kind !== 'slack');
 }
 

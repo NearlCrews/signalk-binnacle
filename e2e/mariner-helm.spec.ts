@@ -316,25 +316,26 @@ test('safe-area insets keep the safety strips clear of system chrome', async ({ 
 });
 
 test('stale GPS stops presenting coordinates as a current position', async ({ page }) => {
-  // DATA-01: retained coordinates keep current styling after the fix goes stale. The staleness
-  // window runs in real time because the worker stamps delta receipt with its own clock, which a
-  // page-side fake clock cannot reach. Flips green in Task 2.4; remove the marker there.
-  test.fail();
+  // DATA-01: a retained fix relabels as "Last fix" with its age. The staleness window runs in
+  // real time because the worker stamps delta receipt with its own clock, which a page-side fake
+  // clock cannot reach.
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
-  const vesselReadout = page.locator('.center-cluster .readout', { hasText: 'Vessel' });
-  await expect(vesselReadout).toContainText('27.7000');
+  // The cluster, not a label-filtered readout: the label itself is what the fix changes.
+  const cluster = page.locator('.center-cluster');
+  await expect(cluster).toContainText('Vessel');
+  await expect(cluster).toContainText('27.7000');
 
   // No further fixes: the vessel staleness window (10 seconds) elapses in real time.
-  await expect(vesselReadout).toContainText(/Last fix/, { timeout: 20_000 });
+  await expect(cluster).toContainText(/Last fix/, { timeout: 20_000 });
+  await expect(cluster).toContainText(/ago/);
+  await expect(cluster).not.toContainText('Vessel');
 });
 
 test('stale wind angle is not presented as live beside fresh speed', async ({ page }) => {
-  // DATA-02: the wind tile grades freshness from speed alone and keeps a retained angle. Real
-  // waits for the same reason as the stale-GPS case. Flips green in Task 2.4; remove the marker
-  // there.
-  test.fail();
+  // DATA-02: the wind angle grades on its own epoch, so a retained angle beside fresh speed reads
+  // "angle stale" and drops the needle. Real waits for the same reason as the stale-GPS case.
   await page.setViewportSize({ width: 1024, height: 768 });
   await openApp(page);
   await sendDelta(page, [

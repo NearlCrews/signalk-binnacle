@@ -21,9 +21,21 @@ export interface DangerContact {
   source: CpaSource;
 }
 
+// A data-quality state, not a danger severity: the target is retained and may be moving, but its
+// closest approach cannot be computed honestly, so it must never read as clear.
+export type UnassessedReason = 'course-unavailable' | 'motion-unknown';
+
+export interface UnassessedContact {
+  id: string;
+  name?: string;
+  position: LatLon;
+  reason: UnassessedReason;
+}
+
 export interface Assessment {
   contacts: DangerContact[];
   worst: Severity;
+  unassessed: UnassessedContact[];
 }
 
 interface OwnFix {
@@ -55,9 +67,14 @@ const DOWNGRADE_MARGIN = 1.1;
 // The identity-stable all-clear result: empty water yields this same object every pass, so
 // consumers that dirty-check the assessment by reference (the chart overlay does, every animation
 // frame) see no change instead of a fresh empty object per own-fix tick.
-const EMPTY_ASSESSMENT: Assessment = { contacts: [], worst: 'clear' };
+const EMPTY_ASSESSMENT: Assessment = { contacts: [], worst: 'clear', unassessed: [] };
 Object.freeze(EMPTY_ASSESSMENT);
 Object.freeze(EMPTY_ASSESSMENT.contacts);
+Object.freeze(EMPTY_ASSESSMENT.unassessed);
+
+// The Signal K navigation.state values that justify treating a target with no fresh speed as
+// genuinely stationary rather than unassessed.
+const STATIONARY_NAV_STATES = new Set(['anchored', 'moored', 'aground']);
 
 function immediateSeverity(cpaMeters: number, tcpaSeconds: number, t: Thresholds): Severity {
   if (cpaMeters <= t.dangerCpaMeters && tcpaSeconds <= t.dangerTcpaSeconds) return 'danger';
@@ -110,6 +127,7 @@ export function assessContacts(
       }
     : undefined;
   const contacts: DangerContact[] = [];
+  const unassessed: UnassessedContact[] = [];
   for (const t of targets) {
     let cpaMeters: number;
     let tcpaSeconds: number;
@@ -127,20 +145,46 @@ export function assessContacts(
       // Computing CPA needs a live own fix; the provider branch above does not (its CPA and TCPA
       // come from the server), so a lost fix stands down only the locally computed geometry.
       if (!ownK) continue;
-      // A reported SOG with no COG has no usable track; defaulting the course to due north would
-      // fabricate closing geometry, so such a target counts as stationary instead.
-      const targetSogMps = t.cogRad === undefined ? 0 : (t.sogMps ?? 0);
+      // Both motion fields arrive through the AIS freshness window, so undefined means missing or
+      // expired. Never fabricate a track: a target without fresh speed is stationary only when its
+      // reported navigation state says so, and a moving target without a fresh course cannot be
+      // assessed at all. Unassessed is a data-quality outcome, never a danger and never clear.
+      const sog = t.sogMps;
+      const cog = t.cogRad;
+      if (sog === undefined) {
+        if (!STATIONARY_NAV_STATES.has(t.navigationState ?? '')) {
+          unassessed.push({
+            id: t.id,
+            name: t.name,
+            position: t.position,
+            reason: 'motion-unknown',
+          });
+        }
+        continue;
+      }
+      const targetSlow = sog < SLOW_TARGET_SOG_MPS;
+      if (!targetSlow && cog === undefined) {
+        unassessed.push({
+          id: t.id,
+          name: t.name,
+          position: t.position,
+          reason: 'course-unavailable',
+        });
+        continue;
+      }
       // The busy-marina and at-anchor false-alarm case: a near-stationary target (a moored or
       // swinging boat) is not a collision risk to an own vessel that is itself not making way. Own
       // vessel counts as stationary when anchored, so GPS wander at anchor cannot reinstate the
       // noise. This gate is computed-branch only: a provider's CPA and TCPA are left authoritative.
       const ownStationary = anchored || ownK.sogMps < SLOW_TARGET_SOG_MPS;
-      if (ownStationary && targetSogMps < SLOW_TARGET_SOG_MPS) continue;
+      if (ownStationary && targetSlow) continue;
       const r = computeCpa(ownK, {
         latitude: t.position.latitude,
         longitude: t.position.longitude,
-        sogMps: targetSogMps,
-        cogRad: t.cogRad ?? 0,
+        sogMps: sog,
+        // A near-stationary target's course is geometrically negligible, so the fallback cannot
+        // fabricate closing geometry; a moving target never reaches here without a fresh course.
+        cogRad: cog ?? 0,
       });
       if (!r.closing) continue;
       cpaMeters = r.cpaMeters;
@@ -159,12 +203,12 @@ export function assessContacts(
       source,
     });
   }
-  if (contacts.length === 0) return EMPTY_ASSESSMENT;
+  if (contacts.length === 0 && unassessed.length === 0) return EMPTY_ASSESSMENT;
   contacts.sort(
     (a, b) =>
       SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.tcpaSeconds - b.tcpaSeconds,
   );
-  return { contacts, worst: contacts[0].severity };
+  return { contacts, worst: contacts[0]?.severity ?? 'clear', unassessed };
 }
 
 export class CollisionAssessment {

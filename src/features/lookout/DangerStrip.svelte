@@ -16,6 +16,7 @@ const { collision, muted, onToggleMute }: Props = $props();
 const MAX_ROWS = 4;
 
 const contacts = $derived(collision.assessment.contacts);
+const unassessedCount = $derived(collision.assessment.unassessed.length);
 const top = $derived(contacts.slice(0, MAX_ROWS));
 const overflow = $derived(Math.max(0, contacts.length - MAX_ROWS));
 const computedFallback = $derived(contacts.some((c) => c.source === 'computed'));
@@ -80,6 +81,12 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
     </ul>
     {#if overflow > 0}
       <p class="more muted-note">+{overflow} more</p>
+    {/if}
+    {#if unassessedCount > 0}
+      <p class="more muted-note">
+        +{unassessedCount}
+        unassessed: course or motion data missing, cannot be graded clear
+      </p>
     {/if}
   </aside>
 {/if}

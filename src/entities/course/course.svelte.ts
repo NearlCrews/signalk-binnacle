@@ -31,6 +31,10 @@ const ARRIVAL_EXIT_FACTOR = 1.2;
 // provider cannot leave a frozen distance inside the arrival circle or a stale ETA on screen.
 const COURSE_CALC_STALE_MS = 30_000;
 
+// The floor under the VMG-based time-to-go fallback: a tenth of a knot toward the mark is drift
+// and numerical dust, not progress, and dividing by it promises thousand-hour arrivals.
+const MIN_PROGRESS_VMG_MPS = 0.05;
+
 // calcValues does not stream as one object: the course-provider publishes each value as its own leaf
 // delta (navigation.course.calcValues.<field>) and the core never emits the parent, so each field is
 // held in its own store cell. These are the fields the guidance reads; the REST seed is decomposed
@@ -341,12 +345,23 @@ export class CourseGuidance {
       : undefined;
   });
 
+  // The active-leg fallback divides by positive VMG toward the waypoint, never SOG: five knots of
+  // SOG on a tack away from the mark is not progress, and an optimistic time is worse than none.
+  // Zero or negative VMG yields unavailable. A fresh server timeToGo stays preferred (regression
+  // guard: the course provider's estimate, when supplied, is authoritative).
   timeToGoSeconds: number | undefined = $derived.by(() => {
     const supplied = this.#finiteCalc('timeToGo');
     if (supplied !== undefined && supplied >= 0) return supplied;
     const d = this.distanceToNextMeters;
-    const sog = this.#vessel.sogStale ? undefined : this.#vessel.sogMps;
-    return d != null && sog != null ? etaSeconds(d, sog) : undefined;
+    const vmg = this.velocityMadeGoodMps;
+    return d != null && vmg != null && vmg >= MIN_PROGRESS_VMG_MPS ? etaSeconds(d, vmg) : undefined;
+  });
+
+  // What produced timeToGoSeconds, so surfaces can label the estimate honestly.
+  timeToGoBasis: 'server' | 'vmg' | undefined = $derived.by(() => {
+    const supplied = this.#finiteCalc('timeToGo');
+    if (supplied !== undefined && supplied >= 0) return 'server';
+    return this.timeToGoSeconds !== undefined ? 'vmg' : undefined;
   });
 
   // Latch bookkeeping for the arrival hysteresis. Plain fields, not $state: they are internal to

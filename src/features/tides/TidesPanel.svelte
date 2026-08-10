@@ -18,6 +18,7 @@ import {
   formatTideHeight,
   formatTideHeightSecondary,
   nextCurrentEvent,
+  nextFlowEvent,
   nowFraction,
   tideCurvePoints,
   tideSourceNote,
@@ -65,6 +66,10 @@ const nextLow = $derived(upcoming.find((event) => event.kind === 'low'));
 const curve = $derived(tide ? tideCurvePoints(tide.events) : []);
 const nowFrac = $derived(tide ? nowFraction(tide.events, clock.now) : undefined);
 const nextCurrent = $derived(current ? nextCurrentEvent(current.events, clock.now) : undefined);
+// When the soonest event is slack, the following flood or ebb maximum keeps the flow picture.
+const followingFlow = $derived(
+  current && nextCurrent?.kind === 'slack' ? nextFlowEvent(current.events, clock.now) : undefined,
+);
 const sourceNote = $derived(tideSourceNote(store.source, store.loadedTide));
 const minimize = createPanelMinimize();
 let observedSelectionRevision = untrack(() => store.selectionRevision);
@@ -337,6 +342,20 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
                 <span class="num">--</span><span class="unit"></span>
               {/if}
             </dd>
+            {#if followingFlow}
+              <dt>{`Then ${followingFlow.kind === 'ebb' ? 'ebb' : 'flood'}`}</dt>
+              <dd>
+                <span class="num"
+                  >{formatClockTime(followingFlow.timeMs)},
+                  {formatCurrentRate(
+                    followingFlow.velocityMps,
+                  )}{followingFlow.directionRad !== undefined
+                    ? `, ${formatBearingOr(followingFlow.directionRad, 0)}°`
+                    : ''}</span
+                >
+                <span class="unit"></span>
+              </dd>
+            {/if}
           </dl>
         {/if}
         <p class="footnote">Ebb flows out toward the sea, and flood flows in from it.</p>

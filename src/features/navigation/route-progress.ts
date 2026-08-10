@@ -4,4 +4,7 @@
 export interface RouteProgress {
   distanceToGoMeters: number;
   timeToGoSeconds?: number;
+  // How the time was built: the active leg's server or VMG estimate plus the planning speed for
+  // the legs ahead. Never a weather-, current-, tack-, or polar-aware passage estimate.
+  basis?: 'server-plan' | 'vmg-plan';
 }

@@ -14,6 +14,7 @@ vi.mock('$shared/signalk', async (importOriginal) => ({
 }));
 
 const DANGER: Assessment = {
+  unassessed: [],
   worst: 'danger',
   contacts: [
     {

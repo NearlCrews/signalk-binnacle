@@ -75,7 +75,11 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
         ><span class="angle">{formatSignedAngleOr(reading.angleRad)}</span>
       </span>
     </div>
-    {#if reading.secondary}
+    {#if reading.angleState}
+      <!-- The needle is already gone; this names why, so a live speed beside a dashed angle does
+           not read as a broken display. -->
+      <span class="tile-secondary">angle {reading.angleState}</span>
+    {:else if reading.secondary}
       <span class="tile-secondary">{reading.secondary}</span>
     {/if}
   {/if}

@@ -49,8 +49,8 @@ function mountPanel(options: {
           options.noOwnPosition ? undefined : { latitude: 42, longitude: -83 },
         ) as unknown as OwnVessel,
         collision: {
-          assessment: { contacts: options.contacts ?? [], worst: 'clear' },
-        } as CollisionAssessment,
+          assessment: { contacts: options.contacts ?? [], worst: 'clear', unassessed: [] },
+        } as unknown as CollisionAssessment,
         units: { mode: 'metric' } as UnitsStore,
         connectionPhase: options.connectionPhase ?? 'open',
         selectedId: options.selectedId,

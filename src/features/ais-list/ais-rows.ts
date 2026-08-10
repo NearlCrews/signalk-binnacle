@@ -1,5 +1,10 @@
 import { type AisTargetView, shortVesselId, vesselLabel } from '$entities/ais';
-import type { DangerContact, Severity } from '$entities/collision';
+import type {
+  DangerContact,
+  Severity,
+  UnassessedContact,
+  UnassessedReason,
+} from '$entities/collision';
 import type { LatLon } from '$shared/geo';
 import { compareOptionalNumber } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
@@ -27,6 +32,9 @@ export interface AisListRow {
   navigationState?: string;
   // The lookout's grading for this contact, when it considers it a risk.
   severity?: Severity;
+  // Set when the lookout cannot assess this target (moving with no fresh course, or no fresh
+  // motion data at all), so a degraded contact never reads as clear.
+  unassessedReason?: UnassessedReason;
 }
 
 export function buildAisRows(
@@ -36,11 +44,14 @@ export function buildAisRows(
   sort: AisSort,
   query = '',
   riskFilter: AisRiskFilter = 'all',
+  unassessed: readonly UnassessedContact[] = [],
 ): AisListRow[] {
   // The lookout's contact per target id, so a risky target reads in its severity color here, and
   // its locally computed CPA and TCPA fill in when the provider publishes none.
   const risks = new Map<string, DangerContact>();
   for (const contact of contacts) risks.set(contact.id, contact);
+  const unassessedById = new Map<string, UnassessedReason>();
+  for (const contact of unassessed) unassessedById.set(contact.id, contact.reason);
   let rows = targets.map<AisListRow>((target) => {
     const risk = risks.get(target.id);
     return {
@@ -65,6 +76,7 @@ export function buildAisRows(
       tcpaSeconds: target.tcpaSeconds ?? risk?.tcpaSeconds,
       navigationState: target.navigationState,
       severity: risk?.severity,
+      unassessedReason: unassessedById.get(target.id),
     };
   });
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -74,7 +86,9 @@ export function buildAisRows(
     );
   }
   if (riskFilter !== 'all') {
-    rows = rows.filter((row) => row.severity === riskFilter);
+    // An unassessed target stays visible under a risk filter: it might be exactly the risk the
+    // filter is looking for, and hiding it would make degraded assessment look like clear water.
+    rows = rows.filter((row) => row.severity === riskFilter || row.unassessedReason !== undefined);
   }
   const byIdentity = (a: AisListRow, b: AisListRow): number =>
     a.label.localeCompare(b.label) || a.id.localeCompare(b.id);

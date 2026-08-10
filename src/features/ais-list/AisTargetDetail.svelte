@@ -110,6 +110,13 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
       </div>
     {/if}
   </dl>
+  {#if row.unassessedReason}
+    <p class="alert-note" role="status">
+      {row.unassessedReason === 'course-unavailable'
+        ? 'CPA is unavailable because the target course is missing or stale. This vessel may be moving and cannot be assessed for collision; assessment resumes automatically when its course returns.'
+        : 'CPA is unavailable because no fresh motion data has arrived from this target. It cannot be assessed for collision; assessment resumes automatically when motion data returns.'}
+    </p>
+  {/if}
 </section>
 
 <style>
