@@ -156,7 +156,7 @@ import {
   Toast,
 } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
-import { probeCompanion } from '$shared/map';
+import { DEFAULT_OVERLAY_STATE, probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
   BINNACLE_PRIVACY_CHANNEL,
@@ -477,7 +477,7 @@ const layerSettingsCodec: PersistedCodec<LayerSettings> = {
 const weatherLayerSettings = new PersistedValue<LayerSettings>(
   binnacleStorageKey('weatherLayers'),
   {
-    [WEATHER_LAYER_IDS.wind]: { visible: true, opacity: 1 },
+    [WEATHER_LAYER_IDS.wind]: { ...DEFAULT_OVERLAY_STATE },
     [WEATHER_LAYER_IDS.waves]: { visible: true, opacity: 0.7 },
   },
   undefined,
@@ -2629,8 +2629,10 @@ const plotterActions = {
       />
       <ProfileSwitcher
         active={profileStore.active}
+        profiles={profileStore.profiles}
         hasUpdate={profileStore.remoteUpdateAvailable}
-        onClick={() => openPanel('profiles')}
+        onSelect={onApplyProfile}
+        onManage={() => openPanel('profiles')}
       />
       <ThemeToggle controller={theme} />
     </span>

@@ -13,16 +13,30 @@ const profile: Profile = {
 
 function renderSwitcher(overrides: Record<string, unknown> = {}): string {
   return render(ProfileSwitcher, {
-    props: { active: profile, onClick: vi.fn(), ...overrides },
+    props: {
+      active: profile,
+      profiles: [profile],
+      onSelect: vi.fn(),
+      onManage: vi.fn(),
+      ...overrides,
+    },
   }).body;
 }
 
 describe('ProfileSwitcher', () => {
+  it('renders a closed menu trigger', () => {
+    const body = renderSwitcher();
+
+    expect(body).toContain('aria-haspopup="menu"');
+    expect(body).toContain('aria-expanded="false"');
+    expect(body).not.toContain('role="menuitem"');
+  });
+
   it('carries the pending remote update in both the indicator and the label', () => {
     const body = renderSwitcher({ hasUpdate: true });
 
     expect(body).toContain('update-dot');
-    expect(body).toContain('Profile Coastal cruising, update available, open profiles');
+    expect(body).toContain('Profile Coastal cruising, update available, switch profile');
   });
 
   it('shows no update signal by default', () => {
@@ -33,7 +47,7 @@ describe('ProfileSwitcher', () => {
   });
 
   it('names the active profile in the hover title, not just the label', () => {
-    expect(renderSwitcher()).toContain('title="Profile Coastal cruising, open profiles"');
-    expect(renderSwitcher({ active: undefined })).toContain('title="No profile, open profiles"');
+    expect(renderSwitcher()).toContain('title="Profile Coastal cruising, switch profile"');
+    expect(renderSwitcher({ active: undefined })).toContain('title="No profile, switch profile"');
   });
 });
