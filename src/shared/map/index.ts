@@ -28,7 +28,7 @@ export {
   type LayerHitHandlers,
 } from './layer-hit-handlers';
 export type { LayerListItem, LayerSettings } from './layer-manager';
-export { LayerManager } from './layer-manager';
+export { DEFAULT_OVERLAY_STATE, LayerManager } from './layer-manager';
 export { CONTEXT_MENU_KEYSHORTCUTS } from './long-press';
 export { setMapImage } from './map-image';
 export {

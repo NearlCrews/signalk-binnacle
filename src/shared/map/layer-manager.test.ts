@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createFakeMap, fakeOverlayContext } from '$shared/testing';
-import { LayerManager } from './layer-manager';
+import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import type { OverlayContext, OverlayModule, ZBand } from './types';
 
 const fakeCtx = (): OverlayContext => fakeOverlayContext(createFakeMap());
+
+function shownOnMap(manager: LayerManager, id: string): boolean | undefined {
+  return manager.layers().find((layer) => layer.id === id)?.visible;
+}
+
+function pinnedVessel(options: LayerManagerOptions = {}) {
+  const vessel = fakeOverlay('vessel', 'vessel');
+  const manager = new LayerManager(fakeCtx(), { pinned: ['vessel'], ...options });
+  return { vessel, manager };
+}
 
 function fakeOverlay(id: string, band: ZBand = 'traffic'): OverlayModule & { events: string[] } {
   const events: string[] = [];
@@ -545,6 +555,33 @@ describe('LayerManager', () => {
     expect(manager.layers()[0].id).toBe('vessel');
   });
 
+  it('toggle cannot hide a pinned overlay', async () => {
+    const { vessel, manager } = pinnedVessel();
+    await manager.register(vessel);
+    manager.toggle('vessel', false);
+    expect(vessel.events).not.toContain('visible:false');
+    expect(shownOnMap(manager, 'vessel')).toBe(true);
+  });
+
+  it('applySnapshot cannot hide a pinned overlay', async () => {
+    const { vessel, manager } = pinnedVessel();
+    await manager.register(vessel);
+    // A profile document is not a safety authority: apply, import, and cross-station sync all
+    // flow through this door, and the panel renders no toggle a navigator could recover with.
+    manager.applySnapshot({ vessel: { visible: false, opacity: 1 } }, []);
+    expect(vessel.events).not.toContain('visible:false');
+    expect(shownOnMap(manager, 'vessel')).toBe(true);
+  });
+
+  it('restores a pinned overlay visible even when saved settings hid it', async () => {
+    const { vessel, manager } = pinnedVessel({
+      saved: { vessel: { visible: false, opacity: 1 } },
+    });
+    await manager.register(vessel);
+    expect(vessel.events).toContain('visible:true');
+    expect(shownOnMap(manager, 'vessel')).toBe(true);
+  });
+
   it('stacks a sub-layer directly above its parent and exposes the parent id', async () => {
     const manager = new LayerManager(fakeCtx());
     await manager.register(fakeOverlay('gebco', 'bathymetry'));
@@ -603,10 +640,9 @@ describe('LayerManager', () => {
     manager.toggle('coverage', false);
     manager.toggle('chart', false);
     manager.toggle('chart', true);
-    const visible = (id: string) => manager.layers().find((l) => l.id === id)?.visible;
-    expect(visible('quality')).toBe(true);
+    expect(shownOnMap(manager, 'quality')).toBe(true);
     // Only what the parent hid returns: the facet already switched off stays off.
-    expect(visible('coverage')).toBe(false);
+    expect(shownOnMap(manager, 'coverage')).toBe(false);
   });
 
   it('applySnapshot drives setVisible and setOpacity for known layers', async () => {

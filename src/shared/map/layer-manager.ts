@@ -19,6 +19,10 @@ export interface OverlayState {
   opacity: number;
 }
 
+// The visible, fully opaque state an overlay defaults to. Shared as a read-only reference; spread
+// it before storing anywhere that mutates state in place.
+export const DEFAULT_OVERLAY_STATE: OverlayState = { visible: true, opacity: 1 };
+
 // Per-layer visibility and opacity, keyed by overlay id, for save and restore.
 export type LayerSettings = Record<string, OverlayState>;
 
@@ -253,7 +257,7 @@ export class LayerManager {
     // flow undefined into setOpacity and render as NaN.
     const state = restored
       ? {
-          visible: Boolean(restored.visible),
+          visible: this.#flooredVisible(module.id, Boolean(restored.visible)),
           opacity: this.#coerceOpacity(restored.opacity),
         }
       : { visible: module.defaultVisible ?? true, opacity: module.defaultOpacity ?? 1 };
@@ -262,7 +266,7 @@ export class LayerManager {
     if (state.visible) {
       const group = this.#groupOf(module.id);
       if (group?.some((other) => other !== module.id && this.#state.get(other)?.visible)) {
-        state.visible = false;
+        state.visible = this.#flooredVisible(module.id, false);
       }
     }
     this.#state.set(module.id, state);
@@ -379,6 +383,9 @@ export class LayerManager {
   }
 
   toggle(id: string, visible: boolean): void {
+    // A request the pinned floor overrides is ignored outright rather than clamped: clamping would
+    // re-run exclusion, child restore, and a persist for a state that did not change.
+    if (this.#flooredVisible(id, visible) !== visible) return;
     const module = this.#modules.get(id);
     const state = this.#state.get(id);
     if (!module || !state) return;
@@ -389,7 +396,7 @@ export class LayerManager {
         if (other === id) continue;
         const om = this.#modules.get(other);
         const os = this.#state.get(other);
-        if (om && os?.visible) {
+        if (om && os?.visible && !this.#flooredVisible(other, false)) {
           os.visible = false;
           this.#syncVisibility(om, os, true);
         }
@@ -412,11 +419,10 @@ export class LayerManager {
     for (const [childId, child] of this.#modules) {
       if (child.parent !== id) continue;
       const childState = this.#state.get(childId);
-      if (childState?.visible) {
-        childState.visible = false;
-        this.#syncVisibility(child, childState, true);
-        suppressed.add(childId);
-      }
+      if (!childState?.visible || this.#flooredVisible(childId, false)) continue;
+      childState.visible = false;
+      this.#syncVisibility(child, childState, true);
+      suppressed.add(childId);
     }
     // A repeat toggle-off finds nothing visible; keep the earlier memory rather than clearing it.
     if (suppressed.size > 0) this.#suppressedChildren.set(id, suppressed);
@@ -480,9 +486,10 @@ export class LayerManager {
       const next = settings[id];
       const state = this.#state.get(id);
       if (!next || !state) continue;
+      const nextVisible = this.#flooredVisible(id, next.visible);
       let visibilityChanged = false;
-      if (next.visible !== state.visible) {
-        state.visible = next.visible;
+      if (nextVisible !== state.visible) {
+        state.visible = nextVisible;
         visibilityChanged = true;
       }
       this.#syncVisibility(module, state, visibilityChanged);
@@ -528,6 +535,14 @@ export class LayerManager {
   // render the layer as NaN, transparent, or broken.
   #coerceOpacity(value: unknown): number {
     return Number.isFinite(value) ? Math.max(0, Math.min(1, value as number)) : 1;
+  }
+
+  // The pinned safety floor: no door lowers a pinned overlay's visibility. Not the panel toggle,
+  // not a saved or synced profile snapshot, not a parent or exclusive-group hide. The panel renders
+  // no toggle for a pinned row, so a false arriving at any door is a corrupted or foreign write,
+  // never a choice, and a floor one door can lower is not a floor.
+  #flooredVisible(id: string, visible: boolean): boolean {
+    return visible || this.#pinned.has(id);
   }
 
   // Apply the rendered visibility when the desired state changes or a provider appears or
@@ -649,7 +664,7 @@ export class LayerManager {
     // re-adding overlays or every beforeId would point at a missing layer.
     installSentinels(this.#ctx.map);
     for (const [id, module] of this.#modules) {
-      const state = this.#state.get(id) ?? { visible: true, opacity: 1 };
+      const state = this.#state.get(id) ?? DEFAULT_OVERLAY_STATE;
       // The swap recreated this overlay's sources empty, so invalidate its change-detection cache
       // before re-adding, so the next sync repopulates rather than early-returning as unchanged.
       module.reset?.();
@@ -690,7 +705,7 @@ export class LayerManager {
         const module = this.#modules.get(id);
         if (!module) return [];
         if (module.listed === false) return [];
-        const state = this.#state.get(id) ?? { visible: true, opacity: 1 };
+        const state = this.#state.get(id) ?? DEFAULT_OVERLAY_STATE;
         const available = this.#availability.get(id) ?? true;
         return [
           {
