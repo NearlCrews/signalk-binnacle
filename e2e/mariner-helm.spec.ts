@@ -445,3 +445,60 @@ test('emergency layout passes axe and the MOB actions are keyboard reachable', a
     ),
   ).toEqual([]);
 });
+
+test('orientation falls back to north on a stale reference and survives a manual pan', async ({
+  page,
+}) => {
+  await openApp(page);
+  await sendDelta(page, OWN_FIX);
+
+  // The orientation tile cycles north to course to heading; the menu closes on each select.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: /Orientation: North up/ }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: /Orientation: Course up/ }).click();
+
+  const chip = page.locator('.status-strip .orientation-chip');
+  await sendDelta(page, OWN_FIX);
+  await expect(chip).toContainText('Heading up (true)');
+
+  // The reference stops arriving: the vessel staleness window elapses and the chart states its
+  // immediate fallback to north rather than holding a dead rotation.
+  await expect(chip).toContainText('North up (true heading stale)', { timeout: 20_000 });
+
+  // A manual pan releases Follow elsewhere but must not corrupt the orientation state.
+  const canvas = page.locator('.maplibregl-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('map canvas did not lay out');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 40, { steps: 5 });
+  await page.mouse.up();
+  await expect(chip).toContainText('North up (true heading stale)');
+
+  // One tap returns to north-up, and the chip retires with the mode.
+  await chip.getByRole('button', { name: 'N up' }).click();
+  await expect(chip).toHaveCount(0);
+});
+
+test('watch handoff keeps an offline snapshot on the device and says so', async ({ page }) => {
+  await openApp(page);
+  await sendDelta(page, OWN_FIX);
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Watch handoff' }).click();
+  const panel = page.getByRole('complementary', { name: 'Watch handoff' });
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByText('It is never a statement that it is safe to take watch.'),
+  ).toBeVisible();
+
+  // The fixture server has no applicationData store, so the snapshot stays on this device.
+  await panel
+    .getByPlaceholder('Sea state, traffic, engine, anything to watch')
+    .fill('Wind building.');
+  await panel.getByRole('button', { name: 'Take handoff snapshot' }).click();
+  await expect(panel.getByText('Wind building.')).toBeVisible();
+  await expect(panel.getByText('On this device only')).toBeVisible();
+  await expect(panel.getByText('GPS fix', { exact: true })).toBeVisible();
+});

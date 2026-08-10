@@ -42,6 +42,7 @@ function makeDeps(): ProfileBindingDeps {
         anchorRadiusMeters = next;
       },
     },
+    chartOrientation: pv('north'),
   } as unknown as ProfileBindingDeps;
 }
 
@@ -140,6 +141,17 @@ describe('createProfileBindings', () => {
     const deps = makeDeps();
     const bindings = createProfileBindings(deps);
     expect(() => bindings.track()).not.toThrow();
+  });
+
+  it('captures chart orientation and resets a legacy profile to north-up', () => {
+    const deps = makeDeps();
+    const bindings = createProfileBindings(deps);
+    deps.chartOrientation.set('heading');
+    expect(bindings.capture().chartOrientation).toBe('heading');
+    const legacy = bindings.capture();
+    legacy.chartOrientation = undefined;
+    bindings.apply(legacy);
+    expect(deps.chartOrientation.value).toBe('north');
   });
 
   it('captures trend ids and applies the legacy default when the field is absent', () => {

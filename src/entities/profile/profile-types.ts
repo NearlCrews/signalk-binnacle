@@ -33,6 +33,9 @@ export interface ProfileSettings {
   // The starting radius for the next anchor drop, in meters. The active watch and its live radius are
   // safety state and never travel with a profile.
   anchorRadiusMeters?: number;
+  // Chart orientation mode. Optional so profiles saved before orientation existed stay valid;
+  // absent reads as north-up.
+  chartOrientation?: 'north' | 'course' | 'heading';
   // Legacy device and safety fields remain optional so older exports validate and round-trip, but the
   // current bindings never capture or apply them.
   layerCategories?: Record<string, boolean>;
@@ -50,6 +53,7 @@ export const PORTABLE_PROFILE_SETTING_KEYS = [
   'trackSettings',
   'planningSpeedMps',
   'units',
+  'chartOrientation',
   'pinnedActionIds',
   'instrumentTiles',
   'trendInstrumentIds',

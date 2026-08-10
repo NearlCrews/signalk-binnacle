@@ -42,12 +42,12 @@ describe('createFollowController', () => {
 
     test.controller.toggle();
     flushSync();
-    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24);
+    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24, 0);
 
     test.vessel.position = { latitude: 60.001, longitude: 24.001 };
     flushSync();
     expect(test.recenterOnVessel).toHaveBeenCalledTimes(2);
-    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(60.001, 24.001);
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(60.001, 24.001, 0);
   });
 
   it('stays armed through a stale fix and resumes when the fix recovers', () => {
@@ -67,7 +67,7 @@ describe('createFollowController', () => {
 
     test.vessel.positionStale = false;
     flushSync();
-    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60.01, 24.01);
+    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60.01, 24.01, 0);
   });
 
   it('release disarms follow and stops recentering on later fixes', () => {
@@ -95,6 +95,6 @@ describe('createFollowController', () => {
 
     test.commands.current = { recenterOnVessel: test.recenterOnVessel };
     flushSync();
-    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24);
+    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24, 0);
   });
 });

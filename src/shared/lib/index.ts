@@ -75,6 +75,7 @@ export {
   pressureUnit,
   pressureValue,
   RAD_TO_DEG,
+  radiansToBearing,
   temperatureUnit,
   type UnitsMode,
 } from './units';

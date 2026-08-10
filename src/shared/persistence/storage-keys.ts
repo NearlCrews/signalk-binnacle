@@ -44,6 +44,9 @@ const BINNACLE_STORAGE_KEYS = {
   chartActionsHint: { key: 'binnacle:chart-actions-hint', scope: 'device' },
   // The first-run orientation was dismissed on this device; Help reopens it on demand.
   helpOrientation: { key: 'binnacle:help-orientation', scope: 'device' },
+  // Watch-handoff snapshots taken while the shared server store was unreachable, queued to sync.
+  handoffDrafts: { key: 'binnacle:handoff-drafts', scope: 'draft' },
+  chartOrientation: { key: 'binnacle:chart-orientation', scope: 'profile' },
 } as const satisfies Record<string, StorageKeyDefinition>;
 
 type BinnacleStorageKeyId = keyof typeof BINNACLE_STORAGE_KEYS;

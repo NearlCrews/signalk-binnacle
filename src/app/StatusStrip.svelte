@@ -40,6 +40,8 @@ let {
   radarHealth = { state: 'quiet' },
   audioState,
   onEnableSound,
+  orientation = undefined,
+  onResetOrientation = undefined,
   pinnedActions,
   editing = false,
   clock,
@@ -73,6 +75,11 @@ let {
   // 'unsupported' states that audible alarms are unavailable on this display, with no dead action.
   audioState: import('$shared/audio').AlarmAudioState;
   onEnableSound: () => void;
+  // The chart orientation while a rotating mode is chosen: its live label (including a fallback to
+  // north when the reference is stale) stays visible, and one tap returns to north-up. Absent in
+  // the default north-up mode, where an unrotated chart speaks for itself.
+  orientation?: { label: string; active: boolean };
+  onResetOrientation?: () => void;
   pinnedActions: MenuItem[];
   editing?: boolean;
   clock: ReactiveClock;
@@ -205,6 +212,19 @@ const depthLabel = $derived.by(() => {
         title="Audible alarms are unavailable on this display; alerts remain visual only"
       >
         Sound unavailable
+      </span>
+    {/if}
+    {#if orientation}
+      <!-- The sound-off idiom: the chip states the live orientation (including its fallback), and
+           the compact action is the one-tap return to north up. -->
+      <span
+        class="readout orientation-chip"
+        class:sev-warning={!orientation.active}
+        role="status"
+        title="Chart orientation and its reference; N up returns to north up"
+      >
+        {orientation.label}
+        <button type="button" class="btn btn-compact" onclick={onResetOrientation}>N up</button>
       </span>
     {/if}
     {#if showLookout}

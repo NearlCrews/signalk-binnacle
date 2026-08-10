@@ -21,6 +21,7 @@ import { loadAisListPanel } from '$features/ais-list';
 import { loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
+import { loadHandoffPanel } from '$features/handoff';
 import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
@@ -109,6 +110,7 @@ interface FlatProps {
   trackController: TrackController;
   marineRadar: RadarController;
   tidesController: TidesController;
+  handoff: import('$features/handoff').HandoffController;
 
   // Entity stores
   anchor: AnchorWatch;
@@ -235,6 +237,9 @@ interface FlatProps {
   onSilenceNotification: (notification: ActiveNotification) => void;
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
   muteGenericHere: () => void;
+  // The latest route-coverage result from the Offline charts panel, threaded up so a watch-handoff
+  // snapshot can state whether the corridor was checked.
+  onRouteCoverageReport: (report: import('$features/prewarm').RouteCoverageReport | null) => void;
   openAlarmsPanel: () => void;
   selectPoi: (poi: Poi) => void;
   flyToPosition: (position: LatLon) => void;
@@ -288,7 +293,8 @@ type ControllerKey =
   | 'personalNotesController'
   | 'trackController'
   | 'marineRadar'
-  | 'tidesController';
+  | 'tidesController'
+  | 'handoff';
 type EntityKey =
   | 'anchor'
   | 'mob'
@@ -337,6 +343,7 @@ type ActionKey =
   | 'armMeasure'
   | 'moveSelectedMeasureToCenter'
   | 'toggleCollisionMute'
+  | 'onRouteCoverageReport'
   | 'onSilenceNotification'
   | 'onAcknowledgeNotification'
   | 'muteGenericHere'
@@ -455,6 +462,7 @@ const {
   trackController,
   marineRadar,
   tidesController,
+  handoff,
 } = $derived(controllers);
 const {
   anchor,
@@ -508,6 +516,7 @@ const {
   onSilenceNotification,
   onAcknowledgeNotification,
   muteGenericHere,
+  onRouteCoverageReport,
   openAlarmsPanel,
   selectPoi,
   flyToPosition,
@@ -712,6 +721,11 @@ function alarmsPanelForAttempt() {
 function helpPanelForAttempt() {
   void lazyPanelAttempt;
   return loadHelpPanel();
+}
+
+function handoffPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadHandoffPanel();
 }
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
@@ -1635,6 +1649,43 @@ $effect(() => {
             onRetry={retryLazyPanel}
           />
         {/await}
+      {:else if activePanel === 'handoff'}
+        {#await handoffPanelForAttempt()}
+          <LazyPanelState
+            title="Watch handoff"
+            closeLabel="Close watch handoff"
+            state="loading"
+            message="Loading Watch handoff…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default controller={handoff} onClose={closePanel} onBack={backToMenu} />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Watch handoff"
+                closeLabel="Close watch handoff"
+                state="error"
+                message="Watch handoff stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Watch handoff"
+            closeLabel="Close watch handoff"
+            state="error"
+            message="Watch handoff could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         {#await regionsPanelForAttempt()}
           <LazyPanelState
@@ -1656,6 +1707,7 @@ $effect(() => {
               {units}
               {companionBase}
               activeRoute={activeRouteForCoverage}
+              onCoverageReport={onRouteCoverageReport}
               onClose={closePanel}
               onBack={backToMenu}
               onOpenCharts={openInstalledCharts}

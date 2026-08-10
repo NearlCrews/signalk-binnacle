@@ -3,7 +3,9 @@ import Anchor from '@lucide/svelte/icons/anchor';
 import Bell from '@lucide/svelte/icons/bell';
 import ChartLine from '@lucide/svelte/icons/chart-line';
 import CircleHelp from '@lucide/svelte/icons/circle-help';
+import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 import CloudSun from '@lucide/svelte/icons/cloud-sun';
+import Compass from '@lucide/svelte/icons/compass';
 import DownloadCloud from '@lucide/svelte/icons/download-cloud';
 import ExternalLink from '@lucide/svelte/icons/external-link';
 import Gauge from '@lucide/svelte/icons/gauge';
@@ -27,6 +29,7 @@ import { AisTargets } from '$entities/ais';
 import { AnchorWatch } from '$entities/anchor';
 import { CollisionAssessment } from '$entities/collision';
 import { CourseGuidance } from '$entities/course';
+import { type HandoffSnapshot, isHandoffSnapshot } from '$entities/handoff';
 import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import { MeasureStore } from '$entities/measure';
 import { MobStore } from '$entities/mob';
@@ -53,6 +56,7 @@ import { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
+import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
   createInstrumentsController,
   DEFAULT_TILES,
@@ -65,7 +69,9 @@ import {
   CollisionMute,
   createShallowController,
   GenericAlarm,
+  isRaisedNotification,
   LookoutAlarm,
+  worstRaisedNotification,
 } from '$features/lookout';
 import {
   createMarineRadarController,
@@ -94,7 +100,7 @@ import {
   type PoiViewState,
 } from '$features/notes';
 import type { Poi } from '$features/poi-search';
-import { CompanionStatus } from '$features/prewarm';
+import { CompanionStatus, type RouteCoverageReport } from '$features/prewarm';
 import {
   createProfileBindings,
   createProfilesController,
@@ -143,6 +149,7 @@ import {
 import {
   Clock,
   createMediaQuery,
+  formatClockTime,
   HeldFlag,
   hasControlCharacters,
   isRecord,
@@ -164,10 +171,14 @@ import { OnlineStatus, registerPwa } from '$shared/pwa';
 import {
   booleanPersistedCodec,
   booleanRecordPersistedCodec,
+  CHART_ORIENTATION_MODES,
+  type ChartOrientationMode,
   createMapView,
+  createPersistedCodec,
   createPlanningSpeed,
   createThresholds,
   createTrackSettings,
+  enumPersistedCodec,
   isMapView,
   type MapView,
   type PersistedCodec,
@@ -204,7 +215,9 @@ import {
 import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
+import { resolveOrientation } from './chart-orientation';
 import { createFollowController } from './follow-controller.svelte';
+import { collectHandoffFacts } from './handoff-facts';
 import LiveRegions from './LiveRegions.svelte';
 import { createNotificationsController } from './notifications-controller.svelte';
 import StatusStrip from './StatusStrip.svelte';
@@ -680,6 +693,13 @@ const instrumentTiles = new PersistedValue<string[]>(
   undefined,
   stringArrayPersistedCodec({ maxItems: 100, maxLength: 256 }),
 );
+// Chart orientation mode, profile-owned; the resolver and bearing effect live beside follow.
+const chartOrientation = new PersistedValue<ChartOrientationMode>(
+  binnacleStorageKey('chartOrientation'),
+  'north',
+  undefined,
+  enumPersistedCodec(CHART_ORIENTATION_MODES),
+);
 const trendInstruments = new PersistedValue<string[]>(
   binnacleStorageKey('trendInstruments'),
   [...DEFAULT_TREND_INSTRUMENT_IDS],
@@ -939,6 +959,7 @@ const profileBindings = createProfileBindings({
     get: () => anchor.preferredRadiusMeters,
     set: (radiusMeters) => anchor.rememberRadius(radiusMeters),
   },
+  chartOrientation,
 });
 
 // Push a profile's persisted layer snapshots to the live maps after the bindings update their stores.
@@ -1123,11 +1144,47 @@ if (profileStore.profiles.length > 0) {
   });
 }
 
+// Chart orientation: north-up by default, with course-up and heading-up as explicit profile-owned
+// choices. The resolver owns the fallback rules (fresh reference or north, immediately), the
+// effect below is the one author of map bearing, and rotation gestures stay disabled.
+const orientation = $derived(
+  resolveOrientation({
+    mode: chartOrientation.value,
+    headingRad: vessel.headingRad,
+    headingStale: vessel.headingStale,
+    cogRad: vessel.cogRad,
+    cogStale: vessel.cogStale,
+    sogMps: vessel.sogMps,
+    sogStale: vessel.sogStale,
+  }),
+);
+$effect(() => {
+  mapCommands?.setMapBearing(orientation.bearingDeg);
+});
+function cycleOrientation(): void {
+  const modes = CHART_ORIENTATION_MODES;
+  const index = modes.indexOf(chartOrientation.value);
+  chartOrientation.set(modes[(index + 1) % modes.length]);
+}
+const ORIENTATION_TILE_LABELS: Record<ChartOrientationMode, string> = {
+  north: 'North up',
+  course: 'Course up',
+  heading: 'Heading up',
+};
+// The bounded look-ahead: only a rotated chart making way shifts the boat low on screen (up IS
+// ahead there); north-up and a stopped or referenceless boat stay centered. Bounded by a fixed
+// pixel budget, and the map is never pitched.
+const LOOK_AHEAD_PX = 140;
+const lookAheadPx = $derived(
+  orientation.active && chartOrientation.value !== 'north' ? LOOK_AHEAD_PX : 0,
+);
+
 // Follow lock orchestration (recenter per fix, stale pause with auto recovery, release on manual
 // pan) lives in the controller; the host wires the menu tile and onUserPan to it.
 const follow = createFollowController({
   vessel,
   commands: () => mapCommands,
+  lookAheadPx: () => lookAheadPx,
 });
 
 // Show a chart layer at full registration (the persisted snapshot plus the live map), so a feature
@@ -1296,6 +1353,96 @@ const onSilenceNotification = notificationsController.onSilenceNotification;
 const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
 const muteGenericHere = notificationsController.muteGenericHere;
 
+// Helm radar health, shared by the status strip chip and the watch-handoff facts so the two can
+// never disagree about the same picture.
+const radarHealth = $derived(
+  radarHelmHealth({
+    echoShown: layerSettings.value['marine-radar']?.visible ?? false,
+    operationalStatus: marineRadar.store.operationalStatus,
+    connection: marineRadar.store.status,
+    renderer: marineRadar.store.rendererStatus,
+  }),
+);
+
+// Watch handoff: timestamped review-status snapshots shared through Signal K applicationData
+// (global scope, every station reads one list), with a bounded device draft queue that syncs when
+// the server store returns. Creating a snapshot only reads the stores wired here.
+const handoffDrafts = new PersistedValue<HandoffSnapshot[]>(
+  binnacleStorageKey('handoffDrafts'),
+  [],
+  undefined,
+  createPersistedCodec(
+    (value: unknown): value is HandoffSnapshot[] =>
+      Array.isArray(value) && value.length <= 10 && value.every(isHandoffSnapshot),
+  ),
+);
+const handoffClient = createHandoffClient(origin, () => authToken);
+// The latest route-coverage report, threaded up from the Offline charts panel, so a handoff can
+// state whether the corridor was checked without re-running the check.
+let routeCoverageFact = $state<string | undefined>();
+function onRouteCoverageReport(report: RouteCoverageReport | null): void {
+  if (report === null || report.verdict === 'unknown') {
+    routeCoverageFact = undefined;
+    return;
+  }
+  const verdict = report.verdict === 'complete' ? 'Complete' : 'Partial';
+  routeCoverageFact = `${verdict} for a ${report.corridorNm} nm corridor, checked ${formatClockTime(Date.now())}`;
+}
+const handoff = createHandoffController({
+  client: () => handoffClient,
+  drafts: handoffDrafts,
+  collectFacts: () =>
+    collectHandoffFacts({
+      now: Date.now,
+      fix: () => ({
+        received: vessel.positionReceived,
+        stale: vessel.positionStale,
+        epochMs: vessel.positionEpochMs ?? 0,
+      }),
+      course: () => ({
+        destination: courseGuidance.active
+          ? (courseGuidance.nextPointName ?? 'the next point')
+          : undefined,
+        xteMeters: courseGuidance.crossTrackErrorMeters,
+        ttgSeconds: courseGuidance.timeToGoSeconds,
+        ttgBasis: courseGuidance.timeToGoBasis,
+      }),
+      alarms: () => ({
+        raised: genericAlarms.filter(isRaisedNotification).length,
+        worst: worstRaisedNotification(genericAlarms)?.state,
+        collisionMutedUntilMs: collisionMute.active
+          ? Date.now() + collisionMute.remainingMs
+          : undefined,
+      }),
+      collision: () => ({
+        worst: collision.assessment.worst,
+        unassessed: collision.assessment.unassessed.length,
+        topCpaMeters: collision.assessment.contacts[0]?.cpaMeters,
+        topTcpaSeconds: collision.assessment.contacts[0]?.tcpaSeconds,
+      }),
+      depthWatch: () => shallowController.monitorState,
+      radar: () =>
+        radarHealth.state === 'quiet'
+          ? 'quiet'
+          : radarHealth.state === 'stale'
+            ? 'transmitting, picture stale'
+            : `failed (${radarHealth.reason})`,
+      weatherFetchedAtMs: () => weather.grid?.fetchedAt,
+      tides: () =>
+        tidesStore.tide !== undefined
+          ? 'tide station data loaded'
+          : tidesStore.status === 'idle'
+            ? 'not loaded'
+            : tidesStore.status,
+      routeCoverage: () => routeCoverageFact,
+    }),
+});
+// Reconnect synchronization: a draft taken offline reaches the other stations as soon as the
+// browser is back online, without a manual step.
+$effect(() => {
+  if (net.online) void handoff.syncDrafts();
+});
+
 // Full-screen Instruments is a modal whose aria-modal removes the rest of the app, emergency rail
 // included, from the accessibility tree, and no sibling subtree can be exempted from it. So an
 // alarm-grade safety event closes the full-screen dock outright, returning the rail and its
@@ -1373,6 +1520,17 @@ const menuItems = $derived<MenuItem[]>([
         : 'Follow needs a GPS position.',
     pressed: follow.following,
     onSelect: () => follow.toggle(),
+  },
+  {
+    id: 'orientation',
+    label: `Orientation: ${ORIENTATION_TILE_LABELS[chartOrientation.value]}`,
+    shortLabel: ORIENTATION_TILE_LABELS[chartOrientation.value],
+    icon: Compass,
+    group: 'Map',
+    disabled: !mapCommands,
+    disabledLabel: 'Orientation (chart is loading)',
+    pressed: chartOrientation.value !== 'north',
+    onSelect: cycleOrientation,
   },
   {
     id: 'routes',
@@ -1504,6 +1662,15 @@ const menuItems = $derived<MenuItem[]>([
     count: genericAlarms.length,
     countNoun: 'alarm',
     onSelect: () => togglePanel('alarms'),
+  },
+  {
+    id: 'handoff',
+    label: 'Watch handoff',
+    shortLabel: 'Handoff',
+    icon: ClipboardList,
+    group: 'Safety',
+    pressed: activePanel === 'handoff',
+    onSelect: () => togglePanel('handoff'),
   },
   {
     id: 'forecast',
@@ -2314,6 +2481,7 @@ const plotterControllers = {
   trackController,
   marineRadar,
   tidesController,
+  handoff,
 };
 
 const plotterEntities = {
@@ -2359,6 +2527,7 @@ const plotterActions = {
   onSilenceNotification,
   onAcknowledgeNotification,
   muteGenericHere,
+  onRouteCoverageReport,
   openAlarmsPanel: () => openPanel('alarms'),
   closePanel,
   backToMenu,
@@ -2680,14 +2849,13 @@ const plotterActions = {
     {vessel}
     shallowAlarming={shallowController.alarming}
     shallowState={shallowController.monitorState}
-    radarHealth={radarHelmHealth({
-      echoShown: layerSettings.value['marine-radar']?.visible ?? false,
-      operationalStatus: marineRadar.store.operationalStatus,
-      connection: marineRadar.store.status,
-      renderer: marineRadar.store.rendererStatus,
-    })}
+    {radarHealth}
     audioState={audioChipState}
     onEnableSound={primeAlarmAudio}
+    orientation={chartOrientation.value !== 'north'
+      ? { label: orientation.label, active: orientation.active }
+      : undefined}
+    onResetOrientation={() => chartOrientation.set('north')}
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}

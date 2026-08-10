@@ -12,6 +12,7 @@ const PROFILE_SETTING_LABELS: Record<PortableProfileSettingKey, string> = {
   trackSettings: 'Track recording',
   planningSpeedMps: 'Planning speed',
   units: 'Units',
+  chartOrientation: 'Chart orientation',
   pinnedActionIds: 'Toolbar actions',
   instrumentTiles: 'Instrument dock',
   trendInstrumentIds: 'Data trends',

@@ -15,4 +15,5 @@ export type PanelId =
   | 'profiles'
   | 'regions'
   | 'charts-management'
-  | 'help';
+  | 'help'
+  | 'handoff';

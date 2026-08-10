@@ -2,7 +2,12 @@ import { DEFAULT_TREND_INSTRUMENT_IDS } from '$entities/instrument-trend';
 import type { ProfileSettings } from '$entities/profile';
 import type { UnitsMode } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
-import type { PersistedValue, Thresholds, TrackSettings } from '$shared/settings';
+import type {
+  ChartOrientationMode,
+  PersistedValue,
+  Thresholds,
+  TrackSettings,
+} from '$shared/settings';
 import type { ThemeController } from '$shared/ui';
 
 // Every store a profile captures. All are shared-layer services or entity types, so this binding
@@ -30,6 +35,8 @@ export interface ProfileBindingDeps {
     get(): number;
     set(radiusMeters: number): void;
   };
+  // The chart orientation mode (north-up, course-up, heading-up).
+  chartOrientation: PersistedValue<ChartOrientationMode>;
 }
 
 export interface ProfileBindings {
@@ -121,6 +128,13 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
         if (s.anchorRadiusMeters !== undefined) deps.anchorRadius.set(s.anchorRadiusMeters);
       },
       track: () => void deps.anchorRadius.get(),
+    },
+    chartOrientation: {
+      read: () => ({ chartOrientation: deps.chartOrientation.snapshot() }),
+      // Optional for compatibility: a profile saved before orientation existed reads as north-up
+      // rather than inheriting the previously active profile's rotation.
+      write: (s) => deps.chartOrientation.set(s.chartOrientation ?? 'north'),
+      track: () => void deps.chartOrientation.value,
     },
     units: {
       read: () => ({ units: deps.unitsLocal.snapshot() }),

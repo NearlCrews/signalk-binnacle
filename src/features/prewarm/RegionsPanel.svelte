@@ -29,7 +29,7 @@ import { DETAIL_PRESETS } from './detail-level.js';
 import type { SavedRegionDto } from './regions-client.js';
 import { createRegionsClient } from './regions-client.js';
 import { createRegionsController } from './regions-controller.svelte.js';
-import { COVERAGE_CORRIDOR_CHOICES_NM } from './route-coverage.js';
+import { COVERAGE_CORRIDOR_CHOICES_NM, type RouteCoverageReport } from './route-coverage.js';
 import SavedRegionsView from './SavedRegionsView.svelte';
 import StorageView from './StorageView.svelte';
 import { sourceDescription } from './source-summary.js';
@@ -52,6 +52,9 @@ interface Props {
   // The route being navigated, as a getter so the coverage check reads the live route. Absent or
   // returning undefined when nothing is being navigated.
   activeRoute?: () => { name: string; waypoints: RouteWaypoint[] } | undefined;
+  // Reports the latest coverage result (and its clearing) upward, so a watch-handoff snapshot can
+  // state whether the corridor was checked without re-running the check.
+  onCoverageReport?: (report: RouteCoverageReport | null) => void;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
@@ -70,6 +73,7 @@ const {
   insecureTransport = typeof location !== 'undefined' && isInsecureTransportOrigin(serverOrigin()),
   pwaStatus = 'pending',
   activeRoute,
+  onCoverageReport,
   onClose,
   onBack,
   onOpenCharts,
@@ -95,6 +99,9 @@ $effect(() => {
   if (routeForCheck === undefined && controller.coverageReport !== null) {
     controller.clearCoverageCheck();
   }
+});
+$effect(() => {
+  onCoverageReport?.(controller.coverageReport);
 });
 onDestroy(() => controller.destroy());
 

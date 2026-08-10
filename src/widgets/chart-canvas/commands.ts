@@ -7,8 +7,14 @@ import type { LayerSettings, SignalKChart } from '$shared/map';
 export interface MapCommands {
   centerOnVessel: () => void;
   // Pan to a position at the current zoom, with no animation, for the follow lock that keeps
-  // the boat centered as it moves. Unlike centerOnVessel it never changes the zoom.
-  recenterOnVessel: (latitude: number, longitude: number) => void;
+  // the boat centered as it moves. Unlike centerOnVessel it never changes the zoom. A positive
+  // lookAheadPx places the vessel that many pixels below screen center, so a rotated (course-up or
+  // heading-up) chart shows more water ahead; 0 or absent keeps the boat centered.
+  recenterOnVessel: (latitude: number, longitude: number, lookAheadPx?: number) => void;
+  // Command the map's bearing (degrees clockwise from north). The one author of chart rotation:
+  // user rotate gestures stay disabled, and the orientation controller in App drives this. Small
+  // deltas are coalesced so heading jitter does not thrash the camera.
+  setMapBearing: (bearingDeg: number) => void;
   // Ring the POI marker at a position, or clear the ring with undefined. Drives the chart highlight
   // from a selected or hovered note: a map-marker click, or a POI search result. Never moves the map.
   highlightPoi: (position: LatLon | undefined) => void;

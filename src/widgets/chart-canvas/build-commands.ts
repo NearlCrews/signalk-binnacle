@@ -68,8 +68,25 @@ export function buildMapCommands(deps: MapCommandsDeps): MapCommands {
       if (!position || vessel.positionStale) return;
       flyToMinZoom([position.longitude, position.latitude], 12, 14);
     },
-    recenterOnVessel: (latitude, longitude) => {
+    recenterOnVessel: (latitude, longitude, lookAheadPx = 0) => {
+      if (lookAheadPx > 0) {
+        // easeTo at zero duration, not setCenter: only the ease path takes the offset that places
+        // the vessel low on a rotated screen so the water ahead gets the pixels. Bounded by the
+        // caller; no animation, matching the plain recenter.
+        map.easeTo({ center: [longitude, latitude], offset: [0, lookAheadPx], duration: 0 });
+        return;
+      }
       map.setCenter([longitude, latitude]);
+    },
+    setMapBearing: (bearingDeg) => {
+      // Coalesce sub-degree jitter: a compass wanders tenths of a degree at rest, and easing the
+      // camera for each tick would keep the map perpetually in motion.
+      const delta = Math.abs(((bearingDeg - map.getBearing() + 540) % 360) - 180);
+      if (delta < 0.75) return;
+      map.easeTo({
+        bearing: bearingDeg,
+        ...(prefersReducedMotion() ? { duration: 0 } : { duration: 300 }),
+      });
     },
     flyTo: (latitude, longitude) => {
       flyToMinZoom([longitude, latitude], 11, 12);

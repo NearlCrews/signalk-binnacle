@@ -406,6 +406,12 @@ export function isThresholds(value: unknown): value is Thresholds {
 
 // The speed used to turn a planned route's distance into per-waypoint passage times. Stored in SI
 // (m/s) like every other persisted measure, and converted to knots only at the display field.
+// Chart orientation: north-up is the default; course-up and heading-up are explicit profile-owned
+// choices. Programmatic bearing owns the rotation (user rotate gestures stay disabled), and a
+// stale or missing reference falls back to north immediately.
+export type ChartOrientationMode = 'north' | 'course' | 'heading';
+export const CHART_ORIENTATION_MODES = ['north', 'course', 'heading'] as const;
+
 export const MAX_PLANNING_SPEED_KN = 100;
 export const MAX_PLANNING_SPEED_MPS = knotsToMetersPerSecond(MAX_PLANNING_SPEED_KN);
 const DEFAULT_PLANNING_SPEED_MPS = knotsToMetersPerSecond(5);

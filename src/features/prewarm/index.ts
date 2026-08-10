@@ -5,6 +5,7 @@ export {
   type CompanionState,
   CompanionStatus,
 } from './companion-status.svelte';
+export type { CoverageVerdict, RouteCoverageReport } from './route-coverage';
 
 const regionsPanelLoader = createRetryableLazyUiLoader(() => import('./RegionsPanel.svelte'));
 

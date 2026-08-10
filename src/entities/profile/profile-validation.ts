@@ -242,6 +242,14 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   if (value.units !== undefined && value.units !== 'metric' && value.units !== 'imperial')
     return false;
   if (
+    value.chartOrientation !== undefined &&
+    value.chartOrientation !== 'north' &&
+    value.chartOrientation !== 'course' &&
+    value.chartOrientation !== 'heading'
+  ) {
+    return false;
+  }
+  if (
     value.pinnedActionIds !== undefined &&
     !validStringList(value.pinnedActionIds, MAX_PINNED_ACTIONS)
   ) {

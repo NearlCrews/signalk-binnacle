@@ -1,5 +1,6 @@
 export type { MapView } from '$shared/geo';
 export type {
+  ChartOrientationMode,
   PersistedCodec,
   PersistedDecodeResult,
   PersistedRepairStatus,
@@ -13,6 +14,7 @@ export {
   booleanPersistedCodec,
   booleanRecordPersistedCodec,
   boundedNumberPersistedCodec,
+  CHART_ORIENTATION_MODES,
   createMapView,
   createPersistedCodec,
   createPlanningSpeed,
