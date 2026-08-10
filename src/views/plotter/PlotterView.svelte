@@ -18,29 +18,29 @@ import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import type { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
-import { AnchorPanel, AnchorStrip } from '$features/anchor-watch';
+import { AnchorStrip, loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
-import { LayersPanel, type LayersView } from '$features/layers-panel';
+import { type LayersView, loadLayersPanel } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
-import { AlarmStrip, AlarmsPanel, DangerStrip } from '$features/lookout';
+import { AlarmStrip, DangerStrip, loadAlarmsPanel } from '$features/lookout';
 import { loadRadarControls, radarAreaChartInstruction } from '$features/marine-radar';
 import { loadMeasureStrip } from '$features/measure';
 import { MobStrip } from '$features/mob';
 import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
-import { type Poi, PoiSearchPanel } from '$features/poi-search';
+import { loadPoiSearchPanel, type Poi } from '$features/poi-search';
 import { loadRegionsPanel } from '$features/prewarm';
-import { RoutesPanel } from '$features/routing';
+import { loadRoutesPanel } from '$features/routing';
 import {
   loadTidesPanel,
   type TideStationSelectionEvent,
   type TidesController,
 } from '$features/tides';
 import { loadHistoryStrip, type TimeTravelController } from '$features/time-travel';
-import { TracksPanel } from '$features/tracks';
+import { loadTracksPanel } from '$features/tracks';
 import { loadTrendsPanel } from '$features/trends';
-import { WaypointsPanel } from '$features/waypoints';
+import { loadWaypointsPanel } from '$features/waypoints';
 import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
 import type { LayerSettings } from '$shared/map';
@@ -642,6 +642,41 @@ function measureStripForAttempt() {
   return loadMeasureStrip();
 }
 
+function layersPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadLayersPanel();
+}
+
+function routesPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadRoutesPanel();
+}
+
+function tracksPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadTracksPanel();
+}
+
+function waypointsPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadWaypointsPanel();
+}
+
+function poiSearchPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadPoiSearchPanel();
+}
+
+function anchorPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadAnchorPanel();
+}
+
+function alarmsPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadAlarmsPanel();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 const routeProgress = $derived.by<RouteProgress | undefined>(() => {
@@ -916,96 +951,236 @@ $effect(() => {
   {#if activePanel && activePanel !== 'profiles'}
     <div class="panel-slot" id={activePanel === 'layers' ? 'layers-panel' : undefined}>
       {#if activePanel === 'layers' && layersView}
-        <LayersPanel
-          view={layersView}
-          initialMode={layersInitialMode}
-          {auth}
-          chartsLoadState={serverChartsStatus}
-          onRetryCharts={retryServerCharts}
-          {userCharts}
-          {categoriesOpen}
-          onClose={closePanel}
-          onBack={backToMenu}
-          {onShowChartBounds}
-          onManageLayer={(id) => {
-            if (id === 'marine-radar') {
-              radarOpenedFrom = 'layers';
-              radarControlsOpen = true;
-            }
-          }}
-        />
+        {#await layersPanelForAttempt()}
+          <LazyPanelState
+            title="Layers and charts"
+            closeLabel="Close layers and charts"
+            state="loading"
+            message="Loading Layers and charts controls…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              view={layersView}
+              initialMode={layersInitialMode}
+              {auth}
+              chartsLoadState={serverChartsStatus}
+              onRetryCharts={retryServerCharts}
+              {userCharts}
+              {categoriesOpen}
+              onClose={closePanel}
+              onBack={backToMenu}
+              {onShowChartBounds}
+              onManageLayer={(id) => {
+                if (id === 'marine-radar') {
+                  radarOpenedFrom = 'layers';
+                  radarControlsOpen = true;
+                }
+              }}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Layers and charts"
+                closeLabel="Close layers and charts"
+                state="error"
+                message="Layers and charts controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Layers and charts"
+            closeLabel="Close layers and charts"
+            state="error"
+            message="Layers and charts controls could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'routes'}
-        <RoutesPanel
-          {auth}
-          routes={routeStore.routes}
-          shownIds={routeStore.shownIds}
-          working={routeStore.working}
-          activeId={routeStore.activeId}
-          refreshing={routeController.refreshing}
-          loadState={routeController.loadState}
-          busy={routeController.busy}
-          highlight={routeStore.highlight}
-          {onHighlightLeg}
-          error={routeController.routeError}
-          editorLoadFailed={routeController.editorLoadFailed}
-          onRetryEditor={routeController.retryRouteEdit}
-          onRetry={() => void routeController.refreshRoutes()}
-          onNew={routeController.beginNewRoute}
-          onEditRoute={routeController.onEditRoute}
-          onSave={routeController.onSaveRoute}
-          onCancelEdit={routeController.onCancelRouteEdit}
-          onToggleShown={routeController.onToggleRouteShown}
-          onLocate={routeController.showRoute}
-          onActivate={routeController.onActivateRoute}
-          onStop={routeController.onStopCourse}
-          onReverse={routeController.onReverseRoute}
-          onExportGpx={routeController.onExportRouteGpx}
-          onImportGpx={routeController.onImportRouteGpx}
-          planningSpeed={planningSpeedMps}
-          onDelete={routeController.onDeleteRoute}
-          onClose={closeRoutesPanel}
-          onBack={backFromRoutesPanel}
-        />
+        {#await routesPanelForAttempt()}
+          <LazyPanelState
+            title="Routes"
+            closeLabel="Close routes panel"
+            state="loading"
+            message="Loading Routes controls…"
+            onClose={closeRoutesPanel}
+            onBack={backFromRoutesPanel}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {auth}
+              routes={routeStore.routes}
+              shownIds={routeStore.shownIds}
+              working={routeStore.working}
+              activeId={routeStore.activeId}
+              refreshing={routeController.refreshing}
+              loadState={routeController.loadState}
+              busy={routeController.busy}
+              highlight={routeStore.highlight}
+              {onHighlightLeg}
+              error={routeController.routeError}
+              editorLoadFailed={routeController.editorLoadFailed}
+              onRetryEditor={routeController.retryRouteEdit}
+              onRetry={() => void routeController.refreshRoutes()}
+              onNew={routeController.beginNewRoute}
+              onEditRoute={routeController.onEditRoute}
+              onSave={routeController.onSaveRoute}
+              onCancelEdit={routeController.onCancelRouteEdit}
+              onToggleShown={routeController.onToggleRouteShown}
+              onLocate={routeController.showRoute}
+              onActivate={routeController.onActivateRoute}
+              onStop={routeController.onStopCourse}
+              onReverse={routeController.onReverseRoute}
+              onExportGpx={routeController.onExportRouteGpx}
+              onImportGpx={routeController.onImportRouteGpx}
+              planningSpeed={planningSpeedMps}
+              onDelete={routeController.onDeleteRoute}
+              onClose={closeRoutesPanel}
+              onBack={backFromRoutesPanel}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Routes"
+                closeLabel="Close routes panel"
+                state="error"
+                message="Routes controls stopped unexpectedly."
+                onClose={closeRoutesPanel}
+                onBack={backFromRoutesPanel}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Routes"
+            closeLabel="Close routes panel"
+            state="error"
+            message="Routes controls could not load."
+            onClose={closeRoutesPanel}
+            onBack={backFromRoutesPanel}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'tracks'}
-        <TracksPanel
-          {auth}
-          {recorder}
-          settings={trackSettings}
-          saved={trackController.savedTracks}
-          shown={trackController.shownSaved}
-          loadState={trackController.loadState}
-          provisioning={trackController.provisioning}
-          busy={trackController.busy}
-          routeBusy={routeController.busy}
-          persistenceDegraded={trackPersistenceDegraded}
-          onRetry={() => void trackController.refreshSavedTracks()}
-          onSave={trackController.onSaveTrack}
-          onSaveAsRoute={routeController.onSaveTrackAsRoute}
-          onTrackHome={routeController.onTrackHome}
-          onDelete={trackController.onDeleteSavedTrack}
-          onToggleSaved={trackController.onToggleSaved}
-          onExport={trackController.onExportSavedTrack}
-          onClose={closeTracksPanel}
-          onBack={backFromTracksPanel}
-        />
+        {#await tracksPanelForAttempt()}
+          <LazyPanelState
+            title="Tracks"
+            closeLabel="Close tracks panel"
+            state="loading"
+            message="Loading Tracks controls…"
+            onClose={closeTracksPanel}
+            onBack={backFromTracksPanel}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {auth}
+              {recorder}
+              settings={trackSettings}
+              saved={trackController.savedTracks}
+              shown={trackController.shownSaved}
+              loadState={trackController.loadState}
+              provisioning={trackController.provisioning}
+              busy={trackController.busy}
+              routeBusy={routeController.busy}
+              persistenceDegraded={trackPersistenceDegraded}
+              onRetry={() => void trackController.refreshSavedTracks()}
+              onSave={trackController.onSaveTrack}
+              onSaveAsRoute={routeController.onSaveTrackAsRoute}
+              onTrackHome={routeController.onTrackHome}
+              onDelete={trackController.onDeleteSavedTrack}
+              onToggleSaved={trackController.onToggleSaved}
+              onExport={trackController.onExportSavedTrack}
+              onClose={closeTracksPanel}
+              onBack={backFromTracksPanel}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Tracks"
+                closeLabel="Close tracks panel"
+                state="error"
+                message="Tracks controls stopped unexpectedly."
+                onClose={closeTracksPanel}
+                onBack={backFromTracksPanel}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Tracks"
+            closeLabel="Close tracks panel"
+            state="error"
+            message="Tracks controls could not load."
+            onClose={closeTracksPanel}
+            onBack={backFromTracksPanel}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'waypoints'}
-        <WaypointsPanel
-          {auth}
-          {vessel}
-          {units}
-          selectedId={selectedWaypointId}
-          waypoints={waypointsStore.waypoints}
-          loadState={waypointsController.loadState}
-          busy={waypointsController.busy}
-          routeBusy={routeController.busy}
-          onRetry={() => void waypointsController.refreshWaypoints()}
-          onLocate={(waypoint) => flyToPosition(waypoint.position)}
-          onGoTo={(waypoint) => void routeController.onGoToWaypoint(waypoint)}
-          onEdit={waypointsController.onOpenEditWaypoint}
-          onDelete={waypointsController.onDeleteWaypoint}
-          onClose={closeWaypointsPanel}
-          onBack={backFromWaypointsPanel}
-        />
+        {#await waypointsPanelForAttempt()}
+          <LazyPanelState
+            title="Waypoints"
+            closeLabel="Close waypoints panel"
+            state="loading"
+            message="Loading Waypoints controls…"
+            onClose={closeWaypointsPanel}
+            onBack={backFromWaypointsPanel}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {auth}
+              {vessel}
+              {units}
+              selectedId={selectedWaypointId}
+              waypoints={waypointsStore.waypoints}
+              loadState={waypointsController.loadState}
+              busy={waypointsController.busy}
+              routeBusy={routeController.busy}
+              onRetry={() => void waypointsController.refreshWaypoints()}
+              onLocate={(waypoint) => flyToPosition(waypoint.position)}
+              onGoTo={(waypoint) => void routeController.onGoToWaypoint(waypoint)}
+              onEdit={waypointsController.onOpenEditWaypoint}
+              onDelete={waypointsController.onDeleteWaypoint}
+              onClose={closeWaypointsPanel}
+              onBack={backFromWaypointsPanel}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Waypoints"
+                closeLabel="Close waypoints panel"
+                state="error"
+                message="Waypoints controls stopped unexpectedly."
+                onClose={closeWaypointsPanel}
+                onBack={backFromWaypointsPanel}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Waypoints"
+            closeLabel="Close waypoints panel"
+            state="error"
+            message="Waypoints controls could not load."
+            onClose={closeWaypointsPanel}
+            onBack={backFromWaypointsPanel}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'tides'}
         {#await tidesPanelForAttempt()}
           <LazyPanelState
@@ -1154,54 +1329,159 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'poi-search'}
-        <PoiSearchPanel
-          pois={poiInView}
-          {vessel}
-          {units}
-          viewState={poiViewState}
-          selectedId={selectedNote?.id}
-          placesShown={layerSettings.notes?.visible ?? false}
-          onTogglePlaces={(shown) => setLayerVisible('notes', shown)}
-          onSelect={selectPoi}
-          onHover={(poi) => (hoveredPoi = poi)}
-          onClose={closePoiSearch}
-          onBack={backFromPoiSearch}
-        />
+        {#await poiSearchPanelForAttempt()}
+          <LazyPanelState
+            title="Find places"
+            closeLabel="Close find places"
+            state="loading"
+            message="Loading Find places controls…"
+            onClose={closePoiSearch}
+            onBack={backFromPoiSearch}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              pois={poiInView}
+              {vessel}
+              {units}
+              viewState={poiViewState}
+              selectedId={selectedNote?.id}
+              placesShown={layerSettings.notes?.visible ?? false}
+              onTogglePlaces={(shown) => setLayerVisible('notes', shown)}
+              onSelect={selectPoi}
+              onHover={(poi) => (hoveredPoi = poi)}
+              onClose={closePoiSearch}
+              onBack={backFromPoiSearch}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Find places"
+                closeLabel="Close find places"
+                state="error"
+                message="Find places controls stopped unexpectedly."
+                onClose={closePoiSearch}
+                onBack={backFromPoiSearch}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Find places"
+            closeLabel="Close find places"
+            state="error"
+            message="Find places controls could not load."
+            onClose={closePoiSearch}
+            onBack={backFromPoiSearch}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'anchor'}
-        <AnchorPanel
-          {auth}
-          {units}
-          {anchor}
-          {vessel}
-          error={anchorController.anchorError}
-          busy={anchorController.busy}
-          onDrop={() => void anchorController.onDrop()}
-          onRaise={() => void anchorController.onRaise()}
-          onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
-          {audioBlocked}
-          onClose={closePanel}
-          onBack={backToMenu}
-        />
+        {#await anchorPanelForAttempt()}
+          <LazyPanelState
+            title="Anchor watch"
+            closeLabel="Close anchor watch"
+            state="loading"
+            message="Loading Anchor watch controls…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {auth}
+              {units}
+              {anchor}
+              {vessel}
+              error={anchorController.anchorError}
+              busy={anchorController.busy}
+              onDrop={() => void anchorController.onDrop()}
+              onRaise={() => void anchorController.onRaise()}
+              onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
+              {audioBlocked}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Anchor watch"
+                closeLabel="Close anchor watch"
+                state="error"
+                message="Anchor watch controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Anchor watch"
+            closeLabel="Close anchor watch"
+            state="error"
+            message="Anchor watch controls could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'alarms'}
-        <AlarmsPanel
-          {auth}
-          connectionPhase={store.connection.phase}
-          {thresholds}
-          {units}
-          collisionMuted={collisionMute.active}
-          {collisionMuteRemainingMin}
-          onToggleCollisionMute={toggleCollisionMute}
-          arrivalMuted={arrivalMuted.value}
-          onToggleArrivalMute={() => arrivalMuted.set(!arrivalMuted.value)}
-          notifications={notificationsStore}
-          error={alarmActionError}
-          onSilence={notificationsApi ? onSilenceNotification : undefined}
-          onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
-          {audioBlocked}
-          shallow={shallowMonitor}
-          onClose={closePanel}
-          onBack={backToMenu}
-        />
+        {#await alarmsPanelForAttempt()}
+          <LazyPanelState
+            title="Alarms"
+            closeLabel="Close alarms panel"
+            state="loading"
+            message="Loading Alarms controls…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              {auth}
+              connectionPhase={store.connection.phase}
+              {thresholds}
+              {units}
+              collisionMuted={collisionMute.active}
+              {collisionMuteRemainingMin}
+              onToggleCollisionMute={toggleCollisionMute}
+              arrivalMuted={arrivalMuted.value}
+              onToggleArrivalMute={() => arrivalMuted.set(!arrivalMuted.value)}
+              notifications={notificationsStore}
+              error={alarmActionError}
+              onSilence={notificationsApi ? onSilenceNotification : undefined}
+              onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+              {audioBlocked}
+              shallow={shallowMonitor}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Alarms"
+                closeLabel="Close alarms panel"
+                state="error"
+                message="Alarms controls stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Alarms"
+            closeLabel="Close alarms panel"
+            state="error"
+            message="Alarms controls could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         {#await regionsPanelForAttempt()}
           <LazyPanelState

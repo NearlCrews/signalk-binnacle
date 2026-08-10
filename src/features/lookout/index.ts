@@ -1,5 +1,6 @@
+import { createRetryableLazyUiLoader } from '$shared/lib';
+
 export { default as AlarmStrip } from './AlarmStrip.svelte';
-export { default as AlarmsPanel } from './AlarmsPanel.svelte';
 export { CollisionMute } from './collision-mute.svelte';
 export type { SkNotification } from './collision-notification';
 export { CollisionNotifier, NOTIFICATION_PATH } from './collision-notification';
@@ -19,3 +20,11 @@ export type {
   ShallowThresholdSource,
 } from './shallow-monitor.svelte';
 export { createShallowController } from './shallow-monitor.svelte';
+
+const alarmsPanelLoader = createRetryableLazyUiLoader(() => import('./AlarmsPanel.svelte'), {
+  timeoutMessage: 'Alarms controls took too long to load.',
+});
+
+export function loadAlarmsPanel(): Promise<typeof import('./AlarmsPanel.svelte')> {
+  return alarmsPanelLoader();
+}
