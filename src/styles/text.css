@@ -89,3 +89,11 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* Single-line truncation with a trailing ellipsis. The span still owns its width bound (a
+   max-inline-size, or min-inline-size: 0 in a flex row) or the clip never engages. */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

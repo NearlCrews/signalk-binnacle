@@ -110,20 +110,23 @@ export interface MenuFocusMachine {
   // The role="menu" keydown contract: arrow and Home/End roving plus the Tab redirect to the
   // control after the trigger (forward) or back to the trigger (reverse).
   handleKeydown(event: KeyboardEvent): void;
-  // Call from the open branch of the consumer's open-state effect.
-  opened(): void;
-  // Call from the close branch; returns the effect cleanup for the scheduled focus restore, or
-  // undefined when there is nothing to restore.
-  closed(): (() => void) | undefined;
+  // Drive from the consumer's single open-state effect (`$effect(() => machine.syncOpen(open))`):
+  // the open branch records the open and schedules the initial roving focus, the close branch runs
+  // the close-focus restore, and the return value is the effect cleanup either way.
+  syncOpen(open: boolean): (() => void) | undefined;
 }
 
-// The stateful half of the machine, shared by both toolbar menus so the close-focus protocol and
-// the Tab redirect cannot drift between them. Surface and trigger are getters because the refs
-// bind after mount and change on open.
+// The stateful half of the machine, shared by the toolbar menus (the overflow menu, the bottom-bar
+// More menu, and the profile switcher) so the open-focus and close-focus protocol and the Tab
+// redirect cannot drift between them. Surface and trigger are getters because the refs bind after
+// mount and change on open.
 export function createMenuFocusMachine(deps: {
   surface: () => HTMLElement | undefined;
   trigger: () => HTMLElement | undefined;
   requestClose: () => void;
+  // Frames to wait before the initial roving focus: 2 for a menu that positions itself on its
+  // first frame (the bottom-bar More menu), otherwise 1.
+  focusFrames?: number;
 }): MenuFocusMachine {
   let wasOpen = false;
   let requestedCloseFocus: HTMLElement | null | undefined;
@@ -131,6 +134,32 @@ export function createMenuFocusMachine(deps: {
   const close = (focusTarget?: HTMLElement | null): void => {
     requestedCloseFocus = focusTarget;
     deps.requestClose();
+  };
+
+  const opened = (): (() => void) => {
+    wasOpen = true;
+    let frame = 0;
+    const schedule = (remaining: number): void => {
+      frame = requestAnimationFrame(() => {
+        if (remaining > 1) schedule(remaining - 1);
+        else initializeMenuFocus(deps.surface());
+      });
+    };
+    schedule(deps.focusFrames ?? 1);
+    // Only one frame is pending at a time, so canceling the latest cancels the chain.
+    return () => cancelAnimationFrame(frame);
+  };
+
+  const closed = (): (() => void) | undefined => {
+    if (!wasOpen) return undefined;
+    wasOpen = false;
+    const target = requestedCloseFocus;
+    requestedCloseFocus = undefined;
+    if (target === null) return undefined;
+    const closingSurface = deps.surface();
+    const trigger = deps.trigger();
+    const frame = requestAnimationFrame(() => restoreMenuFocus(target, trigger, closingSurface));
+    return () => cancelAnimationFrame(frame);
   };
 
   return {
@@ -146,19 +175,8 @@ export function createMenuFocusMachine(deps: {
         return target !== undefined;
       });
     },
-    opened(): void {
-      wasOpen = true;
-    },
-    closed(): (() => void) | undefined {
-      if (!wasOpen) return undefined;
-      wasOpen = false;
-      const target = requestedCloseFocus;
-      requestedCloseFocus = undefined;
-      if (target === null) return undefined;
-      const closingSurface = deps.surface();
-      const trigger = deps.trigger();
-      const frame = requestAnimationFrame(() => restoreMenuFocus(target, trigger, closingSurface));
-      return () => cancelAnimationFrame(frame);
+    syncOpen(open: boolean): (() => void) | undefined {
+      return open ? opened() : closed();
     },
   };
 }

@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createMenuFocusMachine,
   handleMenuKeydown,
   initializeMenuFocus,
   MENU_ITEM_SELECTOR,
@@ -222,5 +223,84 @@ describe('restoreMenuFocus', () => {
     restoreMenuFocus(undefined, trigger, undefined, live, {} as HTMLElement);
 
     expect(trigger.focus).not.toHaveBeenCalled();
+  });
+});
+
+describe('createMenuFocusMachine syncOpen', () => {
+  const frames: FrameRequestCallback[] = [];
+
+  function stubFrames(): void {
+    frames.length = 0;
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => frames.push(callback)),
+    );
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((id: number) => {
+        frames[id - 1] = () => {};
+      }),
+    );
+  }
+
+  function flushFrames(): void {
+    // A frame callback may schedule the next frame, so walk the growing list in place.
+    for (let index = 0; index < frames.length; index++) frames[index]?.(0);
+  }
+
+  function machineWith(items: FakeItem[], focusFrames?: number) {
+    const menu = surface(items);
+    return createMenuFocusMachine({
+      surface: () => menu,
+      trigger: () => undefined,
+      requestClose: vi.fn(),
+      ...(focusFrames === undefined ? {} : { focusFrames }),
+    });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('schedules the initial roving focus one frame after open', () => {
+    stubFrames();
+    const items = [item(), item()];
+    const machine = machineWith(items);
+
+    machine.syncOpen(true);
+
+    expect(items[0]?.focus).not.toHaveBeenCalled();
+    flushFrames();
+    expect(items[0]?.focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it('waits the extra positioning frame when focusFrames is 2', () => {
+    stubFrames();
+    const items = [item()];
+    const machine = machineWith(items, 2);
+
+    machine.syncOpen(true);
+
+    frames[0]?.(0);
+    expect(items[0]?.focus).not.toHaveBeenCalled();
+    flushFrames();
+    expect(items[0]?.focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it('cleanup cancels the pending focus frame', () => {
+    stubFrames();
+    const items = [item()];
+    const machine = machineWith(items);
+
+    const cleanup = machine.syncOpen(true);
+    cleanup?.();
+    flushFrames();
+
+    expect(items[0]?.focus).not.toHaveBeenCalled();
+  });
+
+  it('returns no cleanup for a close before any open', () => {
+    stubFrames();
+    expect(machineWith([]).syncOpen(false)).toBeUndefined();
   });
 });

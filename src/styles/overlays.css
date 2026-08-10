@@ -57,6 +57,19 @@ dialog.modal-card {
   box-shadow: var(--shadow-overlay);
 }
 
+/* The anchored toolbar-menu surface layered on .popover-card, shared by the overflow menu, the
+   bottom-bar More menu, and the profile switcher: the column layout, z-order, width clamp, and
+   grow origin. A consumer declares only its real differences: the width via --menu-width, and the
+   origin corner when it opens upward or right-aligned. */
+.menu-surface {
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  inline-size: min(var(--menu-width, 13rem), calc(100vw - 1rem));
+  padding: var(--space-1);
+  transform-origin: left var(--anchored-origin-y, top);
+}
+
 /* The larger elevated-panel frame shared by the full app-menu launcher and the floating weather panel:
    the same surface, hairline border, large radius, and lifted shadow so those big floating surfaces
    cannot drift apart. Consumers keep their own position, sizing, padding, and z-index. The slide-over

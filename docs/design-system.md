@@ -177,7 +177,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   color by the weather warning banners and the degraded-monitor notes), `.sev-danger` and
   `.sev-warning` (severity text coloring),
   `.panel-title` and `.panel-title--sub` (the panel header title and subtitle), `.num` (mono tabular
-  numerals for any aligned readout). The status strip's own `.readout` spans (StatusStrip.svelte,
+  numerals for any aligned readout), and `.truncate` (single-line ellipsis truncation; the span still
+  owns its width bound, a `max-inline-size` or a flex `min-inline-size: 0`, or the clip never
+  engages). The status strip's own `.readout` spans (StatusStrip.svelte,
   component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
   (SOG, COG, HDG, Depth, Vessel, Time), then the value wrapped in `.num`. A trailing physical unit
   (kn, °T, ft, m) stays outside the `.num` span as plain text. The Time readout uses local time, and
@@ -248,7 +250,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   maximum, start, and end summary. Labels, source paths, and readouts wrap at 320 px. Canvas colors
   resolve from tokens and redraw on theme changes, with no blue or bright stray pixels in night-red.
   The phone sheet traps keyboard focus while it is open.
-- Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.surface-elevated`
+- Overlays (`overlays.css`): `.popover-card` (the small anchored floating-card frame), `.menu-surface`
+  (the anchored toolbar-menu surface layered on `.popover-card`: column layout, `--z-menu`, the
+  `--menu-width` clamp, and the grow origin, shared by the overflow menu, the bottom-bar More menu,
+  and the profile switcher; a consumer declares only its width and, when it opens upward or
+  right-aligned, its origin corner), `.surface-elevated`
   (the larger floating-panel frame: surface + border + radius-lg + shadow-lg + edge-light, used by the
   app-menu launcher and the weather panel), `.menu-item` (the flat control-height interactive menu row),
   `.row-interactive` (the shared control-height transparent interactive row that tints on hover and

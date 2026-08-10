@@ -18,7 +18,7 @@ export {
 export { default as InlineConfirm } from './InlineConfirm.svelte';
 export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as LazyPanelState } from './LazyPanelState.svelte';
-export { createMenuFocusMachine, initializeMenuFocus, menuFocusLeft } from './menu-focus';
+export { createMenuFocusMachine, menuFocusLeft } from './menu-focus';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as NavSortControl } from './NavSortControl.svelte';
 export { default as OverflowActions } from './OverflowActions.svelte';

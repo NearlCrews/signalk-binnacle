@@ -2,12 +2,7 @@
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy } from 'svelte';
 import { createMediaQuery, Toast } from '$shared/lib';
-import {
-  AnchoredMenu,
-  createMenuFocusMachine,
-  initializeMenuFocus,
-  UnavailableHint,
-} from '$shared/ui';
+import { AnchoredMenu, createMenuFocusMachine, UnavailableHint } from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -27,14 +22,16 @@ let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
 
-// The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the close-focus
-// protocol live in $shared/ui menu-focus, identical to OverflowActions.
+// The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the open-focus and
+// close-focus protocol live in $shared/ui menu-focus, identical to OverflowActions. The extra
+// focus frame lets the surface position itself before the initial roving focus lands.
 const machine = createMenuFocusMachine({
   surface: () => moreSurface,
   trigger: () => moreTrigger,
   requestClose: () => {
     moreOpen = false;
   },
+  focusFrames: 2,
 });
 const split = $derived(
   splitBarActions(actions, compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS),
@@ -57,20 +54,7 @@ function run(action: MenuItem, after?: () => void): void {
   }
 }
 
-$effect(() => {
-  if (moreOpen) {
-    machine.opened();
-    let focusFrame = 0;
-    const positionFrame = requestAnimationFrame(() => {
-      focusFrame = requestAnimationFrame(() => initializeMenuFocus(moreSurface));
-    });
-    return () => {
-      cancelAnimationFrame(positionFrame);
-      cancelAnimationFrame(focusFrame);
-    };
-  }
-  return machine.closed();
-});
+$effect(() => machine.syncOpen(moreOpen));
 </script>
 
 <div class="pinned-actions strip-center">
@@ -120,7 +104,7 @@ $effect(() => {
         open={moreOpen}
         onClose={() => machine.close()}
         backdropLabel="Close more actions"
-        surfaceClass="popover-card bar-more"
+        surfaceClass="popover-card menu-surface bar-more"
         ariaLabel="More actions"
         role="menu"
         id="bar-more-menu"
@@ -192,15 +176,11 @@ $effect(() => {
   text-align: center;
 }
 :global(.bar-more) {
+  --menu-width: 12rem;
   transform-origin: right var(--anchored-origin-y, bottom);
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
   gap: var(--space-1);
-  inline-size: min(12rem, calc(100vw - 1rem));
   max-block-size: calc(100 * var(--dvh) - 1rem);
   overflow-y: auto;
-  padding: var(--space-1);
 }
 @media (max-width: 600px) {
   .pinned-actions {

@@ -2,7 +2,7 @@
 import MoreHorizontal from '@lucide/svelte/icons/more-horizontal';
 import type { Snippet } from 'svelte';
 import AnchoredMenu from './AnchoredMenu.svelte';
-import { createMenuFocusMachine, initializeMenuFocus, MENU_ITEM_SELECTOR } from './menu-focus';
+import { createMenuFocusMachine, MENU_ITEM_SELECTOR } from './menu-focus';
 
 interface Props {
   open: boolean;
@@ -14,7 +14,7 @@ interface Props {
 
 const { open, label, onToggle, onClose, children: content }: Props = $props();
 let trigger = $state<HTMLButtonElement>();
-let surface = $state<HTMLElement | undefined>();
+let surface = $state<HTMLElement>();
 
 const machine = createMenuFocusMachine({
   surface: () => surface,
@@ -24,14 +24,7 @@ const machine = createMenuFocusMachine({
   requestClose: () => onClose(),
 });
 
-$effect(() => {
-  if (open) {
-    machine.opened();
-    const frame = requestAnimationFrame(() => initializeMenuFocus(surface));
-    return () => cancelAnimationFrame(frame);
-  }
-  return machine.closed();
-});
+$effect(() => machine.syncOpen(open));
 
 function handleClick(event: MouseEvent): void {
   const target = event.target;
@@ -61,7 +54,7 @@ function handleClick(event: MouseEvent): void {
     {open}
     onClose={() => machine.close()}
     backdropLabel={`Close ${label.toLowerCase()}`}
-    surfaceClass="popover-card overflow-actions-menu"
+    surfaceClass="popover-card menu-surface overflow-actions-menu"
     anchor={trigger}
     ariaLabel={label}
     role="menu"
@@ -77,15 +70,6 @@ function handleClick(event: MouseEvent): void {
 <style>
 .overflow-actions {
   position: relative;
-}
-
-:global(.overflow-actions-menu) {
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
-  inline-size: min(13rem, calc(100vw - 1rem));
-  padding: var(--space-1);
-  transform-origin: left var(--anchored-origin-y, top);
 }
 
 :global(.overflow-actions-menu .menu-item) {

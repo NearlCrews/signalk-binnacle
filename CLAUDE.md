@@ -309,7 +309,10 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   shared by the waypoints, tracks, and note-detail panels), and the
   PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.pill-count` (the small count
-  chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`, the
+  chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`,
+  `.menu-surface` (the anchored toolbar-menu surface layered on `.popover-card`, shared by the
+  overflow menu, the bottom-bar More menu, and the profile switcher; consumers declare only
+  `--menu-width` and, when needed, the origin corner), the
   `.surface-elevated` floating-panel frame, `.modal-card`, `.menu-item`, the `.row-interactive`
   control-height interactive-row base composed by the weather, route, and layers-category rows (it
   carries the hover tint and the lit `.is-on` body at a high enough specificity to beat a scoped
@@ -321,7 +324,8 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   `.alert-note` and its `.alert-note--filled` tinted-banner modifier, `.muted-note`,
   `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*` (including `.panel-slot`
   and its `--end` modifier), `.saved`, `.stat-grid`,
-  `.num`, and the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
+  `.num`, `.truncate` (single-line ellipsis truncation; the span still owns its width bound), and
+  the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
   `.nav-metric`) shared by the AIS targets, POI search, and Waypoints panels)
   before any panel grows a scoped duplicate. Lay a panel's body out with SlideOver's `bodyFlex` prop
   rather than a hand-rolled flex column, so the section rhythm matches across panels. When the same
