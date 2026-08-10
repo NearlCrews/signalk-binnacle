@@ -25,13 +25,25 @@ export default defineConfig({
     trace: 'on-first-retry',
     video: 'retain-on-failure',
   },
-  webServer: {
-    command: 'npm run preview',
-    url: 'http://localhost:4173/signalk-binnacle/',
-    // Never trust a process already on this port: it may be an unrelated server or a stale build.
-    reuseExistingServer: false,
-    timeout: 120000,
-  },
+  webServer: [
+    {
+      command: 'npm run preview',
+      url: 'http://localhost:4173/signalk-binnacle/',
+      // Never trust a process already on this port: it may be an unrelated server or a stale build.
+      reuseExistingServer: false,
+      timeout: 120000,
+    },
+    {
+      // The Signal K stream fixture: the app's delta WebSocket opens inside the Comlink worker,
+      // which Playwright's routeWebSocket cannot intercept, so the mariner project runs against
+      // this real server (static build plus /signalk/v1/stream plus an HTTP control channel).
+      command: 'npm run e2e:fixture',
+      // 127.0.0.1, not localhost: the fixture binds IPv4 only, and localhost can resolve to ::1.
+      url: 'http://127.0.0.1:4174/signalk-binnacle/',
+      reuseExistingServer: false,
+      timeout: 30000,
+    },
+  ],
   // Firefox is deliberately absent: Chromium and WebKit cover the engine spread Binnacle
   // targets (Chrome, Edge, and Safari on helm tablets and phones), and Gecko is not a
   // default browser on any marine tablet. Revisit if a Firefox-specific defect is reported.
@@ -43,8 +55,18 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: [/pwa\.spec\.ts/, /webkit-smoke\.spec\.ts/],
+      testIgnore: [/pwa\.spec\.ts/, /webkit-smoke\.spec\.ts/, /mariner-.*\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // The mariner helm scenarios run against the stream fixture origin, not the plain preview,
+      // so they can drive live Signal K deltas (MOB, collision, staleness) through the worker.
+      name: 'mariner',
+      testMatch: /mariner-helm\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://127.0.0.1:4174/signalk-binnacle/',
+      },
     },
     {
       name: 'webkit-ui',
