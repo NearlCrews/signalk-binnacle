@@ -123,7 +123,7 @@ import {
   WEATHER_LAYER_IDS,
   type WeatherProvider,
 } from '$features/weather';
-import { alarmAudioPrimed, GatedAlarm, primeAlarmAudio } from '$shared/audio';
+import { AlarmAudioGate, alarmAudioPrimed, GatedAlarm, primeAlarmAudio } from '$shared/audio';
 import {
   type Bbox4,
   bboxContainsPoint,
@@ -167,6 +167,7 @@ import {
   fetchHistoryProviders,
   fetchServerFeatures,
   fetchSymbols,
+  isConnectionOpen,
   SELF_CONTEXT,
   type ServerFeatures,
   SignalKStore,
@@ -205,9 +206,17 @@ const store = new SignalKStore();
 // A one-second reactive clock drives every staleness check (a frozen GPS fix, a dropped feed), so
 // they re-evaluate even while no data arrives. Disposed on teardown.
 const clock = new Clock();
+// Alarm audio readiness on the reactive clock. audioBlocked is the raw gate the panels render as
+// an informational note; the status-strip chip's armed-watch policy derives beside the watches
+// it reads, below.
+const alarmAudioGate = new AlarmAudioGate(clock);
+const audioBlocked = $derived(alarmAudioGate.blocked);
 const vessel = new OwnVessel(store, clock);
 const aisTargets = new AisTargets(store);
-const client = createSignalKClient();
+// A worker that dies after connect fires no Comlink settle; the failure callback routes it into
+// the stream controller's error state, whose retry restarts the worker. Deferred through a closure
+// because the controller is constructed further down; the callback can only fire after connect.
+const client = createSignalKClient(() => streamController.onWorkerFailure());
 const auth = new AuthController(origin);
 // The token in the shape the REST clients expect (string | undefined, not the controller's
 // string | null), and whether access has resolved (an authenticated session or an unsecured server),
@@ -276,12 +285,18 @@ const notificationsStore = new NotificationsStore(store);
 
 // The anchor watch: server-driven when the anchoralarm plugin answers, client-side otherwise. The
 // drag alarm mirrors the collision split: an audible tone here, the strip and live region below.
-const anchor = new AnchorWatch(store, vessel);
+const anchor = new AnchorWatch(store, vessel, clock);
 const anchorAlarm = new GatedAlarm(ANCHOR_TONE);
 
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
 // raises the recovery strip; a remote station's notifications.mob raises it here too.
 const mob = new MobStore(store, vessel, clock);
+// The status-strip chip alerts on blocked audio only while something audible is armed: a
+// client-side anchor or MOB watch, or an open stream whose shallow, collision, and generic
+// alarms could sound. The panels keep rendering the raw audioBlocked as an informational note.
+const soundOffAlert = $derived(
+  audioBlocked && (anchor.watching || mob.active || isConnectionOpen(store.connection.phase)),
+);
 const mobAlarm = new GatedAlarm(MOB_TONE);
 
 // The measure tool: armed from the menu, fed by chart taps, read by its overlay and strip.
@@ -1531,6 +1546,8 @@ const mobController = createMobController({
   mobAlarm,
   units,
   notificationsApi: () => notificationsApi,
+  writeBlocked: () => auth.writeBlocked,
+  streamOpen: () => isConnectionOpen(store.connection.phase),
   publishDelta,
   flyTo: (lat, lon) => mapCommands?.flyTo(lat, lon),
   goTo: (position) => routeController.onGoToHere(position),
@@ -1857,7 +1874,19 @@ const CONNECTION_LABELS: Record<ConnectionPhase, string> = {
   closed: 'Not connected',
 };
 
-const connectionLabel = $derived(CONNECTION_LABELS[store.connection.phase]);
+// An open socket with no data for this long is a silent stop (a wedged provider chain, a stale
+// token the server accepted but does not authenticate), which per-tile staleness dashes never name.
+const DATA_STALL_MS = 30_000;
+// Gated on a data frame ever arriving, so a stock server with no producers reads plain Connected
+// truthfully rather than claiming its silence is a fault.
+const dataStalled = $derived(
+  isConnectionOpen(store.connection.phase) &&
+    store.lastDataEpoch > 0 &&
+    clock.now - store.lastDataEpoch > DATA_STALL_MS,
+);
+const connectionLabel = $derived(
+  dataStalled ? 'Connected, no data' : CONNECTION_LABELS[store.connection.phase],
+);
 // The own fix has aged out: the footer dashes SOG and COG and shows a calm "No GPS fix" note rather
 // than presenting a frozen speed and course as if they were live.
 const fixStale = $derived(vessel.positionStale);
@@ -1896,7 +1925,12 @@ function refreshAfterStreamReconnect(token: string | undefined): void {
   if (instruments.open) instruments.refreshLiveCatalog();
   if (untrack(() => companionBase === null)) refreshCompanionProbe();
   void units.syncFromServer(origin);
-  void routeController.hydrateAndSeedCourse();
+  // The MOB replay decision reads the mirror, so it runs behind the mirror reconcile: before
+  // it, the pre-outage mirror still shows the raise a restarted server has already lost, and
+  // the replay guard would skip the re-raise every other station needs.
+  void notificationsController
+    .reconcileAfterReconnect(token)
+    .then(() => mobController.onStreamReconnect());
 }
 
 // A replacement Web Worker starts its internal connection counter from zero. Offset each worker's
@@ -1924,10 +1958,17 @@ const streamController = createStreamController({
     if (!store.applyFrame(frame)) return;
     for (const [path, value] of frame.self) marineRadar.applyControlDelta(path, value);
   },
-  onInitialSubscription: async () => {
-    await routeController.hydrateAndSeedCourse();
+  // The open edge is the whole connect-and-reconnect story: every open re-hydrates the course
+  // (the one edge tied to the socket actually delivering; hydrateAndSeedCourse serializes
+  // overlapping calls), the first open replays a MOB raise or clear published before the socket
+  // ever opened (a cold helm display against a still-booting server), and every later open runs
+  // the reconnect refresh chain, whose notification reconcile replays MOB after the mirror
+  // settles.
+  onOpen: (firstOpen, token) => {
+    void routeController.hydrateAndSeedCourse();
+    if (firstOpen) mobController.onStreamReconnect();
+    else refreshAfterStreamReconnect(token);
   },
-  onReconnect: refreshAfterStreamReconnect,
   onWorkerRestart: () => {
     workerGenerationBase = store.generation + 1;
     instruments.resubscribe();
@@ -2255,7 +2296,12 @@ const plotterActions = {
         >Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></span
       >
     </span>
-    <MobButton {mob} onTrigger={mobController.onTrigger} onLocate={flyToPosition} />
+    <MobButton
+      {mob}
+      onTrigger={mobController.onTrigger}
+      onLocate={flyToPosition}
+      writeBlocked={auth.writeBlocked}
+    />
     <span class="topbar-actions">
       {#if collisionMute.active}
         <button
@@ -2324,6 +2370,7 @@ const plotterActions = {
     {chartLockerAccessUrl}
     chartLockerState={companionStatus.state}
     chartLockerAdminAccess={companionStatus.state === 'serving'}
+    pwaStatus={pwa.status}
     {arrivalBanner}
     toastMessage={toast.message}
     bind:hoveredPoi
@@ -2332,6 +2379,7 @@ const plotterActions = {
     {historyProviders}
     {serverFeatures}
     {notificationsApi}
+    {audioBlocked}
     {weatherProvider}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
@@ -2471,6 +2519,7 @@ const plotterActions = {
   <StatusStrip
     {connectionLabel}
     {streamError}
+    {dataStalled}
     online={net.online}
     {fixStale}
     connectionPhase={store.connection.phase}
@@ -2479,10 +2528,18 @@ const plotterActions = {
     {units}
     {vessel}
     shallowAlarming={shallowController.alarming}
+    audioBlocked={soundOffAlert}
+    onEnableSound={primeAlarmAudio}
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}
-    onReconnect={() => streamController.reconnect()}
+    onReconnect={() => {
+      // On a fixed helm display no focus or visibility event ever re-probes an exhausted auth
+      // poll, so the one visible retry action must also revalidate access, or it silently no-ops
+      // while status is stuck at unknown and the stream controller refuses to connect.
+      auth.recheck();
+      streamController.reconnect();
+    }}
   />
 </main>
 

@@ -23,6 +23,7 @@ import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
 let {
   connectionLabel,
   streamError,
+  dataStalled = false,
   online,
   fixStale,
   connectionPhase,
@@ -31,6 +32,8 @@ let {
   units,
   vessel,
   shallowAlarming,
+  audioBlocked,
+  onEnableSound,
   pinnedActions,
   editing = false,
   clock,
@@ -38,6 +41,7 @@ let {
 }: {
   connectionLabel: string;
   streamError: boolean;
+  dataStalled?: boolean;
   online: boolean;
   fixStale: boolean;
   connectionPhase: ConnectionPhase;
@@ -46,6 +50,8 @@ let {
   units: UnitsStore;
   vessel: OwnVessel;
   shallowAlarming: boolean;
+  audioBlocked: boolean;
+  onEnableSound: () => void;
   pinnedActions: MenuItem[];
   editing?: boolean;
   clock: ReactiveClock;
@@ -72,7 +78,7 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
   <div class="strip-start">
     <span
       class="conn"
-      class:conn--down={connectionDown}
+      class:conn--down={connectionDown || dataStalled}
       role="status"
       aria-live="polite"
       title={connectionLabel}
@@ -85,9 +91,11 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
         Data link failed
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>
-    {:else if connectionDown}
-      <!-- Not a live region: the always-mounted conn dot above already announces every phase, and a
-           second region carrying the same label announced the drop twice. This is the sighted half. -->
+    {:else if connectionDown || dataStalled}
+      <!-- A down socket, or one that is open but silent (a stop the per-tile staleness dashes
+           never name; connectionLabel already says which). Not a live region: the always-mounted
+           conn dot above announces every phase, and a second region carrying the same label
+           announced the drop twice. This is the sighted half. -->
       <span class="readout fix-lost">
         {connectionLabel}
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
@@ -98,6 +106,14 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
     {/if}
     {#if fixStale}
       <span class="readout fix-lost" role="status" aria-live="polite">No GPS fix</span>
+    {/if}
+    {#if audioBlocked}
+      <!-- role=status makes the chip's mount the polite announcement that alarm audio is off; the
+           Enable tap is a user gesture, so it primes the shared context directly. -->
+      <span class="readout sound-off" role="status" aria-live="polite">
+        Sound off
+        <button type="button" class="btn btn-compact" onclick={onEnableSound}>Enable</button>
+      </span>
     {/if}
     {#if connectionPhase === 'open'}
       <span class="readout lookout" title="AIS targets the lookout is tracking">
@@ -291,6 +307,12 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
    longer updating. Warning-colored and calm, beside the dashed SOG and COG. */
 .fix-lost {
   color: var(--warning);
+  font-weight: 600;
+}
+/* Alarm audio is blocked (no priming gesture since load): alarm-colored, because an armed watch
+   is silently visual-only until the operator taps. */
+.sound-off {
+  color: var(--alarm);
   font-weight: 600;
 }
 /* The lookout chip is muted chrome: it confirms the AIS watch is live without competing with the

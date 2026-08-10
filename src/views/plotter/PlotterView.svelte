@@ -45,7 +45,7 @@ import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
 import type { LayerSettings } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
-import type { OnlineStatus } from '$shared/pwa';
+import type { OnlineStatus, PwaStatus } from '$shared/pwa';
 import type {
   AuthController,
   HistoryProviders,
@@ -168,6 +168,7 @@ interface FlatProps {
   chartLockerAccessUrl: string;
   chartLockerState: import('$features/prewarm').CompanionState;
   chartLockerAdminAccess: boolean;
+  pwaStatus: PwaStatus;
   arrivalBanner: string | undefined;
   toastMessage: string | undefined;
   hoveredPoi: Poi | undefined;
@@ -176,6 +177,8 @@ interface FlatProps {
   historyProviders: HistoryProviders | undefined;
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
+  // Alarm audio cannot sound while a watch is armed (no priming gesture since load).
+  audioBlocked?: boolean;
   weatherProvider: WeatherProvider | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
@@ -381,6 +384,7 @@ let {
   chartLockerAccessUrl,
   chartLockerState,
   chartLockerAdminAccess,
+  pwaStatus,
   arrivalBanner,
   toastMessage,
   hoveredPoi = $bindable(),
@@ -389,6 +393,7 @@ let {
   historyProviders,
   serverFeatures,
   notificationsApi,
+  audioBlocked = false,
   weatherProvider,
   collisionMute,
   collisionMuteRemainingMin,
@@ -866,7 +871,13 @@ $effect(() => {
     <div class="safety-strips">
       <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
       <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
-      <MobStrip {mob} {units} onSteer={mobController.onSteer} onCancel={mobController.onCancel} />
+      <MobStrip
+        {mob}
+        {units}
+        onSteer={mobController.onSteer}
+        onCancel={mobController.onCancel}
+        publishWarning={mobController.mobPublishWarning}
+      />
       <AlarmStrip
         notifications={genericAlarms}
         sounding={genericSounding}
@@ -1167,6 +1178,7 @@ $effect(() => {
           onDrop={() => void anchorController.onDrop()}
           onRaise={() => void anchorController.onRaise()}
           onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
+          {audioBlocked}
           onClose={closePanel}
           onBack={backToMenu}
         />
@@ -1185,6 +1197,7 @@ $effect(() => {
           error={alarmActionError}
           onSilence={notificationsApi ? onSilenceNotification : undefined}
           onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+          {audioBlocked}
           shallow={shallowMonitor}
           onClose={closePanel}
           onBack={backToMenu}
@@ -1203,6 +1216,7 @@ $effect(() => {
           <ErrorBoundary>
             <module.default
               adminAccess={chartLockerAdminAccess}
+              {pwaStatus}
               accessUrl={chartLockerAccessUrl}
               accessState={chartLockerState}
               map={mapInstance}

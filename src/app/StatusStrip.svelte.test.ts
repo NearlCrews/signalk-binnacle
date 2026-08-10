@@ -14,10 +14,11 @@ const clock: ReactiveClock = { now: Date.UTC(2026, 0, 1, 12, 0, 0) };
 function baseProps() {
   const store = new SignalKStore();
   const vessel = new OwnVessel(store);
-  const anchor = new AnchorWatch(store, vessel, createFakeStorage());
+  const anchor = new AnchorWatch(store, vessel, undefined, createFakeStorage());
   return {
     connectionLabel: 'Connected',
     streamError: false,
+    dataStalled: false,
     online: true,
     fixStale: false,
     // The whole union, not the literal: a case that overrides this on a spread of baseProps() has
@@ -28,6 +29,8 @@ function baseProps() {
     units: new UnitsStore(),
     vessel,
     shallowAlarming: false,
+    audioBlocked: false,
+    onEnableSound: () => {},
     pinnedActions: [],
     clock,
     onReconnect: () => {},
@@ -118,6 +121,25 @@ describe('StatusStrip depth alarm', () => {
     expect(reconnect.match(/role="status"/g) ?? []).toHaveLength(1);
   });
 
+  it('shows the stalled-data readout with a reconnect action while the socket is open', () => {
+    const html = body({
+      ...baseProps(),
+      connectionLabel: 'Connected, no data',
+      dataStalled: true,
+    });
+    expect(html).toContain('Connected, no data');
+    expect(html).toContain('Reconnect</button>');
+    // The chip is the sighted half only; the conn dot's live region announces the label once.
+    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('conn--down');
+  });
+
+  it('keeps the stalled readout out of a healthy connected strip', () => {
+    const html = body(baseProps());
+    expect(html).not.toContain('Reconnect</button>');
+    expect(html).not.toContain('conn--down');
+  });
+
   it('replaces a stale depth with an explicit unavailable state', () => {
     const store = new SignalKStore();
     const vesselClock = $state({ now: 20_000 });
@@ -132,5 +154,14 @@ describe('StatusStrip depth alarm', () => {
     expect(html).toContain('Depth stale');
     expect(html).toContain('Depth data is stale');
     expect(html).not.toContain('>4.0<');
+  });
+
+  it('shows the sound-off chip with its enable action only while audio is blocked', () => {
+    const blocked = body({ ...baseProps(), audioBlocked: true });
+    expect(blocked).toContain('Sound off');
+    expect(blocked).toContain('Enable');
+
+    const healthy = body(baseProps());
+    expect(healthy).not.toContain('Sound off');
   });
 });
