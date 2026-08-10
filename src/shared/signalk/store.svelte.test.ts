@@ -152,6 +152,100 @@ describe('SignalKStore', () => {
     expect(store.cell('navigation.position').generation).toBe(2);
   });
 
+  it('traces source handoffs only for opted-in paths, quietly on repeats', () => {
+    const store = new SignalKStore();
+    store.traceSources(['navigation.speedOverGround']);
+    const withSource = (label: string, epoch: number): SKFrame => ({
+      self: new Map([['navigation.speedOverGround', 5]]),
+      selfSources: new Map([['navigation.speedOverGround', { label }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch,
+    });
+    store.applyFrame(withSource('gps.1', 1000));
+    store.applyFrame(withSource('gps.1', 2000));
+    store.applyFrame(withSource('gps.2', 3000));
+    expect(store.cell('navigation.speedOverGround').sourceTrace).toEqual([
+      { label: 'gps.1', epoch: 1000 },
+      { label: 'gps.2', epoch: 3000 },
+    ]);
+
+    // An untraced path records nothing.
+    store.applyFrame({
+      self: new Map([['environment.depth.belowTransducer', 3]]),
+      selfSources: new Map([['environment.depth.belowTransducer', { label: 'sounder.1' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 4000,
+    });
+    expect(store.cell('environment.depth.belowTransducer').sourceTrace).toEqual([]);
+  });
+
+  it('does not read a metadata gap as a source handoff', () => {
+    const store = new SignalKStore();
+    store.traceSources(['navigation.speedOverGround']);
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'gps.1' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    // A frame with no source metadata, then the same source again: no handoff happened.
+    store.applyFrame(frame({ 'navigation.speedOverGround': 5.1 }));
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5.2]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'gps.1' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 3000,
+    });
+    expect(store.cell('navigation.speedOverGround').sourceTrace).toHaveLength(1);
+  });
+
+  it('bounds the trace and drops the oldest transitions first', () => {
+    const store = new SignalKStore();
+    store.traceSources(['navigation.speedOverGround']);
+    for (let index = 0; index < 12; index += 1) {
+      store.applyFrame({
+        self: new Map([['navigation.speedOverGround', index]]),
+        selfSources: new Map([['navigation.speedOverGround', { label: `gps.${index}` }]]),
+        connection: { phase: 'open', attempt: 0 },
+        epoch: 1000 + index,
+      });
+    }
+    const trace = store.cell('navigation.speedOverGround').sourceTrace;
+    expect(trace).toHaveLength(8);
+    expect(trace[0]?.label).toBe('gps.4');
+    expect(trace.at(-1)?.label).toBe('gps.11');
+  });
+
+  it('clears traces on a reconnect generation so old transitions cannot leak', () => {
+    const store = new SignalKStore();
+    store.traceSources(['navigation.speedOverGround']);
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'gps.1' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+      generation: 1,
+    });
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 6]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'gps.2' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+      generation: 1,
+    });
+    expect(store.cell('navigation.speedOverGround').sourceTrace).toHaveLength(2);
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 7]]),
+      selfSources: new Map([['navigation.speedOverGround', { label: 'gps.2' }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 3000,
+      generation: 2,
+    });
+    expect(store.cell('navigation.speedOverGround').sourceTrace).toEqual([
+      { label: 'gps.2', epoch: 3000 },
+    ]);
+  });
+
   it('ignores a late frame from an older connection generation', () => {
     const store = new SignalKStore();
     store.applyFrame({ ...frame({ 'navigation.speedOverGround': 5 }), generation: 2 });

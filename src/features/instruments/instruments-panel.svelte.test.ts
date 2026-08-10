@@ -12,7 +12,7 @@ import { TILE_CATALOG, tileById } from './tile-catalog';
 
 function makeStore(epochFor: (path: string) => number = () => 0) {
   return {
-    cell: (path: string) => ({ epoch: epochFor(path), value: undefined }),
+    cell: (path: string) => ({ epoch: epochFor(path), value: undefined, sourceTrace: [] }),
     notifications: new Map<string, unknown>(),
     notificationsVersion: 0,
     ensureCells: () => {},

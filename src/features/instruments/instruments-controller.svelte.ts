@@ -82,6 +82,8 @@ export interface InstrumentsController {
 export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsController {
   const MAX_SELECTED_TILES = 100;
   deps.store.ensureCells(ALL_CATALOG_PATHS);
+  // Every instrument path is watch-critical: trace source handoffs for the detail's source cue.
+  deps.store.traceSources(ALL_CATALOG_PATHS);
 
   const metaCache = createPathMetaCache(deps.origin, deps.getToken);
   const dynamicDefCache = new Map<string, TileDef[]>();
@@ -198,7 +200,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     dynamicCatalog = [...liveCatalog, ...historicalOnly];
     historicalOnlyIds = new Set(historicalOnly.map((def) => def.id));
     liveDiscoveredIds = liveIds;
-    deps.store.ensureCells(dynamicCatalog.flatMap((def) => def.paths));
+    const dynamicPaths = dynamicCatalog.flatMap((def) => def.paths);
+    deps.store.ensureCells(dynamicPaths);
+    deps.store.traceSources(dynamicPaths);
   }
 
   function familyForDef(def: TileDef): keyof Omit<InstrumentInstances, 'paths'> | undefined {
@@ -324,6 +328,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     // whose $state is created during that read is untracked and never re-renders (the dynamic
     // battery defs are not in ALL_CATALOG_PATHS, so nothing else pre-creates theirs).
     deps.store.ensureCells(def.paths);
+    deps.store.traceSources(def.paths);
     const current = resolveSelectedIds();
     const idx = current.indexOf(id);
     if (idx < 0 && current.length >= MAX_SELECTED_TILES) return;
@@ -431,7 +436,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
 
   // Pre-create cells for the persisted selection too: it can hold dynamic battery ids that
   // ALL_CATALOG_PATHS does not cover, and their first read must find a tracked cell.
-  deps.store.ensureCells(resolveTiles().flatMap((def) => def.paths));
+  const selectedPaths = resolveTiles().flatMap((def) => def.paths);
+  deps.store.ensureCells(selectedPaths);
+  deps.store.traceSources(selectedPaths);
 
   // Restore subscriptions, meta, and discovery if the dock was persisted open before construction.
   syncSubscriptions();

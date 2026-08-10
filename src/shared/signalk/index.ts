@@ -59,6 +59,7 @@ export {
   str,
   writeRefusedMessage,
 } from './resource';
+export { sourceCue } from './source-trace';
 export { SignalKStore } from './store.svelte';
 export type { SkSymbol } from './symbols-client';
 export { fetchSymbols } from './symbols-client';

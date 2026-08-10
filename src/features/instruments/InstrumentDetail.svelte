@@ -1,6 +1,6 @@
 <script lang="ts">
 import { tick } from 'svelte';
-import type { ZoneState } from '$shared/signalk';
+import { sourceCue, type ZoneState } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
 import type { TileDef, TileDeps, TileReading } from './tile-catalog';
 
@@ -67,6 +67,16 @@ const primaryCell = $derived.by(() => {
 const sourceLabel = $derived(
   def.paths.length === 0 ? 'Computed in Binnacle' : (primaryCell?.source?.label ?? 'Unknown'),
 );
+// The recent-handoff cue for the shown value's own path (never a cross-reference comparison).
+// Signal K remains the source authority; this only reports what the server sent recently.
+const cue = $derived(primaryCell ? sourceCue(primaryCell.sourceTrace, deps.clock.now) : undefined);
+const cueText = $derived.by(() => {
+  if (cue === undefined) return undefined;
+  if (cue.kind === 'changed') {
+    return `Source changed ${ageLabel(cue.atEpoch)}: ${cue.from} to ${cue.to}.`;
+  }
+  return `Multiple recent sources: ${cue.labels.join(', ')}.`;
+});
 const age = $derived(primaryCell ? ageLabel(primaryCell.epoch) : 'Not streamed');
 const stateLabel = $derived(
   reading.state === 'live'
@@ -104,6 +114,10 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
     <dt>Updated</dt>
     <dd><span>{age}</span><span class="unit"></span></dd>
   </dl>
+
+  {#if cueText}
+    <p class="muted-note" role="status">{cueText}</p>
+  {/if}
 
   {#if onViewTrend}
     <button

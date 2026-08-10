@@ -1,4 +1,5 @@
 import { sameJsonValue } from '$shared/lib';
+import type { SourceTransition } from './source-trace';
 import type { AisTargetState, ConnectionState, PathSource, SKFrame, Value } from './types';
 import {
   INITIAL_CONNECTION_STATE,
@@ -12,6 +13,11 @@ import {
 // well-formed server (Signal K alarms are per hazard, not per sample) and far below a memory
 // problem. The alert list renders fewer still; this bounds what is retained, not what is shown.
 const MAX_MIRRORED_NOTIFICATIONS = 1_000;
+
+// How many source transitions a traced cell retains. A well-behaved installation sees a handful in
+// a whole passage; the bound only caps a pathological alternation, whose cue reads the same at
+// eight entries as at eight hundred.
+const MAX_SOURCE_TRACE = 8;
 
 // The four v2 status flags the alert list renders, so the notification dedup compares them field by
 // field; serializing the status object would allocate per delta for active alarms. canClear is
@@ -54,6 +60,11 @@ export class PathCell {
   // True only when the current value came from the delta stream. REST hydration uses the same cell
   // but must not make a same-millisecond later hydration look like a competing stream write.
   streamed = $state(false);
+  // Recent source transitions, oldest first, populated only for paths opted in via traceSources.
+  // The first entry is the first source observed and not a handoff; repeats of the same label
+  // append nothing, and a reconnect generation clears the trace so old transitions cannot leak
+  // into the disagreement cue.
+  sourceTrace = $state<readonly SourceTransition[]>([]);
   // Notification activation sequence. It increments only on quiet-to-sounding transitions, so
   // acknowledgments survive repeated emergency deltas but reset after a clear and re-raise.
   activation = $state(0);
@@ -98,6 +109,14 @@ export class SignalKStore {
   // delta would grow this without bound, but that is out of scope for a well-formed stream.
   #cells = new Map<string, PathCell>();
 
+  // The watch-critical paths whose cells keep a bounded source-transition trace. Opt-in, so the
+  // hundreds of untraced paths pay nothing per frame.
+  #tracedPaths = new Set<string>();
+
+  traceSources(paths: readonly string[]): void {
+    for (const path of paths) this.#tracedPaths.add(path);
+  }
+
   cell(path: string): PathCell {
     let cell = this.#cells.get(path);
     if (!cell) {
@@ -129,6 +148,12 @@ export class SignalKStore {
       // cue, so the stalled badge must not fire the instant the stream reopens. Zero still means
       // no data ever arrived.
       if (this.lastDataEpoch > 0) this.lastDataEpoch = frame.epoch;
+      // Transitions recorded under the old connection must not feed the source cue after a
+      // reconnect: the new generation starts its trace from the first source it observes.
+      for (const path of this.#tracedPaths) {
+        const traced = this.#cells.get(path);
+        if (traced !== undefined && traced.sourceTrace.length > 0) traced.sourceTrace = [];
+      }
     }
     if (!this.selfContext && frame.selfContext) this.selfContext = frame.selfContext;
     if (frame.self.size > 0 || (frame.ais !== undefined && frame.ais.size > 0)) {
@@ -145,6 +170,19 @@ export class SignalKStore {
       }
       cell.value = value;
       cell.source = frame.selfSources?.get(path);
+      // Compared against the last traced label, not cell.source: a frame that carries no source
+      // metadata clears cell.source, and the same source reappearing must stay quiet rather than
+      // read as a handoff.
+      const label = cell.source?.label;
+      if (
+        label !== undefined &&
+        this.#tracedPaths.has(path) &&
+        label !== cell.sourceTrace.at(-1)?.label
+      ) {
+        const at = frame.selfEpochs?.get(path) ?? frame.epoch;
+        const trace = [...cell.sourceTrace, { label, epoch: at }];
+        cell.sourceTrace = trace.length > MAX_SOURCE_TRACE ? trace.slice(-MAX_SOURCE_TRACE) : trace;
+      }
       cell.epoch = frame.selfEpochs?.get(path) ?? frame.epoch;
       cell.generation = generation;
       cell.streamed = true;

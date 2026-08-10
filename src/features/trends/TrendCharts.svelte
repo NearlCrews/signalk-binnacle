@@ -1,8 +1,15 @@
 <script lang="ts">
-import { formatClockTime, formatFixed, type UnitsMode } from '$shared/lib';
+import { onDestroy } from 'svelte';
+import { Clock, formatClockTime, formatFixed, MINUTE_MS, type UnitsMode } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import TrendChart from './TrendChart.svelte';
-import { type AttributedTrendSeries, hasTrendSamples, trendDisplayFor } from './trend-metrics';
+import {
+  type AttributedTrendSeries,
+  hasTrendSamples,
+  type TrendCoverage,
+  trendCoverage,
+  trendDisplayFor,
+} from './trend-metrics';
 import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
 interface Props {
@@ -12,6 +19,11 @@ interface Props {
 }
 
 const { controller, mode, theme }: Props = $props();
+
+// A coarse minute tick so the last-sample age and staleness marks keep tracking the wall clock
+// during a long open, the WeatherMap idiom.
+const clock = new Clock(MINUTE_MS);
+onDestroy(() => clock.dispose());
 
 interface Section {
   item: TrendItem;
@@ -101,6 +113,32 @@ function summary(section: Section): string {
   ].join(', ');
 }
 
+// The honesty line under each chart: coverage, longest hole, and the newest sample's age, with
+// Partial and Stale words rather than color alone. Visible and read by screen readers through the
+// same paragraph.
+function durationText(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return 'under a minute';
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours}h ${rest.toString().padStart(2, '0')}m` : `${hours}h`;
+}
+
+function coverageText(coverage: TrendCoverage): string {
+  const marks = [coverage.partial ? 'Partial' : '', coverage.stale ? 'Stale' : '']
+    .filter(Boolean)
+    .join(', ');
+  const facts = [
+    `${Math.round(coverage.coverageFraction * 100)}% of samples present`,
+    coverage.longestGapSec > 0 ? `longest gap ${durationText(coverage.longestGapSec)}` : '',
+    `last sample ${durationText(coverage.lastSampleAgeSec)} ago`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  return marks ? `${marks}: ${facts}.` : `${facts}.`;
+}
+
 function sourceLabel(section: Section): string {
   const series = section.sourceSeries;
   const path = series.path ? ` · ${series.path}` : '';
@@ -138,6 +176,7 @@ function valueText(section: Section, index: number): string {
   {#each sections as section (section.item.id)}
     {@const index = inspectIndex(section)}
     {@const hasData = section.values.some((value) => value != null)}
+    {@const coverage = trendCoverage(section.sourceSeries, clock.now / 1000)}
     {@const scrubberId = scrubberInputId(section.item.id)}
     <section class="panel-section trend-section" aria-label="{section.item.label} trend">
       <div class="head">
@@ -177,6 +216,11 @@ function valueText(section: Section, index: number): string {
           <output for={scrubberId}>{valueText(section, index)}</output>
         </div>
         <p class="summary">{summary(section)}</p>
+        {#if coverage}
+          <p class="summary" class:coverage-flagged={coverage.partial || coverage.stale}>
+            {coverageText(coverage)}
+          </p>
+        {/if}
       {:else}
         <p class="muted-note">No samples for this instrument yet.</p>
       {/if}
@@ -227,6 +271,11 @@ function valueText(section: Section, index: number): string {
   color: var(--text-muted);
   font-size: var(--text-xs);
   overflow-wrap: anywhere;
+}
+/* A flagged coverage line lifts to the warning tone; the Partial and Stale words carry the meaning
+   without the color. */
+.coverage-flagged {
+  color: var(--warning);
 }
 .timeline {
   display: grid;

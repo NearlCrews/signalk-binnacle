@@ -112,3 +112,53 @@ export function trendDisplayFor(
 export function hasTrendSamples(series: TrendSeries | undefined): boolean {
   return series?.values.some((value) => value != null) ?? false;
 }
+
+// The honesty summary for one series: how much of it actually holds samples, where its longest
+// hole is, and how old the newest sample is. Undefined means no samples at all, which the caller
+// must present as no data, never as an empty-but-healthy series. Explicit nulls stay in the series
+// itself; this only measures them.
+export interface TrendCoverage {
+  lastSampleAgeSec: number;
+  // Non-null samples over total slots, 0 to 1.
+  coverageFraction: number;
+  // The widest time span between consecutive non-null samples; 0 with fewer than two samples.
+  longestGapSec: number;
+  partial: boolean;
+  stale: boolean;
+}
+
+// A series missing more than a tenth of its slots is marked partial.
+export const TREND_PARTIAL_BELOW = 0.9;
+// A newest sample older than this, or than three median sample intervals when that is longer, is
+// marked stale: the chart still shows history, but its right edge is not the present.
+export const TREND_STALE_AFTER_SEC = 600;
+
+export function trendCoverage(series: TrendSeries, nowSec: number): TrendCoverage | undefined {
+  const sampleTimes: number[] = [];
+  for (let index = 0; index < series.values.length; index += 1) {
+    if (series.values[index] != null && Number.isFinite(series.times[index])) {
+      sampleTimes.push(series.times[index]);
+    }
+  }
+  if (sampleTimes.length === 0) return undefined;
+  const lastSampleAgeSec = Math.max(0, nowSec - (sampleTimes.at(-1) ?? nowSec));
+  const coverageFraction = sampleTimes.length / series.values.length;
+  let longestGapSec = 0;
+  const intervals: number[] = [];
+  for (let index = 1; index < sampleTimes.length; index += 1) {
+    const gap = sampleTimes[index] - sampleTimes[index - 1];
+    intervals.push(gap);
+    longestGapSec = Math.max(longestGapSec, gap);
+  }
+  const medianInterval =
+    intervals.length > 0
+      ? intervals.toSorted((a, b) => a - b)[Math.floor(intervals.length / 2)]
+      : 0;
+  return {
+    lastSampleAgeSec,
+    coverageFraction,
+    longestGapSec,
+    partial: coverageFraction < TREND_PARTIAL_BELOW,
+    stale: lastSampleAgeSec > Math.max(TREND_STALE_AFTER_SEC, 3 * medianInterval),
+  };
+}
