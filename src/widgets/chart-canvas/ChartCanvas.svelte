@@ -45,10 +45,10 @@ import type { LatLon } from '$shared/geo';
 import { createRetryableLazyUiLoader, lengthUnit } from '$shared/lib';
 import {
   activeLayerHitCursor,
-  type ChartViewChart,
   type ChartViewStatusKind,
   CONTEXT_MENU_KEYSHORTCUTS,
   chartSourceId,
+  chartViewCharts,
   chartViewStatus,
   createChartOverlay,
   createMapTapRecognizer,
@@ -265,20 +265,10 @@ let layersRevision = $state(0);
 let managerRef = $state<LayerManager | undefined>();
 const chartStatus = $derived.by<ChartViewStatusKind>(() => {
   void layersRevision;
-  const charts: ChartViewChart[] = [];
-  for (const item of managerRef?.layers() ?? []) {
-    if (!item.chart) continue;
-    charts.push({
-      visible: item.visible,
-      bounds: item.chart.bounds,
-      minzoom: item.chart.minzoom,
-      maxzoom: item.chart.maxzoom,
-    });
-  }
   return chartViewStatus({
     baseStyleFallback,
     chartsLoadState: chartsLoadStateLocal,
-    charts,
+    charts: chartViewCharts(managerRef?.layers() ?? []),
     center: viewSnapshot?.center,
     zoom: viewSnapshot?.zoom,
   });

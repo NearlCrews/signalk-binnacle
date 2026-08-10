@@ -3,6 +3,7 @@ import type { ChartGroup } from 'signalk-chart-sources';
 import type { MapThemePaint } from './map-theme';
 import { installSentinels, sentinelId } from './sentinels';
 import {
+  type ChartCoverageInfo,
   type ChartLayerInfo,
   type OverlayContext,
   type OverlayModule,
@@ -60,6 +61,9 @@ export interface LayerListItem {
   // Present when this row represents a chart source, so the Layers panel can expose chart-source
   // detail without knowing how the overlay renders.
   chart?: ChartLayerInfo;
+  // Present when this row is a navigation chart the ambient chart badge counts. See
+  // OverlayModule.chartCoverage.
+  chartCoverage?: ChartCoverageInfo;
 }
 
 export interface LayerManagerOptions {
@@ -725,6 +729,7 @@ export class LayerManager {
             unavailableHint: module.unavailableHint,
             manageable: module.manageable,
             chart: module.chart,
+            chartCoverage: module.chartCoverage,
           },
         ];
       });

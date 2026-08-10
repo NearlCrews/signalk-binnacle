@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { requireCatalogSource } from '$shared/map';
 import { expectCatalogFacts } from '$shared/testing';
 import { createStreamingChartOverlay } from './streaming-overlay';
 import { STREAMING_CHART_SOURCES } from './streaming-sources';
@@ -48,5 +49,30 @@ describe('streaming chart sources', () => {
       expect(overlay.supportsOpacity).toBe(true);
       expect(overlay.layerIds).toHaveLength(1);
     }
+  });
+
+  it('marks exactly the NOAA ENC chart as a navigation chart for the ambient badge', () => {
+    // Exhaustive over the family list, so a new sibling can neither silently gain the flag nor
+    // silently strip it from the ENC.
+    const flagged = STREAMING_CHART_SOURCES.filter((source) => source.chartCoverage !== undefined);
+    expect(flagged.map((source) => source.id)).toEqual(['depth-noaa-enc']);
+    const overlays = STREAMING_CHART_SOURCES.map((source) => createStreamingChartOverlay(source));
+    expect(
+      overlays.filter((overlay) => overlay.chartCoverage !== undefined).map((o) => o.id),
+    ).toEqual(['depth-noaa-enc']);
+  });
+
+  it('takes the ENC badge coverage from the catalog regional coverage, never the envelope', () => {
+    const catalog = requireCatalogSource('depth-noaa-enc');
+    const enc = STREAMING_CHART_SOURCES.find((source) => source.id === 'depth-noaa-enc');
+    // The catalog must carry a real regional coverage list: the WMS bounds are the near-worldwide
+    // service envelope, and using them would call the whole planet charted.
+    expect(catalog.coverage).toBeDefined();
+    expect(catalog.coverage?.length).toBeGreaterThan(1);
+    expect(enc?.chartCoverage).toEqual({
+      coverage: catalog.coverage,
+      minzoom: catalog.minzoom,
+      maxzoom: catalog.maxzoom,
+    });
   });
 });

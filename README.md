@@ -57,6 +57,11 @@ Binnacle ships its full feature set as a Signal K webapp:
   available for inspection, but Binnacle labels them unsupported and keeps them off instead of
   presenting a blank chart. The Overlays tab controls visibility, opacity, and stacking for marks,
   routes, weather-adjacent data, and other map overlays.
+  An ambient chart badge on the map corner grades the current view honestly: Chart when a real
+  nautical chart covers it (a server or user chart, or the NOAA ENC within its actual regional
+  coverage), Reference map only when nothing but the base map is showing, and Outside chart
+  coverage, Chart overzoomed, or a failure state when that is the truth; bathymetry references
+  never count as charts.
   A 24 hour **track history** layer draws the server-recorded past day under the live track.
 - **Offline charts:** with the optional Chart Locker plugin, draw and save the chart area needed for a
   passage, choose overview, coastal, or harbor detail, review the estimated download and available

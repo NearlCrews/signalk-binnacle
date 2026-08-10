@@ -5,8 +5,8 @@ export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';
 export {
-  type ChartViewChart,
   type ChartViewStatusKind,
+  chartViewCharts,
   chartViewStatus,
 } from './chart-view-status';
 export { depthShadingStops, shadeColor } from './color-ramp';

@@ -15,8 +15,10 @@ export type StreamingChartSource = RasterOverlaySource;
 // display categories so the data-quality markers come off without losing the chart. Which categories
 // and styles those are is the catalog's business, recorded on depth-noaa-enc and its siblings.
 
-// Live-verified free services (2026-06-02). Every one carries a "not for navigation" constraint, so
-// they are reference overlays, not the primary chart. Two traps kept exactly as verified: BlueTopo
+// Live-verified free services (2026-06-02). The bathymetry families are reference overlays, not
+// charts: they carry no aids to navigation and Seascape-class depths are not reduced to chart
+// datum. The NOAA ENC family is the exception, a real chart display the ambient chart badge counts
+// (navigationChart below). Two traps kept exactly as verified: BlueTopo
 // serves 512px PNG8 tiles, and the NOAA ENC is a full chart-display WMS whose LAYERS list selects
 // S-57 display categories (see noaaEncSource above). Registration order is z, bottom to top, so the
 // array runs from the least specific at the bottom to the most relevant on top: GEBCO (global), then
@@ -68,7 +70,10 @@ export const STREAMING_CHART_SOURCES: StreamingChartSource[] = [
   // both facets share the "NOAA ENC (US)" group.
   catalogSource('depth-noaa-enc', {
     region: 'US',
-    description: 'US official electronic navigation charts, for reference (not for navigation).',
+    description: 'US official electronic navigation charts from the live NOAA chart display.',
+    // The one streaming family that is a real chart display (S-57 categories rendered by NOAA's
+    // own service), so the ambient chart badge counts it; the bathymetry families stay reference.
+    navigationChart: true,
   }),
   catalogSource('depth-noaa-enc-quality', {
     parent: 'depth-noaa-enc',

@@ -3,7 +3,7 @@ import type { ChartGroup, ChartSource, LngLatBbox } from 'signalk-chart-sources'
 import { requireCatalogSource } from './catalog';
 import { applyRasterTheme } from './map-theme';
 import { removeLayersAndSources, setLayersVisibility } from './overlay-helpers';
-import type { OverlayModule, ZBand } from './types';
+import type { ChartCoverageInfo, OverlayModule, ZBand } from './types';
 
 // The id prefix on every hosted-raster overlay source and layer. The base-theme recolor skips ids
 // under this prefix, so the id scheme lives here in one place and base-theme imports it.
@@ -44,6 +44,9 @@ export interface RasterOverlaySource {
   defaultVisible?: boolean;
   // Initial opacity when there is no saved state. Defaults to 1; a translucent overlay sets it lower.
   defaultOpacity?: number;
+  // Set when this source is a NAVIGATION CHART the ambient chart badge should count. Built by
+  // catalogSource from the catalog's coverage facts; see OverlayModule.chartCoverage.
+  chartCoverage?: ChartCoverageInfo;
 }
 
 // A WMS 1.3.0 GetMap raster tile template: 256px EPSG:3857 PNG tiles with the {bbox-epsg-3857} token
@@ -93,10 +96,16 @@ export const catalogSource = (
     parent?: string;
     defaultVisible?: boolean;
     defaultOpacity?: number;
+    // Declare this catalog entry a navigation chart the ambient chart badge counts. The coverage
+    // itself stays a catalog fact: the regional coverage list when the catalog carries one, since
+    // a chart-display service's single bounds is its near-worldwide envelope, not where it has
+    // charts.
+    navigationChart?: boolean;
   } = {},
 ): RasterOverlaySource => {
   const source = requireCatalogSource(id);
-  return {
+  const { navigationChart, ...rest } = opts;
+  const built: RasterOverlaySource = {
     id: source.id,
     title: source.title,
     tiles: catalogTiles(source),
@@ -106,8 +115,16 @@ export const catalogSource = (
     bounds: source.bounds,
     attribution: source.attribution,
     group: source.group,
-    ...opts,
+    ...rest,
   };
+  if (navigationChart) {
+    built.chartCoverage = {
+      coverage: source.coverage ?? (source.bounds ? [source.bounds] : undefined),
+      minzoom: source.minzoom,
+      maxzoom: source.maxzoom,
+    };
+  }
+  return built;
 };
 
 // The safety band hosts the navigation-hazard rasters (seamarks, protected areas, and maritime
@@ -137,6 +154,7 @@ export function createRasterOverlay(source: RasterOverlaySource, band: ZBand): O
     supportsOpacity: true,
     defaultVisible: source.defaultVisible ?? false,
     defaultOpacity: source.defaultOpacity ?? 1,
+    chartCoverage: source.chartCoverage,
     layerIds: [layerId],
     add(ctx) {
       if (!ctx.map.getSource(sourceId)) {

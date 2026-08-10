@@ -117,4 +117,18 @@ export interface OverlayModule {
   readonly manageable?: boolean;
   // Chart-source metadata for rows that represent a chart. Generic overlays omit it.
   readonly chart?: ChartLayerInfo;
+  // Set only when the overlay presents a NAVIGATION CHART (a real chart display, not a bathymetry
+  // or hazard reference): the ambient chart badge counts it toward "a chart covers this view".
+  // Distinct from `chart`, whose presence also drives the Layers panel's chart-management surface.
+  readonly chartCoverage?: ChartCoverageInfo;
+}
+
+// Where a navigation-chart overlay actually has data, for the ambient chart badge. `coverage`
+// lists the regional boxes the service genuinely covers (a chart-display WMS advertises a
+// near-worldwide service envelope, so a single bounds would read as a chart over the whole
+// planet); absent coverage means worldwide by the charts contract.
+export interface ChartCoverageInfo {
+  coverage?: readonly Readonly<Bbox4>[];
+  minzoom?: number;
+  maxzoom?: number;
 }

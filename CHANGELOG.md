@@ -30,6 +30,12 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Enabling the NOAA ENC chart layer now flips the chart badge to Chart: the badge counts the ENC
+  as a real nautical chart within its actual regional coverage (US coasts, Great Lakes, Alaska,
+  Hawaii, and island territories), and mid-ocean or foreign waters still read Outside chart
+  coverage. Bathymetry reference layers still never count as charts, and the ENC row's own
+  description no longer contradicts the badge. The badge also recognizes charts correctly after
+  panning across the antimeridian.
 - A Signal K source identified only by its $source reference no longer renders as "Unknown" in
   the instrument detail, and its handoffs now feed the source-changed cue.
 

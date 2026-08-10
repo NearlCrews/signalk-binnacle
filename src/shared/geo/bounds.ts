@@ -180,7 +180,7 @@ export function bboxContains(outer: Bbox4, inner: Bbox4): boolean {
 // Whether a non-crossing box contains a point, for an in-view check before a camera move. Same
 // non-crossing caveat as bboxContains: the edge comparisons are meaningless for a box that wraps the
 // antimeridian. Callers pass a viewport box, which MapLibre reports non-crossing.
-export function bboxContainsPoint(box: Bbox4, p: LatLon): boolean {
+export function bboxContainsPoint(box: Readonly<Bbox4>, p: LatLon): boolean {
   return (
     p.longitude >= box[0] && p.longitude <= box[2] && p.latitude >= box[1] && p.latitude <= box[3]
   );

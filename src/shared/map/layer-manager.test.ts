@@ -52,6 +52,22 @@ describe('LayerManager', () => {
     expect(overlay.events).toContain('opacity:1');
   });
 
+  it('passes chart and chartCoverage metadata through to the listed item', async () => {
+    const chart = {
+      identifier: 'c1',
+      source: 'server' as const,
+      kind: 'raster' as const,
+      type: 'tilelayer',
+      bounds: [-83, 27, -82, 28] as [number, number, number, number],
+    };
+    const chartCoverage = { coverage: [[-83, 27, -82, 28]] as const, minzoom: 0, maxzoom: 18 };
+    const manager = new LayerManager(fakeCtx());
+    await manager.register({ ...fakeOverlay('chart'), chart });
+    await manager.register({ ...fakeOverlay('enc'), chartCoverage });
+    expect(manager.layers().find((layer) => layer.id === 'chart')?.chart).toBe(chart);
+    expect(manager.layers().find((layer) => layer.id === 'enc')?.chartCoverage).toBe(chartCoverage);
+  });
+
   it('toggle drives setVisible', async () => {
     const overlay = fakeOverlay('ais');
     const manager = new LayerManager(fakeCtx());
