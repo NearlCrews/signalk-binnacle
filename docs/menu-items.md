@@ -11,9 +11,17 @@ source, and surrounding traffic before relying on it.
 
 - **Center on boat** moves the chart to the latest vessel position. It is disabled while the chart is
   loading, before GPS is available, and when the last fix is stale.
-- **Follow boat** keeps the vessel centered until the chart is panned. Follow turns off automatically
-  when the GPS fix becomes stale.
-- The chart stays north-up and flat, zoom controls provide gloved-hand alternatives to pinch, and
+- **Follow boat** keeps the vessel centered until the chart is panned. A stale GPS fix only pauses
+  recentering: Follow stays armed through the outage and resumes on the next fresh fix. While the
+  chart is rotated (course-up or heading-up) and the boat is making way, Follow adds a bounded
+  look-ahead that sits the boat low on screen so the water ahead gets the pixels.
+- **Orientation** cycles north-up, course-up, and heading-up. North-up is the default; the rotating
+  modes are explicit, profile-owned choices. Heading-up needs fresh true heading and course-up
+  needs fresh COG with way on; a stale or missing reference falls back to north immediately.
+  While a rotating mode is chosen, a status-strip chip keeps the live orientation and its
+  reference (including the fallback) visible, and its N up action returns to north with one tap.
+  Rotation gestures stay disabled; the mode is the only author of chart bearing, and the chart
+  stays flat (never pitched). Zoom controls provide gloved-hand alternatives to pinch, and
   the compact labeled scale reports nautical distance.
 - Long press, right-click, the Context Menu key, and Shift+F10 open chart actions. Keyboard actions
   use the chart center.
@@ -111,7 +119,19 @@ source, and surrounding traffic before relying on it.
   publishing. While any audible watch is live (an armed anchor or MOB watch, or an open stream
   whose shallow, collision, and generic alarms could sound) and no gesture has primed alarm audio,
   the status strip shows an alarm-colored "Sound off" chip whose Enable tap turns audio on, and
-  the Anchor watch and Alarms panels carry a matching visual-only-audio note.
+  the Anchor watch and Alarms panels carry a matching visual-only-audio note. One alarm sounds at
+  a time through a single audio authority: man overboard and an escalating collision danger
+  interleave at the top, lower alarms rotate with bounded reminders, and courtesy tones yield.
+- **Watch handoff** takes a timestamped review-status snapshot for the change of watch: fix and
+  source age, course with cross-track error and a basis-qualified time to go, raised alarms and
+  the collision mute expiry, the top CPA and TCPA contact with assessment health, depth watch
+  state, radar health, weather and tide ages, whether the active route's offline coverage was
+  checked, and a short operator note. Snapshots share between stations through Signal K
+  applicationData (global scope); when that store is unreachable they queue on the device and sync
+  on reconnect, and every record states whether it is shared, waiting to sync, or on this device
+  only. Facts are rendered at snapshot time so stale inputs read as stale, taking a snapshot
+  mutates nothing (no acknowledgments, no navigation changes), and the surface reviews status; it
+  never declares it safe to take watch.
 
 ## Weather
 
@@ -121,7 +141,9 @@ source, and surrounding traffic before relying on it.
   fresh GPS fix. Provider point requests are time-bounded, warning intervals are validated, and
   missing optional warning labels receive bounded fallbacks. Open-Meteo marine fields are omitted
   when the provider's sea-snapped coordinate is too far from the requested grid cell. Provider
-  warnings state when warning data is unavailable or cached.
+  warnings state when warning data is unavailable or cached. The routes shown on the chart draw
+  read-only over the forecast with their named waypoints; they are not offered as a weather layer,
+  cannot be edited there, and never imply the forecast was routed along the path.
 - **Tides** independently selects tide-height and tidal-current stations. Automatic mode is the
   session default, prefers signalk-tides for tide height, and uses NOAA CO-OPS as the US-waters
   fallback and current source. Up to eight NOAA stations of each kind are listed within the supported
@@ -149,7 +171,11 @@ source, and surrounding traffic before relying on it.
   the Customize list automatically disambiguates any future repeated label. An absent or failed
   provider leaves live discovery working and reports the reduced scan. An intentionally empty
   selection explains how to add a tile. Duplicate, invalid, and oversized saved selections are
-  normalized.
+  normalized. Each tile's detail names the live Signal K source of the shown value, and on
+  watch-critical paths a bounded recent-source trace adds a cue: Source changed with the prior
+  label, or Multiple recent sources when they alternate, within a ten-minute window. Each path
+  traces alone, so unlike references (magnetic versus true heading) are never compared, and a
+  reconnect starts the trace fresh.
 - **Data trends** shows zero to eight profile-owned instrument trends in saved order.
   Customize groups the available readings by category, supports touch and keyboard reordering, keeps
   unavailable saved selections removable, and disables a ninth addition without hiding it. Opening
@@ -161,10 +187,12 @@ source, and surrounding traffic before relying on it.
   instrument starts recording only when its focused chart opens. Provider checking, partial failure,
   total failure, true empty history, session fallback, and no samples remain distinct. Every chart
   identifies its provider, path, and reference and includes a touch and keyboard timeline scrubber
-  plus a textual latest, minimum, maximum, start, and end summary. Eligible instrument details can
+  plus a textual latest, minimum, maximum, start, and end summary, and a data-coverage line
+  (percent of samples present, longest gap, newest sample's age, marked Partial or Stale when
+  warranted) that is visible and read by screen readers. Eligible instrument details can
   open one focused trend without changing the saved overview. Back restores the same detail and
   focus, while Close returns to the chart.
-- **Open KIP** opens the installed KIP webapp in a new tab. Transport or access failures keep its
+- **Instrument dashboard (KIP)** opens the installed KIP webapp in a new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
 - **Time travel** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
@@ -186,14 +214,21 @@ source, and surrounding traffic before relying on it.
   Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
   Repeated status failures offer Retry status without starting another download. Removed chart
   sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
-  adjusted copy uses available sources.
+  adjusted copy uses available sources. Saved-area cards lead with an at-a-glance summary: plain
+  detail level, chart count with any unavailable ones, and the approximate span in nautical miles.
+  While navigating a route, an advisory route-coverage check samples a chosen 1, 5, or 10
+  nautical-mile corridor (the route line and both edges) against the ready saved areas, the
+  catalog coverage of their included charts, and a requested detail level; it reports Complete,
+  Partial, or Unknown, highlights uncovered and insufficient-detail stretches read-only on the
+  chart, clears with the route, and states that it does not certify navigation or passage safety.
+  Provider readiness stays a separate readout.
   See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
   [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 
 ## Settings
 
 - **Profiles** saves portable chart, weather, threshold, toolbar, instrument, Data trends, track,
-  unit-fallback, planning, and preferred anchor-radius settings. The active profile saves
+  unit-fallback, planning, chart-orientation, and preferred anchor-radius settings. The active profile saves
   automatically after a short debounce. Each device keeps its own active choice, while profiles and
   the default sync
   through the authenticated Signal K account. A remote change to the active profile is offered for
@@ -213,3 +248,8 @@ source, and surrounding traffic before relying on it.
   Synced profiles return after sign-in and sync, while unsynced profiles and edits are permanently
   lost. Profile writes are suspended during erasure so queued work cannot recreate local data. See
   [Profiles and settings](profiles.md).
+- **Help** opens the permanent help panel: the safe-use framing (an advisory chartplotter, not a
+  navigation chart), the reference-map-versus-charts distinction, Signal K access and alarm-sound
+  setup with direct actions, a marine glossary, operating-context checklists for a coastal day, a
+  night passage, and lying at anchor, and a reset for the chart hints. The first-run orientation
+  banner reopens from here; dismissing it persists per device.

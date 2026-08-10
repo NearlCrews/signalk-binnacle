@@ -104,8 +104,11 @@ surfaces: the menu popout, the weather panel, the slide-overs), `--scrim` (modal
 ## 3. Themes: day, dusk, night-red
 
 Three themes, switched by `:root[data-theme]`. Day is the `:root` default (a light theme, `color-scheme:
-light`). Dusk is a calm dark theme. Night-red is the discipline: pure red on true black, no blue or
-green anywhere, alarms always distinguishable, the brightest pixel kept low.
+light`). Dusk is a calm dark theme. Night-red is the discipline: pure red on true black, alarms always
+distinguishable, the brightest pixel kept low. Every app-owned night-red token carries a zero blue
+channel (blue luminance is folded into green so the WCAG contrast ratios hold exactly), and green is
+minimized: the only nonzero green channels are the bounded ones AA contrast requires, each documented
+in `tokens.css` with its rationale and pinned by the night-red token test.
 
 You almost never write theme-specific CSS. You write tokens, and the theme carries the value. The rules
 that matter when you do touch this:
@@ -113,9 +116,10 @@ that matter when you do touch this:
 - Night-red drops `--shadow-overlay`, `--shadow-lg`, and `--edge-light` to `none` (a black shadow on
   true black is invisible; the deeper red `--border` is the only surface separation). So never rely on a
   shadow alone to separate surfaces: a border must also be present.
-- Green is forbidden at night: `--ok` collapses to a dim red told from `--alarm` and `--warning` by
-  brightness, not hue. If you add a status color, it must survive this: distinguish by brightness, never
-  by hue alone.
+- Green is not a status hue at night: `--ok` collapses to a dim red told from `--alarm` and `--warning`
+  by brightness, not hue. If you add a status color, it must survive this: distinguish by brightness,
+  never by hue alone. A new night-red token must keep the zero-blue channel rule and justify any
+  nonzero green against an AA contrast need in `tokens.css`.
 - Danger and caution must stay distinguishable in every theme. `--alarm` is the brighter, `--warning`
   the dimmer; that brightness gap is the contract.
 
