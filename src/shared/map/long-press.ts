@@ -1,9 +1,14 @@
 import type * as maplibregl from 'maplibre-gl';
 
 // A touch long-press that holds still this long, and within this pixel slop, stands in for the
-// contextmenu event that touch browsers do not reliably fire.
+// contextmenu event that touch browsers do not reliably fire. The slop is sized for a gloved
+// finger on a moving boat (the 16 to 22 pixel band): 10 pixels canceled real presses in a seaway,
+// while a deliberate pan still travels far past this before the timer fires.
 const LONG_PRESS_MS = 500;
-const LONG_PRESS_MOVE_PX = 10;
+const LONG_PRESS_MOVE_PX = 18;
+// A short recognition buzz where the platform supports it, never a replacement for the visual
+// menu that follows.
+const RECOGNITION_VIBRATION_MS = 20;
 
 export interface ContextMenuPoint {
   lng: number;
@@ -32,6 +37,9 @@ export function installContextMenu(
   let pressTimer = 0;
   let startX = 0;
   let startY = 0;
+  // Live touch pointers on the canvas: a second finger means a pinch or two-finger gesture, which
+  // must cancel the press and never arm one of its own.
+  let touchCount = 0;
   const cancel = () => {
     if (!pressTimer) return;
     clearTimeout(pressTimer);
@@ -46,7 +54,9 @@ export function installContextMenu(
   map.on('contextmenu', onContextMenu);
   const onPointerDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return;
+    touchCount += 1;
     cancel();
+    if (touchCount > 1) return;
     startX = e.clientX;
     startY = e.clientY;
     pressTimer = window.setTimeout(() => {
@@ -55,6 +65,11 @@ export function installContextMenu(
       const x = startX - rect.left;
       const y = startY - rect.top;
       const at = map.unproject([x, y]);
+      // Recognition feedback for a gloved hand that cannot feel the screen; the menu that follows
+      // remains the visual confirmation.
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(RECOGNITION_VIBRATION_MS);
+      }
       emit({ lng: at.lng, lat: at.lat, x, y });
     }, LONG_PRESS_MS);
   };
@@ -63,10 +78,14 @@ export function installContextMenu(
       cancel();
     }
   };
+  const onPointerEnd = (e: PointerEvent) => {
+    if (e.pointerType === 'touch' && touchCount > 0) touchCount -= 1;
+    cancel();
+  };
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
-  canvas.addEventListener('pointerup', cancel);
-  canvas.addEventListener('pointercancel', cancel);
+  canvas.addEventListener('pointerup', onPointerEnd);
+  canvas.addEventListener('pointercancel', onPointerEnd);
   const onKeyDown = (event: KeyboardEvent) => {
     if (!(event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))) return;
     event.preventDefault();
@@ -80,8 +99,8 @@ export function installContextMenu(
     map.off('contextmenu', onContextMenu);
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);
-    canvas.removeEventListener('pointerup', cancel);
-    canvas.removeEventListener('pointercancel', cancel);
+    canvas.removeEventListener('pointerup', onPointerEnd);
+    canvas.removeEventListener('pointercancel', onPointerEnd);
     canvas.removeEventListener('keydown', onKeyDown);
   };
   return { cancel, remove };

@@ -6,10 +6,13 @@ import { bboxContainsPoint, type LatLon, latLonToLonLat, lngLatBoundsToBbox4 } f
 interface Props {
   map: MapLibreMap;
   position: LatLon | undefined;
+  // The fix is stale: the arrow still points at the LAST fix, and the action must say so instead
+  // of promising to center on a vessel whose position is no longer known.
+  positionStale?: boolean;
   onCenter: () => void;
 }
 
-const { map, position, onCenter }: Props = $props();
+const { map, position, positionStale = false, onCenter }: Props = $props();
 
 // Keeps the arrow's whole hit target inside the canvas, never clipped at the edge.
 const EDGE_INSET = 28;
@@ -65,10 +68,14 @@ $effect(() => {
   <button
     type="button"
     class="icon-pill off-screen-indicator"
+    class:off-screen-indicator--stale={positionStale}
     style:left="{x}px"
     style:top="{y}px"
     style:rotate="{bearingDeg}deg"
-    aria-label="Vessel is off screen. Tap to center the chart on it."
+    aria-label={positionStale
+      ? 'Last known vessel position is off screen; the GPS fix is stale. Tap to center the chart on the last fix.'
+      : 'Vessel is off screen. Tap to center the chart on it.'}
+    title={positionStale ? 'Center on last fix (GPS stale)' : 'Center on vessel'}
     onclick={onCenter}
   >
     <Navigation size={18} aria-hidden="true" />
@@ -83,5 +90,10 @@ $effect(() => {
   position: absolute;
   translate: -50% -50%;
   z-index: var(--z-overlay);
+}
+/* A stale fix reads in the caution tone, matching the strip's fix-lost treatment. */
+.off-screen-indicator--stale {
+  color: var(--warning);
+  border-color: var(--warning);
 }
 </style>

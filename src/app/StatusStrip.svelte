@@ -9,6 +9,7 @@ import {
 } from '$entities/vessel';
 import { type MenuItem, PinnedActions } from '$features/menu';
 import {
+  createMediaQuery,
   formatBearingOr,
   formatClockTime,
   formatKnotsOr,
@@ -26,9 +27,11 @@ let {
   dataStalled = false,
   online,
   fixStale,
+  gpsNeverReceived = false,
   connectionPhase,
   aisCount,
   aisUnassessed = 0,
+  navigating = false,
   anchor,
   units,
   vessel,
@@ -47,11 +50,16 @@ let {
   dataStalled?: boolean;
   online: boolean;
   fixStale: boolean;
+  // Connected with no position EVER received (past the startup grace): a different answer from
+  // fixStale, which is a fix that was had and lost.
+  gpsNeverReceived?: boolean;
   connectionPhase: ConnectionPhase;
   aisCount: number;
   // Retained targets the lookout cannot assess (course or motion missing), the persistent
   // degraded-assessment cue a watch handoff must be able to see at a glance.
   aisUnassessed?: number;
+  // Whether a course is active, which prioritizes COG in the compact readout set.
+  navigating?: boolean;
   anchor: AnchorWatch;
   units: UnitsStore;
   vessel: OwnVessel;
@@ -75,6 +83,19 @@ let {
 const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(isConnectionDown(connectionPhase));
+
+// The phone-width strip carries a bounded, context-prioritized readout set instead of hiding COG,
+// heading, and AIS with fixed CSS: underway or navigating, COG is the course reference; a boat
+// with only a compass shows HDG; and the AIS chip stays whenever assessment is degraded, because
+// that state must never disappear just because the screen is narrow. Wide layouts show everything.
+const compactQuery = createMediaQuery('(max-width: 600px)');
+const compact = $derived(compactQuery.matches);
+const underway = $derived(!vessel.sogStale && (vessel.sogMps ?? 0) >= COG_MIN_SOG_MPS);
+const showCog = $derived(!compact || navigating || underway);
+const showHdg = $derived(
+  !compact || (!showCog && !vessel.headingStale && vessel.headingRad !== undefined),
+);
+const showLookout = $derived(connectionPhase === 'open' && (!compact || aisUnassessed > 0));
 
 const depth = $derived(vessel.safetyDepth);
 
@@ -144,6 +165,17 @@ const depthLabel = $derived.by(() => {
     {/if}
     {#if fixStale}
       <span class="readout fix-lost" role="status" aria-live="polite">No GPS fix</span>
+    {:else if gpsNeverReceived}
+      <!-- Connected, but no position has ever arrived: without this the strip looks healthy while
+           every position-dependent feature silently waits. -->
+      <span
+        class="readout fix-lost"
+        role="status"
+        aria-live="polite"
+        title="Connected, but the server has not published a GPS position. Check the GPS source in the Signal K server's Data Browser, or open Help."
+      >
+        Waiting for GPS
+      </span>
     {/if}
     {#if audioState === 'blocked'}
       <!-- role=status makes the chip's mount the polite announcement that alarm audio is off; the
@@ -175,7 +207,7 @@ const depthLabel = $derived.by(() => {
         Sound unavailable
       </span>
     {/if}
-    {#if connectionPhase === 'open'}
+    {#if showLookout}
       <span
         class="readout lookout"
         title={aisUnassessed > 0
@@ -215,22 +247,26 @@ const depthLabel = $derived.by(() => {
       <b class="num">{formatKnotsOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps)}</b>
       kn</span
     >
-    <span class="readout cog-readout" title="Course over ground"
-      >COG
-      <b class="num"
-        >{formatBearingOr(
-          fixStale || vessel.cogStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS
-            ? undefined
-            : vessel.cogRad,
-        )}</b
-      >&deg;T</span
-    >
-    <span class="readout hdg-readout" class:fix-lost={vessel.headingStale} title="Heading, true"
-      >HDG
-      <b class="num"
-        >{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
-      >&deg;T</span
-    >
+    {#if showCog}
+      <span class="readout cog-readout" title="Course over ground"
+        >COG
+        <b class="num"
+          >{formatBearingOr(
+            fixStale || vessel.cogStale || (vessel.sogMps ?? 0) < COG_MIN_SOG_MPS
+              ? undefined
+              : vessel.cogRad,
+          )}</b
+        >&deg;T</span
+      >
+    {/if}
+    {#if showHdg}
+      <span class="readout hdg-readout" class:fix-lost={vessel.headingStale} title="Heading, true"
+        >HDG
+        <b class="num"
+          >{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
+        >&deg;T</span
+      >
+    {/if}
     <span
       class="readout depth-readout"
       class:depth-alarm={shallowAlarming}
@@ -377,11 +413,6 @@ const depthLabel = $derived.by(() => {
   }
   .strip-start {
     gap: var(--space-2);
-  }
-  .cog-readout,
-  .hdg-readout,
-  .lookout {
-    display: none;
   }
 }
 .offline {

@@ -188,6 +188,17 @@ describe('StatusStrip depth alarm', () => {
     expect(body(baseProps())).not.toContain('watch paused');
   });
 
+  it('says Waiting for GPS when connected with no position ever received', () => {
+    const waiting = body({ ...baseProps(), gpsNeverReceived: true });
+    expect(waiting).toContain('Waiting for GPS');
+    expect(waiting).toContain('Data Browser');
+    // The had-then-lost case wins the same slot with its own wording.
+    const lost = body({ ...baseProps(), gpsNeverReceived: true, fixStale: true });
+    expect(lost).toContain('No GPS fix');
+    expect(lost).not.toContain('Waiting for GPS');
+    expect(body(baseProps())).not.toContain('Waiting for GPS');
+  });
+
   it('keeps radar trouble visible with the radar panel closed, and quiet otherwise', () => {
     const stream = body({
       ...baseProps(),

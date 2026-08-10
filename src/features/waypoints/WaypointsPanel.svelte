@@ -94,6 +94,24 @@ const allRows = $derived(
 );
 const rows = $derived(allRows.slice(0, MAX_NAV_ROWS));
 
+// A chart-selected waypoint must be visible even when the current search filters it out or the
+// row cap cuts it off: pin it first, leaving the navigator's query and sort untouched so backing
+// out restores the prior context.
+const selectedRow = $derived(
+  selectedId ? metricRows.find((row) => row.id === selectedId) : undefined,
+);
+const selectedPinned = $derived(
+  selectedRow !== undefined && !rows.some((row) => row.id === selectedRow.id),
+);
+const displayRows = $derived(selectedPinned && selectedRow ? [selectedRow, ...rows] : rows);
+
+// A chart selection also reveals a minimized panel: the tap asked to see the waypoint's details.
+let lastSelectedId: string | undefined;
+$effect(() => {
+  if (selectedId && selectedId !== lastSelectedId) minimize.expand();
+  lastSelectedId = selectedId;
+});
+
 const SORTS: { key: NavSortKey; label: string }[] = [
   { key: 'name', label: 'Name' },
   { key: 'distance', label: 'Distance' },
@@ -198,9 +216,15 @@ $effect(() => {
     />
   {/if}
 
+  {#if selectedPinned}
+    <p class="muted-note" role="status">
+      The chart-selected waypoint is shown first. It does not match the current search, which is
+      unchanged below.
+    </p>
+  {/if}
   <SavedList
     heading="Saved waypoints"
-    items={rows}
+    items={displayRows}
     empty={emptyMessage}
     key={(row) => row.id}
     isActive={(row) => row.id === selectedId}

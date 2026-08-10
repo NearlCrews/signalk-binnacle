@@ -4,6 +4,11 @@ export { BASEMAP_SOURCE_ID, requireCatalogSource } from './catalog';
 export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
 export type { SignalKChart } from './chart-types';
+export {
+  type ChartViewChart,
+  type ChartViewStatusKind,
+  chartViewStatus,
+} from './chart-view-status';
 export { depthShadingStops, shadeColor } from './color-ramp';
 export {
   type CompanionProbeResult,

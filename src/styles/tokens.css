@@ -190,30 +190,35 @@
 :root[data-theme="night-red"] {
   color-scheme: dark;
 
+  /* Every night-red token carries a ZERO blue channel: blue is what bleaches dark adaptation
+     fastest, and no app-owned pixel may emit it at night. The green each token keeps is the
+     minimum that preserves its WCAG contrast: each value below folds the old blue channel's
+     luminance into green (G_lin += 0.0722/0.7152 * B_lin), so every ratio the palette was tuned
+     to still holds exactly. The bounds are pinned by night-red-tokens.test.ts. */
   --surface: #000000;
   --surface-raised: #0a0000;
   --surface-overlay: #080000;
   /* A deeper red border than near-black, so panel and card separation stays visible at night where
      --shadow-overlay is dropped, while keeping the pixel dark. */
-  --border: #5a1813;
-  /* Brightened from #c8362a/#b8473a to clear WCAG AA (4.5:1) on all three surfaces (was
-     3.97-4.02:1); the owner chose readability over the last fraction of dark-adaptation
-     headroom for body text specifically. */
-  --text: #d44134;
-  --text-muted: #c45043;
-  --accent: #e0473a;
+  --border: #5a1900;
+  /* Brightened from #c8362a to clear WCAG AA (4.5:1) on all three surfaces; the owner chose
+     readability over the last fraction of dark-adaptation headroom for body text specifically.
+     The green (G:R 0.32) is what carries that AA on true black. */
+  --text: #d44300;
+  --text-muted: #c45300;
+  --accent: #e04900;
   --accent-contrast: #1a0000;
-  /* Purer red than the prior #ffb39a, which carried enough green/blue (G:R 0.70, B:R 0.60) to
-     read as salmon rather than red; this keeps the highlight the brightest non-alarm color while
-     staying in the red band. */
-  --select: #ff9a8a;
-  /* Brightened from #7a2620 to clear the 3:1 non-text contrast floor (was 2.13:1), so the
-     connection dot stays perceptible on true black. */
-  --ok: #a2332b;
-  --alarm: #ff6a5a;
-  /* A medium red, dimmer than the brighter --alarm so danger and caution stay distinguishable by
-     brightness alone, with no blue or green. */
-  --warning: #c0563c;
+  /* The highlight stays the brightest non-alarm color, told from --alarm by brightness (10.1:1
+     versus 7.4:1 on the raised surface). That brightness role is what its green (G:R 0.62) buys;
+     dimming it to a redder hue would collapse the selection and alarm tiers into one band. */
+  --select: #ff9f00;
+  /* Brightened from #7a2620 to clear the 3:1 non-text contrast floor, so the connection dot stays
+     perceptible on true black. */
+  --ok: #a23500;
+  --alarm: #ff6e00;
+  /* A medium tone, dimmer than the brighter --alarm so danger and caution stay distinguishable by
+     brightness alone. */
+  --warning: #c05800;
   --shadow-overlay: none;
   /* No side shadow at night either: a black shadow on true black is invisible, same as the
      overlay and large shadows already dropped above. */

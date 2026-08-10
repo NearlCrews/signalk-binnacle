@@ -45,12 +45,16 @@ import type { LatLon } from '$shared/geo';
 import { createRetryableLazyUiLoader, lengthUnit } from '$shared/lib';
 import {
   activeLayerHitCursor,
+  type ChartViewChart,
+  type ChartViewStatusKind,
   CONTEXT_MENU_KEYSHORTCUTS,
   chartSourceId,
+  chartViewStatus,
   createChartOverlay,
   createMapTapRecognizer,
   createThemedMap,
   detectCompanion,
+  type LayerManager,
   type LayerSettings,
   type MapTapEvent,
   proxiedSources,
@@ -64,6 +68,7 @@ import { buildBathymetryOverlays } from './build-bathymetry-overlays';
 import { buildMapCommands } from './build-commands';
 import { buildDynamicOverlays } from './build-overlays';
 import ChartContextMenu from './ChartContextMenu.svelte';
+import ChartStatusBadge from './ChartStatusBadge.svelte';
 import type { MapCommands, UserChartRegistrar } from './commands';
 import { CRITICAL_OVERLAY_IDS } from './critical-overlays';
 import VesselOffScreenIndicator from './VesselOffScreenIndicator.svelte';
@@ -125,6 +130,8 @@ interface Props {
   onUserChartsReady?: (registrar: UserChartRegistrar) => void;
   onServerChartsReady?: (retry: () => void) => void;
   onServerChartsStatus?: (status: 'loading' | 'ready' | 'partial' | 'error') => void;
+  // Opens Layers and charts in chart mode: the ambient chart-trust badge's recovery route.
+  onOpenChartLayers?: () => void;
   // Critical navigation overlays failed to mount. The host surfaces this instead of leaving a
   // navigator with an apparently healthy chart that is missing the vessel or a safety mark.
   onCriticalOverlayError?: (overlayIds: string[]) => void;
@@ -208,6 +215,7 @@ const {
   onUserChartsReady,
   onServerChartsReady,
   onServerChartsStatus,
+  onOpenChartLayers,
   onCriticalOverlayError,
   onViewChange,
   onNoteSelect,
@@ -234,6 +242,47 @@ const {
 
 let container: HTMLDivElement;
 let mapHandle: ThemedMapHandle | undefined;
+// True from mount until the companion probe and map construction settle, so the surface says
+// "Loading chart" instead of sitting blank through the bounded Chart Locker probe. The
+// cannot-start notice (WebGL2, style failure) replaces it on the failure paths.
+let chartBooting = $state(true);
+
+// The ambient chart-trust inputs: the offline-fallback base flag, the chart endpoint state, the
+// view, and a counter bumped whenever the layer set or visibility changes so the badge recomputes
+// from the manager's non-reactive snapshot.
+let baseStyleFallback = $state(false);
+let chartsLoadStateLocal = $state<'loading' | 'ready' | 'partial' | 'error'>('loading');
+
+// One emitter for the server-chart load state, so the upward callback, the local badge input, and
+// the layer-set revision can never disagree.
+function emitChartsStatus(status: 'loading' | 'ready' | 'partial' | 'error'): void {
+  chartsLoadStateLocal = status;
+  layersRevision += 1;
+  onServerChartsStatus?.(status);
+}
+let viewSnapshot = $state<{ center: LatLon; zoom: number } | undefined>();
+let layersRevision = $state(0);
+let managerRef = $state<LayerManager | undefined>();
+const chartStatus = $derived.by<ChartViewStatusKind>(() => {
+  void layersRevision;
+  const charts: ChartViewChart[] = [];
+  for (const item of managerRef?.layers() ?? []) {
+    if (!item.chart) continue;
+    charts.push({
+      visible: item.visible,
+      bounds: item.chart.bounds,
+      minzoom: item.chart.minzoom,
+      maxzoom: item.chart.maxzoom,
+    });
+  }
+  return chartViewStatus({
+    baseStyleFallback,
+    chartsLoadState: chartsLoadStateLocal,
+    charts,
+    center: viewSnapshot?.center,
+    zoom: viewSnapshot?.zoom,
+  });
+});
 // onMount now awaits companion detection before building the map; this guards against the component
 // unmounting during that await, which would otherwise build a map onDestroy never tears down.
 let destroyed = false;
@@ -355,6 +404,9 @@ onMount(async () => {
   // raster overlays in onLoad below, so it is detected once here.
   const companionBase = await detectCompanion(origin, chartsToken);
   if (destroyed) return; // unmounted during the probe; do not build a map nothing will tear down
+  // The probe settled: either the map constructs now (its canvas replaces the loading note within
+  // this task) or the cannot-start notice explains why. Neither leaves a blank surface.
+  chartBooting = false;
   // createThemedMap defaults to the world view ([0, 30], zoom 2) when no saved view is passed.
   mapHandle = createThemedMap({
     container,
@@ -363,7 +415,12 @@ onMount(async () => {
     view: initialView,
     managerOptions: {
       saved: savedLayers,
-      onChange: onLayersChange,
+      onChange: (settings) => {
+        // The chart-trust badge recomputes from the manager's non-reactive snapshot on any
+        // visibility or registration change.
+        layersRevision += 1;
+        onLayersChange?.(settings);
+      },
       savedOrder,
       onOrderChange,
       // The own vessel, an active MOB mark, and active collision alarms stay pinned on top so a
@@ -371,7 +428,13 @@ onMount(async () => {
       // the vessel itself.
       pinned: [COLLISION_OVERLAY_ID, MOB_OVERLAY_ID, OWN_VESSEL_OVERLAY_ID],
     },
-    onView: (view) => onViewChange?.(view),
+    onView: (view) => {
+      viewSnapshot = { center: { latitude: view.lat, longitude: view.lon }, zoom: view.zoom };
+      onViewChange?.(view);
+    },
+    onBaseStyleFallback: () => {
+      baseStyleFallback = true;
+    },
     onUserPan: () => onUserPan?.(),
     onContextMenu: (point) => {
       // No context menu at all while drawing or editing a route, or while the measure tool is armed
@@ -394,6 +457,12 @@ onMount(async () => {
       // Chart tools can be opened while optional overlays are still registering. Expose the loaded
       // map immediately so their cursor and keyboard feedback do not wait on unrelated providers.
       mapRef = map;
+      managerRef = mgr;
+      // Seed the chart-trust view before the first camera move reports through onView.
+      viewSnapshot = {
+        center: { latitude: map.getCenter().lat, longitude: map.getCenter().lng },
+        zoom: map.getZoom(),
+      };
       // Seed the unit global-state before registerAll below adds Seascape's vector layers, so their
       // global-state-driven filters and text-fields never evaluate against an unset value; the
       // units effect (mapRef-gated, further down) keeps it live after this initial seed.
@@ -657,7 +726,7 @@ onMount(async () => {
         const next = await fetchCharts(origin, chartsToken);
         if (isDestroyed() || generation !== serverChartsGeneration) return;
         if (next === undefined) {
-          onServerChartsStatus?.('error');
+          emitChartsStatus('error');
           return;
         }
         // A URL chart synced by this device can also be returned by the server. Keep the local,
@@ -693,7 +762,7 @@ onMount(async () => {
           }
         }
         view.refresh();
-        onServerChartsStatus?.(
+        emitChartsStatus(
           results.some((result) => result.status === 'failed') ? 'partial' : 'ready',
         );
       }
@@ -701,7 +770,7 @@ onMount(async () => {
       function retryServerCharts(): Promise<void> {
         if (isDestroyed()) return Promise.resolve();
         const generation = ++serverChartsGeneration;
-        onServerChartsStatus?.('loading');
+        emitChartsStatus('loading');
         if (isDestroyed()) return Promise.resolve();
         serverChartsQueue = serverChartsQueue
           .catch(() => undefined)
@@ -709,7 +778,7 @@ onMount(async () => {
           .catch((error) => {
             if (!isDestroyed() && generation === serverChartsGeneration) {
               console.warn('Could not refresh server charts.', error);
-              onServerChartsStatus?.('error');
+              emitChartsStatus('error');
             }
           });
         return serverChartsQueue;
@@ -826,6 +895,11 @@ onDestroy(() => {
 </script>
 
 <div class="chart-canvas" bind:this={container}>
+  {#if chartBooting}
+    <!-- The rest of the shell stays interactive; only the chart surface itself explains that it
+         is starting rather than sitting blank through the companion probe. -->
+    <div class="chart-booting" role="status">Loading chart…</div>
+  {/if}
   {#if showContextHint}
     <div class="context-hint popover-card" role="status">
       <span>Press and hold the chart for actions.</span>
@@ -836,8 +910,10 @@ onDestroy(() => {
     <VesselOffScreenIndicator
       map={mapRef}
       position={vessel.position}
+      positionStale={vessel.positionStale}
       onCenter={() => commandsRef?.centerOnVessel()}
     />
+    <ChartStatusBadge status={chartStatus} onOpenLayers={() => onOpenChartLayers?.()} />
   {/if}
   {#if chartMenu}
     {@const menu = chartMenu}
@@ -884,6 +960,16 @@ onDestroy(() => {
   position: relative;
   inline-size: 100%;
   block-size: 100%;
+}
+
+/* Centered on the empty surface while the companion probe and map construction settle. */
+.chart-booting {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--text-md);
 }
 
 .context-hint {

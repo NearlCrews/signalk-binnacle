@@ -46,6 +46,17 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
 }
 
 describe('WaypointsPanel', () => {
+  it('pins a chart-selected waypoint hidden beyond the row cap, preserving the list', () => {
+    // 260 marks exceed the row cap; the selected one sorts last by name, past the cap.
+    const many = marks(260);
+    const body = renderPanel({ waypoints: many, vessel: boat, selectedId: 'w259' });
+    expect(body).toContain('Mark 259');
+    expect(body).toContain('chart-selected waypoint is shown first');
+    // Without a selection the same mark stays capped out and no pin note renders.
+    const unpinned = renderPanel({ waypoints: many, vessel: boat });
+    expect(unpinned).not.toContain('chart-selected waypoint');
+  });
+
   it('distinguishes loading, failure, refresh, and genuinely empty lists', () => {
     expect(renderPanel({ loadState: 'loading' })).toContain('Loading waypoints…');
     expect(renderPanel({ loadState: 'error' })).toContain('Could not load waypoints.');

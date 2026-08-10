@@ -28,6 +28,7 @@ import { radarAreaFeatures, updateRadarAreaFromChart } from './radar-area-geomet
 import type { RadarFrame } from './radar-frame-core';
 import { rangeQuadHalfExtent } from './radar-geo';
 import { RadarGl } from './radar-gl';
+import { radarPalette } from './radar-palette';
 import type { LegendEntry } from './radar-types';
 import { headingLineFeature, rangeRingFeatures } from './radar-vectors';
 
@@ -39,14 +40,6 @@ export const RADAR_AREAS_LINE_LAYER_ID = 'marine-radar-areas-line';
 const RINGS_SOURCE_ID = 'marine-radar-rings-src';
 export const RADAR_AREAS_SOURCE_ID = 'marine-radar-areas-src';
 const RANGE_RINGS = 3;
-const RING_COLOR_DAY = '#33ff66';
-const RING_COLOR_NIGHT = '#d00000';
-// A dark halo behind the ring labels so the bright ring-colored text stays readable over any chart
-// feature, in day and dusk; on night-red's true black the halo is invisible and the red text already
-// carries its own contrast.
-const RING_LABEL_HALO = 'rgba(0, 0, 0, 0.75)';
-const AREA_COLOR_DAY = '#ff9f1c';
-const AREA_COLOR_NIGHT = '#d00000';
 // The range label for a ring's radius: nautical miles, the universal radar range unit.
 const ringLabel = (meters: number): string =>
   `${formatNm(meters, meters < METERS_PER_NAUTICAL_MILE ? 2 : 1)} nm`;
@@ -55,14 +48,6 @@ const ringLabel = (meters: number): string =>
 // same thing when no radar is discovered. One source of truth keeps the wording from drifting.
 export const RADAR_UNAVAILABLE_HINT =
   'Radar is not available. Open Radar for provider or access details.';
-
-function ringColor(theme: MapThemePaint['theme']): string {
-  return theme === 'night-red' ? RING_COLOR_NIGHT : RING_COLOR_DAY;
-}
-
-function areaColor(theme: MapThemePaint['theme']): string {
-  return theme === 'night-red' ? AREA_COLOR_NIGHT : AREA_COLOR_DAY;
-}
 
 function areaFillOpacity(value: number): ExpressionSpecification {
   return [
@@ -82,12 +67,6 @@ function areaLineOpacity(value: number): ExpressionSpecification {
     0.95 * value,
     0.55 * value,
   ] as ExpressionSpecification;
-}
-
-// The sweep wedge color as shader RGB floats: red on night-red (no green at night), classic bright radar
-// green otherwise, brighter than the rings so the scanning edge stands out over the echo.
-function sweepColor(theme: MapThemePaint['theme']): [number, number, number] {
-  return theme === 'night-red' ? [0.75, 0, 0] : [0.4, 1, 0.55];
 }
 
 export interface PpiLayer extends OverlayModule {
@@ -116,6 +95,8 @@ export function createPpiLayer(
   let gl: RadarGl | undefined;
   let echoMap: MapLibreMap | undefined;
   let theme: MapThemePaint['theme'] = 'day';
+  // The one resolved display palette; every ring, label, area, and sweep color reads this.
+  let palette = radarPalette(theme);
   let opacity = 1;
   let visible = false;
   let frame: RadarFrame | undefined;
@@ -188,7 +169,7 @@ export function createPpiLayer(
         gl = new RadarGl(glCtx);
         applyLegend();
         gl.setOpacity(opacity);
-        gl.setSweepColor(sweepColor(theme));
+        gl.setSweepColor(palette.sweep);
         dirty = true;
         store.setRendererStatus('ready');
       } catch (error) {
@@ -303,7 +284,7 @@ export function createPpiLayer(
         id: RADAR_RINGS_LAYER_ID,
         type: 'line',
         source: RINGS_SOURCE_ID,
-        paint: { 'line-color': ringColor(theme), 'line-width': 1.5, 'line-opacity': 0.85 },
+        paint: { 'line-color': palette.ring, 'line-width': 1.5, 'line-opacity': 0.85 },
       };
       ctx.map.addLayer(layer, ctx.beforeIdFor('traffic'));
     }
@@ -323,8 +304,8 @@ export function createPpiLayer(
           'text-allow-overlap': true,
         },
         paint: {
-          'text-color': ringColor(theme),
-          'text-halo-color': RING_LABEL_HALO,
+          'text-color': palette.ringLabel,
+          'text-halo-color': palette.ringLabelHalo,
           'text-halo-width': 1.5,
         },
       };
@@ -340,7 +321,7 @@ export function createPpiLayer(
         type: 'fill',
         source: RADAR_AREAS_SOURCE_ID,
         paint: {
-          'fill-color': areaColor(theme),
+          'fill-color': palette.area,
           'fill-opacity': areaFillOpacity(opacity),
         },
       };
@@ -352,7 +333,7 @@ export function createPpiLayer(
         type: 'line',
         source: RADAR_AREAS_SOURCE_ID,
         paint: {
-          'line-color': areaColor(theme),
+          'line-color': palette.area,
           'line-width': ['case', ['boolean', ['get', 'active'], false], 3, 2],
           'line-opacity': areaLineOpacity(opacity),
           'line-dasharray': [
@@ -540,19 +521,20 @@ export function createPpiLayer(
     },
     applyTheme(ctx, paint) {
       theme = paint.theme;
+      palette = radarPalette(theme);
       applyLegend();
-      gl?.setSweepColor(sweepColor(theme));
+      gl?.setSweepColor(palette.sweep);
       if (ctx.map.getLayer(RADAR_RINGS_LAYER_ID)) {
-        ctx.map.setPaintProperty(RADAR_RINGS_LAYER_ID, 'line-color', ringColor(paint.theme));
+        ctx.map.setPaintProperty(RADAR_RINGS_LAYER_ID, 'line-color', palette.ring);
       }
       if (ctx.map.getLayer(RADAR_RING_LABELS_LAYER_ID)) {
-        ctx.map.setPaintProperty(RADAR_RING_LABELS_LAYER_ID, 'text-color', ringColor(paint.theme));
+        ctx.map.setPaintProperty(RADAR_RING_LABELS_LAYER_ID, 'text-color', palette.ringLabel);
       }
       if (ctx.map.getLayer(RADAR_AREAS_FILL_LAYER_ID)) {
-        ctx.map.setPaintProperty(RADAR_AREAS_FILL_LAYER_ID, 'fill-color', areaColor(paint.theme));
+        ctx.map.setPaintProperty(RADAR_AREAS_FILL_LAYER_ID, 'fill-color', palette.area);
       }
       if (ctx.map.getLayer(RADAR_AREAS_LINE_LAYER_ID)) {
-        ctx.map.setPaintProperty(RADAR_AREAS_LINE_LAYER_ID, 'line-color', areaColor(paint.theme));
+        ctx.map.setPaintProperty(RADAR_AREAS_LINE_LAYER_ID, 'line-color', palette.area);
       }
     },
     chartEditing() {

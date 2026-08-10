@@ -70,6 +70,9 @@ export interface ThemedMapOptions {
   // A right-click (desktop) or long-press (touch) at a chart point, for the "go to here" menu. Carries
   // the geographic point and the pixel point within the container, so a menu can anchor at the press.
   onContextMenu?: (point: { lng: number; lat: number; x: number; y: number }) => void;
+  // Every base-style attempt failed and the one-layer offline fallback is standing in, so the
+  // chart-trust surface can say the base map is unavailable rather than showing a silent void.
+  onBaseStyleFallback?: () => void;
   onLoad: (api: ThemedMapApi) => void | Promise<void>;
 }
 
@@ -318,6 +321,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
         ? '[map] the base map style did not arrive; starting on the offline fallback base. Cached charts and overlays still load.'
         : '[map] the base map style is unreachable; starting on the offline fallback base. Cached charts and overlays still load.',
     );
+    opts.onBaseStyleFallback?.();
     mapInstance.setStyle(fallbackBaseStyle());
   }
   void mapInstance.once('styledata', () => {

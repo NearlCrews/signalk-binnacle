@@ -111,6 +111,13 @@ export class OwnVessel {
     return epoch > 0 ? epoch : undefined;
   }
 
+  // Whether any position has EVER arrived this session. The staleness predicate deliberately
+  // reports false before the first value (absent is not stale), so a connected server that has
+  // never published a fix looks healthy without this distinct signal.
+  get positionReceived(): boolean {
+    return this.#store.cell(SK_PATHS.position).epoch > 0;
+  }
+
   // The own fix rounded to about 110 m, and undefined while it is stale. This is what a sortable
   // list should measure from: distance and bearing to every row would otherwise be recomputed on
   // every 1 Hz GPS tick, for a change no navigator can see. The key is a string, so the derived

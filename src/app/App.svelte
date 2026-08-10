@@ -139,7 +139,14 @@ import {
   padBbox,
   quantizeViewCellKey,
 } from '$shared/geo';
-import { Clock, createMediaQuery, hasControlCharacters, isRecord, Toast } from '$shared/lib';
+import {
+  Clock,
+  createMediaQuery,
+  HeldFlag,
+  hasControlCharacters,
+  isRecord,
+  Toast,
+} from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
 import { probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
@@ -1143,6 +1150,12 @@ function captureMapCommands(commands: MapCommands): void {
 // would read as broken. Selecting the active menu item keeps the current measurement. The chart's
 // "Measure from here" action explicitly requests a fresh measurement at that position.
 function armMeasure(reset = false): boolean {
+  // No actionable crosshair before the tap handler exists: arming against a chart that is still
+  // constructing advertises a first tap that would be silently dropped.
+  if (!mapInstance) {
+    toast.show('The chart is still loading. Measure will be available in a moment.');
+    return false;
+  }
   if (marineRadar.store.areaDraft?.chartEditing) {
     toast.show('Finish the radar-area chart edit before starting Measure.');
     return false;
@@ -1946,6 +1959,15 @@ const connectionLabel = $derived(
 // The own fix has aged out: the footer dashes SOG and COG and shows a calm "No GPS fix" note rather
 // than presenting a frozen speed and course as if they were live.
 const fixStale = $derived(vessel.positionStale);
+// A connected server that has never published a position must not look healthy: after a short
+// startup grace (so a normal boot never flashes the chip), the strip says it is waiting for GPS.
+// Distinct from fixStale, which is the had-then-lost case.
+const GPS_WAIT_GRACE_MS = 8_000;
+const gpsNeverReceived = new HeldFlag(
+  clock,
+  GPS_WAIT_GRACE_MS,
+  () => isConnectionOpen(store.connection.phase) && !vessel.positionReceived,
+);
 
 // The count of AIS targets the lookout is tracking, so a quiet footer chip confirms the watch is live
 // and receiving traffic, rather than leaving the navigator to wonder whether an empty danger strip
@@ -2594,9 +2616,11 @@ const plotterActions = {
     {dataStalled}
     online={net.online}
     {fixStale}
+    gpsNeverReceived={gpsNeverReceived.held}
     connectionPhase={store.connection.phase}
     {aisCount}
     aisUnassessed={collision.assessment.unassessed.length}
+    navigating={courseGuidance.active}
     {anchor}
     {units}
     {vessel}

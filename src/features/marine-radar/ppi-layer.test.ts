@@ -376,7 +376,7 @@ describe('createPpiLayer', () => {
     expect(store.rendererStatus).toBe('error');
   });
 
-  it('uses zero-green, zero-blue colors for night radar vectors', async () => {
+  it('uses zero-blue night vector colors, with green only where AA text needs it', async () => {
     const layer = createPpiLayer(
       new MarineRadarStore(),
       () => ({ latitude: 0, longitude: 0 }),
@@ -399,10 +399,18 @@ describe('createPpiLayer', () => {
       )?.[2];
       expect(color).toMatch(/^#[0-9a-f]{6}$/i);
       if (typeof color !== 'string') throw new Error('expected a radar vector color');
-      expect([
-        Number.parseInt(color.slice(3, 5), 16),
-        Number.parseInt(color.slice(5, 7), 16),
-      ]).toEqual([0, 0]);
+      const green = Number.parseInt(color.slice(3, 5), 16);
+      const blue = Number.parseInt(color.slice(5, 7), 16);
+      expect(blue, `${layerId} blue channel`).toBe(0);
+      // Ring label text carries the theme's night text tone (bounded green buys its 4.5:1 AA on
+      // true black, matching tokens.css); the non-text vectors stay pure red.
+      if (layerId === RADAR_RING_LABELS_LAYER_ID) {
+        const red = Number.parseInt(color.slice(1, 3), 16);
+        expect(green).toBeGreaterThan(0);
+        expect(green / red).toBeLessThanOrEqual(0.5);
+      } else {
+        expect(green, `${layerId} green channel`).toBe(0);
+      }
     }
   });
 });

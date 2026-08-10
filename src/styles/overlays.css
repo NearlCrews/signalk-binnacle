@@ -30,7 +30,10 @@ dialog.modal-card {
   position: fixed;
   inset: 0;
   margin: auto;
-  border: 0;
+  /* A tokenized boundary rather than the old border: 0. In night-red the shadows are none by
+     design, and a borderless modal dissolved into the black chart behind it. A dialog with its
+     own scoped border (the MOB confirm's stronger alarm frame) still wins its cascade. */
+  border: 1px solid var(--border);
   padding: 0;
   color: inherit;
   overflow: visible;
@@ -40,6 +43,7 @@ dialog.modal-card {
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
   box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
 }
 
 /* The anchored floating-card frame shared by the map popovers and menus (the weather layer menu, the
