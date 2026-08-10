@@ -4,6 +4,7 @@ export { default as ProfileSwitcher } from './ProfileSwitcher.svelte';
 export { createProfileBindings } from './profile-bindings';
 export { downloadProfileJson, type ImportedProfile } from './profile-io';
 export { createProfilesController } from './profiles-controller.svelte';
+export { seedStarterProfiles } from './starter-profiles';
 
 const profilesPanelLoader = createRetryableLazyUiLoader(() => import('./ProfilesPanel.svelte'));
 

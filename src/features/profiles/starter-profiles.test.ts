@@ -46,4 +46,26 @@ describe('seedStarterProfiles', () => {
       ),
     ).toBe(true);
   });
+
+  it('gives each starter its presentation half: orientation and raised layers', () => {
+    const store = new ProfileStore(adapter);
+    seedStarterProfiles(store, {
+      ...base,
+      layers: { routes: { visible: false, opacity: 0.5 } },
+    });
+    const [coastal, night, anchor] = store.profiles;
+
+    expect(coastal.settings.chartOrientation).toBe('north');
+    expect(night.settings.chartOrientation).toBe('course');
+    expect(anchor.settings.chartOrientation).toBe('north');
+
+    // Night passage raises the radar picture; at anchor raises tides. Coastal day keeps defaults.
+    expect(night.settings.layers['marine-radar']).toEqual({ visible: true, opacity: 1 });
+    expect(anchor.settings.layers.tides).toEqual({ visible: true, opacity: 1 });
+    expect(coastal.settings.layers['marine-radar']).toBeUndefined();
+    expect(coastal.settings.layers.tides).toBeUndefined();
+
+    // A raise merges over the seeding device's capture rather than replacing it.
+    expect(night.settings.layers.routes).toEqual({ visible: false, opacity: 0.5 });
+  });
 });

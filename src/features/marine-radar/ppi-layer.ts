@@ -32,6 +32,10 @@ import { radarPalette } from './radar-palette';
 import type { LegendEntry } from './radar-types';
 import { headingLineFeature, rangeRingFeatures } from './radar-vectors';
 
+// The overlay id, which is also the layer's persisted LayerSettings key. The starter profiles
+// raise it by literal (a feature must not import a sibling feature), pinned by the
+// starter-overlay-ids seam test in widgets/chart-canvas.
+export const MARINE_RADAR_OVERLAY_ID = 'marine-radar';
 export const RADAR_ECHO_LAYER_ID = 'marine-radar-echo';
 export const RADAR_RINGS_LAYER_ID = 'marine-radar-rings';
 export const RADAR_RING_LABELS_LAYER_ID = 'marine-radar-ring-labels';
@@ -412,7 +416,7 @@ export function createPpiLayer(
   }
 
   return {
-    id: 'marine-radar',
+    id: MARINE_RADAR_OVERLAY_ID,
     title: 'Radar',
     description:
       "The radar's own returns painted over the chart: boats, land, and rain it detects.",

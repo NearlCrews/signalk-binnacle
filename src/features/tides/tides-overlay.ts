@@ -45,6 +45,11 @@ import {
   TIDES_VISUAL_LAYERS,
 } from './tides-overlay-layers';
 
+// The overlay id, which is also the layer's persisted LayerSettings key. The starter profiles
+// raise it by literal (a feature must not import a sibling feature), pinned by the
+// starter-overlay-ids seam test in widgets/chart-canvas.
+export const TIDES_OVERLAY_ID = 'tides';
+
 interface TidesOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
@@ -230,7 +235,7 @@ export function createTidesOverlay(
   };
 
   return {
-    id: 'tides',
+    id: TIDES_OVERLAY_ID,
     title: 'Tide stations',
     description: 'Markers for nearby tide and current stations you can tap for predictions.',
     band: 'safety',
