@@ -6,6 +6,7 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import { formatBounds } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
 import { type ArmedRow, Disclosure, InlineConfirm, SavedList } from '$shared/ui';
+import { areaSummary } from './area-summary';
 import type { SavedRegionDto, WarmStatus } from './regions-client.js';
 
 interface Props {
@@ -86,6 +87,10 @@ function chartList(region: SavedRegionDto): string {
             {STATUS_META[region.status].label}
           </span>
         </div>
+        <!-- The at-a-glance facts that tell several areas apart without opening each card. It states
+             what was requested, never that the area is passage-ready; verifying coverage against a
+             passage stays a navigator judgment. -->
+        <p class="area-summary muted-note">{areaSummary(region)}</p>
         <dl class="card-stats">
           <dt class="caps-label">Saved</dt>
           <dd><span class="num">{cached.value}</span> {cached.unit}</dd>
@@ -221,6 +226,11 @@ function chartList(region: SavedRegionDto): string {
 }
 .area-status {
   min-block-size: 1.25rem;
+}
+/* The one-line glance summary wraps at its separators on a 320px phone rather than overflowing. */
+.area-summary {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .progress-note {
   margin: 0;

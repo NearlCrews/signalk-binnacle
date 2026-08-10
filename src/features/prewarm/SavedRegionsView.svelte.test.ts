@@ -55,6 +55,20 @@ describe('SavedRegionsView', () => {
     expect(html).not.toContain('Starting download');
   });
 
+  it('shows the at-a-glance area summary on the card, outside the disclosure', () => {
+    const html = body({
+      ...savedRegion,
+      status: 'ready',
+      bbox: [-84, 59.5, -83, 60.5],
+      minzoom: 6,
+      maxzoom: 12,
+      sourceIds: ['basemap', 'retired-chart'],
+      unavailableSourceIds: ['retired-chart'],
+    });
+    expect(html).toContain('Coastal detail · 2 charts, 1 unavailable · about 30 by 60 nm');
+    expect(html).not.toContain('passage-ready');
+  });
+
   it('explains unavailable chart sources and prevents a doomed re-download', () => {
     const html = body({
       ...savedRegion,
