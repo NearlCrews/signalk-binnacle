@@ -3,3 +3,11 @@
 export function attribute(tag: string, name: string): string | undefined {
   return tag.match(new RegExp(`${name}="([^"]*)"`))?.[1];
 }
+
+// Pull one tag out of server-rendered HTML, throwing when absent so an assertion against the
+// result cannot silently pass on a missing element. The companion half of attribute() above.
+export function tag(html: string, pattern: RegExp, description: string): string {
+  const match = html.match(pattern);
+  if (!match) throw new Error(`${description} not rendered`);
+  return match[0];
+}

@@ -9,3 +9,17 @@ export function hasControlCharacters(value: string): boolean {
   }
   return false;
 }
+
+// Whether a provider-controlled string is unusable as an object key or path segment: empty,
+// oversized, carrying control characters, or a prototype-polluting name. One predicate, so the
+// resource-id and notification-path walks cannot drift apart on which keys they refuse.
+export function isUnsafeProviderKey(key: string): boolean {
+  return (
+    key.length === 0 ||
+    key.length > 512 ||
+    hasControlCharacters(key) ||
+    key === '__proto__' ||
+    key === 'prototype' ||
+    key === 'constructor'
+  );
+}

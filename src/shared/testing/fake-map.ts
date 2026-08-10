@@ -44,6 +44,10 @@ export function createFakeMap() {
   const canvas = {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
     dispatchEvent: () => true,
+    // A custom layer registers its WebGL context-loss listeners on the canvas rather than the map,
+    // so these are recorded for a test that drives onAdd and asserts the pair is removed again.
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     style: {} as CSSStyleDeclaration,
   };
   const handlerKey = (type: string, layers?: readonly string[]) =>
@@ -102,6 +106,7 @@ export function createFakeMap() {
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
     setGlobalStateProperty: vi.fn(),
+    triggerRepaint: vi.fn(),
     queryRenderedFeatures: vi.fn(() => renderedFeatures),
     dragPan: {
       isEnabled: () => dragPanEnabled,

@@ -1,15 +1,11 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import { attribute } from '$shared/testing';
+import { attribute, tag } from '$shared/testing';
 import LayerToggle from './LayerToggle.svelte';
 
 const DESCRIPTION = 'Depth contours and soundings from the NOAA ENC set';
 
-function checkbox(html: string): string {
-  const match = html.match(/<input type="checkbox"[^>]*>/);
-  if (!match) throw new Error('no toggle rendered');
-  return match[0];
-}
+const checkbox = (html: string): string => tag(html, /<input type="checkbox"[^>]*>/, 'toggle');
 
 function renderToggle(props: Record<string, unknown> = {}): string {
   return render(LayerToggle, {

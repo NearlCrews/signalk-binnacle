@@ -1,15 +1,11 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import { attribute } from '$shared/testing';
+import { attribute, tag } from '$shared/testing';
 import ShowOnChartToggle from './ShowOnChartToggle.svelte';
 
 const DESCRIPTION = 'Markers for places in the current chart view';
 
-function toggle(html: string): string {
-  const match = html.match(/<button[^>]*show-on-chart[^>]*>/);
-  if (!match) throw new Error('no toggle rendered');
-  return match[0];
-}
+const toggle = (html: string): string => tag(html, /<button[^>]*show-on-chart[^>]*>/, 'toggle');
 
 describe('ShowOnChartToggle', () => {
   it('associates a supplied description with the control, not only its tooltip', () => {

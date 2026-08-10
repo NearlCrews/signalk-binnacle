@@ -1,15 +1,12 @@
 import { createRawSnippet } from 'svelte';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import { attribute } from '$shared/testing';
+import { attribute, tag } from '$shared/testing';
 import PanelHeader from './PanelHeader.svelte';
 import SlideOver from './SlideOver.svelte';
 
-function minimizeControl(html: string): string {
-  const match = html.match(/<button[^>]*panel-minimize[^>]*>/);
-  if (!match) throw new Error('no minimize control rendered');
-  return match[0];
-}
+const minimizeControl = (html: string): string =>
+  tag(html, /<button[^>]*panel-minimize[^>]*>/, 'minimize control');
 
 describe('PanelHeader', () => {
   it('points the minimize control at the panel body it collapses', () => {

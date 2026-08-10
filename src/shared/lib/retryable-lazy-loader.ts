@@ -3,17 +3,9 @@ interface RetryableLazyLoaderOptions {
   timeoutMessage?: string;
 }
 
-const DEFAULT_LAZY_UI_TIMEOUT_MS = 15_000;
+import { withPromiseTimeout } from './promise-timeout';
 
-function withTimeout<T>(pending: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout>;
-  return Promise.race([
-    pending,
-    new Promise<never>((_resolve, reject) => {
-      timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
-    }),
-  ]).finally(() => clearTimeout(timeout));
-}
+const DEFAULT_LAZY_UI_TIMEOUT_MS = 15_000;
 
 export function createRetryableLazyLoader<T>(
   load: () => Promise<T>,
@@ -28,7 +20,7 @@ export function createRetryableLazyLoader<T>(
     const pending =
       options.timeoutMs === undefined
         ? source
-        : withTimeout(
+        : withPromiseTimeout(
             source,
             options.timeoutMs,
             options.timeoutMessage ?? 'Lazy module load timed out.',

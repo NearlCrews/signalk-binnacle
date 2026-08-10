@@ -6,5 +6,5 @@ export * from './fake-storage';
 export * from './fake-vessel';
 export * from './fake-websocket';
 export * from './fetch-stub';
-export { attribute } from './markup';
+export { attribute, tag } from './markup';
 export * from './sk-frame';

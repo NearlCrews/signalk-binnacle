@@ -7,6 +7,7 @@ export { ErrorState } from './error-state.svelte';
 export { fetchJsonOrUndefined } from './fetch-json';
 export { withTimeout } from './fetch-timeout';
 export { portableFilename } from './filename';
+export { HeldFlag } from './held-flag.svelte';
 export { uuidv4 } from './id';
 export {
   createLatestWriter,
@@ -26,11 +27,12 @@ export {
 export { createMediaQuery, type ReactiveMediaQuery } from './media.svelte';
 export { prefersReducedMotion } from './motion';
 export { evictOldestKey, isRecord, sameJsonValue } from './object';
+export { withPromiseTimeout } from './promise-timeout';
 export {
   createRetryableLazyLoader,
   createRetryableLazyUiLoader,
 } from './retryable-lazy-loader';
-export { capitalize, hasControlCharacters } from './strings';
+export { capitalize, hasControlCharacters, isUnsafeProviderKey } from './strings';
 export { Toast } from './toast.svelte';
 export {
   DAY_MS,
