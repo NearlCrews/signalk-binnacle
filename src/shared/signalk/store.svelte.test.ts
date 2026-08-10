@@ -559,3 +559,249 @@ describe('SignalKStore', () => {
     expect(notificationState(store.notifications.get('notifications.junk.0'))).toBe('emergency');
   });
 });
+
+describe('SignalKStore server staleness and per-source samples', () => {
+  const SOG = 'navigation.speedOverGround';
+  const POSITION = 'navigation.position';
+
+  interface StaleEntry {
+    sourceRef?: string;
+    lastValue?: { value: unknown; epoch?: number };
+  }
+
+  // One builder for every staleness and sample scenario: self values, per-path sources, stale
+  // markers, and a generation, so a test reads as data rather than frame plumbing.
+  function buildFrame(
+    self: Record<string, unknown>,
+    epoch: number,
+    options: {
+      sources?: Record<string, { label?: string; ref?: string }>;
+      stales?: Record<string, StaleEntry>;
+      generation?: number;
+    } = {},
+  ): SKFrame {
+    const frame: SKFrame = {
+      self: new Map(Object.entries(self)) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch,
+    };
+    if (options.sources) frame.selfSources = new Map(Object.entries(options.sources));
+    if (options.stales) frame.selfStales = new Map(Object.entries(options.stales));
+    if (options.generation !== undefined) frame.generation = options.generation;
+    return frame;
+  }
+
+  it('sets the record while retaining the value, epoch, and source', () => {
+    const store = new SignalKStore();
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.5 }, 1000, { sources: { [SOG]: { label: 'gps0', ref: 'gps0.GP' } } }),
+    );
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [SOG]: { sourceRef: 'gps0.GP' } } }));
+    const cell = store.cell(SOG);
+    expect(cell.serverStale).toEqual({ sourceRef: 'gps0.GP', lastValueEpoch: 1000 });
+    expect(cell.value).toBe(5.5);
+    expect(cell.epoch).toBe(1000);
+    expect(cell.source).toEqual({ label: 'gps0', ref: 'gps0.GP' });
+  });
+
+  it('clears the record on any later self value, null included', () => {
+    const store = new SignalKStore();
+    store.applyFrame(buildFrame({ [SOG]: 5.5 }, 1000));
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [SOG]: {} } }));
+    expect(store.cell(SOG).serverStale).toBeDefined();
+    // A resumed sounder reporting no bottom publishes null; the server accepted it, so the path
+    // is live again.
+    store.applyFrame(buildFrame({ [SOG]: null }, 62_000));
+    expect(store.cell(SOG).serverStale).toBeUndefined();
+    expect(store.cell(SOG).value).toBeNull();
+  });
+
+  it('ignores a declaration for a source that is not the cell current one', () => {
+    // Dual-GPS: unit A dies, unit B keeps publishing. A's timeout must not mark the path.
+    const store = new SignalKStore();
+    store.applyFrame(
+      buildFrame({ [POSITION]: { latitude: 1, longitude: 2 } }, 1000, {
+        sources: { [POSITION]: { label: 'gps-b', ref: 'gps-b.GP' } },
+      }),
+    );
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [POSITION]: { sourceRef: 'gps-a.GP' } } }));
+    expect(store.cell(POSITION).serverStale).toBeUndefined();
+  });
+
+  it('applies a declaration when the cell has no source ref to compare', () => {
+    const store = new SignalKStore();
+    store.applyFrame(buildFrame({ [SOG]: 5.5 }, 1000));
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [SOG]: { sourceRef: 'gps0.GP' } } }));
+    expect(store.cell(SOG).serverStale?.sourceRef).toBe('gps0.GP');
+  });
+
+  it('applies both a value and a marker arriving in one frame, value first', () => {
+    const store = new SignalKStore();
+    store.applyFrame(buildFrame({ [SOG]: 4.2 }, 1000, { stales: { [SOG]: {} } }));
+    const cell = store.cell(SOG);
+    expect(cell.value).toBe(4.2);
+    expect(cell.epoch).toBe(1000);
+    expect(cell.serverStale).toBeDefined();
+  });
+
+  it('seeds a never-streamed cell from the declaration lastValue', () => {
+    const store = new SignalKStore();
+    const fix = { latitude: 60.1, longitude: 24.9 };
+    store.applyFrame(
+      buildFrame({}, 61_000, {
+        stales: {
+          [POSITION]: { lastValue: { value: fix, epoch: 55_000 } },
+          [SOG]: { lastValue: { value: 5.5, epoch: 55_000 } },
+        },
+      }),
+    );
+    const position = store.cell(POSITION);
+    expect(position.value).toEqual(fix);
+    expect(position.epoch).toBe(0);
+    expect(position.streamed).toBe(false);
+    expect(position.serverStale?.lastValueEpoch).toBe(55_000);
+    const sog = store.cell(SOG);
+    expect(sog.value).toBe(5.5);
+    expect(sog.serverStale?.lastValueEpoch).toBe(55_000);
+  });
+
+  it('prefers the receipt epoch over the marker epoch once the cell has streamed', () => {
+    const store = new SignalKStore();
+    store.applyFrame(buildFrame({ [SOG]: 5.5 }, 40_000));
+    store.applyFrame(
+      buildFrame({}, 61_000, { stales: { [SOG]: { lastValue: { value: 5.5, epoch: 39_000 } } } }),
+    );
+    expect(store.cell(SOG).serverStale?.lastValueEpoch).toBe(40_000);
+  });
+
+  it('latches across a reconnect and skips the write on an equivalent replay', () => {
+    const store = new SignalKStore();
+    store.applyFrame(buildFrame({ [SOG]: 5.5 }, 1000, { generation: 1 }));
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [SOG]: {} }, generation: 1 }));
+    const record = store.cell(SOG).serverStale;
+    expect(record).toBeDefined();
+    // The socket reopens; the cache replays an equivalent declaration. The record must survive
+    // the generation bump AND keep its identity, so consumers are not invalidated for nothing.
+    store.applyFrame(buildFrame({}, 70_000, { stales: { [SOG]: {} }, generation: 2 }));
+    expect(store.cell(SOG).serverStale).toBe(record);
+    // Only a real value clears it.
+    store.applyFrame(buildFrame({ [SOG]: 5.6 }, 71_000, { generation: 2 }));
+    expect(store.cell(SOG).serverStale).toBeUndefined();
+  });
+
+  it('retires only the declared source sample when another source keeps the path live', () => {
+    const store = new SignalKStore();
+    store.traceSources([POSITION]);
+    store.applyFrame(
+      buildFrame({ [POSITION]: { latitude: 1, longitude: 2 } }, 1000, {
+        sources: { [POSITION]: { label: 'gps-a', ref: 'gps-a.GP' } },
+      }),
+    );
+    store.applyFrame(
+      buildFrame({ [POSITION]: { latitude: 1.1, longitude: 2 } }, 2000, {
+        sources: { [POSITION]: { label: 'gps-b', ref: 'gps-b.GP' } },
+      }),
+    );
+    const cell = store.cell(POSITION);
+    expect(cell.sourceSamples?.size).toBe(2);
+    const revisionBefore = cell.sourceSamplesRevision;
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [POSITION]: { sourceRef: 'gps-a.GP' } } }));
+    expect(cell.serverStale).toBeUndefined();
+    expect(cell.sourceSamples?.has('gps-a.GP')).toBe(false);
+    expect(cell.sourceSamples?.has('gps-b.GP')).toBe(true);
+    expect(cell.sourceSamplesRevision).toBe(revisionBefore + 1);
+  });
+
+  it('does not advance lastDataEpoch or touch sourceTrace on a stale-only frame', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    store.applyFrame(buildFrame({ [SOG]: 5.5 }, 1000, { sources: { [SOG]: { label: 'gps0' } } }));
+    expect(store.lastDataEpoch).toBe(1000);
+    const traceBefore = store.cell(SOG).sourceTrace;
+    store.applyFrame(buildFrame({}, 61_000, { stales: { [SOG]: { sourceRef: 'gps0.GP' } } }));
+    expect(store.lastDataEpoch).toBe(1000);
+    expect(store.cell(SOG).sourceTrace).toBe(traceBefore);
+  });
+
+  it('keys samples by ref so two devices on one bus stay distinct', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.1 }, 1000, {
+        sources: { [SOG]: { label: 'n2kFromFile', ref: 'n2kFromFile.160' } },
+      }),
+    );
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.4 }, 2000, {
+        sources: { [SOG]: { label: 'n2kFromFile', ref: 'n2kFromFile.161' } },
+      }),
+    );
+    const samples = store.cell(SOG).sourceSamples;
+    expect(samples?.size).toBe(2);
+    expect(samples?.get('n2kFromFile.160')?.value).toBe(5.1);
+    expect(samples?.get('n2kFromFile.161')?.value).toBe(5.4);
+  });
+
+  it('updates a known source in place without bumping the revision', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.1 }, 1000, { sources: { [SOG]: { label: 'gps0', ref: 'gps0.GP' } } }),
+    );
+    const cell = store.cell(SOG);
+    const revision = cell.sourceSamplesRevision;
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.2 }, 2000, { sources: { [SOG]: { label: 'gps0', ref: 'gps0.GP' } } }),
+    );
+    expect(cell.sourceSamples?.get('gps0.GP')?.value).toBe(5.2);
+    expect(cell.sourceSamples?.get('gps0.GP')?.epoch).toBe(2000);
+    expect(cell.sourceSamplesRevision).toBe(revision);
+  });
+
+  it('caps samples per path by evicting the least recently heard', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    for (let index = 0; index < 5; index += 1) {
+      store.applyFrame(
+        buildFrame({ [SOG]: index }, 1000 + index, {
+          sources: { [SOG]: { label: `bus${index}`, ref: `bus${index}.1` } },
+        }),
+      );
+    }
+    const samples = store.cell(SOG).sourceSamples;
+    expect(samples?.size).toBe(4);
+    expect(samples?.has('bus0.1')).toBe(false);
+    expect(samples?.has('bus4.1')).toBe(true);
+  });
+
+  it('records nothing for an untraced path', () => {
+    const store = new SignalKStore();
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.1 }, 1000, { sources: { [SOG]: { label: 'gps0', ref: 'gps0.GP' } } }),
+    );
+    expect(store.cell(SOG).sourceSamples).toBeUndefined();
+  });
+
+  it('falls back to the label as the key for a source-object-only producer', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    store.applyFrame(buildFrame({ [SOG]: 5.1 }, 1000, { sources: { [SOG]: { label: 'gps0' } } }));
+    expect(store.cell(SOG).sourceSamples?.get('gps0')?.value).toBe(5.1);
+  });
+
+  it('clears samples on a reconnect generation bump', () => {
+    const store = new SignalKStore();
+    store.traceSources([SOG]);
+    store.applyFrame(
+      buildFrame({ [SOG]: 5.1 }, 1000, {
+        sources: { [SOG]: { label: 'gps0', ref: 'gps0.GP' } },
+        generation: 1,
+      }),
+    );
+    const cell = store.cell(SOG);
+    const revision = cell.sourceSamplesRevision;
+    store.applyFrame(buildFrame({}, 5000, { generation: 2 }));
+    expect(cell.sourceSamples?.size).toBe(0);
+    expect(cell.sourceSamplesRevision).toBe(revision + 1);
+  });
+});

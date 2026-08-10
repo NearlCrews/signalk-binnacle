@@ -159,6 +159,39 @@ describe('state grading', () => {
     const reading = readTile('sog', deps);
     expect(reading.state).toBe('live');
   });
+
+  it('a declared meta.timeout window on the cell replaces the ten-second default', () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(skFrame({ [SK_PATHS.speedOverGround]: 3.0 }, 1000));
+    const cell = deps.store.cell(SK_PATHS.speedOverGround);
+    // A five-minute sensor declared via meta.timeout: not stale at eleven seconds.
+    cell.staleWindowMs = 300_000;
+    clock.now = 1000 + TILE_STALE_MS + 1;
+    expect(readTile('sog', deps).state).toBe('live');
+    clock.now = 1000 + 300_001;
+    expect(readTile('sog', deps).state).toBe('stale');
+    // timeout 0 declares the path never stale.
+    cell.staleWindowMs = Number.POSITIVE_INFINITY;
+    clock.now = 1000 + 100_000_000;
+    expect(readTile('sog', deps).state).toBe('live');
+  });
+
+  it("server stale declaration → 'stale' even with a fresh epoch, value retained", () => {
+    const clock = { now: 1000 };
+    const deps = makeDeps(clock);
+    deps.store.applyFrame(skFrame({ [SK_PATHS.speedOverGround]: 3.0 }, 1000));
+    deps.store.applyFrame({
+      self: new Map(),
+      selfStales: new Map([[SK_PATHS.speedOverGround, {}]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1500,
+    });
+    clock.now = 1600;
+    const reading = readTile('sog', deps);
+    expect(reading.state).toBe('stale');
+    expect(reading.value).not.toBe(PLACEHOLDER);
+  });
 });
 
 describe('sog tile', () => {

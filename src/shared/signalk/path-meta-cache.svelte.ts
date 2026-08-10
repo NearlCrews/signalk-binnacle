@@ -1,5 +1,5 @@
 import { evictOldestKey } from '$shared/lib';
-import { fetchPathMeta, type PathMeta } from './meta';
+import { fetchPathMeta, type PathMeta, staleWindowMsFromTimeout } from './meta';
 
 // How many failed fetches one path may burn before the cache settles on an empty sentinel. A
 // version-reactive consumer retries on every settle, so without a cap a dead endpoint would be
@@ -32,7 +32,15 @@ const MAX_CACHED_PATHS = 500;
 // outage the old credentials could not outlive, say nothing about the new credentials. Reads pair
 // with `version`, a $state counter bumped after every settle, so a $derived over the plain Map
 // re-evaluates when a fetch lands.
-export function createPathMetaCache(origin: string, getToken: () => string | undefined) {
+// When handed a store, every successful settle also writes the path's declared staleness window
+// (meta.timeout) onto its cell, so grading helpers anywhere honor it. The write lives here rather
+// than in a consumer callback because the window is a server-declared fact about the path, not a
+// feature-local one: whichever cache instance fetches the meta must publish it the same way.
+export function createPathMetaCache(
+  origin: string,
+  getToken: () => string | undefined,
+  store?: { cell(path: string): { staleWindowMs: number | undefined } },
+) {
   const cache = new Map<string, PathMeta | null>();
   const attempts = new Map<string, number>();
   const inFlight = new Set<string>();
@@ -74,6 +82,11 @@ export function createPathMetaCache(origin: string, getToken: () => string | und
       if (result !== undefined) {
         cache.set(path, result);
         attempts.delete(path);
+        if (store !== undefined) {
+          const windowMs = staleWindowMsFromTimeout(result.timeout);
+          const cell = store.cell(path);
+          if (cell.staleWindowMs !== windowMs) cell.staleWindowMs = windowMs;
+        }
         version += 1;
         return;
       }

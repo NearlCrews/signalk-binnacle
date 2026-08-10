@@ -1,6 +1,6 @@
 <script lang="ts">
 import { tick } from 'svelte';
-import { sourceCue, type ZoneState } from '$shared/signalk';
+import { recentSourceRefs, sourceCue, type ZoneState } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
 import type { TileDef, TileDeps, TileReading } from './tile-catalog';
 
@@ -55,14 +55,14 @@ function ageLabel(epoch: number): string {
   return `${minutes}m ago`;
 }
 
-const primaryCell = $derived.by(() => {
+const primaryPath = $derived.by(() => {
   // The reading's own resolved path first: on a fallback-chain tile the first populated path can
   // differ from the path the shown value actually came from, and the detail must never name the
   // wrong source or age for the number on screen.
-  if (reading.activePath) return deps.store.cell(reading.activePath);
-  const live = def.paths.map((path) => deps.store.cell(path)).find((cell) => cell.epoch > 0);
-  return live ?? (def.paths[0] ? deps.store.cell(def.paths[0]) : undefined);
+  if (reading.activePath) return reading.activePath;
+  return def.paths.find((path) => deps.store.cell(path).epoch > 0) ?? def.paths[0];
 });
+const primaryCell = $derived(primaryPath ? deps.store.cell(primaryPath) : undefined);
 
 const sourceLabel = $derived(
   def.paths.length === 0 ? 'Computed in Binnacle' : (primaryCell?.source?.label ?? 'Unknown'),
@@ -77,16 +77,47 @@ const cueText = $derived.by(() => {
   }
   return `Multiple recent sources: ${cue.labels.join(', ')}.`;
 });
-const age = $derived(primaryCell ? ageLabel(primaryCell.epoch) : 'Not streamed');
-const stateLabel = $derived(
-  reading.state === 'live'
-    ? 'Live'
-    : reading.state === 'stale'
-      ? 'Stale'
-      : reading.state === 'placeholder'
-        ? 'Reported blank'
-        : 'No report',
+// While the server declares the path timed out, age from the last good value's own epoch (the
+// declaration itself is not an update); with no declaration the fallback is the same epoch.
+const age = $derived(
+  primaryCell
+    ? ageLabel(primaryCell.serverStale?.lastValueEpoch ?? primaryCell.epoch)
+    : 'Not streamed',
 );
+const stateLabel = $derived.by(() => {
+  if (reading.state === 'live') return 'Live';
+  if (reading.state === 'stale') {
+    return primaryCell?.serverStale !== undefined ? 'Stale (server declared)' : 'Stale';
+  }
+  return reading.state === 'placeholder' ? 'Reported blank' : 'No report';
+});
+// Which source went quiet, when the server named one in its declaration.
+const staleSourceNote = $derived.by(() => {
+  const ref = primaryCell?.serverStale?.sourceRef;
+  return ref ? `No update from ${ref}.` : undefined;
+});
+// What each recent source reports, neutrally: values and ages, no disagreement judgment. Signal K
+// remains the source authority. Values re-read through the 1 Hz clock (the age text forces it);
+// the revision covers a source appearing or retiring. The formatter applies only when the shown
+// path is the def's canonical unit-bearing one (zonesPath): a fallback-chain def can resolve onto
+// a path in different units, and a mis-unit number is worse than source and age alone.
+const EMPTY_SOURCE_ROWS: Array<{ ref: string; text?: string; age: string }> = [];
+const sourceRows = $derived.by(() => {
+  const samples = primaryCell?.sourceSamples;
+  if (!primaryCell || samples === undefined) return EMPTY_SOURCE_ROWS;
+  void primaryCell.sourceSamplesRevision;
+  const refs = recentSourceRefs(samples, deps.clock.now);
+  if (refs.length === 0) return EMPTY_SOURCE_ROWS;
+  const format = primaryPath === def.zonesPath ? def.formatSample : undefined;
+  return refs.map((ref) => {
+    const sample = samples.get(ref);
+    return {
+      ref,
+      text: sample !== undefined ? format?.(sample.value, deps) : undefined,
+      age: ageLabel(sample?.epoch ?? 0),
+    };
+  });
+});
 const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Warning' : 'Normal');
 </script>
 
@@ -115,8 +146,26 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
     <dd><span>{age}</span><span class="unit"></span></dd>
   </dl>
 
+  {#if staleSourceNote}
+    <p class="muted-note" role="status">{staleSourceNote}</p>
+  {/if}
+
   {#if cueText}
     <p class="muted-note" role="status">{cueText}</p>
+  {/if}
+
+  {#if sourceRows.length > 0}
+    <section class="sources" aria-label="Recent sources">
+      <h3 class="caps-label">Recent sources</h3>
+      <ul class="bare-list source-list">
+        {#each sourceRows as row (row.ref)}
+          <li>
+            <span class="path">{row.ref}</span>
+            <span class="path-meta">{row.text ? `${row.text}, ` : ''}{row.age}</span>
+          </li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
   {#if onViewTrend}
@@ -156,24 +205,28 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
   padding: 0 var(--space-3) var(--space-3);
   overflow-y: auto;
 }
-.paths {
+.paths,
+.sources {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+.paths h3,
+.sources h3 {
+  margin: 0;
 }
 .trend-action {
   min-block-size: 44px;
   inline-size: 100%;
 }
-.paths h3 {
-  margin: 0;
-}
-.path-list {
+.path-list,
+.source-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
 }
-.path-list li {
+.path-list li,
+.source-list li {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;

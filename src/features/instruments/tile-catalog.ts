@@ -7,8 +7,8 @@ import type {
 } from '$entities/instrument-trend';
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, type OwnVessel } from '$entities/vessel';
-import { asNumber } from '$shared/geo';
-import type { ReactiveClock } from '$shared/lib';
+import { asNumber, isLatLon } from '$shared/geo';
+import type { ReactiveClock, UnitsMode } from '$shared/lib';
 import {
   formatBearingOr,
   formatDuration,
@@ -89,6 +89,9 @@ export interface TileDef {
     description?: string;
   };
   read(deps: TileDeps): TileReading;
+  // Format one raw SI sample the way this tile formats its reading, for the detail's per-source
+  // rows. A def without one renders source and age only; never render a raw SI number.
+  formatSample?(value: unknown, deps: TileDeps): string;
 }
 
 function normalizedOptionLabel(value: string): string {
@@ -186,10 +189,36 @@ export function trendDescriptorFor(
 type PathCell = ReturnType<SignalKStore['cell']>;
 
 function grade(cell: PathCell, clock: ReactiveClock): TileValueState {
+  // A server stale declaration outranks the client window: the server enforced the path's own
+  // meta.timeout, so the tile must not read live off a value the server has disowned.
+  if (cell.serverStale !== undefined) return 'stale';
   if (cell.epoch === 0) return 'never';
-  if (clock.now - cell.epoch > TILE_STALE_MS) return 'stale';
+  // A path's declared meta.timeout (carried on the cell once its meta loads) replaces the client
+  // default, so a legitimately slow sensor is not flashed stale at ten seconds.
+  if (clock.now - cell.epoch > (cell.staleWindowMs ?? TILE_STALE_MS)) return 'stale';
   return cell.value === undefined ? 'placeholder' : 'live';
 }
+
+// Per-source sample formatters for the detail's source rows: each renders one raw SI sample with
+// its unit the way the tile formats its own reading.
+function sampleKnots(value: unknown): string {
+  return `${formatKnotsOr(asNumber(value))} kn`;
+}
+
+function sampleBearing(value: unknown): string {
+  return `${formatBearingOr(asNumber(value))}°`;
+}
+
+const unitSample =
+  (
+    format: (value: number | undefined, mode: UnitsMode) => string,
+    unit: (mode: UnitsMode) => string,
+  ) =>
+  (value: unknown, { units }: TileDeps): string =>
+    `${format(asNumber(value), units.mode)} ${unit(units.mode)}`;
+const sampleDepth = unitSample(formatLengthOr, lengthUnit);
+const samplePressure = unitSample(formatPressureOr, pressureUnit);
+const sampleTemperature = unitSample(formatTemperatureOr, temperatureUnit);
 
 // Wraps a radian angle to -π..π so a relative bearing stays in the port-starboard range.
 function normalizeAngle(a: number): number {
@@ -220,6 +249,7 @@ const SOG_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedOverGround)], 1),
+  formatSample: sampleKnots,
   read({ vessel, store, clock }) {
     const cell = store.cell(SK_PATHS.speedOverGround);
     const state = grade(cell, clock);
@@ -239,6 +269,7 @@ const HDG_DEF: TileDef = {
   zonesPath: SK_PATHS.headingTrue,
   category: 'navigation',
   kind: 'numeric',
+  formatSample: sampleBearing,
   read({ vessel, store, clock }) {
     const trueCell = store.cell(SK_PATHS.headingTrue);
     const magCell = store.cell(SK_PATHS.headingMagnetic);
@@ -305,6 +336,7 @@ const DEPTH_DEF: TileDef = {
     description:
       'Depth history, preferring below-transducer, then below-surface, then below-keel data.',
   },
+  formatSample: sampleDepth,
   // The entity owns the resolution so this tile and the status chip can never disagree about
   // which reference the boat's Depth number is measured from.
   read({ vessel, store, clock, units }) {
@@ -355,6 +387,7 @@ const WIND_APPARENT_DEF: TileDef = {
     ),
     description: 'Wind speed history, preferring apparent wind and falling back to ground wind.',
   },
+  formatSample: sampleKnots,
   read({ vessel, store, clock }) {
     const apparentSpeedCell = store.cell(SK_PATHS.windSpeedApparent);
     const groundSpeedCell = store.cell(SK_PATHS.windSpeedOverGround);
@@ -433,6 +466,7 @@ const STW_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedThroughWater)], 1),
+  formatSample: sampleKnots,
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.speedThroughWater);
     const state = grade(cell, clock);
@@ -455,6 +489,7 @@ const WIND_TRUE_DEF: TileDef = {
   category: 'wind',
   kind: 'wind',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.windSpeedTrue, 'True')], 1, 1, 'max'),
+  formatSample: sampleKnots,
   read({ store, clock }) {
     const cell = store.cell(SK_PATHS.windSpeedTrue);
     const state = grade(cell, clock);
@@ -478,6 +513,7 @@ const PRESSURE_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('pressure', [trendCandidate(SK_PATHS.outsidePressure)], 0, 2),
+  formatSample: samplePressure,
   read({ vessel, store, clock, units }) {
     const cell = store.cell(SK_PATHS.outsidePressure);
     const state = grade(cell, clock);
@@ -501,6 +537,10 @@ const POSITION_DEF: TileDef = {
   zonesPath: SK_PATHS.position,
   category: 'navigation',
   kind: 'position',
+  formatSample: (value) =>
+    isLatLon(value)
+      ? `${formatLatitude(value.latitude)} ${formatLongitude(value.longitude)}`
+      : PLACEHOLDER,
   read({ vessel, store, clock }) {
     const cell = store.cell(SK_PATHS.position);
     const state = grade(cell, clock);
@@ -647,6 +687,7 @@ const WATER_TEMP_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('temperature', [trendCandidate(SK_PATHS.waterTemperature)], 1),
+  formatSample: sampleTemperature,
   read: temperatureRead(SK_PATHS.waterTemperature),
 };
 
@@ -662,6 +703,7 @@ const AIR_TEMP_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('temperature', [trendCandidate(SK_PATHS.outsideTemperature)], 1),
+  formatSample: sampleTemperature,
   read: temperatureRead(SK_PATHS.outsideTemperature),
 };
 

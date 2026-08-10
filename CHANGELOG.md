@@ -6,6 +6,33 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Server-declared staleness is honored end to end. When the Signal K server's meta.timeout
+  enforcement declares a path timed out, every surface that grades freshness reacts at once: the
+  status strip relabels the retained fix as Last fix with its age, chart orientation falls back
+  and names why, follow pauses, the collision and shallow-water watches stand down honestly, and
+  the instrument tile reads Stale with its last good value kept visible. The instrument detail
+  distinguishes Stale (server declared) from a client-side window, ages the value from its own
+  receipt rather than the declaration, and names the source that went quiet. Declarations are
+  honored per source, so with two GPS units the surviving unit keeps the position live while the
+  dead unit's declaration is set aside. On servers without the enforcement nothing changes.
+  One consequence to know: when a sensor dies under an active server zone alarm, the server itself
+  clears that alarm as it retires the reading; Binnacle's watch reports the stale reading and
+  pauses in its place.
+- The instrument detail shows what each sensor says: when two or more sources fed the shown path
+  within the last ten minutes, a Recent sources list names each source with its own formatted
+  value and age, without judging disagreement. A watch handoff snapshot now also names any
+  watch-critical path with multiple recent sources.
+- A path's explicitly declared meta.timeout replaces the ten-second client staleness window on
+  its instrument tile, so a legitimately slow sensor is not flashed stale; a declared timeout of
+  zero means never stale.
+
+### Fixed
+
+- A Signal K source identified only by its $source reference no longer renders as "Unknown" in
+  the instrument detail, and its handoffs now feed the source-changed cue.
+
 <a id="v0191"></a>
 
 ## [0.19.1] - 2026-08-04

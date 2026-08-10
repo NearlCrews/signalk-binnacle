@@ -5,7 +5,7 @@ import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import InstrumentsPanel from './InstrumentsPanel.svelte';
 import INSTRUMENTS_PANEL_SOURCE from './InstrumentsPanel.svelte?raw';
 import type { InstrumentsController } from './instruments-controller.svelte';
-import type { TileDeps } from './tile-catalog';
+import type { TileDeps, TileReading } from './tile-catalog';
 import { TILE_CATALOG, tileById } from './tile-catalog';
 
 // SSR-only suite (node environment, no DOM). Assertions are substring checks on the rendered body.
@@ -66,6 +66,26 @@ function makeDeps(epochFor?: (path: string) => number): TileDeps {
   };
 }
 
+// Renders InstrumentDetail for the sog tile against one fake cell, the shape every staleness and
+// source-row test shares; only the cell and reading state vary per test.
+function detailBody(cell: Record<string, unknown>, reading: TileReading, now = 70_000): string {
+  const sog = tileById('sog');
+  if (!sog) throw new Error('Missing sog tile');
+  const deps = {
+    ...makeDeps(),
+    store: {
+      cell: () => cell,
+      notifications: new Map<string, unknown>(),
+      notificationsVersion: 0,
+      ensureCells: () => {},
+    } as unknown as TileDeps['store'],
+    clock: { now } as TileDeps['clock'],
+  };
+  return render(InstrumentDetail, {
+    props: { def: sog, label: 'Speed', deps, reading, zone: 'normal', onBack: () => {} },
+  }).body;
+}
+
 describe('InstrumentsPanel', () => {
   it('renders the Instruments heading in the panel header', () => {
     const controller = makeController();
@@ -105,6 +125,70 @@ describe('InstrumentsPanel', () => {
     }).body;
     expect(body).toContain('View recent trend');
     expect(body).toContain('trend-action');
+  });
+
+  it('labels a server-declared stale reading and names the quiet source', () => {
+    const body = detailBody(
+      {
+        epoch: 40_000,
+        value: 5.5,
+        sourceTrace: [],
+        source: { label: 'gps0', ref: 'gps0.GP' },
+        serverStale: { sourceRef: 'gps0.GP', lastValueEpoch: 40_000 },
+      },
+      { state: 'stale', value: '10.7', unit: 'kn', siValue: 5.5 },
+    );
+    expect(body).toContain('Stale (server declared)');
+    expect(body).toContain('No update from gps0.GP.');
+    // The Updated row ages from the last good value, not the declaration.
+    expect(body).toContain('30s ago');
+  });
+
+  it('keeps the plain Stale label for a client-window stale reading', () => {
+    const body = detailBody(
+      { epoch: 40_000, value: 5.5, sourceTrace: [] },
+      { state: 'stale', value: '10.7', unit: 'kn', siValue: 5.5 },
+    );
+    expect(body).toContain('>Stale<');
+    expect(body).not.toContain('Stale (server declared)');
+    expect(body).not.toContain('No update from');
+  });
+
+  it('lists each recent source with its formatted value when two or more report', () => {
+    const body = detailBody(
+      {
+        epoch: 69_000,
+        value: 2.5,
+        sourceTrace: [],
+        source: { label: 'gps0', ref: 'gps0.GP' },
+        sourceSamples: new Map([
+          ['gps0.GP', { value: 2.5, epoch: 69_000 }],
+          ['gps1.GP', { value: 2.8, epoch: 65_000 }],
+        ]),
+        sourceSamplesRevision: 2,
+      },
+      { state: 'live', value: '4.9', unit: 'kn', siValue: 2.5 },
+    );
+    expect(body).toContain('Recent sources');
+    expect(body).toContain('gps0.GP');
+    expect(body).toContain('gps1.GP');
+    // The def's own formatter renders each sample at the display edge (m/s to knots).
+    expect(body).toContain('4.9 kn');
+    expect(body).toContain('5.4 kn');
+  });
+
+  it('stays quiet with a single recent source', () => {
+    const body = detailBody(
+      {
+        epoch: 69_000,
+        value: 2.5,
+        sourceTrace: [],
+        sourceSamples: new Map([['gps0.GP', { value: 2.5, epoch: 69_000 }]]),
+        sourceSamplesRevision: 1,
+      },
+      { state: 'live', value: '4.9', unit: 'kn', siValue: 2.5 },
+    );
+    expect(body).not.toContain('Recent sources');
   });
 
   it('titles a shown tile with the resolved label while the catalog keeps its own', () => {

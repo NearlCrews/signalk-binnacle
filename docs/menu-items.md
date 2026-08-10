@@ -175,7 +175,15 @@ source, and surrounding traffic before relying on it.
   watch-critical paths a bounded recent-source trace adds a cue: Source changed with the prior
   label, or Multiple recent sources when they alternate, within a ten-minute window. Each path
   traces alone, so unlike references (magnetic versus true heading) are never compared, and a
-  reconnect starts the trace fresh.
+  reconnect starts the trace fresh. When two or more sources fed the shown path within that
+  window, a Recent sources list names each source with its own formatted value and age, neutrally
+  and without judging disagreement. Staleness honors the server first: a path the server declares
+  timed out under its meta.timeout reads Stale (server declared) with the last good value retained
+  and aged from its own receipt, and the detail names the source that went quiet. Because the
+  server declares staleness per source, a declaration for a source other than the one feeding the
+  shown value never marks the path. A path's explicitly declared meta.timeout also replaces the
+  ten-second client staleness window on its tile, so a legitimately slow sensor is not flashed
+  stale, and a declared timeout of zero means never stale.
 - **Data trends** shows zero to eight profile-owned instrument trends in saved order.
   Customize groups the available readings by category, supports touch and keyboard reordering, keeps
   unavailable saved selections removable, and disables a ninth addition without hiding it. Opening

@@ -19,7 +19,7 @@ const FIXTURE_ORIGIN = 'http://127.0.0.1:4174';
 const FIXED_TIMESTAMP = '2026-08-10T12:00:00.000Z';
 const TARGET_CONTEXT = 'vessels.urn:mrn:imo:mmsi:366123456';
 
-type DeltaValue = { path: string; value: unknown };
+type DeltaValue = { path: string; value: unknown; state?: unknown };
 
 async function fixturePost(page: Page, action: string, body?: unknown): Promise<void> {
   const response = await page.request.post(`${FIXTURE_ORIGIN}/__fixture__/${action}`, {
@@ -28,11 +28,33 @@ async function fixturePost(page: Page, action: string, body?: unknown): Promise<
   expect(response.ok()).toBe(true);
 }
 
-async function sendDelta(page: Page, values: DeltaValue[], context?: string): Promise<void> {
+async function sendDelta(
+  page: Page,
+  values: DeltaValue[],
+  context?: string,
+  sourceRef?: string,
+): Promise<void> {
   await fixturePost(page, 'delta', {
     ...(context === undefined ? {} : { context }),
-    updates: [{ timestamp: FIXED_TIMESTAMP, values }],
+    updates: [
+      {
+        ...(sourceRef === undefined ? {} : { $source: sourceRef }),
+        timestamp: FIXED_TIMESTAMP,
+        values,
+      },
+    ],
   });
+}
+
+// The exact wire shape signalk-server's meta.timeout enforcement emits per timed-out path:
+// $source with no source object, value null, and the out-of-band state container carrying the
+// last good value.
+function staleValue(path: string, lastValue: unknown): DeltaValue {
+  return {
+    path,
+    value: null,
+    state: { timedOut: true, lastValue: { timestamp: FIXED_TIMESTAMP, value: lastValue } },
+  };
 }
 
 const OWN_FIX: DeltaValue[] = [
@@ -331,6 +353,43 @@ test('stale GPS stops presenting coordinates as a current position', async ({ pa
   await expect(cluster).toContainText(/Last fix/, { timeout: 20_000 });
   await expect(cluster).toContainText(/ago/);
   await expect(cluster).not.toContainText('Vessel');
+});
+
+test('a server staleness declaration relabels the fix and names the quiet source', async ({
+  page,
+}) => {
+  // Server-declared staleness is push-based, so unlike the client-window cases above nothing here
+  // waits out a timeout: the declaration lands and the surfaces react at once.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await sendDelta(page, OWN_FIX);
+  const cluster = page.locator('.center-cluster');
+  await expect(cluster).toContainText('Vessel');
+
+  await sendDelta(
+    page,
+    [
+      staleValue('navigation.position', { latitude: 27.7, longitude: -82.7 }),
+      staleValue('navigation.speedOverGround', 3),
+    ],
+    undefined,
+    'gps0.GP',
+  );
+  // The strip relabels immediately: the retained fix presents as Last fix with an age, never as a
+  // current position.
+  await expect(cluster).toContainText(/Last fix/, { timeout: 5_000 });
+  await expect(cluster).not.toContainText('Vessel');
+
+  // The instrument detail names the declaration and the source that went quiet, not "Unknown".
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instrument dock', exact: true })
+    .click();
+  const dock = page.getByRole('complementary', { name: 'Instruments' });
+  await dock.getByRole('button', { name: /speed/i }).first().click();
+  await expect(dock).toContainText('Stale (server declared)');
+  await expect(dock).toContainText('No update from gps0.GP.');
 });
 
 test('stale wind angle is not presented as live beside fresh speed', async ({ page }) => {

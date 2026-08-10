@@ -17,9 +17,21 @@ export interface PathMeta {
   zones?: MetaZone[];
   units?: string;
   displayName?: string;
+  // The path's declared staleness window in SECONDS (the server's meta.timeout): 0 means never
+  // stale, 'auto' means the server derives it per source. Only an explicit declaration is carried;
+  // the server's derived and default windows stay server-internal.
+  timeout?: number | 'auto';
 }
 
 const STATE_RANK: Record<ZoneState, number> = { normal: 0, warning: 1, alarm: 2 };
+
+// A declared meta.timeout as a client staleness window in ms: 0 means never stale (Infinity),
+// 'auto' and absent mean the caller keeps its client default (the server's derived and default
+// windows are server-internal, so honoring them here would misstate what the server declared).
+export function staleWindowMsFromTimeout(timeout: PathMeta['timeout']): number | undefined {
+  if (timeout === undefined || timeout === 'auto') return undefined;
+  return timeout === 0 ? Number.POSITIVE_INFINITY : timeout * 1000;
+}
 
 // Bounds must be finite numbers or absent: a string or NaN bound silently mis-bands every value it
 // is compared against, so a malformed zone is dropped rather than carried into the banding.
@@ -70,9 +82,14 @@ export async function fetchPathMeta(
   const body = await fetchAuthedJson<unknown>(url, token);
   if (!isRecord(body)) return undefined;
   const zones = Array.isArray(body.zones) ? body.zones.filter(isMetaZone) : undefined;
+  const timeout =
+    body.timeout === 'auto' || (isFiniteNumber(body.timeout) && body.timeout >= 0)
+      ? body.timeout
+      : undefined;
   return {
     zones,
     units: typeof body.units === 'string' ? body.units : undefined,
     displayName: typeof body.displayName === 'string' ? body.displayName : undefined,
+    timeout,
   };
 }

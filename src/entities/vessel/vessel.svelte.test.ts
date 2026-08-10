@@ -93,6 +93,66 @@ describe('OwnVessel', () => {
     expect(vessel.positionStale).toBe(false);
   });
 
+  it('reports stale on a server declaration, with no clock wired and inside the client window', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(frame({ 'navigation.position': { latitude: 1, longitude: 2 } }));
+    expect(vessel.positionStale).toBe(false);
+    store.applyFrame({
+      self: new Map(),
+      selfStales: new Map([['navigation.position', {}]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+    });
+    // A declaration is a fact, not a window: it holds with no clock and a fresh epoch.
+    expect(vessel.positionStale).toBe(true);
+    expect(vessel.position).toEqual({ latitude: 1, longitude: 2 });
+    // A real fix clears it.
+    store.applyFrame(frame({ 'navigation.position': { latitude: 1.1, longitude: 2 } }, 3000));
+    expect(vessel.positionStale).toBe(false);
+  });
+
+  it('ages and counts a fix seeded from a staleness declaration lastValue', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    expect(vessel.positionReceived).toBe(false);
+    expect(vessel.positionEpochMs).toBeUndefined();
+    // A late subscriber: the cache replays only the staleness shape, never a live fix.
+    store.applyFrame({
+      self: new Map(),
+      selfStales: new Map([
+        [
+          'navigation.position',
+          {
+            lastValue: { value: { latitude: 1, longitude: 2 }, epoch: 55_000 },
+          },
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 61_000,
+    });
+    expect(vessel.position).toEqual({ latitude: 1, longitude: 2 });
+    expect(vessel.positionStale).toBe(true);
+    expect(vessel.positionReceived).toBe(true);
+    expect(vessel.positionEpochMs).toBe(55_000);
+  });
+
+  it('marks the safety depth stale on a server declaration, so the shallow watch pauses', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(frame({ 'environment.depth.belowTransducer': 3.2 }));
+    expect(vessel.safetyDepth.stale).toBe(false);
+    store.applyFrame({
+      self: new Map(),
+      selfStales: new Map([['environment.depth.belowTransducer', {}]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+    });
+    expect(vessel.safetyDepth.stale).toBe(true);
+    // The retained reading survives: the monitor reports stale, never a phantom blank.
+    expect(vessel.safetyDepth.meters).toBe(3.2);
+  });
+
   it('grades each safety-relevant path independently', () => {
     const store = new SignalKStore();
     const clock = $state({ now: 1000 });

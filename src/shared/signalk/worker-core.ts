@@ -8,8 +8,11 @@ import {
   type Context,
   type Delta,
   INITIAL_CONNECTION_STATE,
+  NOTIFICATIONS_PREFIX,
   type Path,
   type PathSource,
+  type PathStaleMarker,
+  type PathValueState,
   SELF_CONTEXT,
   type SKFrame,
   type SubscribeEntry,
@@ -72,11 +75,12 @@ export class WorkerCore {
         this.#registry.resubscribeAll();
       },
     });
-    this.#batcher.onFlush = (self, ais, epoch, selfSources, selfEpochs, aisEpochs) => {
+    this.#batcher.onFlush = (self, ais, epoch, selfSources, selfEpochs, aisEpochs, selfStales) => {
       this.#onFrame?.({
         self,
         selfSources,
         selfEpochs,
+        selfStales,
         ais,
         aisEpochs,
         connection: this.#connectionState,
@@ -130,13 +134,41 @@ export class WorkerCore {
 
   // One routing callback for the life of the core, not a fresh closure per #ingest: reconciling
   // runs on the hottest path, once per incoming delta frame.
-  #route = (context: Context, path: Path, value: Value, source?: PathSource): void => {
+  #route = (
+    context: Context,
+    path: Path,
+    value: Value,
+    source?: PathSource,
+    state?: PathValueState,
+  ): void => {
     if (this.#isSelf(context)) {
+      // A server stale declaration routes to its own channel and the wire null is suppressed, so
+      // the last good value survives in the store. Honored for self only and never for
+      // notifications, mirroring the enforcer's own scope; the server's event-contract exemption
+      // is deliberately NOT re-derived here, since the server's shipped classification table
+      // would drift from any client copy.
+      if (state?.timedOut === true && !path.startsWith(NOTIFICATIONS_PREFIX)) {
+        this.#batcher.putStale(path, this.#staleMarker(state, source));
+        return;
+      }
       this.#batcher.put(path, value, source, this.#receivedAt);
     } else {
       this.#batcher.putVessel(context, path, value, this.#receivedAt);
     }
   };
+
+  // The provider-stamped lastValue timestamp is a foreign clock; clamp it to the receipt time so
+  // a skewed provider (or a Pi before NTP sync) can never show a negative or inflated age.
+  #staleMarker(state: PathValueState, source?: PathSource): PathStaleMarker {
+    const marker: PathStaleMarker = {};
+    if (source?.ref !== undefined) marker.sourceRef = source.ref;
+    if (state.lastValue !== undefined) {
+      const parsed = Date.parse(state.lastValue.timestamp ?? '');
+      marker.lastValue = { value: state.lastValue.value };
+      if (parsed > 0) marker.lastValue.epoch = Math.min(parsed, this.#receivedAt);
+    }
+    return marker;
+  }
 
   #ingest(raw: string): void {
     if (typeof raw !== 'string' || raw.length > MAX_DELTA_FRAME_CHARACTERS) {

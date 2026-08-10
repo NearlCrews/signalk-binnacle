@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '$shared/testing';
-import { fetchPathMeta, type MetaZone, zoneStateFor } from './meta';
+import { fetchPathMeta, type MetaZone, staleWindowMsFromTimeout, zoneStateFor } from './meta';
 
 const ZONES: MetaZone[] = [
   { upper: 3, state: 'alarm', message: 'Shallow' },
@@ -86,5 +86,29 @@ describe('fetchPathMeta', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, { zones })));
     const meta = await fetchPathMeta('http://pi', undefined, 'a.b');
     expect(zoneStateFor(3, meta?.zones)).toBe('warning');
+  });
+
+  it('carries a declared timeout through and drops malformed ones', async () => {
+    for (const [wire, parsed] of [
+      [300, 300],
+      [0, 0],
+      ['auto', 'auto'],
+      ['300', undefined],
+      [-5, undefined],
+      [Number.NaN, undefined],
+    ] as const) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, { timeout: wire })));
+      const meta = await fetchPathMeta('http://pi', undefined, 'a.b');
+      expect(meta?.timeout).toBe(parsed);
+    }
+  });
+});
+
+describe('staleWindowMsFromTimeout', () => {
+  it('maps seconds to ms, zero to never, and auto or absent to the client default', () => {
+    expect(staleWindowMsFromTimeout(300)).toBe(300_000);
+    expect(staleWindowMsFromTimeout(0)).toBe(Number.POSITIVE_INFINITY);
+    expect(staleWindowMsFromTimeout('auto')).toBeUndefined();
+    expect(staleWindowMsFromTimeout(undefined)).toBeUndefined();
   });
 });

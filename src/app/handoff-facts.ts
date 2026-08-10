@@ -27,6 +27,10 @@ export interface HandoffFactDeps {
   weatherFetchedAtMs: () => number | undefined;
   tides: () => string;
   routeCoverage: () => string | undefined;
+  // Watch-critical paths currently fed by more than one recent source, with the source refs.
+  // Empty when every path has one source, the normal case. Neutral data: naming the sources is
+  // the fact, judging them is not.
+  multiSourcePaths: () => Array<{ name: string; refs: string[] }>;
 }
 
 function ageText(now: number, epochMs: number): string {
@@ -111,6 +115,14 @@ export function collectHandoffFacts(deps: HandoffFactDeps): HandoffFact[] {
     label: 'Route offline coverage',
     value: deps.routeCoverage() ?? 'not checked this session',
   });
+
+  const multiSource = deps.multiSourcePaths();
+  if (multiSource.length > 0) {
+    facts.push({
+      label: 'Sensor sources',
+      value: multiSource.map((entry) => `${entry.name}: ${entry.refs.join(', ')}`).join('; '),
+    });
+  }
 
   return facts;
 }

@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_VALUES_PER_DELTA, MAX_VALUES_PER_UPDATE, reconcileDelta } from './reconcile';
-import type { Context, Delta, Path, Value } from './types';
+import type { Context, Delta, Path, PathValueState, Value } from './types';
 
 interface Collected {
   context: Context;
   path: Path;
   value: Value;
-  source?: { label?: string };
+  source?: { label?: string; ref?: string };
+  state?: PathValueState;
 }
 
 function collect(delta: Delta): Collected[] {
   const out: Collected[] = [];
-  reconcileDelta(delta, (context, path, value, source) =>
-    out.push({ context, path, value, source }),
+  reconcileDelta(delta, (context, path, value, source, state) =>
+    out.push({ context, path, value, source, state }),
   );
   return out;
 }
@@ -110,6 +111,9 @@ describe('reconcileDelta', () => {
     } as unknown as Delta;
     const writes = collect(delta);
     expect(writes.map((w) => w.source?.label)).toEqual(['NMEA2000.35', 'NMEA2000.35']);
+    // A plain delta with no $source and no state carries neither field, byte-identical to before.
+    expect(writes[0].source?.ref).toBeUndefined();
+    expect(writes[0].state).toBeUndefined();
   });
 
   it('rejects unsafe contexts and paths', () => {
@@ -162,5 +166,93 @@ describe('reconcileDelta', () => {
     expect(collect({ context: 'vessels.self', updates: [{ values }] } as unknown as Delta)).toEqual(
       [],
     );
+  });
+
+  it('captures $source as the source ref and falls back to it for the label', () => {
+    // The staleness enforcer's deltas carry ONLY $source; without the fallback they would render
+    // as "Unknown" exactly when a source dies.
+    const delta = {
+      context: 'vessels.self' as Context,
+      updates: [
+        { $source: 'ttyUSB0.GP', values: [{ path: 'navigation.speedOverGround', value: 3.85 }] },
+      ],
+    } as unknown as Delta;
+    expect(collect(delta)[0].source).toEqual({ label: 'ttyUSB0.GP', ref: 'ttyUSB0.GP' });
+  });
+
+  it('prefers the source object label over $source while keeping the ref', () => {
+    const delta = {
+      context: 'vessels.self' as Context,
+      updates: [
+        {
+          source: { label: 'n2kFromFile' },
+          $source: 'n2kFromFile.160',
+          values: [{ path: 'navigation.headingTrue', value: 1.1 }],
+        },
+      ],
+    } as unknown as Delta;
+    expect(collect(delta)[0].source).toEqual({ label: 'n2kFromFile', ref: 'n2kFromFile.160' });
+  });
+
+  it('parses the staleness enforcer state shape', () => {
+    const delta = {
+      context: 'vessels.self' as Context,
+      updates: [
+        {
+          $source: 'ttyUSB0.GP',
+          values: [
+            {
+              path: 'navigation.speedOverGround',
+              value: null,
+              state: {
+                timedOut: true,
+                lastValue: { timestamp: '2026-03-28T10:00:00Z', value: 5.5 },
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as Delta;
+    const writes = collect(delta);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].value).toBeNull();
+    expect(writes[0].state).toEqual({
+      timedOut: true,
+      lastValue: { timestamp: '2026-03-28T10:00:00Z', value: 5.5 },
+    });
+  });
+
+  it('degrades a malformed state container to a plain leaf', () => {
+    const shapes = [42, 'stale', { timedOut: 'yes' }, { timedOut: false }, {}];
+    for (const state of shapes) {
+      const delta = {
+        context: 'vessels.self' as Context,
+        updates: [{ values: [{ path: 'navigation.speedOverGround', value: null, state }] }],
+      } as unknown as Delta;
+      const writes = collect(delta);
+      expect(writes).toHaveLength(1);
+      expect(writes[0].state).toBeUndefined();
+    }
+  });
+
+  it('parses a timedOut state without a usable lastValue', () => {
+    const delta = {
+      context: 'vessels.self' as Context,
+      updates: [
+        {
+          values: [
+            { path: 'navigation.speedOverGround', value: null, state: { timedOut: true } },
+            {
+              path: 'navigation.headingTrue',
+              value: null,
+              state: { timedOut: true, lastValue: 'gone' },
+            },
+          ],
+        },
+      ],
+    } as unknown as Delta;
+    const writes = collect(delta);
+    expect(writes[0].state).toEqual({ timedOut: true });
+    expect(writes[1].state).toEqual({ timedOut: true });
   });
 });

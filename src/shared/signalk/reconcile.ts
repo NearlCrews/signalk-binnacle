@@ -5,6 +5,7 @@ import {
   type Path,
   type PathSource,
   type PathValue,
+  type PathValueState,
   SELF_CONTEXT,
   type Value,
 } from './types';
@@ -50,11 +51,30 @@ function sourceLabel(source: unknown): string | undefined {
   return undefined;
 }
 
+// The staleness enforcer's out-of-band state container, accepted only in its declared shape.
+// Anything malformed degrades to undefined so the leaf flows as a plain value, today's behavior.
+function parseValueState(raw: unknown): PathValueState | undefined {
+  if (!isRecord(raw) || raw.timedOut !== true) return undefined;
+  const state: PathValueState = { timedOut: true };
+  if (isRecord(raw.lastValue)) {
+    const timestamp = boundedText(raw.lastValue.timestamp, 64);
+    state.lastValue = { value: raw.lastValue.value as Value };
+    if (timestamp) state.lastValue.timestamp = timestamp;
+  }
+  return state;
+}
+
 // The hottest path in the app: positional arguments, not a per-value object, so reconciling a
-// delta allocates nothing per leaf.
+// delta allocates nothing per leaf beyond the rare parsed staleness state.
 export function reconcileDelta(
   delta: Delta,
-  onLeaf: (context: Context, path: Path, value: Value, source?: PathSource) => void,
+  onLeaf: (
+    context: Context,
+    path: Path,
+    value: Value,
+    source?: PathSource,
+    state?: PathValueState,
+  ) => void,
 ): void {
   if (!isRecord(delta)) return;
   const context = delta.context === undefined ? SELF_CONTEXT : cleanContext(delta.context);
@@ -64,8 +84,12 @@ export function reconcileDelta(
     if (!isRecord(update)) continue;
     const values: PathValue[] | undefined = update.values;
     if (!Array.isArray(values) || values.length > MAX_VALUES_PER_UPDATE) continue;
-    const label = sourceLabel(update.source);
-    const source: PathSource | undefined = label ? { label } : undefined;
+    // $source is the server's per-source identity reference; the staleness enforcer keys its
+    // declarations by it and its own deltas carry ONLY $source, no source object. The label falls
+    // back to it so an enforcer delta never renders as "Unknown".
+    const ref = boundedText(update.$source, MAX_SOURCE_LABEL_LENGTH);
+    const label = sourceLabel(update.source) ?? ref;
+    const source: PathSource | undefined = label ? { label, ref } : undefined;
     for (const pv of values) {
       // A malformed element (null, or a missing or non-string path) would key the frame Map with a
       // non-string and throw in applyFrame's path.startsWith, aborting the whole frame's update.
@@ -74,7 +98,8 @@ export function reconcileDelta(
       if (!path) continue;
       if (accepted >= MAX_VALUES_PER_DELTA) return;
       accepted += 1;
-      onLeaf(context, path, pv.value as Value, source);
+      const state = pv.state === undefined ? undefined : parseValueState(pv.state);
+      onLeaf(context, path, pv.value as Value, source, state);
     }
   }
 }

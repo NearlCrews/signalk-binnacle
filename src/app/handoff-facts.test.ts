@@ -25,6 +25,7 @@ function deps(overrides: Partial<HandoffFactDeps> = {}): HandoffFactDeps {
     weatherFetchedAtMs: () => undefined,
     tides: () => 'not loaded',
     routeCoverage: () => undefined,
+    multiSourcePaths: () => [],
     ...overrides,
   };
 }
@@ -45,6 +46,22 @@ describe('collectHandoffFacts', () => {
     expect(fact(facts, 'Depth watch')).toBe('monitoring');
     expect(fact(facts, 'Weather forecast')).toBe('not loaded');
     expect(fact(facts, 'Route offline coverage')).toBe('not checked this session');
+  });
+
+  it('names a path only when more than one recent source feeds it', () => {
+    const quiet = collectHandoffFacts(deps());
+    expect(quiet.some((entry) => entry.label === 'Sensor sources')).toBe(false);
+    const facts = collectHandoffFacts(
+      deps({
+        multiSourcePaths: () => [
+          { name: 'position', refs: ['gps0.GP', 'gps1.GP'] },
+          { name: 'depth', refs: ['sounder.1', 'scanner.2'] },
+        ],
+      }),
+    );
+    expect(fact(facts, 'Sensor sources')).toBe(
+      'position: gps0.GP, gps1.GP; depth: sounder.1, scanner.2',
+    );
   });
 
   it('renders stale and missing inputs as such rather than re-deriving them', () => {

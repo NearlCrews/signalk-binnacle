@@ -21,6 +21,23 @@ export type SourceCue =
   | { kind: 'changed'; from: string; to: string; atEpoch: number }
   | { kind: 'multiple'; labels: string[] };
 
+// The source refs that fed a traced path within the window, or empty below two: one recent source
+// is the normal case and not worth a word. The one definition of "recently multi-source" shared by
+// the instrument detail's rows and the watch-handoff fact, over the per-source sample map a traced
+// PathCell carries (structural element type, so this module does not import the store).
+export function recentSourceRefs(
+  samples: ReadonlyMap<string, { epoch: number }> | undefined,
+  now: number,
+  windowMs = SOURCE_CUE_WINDOW_MS,
+): string[] {
+  if (samples === undefined || samples.size < 2) return [];
+  const refs: string[] = [];
+  for (const [ref, sample] of samples) {
+    if (now - sample.epoch <= windowMs) refs.push(ref);
+  }
+  return refs.length >= 2 ? refs : [];
+}
+
 export function sourceCue(
   trace: readonly SourceTransition[],
   now: number,

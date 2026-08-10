@@ -85,7 +85,10 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   // Every instrument path is watch-critical: trace source handoffs for the detail's source cue.
   deps.store.traceSources(ALL_CATALOG_PATHS);
 
-  const metaCache = createPathMetaCache(deps.origin, deps.getToken);
+  // Handing the store in lets meta settling carry each path's declared staleness window onto its
+  // cell, so grade() honors a legitimately slow sensor's own meta.timeout instead of the
+  // ten-second default.
+  const metaCache = createPathMetaCache(deps.origin, deps.getToken, deps.store);
   const dynamicDefCache = new Map<string, TileDef[]>();
 
   // Dynamic definitions discovered from the live model and the optional history path catalog.

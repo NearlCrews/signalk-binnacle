@@ -105,17 +105,22 @@ export class OwnVessel {
   }
 
   // When the current fix arrived (store receipt time), for surfaces that must say how old a
-  // retained position is. Undefined before the first fix.
+  // retained position is. Undefined before the first fix. A server-stale seed (the fix arrived
+  // only through a staleness declaration's lastValue) ages from the declaration's record instead,
+  // so a seeded Last fix still shows an honest age.
   get positionEpochMs(): number | undefined {
-    const epoch = this.#store.cell(SK_PATHS.position).epoch;
-    return epoch > 0 ? epoch : undefined;
+    const cell = this.#store.cell(SK_PATHS.position);
+    if (cell.epoch > 0) return cell.epoch;
+    return cell.serverStale?.lastValueEpoch;
   }
 
   // Whether any position has EVER arrived this session. The staleness predicate deliberately
   // reports false before the first value (absent is not stale), so a connected server that has
-  // never published a fix looks healthy without this distinct signal.
+  // never published a fix looks healthy without this distinct signal. A server-stale seed counts:
+  // the server held a fix, so "no GPS this session" would be false.
   get positionReceived(): boolean {
-    return this.#store.cell(SK_PATHS.position).epoch > 0;
+    const cell = this.#store.cell(SK_PATHS.position);
+    return cell.epoch > 0 || cell.serverStale !== undefined;
   }
 
   // The own fix rounded to about 110 m, and undefined while it is stale. This is what a sortable
@@ -235,6 +240,9 @@ export class OwnVessel {
 
   #pathStale(path: string): boolean {
     const cell = this.#store.cell(path);
+    // A server stale declaration is a fact, not a window: it holds with no clock wired and
+    // regardless of how recently the declaration itself arrived.
+    if (cell.serverStale !== undefined) return true;
     if (cell.epoch > 0 && cell.generation !== this.#store.generation) return true;
     if (!this.#clock) return false;
     const epoch = cell.epoch;

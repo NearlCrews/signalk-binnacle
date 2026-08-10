@@ -25,6 +25,34 @@ describe('createPathMetaCache', () => {
     expect(mock).toHaveBeenCalledTimes(1);
   });
 
+  it('writes a declared staleness window onto the handed store cell when meta settles', async () => {
+    stubFetch({ ok: true, body: { units: 'm', timeout: 300 } });
+    const cells = new Map<string, { staleWindowMs: number | undefined }>();
+    const store = {
+      cell: (path: string) => {
+        let cell = cells.get(path);
+        if (!cell) {
+          cell = { staleWindowMs: undefined };
+          cells.set(path, cell);
+        }
+        return cell;
+      },
+    };
+    const cache = createPathMetaCache(ORIGIN, () => 'tok', store);
+    cache.load(PATH);
+    await vi.runAllTimersAsync();
+    expect(store.cell(PATH).staleWindowMs).toBe(300_000);
+  });
+
+  it('leaves the store cell untouched on a failed settle and without a declared timeout', async () => {
+    stubFetch({ ok: false, status: 500 });
+    const cell = { staleWindowMs: undefined as number | undefined };
+    const cache = createPathMetaCache(ORIGIN, () => 'tok', { cell: () => cell });
+    cache.load(PATH);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cell.staleWindowMs).toBeUndefined();
+  });
+
   it('paces retries: a failed settle holds the sentinel until the retry delay passes', async () => {
     const mock = stubFetch({ ok: false, status: 500 });
     const cache = createPathMetaCache(ORIGIN, () => 'tok');

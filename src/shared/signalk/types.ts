@@ -81,13 +81,42 @@ export interface PathValue {
   value: Value;
 }
 
+// label is the human-readable display string (the source bus for hardware providers). ref is the
+// update's $source reference, the server's per-source identity; the staleness enforcer keys its
+// declarations by it, and two devices on one bus share a label but never a ref.
 export interface PathSource {
   label?: string;
+  ref?: string;
+}
+
+// Mirror of @signalk/server-api PathValueState: the out-of-band container the staleness enforcer
+// attaches to its synthetic value-null delta when meta.timeout enforcement declares a path stale.
+export interface PathValueState {
+  timedOut?: boolean;
+  lastValue?: { timestamp?: string; value?: Value };
+}
+
+// One parsed stale declaration the worker forwards per timed-out self path. Travels in its own
+// frame channel so it can never refresh a freshness signal.
+export interface PathStaleMarker {
+  // The update's $source: which source the server declared stale (staleness is per source).
+  sourceRef?: string;
+  // The server's last good value, with its provider timestamp parsed to epoch ms when parseable
+  // and clamped to the receipt clock.
+  lastValue?: { value: Value; epoch?: number };
+}
+
+// What a PathCell retains while the server declares the path timed out. Cleared by any later self
+// value for the path, null included: the server clears its own record on any accepted delta.
+export interface ServerStaleRecord {
+  sourceRef?: string;
+  lastValueEpoch?: number;
 }
 
 interface DeltaUpdate {
   values?: PathValue[];
   source?: unknown;
+  $source?: unknown;
   [key: string]: unknown;
 }
 
@@ -140,6 +169,9 @@ export interface SKFrame {
   self: Map<string, Value>;
   selfSources?: Map<string, PathSource>;
   selfEpochs?: Map<string, number>;
+  // Server-declared staleness markers, one per timed-out self path. A separate channel from self
+  // on purpose: a marker must not stamp an epoch or read as data flow.
+  selfStales?: Map<string, PathStaleMarker>;
   ais?: Map<string, Map<string, Value>>;
   aisEpochs?: Map<string, Map<string, number>>;
   connection: ConnectionState;

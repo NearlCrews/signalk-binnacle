@@ -1,4 +1,4 @@
-import type { PathSource, Value } from './types';
+import type { PathSource, PathStaleMarker, Value } from './types';
 
 // A scheduler returns a cancel function, so a pending flush can be dropped on teardown rather than
 // firing into a store the app is disposing.
@@ -36,11 +36,13 @@ export class FrameBatcher {
     selfSources?: Map<string, PathSource>,
     selfEpochs?: Map<string, number>,
     aisEpochs?: Map<string, Map<string, number>>,
+    selfStales?: Map<string, PathStaleMarker>,
   ) => void;
 
   #self = new Map<string, Value>();
   #selfSources = new Map<string, PathSource>();
   #selfEpochs = new Map<string, number>();
+  #selfStales = new Map<string, PathStaleMarker>();
   #ais = new Map<string, Map<string, Value>>();
   #aisEpochs = new Map<string, Map<string, number>>();
   #scheduled = false;
@@ -52,10 +54,25 @@ export class FrameBatcher {
   }
 
   put(path: string, value: Value, source?: PathSource, receivedAt = Date.now()): void {
+    // A real value supersedes a pending stale marker for the path, in wire order. Deleted before
+    // the capacity check: a cap-dropped value must not leave an earlier marker alive to invert
+    // that order.
+    if (this.#selfStales.size > 0) this.#selfStales.delete(path);
     if (!this.#self.has(path) && this.#self.size >= MAX_BATCH_SELF_PATHS) return;
     this.#self.set(path, value);
     this.#selfEpochs.set(path, receivedAt);
     if (source) this.#selfSources.set(path, source);
+    this.#mark();
+  }
+
+  // Record a server stale declaration for a self path. Never touches #self (a pending real value
+  // stays batched; applyFrame applies values before markers, matching the wire order where the
+  // marker arrived second) and never touches #selfSources (the marker's own sourceRef carries its
+  // identity; writing the shared source channel would relabel another source's value sharing the
+  // flush). A marker must never stamp an epoch or read as data flow.
+  putStale(path: string, marker: PathStaleMarker): void {
+    if (!this.#selfStales.has(path) && this.#selfStales.size >= MAX_BATCH_SELF_PATHS) return;
+    this.#selfStales.set(path, marker);
     this.#mark();
   }
 
@@ -86,6 +103,7 @@ export class FrameBatcher {
     this.#self.clear();
     this.#selfSources.clear();
     this.#selfEpochs.clear();
+    this.#selfStales.clear();
     this.#ais.clear();
     this.#aisEpochs.clear();
   }
@@ -99,7 +117,7 @@ export class FrameBatcher {
   #flush(epoch: number): void {
     this.#scheduled = false;
     this.#cancel = undefined;
-    if (this.#self.size === 0 && this.#ais.size === 0) return;
+    if (this.#self.size === 0 && this.#ais.size === 0 && this.#selfStales.size === 0) return;
     // Hand off the accumulated maps directly and start fresh. self mirrors how ais is already
     // passed: a Map crosses the Comlink boundary by structured clone, so neither needs converting
     // to a plain object on the hot path. Subsequent puts land in the new maps, not the handed-off
@@ -107,13 +125,17 @@ export class FrameBatcher {
     const self = this.#self;
     const selfSources = this.#selfSources.size > 0 ? this.#selfSources : undefined;
     const selfEpochs = this.#selfEpochs;
+    const selfStales = this.#selfStales.size > 0 ? this.#selfStales : undefined;
     const ais = this.#ais;
     const aisEpochs = this.#aisEpochs;
     this.#self = new Map();
-    this.#selfSources = new Map();
     this.#selfEpochs = new Map();
     this.#ais = new Map();
     this.#aisEpochs = new Map();
-    this.onFlush?.(self, ais, epoch, selfSources, selfEpochs, aisEpochs);
+    // The sparse channels are replaced only when actually handed off: an empty map was not passed
+    // to onFlush, so reusing it saves an allocation per flush on the common frame.
+    if (selfSources !== undefined) this.#selfSources = new Map();
+    if (selfStales !== undefined) this.#selfStales = new Map();
+    this.onFlush?.(self, ais, epoch, selfSources, selfEpochs, aisEpochs, selfStales);
   }
 }

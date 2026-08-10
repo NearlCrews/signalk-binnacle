@@ -194,9 +194,11 @@ import {
   fetchServerFeatures,
   fetchSymbols,
   isConnectionOpen,
+  recentSourceRefs,
   SELF_CONTEXT,
   type ServerFeatures,
   SignalKStore,
+  SK_PATHS,
   serverOrigin,
   setWriteOutcomeListener,
 } from '$shared/signalk';
@@ -1435,6 +1437,21 @@ const handoff = createHandoffController({
             ? 'not loaded'
             : tidesStore.status,
       routeCoverage: () => routeCoverageFact,
+      multiSourcePaths: () => {
+        // Watch-critical paths a handoff should name when more than one source fed them recently.
+        const watched: Array<[string, string]> = [
+          ['position', SK_PATHS.position],
+          ['heading', SK_PATHS.headingTrue],
+          ['depth', vessel.safetyDepth.path],
+        ];
+        const now = Date.now();
+        const entries: Array<{ name: string; refs: string[] }> = [];
+        for (const [name, path] of watched) {
+          const refs = recentSourceRefs(store.cell(path).sourceSamples, now);
+          if (refs.length > 0) entries.push({ name, refs });
+        }
+        return entries;
+      },
     }),
 });
 // Reconnect synchronization: a draft taken offline reaches the other stations as soon as the

@@ -138,6 +138,73 @@ describe('FrameBatcher', () => {
     expect(aisFrames[0].get('vessels.b')?.get('navigation.headingTrue')).toBe(0.7);
   });
 
+  it('flushes a stale-only batch', () => {
+    const batcher = new FrameBatcher();
+    let stales: Map<string, unknown> | undefined;
+    let selfSize = -1;
+    batcher.onFlush = (self, _ais, _epoch, _sources, _epochs, _aisEpochs, selfStales) => {
+      selfSize = self.size;
+      stales = selfStales;
+    };
+    batcher.putStale('navigation.speedOverGround', { sourceRef: 'gps0' });
+    vi.runAllTimers();
+    expect(selfSize).toBe(0);
+    expect(stales?.get('navigation.speedOverGround')).toEqual({ sourceRef: 'gps0' });
+  });
+
+  it('omits the stales map entirely on an ordinary flush', () => {
+    const batcher = new FrameBatcher();
+    let stales: Map<string, unknown> | undefined | 'unset' = 'unset';
+    batcher.onFlush = (_self, _ais, _epoch, _sources, _epochs, _aisEpochs, selfStales) => {
+      stales = selfStales;
+    };
+    batcher.put('navigation.speedOverGround', 3.1);
+    vi.runAllTimers();
+    expect(stales).toBeUndefined();
+  });
+
+  it('a later value supersedes a pending stale marker for the same path, even at the cap', () => {
+    const batcher = new FrameBatcher();
+    let stales: Map<string, unknown> | undefined;
+    batcher.onFlush = (_self, _ais, _epoch, _sources, _epochs, _aisEpochs, selfStales) => {
+      stales = selfStales;
+    };
+    // Fill self to the cap FIRST, then mark a capped-out path stale, then send its value: the
+    // value is dropped by the cap but must still retire the marker, or wire order inverts.
+    for (let index = 0; index < MAX_BATCH_SELF_PATHS; index += 1) {
+      batcher.put(`self.${index}`, index);
+    }
+    batcher.putStale('navigation.overflow', {});
+    batcher.put('navigation.overflow', 5);
+    vi.runAllTimers();
+    expect(stales).toBeUndefined();
+  });
+
+  it('a stale marker after a value keeps both, and never drops the pending value', () => {
+    const batcher = new FrameBatcher();
+    let self: Map<string, Value> | undefined;
+    let stales: Map<string, unknown> | undefined;
+    batcher.onFlush = (flushedSelf, _ais, _epoch, _sources, _epochs, _aisEpochs, selfStales) => {
+      self = flushedSelf;
+      stales = selfStales;
+    };
+    batcher.put('navigation.speedOverGround', 3.1);
+    batcher.putStale('navigation.speedOverGround', {});
+    vi.runAllTimers();
+    expect(self?.get('navigation.speedOverGround')).toBe(3.1);
+    expect(stales?.has('navigation.speedOverGround')).toBe(true);
+  });
+
+  it('reset() clears pending stale markers', () => {
+    const batcher = new FrameBatcher();
+    const flushes: unknown[] = [];
+    batcher.onFlush = (...args) => flushes.push(args);
+    batcher.putStale('navigation.speedOverGround', {});
+    batcher.reset();
+    vi.runAllTimers();
+    expect(flushes).toHaveLength(0);
+  });
+
   it('bounds self paths, AIS contexts, and AIS paths per context', () => {
     const batcher = new FrameBatcher();
     let selfSize = 0;
