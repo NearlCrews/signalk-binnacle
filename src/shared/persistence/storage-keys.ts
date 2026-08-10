@@ -42,6 +42,8 @@ const BINNACLE_STORAGE_KEYS = {
   profileDevice: { key: 'binnacle:profile-device', scope: 'device' },
   signalkAuth: { key: 'binnacle:signalk-auth', scope: 'credential' },
   chartActionsHint: { key: 'binnacle:chart-actions-hint', scope: 'device' },
+  // The first-run orientation was dismissed on this device; Help reopens it on demand.
+  helpOrientation: { key: 'binnacle:help-orientation', scope: 'device' },
 } as const satisfies Record<string, StorageKeyDefinition>;
 
 type BinnacleStorageKeyId = keyof typeof BINNACLE_STORAGE_KEYS;

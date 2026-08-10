@@ -111,6 +111,7 @@ async function touchTap(page: Page, point: { x: number; y: number }): Promise<vo
 test('warms Tide controls before a visible station marker is selected', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
     localStorage.setItem(
       'binnacle:layers',
@@ -132,6 +133,7 @@ test('opens Tides from a station enabled only through Layers and charts', async 
   await page.setViewportSize({ width: 800, height: 700 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
   });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
@@ -181,6 +183,7 @@ test('opens Tides from a direct chart touch tap', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 700 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
     localStorage.setItem(
       'binnacle:layers',
@@ -216,6 +219,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
   });
   const workerProof = await installMapLibreWorkerProof(page);
@@ -297,7 +301,10 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
 });
 
 test('can leave Tides while its controls are still loading', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });

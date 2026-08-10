@@ -7,6 +7,7 @@ test('find places enables its layer, searches provider metadata, and keeps selec
 }) => {
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
     localStorage.setItem(
       'binnacle:layers',
@@ -100,6 +101,7 @@ test('find places explains the chart zoom limit on a narrow screen', async ({ pa
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 4 }));
   });
   await page.goto('/');
@@ -117,6 +119,7 @@ test('place detail returns to find places on a narrow screen', async ({ page }) 
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
   });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
@@ -160,6 +163,7 @@ test('personal notes create, edit, move, and delete through the v2 notes provide
   test.setTimeout(60_000);
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
   });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {

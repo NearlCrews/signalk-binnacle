@@ -14,4 +14,5 @@ export type PanelId =
   | 'poi-search'
   | 'profiles'
   | 'regions'
-  | 'charts-management';
+  | 'charts-management'
+  | 'help';

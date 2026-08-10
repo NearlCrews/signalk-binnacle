@@ -392,6 +392,36 @@ test('route editing stays visible with its exit actions when its panel is replac
   await expect(strip).toBeHidden();
 });
 
+test('the first-run orientation is offered once, opens Help, and never nags again', async ({
+  page,
+}) => {
+  // HELP-01: a compact banner (never a forced panel) invites the safety orientation after the
+  // shell is usable; the Help panel carries the advisory boundary, the chart distinction, and the
+  // glossary; dismissal persists on the device.
+  await page.setViewportSize({ width: 360, height: 800 });
+  await openApp(page);
+  const banner = page.getByText('First time with Binnacle?');
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+
+  await page.getByRole('button', { name: 'Open Help' }).click();
+  const help = page.getByRole('complementary', { name: 'Help and helm setup' });
+  await expect(help).toBeVisible();
+  await expect(help.getByText('advisory chartplotter', { exact: false })).toBeVisible();
+  await expect(help.getByText('not a navigation chart', { exact: false })).toBeVisible();
+  await expect(help.getByText('Closest point of approach', { exact: false }).first()).toBeVisible();
+
+  await help.getByRole('button', { name: 'Got it, do not show this again' }).click();
+  await help.getByRole('button', { name: 'Close help' }).click();
+  await expect(banner).toBeHidden();
+
+  // Dismissal persists on the device across a reload.
+  await page.reload();
+  await expect(page.locator('.status-strip .conn')).toHaveAttribute('title', /Connected/, {
+    timeout: 20_000,
+  });
+  await expect(page.getByText('First time with Binnacle?')).toBeHidden();
+});
+
 test('emergency layout passes axe and the MOB actions are keyboard reachable', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);

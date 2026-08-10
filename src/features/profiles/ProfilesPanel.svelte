@@ -12,6 +12,7 @@ import {
   type Profile,
   type ProfileSyncState,
 } from '$entities/profile';
+import type { UnitsStore } from '$entities/units';
 import type { PrivacyReport } from '$shared/privacy';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -32,6 +33,9 @@ import { profileChangeSummary } from './setting-labels';
 
 interface Props {
   auth: AuthController;
+  // The display-unit resolution, so the panel can say where units come from: the server's
+  // preference when it publishes one, or this device profile's documented fallback otherwise.
+  units: UnitsStore;
   profiles: Profile[];
   activeId: string | undefined;
   defaultId: string | undefined;
@@ -57,8 +61,11 @@ interface Props {
   onBack?: () => void;
 }
 
+const UNIT_MODES = ['metric', 'imperial'] as const;
+
 const {
   auth,
+  units,
   profiles,
   activeId,
   defaultId,
@@ -347,6 +354,36 @@ function useProfile(id: string): void {
       {/if}
     {/snippet}
   </SavedList>
+  <section class="panel-section" aria-label="Units">
+    <h3 class="caps-label">Units</h3>
+    {#if units.source === 'server'}
+      <!-- The server preference always wins; a competing local toggle here would let this panel
+           disagree with the admin UI and every other webapp on the boat. -->
+      <p class="muted-note">
+        Following the Signal K server's unit preference ({units.mode}). Change it in the server's
+        admin settings; Binnacle never overrides it.
+      </p>
+    {:else}
+      <p class="muted-note">
+        This server does not publish a unit preference, so displays use this device's fallback,
+        which profiles carry. The server preference takes over automatically when one appears.
+      </p>
+      <div class="segmented" role="group" aria-label="Fallback display units">
+        {#each UNIT_MODES as mode (mode)}
+          <button
+            type="button"
+            class="btn"
+            class:is-on={units.localSetting.value === mode}
+            aria-pressed={units.localSetting.value === mode}
+            onclick={() => units.localSetting.set(mode)}
+          >
+            {mode === 'metric' ? 'Metric' : 'Imperial'}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </section>
+
   <DevicePrivacySection {onForgetCredentials} {onEraseAllLocalData} />
 </SlideOver>
 

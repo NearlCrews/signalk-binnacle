@@ -112,7 +112,10 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -212,7 +215,10 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
 });
 
 test('time travel can exit while its lazy controls are still loading', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -255,7 +261,10 @@ test('time travel can exit while its lazy controls are still loading', async ({ 
 });
 
 test('weather can exit while its lazy view is still loading', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -298,7 +307,10 @@ test('weather can exit while its lazy view is still loading', async ({ page }) =
 });
 
 test('center and follow explain when no GPS fix is available', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
@@ -321,7 +333,10 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
 test('menu prioritizes safety and customizes toolbar order without shifting blocked feedback', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.goto('/');
 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
@@ -362,7 +377,10 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
 
 test('radar discovery opens a hydrated provider-driven controls panel', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   const radarWrites: Array<{ pathname: string; body: unknown }> = [];
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
@@ -687,7 +705,10 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
 });
 
 test('offline charts stays discoverable when Chart Locker is not installed', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
 
@@ -702,7 +723,10 @@ test('offline charts stays discoverable when Chart Locker is not installed', asy
 test('offline area review shows a planning estimate and catalog chart defaults', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await mockChartLocker(page);
 
   await page.goto('/');
@@ -741,7 +765,10 @@ test('offline area review shows a planning estimate and catalog chart defaults',
 });
 
 test('offline areas explain removed chart sources before re-download', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await mockChartLocker(page, [
     {
       id: 'region-1',
@@ -780,7 +807,10 @@ test('offline areas explain removed chart sources before re-download', async ({ 
 });
 
 test('layers and charts opens chart sources before overlay stack controls', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.goto('/');
 
   const charts = page.getByRole('button', { name: 'Charts' }).first();
@@ -810,7 +840,10 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
 test('style-document charts stay visible and explain that they are unsupported', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   let styleRequests = 0;
   await page.route(/\/signalk\/v2\/api\/resources\/charts\/?$/, (route) =>
     route.fulfill({
@@ -866,6 +899,7 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
   });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem(
       'binnacle:user-charts',
       JSON.stringify([
@@ -917,7 +951,10 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
 });
 
 test('route editing confirms before discarding plotted changes', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Routes' }).click();
@@ -942,7 +979,10 @@ test('route editing confirms before discarding plotted changes', async ({ page }
 });
 
 test('saved route secondary actions use a labeled overflow menu', async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
@@ -1017,7 +1057,10 @@ test('data trends discovers instruments independently and enforces the profile s
 }) => {
   let providerRequests = 0;
   let batteryRequests = 0;
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -1121,7 +1164,10 @@ test('history-only engine readings stay identifiable through selection and detai
         provider: string | null;
       }
     | undefined;
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -1222,7 +1268,10 @@ test('history-only engine readings stay identifiable through selection and detai
 test('focused trends return to instrument detail without changing the saved overview', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
   );
@@ -1268,7 +1317,10 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   let historyValueRequests = 0;
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
@@ -1453,6 +1505,7 @@ test('weather remains usable without horizontal overflow on a narrow phone', asy
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem(
       'binnacle:weather-layers',
       JSON.stringify({ 'weather-wind': { visible: true, opacity: 1 } }),

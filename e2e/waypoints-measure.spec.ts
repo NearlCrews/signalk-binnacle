@@ -6,7 +6,10 @@ test('waypoints loads without the stream and confirms navigation on a narrow scr
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
@@ -54,7 +57,10 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
@@ -158,7 +164,10 @@ test('measure edits middle points with pointer and keyboard paths, then restores
 test('measure and route editing refuse overlapping chart gestures in both directions', async ({
   page,
 }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
   await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });

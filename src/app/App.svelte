@@ -2,6 +2,7 @@
 import Anchor from '@lucide/svelte/icons/anchor';
 import Bell from '@lucide/svelte/icons/bell';
 import ChartLine from '@lucide/svelte/icons/chart-line';
+import CircleHelp from '@lucide/svelte/icons/circle-help';
 import CloudSun from '@lucide/svelte/icons/cloud-sun';
 import DownloadCloud from '@lucide/svelte/icons/download-cloud';
 import ExternalLink from '@lucide/svelte/icons/external-link';
@@ -354,6 +355,24 @@ const arrivalMuted = new PersistedValue<boolean>(
   undefined,
   booleanPersistedCodec,
 );
+
+// The first-run orientation: shown once per device after the shell is usable, dismissible from
+// the Help panel, and reopenable there forever. Closing the auto-opened Help also counts as
+// dismissal, so the orientation is skippable without hunting for the button.
+const helpOrientationSeen = new PersistedValue<boolean>(
+  binnacleStorageKey('helpOrientation'),
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
+
+function resetChartHints(): void {
+  try {
+    localStorage.removeItem(binnacleStorageKey('chartActionsHint'));
+  } catch {
+    // Storage unavailable (private mode): the hint state never persisted anyway.
+  }
+}
 // The speed used to turn a planned route's distance into per-waypoint passage times. Stored in SI
 // (m/s), migrating a pre-SI device's knots on first read; the route plan converts at its field.
 const planningSpeedMps = createPlanningSpeed();
@@ -1296,6 +1315,17 @@ $effect(() => {
   if (untrack(() => instruments.open)) untrack(() => instruments.setOpen(false));
 });
 
+// The first-run welcome: a compact top banner once the shell is usable, never a panel forced open
+// over the chart (a helm display rebooting mid-passage must come back to the chart). It yields to
+// any active safety event, hides while Help is open, and Dismiss or the panel's own dismissal
+// persists on the device.
+const showHelpWelcome = $derived(
+  !helpOrientationSeen.value &&
+    mapInstance !== undefined &&
+    !emergencySafetyActive &&
+    activePanel !== 'help',
+);
+
 // The one spoken safety channel: structured events in fixed priority order, worst-first speech,
 // polite delivery for the rest. The per-channel alert strings stay owned by their controllers.
 const safetyAnnunciator = createSafetyAnnunciator();
@@ -1526,16 +1556,18 @@ const menuItems = $derived<MenuItem[]>([
   },
   {
     id: 'open-kip',
-    label: 'Open KIP',
+    // Named for what it is, an instrument dashboard, so a navigator who has never heard the
+    // acronym knows what will open before launching another webapp.
+    label: 'Instrument dashboard (KIP)',
     icon: ExternalLink,
     group: 'Instruments',
     available: kipPresent === true,
     unavailableHint:
       kipProbeState === 'checking' || kipProbeState === 'retrying'
-        ? 'Checking whether the KIP webapp is installed on the Signal K server.'
+        ? 'Checking whether the KIP instrument-dashboard webapp is installed on the Signal K server.'
         : kipProbeState === 'failed'
           ? 'Could not check for KIP. Reconnect or reload to retry.'
-          : 'Open KIP needs the KIP webapp installed on the Signal K server.',
+          : 'The KIP instrument dashboard needs the KIP webapp installed on the Signal K server.',
     onSelect: () => {
       const opened = window.open(KIP_URL, '_blank', 'noopener,noreferrer');
       if (!opened) toast.show('The browser blocked the KIP window. Allow pop-ups, then try again.');
@@ -1595,6 +1627,14 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Settings',
     pressed: activePanel === 'profiles',
     onSelect: () => togglePanel('profiles'),
+  },
+  {
+    id: 'help',
+    label: 'Help',
+    icon: CircleHelp,
+    group: 'Settings',
+    pressed: activePanel === 'help',
+    onSelect: () => togglePanel('help'),
   },
 ]);
 
@@ -2343,6 +2383,11 @@ const plotterActions = {
   closeRoutesPanel,
   backFromRoutesPanel,
   openRoutesPanel: () => openPanel('routes'),
+  openProfilesPanel: () => openPanel('profiles'),
+  openHelpPanel: () => openPanel('help'),
+  enableAlarmSound: primeAlarmAudio,
+  resetChartHints,
+  dismissHelpOrientation: () => helpOrientationSeen.set(true),
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,
@@ -2464,6 +2509,8 @@ const plotterActions = {
     {serverFeatures}
     {notificationsApi}
     {audioBlocked}
+    helpFirstRun={!helpOrientationSeen.value}
+    {showHelpWelcome}
     {weatherProvider}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
@@ -2493,6 +2540,7 @@ const plotterActions = {
         <ErrorBoundary>
           <module.default
             {auth}
+            {units}
             profiles={profileStore.profiles}
             activeId={profileStore.activeId}
             defaultId={profileStore.defaultId}

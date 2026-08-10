@@ -79,6 +79,7 @@ function applyPatch(document: Record<string, unknown>, patch: JsonPatchOperation
 async function installProfileServer(page: Page, document: Record<string, unknown>): Promise<void> {
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem(
       'binnacle:signalk-auth',
       JSON.stringify({ clientId: 'binnacle-e2e', token: 'profile-token' }),
@@ -209,6 +210,7 @@ test('a locally cached profile applies at boot without a startup error', async (
   page.on('pageerror', (error) => pageErrors.push(String(error)));
   await page.addInitScript(() => {
     localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem(
       'binnacle:profiles',
       JSON.stringify({

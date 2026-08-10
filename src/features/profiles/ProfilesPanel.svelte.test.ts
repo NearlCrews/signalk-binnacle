@@ -1,8 +1,17 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_PROFILES, type Profile, type ProfileSettings } from '$entities/profile';
+import type { UnitsStore } from '$entities/units';
 import type { AuthController } from '$shared/signalk';
 import ProfilesPanel from './ProfilesPanel.svelte';
+
+function fakeUnits(source: 'server' | 'local' = 'local'): UnitsStore {
+  return {
+    mode: 'metric',
+    source,
+    localSetting: { value: 'metric', set: vi.fn() },
+  } as unknown as UnitsStore;
+}
 
 function profiles(count: number): Profile[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -18,6 +27,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
   return render(ProfilesPanel, {
     props: {
       auth: { writeBlocked: false } as AuthController,
+      units: fakeUnits(),
       profiles: profiles(1),
       activeId: 'p0',
       defaultId: undefined,
@@ -59,6 +69,16 @@ function saveButtonTag(body: string): string {
 }
 
 describe('ProfilesPanel', () => {
+  it('discloses the unit source and hides the fallback selector when the server decides', () => {
+    const serverLed = renderPanel({ units: fakeUnits('server') });
+    expect(serverLed).toContain("Following the Signal K server's unit preference");
+    expect(serverLed).not.toContain('Fallback display units');
+
+    const localLed = renderPanel({ units: fakeUnits('local') });
+    expect(localLed).toContain('does not publish a unit preference');
+    expect(localLed).toContain('Fallback display units');
+  });
+
   it('names the settings a remote update would change', () => {
     const body = renderPanel({
       remoteUpdateAvailable: true,

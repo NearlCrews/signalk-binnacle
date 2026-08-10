@@ -21,6 +21,7 @@ import { loadAisListPanel } from '$features/ais-list';
 import { loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
+import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { loadAlarmsPanel } from '$features/lookout';
@@ -179,6 +180,10 @@ interface FlatProps {
   notificationsApi: boolean;
   // Alarm audio cannot sound while a watch is armed (no priming gesture since load).
   audioBlocked?: boolean;
+  // The first-run orientation has not been dismissed on this device yet.
+  helpFirstRun?: boolean;
+  // Show the compact first-run welcome banner inviting the safety orientation.
+  showHelpWelcome?: boolean;
   weatherProvider: WeatherProvider | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
@@ -239,6 +244,12 @@ interface FlatProps {
   backFromRoutesPanel: () => void;
   // Reopen the Routes panel from the persistent route-edit strip when another panel replaced it.
   openRoutesPanel: () => void;
+  // Help panel setup routes and hooks.
+  openProfilesPanel: () => void;
+  openHelpPanel: () => void;
+  enableAlarmSound: () => void;
+  resetChartHints: () => void;
+  dismissHelpOrientation: () => void;
   closeTracksPanel: () => void;
   backFromTracksPanel: () => void;
   closeWaypointsPanel: () => void;
@@ -337,6 +348,11 @@ type ActionKey =
   | 'closeRoutesPanel'
   | 'backFromRoutesPanel'
   | 'openRoutesPanel'
+  | 'openProfilesPanel'
+  | 'openHelpPanel'
+  | 'enableAlarmSound'
+  | 'resetChartHints'
+  | 'dismissHelpOrientation'
   | 'closeTracksPanel'
   | 'backFromTracksPanel'
   | 'closeWaypointsPanel'
@@ -397,6 +413,8 @@ let {
   serverFeatures,
   notificationsApi,
   audioBlocked = false,
+  helpFirstRun = false,
+  showHelpWelcome = false,
   weatherProvider,
   collisionMute,
   collisionMuteRemainingMin,
@@ -498,6 +516,11 @@ const {
   closeRoutesPanel,
   backFromRoutesPanel,
   openRoutesPanel,
+  openProfilesPanel,
+  openHelpPanel,
+  enableAlarmSound,
+  resetChartHints,
+  dismissHelpOrientation,
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,
@@ -686,6 +709,11 @@ function alarmsPanelForAttempt() {
   return loadAlarmsPanel();
 }
 
+function helpPanelForAttempt() {
+  void lazyPanelAttempt;
+  return loadHelpPanel();
+}
+
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 // Whole-route time: the active leg's own estimate (server timeToGo, else positive-VMG) plus the
@@ -845,6 +873,17 @@ $effect(() => {
     {/if}
     {#if arrivalBanner}
       <div class="arrival-banner" role="status">Arrived at {arrivalBanner}</div>
+    {/if}
+    {#if showHelpWelcome}
+      <!-- A compact invitation, never a panel forced over the chart: a helm display must come
+           back to the chart on every boot. Dismiss persists on this device. -->
+      <div class="alert-note toast-banner" role="status">
+        <span>First time with Binnacle? Read the short safety orientation.</span>
+        <button type="button" class="btn btn-compact" onclick={openHelpPanel}>Open Help</button>
+        <button type="button" class="btn btn-compact" onclick={dismissHelpOrientation}>
+          Dismiss
+        </button>
+      </div>
     {/if}
     <!-- The toast channel carries failures and refusals only (see Toast), so it announces as an
       alert, matching the alarm styling it already wears. -->
@@ -1531,6 +1570,57 @@ $effect(() => {
             closeLabel="Close alarms panel"
             state="error"
             message="Alarms controls could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
+      {:else if activePanel === 'help'}
+        {#await helpPanelForAttempt()}
+          <LazyPanelState
+            title="Help and helm setup"
+            closeLabel="Close help"
+            state="loading"
+            message="Loading Help…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              firstRun={helpFirstRun}
+              onDismissOrientation={dismissHelpOrientation}
+              writeBlocked={auth.writeBlocked}
+              requestingWrite={auth.upgrading}
+              onRequestWrite={() => void auth.requestWriteAccess()}
+              {audioBlocked}
+              onEnableSound={enableAlarmSound}
+              onOpenLayers={() => openLayersPanel('charts')}
+              onOpenProfiles={openProfilesPanel}
+              onOpenAlarms={openAlarmsPanel}
+              onResetHints={resetChartHints}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Help and helm setup"
+                closeLabel="Close help"
+                state="error"
+                message="Help stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Help and helm setup"
+            closeLabel="Close help"
+            state="error"
+            message="Help could not load."
             onClose={closePanel}
             onBack={backToMenu}
             onRetry={retryLazyPanel}

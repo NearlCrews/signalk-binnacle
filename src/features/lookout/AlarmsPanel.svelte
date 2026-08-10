@@ -28,7 +28,7 @@ import {
   type Thresholds,
 } from '$shared/settings';
 import { type AuthController, type ConnectionPhase, isConnectionDown } from '$shared/signalk';
-import { Disclosure, InlineConfirm, SlideOver, UnitField } from '$shared/ui';
+import { Disclosure, InlineConfirm, SlideOver, UnitField, WriteAccessNote } from '$shared/ui';
 import {
   canAcknowledgeNotification,
   canSilenceNotification,
@@ -178,10 +178,11 @@ $effect(() => {
     <p class="alert-note" role="alert">{error}</p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note" role="status">
-      A write token is needed to silence or acknowledge alarms. Request a read/write token to
-      continue.
-    </p>
+    <WriteAccessNote
+      message="A write token is needed to silence or acknowledge alarms. Request a read/write token to continue."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {/if}
   {#if isConnectionDown(connectionPhase)}
     <p class="alert-note" role="alert">

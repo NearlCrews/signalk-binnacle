@@ -26,6 +26,7 @@ import {
   SavedList,
   SlideOver,
   VisibilityToggle,
+  WriteAccessNote,
 } from '$shared/ui';
 import RouteEditPlan from './RouteEditPlan.svelte';
 import type { RouteLoadState } from './route-controller.svelte';
@@ -257,10 +258,11 @@ $effect(() => {
     </p>
   {/if}
   {#if auth.writeBlocked}
-    <p class="muted-note" role="status">
-      A write token is needed to save, activate, or delete routes. Request a read/write token to
-      continue.
-    </p>
+    <WriteAccessNote
+      message="A write token is needed to save, activate, or delete routes. Request a read/write token to continue."
+      requesting={auth.upgrading}
+      onRequest={() => void auth.requestWriteAccess()}
+    />
   {/if}
 
   <p class="muted-note">
