@@ -60,7 +60,9 @@ The worker integrates spokes in a bounded polar buffer and transfers a frame onl
 arrive. If no spoke arrives for five seconds, Binnacle clears the echo and range rings and reports the
 picture as stale. Reconnect attempts use bounded jitter, and an armed reconnect backoff is the single
 reconnect authority: control deltas and other lifecycle syncs cannot preempt it, and they do not tear
-down a silent but still open stream. Hiding the overlay, putting the radar in standby,
+down a silent but still open stream. A picture that stays stale past a bounded escalation window
+forces the close a half-open socket never signals and hands the reopen to the backoff, so a dead
+upstream with no close event cannot leave the echo dark until a manual toggle. Hiding the overlay, putting the radar in standby,
 or backgrounding the page closes the stream and clears the cached picture. A standby or transmit
 change reconciled from the controls poll or a Signal K delta resyncs the stream the same way:
 standby closes it and clears the picture, and transmit reopens it. Providers spell the operational

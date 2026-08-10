@@ -140,11 +140,16 @@ not have to be corrected after the fact.
     its hosts, because the build serializes each matcher through `Function.toString` without its
     module scope, so a matcher closing over an import throws `ReferenceError` in the worker. The
     invariant: every host inlined there that the catalog also owns must be asserted against the
-    catalog, so enumerate `CHART_SOURCES` rather than pinning one matcher against one URL.
+    catalog, so enumerate `CHART_SOURCES` rather than pinning one matcher against one URL. The same
+    seam covers the privacy erase: every `cacheName` the worker config declares must appear in
+    `BINNACLE_CACHE_NAMES` from `$shared/privacy`, pinned by sw-caching's own test, or a new route's
+    cache survives a device-data erase that reports success.
   - A source carrying `maxAgeSeconds` is time-dynamic (weather radar, NWS alerts, sea surface
     temperature). It must never be offered for offline pre-warm: a stored weather frame is wrong
     before anyone sails into it, and the companion cache refuses to store it anyway. `isVolatile`
-    in `features/prewarm/estimate.ts` is the one gate.
+    in `features/prewarm/estimate.ts` is the one gate, and its exclusion is itself pinned by a
+    catalog-derived test. Time-dynamic sources the service worker does cache route to their own
+    short-lived NetworkFirst cache, never the seven-day overlay one.
   - A zero-area bbox is rejected by the enumerator rather than silently expanded to worldwide
     coverage. `coveringSources` answers a degenerate box locally, because it runs inside the draw
     library's finish callback where a throw would escape into its event dispatch.
@@ -323,15 +328,19 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
 - Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (isRecord, formatPercent,
   formatFixed, formatBytes and the unit formatters including lengthUnit, the SI converters, uuidv4,
-  and the sorted-array searches lowerBound and nearestBySorted; nearestBy stays for unsorted
-  callers), `$shared/map` (featureCollection,
+  the sorted-array searches lowerBound and nearestBySorted with nearestBy for unsorted callers,
+  HeldFlag for a condition held continuously past a window against the reactive clock (a seeded run
+  counts from construction, and reset() serves consumers with an imperative per-pass sweep, since an
+  unobserved down window cannot clear the memo), withPromiseTimeout for a promise-deadline race
+  (distinct from the aborting fetch withTimeout), and isUnsafeProviderKey, the one key-hygiene
+  predicate for provider-controlled ids and path segments), `$shared/map` (featureCollection,
   emptyFeatureCollection, setSourceData, iconOffsetExpression with CENTERED_OFFSET, removeLayersAndSources,
   setLayersVisibility, createSafetyOverlay for safety-band rasters, ensureSource and removeSharedSourceIfOrphaned
   for a MapLibre source two overlays share, setPaintProp and getPaintProp for a dynamically-computed
   paint property name (casts once through MapLibre's keyed paint types instead of re-spelling `as
   keyof AllPaintProperties` / `as never` at each call site), rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,
-  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource), meta.ts (fetchPathMeta, zoneStateFor), path-meta-cache.svelte.ts (createPathMetaCache, the shared per-session path-meta cache with a retry on the next reactive visit after any failed fetch), provider-probe.ts (fetchProviderIdList for the resources API's ARRAY `_providers` contract, and safeProviderId; history and weather keep their own keyed `_providers` readers, since the two APIs disagree on the response shape), and the NOTIFICATIONS_PREFIX export, `$shared/nav` (the rhumb helpers, plus the nav-rows list core shared by the POI search and Waypoints panels, and only those two: SEARCH_COLLATOR, compareNavIdentity, filterNavRows, sortNavRows, defaultNavSort, toggleSort, navMetrics, and MAX_NAV_ROWS; the AIS targets panel keeps its own sort in ais-rows.ts and shares only the `.nav-*` CSS family), `$shared/audio` (Alarm and GatedAlarm, which draw one shared AudioContext for the whole app rather than one per alarm, so a gesture on one alarm primes every alarm; GatedAlarm.restart re-articulates an already-sounding tone; primeAlarmAudio and alarmAudioPrimed are the gesture-priming pair), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; fakeOverlayContext for the overlay-test context, the one place the `{ map, beforeIdFor }` shape is built; createFrameFactory for SKFrames, including AIS vessels from plain records; expectBearerAuth for a captured fetch call's Authorization header), and `$entities/symbols`
+  quantizeLatLonKey for a position-keyed reactive cell, VIEWPORT_FETCH_PAD_FRACTION), `$shared/signalk` resource.ts (jsonOr, sendJson, fetchKeyedResource, the authenticated fetchAuthedJson, and postResource), meta.ts (fetchPathMeta, zoneStateFor), path-meta-cache.svelte.ts (createPathMetaCache, the shared per-session path-meta cache; a failed fetch reopens for retry after a paced RETRY_DELAY_MS window rather than on the next reactive visit, and a changed token restores every spent attempt budget), provider-probe.ts (fetchProviderIdList for the resources API's ARRAY `_providers` contract, and safeProviderId; history and weather keep their own keyed `_providers` readers, since the two APIs disagree on the response shape), and the NOTIFICATIONS_PREFIX export, `$shared/nav` (the rhumb helpers, plus the nav-rows list core shared by the POI search and Waypoints panels, and only those two: SEARCH_COLLATOR, compareNavIdentity, filterNavRows, sortNavRows, defaultNavSort, toggleSort, navMetrics, and MAX_NAV_ROWS; the AIS targets panel keeps its own sort in ais-rows.ts and shares only the `.nav-*` CSS family), `$shared/audio` (Alarm and GatedAlarm, which draw one shared AudioContext for the whole app rather than one per alarm, so a gesture on one alarm primes every alarm; GatedAlarm.restart re-articulates an already-sounding tone; primeAlarmAudio and alarmAudioPrimed are the gesture-priming pair, and priming replaces a closed context so the Enable tap can never become a permanent no-op; AlarmAudioGate reports blocked audio past a short seeded grace, with ALARM_AUDIO_BLOCKED_NOTE as the one explanation every panel renders beside it), `$shared/companion` (companionApiUrl, the companion plugin route base), `$shared/testing` (sourceFeatures for a fake map's source data, throwing on a missing source rather than masking it with an empty array; fakeOverlayContext for the overlay-test context, the one place the `{ map, beforeIdFor }` shape is built; createFakeMap, whose map carries a triggerRepaint spy and whose canvas records its listeners for custom-layer overlays; createFrameFactory for SKFrames, including AIS vessels from plain records; expectBearerAuth for a captured fetch call's Authorization header; attribute and tag for pulling one attribute or tag out of server-rendered HTML, throwing when absent), and `$entities/symbols`
   (createOverlayIconResolver, the provided-symbol overlay glue). An overlay that hand-rolls a
   `getSource(...) as { setData }` cast or a `{ type: 'FeatureCollection', features }` literal should use
   setSourceData and featureCollection instead.
