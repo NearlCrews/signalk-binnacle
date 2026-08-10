@@ -29,7 +29,7 @@ function baseProps() {
     units: new UnitsStore(),
     vessel,
     shallowAlarming: false,
-    audioBlocked: false,
+    audioState: 'ready' as import('$shared/audio').AlarmAudioState,
     onEnableSound: () => {},
     pinnedActions: [],
     clock,
@@ -157,11 +157,27 @@ describe('StatusStrip depth alarm', () => {
   });
 
   it('shows the sound-off chip with its enable action only while audio is blocked', () => {
-    const blocked = body({ ...baseProps(), audioBlocked: true });
+    const blocked = body({ ...baseProps(), audioState: 'blocked' as const });
     expect(blocked).toContain('Sound off');
     expect(blocked).toContain('Enable');
 
     const healthy = body(baseProps());
     expect(healthy).not.toContain('Sound off');
+    expect(healthy).not.toContain('Sound unavailable');
+  });
+
+  it('offers Retry for a failed audio setup instead of a dead Enable', () => {
+    const failed = body({ ...baseProps(), audioState: 'failed' as const });
+    expect(failed).toContain('Sound unavailable');
+    expect(failed).toContain('Retry');
+    expect(failed).not.toContain('>Enable<');
+  });
+
+  it('states that audible alarms are unavailable with no action when unsupported', () => {
+    const unsupported = body({ ...baseProps(), audioState: 'unsupported' as const });
+    expect(unsupported).toContain('Sound unavailable');
+    expect(unsupported).toContain('Audible alarms are unavailable on this display');
+    expect(unsupported).not.toContain('>Enable<');
+    expect(unsupported).not.toContain('>Retry<');
   });
 });

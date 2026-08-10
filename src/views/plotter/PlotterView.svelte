@@ -18,15 +18,14 @@ import type { OwnVessel } from '$entities/vessel';
 import type { WaypointsStore } from '$entities/waypoint';
 import type { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
-import { AnchorStrip, loadAnchorPanel } from '$features/anchor-watch';
+import { loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
-import { AlarmStrip, DangerStrip, loadAlarmsPanel } from '$features/lookout';
+import { loadAlarmsPanel } from '$features/lookout';
 import { loadRadarControls, radarAreaChartInstruction } from '$features/marine-radar';
 import { loadMeasureStrip } from '$features/measure';
-import { MobStrip } from '$features/mob';
 import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
 import { loadPoiSearchPanel, type Poi } from '$features/poi-search';
@@ -70,6 +69,7 @@ import {
   type MapCommands,
   type UserChartRegistrar,
 } from '$widgets/chart-canvas';
+import { SafetyAlertStack } from '$widgets/safety-alert-stack';
 import { loadWeatherMap } from '$widgets/weather-map';
 
 type AnchorController = ReturnType<typeof import('$features/anchor-watch').createAnchorController>;
@@ -528,6 +528,11 @@ function retryLazyPanel(): void {
   lazyPanelAttempt += 1;
 }
 
+// The secondary bottom stack sits directly above the emergency rail, whose height depends on the
+// active conditions, so the stack's bottom offset tracks the measured rail height.
+let railHeight = $state(0);
+const railClearance = $derived(railHeight > 0 ? `calc(${railHeight}px + var(--space-2))` : '0px');
+
 function closeWeatherPanel(): void {
   weatherPanelOpen = false;
 }
@@ -822,7 +827,11 @@ $effect(() => {
       <div class="alert-note alert-note--filled toast-banner" role="alert">{toastMessage}</div>
     {/if}
   </div>
-  <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
+  <div
+    class="bottom-stack"
+    class:above-weather={weatherPanelOpen}
+    style:--rail-clearance={railClearance}
+  >
     <div class="secondary-strips">
       {#if timeTravel.active}
         {#await historyStripForAttempt()}
@@ -903,27 +912,34 @@ $effect(() => {
         {/await}
       {/if}
     </div>
-    <div class="safety-strips">
-      <AnchorStrip {anchor} {units} onRaise={() => void anchorController.onRaise()} />
-      <DangerStrip {collision} muted={collisionMute.active} onToggleMute={toggleCollisionMute} />
-      <MobStrip
-        {mob}
-        {units}
-        onSteer={mobController.onSteer}
-        onCancel={mobController.onCancel}
-        publishWarning={mobController.mobPublishWarning}
-      />
-      <AlarmStrip
-        notifications={genericAlarms}
-        sounding={genericSounding}
-        locallyMuted={genericLocallyMuted}
-        writeBlocked={auth.writeBlocked}
-        onSilence={notificationsApi ? onSilenceNotification : undefined}
-        onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
-        onMuteHere={muteGenericHere}
-        onOpenAlarms={openAlarmsPanel}
-      />
-    </div>
+  </div>
+  <!-- The emergency rail: outside the capped bottom stack, never clipped, never lifted by the
+       Forecast panel, and above it in the z-order, so Forecast yields to safety chrome instead of
+       displacing it. -->
+  <div class="safety-rail" bind:clientHeight={railHeight}>
+    <SafetyAlertStack
+      {units}
+      {anchor}
+      onAnchorRaise={() => void anchorController.onRaise()}
+      {collision}
+      collisionMuted={collisionMute.active}
+      onToggleCollisionMute={toggleCollisionMute}
+      {mob}
+      onMobSteer={mobController.onSteer}
+      onMobCancel={mobController.onCancel}
+      mobPublishWarning={mobController.mobPublishWarning}
+      mobActiveCourse={courseGuidance.active
+        ? (courseGuidance.nextPointName ?? 'the current destination')
+        : undefined}
+      {genericAlarms}
+      {genericSounding}
+      {genericLocallyMuted}
+      writeBlocked={auth.writeBlocked}
+      onSilence={notificationsApi ? onSilenceNotification : undefined}
+      onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+      onMuteGenericHere={muteGenericHere}
+      onOpenAlarms={openAlarmsPanel}
+    />
   </div>
   {#if selectedNote && noteLoader}
     <div class="panel-slot panel-slot--end">
@@ -1758,12 +1774,12 @@ $effect(() => {
   padding: var(--space-2) var(--space-4);
   box-shadow: var(--shadow-overlay);
 }
-/* Keep safety strips pinned above the reachable bottom edge. Lower-priority review, navigation, and
-   tool strips scroll in their own tier, so a pileup can never clip MOB, collision, or anchor actions
-   behind History or Measure. */
+/* The review, navigation, and tool strips scroll in their own capped tier; the emergency rail
+   below is a separate uncapped surface, so a pileup here can never clip MOB, collision, or anchor
+   actions. */
 .bottom-stack {
   position: absolute;
-  inset-block-end: var(--space-3);
+  inset-block-end: calc(var(--space-3) + var(--rail-clearance, 0px));
   inset-inline: var(--space-3);
   inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
   margin-inline: auto;
@@ -1776,22 +1792,37 @@ $effect(() => {
   pointer-events: auto;
   z-index: var(--z-safety-strips);
 }
-.secondary-strips,
-.safety-strips {
+.secondary-strips {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
   inline-size: 100%;
-}
-.secondary-strips {
   min-block-size: 0;
   overflow-y: auto;
 }
-.safety-strips {
-  flex: none;
-}
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
+}
+/* The emergency rail: viewport-fixed at the reachable bottom edge, deliberately without a height
+   cap or overflow clipping, and NOT lifted while Forecast is open; it stacks above the Forecast
+   panel instead, so safety chrome is never displaced off-screen. The status strip below the chart
+   host absorbs the bottom safe-area inset, and the inline insets absorb the side ones. */
+.safety-rail {
+  position: absolute;
+  inset-block-end: var(--space-3);
+  inset-inline: calc(var(--space-3) + env(safe-area-inset-left, 0px))
+    calc(var(--space-3) + env(safe-area-inset-right, 0px));
+  inline-size: min(calc(28rem + 2 * var(--space-3)), calc(100% - 2 * var(--space-3)));
+  max-inline-size: calc(
+    100% -
+    2 *
+    var(--space-3) -
+    env(safe-area-inset-left, 0px) -
+    env(safe-area-inset-right, 0px)
+  );
+  margin-inline: auto;
+  pointer-events: auto;
+  z-index: var(--z-safety-strips);
 }
 </style>

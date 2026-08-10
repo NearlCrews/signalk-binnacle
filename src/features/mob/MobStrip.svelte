@@ -12,6 +12,9 @@ interface Props {
   // The controller's warning that the boat-wide announcement may not have reached the server, so
   // the crew never believes every station alarmed when only this display did.
   publishWarning?: string;
+  // The name of the destination the vessel is currently navigating to, when a course is active,
+  // so the steer confirmation can say what it replaces.
+  activeCourse?: string;
   // Set the Signal K course destination to the mark, the deliberate second tap (never automatic,
   // since a coupled autopilot may follow the course).
   onSteer: () => void;
@@ -19,16 +22,50 @@ interface Props {
   onCancel: () => void;
 }
 
-const { mob, units, publishWarning, onSteer, onCancel }: Props = $props();
+const { mob, units, publishWarning, activeCourse, onSteer, onCancel }: Props = $props();
 
 // Cancel wipes the splash point boat-wide, so it arms a confirm step instead of firing on a
 // single tap; the arm times out back to plain Cancel on its own.
 const cancelArm = new ConfirmArm();
-onDestroy(() => cancelArm.disarm());
+// Steer replaces the active course in one navigation command a coupled autopilot may follow, so
+// it arms the same way: the first tap explains, only the second commits.
+const steerArm = new ConfirmArm();
+onDestroy(() => {
+  cancelArm.disarm();
+  steerArm.disarm();
+});
 
 function tapCancel(): void {
   if (cancelArm.tap()) onCancel();
 }
+
+function tapSteer(): void {
+  if (steerArm.tap()) onSteer();
+}
+
+function disarmSteerOnEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && steerArm.armed) {
+    event.stopPropagation();
+    steerArm.disarm();
+  }
+}
+
+// A steer armed against a position that has since been lost, or against a navigation state that
+// changed under it, is confirming a different action than the one explained: disarm.
+$effect(() => {
+  if (!mob.position) steerArm.disarm();
+});
+let lastCourse: string | undefined;
+$effect(() => {
+  if (activeCourse !== lastCourse) steerArm.disarm();
+  lastCourse = activeCourse;
+});
+
+const steerWarning = $derived(
+  activeCourse === undefined
+    ? 'Sets the course to the MOB mark. A coupled autopilot may turn.'
+    : `Replaces navigation to ${activeCourse} with the MOB mark. A coupled autopilot may turn.`,
+);
 </script>
 
 {#if mob.active}
@@ -44,8 +81,14 @@ function tapCancel(): void {
         <span class="note ack-tag">Acknowledged</span>
       {/if}
       <div class="actions actions--safety">
-        <button type="button" class="ack ack--primary" disabled={!mob.position} onclick={onSteer}>
-          Steer to MOB
+        <button
+          type="button"
+          class="ack ack--primary"
+          disabled={!mob.position}
+          onclick={tapSteer}
+          onkeydown={disarmSteerOnEscape}
+        >
+          {steerArm.armed ? 'Confirm steer?' : 'Steer to MOB'}
         </button>
         {#if !mob.acknowledged}
           <button type="button" class="ack" onclick={() => mob.acknowledge()}>Acknowledge</button>
@@ -69,6 +112,12 @@ function tapCancel(): void {
         >
       {/if}
     </div>
+    {#if steerArm.armed}
+      <!-- Polite, not assertive: the armed explanation must not restart the MOB announcement. -->
+      <div class="row">
+        <span class="alert-note" role="status">{steerWarning}</span>
+      </div>
+    {/if}
     {#if publishWarning}
       <!-- Polite, not assertive: the MOB channel already holds the assertive region, and this
            caveat must not restart the bearing-and-range announcement. -->

@@ -32,7 +32,7 @@ let {
   units,
   vessel,
   shallowAlarming,
-  audioBlocked,
+  audioState,
   onEnableSound,
   pinnedActions,
   editing = false,
@@ -50,7 +50,9 @@ let {
   units: UnitsStore;
   vessel: OwnVessel;
   shallowAlarming: boolean;
-  audioBlocked: boolean;
+  // 'ready' hides the chip; 'blocked' offers Enable (a gesture helps); 'failed' offers Retry; and
+  // 'unsupported' states that audible alarms are unavailable on this display, with no dead action.
+  audioState: import('$shared/audio').AlarmAudioState;
   onEnableSound: () => void;
   pinnedActions: MenuItem[];
   editing?: boolean;
@@ -107,12 +109,34 @@ function depthTitle(reading: DepthReading, alarming: boolean): string {
     {#if fixStale}
       <span class="readout fix-lost" role="status" aria-live="polite">No GPS fix</span>
     {/if}
-    {#if audioBlocked}
+    {#if audioState === 'blocked'}
       <!-- role=status makes the chip's mount the polite announcement that alarm audio is off; the
            Enable tap is a user gesture, so it primes the shared context directly. -->
       <span class="readout sound-off" role="status" aria-live="polite">
         Sound off
         <button type="button" class="btn btn-compact" onclick={onEnableSound}>Enable</button>
+      </span>
+    {:else if audioState === 'failed'}
+      <!-- Audio setup failed outright; a Retry re-attempts context construction, which can
+           recover once the audio device returns. -->
+      <span
+        class="readout sound-off"
+        role="status"
+        aria-live="polite"
+        title="Alarm audio failed to start; retry once the audio device is back"
+      >
+        Sound unavailable
+        <button type="button" class="btn btn-compact" onclick={onEnableSound}>Retry</button>
+      </span>
+    {:else if audioState === 'unsupported'}
+      <!-- No Web Audio API here at all: state the fact plainly, with no dead action. -->
+      <span
+        class="readout sound-off"
+        role="status"
+        aria-live="polite"
+        title="Audible alarms are unavailable on this display; alerts remain visual only"
+      >
+        Sound unavailable
       </span>
     {/if}
     {#if connectionPhase === 'open'}

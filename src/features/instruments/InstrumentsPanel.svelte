@@ -1,5 +1,5 @@
 <script lang="ts">
-import { untrack } from 'svelte';
+import { type Snippet, untrack } from 'svelte';
 import { CustomizeToggle, dialog, PanelHeader, trapFocus } from '$shared/ui';
 import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
@@ -17,6 +17,11 @@ interface Props {
   onViewTrend?: (id: string) => void;
   onTrendFocusRestored?: () => void;
   fullscreen?: boolean;
+  // The emergency action the shell injects (the MOB trigger): while the panel is a full-screen
+  // modal, aria-modal removes the topbar from the accessibility tree, so the trigger must live
+  // inside the dialog subtree. Injected rather than imported so instruments never reaches into
+  // the mob feature.
+  emergencyAction?: Snippet;
 }
 
 const {
@@ -27,6 +32,7 @@ const {
   onViewTrend,
   onTrendFocusRestored,
   fullscreen = false,
+  emergencyAction,
 }: Props = $props();
 
 let customizing = $state(false);
@@ -78,6 +84,9 @@ $effect(() => {
     onClose={() => controller.setOpen(false)}
   >
     {#snippet headerExtra()}
+      {#if fullscreen && emergencyAction}
+        {@render emergencyAction()}
+      {/if}
       <CustomizeToggle
         object="instruments"
         editing={customizing}

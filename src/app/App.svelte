@@ -123,7 +123,13 @@ import {
   WEATHER_LAYER_IDS,
   type WeatherProvider,
 } from '$features/weather';
-import { AlarmAudioGate, alarmAudioPrimed, GatedAlarm, primeAlarmAudio } from '$shared/audio';
+import {
+  AlarmAudioGate,
+  AlarmCoordinator,
+  alarmAudioPrimed,
+  GatedAlarm,
+  primeAlarmAudio,
+} from '$shared/audio';
 import {
   type Bbox4,
   bboxContainsPoint,
@@ -193,6 +199,7 @@ import { createFollowController } from './follow-controller.svelte';
 import LiveRegions from './LiveRegions.svelte';
 import { createNotificationsController } from './notifications-controller.svelte';
 import StatusStrip from './StatusStrip.svelte';
+import { createSafetyAnnunciator } from './safety-annunciator.svelte';
 import { createStreamController } from './stream-controller.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
@@ -228,7 +235,14 @@ const thresholds = createThresholds();
 // Anchored own vessel treats moored and swinging boats as non-hazards, silencing the busy-anchorage
 // nuisance; the callback reads anchor (constructed below) lazily, only from inside the assessment.
 const collision = new CollisionAssessment(vessel, aisTargets, thresholds, () => anchor.watching);
-const lookoutAlarm = new LookoutAlarm();
+// Every Binnacle-owned tone routes through one coordinator, so simultaneous alarms cannot sum at
+// the speaker and priority is deterministic: MOB and an escalating close-quarters collision are
+// co-equal and interleave; emergency outranks alarm; arrival is a courtesy that never preempts a
+// safety condition. Silencing stays at each call site.
+const alarmCoordinator = new AlarmCoordinator();
+const lookoutAlarm = new LookoutAlarm(
+  alarmCoordinator.channel({ id: 'collision', rank: () => (collision.escalating ? 0 : 1) }),
+);
 // The collision mute is session-only with a bounded auto-expiring window (see CollisionMute): a mute
 // set in a crowded anchorage must never carry silently into the next passage or across a reload, and
 // a close, imminent contact escalates past it. Deliberately not a PersistedValue and not part of a
@@ -286,18 +300,23 @@ const notificationsStore = new NotificationsStore(store);
 // The anchor watch: server-driven when the anchoralarm plugin answers, client-side otherwise. The
 // drag alarm mirrors the collision split: an audible tone here, the strip and live region below.
 const anchor = new AnchorWatch(store, vessel, clock);
-const anchorAlarm = new GatedAlarm(ANCHOR_TONE);
+const anchorAlarm = new GatedAlarm(
+  ANCHOR_TONE,
+  alarmCoordinator.channel({ id: 'anchor', rank: () => 1 }),
+);
 
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
 // raises the recovery strip; a remote station's notifications.mob raises it here too.
 const mob = new MobStore(store, vessel, clock);
-// The status-strip chip alerts on blocked audio only while something audible is armed: a
+// The status-strip chip alerts on degraded audio only while something audible is armed: a
 // client-side anchor or MOB watch, or an open stream whose shallow, collision, and generic
-// alarms could sound. The panels keep rendering the raw audioBlocked as an informational note.
-const soundOffAlert = $derived(
-  audioBlocked && (anchor.watching || mob.active || isConnectionOpen(store.connection.phase)),
+// alarms could sound. The panels keep rendering the raw audioBlocked (gesture-recoverable only)
+// as an informational note, since their tap-to-enable copy is wrong for the terminal grades.
+const soundAlertArmed = $derived(
+  anchor.watching || mob.active || isConnectionOpen(store.connection.phase),
 );
-const mobAlarm = new GatedAlarm(MOB_TONE);
+const audioChipState = $derived(soundAlertArmed ? alarmAudioGate.state : 'ready');
+const mobAlarm = new GatedAlarm(MOB_TONE, alarmCoordinator.channel({ id: 'mob', rank: () => 0 }));
 
 // The measure tool: armed from the menu, fed by chart taps, read by its overlay and strip.
 const measure = new MeasureStore();
@@ -317,7 +336,10 @@ const routeStore = new RouteStore();
 // Active-navigation guidance: prefers the server Course API and computes the derived values
 // client-side when the calcValues provider is absent. The arrival alarm sounds at the waypoint.
 const courseGuidance = new CourseGuidance(store, vessel, clock);
-const arrivalAlarm = new GatedAlarm(ARRIVAL_TONE);
+const arrivalAlarm = new GatedAlarm(
+  ARRIVAL_TONE,
+  alarmCoordinator.channel({ id: 'arrival', rank: () => 5, courtesy: true }),
+);
 const arrivalMuted = new PersistedValue<boolean>(
   binnacleStorageKey('arrivalMuted'),
   false,
@@ -1202,13 +1224,14 @@ const shallowController = createShallowController({
   units,
   origin,
   getToken: () => chartsToken,
+  alarm: alarmCoordinator.channel({ id: 'shallow', rank: () => 2 }),
 });
 
 // The generic server-alarm channel: any inbound alarm or emergency grade notification outside the
 // five dedicated hazards sounds through this one alarm and surfaces on the AlarmStrip, the Alarms
 // badge, and the assistive channel. The controller drives it from the shared generic list. It is
 // constructed before the menu registry so the Alarms entry can carry the live count.
-const genericAlarm = new GenericAlarm();
+const genericAlarm = new GenericAlarm(alarmCoordinator.channel({ id: 'generic', rank: () => 2 }));
 
 const notificationsController = createNotificationsController({
   origin,
@@ -1239,6 +1262,38 @@ const toggleCollisionMute = notificationsController.toggleCollisionMute;
 const onSilenceNotification = notificationsController.onSilenceNotification;
 const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
 const muteGenericHere = notificationsController.muteGenericHere;
+
+// Full-screen Instruments is a modal whose aria-modal removes the rest of the app, emergency rail
+// included, from the accessibility tree, and no sibling subtree can be exempted from it. So an
+// alarm-grade safety event closes the full-screen dock outright, returning the rail and its
+// actions to the focus and screen-reader path at the moment they matter. Mirrors time travel's
+// exit-on-danger. The docked (non-modal) dock is unaffected.
+const emergencySafetyActive = $derived(
+  mob.active ||
+    (collision.assessment.worst === 'danger' && (!collision.suppressed || collision.escalating)) ||
+    anchor.dragging ||
+    anchor.fixLostAlarm ||
+    genericAlarms.some(
+      (notification) => notification.state === 'emergency' || notification.state === 'alarm',
+    ),
+);
+$effect(() => {
+  if (!emergencySafetyActive || !instrumentsFullScreen) return;
+  if (untrack(() => instruments.open)) untrack(() => instruments.setOpen(false));
+});
+
+// The one spoken safety channel: structured events in fixed priority order, worst-first speech,
+// polite delivery for the rest. The per-channel alert strings stay owned by their controllers.
+const safetyAnnunciator = createSafetyAnnunciator();
+$effect(() => {
+  safetyAnnunciator.update([
+    { id: 'mob', rank: 0, text: mobController.mobAlert },
+    { id: 'collision', rank: 1, text: collisionAlert },
+    { id: 'anchor', rank: 2, text: anchorController.anchorAlert },
+    { id: 'shallow', rank: 3, text: shallowController.alert },
+    { id: 'notification', rank: 4, text: genericNotificationAlert },
+  ]);
+});
 
 // The app menu's options, grouped into helm-first intent groups: chart controls and navigation,
 // safety, weather, instruments, optional offline charts, and settings. Adding an option is a single
@@ -2146,6 +2201,8 @@ onDestroy(() => {
   shallowController.stop();
   arrivalAlarm.stop();
   genericAlarm.stop();
+  alarmCoordinator.dispose();
+  safetyAnnunciator.dispose();
   setWriteOutcomeListener(undefined);
   auth.stop();
   profilesController.dispose();
@@ -2271,11 +2328,8 @@ const plotterActions = {
 
 <main class="binnacle-shell">
   <LiveRegions
-    collision={collisionAlert}
-    anchor={anchorController.anchorAlert}
-    mob={mobController.mobAlert}
-    shallow={shallowController.alert}
-    notification={genericNotificationAlert}
+    safety={safetyAnnunciator.assertive}
+    safetyQueue={safetyAnnunciator.polite}
     mute={muteAlert}
     companion={companionAnnounce}
   />
@@ -2490,6 +2544,21 @@ const plotterActions = {
     </aside>
   {/snippet}
 
+  {#snippet instrumentsMobAction()}
+    <!-- The same MOB store and trigger flow as the topbar button, rendered inside the modal
+         dialog subtree so full-screen Instruments always carries a reachable MOB initiation.
+         Fly-to-mark closes the dock first, or the chart movement happens invisibly under it. -->
+    <MobButton
+      {mob}
+      onTrigger={mobController.onTrigger}
+      onLocate={(position) => {
+        instruments.setOpen(false);
+        flyToPosition(position);
+      }}
+      writeBlocked={auth.writeBlocked}
+    />
+  {/snippet}
+
   {#if instruments.open}
     {#await instrumentsPanelForAttempt()}
       {@render instrumentsState('Loading Instruments controls…')}
@@ -2499,6 +2568,7 @@ const plotterActions = {
           controller={instruments}
           deps={{ vessel, store, units, clock, course: courseGuidance }}
           fullscreen={instrumentsFullScreen}
+          emergencyAction={instrumentsMobAction}
           initialDetailId={trendReturnInstrumentId}
           restoreTrendFocusId={trendReturnInstrumentId}
           onViewTrend={openFocusedTrend}
@@ -2528,7 +2598,7 @@ const plotterActions = {
     {units}
     {vessel}
     shallowAlarming={shallowController.alarming}
-    audioBlocked={soundOffAlert}
+    audioState={audioChipState}
     onEnableSound={primeAlarmAudio}
     pinnedActions={resolvedPinned}
     editing={menuEditing}

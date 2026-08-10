@@ -1,42 +1,25 @@
 <script lang="ts">
-// The assertive and polite aria live regions. Four separate keyed assertive regions (collision,
-// anchor, MOB, shallow) keep a distinct screen-reader region identity per channel, so a drag alarm
-// is announced even while a collision alert holds another region; the mute note and the companion
-// health note are polite. The .visually-hidden utility is global (src/styles/a11y.css), so no scoped
-// style is needed here.
+// The aria live regions. One assertive safety region, fed by the priority-aware annunciator so
+// simultaneous hazards speak worst-first and a later low-priority notification can never
+// interrupt an urgent announcement; one polite region drains the annunciator's queued secondary
+// summaries; the mute note and the companion health note stay polite and separate. The
+// .visually-hidden utility is global (src/styles/a11y.css), so no scoped style is needed here.
 let {
-  collision,
-  anchor,
-  mob,
-  shallow,
-  notification,
+  safety,
+  safetyQueue,
   mute,
   companion,
 }: {
-  collision: string;
-  anchor: string;
-  mob: string;
-  shallow: string;
-  notification: string;
+  safety: string;
+  safetyQueue: string;
   mute: string;
   companion: string;
 } = $props();
 </script>
 
 <div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
-  {collision}
+  {safety}
 </div>
-<div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
-  {anchor}
-</div>
-<div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
-  {mob}
-</div>
-<div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
-  {shallow}
-</div>
-<div class="visually-hidden" role="alert" aria-live="assertive" aria-atomic="true">
-  {notification}
-</div>
+<div class="visually-hidden" aria-live="polite" aria-atomic="true">{safetyQueue}</div>
 <div class="visually-hidden" aria-live="polite" aria-atomic="true">{mute}</div>
 <div class="visually-hidden" aria-live="polite" aria-atomic="true">{companion}</div>

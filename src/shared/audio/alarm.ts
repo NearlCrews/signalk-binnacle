@@ -37,12 +37,32 @@ export interface AlarmControl {
 // the context it touched, so a per-instance context would leave later alarms suspended and silent
 // after the single priming gesture has been spent.
 let sharedCtx: AudioContext | undefined;
+// The last construction attempt threw (an audio-device fault, a policy refusal). Cleared by a
+// later successful construction, so a Retry after the device returns recovers.
+let constructionFailed = false;
 
 function sharedContext(): AudioContext | undefined {
-  if (!sharedCtx && typeof window !== 'undefined' && window.AudioContext) {
-    sharedCtx = new window.AudioContext();
+  if (!sharedCtx && alarmAudioSupported()) {
+    try {
+      sharedCtx = new window.AudioContext();
+      constructionFailed = false;
+    } catch {
+      constructionFailed = true;
+    }
   }
   return sharedCtx;
+}
+
+// Whether this display has the Web Audio API at all. False is terminal: no retry can help, and
+// audible alarms are unavailable here.
+export function alarmAudioSupported(): boolean {
+  return typeof window !== 'undefined' && typeof window.AudioContext === 'function';
+}
+
+// Whether the most recent context construction attempt failed. Distinct from unsupported: a retry
+// (which attempts construction again) can help.
+export function alarmAudioConstructionFailed(): boolean {
+  return constructionFailed;
 }
 
 function resumeContext(ctx: AudioContext): void {

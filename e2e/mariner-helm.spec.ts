@@ -172,9 +172,8 @@ test('stream fixture feeds the worker: subscriptions arrive and deltas render', 
 });
 
 test('P0: MOB actions stay reachable with Forecast open at 320x568', async ({ page }) => {
-  // SAF-01: the bottom stack lifts by the full Forecast height and displaces the MOB strip above
-  // the viewport. Flips green in Task 1.1; remove the marker there.
-  test.fail();
+  // SAF-01: the emergency rail must never be displaced by the Forecast panel; it stacks above it
+  // at the viewport bottom instead.
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);
   const strip = await raiseMob(page);
@@ -183,33 +182,46 @@ test('P0: MOB actions stay reachable with Forecast open at 320x568', async ({ pa
   await expectMobActionsReachable(strip);
 });
 
-test('P0: four hazard families keep every primary action reachable at 320x568', async ({
+test('P0: four hazard families stay reachable through the emergency rail at 320x568', async ({
   page,
 }) => {
-  // SAF-01: the safety tier cannot shrink inside the 60dvh overflow-hidden cap, so the pileup
-  // clips the last strips. Flips green in Task 1.1; remove the marker there.
-  test.fail();
+  // SAF-01: the rail shows the most urgent condition in full, and every other active hazard as a
+  // 44-pixel chip that promotes it on tap, so a pileup can never clip a response action.
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
   await sendDelta(page, CLOSING_TARGET, TARGET_CONTEXT);
   await sendDelta(page, [...ANCHOR_DRAG, MOB_ALARM, GENERIC_ALARM]);
 
+  // MOB outranks everything: its full strip and response actions are on screen.
   const mob = page.getByRole('complementary', { name: 'Man overboard' });
-  const anchor = page.getByRole('complementary', { name: 'Anchor alarm' });
-  const collision = page.getByRole('complementary', { name: /Collision (danger|warning)/ });
-  const generic = page.locator('.bottom-strip', {
-    has: page.getByRole('button', { name: 'Open Alarms' }),
-  });
   await expect(mob).toBeVisible();
-  await expect(anchor).toBeVisible();
-  await expect(collision).toBeVisible();
-  await expect(generic).toBeVisible();
-
   await expectMobActionsReachable(mob);
-  await expectActionReachable(anchor.getByRole('button', { name: /Raise/ }));
-  await expectActionReachable(collision.getByRole('button', { name: /Mute/ }));
-  await expectActionReachable(generic.getByRole('button', { name: 'Open Alarms' }));
+
+  // Every other hazard family is visibly represented by a reachable 44-pixel chip.
+  const collisionChip = page.getByRole('button', { name: /^Collision danger.*show details$/ });
+  const anchorChip = page.getByRole('button', { name: /^Anchor alarm.*show details$/ });
+  const alarmsChip = page.getByRole('button', { name: /^Alarms.*show details$/ });
+  for (const chip of [collisionChip, anchorChip, alarmsChip]) {
+    await expectActionReachable(chip);
+    const box = await chip.boundingBox();
+    if (!box) throw new Error('chip did not lay out');
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+
+  // A live helm keeps receiving fixes; refresh the geometry so the 10-second freshness windows
+  // cannot stand the collision assessment down mid-test, which is correct product behavior.
+  await sendDelta(page, OWN_FIX);
+  await sendDelta(page, CLOSING_TARGET, TARGET_CONTEXT);
+
+  // Tapping a chip promotes its condition: the collision response actions become reachable, and
+  // MOB demotes to a chip without leaving the rail.
+  await collisionChip.click();
+  const collision = page.getByRole('complementary', { name: 'Collision danger' });
+  await expect(collision).toBeVisible();
+  await expectActionReachable(collision.getByRole('button', { name: 'Mute' }));
+  await expectActionReachable(collision.getByRole('button', { name: 'Acknowledge' }));
+  await expectActionReachable(page.getByRole('button', { name: /^Man overboard.*show details$/ }));
 });
 
 test('MOB actions stay reachable in landscape 568x320', async ({ page }) => {
@@ -237,9 +249,8 @@ test('MOB actions stay reachable at 200-percent text', async ({ page }) => {
 });
 
 test('full-screen Instruments keeps MOB initiation and response reachable', async ({ page }) => {
-  // SAF-02: Instruments at phone width declares aria-modal and traps focus, leaving the MOB
-  // button and strip outside the modal. Flips green in Tasks 1.1 and 1.2; remove the marker there.
-  test.fail();
+  // SAF-02: the full-screen dock carries an in-dialog MOB trigger, and an alarm-grade safety
+  // event closes the modal outright so the emergency rail returns to the focus and reader path.
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
@@ -248,16 +259,21 @@ test('full-screen Instruments keeps MOB initiation and response reachable', asyn
     .locator('#app-menu-launcher')
     .getByRole('button', { name: 'Instrument dock', exact: true })
     .click();
-  await expect(page.getByRole('dialog', { name: 'Instruments' })).toBeVisible();
-
-  // A MOB trigger must exist inside the modal focus scope.
   const dialog = page.getByRole('dialog', { name: 'Instruments' });
-  await expect(dialog.getByRole('button', { name: /MOB|Man overboard/ })).toBeVisible();
+  await expect(dialog).toBeVisible();
 
-  // A raised MOB must surface reachable response actions despite the modal.
+  // The MOB trigger lives inside the modal focus scope, at full touch size.
+  const trigger = dialog.getByRole('button', { name: 'Mark man overboard here' });
+  await expect(trigger).toBeVisible();
+  const triggerBox = await trigger.boundingBox();
+  if (!triggerBox) throw new Error('MOB trigger did not lay out');
+  expect(triggerBox.height).toBeGreaterThanOrEqual(44);
+
+  // A raised MOB closes the modal, and the rail's response actions become reachable.
   await sendDelta(page, [MOB_ALARM]);
   const strip = page.getByRole('complementary', { name: 'Man overboard' });
   await expect(strip).toBeVisible();
+  await expect(dialog).toBeHidden();
   await expectMobActionsReachable(strip);
 });
 
