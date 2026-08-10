@@ -20,6 +20,7 @@ export {
   sortNavRows,
   toggleSort,
 } from './nav-rows';
+export { crossesLocalMidnight, plannedArrivalMs } from './passage-plan';
 export {
   etaSeconds,
   rhumbBearingRad,

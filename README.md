@@ -77,8 +77,9 @@ Binnacle ships its full feature set as a Signal K webapp:
 - **Routing:** draw and save routes as Signal K resources, or tap **Go to here** (long-press or
   right-click the chart) to navigate straight to a point. Follow a route with a nav strip (cross-track,
   distance, bearing, velocity made good, and time to go) over the v2 Course API, with an arrival alarm
-  and extent-aware skip-waypoint controls. A plan speed turns the route into a **passage plan** with
-  per-waypoint and whole-route arrival times. Routes **import and export as GPX** to move between
+  and extent-aware skip-waypoint controls. A plan speed and an editable departure time turn the route into a
+  **passage plan** with a named leg table: cumulative elapsed time and a local-clock arrival at every
+  endpoint (dated when it lands past midnight), plus the whole-route passage duration. Routes **import and export as GPX** to move between
   Binnacle and other chartplotters and MFDs, and saving an active route refreshes the server's Course
   API without dropping the current route list during a transient read failure.
 - **Profiles:** keep named helm setups containing the theme, chart and weather layers, collision

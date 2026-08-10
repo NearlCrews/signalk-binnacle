@@ -2,6 +2,7 @@
 import { litLegIndices, type Route, type RouteHighlight, routeLegs } from '$entities/route';
 import {
   formatBearingOr,
+  formatClockTime,
   formatDuration,
   formatDurationParts,
   formatNm,
@@ -9,7 +10,7 @@ import {
   metersPerSecondToKnots,
   PLACEHOLDER,
 } from '$shared/lib';
-import { etaSeconds } from '$shared/nav';
+import { crossesLocalMidnight, etaSeconds, plannedArrivalMs } from '$shared/nav';
 import { MAX_PLANNING_SPEED_KN, type PersistedValue } from '$shared/settings';
 import { UnitField } from '$shared/ui';
 
@@ -35,6 +36,20 @@ const planSpeedMps = $derived(Number.isFinite(planningSpeed.value) ? planningSpe
 const boundedPlanningSpeed = $derived(
   Math.round((metersPerSecondToKnots(planSpeedMps) ?? 0) * 100) / 100,
 );
+
+// The editable departure. Component state seeded to now on each mount, deliberately never
+// persisted: a stale date silently carried between unrelated plans would skew every arrival.
+function toLocalInputValue(epochMs: number): string {
+  const at = new Date(epochMs);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+let departureLocal = $state(toLocalInputValue(Date.now()));
+const departureMs = $derived.by(() => {
+  const parsed = new Date(departureLocal).getTime();
+  return Number.isFinite(parsed) ? parsed : undefined;
+});
+
 // Each leg's distance, bearing, and the cumulative distance to reach that leg's end waypoint, so the
 // plan reads as a leg table the way a navigator lays out a passage, updating live as waypoints are
 // dragged or inserted. The per-leg passage times are layered on at render so this geometry walk does
@@ -54,12 +69,30 @@ const litLegs = $derived(new Set(litLegIndices(highlight, wptCount)));
 // The whole-route distance is the last leg's cumulative, so the total and the table cannot drift.
 const workingDistanceMeters = $derived(workingLegs.at(-1)?.cumulativeMeters ?? 0);
 const workingDistanceNm = $derived(formatNm(workingDistanceMeters));
-// The whole-passage time at the planning speed, shown alongside the total distance. Split into value
-// and unit so a minutes reading lines its "min" up in the unit column under the distance's "nm".
-const totalTime = $derived.by(() => {
+// The whole-passage duration at the planning speed. Named a duration, never bare "Time".
+const totalDuration = $derived.by(() => {
   const seconds = etaSeconds(workingDistanceMeters, planSpeedMps);
-  return seconds == null ? null : formatDurationParts(seconds);
+  return seconds === undefined ? null : formatDurationParts(seconds);
 });
+
+// A planned local-clock arrival, with the date named whenever it crosses local midnight so an
+// overnight arrival cannot read earlier than the departure. Planned only: the live route ETA on
+// the nav strip is a different, separately labeled number.
+function arrivalText(cumulativeMeters: number): string {
+  if (departureMs === undefined) return PLACEHOLDER;
+  const at = plannedArrivalMs(departureMs, cumulativeMeters, planSpeedMps);
+  if (at === undefined) return PLACEHOLDER;
+  const clock = formatClockTime(at);
+  if (!crossesLocalMidnight(departureMs, at)) return clock;
+  const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
+    new Date(at),
+  );
+  return `${clock} ${day}`;
+}
+
+function endpointName(fromIndex: number): string {
+  return working.waypoints[fromIndex + 1]?.name ?? `Point ${fromIndex + 2}`;
+}
 </script>
 
 <dl class="stat-grid">
@@ -70,10 +103,15 @@ const totalTime = $derived.by(() => {
     <span class="num">{workingDistanceNm}</span>
     <span class="unit">nm</span>
   </dd>
-  <dt>Time</dt>
+  <dt>Passage duration</dt>
   <dd>
-    <span class="num">{totalTime ? totalTime.value : PLACEHOLDER}</span>
-    <span class="unit">{totalTime ? totalTime.unit : ''}</span>
+    <span class="num">{totalDuration ? totalDuration.value : PLACEHOLDER}</span>
+    <span class="unit">{totalDuration ? totalDuration.unit : ''}</span>
+  </dd>
+  <dt>Planned arrival</dt>
+  <dd>
+    <span class="num">{arrivalText(workingDistanceMeters)}</span>
+    <span class="unit"></span>
   </dd>
 </dl>
 <UnitField
@@ -92,13 +130,15 @@ const totalTime = $derived.by(() => {
       ),
     )}
 />
+<label class="departure">
+  <span class="caps-label">Departure</span>
+  <input
+    type="datetime-local"
+    bind:value={departureLocal}
+    aria-label="Planned departure date and time, used for the arrival clock times"
+  >
+</label>
 {#if workingLegs.length > 0}
-  <div class="leg-row leg-head" aria-hidden="true">
-    <span class="leg-no caps-label">No.</span>
-    <span class="caps-label">Dist</span>
-    <span class="caps-label" title="Compass direction of the leg, in degrees true">Bearing</span>
-    <span class="leg-time caps-label">Time</span>
-  </div>
   <ol class="legs bare-list" aria-label="Legs">
     {#each workingLegs as leg (leg.fromIndex)}
       {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
@@ -108,14 +148,24 @@ const totalTime = $derived.by(() => {
           class="leg-row row-interactive"
           class:is-on={litLegs.has(leg.fromIndex)}
           aria-pressed={litLegs.has(leg.fromIndex)}
-          aria-label={`Highlight leg ${leg.fromIndex + 1}`}
+          aria-label={`Highlight leg ${leg.fromIndex + 1} to ${endpointName(leg.fromIndex)}`}
           onclick={() => onHighlightLeg(leg.fromIndex)}
         >
-          <span class="leg-no num">{leg.fromIndex + 1}</span>
-          <span class="leg-dist num">{formatNm(leg.distanceMeters)} nm</span>
-          <span class="leg-brg num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
-          <span class="leg-time num">
-            {seconds == null ? PLACEHOLDER : formatDuration(seconds)}
+          <span class="leg-line">
+            <span class="leg-no num">{leg.fromIndex + 1}</span>
+            <span class="leg-name">{endpointName(leg.fromIndex)}</span>
+            <span
+              class="leg-arrive num"
+              title="Planned local arrival at this point, from the departure and planning speed"
+              >{arrivalText(leg.cumulativeMeters)}</span
+            >
+          </span>
+          <span class="leg-line leg-line--metrics">
+            <span class="num">{formatNm(leg.distanceMeters)} nm</span>
+            <span class="num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
+            <span class="num leg-elapsed" title="Cumulative elapsed time to reach this point">
+              Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
+            </span>
           </span>
         </button>
       </li>
@@ -124,8 +174,9 @@ const totalTime = $derived.by(() => {
 {/if}
 
 <style>
-/* The leg-by-leg readout for the route under edit: a scrolling list of leg number, distance, bearing,
-   and the cumulative passage time to reach that waypoint, mono and tabular so the columns line up. */
+/* The leg-by-leg readout for the route under edit: two-line rows (endpoint name and arrival, then
+   distance, bearing, and cumulative elapsed), mono and tabular so the columns read as a table
+   while still wrapping cleanly at 320 pixels. */
 .legs {
   display: flex;
   flex-direction: column;
@@ -136,13 +187,12 @@ const totalTime = $derived.by(() => {
 }
 /* The row chrome, hover tint, and lit accent fill and border come from the shared .row-interactive
    base in overlays.css; the 1px border-width reserves space for the lit accent border (whose color
-   the base owns), and only the leg grid and the lit leg's thick inline-start bar are scoped here. */
+   the base owns). */
 .leg-row {
-  display: grid;
-  grid-template-columns: var(--space-5) 1fr auto auto;
-  gap: var(--space-2);
-  align-items: center;
-  padding: 0 var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--space-1) var(--space-2);
   border-width: 1px;
   border-radius: var(--radius-sm);
   text-align: start;
@@ -150,23 +200,42 @@ const totalTime = $derived.by(() => {
 .leg-row.is-on {
   border-inline-start-width: var(--active-bar-width);
 }
-/* The column header row above the legs: the same grid, no interactive chrome. The caps-label class
-   on each header cell carries the muted color, so no per-cell override is needed here. */
-.leg-head {
-  border-width: 0;
+.leg-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  inline-size: 100%;
 }
 .leg-no {
   color: var(--text-muted);
+  min-inline-size: var(--space-4);
 }
-.leg-dist {
-  color: var(--text);
+.leg-name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }
-.leg-brg {
-  color: var(--text-muted);
-}
-.leg-time {
+.leg-arrive {
   color: var(--accent);
-  text-align: end;
+}
+.leg-line--metrics {
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  padding-inline-start: calc(var(--space-4) + var(--space-2));
+}
+.leg-elapsed {
+  margin-inline-start: auto;
+}
+.departure {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.departure input {
+  min-block-size: var(--control-size);
 }
 /* The route-edit working-plan stats use the global .stat-grid system in app.css. */
 </style>
