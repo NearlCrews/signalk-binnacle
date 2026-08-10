@@ -1394,12 +1394,18 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Measure',
     icon: Ruler,
     group: 'Navigate',
+    // Also disabled until the chart's tap handler is ready (mapInstance is set after the tap
+    // recognizer registers), so Measure can never advertise a first tap that would be dropped.
     disabled:
-      routeStore.working !== undefined || marineRadar.store.areaDraft?.chartEditing === true,
+      mapInstance === undefined ||
+      routeStore.working !== undefined ||
+      marineRadar.store.areaDraft?.chartEditing === true,
     disabledLabel:
-      marineRadar.store.areaDraft?.chartEditing === true
-        ? 'Measure (finish the radar-area chart edit first)'
-        : 'Measure (save or cancel the route edit first)',
+      mapInstance === undefined
+        ? 'Measure (chart is loading)'
+        : marineRadar.store.areaDraft?.chartEditing === true
+          ? 'Measure (finish the radar-area chart edit first)'
+          : 'Measure (save or cancel the route edit first)',
     pressed: measure.active,
     onSelect: armMeasure,
   },

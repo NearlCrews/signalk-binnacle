@@ -60,7 +60,7 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Measure' }).click();
+  await page.getByRole('button', { name: 'Measure', exact: true }).click();
 
   const strip = page.getByRole('complementary', { name: 'Measure' });
   const canvas = page.locator('.maplibregl-canvas');
@@ -164,7 +164,7 @@ test('measure and route editing refuse overlapping chart gestures in both direct
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: 'Measure' }).click();
+  await page.getByRole('button', { name: 'Measure', exact: true }).click();
   const strip = page.getByRole('complementary', { name: 'Measure' });
   await expect(strip).toBeVisible();
 
