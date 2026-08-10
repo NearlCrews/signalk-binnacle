@@ -6,9 +6,11 @@ import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import X from '@lucide/svelte/icons/x';
 import { onDestroy, onMount, untrack } from 'svelte';
 import { fly } from 'svelte/transition';
+import type { RouteStore } from '$entities/route';
 import type { UnitsStore } from '$entities/units';
 import { type Bbox, boundsToBbox, type WeatherStore } from '$entities/weather';
 import { LayersView } from '$features/layers-panel';
+import { createRouteOverlay } from '$features/route-layer';
 import {
   createCloudOverlay,
   createPointReadout,
@@ -79,6 +81,10 @@ interface Props {
   // grid answers. The area overlays and radar always use the free sources.
   token?: string;
   weatherProvider?: WeatherProvider;
+  // The shared route store, for read-only route context over the forecast: the shown and active
+  // routes with their named waypoints, so a passage can be read against the weather. Never
+  // editable here, and never a statement that the forecast was routed along the path.
+  routes?: RouteStore;
   // The vessel position, for the "Here" conditions panel.
   position?: { latitude: number; longitude: number };
   positionStale?: boolean;
@@ -103,6 +109,7 @@ const {
   onLayersReady,
   token,
   weatherProvider,
+  routes,
   position,
   positionStale = false,
   pointLoader,
@@ -371,6 +378,8 @@ onMount(() => {
     onLoad: async ({ map, manager, recolor: recolorFn, isDestroyed, runTick }) => {
       // Band order, bottom to top: the waves height field sits at the bottom, then the precip,
       // cloud, and radar fills, with wind arrows and pressure isobars drawn over them.
+      // The routes band sits above the weather band, so the shown and active routes read over the
+      // fields; unlisted, so route context is not a weather layer to toggle or persist here.
       const overlays = [
         createWavesOverlay(store),
         createPrecipOverlay(store),
@@ -378,6 +387,7 @@ onMount(() => {
         createRadarOverlay(store, undefined, undefined, (t) => (radarFrameTime = t)),
         createWindOverlay(store),
         createPressureOverlay(store),
+        ...(routes ? [createRouteOverlay(routes, { listed: false })] : []),
       ];
       await manager.registerAll(overlays);
       if (isDestroyed()) return;

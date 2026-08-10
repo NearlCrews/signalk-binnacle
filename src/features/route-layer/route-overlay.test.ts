@@ -73,6 +73,26 @@ describe('route overlay', () => {
     );
   });
 
+  it('registers unlisted for the Forecast map and listed by default for the nav chart', () => {
+    expect(createRouteOverlay(storeWithShownRoute()).listed).toBeUndefined();
+    expect(createRouteOverlay(storeWithShownRoute(), { listed: false }).listed).toBe(false);
+  });
+
+  it('re-adding after a base-style swap does not duplicate layers and repopulates sources', async () => {
+    const store = storeWithShownRoute();
+    const overlay = createRouteOverlay(store, { listed: false });
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+    overlay.sync(fakeOverlayContext(map));
+    const layerCount = map.layers.size;
+    await overlay.add(fakeOverlayContext(map));
+    expect(map.layers.size).toBe(layerCount);
+    map.sources.get('binnacle-route-lines')?.setData?.('stale');
+    overlay.sync(fakeOverlayContext(map));
+    const lineFc = map.sources.get('binnacle-route-lines')?.data as GeoJSON.FeatureCollection;
+    expect(lineFc.features).toHaveLength(1);
+  });
+
   it('remove tears down layers and sources', async () => {
     const overlay = createRouteOverlay(storeWithShownRoute());
     const map = createFakeMap();

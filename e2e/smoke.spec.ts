@@ -1567,3 +1567,61 @@ test('weather remains usable without horizontal overflow on a narrow phone', asy
   expect(mapBox.height).toBeGreaterThan(100);
   expect(timeBox.y).toBeGreaterThanOrEqual(controlBox.y + controlBox.height - 1);
 });
+
+test('forecast keeps the shown route as read-only context', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
+  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route(/\/signalk\/v2\/api\/resources\/routes$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        passage: {
+          name: 'Harbor passage',
+          feature: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [-83.5, 42.6],
+                [-83.4, 42.7],
+                [-83.3, 42.65],
+              ],
+            },
+            properties: {
+              coordinatesMeta: [{ name: 'Start' }, { name: 'Mid channel' }, { name: 'Harbor' }],
+            },
+          },
+        },
+      }),
+    });
+  });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Routes' }).click();
+  const routesPanel = page.getByRole('complementary', { name: 'Routes' });
+  await expect(routesPanel.getByText('Harbor passage')).toBeVisible();
+  await routesPanel.getByRole('button', { name: 'Show on chart' }).click();
+  await expect(routesPanel.getByRole('button', { name: 'Hide on chart' })).toBeVisible();
+  await routesPanel.getByRole('button', { name: 'Close routes panel' }).click();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Forecast' }).click();
+  const weather = page.locator('#weather-panel');
+  await expect(weather).toBeVisible();
+  await expect(weather.locator('.maplibregl-canvas')).toBeVisible();
+  // Let the mini-map register its overlays and run a sync pass with the shown route, so a broken
+  // route-layer add on the forecast style would surface as a page error here.
+  await page.waitForTimeout(750);
+  expect(pageErrors).toEqual([]);
+  // Read-only context: the forecast map offers no route editing.
+  await expect(weather.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+});

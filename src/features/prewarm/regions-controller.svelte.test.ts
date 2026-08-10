@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { RegionsClient, SavedRegionDto, WarmStatus } from './regions-client.js';
 import {
   createRegionsController,
@@ -339,6 +340,69 @@ describe('RegionsController', () => {
 
     expect(controller.error).toBe('still present');
     expect(getStatus).toHaveBeenCalledWith('active', expect.any(AbortSignal));
+    cleanup();
+  });
+
+  it('runs the route coverage check against the live route and highlights the gaps', () => {
+    const highlight = { set: vi.fn(), clear: vi.fn(), destroy: vi.fn() };
+    const { controller, cleanup } = setup(client(), {
+      getActiveRoute: () => ({
+        name: 'Passage',
+        waypoints: [
+          { position: { latitude: 0, longitude: 0 } },
+          { position: { latitude: 0, longitude: 1 } },
+        ],
+      }),
+      createHighlight: () => highlight,
+    });
+    controller.regions = [
+      { ...region('half'), bbox: [-0.5, -1, 0.4, 1], sourceIds: [BASEMAP_SOURCE_ID], maxzoom: 12 },
+    ];
+    controller.setCoverageDetail('coastal');
+    controller.setCoverageCorridor(1);
+    controller.runCoverageCheck();
+
+    expect(controller.coverageReport?.verdict).toBe('partial');
+    expect(highlight.set).toHaveBeenCalledWith(controller.coverageReport?.gaps);
+
+    controller.clearCoverageCheck();
+    expect(controller.coverageReport).toBeNull();
+    expect(highlight.clear).toHaveBeenCalled();
+
+    cleanup();
+    expect(highlight.destroy).toHaveBeenCalled();
+  });
+
+  it('re-runs a standing coverage result when its corridor or detail changes', () => {
+    const highlight = { set: vi.fn(), clear: vi.fn(), destroy: vi.fn() };
+    const { controller, cleanup } = setup(client(), {
+      getActiveRoute: () => ({
+        name: 'Passage',
+        waypoints: [
+          { position: { latitude: 0, longitude: 0 } },
+          { position: { latitude: 0, longitude: 1 } },
+        ],
+      }),
+      createHighlight: () => highlight,
+    });
+    controller.regions = [];
+    controller.runCoverageCheck();
+    const first = controller.coverageReport;
+    controller.setCoverageDetail('harbor');
+    expect(controller.coverageReport).not.toBe(first);
+    expect(controller.coverageReport?.detail).toBe('harbor');
+    cleanup();
+  });
+
+  it('clears the coverage result when no route is being navigated', () => {
+    const highlight = { set: vi.fn(), clear: vi.fn(), destroy: vi.fn() };
+    const { controller, cleanup } = setup(client(), {
+      getActiveRoute: () => undefined,
+      createHighlight: () => highlight,
+    });
+    controller.runCoverageCheck();
+    expect(controller.coverageReport).toBeNull();
+    expect(highlight.set).not.toHaveBeenCalled();
     cleanup();
   });
 });

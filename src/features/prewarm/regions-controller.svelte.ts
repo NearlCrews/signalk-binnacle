@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { LngLatBbox } from 'signalk-chart-sources';
+import type { RouteWaypoint } from '$entities/route';
 import { bboxCenter, normalizeBounds } from '$shared/geo';
 import {
   clampInt,
@@ -23,7 +24,7 @@ import {
   CHART_LOCKER_MAX_WARM_ZOOM,
   CHART_LOCKER_MIN_INTERVAL_SECONDS,
 } from './contract.js';
-import { DETAIL_PRESETS, presetForRange, rangeForPreset } from './detail-level.js';
+import { DETAIL_PRESETS, type DetailKey, presetForRange, rangeForPreset } from './detail-level.js';
 import {
   coveringSources,
   downloadGateReason,
@@ -36,6 +37,12 @@ import {
 import type { CacheStats, RegionsClient, SavedRegionDto, WarmStatus } from './regions-client.js';
 import type { RegionRectangle } from './regions-draw.js';
 import { createRegionRectangle } from './regions-draw.js';
+import {
+  checkRouteCoverage,
+  DEFAULT_COVERAGE_CORRIDOR_NM,
+  type RouteCoverageReport,
+} from './route-coverage.js';
+import { type CoverageHighlight, createCoverageHighlight } from './route-coverage-overlay.js';
 import {
   buildConfigPayload,
   extractPositionWarm,
@@ -62,7 +69,11 @@ export interface RegionsControllerDeps {
   getClient: () => RegionsClient;
   getMap: () => MapLibreMap;
   getUnitsMode: () => UnitsMode;
+  // The route being navigated, injected as a getter so the coverage check always reads the live
+  // route rather than one captured at construction. Absent on hosts without routing.
+  getActiveRoute?: () => { name: string; waypoints: RouteWaypoint[] } | undefined;
   createRectangle?: (map: MapLibreMap) => RegionRectangle;
+  createHighlight?: (map: MapLibreMap) => CoverageHighlight;
   pollMs?: number;
 }
 
@@ -118,6 +129,10 @@ export class RegionsController {
   positionBaseZoom = $state(12);
   positionSources = $state<string[]>([]);
   positionLoadError = $state<string | null>(null);
+  coverageCorridorNm = $state<number>(DEFAULT_COVERAGE_CORRIDOR_NM);
+  coverageDetail = $state<DetailKey>('coastal');
+  coverageReport = $state<RouteCoverageReport | null>(null);
+  #highlight: CoverageHighlight | null = null;
   readonly armedDelete = new ArmedRow((id) => void this.deleteRegion(id));
   readonly positionWarmSourceList = positionWarmSources();
 
@@ -704,6 +719,45 @@ export class RegionsController {
     this.#rect?.clear();
   }
 
+  get activeRoute(): { name: string; waypoints: RouteWaypoint[] } | undefined {
+    return this.deps.getActiveRoute?.();
+  }
+
+  setCoverageCorridor(nm: number): void {
+    if (!isFiniteNumber(nm) || nm <= 0) return;
+    this.coverageCorridorNm = nm;
+    // A standing result must describe its shown inputs, so a control change re-runs the check.
+    if (this.coverageReport !== null) this.runCoverageCheck();
+  }
+
+  setCoverageDetail(key: DetailKey): void {
+    this.coverageDetail = key;
+    if (this.coverageReport !== null) this.runCoverageCheck();
+  }
+
+  runCoverageCheck(): void {
+    if (this.#disposed) return;
+    const route = this.activeRoute;
+    if (route === undefined) {
+      this.clearCoverageCheck();
+      return;
+    }
+    const report = checkRouteCoverage({
+      waypoints: route.waypoints,
+      regions: this.regions,
+      corridorNm: this.coverageCorridorNm,
+      detail: this.coverageDetail,
+    });
+    this.coverageReport = report;
+    this.#highlight ??= (this.deps.createHighlight ?? createCoverageHighlight)(this.deps.getMap());
+    this.#highlight.set(report.gaps);
+  }
+
+  clearCoverageCheck(): void {
+    this.coverageReport = null;
+    this.#highlight?.clear();
+  }
+
   toggleCollapsed(): void {
     this.panelCollapsed = !this.panelCollapsed;
   }
@@ -739,6 +793,8 @@ export class RegionsController {
     for (const id of [...this.#polls.keys()]) this.stopRegionPoll(id);
     this.#positionWriter.dispose();
     this.#ttlWriter.dispose();
+    this.#highlight?.destroy();
+    this.#highlight = null;
   }
 
   #setPending(id: string, busy: boolean): void {

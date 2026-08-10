@@ -46,7 +46,10 @@ export interface RouteOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
 
-export function createRouteOverlay(store: RouteStore): RouteOverlay {
+// The nav chart registers this listed (a Layers-panel row the navigator toggles). The Forecast
+// mini-map registers it with listed: false: read-only route context drawn over the weather fields,
+// never a weather layer to toggle or persist there.
+export function createRouteOverlay(store: RouteStore, opts?: { listed?: boolean }): RouteOverlay {
   let paint: MapThemePaint = mapThemePaint('day');
   let lastVersion = -1;
 
@@ -54,6 +57,7 @@ export function createRouteOverlay(store: RouteStore): RouteOverlay {
     id: ROUTE_OVERLAY_ID,
     title: 'Routes',
     band: BAND,
+    listed: opts?.listed,
     supportsOpacity: true,
     layerIds: LAYERS,
     add(ctx) {

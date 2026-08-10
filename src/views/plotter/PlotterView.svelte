@@ -8,7 +8,7 @@ import type { MeasureStore } from '$entities/measure';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
 import type { NotePoint, PersonalNotesStore, PoiViewState } from '$entities/poi';
-import type { RouteStore } from '$entities/route';
+import type { RouteStore, RouteWaypoint } from '$entities/route';
 import type { SymbolsStore } from '$entities/symbols';
 import type { TidesStore } from '$entities/tides';
 import type { TrackRecorder } from '$entities/track';
@@ -715,6 +715,15 @@ function helpPanelForAttempt() {
 }
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
+
+// The route being navigated, for the Offline charts route-coverage check. A function, not a value,
+// so the panel and its controller always read the live route.
+function activeRouteForCoverage(): { name: string; waypoints: RouteWaypoint[] } | undefined {
+  const id = routeStore.activeId;
+  if (id === undefined) return undefined;
+  const route = routeStore.routeById(id);
+  return route === undefined ? undefined : { name: route.name, waypoints: route.waypoints };
+}
 const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
 // Whole-route time: the active leg's own estimate (server timeToGo, else positive-VMG) plus the
 // explicit planning speed across the legs ahead. Never cross-track SOG for the whole route: an
@@ -1646,6 +1655,7 @@ $effect(() => {
               map={mapInstance}
               {units}
               {companionBase}
+              activeRoute={activeRouteForCoverage}
               onClose={closePanel}
               onBack={backToMenu}
               onOpenCharts={openInstalledCharts}
@@ -1808,6 +1818,7 @@ $effect(() => {
           onLayersReady={onWeatherLayersReady}
           token={chartsToken}
           {weatherProvider}
+          routes={routeStore}
           position={vessel.position}
           positionStale={vessel.positionStale}
           pointLoader={pointConditionsLoader}

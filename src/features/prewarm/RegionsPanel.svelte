@@ -9,6 +9,7 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
+import type { RouteWaypoint } from '$entities/route';
 import type { UnitsStore } from '$entities/units';
 import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { PwaStatus } from '$shared/pwa';
@@ -28,6 +29,7 @@ import { DETAIL_PRESETS } from './detail-level.js';
 import type { SavedRegionDto } from './regions-client.js';
 import { createRegionsClient } from './regions-client.js';
 import { createRegionsController } from './regions-controller.svelte.js';
+import { COVERAGE_CORRIDOR_CHOICES_NM } from './route-coverage.js';
 import SavedRegionsView from './SavedRegionsView.svelte';
 import StorageView from './StorageView.svelte';
 import { sourceDescription } from './source-summary.js';
@@ -47,6 +49,9 @@ interface Props {
   // 'untrusted-certificate' gets its own notice: over HTTPS with a certificate the browser does
   // not trust, insecureTransport is false and the cache silently stays off without it.
   pwaStatus?: PwaStatus;
+  // The route being navigated, as a getter so the coverage check reads the live route. Absent or
+  // returning undefined when nothing is being navigated.
+  activeRoute?: () => { name: string; waypoints: RouteWaypoint[] } | undefined;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
@@ -64,6 +69,7 @@ const {
   // a service worker is claimed by the origin that served the page, so do not unify these two.
   insecureTransport = typeof location !== 'undefined' && isInsecureTransportOrigin(serverOrigin()),
   pwaStatus = 'pending',
+  activeRoute,
   onClose,
   onBack,
   onOpenCharts,
@@ -78,10 +84,18 @@ const controller = createRegionsController({
   getClient: () => client,
   getMap: () => map,
   getUnitsMode: () => units.mode,
+  getActiveRoute: () => activeRoute?.(),
 });
 controller.start();
 $effect(() => controller.syncClient());
 $effect(() => controller.syncRectangle());
+// A route stopped while a coverage result stands would leave a stale highlight on the chart with
+// its explaining section gone, so the result clears with the route.
+$effect(() => {
+  if (routeForCheck === undefined && controller.coverageReport !== null) {
+    controller.clearCoverageCheck();
+  }
+});
 onDestroy(() => controller.destroy());
 
 const stats = $derived(controller.stats);
@@ -153,6 +167,37 @@ const positionIntervalSecs = $derived(controller.positionIntervalSecs);
 const positionBaseZoom = $derived(controller.positionBaseZoom);
 const positionWarmSourceList = controller.positionWarmSourceList;
 const providerError = $derived(controller.providerError);
+
+const routeForCheck = $derived(activeRoute?.());
+const coverageReport = $derived(controller.coverageReport);
+const coverageCorridorNm = $derived(controller.coverageCorridorNm);
+const coverageDetailKey = $derived(controller.coverageDetail);
+const coverageSummary = $derived.by(() => {
+  const report = coverageReport;
+  if (report === null) return undefined;
+  if (report.verdict === 'unknown') {
+    return { label: 'Unknown', severity: 'sev-warning', note: report.unknownReason ?? '' };
+  }
+  if (report.verdict === 'complete') {
+    return {
+      label: 'Complete',
+      severity: '',
+      note: 'Every checked corridor sample sits inside a ready saved area at the requested detail.',
+    };
+  }
+  const parts: string[] = [];
+  if (report.uncoveredCount > 0) {
+    parts.push(`${report.uncoveredCount} of ${report.sampleCount} samples outside any ready area`);
+  }
+  if (report.detailShortCount > 0) {
+    parts.push(`${report.detailShortCount} of ${report.sampleCount} below the requested detail`);
+  }
+  return {
+    label: 'Partial',
+    severity: 'sev-warning',
+    note: `${parts.join(', ')}. Gaps are highlighted on the chart.`,
+  };
+});
 
 const unit = $derived(controller.unit);
 const positionRadiusDisplay = $derived(controller.positionRadiusDisplay);
@@ -262,6 +307,68 @@ function chartLabel(id: string): string {
       onRedownload={(id) => void redownloadRegion(id)}
       onRetryStatus={(id) => controller.retryRegionPoll(id)}
     />
+
+    <section class="panel-section" aria-label="Route coverage">
+      <h3 class="caps-label">Route coverage</h3>
+      {#if routeForCheck !== undefined}
+        <p class="muted-note">
+          Checks a corridor around {routeForCheck.name} against your ready saved areas and the
+          charts they include. Advisory only: it does not certify navigation or passage safety, and
+          it is separate from Chart Locker's own health.
+        </p>
+        <div class="segmented" role="group" aria-label="Corridor width">
+          {#each COVERAGE_CORRIDOR_CHOICES_NM as nm (nm)}
+            <button
+              type="button"
+              class="btn"
+              class:is-on={coverageCorridorNm === nm}
+              aria-pressed={coverageCorridorNm === nm}
+              onclick={() => controller.setCoverageCorridor(nm)}
+            >
+              {nm}
+              nm
+            </button>
+          {/each}
+        </div>
+        <div class="segmented" role="group" aria-label="Required detail">
+          {#each DETAIL_PRESETS as preset (preset.key)}
+            <button
+              type="button"
+              class="btn"
+              class:is-on={coverageDetailKey === preset.key}
+              aria-pressed={coverageDetailKey === preset.key}
+              onclick={() => controller.setCoverageDetail(preset.key)}
+            >
+              {preset.label}
+            </button>
+          {/each}
+        </div>
+        <div class="panel-controls">
+          <button type="button" class="btn btn--grow" onclick={() => controller.runCoverageCheck()}>
+            Check route coverage
+          </button>
+          {#if coverageReport !== null}
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => controller.clearCoverageCheck()}
+            >
+              Clear
+            </button>
+          {/if}
+        </div>
+        {#if coverageSummary}
+          <p class="muted-note" role="status">
+            <strong class={coverageSummary.severity}>{coverageSummary.label}.</strong>
+            {coverageSummary.note}
+          </p>
+        {/if}
+      {:else}
+        <p class="muted-note">
+          Start navigation on a route to check its corridor against your saved areas.
+        </p>
+      {/if}
+    </section>
 
     <button
       type="button"

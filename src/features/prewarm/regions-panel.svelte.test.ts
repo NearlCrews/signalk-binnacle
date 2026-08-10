@@ -196,6 +196,47 @@ describe('offline charts home view', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
+  it('offers the route coverage check with its noncertifying copy while navigating', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(404, {})),
+    );
+    const html = render(RegionsPanel, {
+      props: {
+        adminAccess: true,
+        accessUrl: 'http://sk/admin',
+        accessState: 'serving',
+        companionBase: 'http://sk/chart-locker',
+        map: {} as MapLibreMap,
+        units: new UnitsStore(
+          new PersistedValue<UnitsMode>('binnacle:units-test', 'metric', createFakeStorage()),
+        ),
+        insecureTransport: false,
+        activeRoute: () => ({
+          name: 'Harbor passage',
+          waypoints: [
+            { position: { latitude: 0, longitude: 0 } },
+            { position: { latitude: 0, longitude: 1 } },
+          ],
+        }),
+        onClose: () => {},
+        onOpenCharts: () => {},
+        onRetryAccess: () => {},
+      },
+    }).body.replaceAll(/\s+/g, ' ');
+    expect(html).toContain('Harbor passage');
+    expect(html).toContain('it does not certify navigation or passage safety');
+    expect(html).toContain('Check route coverage');
+    expect(html).toContain('aria-label="Corridor width"');
+    expect(html).toContain('aria-label="Required detail"');
+  });
+
+  it('invites starting navigation when no route is active', () => {
+    expect(renderHome(false)).toContain(
+      'Start navigation on a route to check its corridor against your saved areas.',
+    );
+  });
+
   it('explains what a plain HTTP server cannot cache', () => {
     expect(renderHome(true)).toContain(PLAIN_HTTP_NOTE);
   });
