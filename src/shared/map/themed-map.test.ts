@@ -469,10 +469,15 @@ describe('createThemedMap long-press', () => {
 });
 
 describe('createThemedMap navigation controls', () => {
-  it('locks rotation and installs zoom and nautical scale controls', async () => {
+  it('locks rotation and pitch and installs zoom and nautical scale controls', async () => {
     createThemedMap({ container, onLoad: () => {} });
     const map = await lastMap();
     expect(map.options.dragRotate).toBe(false);
+    // The chart stays flat by design: a tilted view destroys uniform scale and compresses the far
+    // field. Pin every pitch door, not just rotation, so re-enabling tilt cannot land silently.
+    expect(map.options.maxPitch).toBe(0);
+    expect(map.options.touchPitch).toBe(false);
+    expect(map.options.pitchWithRotate).toBe(false);
     expect(map.touchZoomRotate?.disableRotation).toHaveBeenCalledOnce();
     expect(map.keyboard?.disableRotation).toHaveBeenCalledOnce();
     expect(map.controls).toEqual([
