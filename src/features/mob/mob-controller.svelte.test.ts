@@ -6,6 +6,7 @@ import * as signalk from '$shared/signalk';
 import { SignalKStore } from '$shared/signalk';
 import { createFakeStorage, createFrameFactory } from '$shared/testing';
 import { createMobController } from './mob-controller.svelte';
+import { mobClearNotification, mobNotification } from './mob-notification';
 
 vi.mock('$shared/signalk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$shared/signalk')>()),
@@ -21,11 +22,51 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function setup() {
+// Enough turns for the cancel chain (Promise.all, the resolver pool, the async continuation).
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+}
+
+type SetupFlags = Partial<Record<'notificationsApi' | 'writeBlocked' | 'streamOpen', boolean>>;
+
+// The one deps literal for every construction in this file, so a dependency change is one edit.
+// The flags object is read through getters, so a test mutating it steers the live controller.
+function makeDeps(
+  mob: MobStore,
+  flags: { notificationsApi: boolean; writeBlocked: boolean; streamOpen: boolean },
+) {
+  return {
+    origin: 'http://sk',
+    getToken: () => 'token',
+    mob,
+    mobAlarm: { update: vi.fn() } as unknown as GatedAlarm,
+    units: { mode: 'metric' as const },
+    notificationsApi: () => flags.notificationsApi,
+    writeBlocked: () => flags.writeBlocked,
+    streamOpen: () => flags.streamOpen,
+    publishDelta: vi.fn(),
+    flyTo: vi.fn(),
+    goTo: vi.fn(async () => undefined),
+  };
+}
+
+function realStoreDeps(mob: MobStore, overrides: SetupFlags = {}) {
+  return makeDeps(mob, {
+    notificationsApi: true,
+    writeBlocked: false,
+    streamOpen: true,
+    ...overrides,
+  });
+}
+
+function setup(overrides: SetupFlags = {}) {
+  const flags = { notificationsApi: true, writeBlocked: false, streamOpen: true, ...overrides };
   const mobState = {
     active: false,
     acknowledged: false,
     position: undefined,
+    remoteActive: false,
+    remoteNotificationIds: [] as string[],
     trigger: vi.fn((mark?: MobMark) => {
       mobState.active = true;
       return mark ?? { epochMs: 1 };
@@ -35,19 +76,9 @@ function setup() {
     }),
   };
   const mob = mobState as unknown as MobStore;
-  const publishDelta = vi.fn();
-  const controller = createMobController({
-    origin: 'http://sk',
-    getToken: () => 'token',
-    mob,
-    mobAlarm: { update: vi.fn() } as unknown as GatedAlarm,
-    units: { mode: 'metric' },
-    notificationsApi: () => true,
-    publishDelta,
-    flyTo: vi.fn(),
-    goTo: vi.fn(async () => undefined),
-  });
-  return { controller, mob, publishDelta };
+  const deps = makeDeps(mob, flags);
+  const controller = createMobController(deps);
+  return { controller, mob, mobState, publishDelta: deps.publishDelta, flags };
 }
 
 describe('createMobController', () => {
@@ -59,17 +90,7 @@ describe('createMobController', () => {
     vi.mocked(signalk.resolveNotification).mockResolvedValue(true);
     const store = new SignalKStore();
     const mob = new MobStore(store, new OwnVessel(store), undefined, createFakeStorage());
-    const controller = createMobController({
-      origin: 'http://sk',
-      getToken: () => 'token',
-      mob,
-      mobAlarm: { update: vi.fn() } as unknown as GatedAlarm,
-      units: { mode: 'metric' },
-      notificationsApi: () => true,
-      publishDelta: vi.fn(),
-      flyTo: vi.fn(),
-      goTo: vi.fn(async () => undefined),
-    });
+    const controller = createMobController(realStoreDeps(mob));
 
     controller.onTrigger({ epochMs: 1 });
     store.applyFrame(
@@ -95,17 +116,7 @@ describe('createMobController', () => {
     const store = new SignalKStore();
     const vessel = new OwnVessel(store);
     const mob = new MobStore(store, vessel, undefined, createFakeStorage());
-    const controller = createMobController({
-      origin: 'http://sk',
-      getToken: () => 'token',
-      mob,
-      mobAlarm: { update: vi.fn() } as unknown as GatedAlarm,
-      units: { mode: 'metric' },
-      notificationsApi: () => false,
-      publishDelta: vi.fn(),
-      flyTo: vi.fn(),
-      goTo: vi.fn(async () => undefined),
-    });
+    const controller = createMobController(realStoreDeps(mob, { notificationsApi: false }));
     store.applyFrame(
       createFrameFactory()({ 'navigation.position': { latitude: 42, longitude: -83 } }),
     );
@@ -183,5 +194,104 @@ describe('createMobController', () => {
     await Promise.resolve();
     expect(signalk.resolveNotification).toHaveBeenCalledTimes(10);
     expect(peak).toBe(4);
+  });
+
+  it('publishes the broad clear on the first cancel after a failed v2 raise', async () => {
+    vi.mocked(signalk.postMobNotification).mockResolvedValue(undefined);
+    vi.mocked(signalk.resolveNotification).mockResolvedValue(true);
+    const { controller, publishDelta } = setup();
+
+    controller.onTrigger({ epochMs: 1 });
+    await flushMicrotasks();
+    // The failed POST fell back to the broad v1 emergency, so the cancel owes the broad clear
+    // even though no notification id ever came back.
+    expect(publishDelta).toHaveBeenCalledWith(
+      signalk.SK_PATHS.mobNotification,
+      mobNotification(undefined),
+    );
+    controller.onCancel();
+    await flushMicrotasks();
+    expect(publishDelta).toHaveBeenLastCalledWith(
+      signalk.SK_PATHS.mobNotification,
+      mobClearNotification(),
+    );
+  });
+
+  it('re-raises a v1 alarm lost to a dead socket once the stream reconnects', () => {
+    const { controller, mobState, publishDelta, flags } = setup({
+      notificationsApi: false,
+      streamOpen: false,
+    });
+
+    controller.onTrigger({ epochMs: 1, position: { latitude: 1, longitude: 2 } });
+    expect(publishDelta).toHaveBeenCalledTimes(1);
+    flags.streamOpen = true;
+    controller.onStreamReconnect();
+    expect(publishDelta).toHaveBeenCalledTimes(2);
+    expect(publishDelta).toHaveBeenLastCalledWith(
+      signalk.SK_PATHS.mobNotification,
+      mobNotification({ latitude: 1, longitude: 2 }),
+    );
+    // The stream echo has confirmed the alarm reached the server: no further re-raise.
+    mobState.remoteActive = true;
+    controller.onStreamReconnect();
+    expect(publishDelta).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-raises through the v2 route on reconnect and clears the warning once a raise lands', async () => {
+    const first = deferred<string | undefined>();
+    const second = deferred<string | undefined>();
+    vi.mocked(signalk.postMobNotification)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const { controller, publishDelta, flags } = setup({ streamOpen: false });
+
+    controller.onTrigger({ epochMs: 1 });
+    first.resolve(undefined);
+    await first.promise;
+    await Promise.resolve();
+    expect(publishDelta).toHaveBeenCalledTimes(1);
+    expect(controller.mobPublishWarning).toContain('may not have reached the server');
+
+    flags.streamOpen = true;
+    controller.onStreamReconnect();
+    expect(signalk.postMobNotification).toHaveBeenCalledTimes(2);
+    second.resolve('mob-id');
+    await second.promise;
+    await Promise.resolve();
+    expect(controller.mobPublishWarning).toBeUndefined();
+  });
+
+  it('replays a clear published while the socket was down, once', () => {
+    const { controller, publishDelta, flags } = setup({
+      notificationsApi: false,
+      streamOpen: false,
+    });
+
+    controller.onTrigger({ epochMs: 1 });
+    controller.onCancel();
+    expect(publishDelta).toHaveBeenCalledTimes(2);
+    flags.streamOpen = true;
+    controller.onStreamReconnect();
+    // A canceled trigger must not re-raise; only the owed clear goes back out, exactly once.
+    expect(publishDelta).toHaveBeenCalledTimes(3);
+    expect(publishDelta).toHaveBeenLastCalledWith(
+      signalk.SK_PATHS.mobNotification,
+      mobClearNotification(),
+    );
+    controller.onStreamReconnect();
+    expect(publishDelta).toHaveBeenCalledTimes(3);
+  });
+
+  it('warns when writes are blocked and clears the warning on cancel', () => {
+    vi.mocked(signalk.postMobNotification).mockReturnValue(deferred<string | undefined>().promise);
+    const { controller } = setup({ writeBlocked: true });
+
+    controller.onTrigger({ epochMs: 1 });
+    expect(controller.mobPublishWarning).toBe(
+      'The boat-wide alarm may not have reached the server. Server write access is needed.',
+    );
+    controller.onCancel();
+    expect(controller.mobPublishWarning).toBeUndefined();
   });
 });

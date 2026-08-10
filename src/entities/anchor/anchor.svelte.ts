@@ -1,6 +1,6 @@
 import type { OwnVessel } from '$entities/vessel';
 import { asNumber, isLatLon, type LatLon } from '$shared/geo';
-import { isFiniteNumber, isRecord } from '$shared/lib';
+import { HeldFlag, isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
@@ -21,6 +21,27 @@ import { DragDetector } from './drag-detector';
 // 'server' when the signalk-anchoralarm-plugin is watching (its navigation.anchor.position is on the
 // stream), 'client' when this browser watches on its own, 'off' when no anchor is down.
 export type AnchorMode = 'off' | 'client' | 'server';
+
+// Why the watch is degraded: 'fix-lost' is a client watch whose drag detection is dead without
+// position fixes, 'server-stale' a reconnect window where retained server geometry cannot be
+// trusted as current.
+export type AnchorDegradedCause = 'fix-lost' | 'server-stale';
+
+// How long server-state staleness must persist before it is reported as a cause: the worker bumps
+// the store generation on every socket open, so each reconnect reads as stale for the sub-second
+// window until the resubscribed anchor cells re-arrive, and reporting that blip would raise a
+// false alert on every reconnect. Without a clock the cause reports immediately.
+const SERVER_STALE_GRACE_MS = 5_000;
+
+// How long a client watch must run without a fix before the audible alarm joins the visual
+// surfaces: drag detection is dead the whole time, but GPS blips of a few seconds are routine at
+// anchor and a tone for each would train the crew to ignore the channel.
+const FIX_LOST_ALARM_GRACE_MS = 30_000;
+// A fix-lost episode ends only after the fix has stayed healthy this long. A single returning
+// fix must not restart the alarm grace or forget an acknowledgment: with a fix cadence between
+// the 10 s staleness threshold and 40 s, a per-fix reset would keep the grace permanently below
+// its threshold.
+const FIX_RECOVERY_HOLD_MS = 30_000;
 
 // The client-side watch persisted across reloads. dragging is part of it on purpose: an alarm that
 // a reload could clear while the navigator sleeps is useless.
@@ -76,6 +97,7 @@ const localAnchorCodec: PersistedCodec<LocalAnchor | null> = {
 export class AnchorWatch {
   #store: SignalKStore;
   #vessel: OwnVessel;
+  #clock: ReactiveClock | undefined;
   #detector = new DragDetector();
   #watch: PersistedValue<LocalAnchor | null>;
   #preferredRadius: PersistedValue<number>;
@@ -83,14 +105,35 @@ export class AnchorWatch {
   // The notification state string the navigator acknowledged, so the sound stays off while the
   // server keeps reporting that same grade; an escalation (a new state) sounds again.
   #ackState = $state<string | undefined>(undefined);
+  // The navigator has acknowledged the current fix-lost episode; re-arms once the fix returns.
+  #fixLostAcked = $state(false);
+  // The server-stale grace, constructed with the clock; undefined without one.
+  #staleHeld: HeldFlag | undefined;
+  // Plain memo, not $state: updateFix writes it to remember when the fix-lost episode began.
+  #fixLostSince: number | undefined;
+  // When the fix last came back, so a fix-lost episode survives a momentary recovery. A
+  // struggling receiver delivering a fix every 10 to 40 seconds would otherwise reset the alarm
+  // grace on every fix and never arm the tone at all, which is exactly the receiver whose drag
+  // detection is also effectively dead.
+  #fixRecoveredAt: number | undefined;
   // The epoch of the last fix the detector counted. updateFix runs from a reactive effect, which
   // re-fires on any dependency (a radius edit, a notification), not only on a new fix; without this
   // guard a re-run would feed the same fix into the breach counter twice.
   #lastFixEpoch = 0;
 
-  constructor(store: SignalKStore, vessel: OwnVessel, storage?: StorageLike) {
+  constructor(
+    store: SignalKStore,
+    vessel: OwnVessel,
+    clock?: ReactiveClock,
+    storage?: StorageLike,
+  ) {
     this.#store = store;
     this.#vessel = vessel;
+    this.#clock = clock;
+    // Without a clock the stale cause reports immediately; the graced flag needs one to count.
+    this.#staleHeld = clock
+      ? new HeldFlag(clock, SERVER_STALE_GRACE_MS, () => this.#serverStateStale)
+      : undefined;
     this.#watch = new PersistedValue<LocalAnchor | null>(
       binnacleStorageKey('anchorWatch'),
       null,
@@ -156,6 +199,66 @@ export class AnchorWatch {
     return this.#serverStateStale || (this.fixLost && this.mode !== 'server');
   }
 
+  // Why the watch is degraded, for surfaces that must word the two causes differently. The
+  // server-stale cause waits out a short grace so a reconnect's routine sub-second blip never
+  // reaches a live region or panel; immediateDegradedCause skips the grace for surfaces that
+  // must not show reassuring text over untrusted geometry, and `degraded` stays immediate too.
+  get degradedCause(): AnchorDegradedCause | undefined {
+    if (this.fixLost && this.mode !== 'server') return 'fix-lost';
+    if (this.#staleHeld ? this.#staleHeld.held : this.#serverStateStale) return 'server-stale';
+    return undefined;
+  }
+
+  // The same classification without the server-stale grace, for panels (not live regions) that
+  // word the state the moment it exists.
+  get immediateDegradedCause(): AnchorDegradedCause | undefined {
+    if (this.fixLost && this.mode !== 'server') return 'fix-lost';
+    if (this.#serverStateStale) return 'server-stale';
+    return undefined;
+  }
+
+  // Per-episode bookkeeping for the fix-lost alarm, owned entirely by updateFix, which runs on
+  // every reactive pass (its effect depends on the clock through degradedCause). Losing the fix
+  // starts (or resumes) an episode; a recovery only ends it after holding FIX_RECOVERY_HOLD_MS,
+  // or immediately when the watch itself ends, and ending the episode re-arms the acknowledge.
+  #trackFixEpisode(): void {
+    const now = this.#clock?.now;
+    if (this.degradedCause === 'fix-lost') {
+      this.#fixRecoveredAt = undefined;
+      if (now !== undefined) this.#fixLostSince ??= now;
+      return;
+    }
+    if (this.#fixLostSince === undefined || now === undefined || !this.watching) {
+      this.#endFixEpisode();
+      return;
+    }
+    this.#fixRecoveredAt ??= now;
+    if (now - this.#fixRecoveredAt >= FIX_RECOVERY_HOLD_MS) this.#endFixEpisode();
+  }
+
+  #endFixEpisode(): void {
+    this.#fixLostSince = undefined;
+    this.#fixRecoveredAt = undefined;
+    if (this.#fixLostAcked) this.#fixLostAcked = false;
+  }
+
+  // The audible half of the fix-lost degrade: the client watch has run without a fix long enough
+  // that drag protection is genuinely dead, so a sleeping crew must hear about it, not read it.
+  // A pure read of the episode memo updateFix maintains, so it can never write state from a
+  // derived context.
+  get fixLostAlarm(): boolean {
+    if (this.degradedCause !== 'fix-lost') return false;
+    const now = this.#clock?.now;
+    if (now === undefined || this.#fixLostSince === undefined) return false;
+    return now - this.#fixLostSince >= FIX_LOST_ALARM_GRACE_MS;
+  }
+
+  // True while the navigator has acknowledged the current fix-lost episode, so the tone stays off
+  // until the fix returns and is lost again.
+  get fixLostAcknowledged(): boolean {
+    return this.#fixLostAcked && this.degradedCause === 'fix-lost';
+  }
+
   get position(): LatLon | undefined {
     if (this.mode === 'server') return this.#serverPosition;
     return this.#local?.position;
@@ -205,6 +308,11 @@ export class AnchorWatch {
   // Feed one reactive pass per position fix (and notification change). Client mode runs the drag
   // detection; server mode only reconciles local bookkeeping, since the plugin owns the alarm.
   updateFix(): void {
+    // Per-episode bookkeeping lives here because this method runs on every reactive pass, so an
+    // episode boundary advances even when nothing read the alarm during the healthy window; the
+    // graced flag gets the same treatment for its unobserved-window memo.
+    if (!this.#serverStateStale) this.#staleHeld?.reset();
+    this.#trackFixEpisode();
     if (this.mode === 'server') {
       // The server watch is the source of truth: a lingering local watch would resurface as a stale
       // client watch after the server anchor is raised, so drop it.
@@ -267,7 +375,12 @@ export class AnchorWatch {
 
   // The navigator has seen the drag alarm. Client mode clears the latch (a continued drag re-latches
   // after the next breach window); server mode silences the current grade until it changes or clears.
+  // A fix-lost episode is acknowledged alongside, so one press silences whatever is sounding.
   acknowledge(): void {
+    // Only a sounding fix-lost alarm can be acknowledged: latching during the grace (the strip
+    // and its button are visible from the first stale second) would silently disarm the tone
+    // the grace is still counting toward, for the rest of the episode.
+    if (this.fixLostAlarm) this.#fixLostAcked = true;
     if (this.mode === 'server') {
       this.#ackState = this.#notificationState;
       return;

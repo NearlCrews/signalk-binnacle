@@ -54,6 +54,11 @@ function resumeContext(ctx: AudioContext): void {
 // Create and resume the shared alarm context. Must run from a user gesture (autoplay policy); a
 // call outside one leaves the context suspended, which alarmAudioPrimed() then reports.
 export function primeAlarmAudio(): void {
+  // A closed context can never resume, and the browser or OS can close it out from under the
+  // page (an audio-device reset among others). Without the replacement the Sound off chip would
+  // stay up forever with an Enable tap that does nothing. Bursts read sharedContext() live, so
+  // every alarm picks the replacement up.
+  if (sharedCtx?.state === 'closed') sharedCtx = undefined;
   const ctx = sharedContext();
   if (ctx && ctx.state === 'suspended') resumeContext(ctx);
 }

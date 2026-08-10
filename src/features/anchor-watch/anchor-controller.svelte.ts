@@ -56,17 +56,32 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     anchor.updateFix();
   });
 
-  // Sound the anchor-drag alarm. The acknowledge semantics live in the watch: client mode clears the
-  // latch outright, server mode silences the current grade until it changes or clears.
+  // Sound the anchor alarm: a drag, or a client watch whose fix has been lost long enough that
+  // drag detection is genuinely dead. The acknowledge semantics live in the watch: client mode
+  // clears the drag latch outright, server mode silences the current grade until it changes or
+  // clears, and a fix-lost acknowledge holds until the fix returns.
   $effect(() => {
-    anchorAlarm.update(shouldSoundAnchorAlarm(anchor.dragging, anchor.acknowledged));
+    anchorAlarm.update(
+      shouldSoundAnchorAlarm(
+        anchor.dragging,
+        anchor.acknowledged,
+        anchor.fixLostAlarm,
+        anchor.fixLostAcknowledged,
+      ),
+    );
   });
 
   // The anchor channel of the assertive live region, separate from the collision channel so a drag
-  // alarm is announced even while a collision alert holds the other region.
+  // alarm is announced even while a collision alert holds the other region. The two degraded causes
+  // are worded apart: a reconnect's stale window is not a GPS loss, and calling it one on every
+  // reconnect would train the crew to ignore this channel.
   const anchorAlert = $derived.by(() => {
-    if (anchor.degraded) {
+    const cause = anchor.degradedCause;
+    if (cause === 'fix-lost') {
       return 'Anchor watch degraded: no GPS fix, so drag detection has stopped.';
+    }
+    if (cause === 'server-stale') {
+      return 'Anchor watch state is stale: reconnecting to the server.';
     }
     if (!anchor.dragging || anchor.acknowledged) return '';
     return 'Anchor alarm: the boat is dragging.';

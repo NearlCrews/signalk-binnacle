@@ -2,13 +2,17 @@ import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import MobConfirmDialog from './MobConfirmDialog.svelte';
 
-function renderDialog(mark: {
-  epochMs: number;
-  position?: { latitude: number; longitude: number };
-}) {
+function renderDialog(
+  mark: {
+    epochMs: number;
+    position?: { latitude: number; longitude: number };
+  },
+  writeBlocked = false,
+) {
   return render(MobConfirmDialog, {
     props: {
       mark,
+      writeBlocked,
       onConfirm: vi.fn(),
       onCancel: vi.fn(),
       onTimeout: vi.fn(),
@@ -35,5 +39,14 @@ describe('MobConfirmDialog', () => {
 
     expect(body).toMatch(/class="fix muted-note no-fix [^"]+" aria-hidden="true"/);
     expect(body.match(/No GPS fix\. The alarm will sound without a position\./g)).toHaveLength(2);
+  });
+
+  it('qualifies the every-station promise while server writes are blocked', () => {
+    const warning = 'Server write access is blocked, so other stations may not receive the alarm.';
+    const blocked = renderDialog({ epochMs: Date.parse('2026-07-18T12:34:56Z') }, true);
+    // Once for the alertdialog description, once for the visible aria-hidden duplicate.
+    expect(blocked.split(warning)).toHaveLength(3);
+
+    expect(renderDialog({ epochMs: Date.parse('2026-07-18T12:34:56Z') })).not.toContain(warning);
   });
 });

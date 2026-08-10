@@ -17,7 +17,7 @@ const frame = createFrameFactory();
 function setup() {
   const store = new SignalKStore();
   const vessel = new OwnVessel(store);
-  const anchor = new AnchorWatch(store, vessel, createFakeStorage());
+  const anchor = new AnchorWatch(store, vessel, undefined, createFakeStorage());
   const map = createFakeMap();
   const overlay = createAnchorOverlay(anchor, vessel);
   const ctx = fakeOverlayContext(map);
@@ -178,7 +178,7 @@ function markerCoords(map: ReturnType<typeof eventfulMap>): unknown {
 async function dragSetup(interactionsAllowed: () => boolean = () => true) {
   const store = new SignalKStore();
   const vessel = new OwnVessel(store);
-  const anchor = new AnchorWatch(store, vessel, createFakeStorage());
+  const anchor = new AnchorWatch(store, vessel, undefined, createFakeStorage());
   anchor.dropLocal({ latitude: 0, longitude: 0 }, 50);
   const onMoved = vi.fn();
   const overlay = createAnchorOverlay(anchor, vessel, onMoved, interactionsAllowed);

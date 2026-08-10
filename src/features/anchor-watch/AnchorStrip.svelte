@@ -21,23 +21,33 @@ onDestroy(() => raiseArm.disarm());
 function tapRaise(): void {
   if (raiseArm.tap()) onRaise();
 }
+
+// A client watch that has lost its fix gets the same first-class strip as a drag: its drag
+// detection is dead, which the sleeping crew must be able to acknowledge or act on. A drag
+// outranks it for the title, and each condition carries its own acknowledged state (the drag
+// acknowledge is server-graded, the fix-lost one per episode).
+const fixLost = $derived(anchor.degradedCause === 'fix-lost');
+const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.fixLostAcknowledged);
 </script>
 
-{#if anchor.dragging}
+{#if anchor.dragging || fixLost}
   <!-- No aria-live here: App owns the assertive anchor channel (a concise spoken summary in a
        persistent role=alert region), mirroring the collision strip's split. -->
-  <aside
-    class="bottom-strip bottom-strip--alarm"
-    class:is-ack={anchor.acknowledged}
-    aria-label="Anchor alarm"
-  >
+  <aside class="bottom-strip bottom-strip--alarm" class:is-ack={acked} aria-label="Anchor alarm">
     <div class="head">
-      <span class="title">Anchor dragging</span>
-      {#if anchor.acknowledged}
+      <span class="title">{anchor.dragging ? 'Anchor dragging' : 'Anchor watch: no GPS'}</span>
+      {#if acked}
         <span class="note ack-tag">Acknowledged</span>
       {:else}
         <div class="actions actions--safety">
-          <button type="button" class="ack" onclick={() => anchor.acknowledge()}>
+          <!-- Before the fix-lost tone arms there is nothing to acknowledge, and a tap here must
+               not silently disarm the alarm the grace is still counting toward. -->
+          <button
+            type="button"
+            class="ack"
+            disabled={!anchor.dragging && !anchor.fixLostAlarm}
+            onclick={() => anchor.acknowledge()}
+          >
             Acknowledge
           </button>
           <button type="button" class="ack ack--warning" onclick={tapRaise}>

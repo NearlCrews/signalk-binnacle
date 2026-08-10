@@ -212,6 +212,18 @@ describe('MobStore', () => {
     expect(mob.acknowledged).toBe(true);
   });
 
+  it('reports remoteActive only while a sounding notification is on the stream', () => {
+    const { store, mob } = setup();
+    store.applyFrame(frame({ 'navigation.position': BOAT }));
+    mob.trigger();
+    // A local mark alone is not proof the raise reached the server.
+    expect(mob.remoteActive).toBe(false);
+    store.applyFrame(frame({ 'notifications.mob': { state: 'emergency', message: 'MOB' } }));
+    expect(mob.remoteActive).toBe(true);
+    store.applyFrame(frame({ 'notifications.mob': { state: 'normal', message: 'cleared' } }));
+    expect(mob.remoteActive).toBe(false);
+  });
+
   it('reflects a remote MOB notification, with its mark when carried', () => {
     const { store, mob } = setup();
     store.applyFrame(

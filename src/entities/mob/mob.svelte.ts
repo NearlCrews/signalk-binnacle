@@ -120,6 +120,12 @@ export class MobStore {
     return this.#local !== null || this.#remoteActive;
   }
 
+  // A sounding notifications.mob entry is on the stream (this station's own echo included), so the
+  // boat-wide raise is known to have reached the server; false means it may have been lost.
+  get remoteActive(): boolean {
+    return this.#remoteActive;
+  }
+
   // The mark to render and steer to: this station's own, or the remote one when carried.
   get position(): LatLon | undefined {
     return this.#local?.position ?? this.#remotePosition;

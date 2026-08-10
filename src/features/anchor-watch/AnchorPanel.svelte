@@ -11,6 +11,7 @@ import {
 } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
+import { ALARM_AUDIO_BLOCKED_NOTE } from '$shared/audio';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -29,6 +30,8 @@ interface Props {
   // A failed server call (set radius, move, raise), shown until the next anchor action.
   error?: string;
   busy?: boolean;
+  // Alarm audio cannot sound (no priming gesture since load), so an armed watch is visual-only.
+  audioBlocked?: boolean;
   onDrop: () => void;
   onRaise: () => void;
   onSetRadius: (meters: number) => void;
@@ -43,6 +46,7 @@ const {
   units,
   error,
   busy = false,
+  audioBlocked = false,
   onDrop,
   onRaise,
   onSetRadius,
@@ -77,15 +81,25 @@ const MODE_STATUS: Record<AnchorMode, string> = {
   client: 'Watching in this browser only. Keep Binnacle open for the alarm.',
   off: 'No anchor down.',
 };
-const statusLine = $derived(
-  anchor.degraded
-    ? 'Warning: GPS fix lost. Browser drag detection has stopped.'
-    : anchor.fixLost
-      ? 'GPS fix lost on this display. The server anchor watch remains active.'
-      : anchor.dragging
-        ? 'Anchor dragging: the boat is outside the watch radius.'
-        : MODE_STATUS[anchor.mode],
-);
+// The two degraded causes are worded apart: a held reconnect-stale window is not a GPS loss.
+// The panel words from the ungraced immediateDegradedCause (a panel is not a live region, so a
+// routine sub-second reconnect blip cannot spam anyone, and the reassuring mode text must not
+// stand in for geometry that cannot currently be trusted); the live region and strip keep
+// waiting out the grace through degradedCause. One branch per state, so priority reads top down.
+const immediateCause = $derived(anchor.immediateDegradedCause);
+const statusAlarm = $derived(anchor.dragging || immediateCause !== undefined);
+const statusLine = $derived.by(() => {
+  if (immediateCause === 'fix-lost') {
+    return 'Warning: GPS fix lost. Browser drag detection has stopped.';
+  }
+  if (immediateCause === 'server-stale') {
+    return 'Anchor watch state is stale: reconnecting to the server.';
+  }
+  if (anchor.fixLost)
+    return 'GPS fix lost on this display. The server anchor watch remains active.';
+  if (anchor.dragging) return 'Anchor dragging: the boat is outside the watch radius.';
+  return MODE_STATUS[anchor.mode];
+});
 
 // Below-minimum entries clamp up, matching the entity; UnitField snaps the text back to the
 // effective radius after the commit, so a rejected entry never sits in the box looking accepted.
@@ -132,10 +146,14 @@ function captureFromDistance(): void {
   <p class="muted-note">
     Drop the anchor to start a drift alarm that sounds if the boat swings past the watch radius.
   </p>
+  {#if audioBlocked}
+    <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
+    <p class="alert-note">{ALARM_AUDIO_BLOCKED_NOTE}</p>
+  {/if}
   <p
     class="muted-note status"
-    class:status--alarm={anchor.dragging || anchor.degraded}
-    role={anchor.dragging || anchor.degraded ? 'alert' : 'status'}
+    class:status--alarm={statusAlarm}
+    role={statusAlarm ? 'alert' : 'status'}
   >
     {statusLine}
   </p>

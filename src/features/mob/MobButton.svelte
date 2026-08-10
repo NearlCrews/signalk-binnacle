@@ -7,13 +7,15 @@ import MobConfirmDialog from './MobConfirmDialog.svelte';
 
 interface Props {
   mob: MobStore;
+  // Server writes are known to be blocked; the confirm dialog qualifies its every-station promise.
+  writeBlocked?: boolean;
   // The confirmed trigger: the app commits the mark, publishes the boat-wide alarm, and flies to it.
   onTrigger: (mark: MobMark | undefined) => void;
   // Fly the chart to the existing mark.
   onLocate: (position: LatLon) => void;
 }
 
-const { mob, onTrigger, onLocate }: Props = $props();
+const { mob, writeBlocked = false, onTrigger, onLocate }: Props = $props();
 
 // The MOB button must never trigger on a stray tap, so marking takes two: the button opens a
 // centered confirm dialog, and only its Mark button commits. The fix is snapshotted at PRESS time,
@@ -77,7 +79,7 @@ function onTimeout(): void {
   MOB
 </button>
 {#if confirming}
-  <MobConfirmDialog mark={pressMark} {onConfirm} {onCancel} {onTimeout} />
+  <MobConfirmDialog mark={pressMark} {writeBlocked} {onConfirm} {onCancel} {onTimeout} />
 {/if}
 
 <style>

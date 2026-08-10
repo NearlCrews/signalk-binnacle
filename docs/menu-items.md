@@ -85,8 +85,16 @@ source, and surrounding traffic before relying on it.
   [Marine radar](marine-radar.md).
 - **Anchor watch** prefers the Signal K Anchor API and falls back to a browser-only watch. A fresh GPS
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
-  watch remains active independently. Server-mode changes require write access; client-mode changes
+  watch remains active independently. A browser watch whose GPS fix stays lost for about 30 seconds
+  sounds the anchor tone and shows an "Anchor watch: no GPS" strip with per-episode Acknowledge
+  (which re-arms when the fix returns) and Raise. A stream reconnect's stale server state is
+  reported as "Anchor watch state is stale: reconnecting to the server." only after about 5 seconds
+  and is never worded as a GPS loss. Server-mode changes require write access; client-mode changes
   stay available. Conflicting actions are locked until completion.
+- **Man overboard** raises the boat-wide alarm through the Notifications API with a v1 delta
+  fallback. A raise or clear lost to a closed socket is replayed on reconnect, the MOB strip warns
+  when the boat-wide alarm may not have reached the server, and the confirm dialog qualifies its
+  every-station promise while writes are blocked.
 - **Alarms** lists bounded, validated Signal K notifications by severity, and its menu entry carries
   the live count of raised generic alarms. Any inbound alarm or emergency grade notification outside the
   dedicated hazards sounds a shared tone and raises a safety strip offering Silence, Acknowledge,
@@ -100,7 +108,10 @@ source, and surrounding traffic before relying on it.
   The shallow threshold merges the server's depth zones with the locally configured limit
   conservatively: whichever bound is deeper governs, so the server can tighten the alarm but never
   quietly loosen it. The panel names which one is in force and says when no depth source is
-  publishing.
+  publishing. While any audible watch is live (an armed anchor or MOB watch, or an open stream
+  whose shallow, collision, and generic alarms could sound) and no gesture has primed alarm audio,
+  the status strip shows an alarm-colored "Sound off" chip whose Enable tap turns audio on, and
+  the Anchor watch and Alarms panels carry a matching visual-only-audio note.
 
 ## Weather
 

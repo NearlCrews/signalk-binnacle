@@ -18,6 +18,7 @@ function renderPanel(
   anchorDepth: DepthReading = NO_DEPTH,
   safetyDepth: DepthReading = NO_DEPTH,
   auth: AuthController = { writeBlocked: false } as AuthController,
+  extras: { anchor?: Record<string, unknown>; audioBlocked?: boolean } = {},
 ): string {
   return render(AnchorPanel, {
     props: {
@@ -29,9 +30,10 @@ function renderPanel(
         mode: 'off',
         radiusMeters: undefined,
         preferredRadiusMeters: 30,
-        degraded: false,
+        degradedCause: undefined,
         dragging: false,
-      } as AnchorWatch,
+        ...extras.anchor,
+      } as unknown as AnchorWatch,
       vessel: {
         position: { latitude: 42, longitude: -83 },
         positionStale: false,
@@ -39,6 +41,7 @@ function renderPanel(
         safetyDepth,
       } as OwnVessel,
       units: { mode } as UnitsStore,
+      audioBlocked: extras.audioBlocked ?? false,
       onDrop: vi.fn(),
       onRaise: vi.fn(),
       onSetRadius: vi.fn(),
@@ -99,6 +102,41 @@ describe('AnchorPanel', () => {
     expect(renderPanel('metric', NO_DEPTH, NO_DEPTH, blockedAuth(true))).toMatch(
       /<button[^>]+disabled[^>]*>\s*Requesting access/,
     );
+  });
+
+  it('words the two degraded causes apart and alarms the status line for both', () => {
+    const fixLost = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: {
+        watching: true,
+        mode: 'client',
+        fixLost: true,
+        immediateDegradedCause: 'fix-lost',
+      },
+    });
+    expect(fixLost).toContain('Warning: GPS fix lost. Browser drag detection has stopped.');
+    expect(fixLost).toContain('status--alarm');
+
+    // The panel words server-stale from the ungraced immediate cause, before the live region's
+    // grace has held: the reassuring mode text must not stand in for untrusted geometry.
+    const stale = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: { watching: true, mode: 'server', immediateDegradedCause: 'server-stale' },
+    });
+    expect(stale).toContain('Anchor watch state is stale: reconnecting to the server.');
+    expect(stale).toContain('status--alarm');
+  });
+
+  it('keeps the reconnect blip (degraded without a cause yet) off the status line', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: { watching: true, mode: 'server', degradedCause: undefined },
+    });
+    expect(body).toContain('Watching on the server.');
+    expect(body).not.toContain('status--alarm');
+  });
+
+  it('warns that alarms are visual-only while audio is blocked', () => {
+    const blocked = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, { audioBlocked: true });
+    expect(blocked).toContain('Alarm sound is off');
+    expect(renderPanel('metric')).not.toContain('Alarm sound is off');
   });
 
   it('explains the missing depth row on a keel-only sounder', () => {

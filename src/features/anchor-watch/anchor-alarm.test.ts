@@ -8,7 +8,7 @@ describe('anchor alarm', () => {
     const { control, events, lastTone } = createFakeAlarmControl();
     const alarm = new GatedAlarm(ANCHOR_TONE, control);
     const update = (dragging: boolean, acknowledged: boolean): void => {
-      alarm.update(shouldSoundAnchorAlarm(dragging, acknowledged));
+      alarm.update(shouldSoundAnchorAlarm(dragging, acknowledged, false, false));
     };
 
     update(true, false);
@@ -33,5 +33,14 @@ describe('anchor alarm', () => {
     alarm.update(true);
 
     expect(events).toEqual(['start', 'stop', 'start']);
+  });
+
+  it('sounds a held fix-lost episode until its own acknowledge, independent of dragging', () => {
+    expect(shouldSoundAnchorAlarm(false, false, true, false)).toBe(true);
+    expect(shouldSoundAnchorAlarm(false, false, true, true)).toBe(false);
+    expect(shouldSoundAnchorAlarm(false, false, false, false)).toBe(false);
+    // A drag acknowledge does not silence the fix-lost episode, nor the other way around.
+    expect(shouldSoundAnchorAlarm(true, true, true, false)).toBe(true);
+    expect(shouldSoundAnchorAlarm(true, false, true, true)).toBe(true);
   });
 });

@@ -8,6 +8,9 @@ import { dialog, focusOnMount } from '$shared/ui';
 interface Props {
   // The press-time capture; undefined when there was no GPS fix at the press.
   mark: MobMark | undefined;
+  // Server writes are known to be blocked, so the every-station promise below must be qualified
+  // before the tap, not discovered after it.
+  writeBlocked?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   // Self-dismiss, distinct from onCancel so the opener can retain the press-time fix for a
@@ -15,7 +18,13 @@ interface Props {
   onTimeout: () => void;
 }
 
-const { mark, onConfirm, onCancel, onTimeout }: Props = $props();
+const { mark, writeBlocked = false, onConfirm, onCancel, onTimeout }: Props = $props();
+
+// Spoken and sighted halves of the dialog render these separately, so one constant keeps the
+// screen reader and the sighted reader told the same thing.
+const NO_FIX_NOTE = 'No GPS fix. The alarm will sound without a position.';
+const WRITE_BLOCKED_NOTE =
+  'Server write access is blocked, so other stations may not receive the alarm.';
 
 // Generous for wet, gloved, one-handed taps on a pitching deck; press-time capture makes the wait
 // free. The dialog still self-dismisses so an unattended accidental press can never leave a modal
@@ -65,7 +74,10 @@ function confirm(): void {
         {formatLatitude(mark.position.latitude)}, {formatLongitude(mark.position.longitude)}.
       </span>
     {:else}
-      <span class="visually-hidden"> No GPS fix. The alarm will sound without a position. </span>
+      <span class="visually-hidden">{NO_FIX_NOTE}</span>
+    {/if}
+    {#if writeBlocked}
+      <span class="visually-hidden">{WRITE_BLOCKED_NOTE}</span>
     {/if}
   </p>
   {#if mark?.position}
@@ -75,9 +87,10 @@ function confirm(): void {
       <span class="num">{formatLongitude(mark.position.longitude)}</span>
     </p>
   {:else}
-    <p class="fix muted-note no-fix" aria-hidden="true">
-      No GPS fix. The alarm will sound without a position.
-    </p>
+    <p class="fix muted-note no-fix" aria-hidden="true">{NO_FIX_NOTE}</p>
+  {/if}
+  {#if writeBlocked}
+    <p class="fix muted-note dialog-warn" aria-hidden="true">{WRITE_BLOCKED_NOTE}</p>
   {/if}
   <div class="actions">
     <button type="button" class="btn" onclick={onCancel}>
@@ -135,7 +148,8 @@ function confirm(): void {
 .fix {
   padding-block-start: var(--space-2);
 }
-.no-fix {
+.no-fix,
+.dialog-warn {
   font-family: var(--font-ui);
   font-weight: 600;
   color: var(--warning);
