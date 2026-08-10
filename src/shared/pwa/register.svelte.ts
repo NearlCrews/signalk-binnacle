@@ -1,7 +1,19 @@
 import { registerSW } from 'virtual:pwa-register';
 
+// The registration outcome, surfaced so the offline charts page can explain a cache that stays
+// off instead of leaving the diagnosis in devtools: 'insecure-context' when the browser withholds
+// the service worker API (plain http), 'untrusted-certificate' when registration was refused over
+// the server certificate, 'failed' on any other registration error.
+export type PwaStatus =
+  | 'pending'
+  | 'insecure-context'
+  | 'active'
+  | 'untrusted-certificate'
+  | 'failed';
+
 export interface PwaController {
   update: () => void;
+  readonly status: PwaStatus;
 }
 
 // One-time migration: the old 'binnacle-pmtiles' worker cache was provably inert (PMTiles range
@@ -100,17 +112,31 @@ export function createReloadCoordinator(
 
 // Registers the service worker (prompt mode). onNeedRefresh fires when a new build is waiting so the
 // UI can offer a reload, and update() activates it. On plain http (no secure context) registerSW
-// no-ops, so this degrades cleanly. A registration error in a secure context is logged rather than
-// swallowed, so a genuine HTTPS failure is observable instead of silently invisible.
+// no-ops, so this degrades cleanly. A registration error in a secure context is logged and surfaced
+// through the reactive status, so a genuine HTTPS failure is observable instead of silently
+// invisible.
 export function registerPwa(onNeedRefresh?: () => void): PwaController {
   deleteOrphanCaches();
   // Ask the browser not to evict this origin's storage under pressure: the tile and chart caches
-  // are the offline navigation data. Browsers may decline silently; that is fine.
-  void navigator.storage?.persist?.().catch(() => undefined);
+  // are the offline navigation data. Browsers may decline silently; that is fine. Guarded like
+  // the status classification below, so both survive an environment without a navigator.
+  if (typeof navigator !== 'undefined') {
+    void navigator.storage?.persist?.().catch(() => undefined);
+  }
+  // Over plain http the serviceWorker API is absent, so registration is never attempted and no
+  // callback below ever fires; classify that up front rather than leaving the status pending.
+  let status = $state<PwaStatus>(
+    typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+      ? 'pending'
+      : 'insecure-context',
+  );
   const coordinator = createReloadCoordinator();
   const updateSW = registerSW({
     onNeedRefresh,
     onNeedReload: () => coordinator.onNeedReload(),
+    onRegisteredSW: () => {
+      status = 'active';
+    },
     onRegisterError: (error) => {
       // An untrusted server certificate makes the browser refuse to register a service worker, even
       // after the user clicks through the page warning, so offline caching stays off (the app itself
@@ -118,13 +144,20 @@ export function registerPwa(onNeedRefresh?: () => void): PwaController {
       // falls through to the generic warning below.
       const message = error instanceof Error ? error.message : String(error);
       if (/certificate|ssl/i.test(message)) {
+        status = 'untrusted-certificate';
         console.info(
           '[pwa] Offline caching is off: this browser does not trust the server certificate. Install the Signal K server certificate as a trusted root to enable offline use.',
         );
         return;
       }
+      status = 'failed';
       console.warn('[pwa] service worker registration failed', error);
     },
   });
-  return { update: () => coordinator.requestUpdate(() => void updateSW(true)) };
+  return {
+    update: () => coordinator.requestUpdate(() => void updateSW(true)),
+    get status() {
+      return status;
+    },
+  };
 }

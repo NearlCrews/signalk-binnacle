@@ -486,8 +486,10 @@ must not be repeatable.
   certificate warning. The symptom is `onRegisterError` firing with a SecurityError whose message is
   "An SSL certificate error occurred when fetching the script", and offline caching staying off while
   the page itself loads. The fix is environmental, not code: install the certificate (or its CA root)
-  into the browser or OS trust store and mark it trusted, then reload. register.ts detects this case
-  and logs an actionable info line rather than an alarming warning. Over plain http the serviceWorker
+  into the browser or OS trust store and mark it trusted, then reload. register.svelte.ts detects
+  this case, logs an actionable info line rather than an alarming warning, and surfaces a reactive
+  status ('untrusted-certificate' among others) that the Offline charts landing page renders as a
+  notice with the install-and-trust fix. Over plain http the serviceWorker
   API is absent so registerSW no-ops; over https with an untrusted cert the API is present so
   registration is attempted and fails on the cert, which is a different path from the plain-http one.
 - Never import `@signalk/server-api` in browser or worker code, not even as a type-only import.

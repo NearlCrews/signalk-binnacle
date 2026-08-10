@@ -15,6 +15,7 @@
 const DAY_SECONDS = 60 * 60 * 24;
 const THIRTY_SIX_HOURS_SECONDS = 36 * 60 * 60;
 const TWO_HOURS_SECONDS = 60 * 60 * 2;
+const HOUR_SECONDS = 60 * 60;
 
 interface MatchContext {
   url: URL;
@@ -36,10 +37,32 @@ export const isBasemapAsset = ({ url }: MatchContext): boolean =>
 export const isChartTile = ({ url, sameOrigin }: MatchContext): boolean =>
   sameOrigin && /^\/charts\/[^/]+\/\d+\/\d+\/\d+(?:@2x)?(?:\.\w+)?$/.test(url.pathname);
 
+// The time-dynamic nowcoast layer families (weather radar mosaics, watches and warnings, active
+// tropical cyclones, and sea surface temperature). They share the nowcoast host with the static
+// BlueTopo bathymetry pair, so the WMS LAYERS (or WMTS LAYER) value is what separates them. The
+// family list is inlined, not derived from the catalog, so the serialized worker matcher stays
+// self-contained (file header); the catalog-derived test in sw-caching.test.ts keeps it honest.
+// Workbox routes first-match, so this rule MUST stay listed before isOverlayTile in runtimeCaching;
+// reorder them and a radar frame is served CacheFirst as current for 7 days.
+export const isVolatileOverlayTile = ({ url }: MatchContext): boolean => {
+  if (url.hostname !== 'nowcoast.noaa.gov') return false;
+  for (const [name, value] of url.searchParams) {
+    const param = name.toLowerCase();
+    if (param !== 'layers' && param !== 'layer') continue;
+    for (const layer of value.split(',')) {
+      if (/^(?:weather_radar|alerts|tropical_cyclones|sea_surface_temperature):/.test(layer)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 // The cross-origin overlay tile and WMS hosts Binnacle renders (NOAA ENC and MPA, GEBCO, the two
 // EMODnet services, BlueTopo via nowcoast, Marine Regions boundaries, OpenSeaMap seamarks, NASA
 // GIBS, and Seascape). The host list is inlined, not a shared const, so the serialized worker matcher stays
 // self-contained (file header). One shared cache with a 7 day TTL bounds chart-edition staleness.
+// The nowcoast time-dynamic layers are carved out by isVolatileOverlayTile, listed first.
 export const isOverlayTile = ({ url }: MatchContext): boolean =>
   url.hostname === 'gis.charttools.noaa.gov' ||
   url.hostname === 'nowcoast.noaa.gov' ||
@@ -67,13 +90,16 @@ export const isRadarTile = ({ url }: MatchContext): boolean =>
 // IndexedDB by the pmtiles protocol layer instead, which also covers plain-http contexts.
 export const runtimeCaching = [
   {
-    // The base style document: serve the last one instantly, refresh behind, so a rotated
-    // OpenFreeMap planet build cannot pin a style whose tile references have aged out.
+    // The base style document: serve the last one instantly, refresh behind. Revalidation on every
+    // online use, not expiry, is what keeps a rotated OpenFreeMap planet build from pinning a stale
+    // style, so the age cap matches the tile cache below: a style expiring sooner blanks the base
+    // map on a long offline stretch while its tiles are still cached, and a stale style over
+    // equally stale tiles renders fine.
     urlPattern: isBasemapStyle,
     handler: 'StaleWhileRevalidate',
     options: {
       cacheName: 'binnacle-basemap-style',
-      expiration: { maxEntries: 4, maxAgeSeconds: 7 * DAY_SECONDS },
+      expiration: { maxEntries: 4, maxAgeSeconds: 30 * DAY_SECONDS },
       cacheableResponse: { statuses: [200] },
     },
   },
@@ -102,6 +128,19 @@ export const runtimeCaching = [
         maxAgeSeconds: 30 * DAY_SECONDS,
         purgeOnQuotaError: true,
       },
+      cacheableResponse: { statuses: [200] },
+    },
+  },
+  {
+    // Time-dynamic nowcoast layers: a stored weather frame is wrong before anyone sails into it,
+    // so prefer the network and keep at most an hour as the offline fallback. Must stay listed
+    // before the isOverlayTile route below, which also matches the nowcoast host.
+    urlPattern: isVolatileOverlayTile,
+    handler: 'NetworkFirst',
+    options: {
+      cacheName: 'binnacle-volatile-overlays',
+      networkTimeoutSeconds: 8,
+      expiration: { maxEntries: 200, maxAgeSeconds: HOUR_SECONDS, purgeOnQuotaError: true },
       cacheableResponse: { statuses: [200] },
     },
   },

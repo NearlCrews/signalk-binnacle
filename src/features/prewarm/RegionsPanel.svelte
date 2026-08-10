@@ -11,6 +11,7 @@ import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
 import type { UnitsStore } from '$entities/units';
 import { BASEMAP_SOURCE_ID } from '$shared/map';
+import type { PwaStatus } from '$shared/pwa';
 import { isInsecureTransportOrigin, serverOrigin } from '$shared/signalk';
 import {
   AccessRecoveryNote,
@@ -42,6 +43,10 @@ interface Props {
   // worker and its byte-asset cache. Defaulted here, and guarded so a server-rendered test never
   // touches location.
   insecureTransport?: boolean;
+  // The service worker registration outcome from registerPwa, threaded from the composition root.
+  // 'untrusted-certificate' gets its own notice: over HTTPS with a certificate the browser does
+  // not trust, insecureTransport is false and the cache silently stays off without it.
+  pwaStatus?: PwaStatus;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
@@ -58,6 +63,7 @@ const {
   // Deliberately the PAGE origin, not the Signal K API origin the app threads through as `origin`:
   // a service worker is claimed by the origin that served the page, so do not unify these two.
   insecureTransport = typeof location !== 'undefined' && isInsecureTransportOrigin(serverOrigin()),
+  pwaStatus = 'pending',
   onClose,
   onBack,
   onOpenCharts,
@@ -91,6 +97,42 @@ const panelCollapsed = $derived(controller.panelCollapsed);
 const drawing = $derived(controller.drawing);
 // Draw mode announces itself only through the header subtitle, which is not a live region, so this
 // carries the same instruction to a screen reader when the chart starts waiting for a drag.
+// Why the browser cache is off for this visit and what fixes it. The reassurance between them is
+// identical for every cause, so it renders once from one constant instead of drifting across
+// three copied branches.
+const CACHE_OFF_REASSURANCE =
+  "Charts you have already viewed still reopen offline from the browser's own store, and Chart " +
+  "Locker's saved areas and automatic caching keep working over the boat network.";
+const cacheOffNote = $derived.by(() => {
+  if (insecureTransport) {
+    return {
+      why:
+        "This server uses plain HTTP, so the browser's offline cache for the base map and " +
+        'streamed chart tiles stays off.',
+      fix: 'To cache everything, enable SSL on the Signal K server and trust its certificate.',
+    };
+  }
+  if (pwaStatus === 'untrusted-certificate') {
+    return {
+      why:
+        "This browser does not trust the Signal K server's certificate, so the browser's " +
+        'offline cache for the base map and streamed chart tiles stays off.',
+      fix:
+        'To cache everything, install the server certificate, or its certificate authority, in ' +
+        "this device's trust store, mark it trusted, and reload.",
+    };
+  }
+  if (pwaStatus === 'failed') {
+    return {
+      why:
+        "The browser's offline cache for the base map and streamed chart tiles could not " +
+        'start, so it stays off for this visit.',
+      fix: 'Reloading usually recovers it; the browser console has the details.',
+    };
+  }
+  return undefined;
+});
+
 const drawAnnouncement = $derived(
   drawing ? 'Draw mode on. Drag over the chart to select the area.' : '',
 );
@@ -190,14 +232,8 @@ function chartLabel(id: string): string {
     <p class="muted-note">
       Save the charts needed for a passage, verify their status, and manage offline storage.
     </p>
-    {#if insecureTransport}
-      <p class="muted-note">
-        This server uses plain HTTP, so the browser's offline cache for the base map and streamed
-        chart tiles stays off. Charts you have already viewed still reopen offline from the
-        browser's own store, and Chart Locker's saved areas and automatic caching keep working over
-        the boat network. To cache everything, enable SSL on the Signal K server and trust its
-        certificate.
-      </p>
+    {#if cacheOffNote}
+      <p class="muted-note">{cacheOffNote.why} {CACHE_OFF_REASSURANCE} {cacheOffNote.fix}</p>
     {/if}
     <div class="panel-controls">
       <button

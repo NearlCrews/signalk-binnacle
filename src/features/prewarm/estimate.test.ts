@@ -1,4 +1,5 @@
 import {
+  CHART_SOURCES,
   chartSourceById,
   DEFAULT_TILE_BYTES_BY_MODE,
   tileCountInBbox,
@@ -41,6 +42,18 @@ describe('regions estimate', () => {
   it('positionWarmSources excludes the basemap', () => {
     expect(positionWarmSources().some((s) => s.id === 'basemap')).toBe(false);
     expect(positionWarmSources().some((s) => s.id === 'seamark')).toBe(true);
+  });
+
+  it('keeps every time-dynamic catalog source out of region downloads and position warm', () => {
+    const volatile = CHART_SOURCES.filter((s) => s.maxAgeSeconds !== undefined).map((s) => s.id);
+    // Non-empty so a catalog that stops marking volatility fails here instead of passing vacuously.
+    expect(volatile.length).toBeGreaterThan(0);
+    const region = new Set(regionSources().map((s) => s.id));
+    const warm = new Set(positionWarmSources().map((s) => s.id));
+    for (const id of volatile) {
+      expect(region.has(id), `${id} is offered for a region download`).toBe(false);
+      expect(warm.has(id), `${id} is offered for position warm`).toBe(false);
+    }
   });
 
   it('uses the measured average when present and the source fallback otherwise', () => {

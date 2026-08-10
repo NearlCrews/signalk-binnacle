@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UnitsStore } from '$entities/units';
 import type { UnitsMode } from '$shared/lib';
+import type { PwaStatus } from '$shared/pwa';
 import { PersistedValue } from '$shared/settings';
 import { createFakeStorage, jsonResponse } from '$shared/testing';
 import { canDownloadRegion, downloadGateReason } from './estimate.js';
@@ -160,8 +161,16 @@ describe('offline charts home view', () => {
     "own store, and Chart Locker's saved areas and automatic caching keep working over the boat " +
     'network. To cache everything, enable SSL on the Signal K server and trust its certificate.';
 
+  const UNTRUSTED_CERTIFICATE_NOTE =
+    "This browser does not trust the Signal K server's certificate, so the browser's offline " +
+    'cache for the base map and streamed chart tiles stays off. Charts you have already viewed ' +
+    "still reopen offline from the browser's own store, and Chart Locker's saved areas and " +
+    'automatic caching keep working over the boat network. To cache everything, install the ' +
+    "server certificate, or its certificate authority, in this device's trust store, mark it " +
+    'trusted, and reload.';
+
   // The template wraps the note across source lines, so compare against collapsed whitespace.
-  function renderHome(insecureTransport: boolean): string {
+  function renderHome(insecureTransport: boolean, pwaStatus: PwaStatus = 'pending'): string {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(404, {})),
@@ -177,6 +186,7 @@ describe('offline charts home view', () => {
           new PersistedValue<UnitsMode>('binnacle:units-test', 'metric', createFakeStorage()),
         ),
         insecureTransport,
+        pwaStatus,
         onClose: () => {},
         onOpenCharts: () => {},
         onRetryAccess: () => {},
@@ -192,6 +202,26 @@ describe('offline charts home view', () => {
 
   it('stays quiet about transport when the server is reached over HTTPS', () => {
     expect(renderHome(false)).not.toContain(PLAIN_HTTP_NOTE);
+  });
+
+  it('explains an untrusted server certificate keeping the browser cache off', () => {
+    expect(renderHome(false, 'untrusted-certificate')).toContain(UNTRUSTED_CERTIFICATE_NOTE);
+  });
+
+  it('stays quiet about the certificate while registration is healthy', () => {
+    expect(renderHome(false, 'active')).not.toContain(UNTRUSTED_CERTIFICATE_NOTE);
+  });
+
+  it('lets the plain HTTP notice outrank the certificate one when both conditions hold', () => {
+    // Plain HTTP is the actionable root cause there; a certificate note beside it would send the
+    // navigator chasing a trust store that cannot help until SSL is on at all.
+    const body = renderHome(true, 'untrusted-certificate');
+    expect(body).toContain(PLAIN_HTTP_NOTE);
+    expect(body).not.toContain(UNTRUSTED_CERTIFICATE_NOTE);
+  });
+
+  it('explains a failed registration keeping the browser cache off', () => {
+    expect(renderHome(false, 'failed')).toContain('could not start');
   });
 
   // The region has to be mounted and empty before draw mode starts, or the instruction it later

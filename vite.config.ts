@@ -102,7 +102,7 @@ export default defineConfig({
         // isolates the worker from the Signal K server API and admin paths, and a /^\/signalk/ entry
         // would falsely match the app's own /signalk-binnacle/ routes and break the offline fallback.
         navigateFallbackDenylist: [/\/[^/?]+\.[^/?]+$/],
-        // Sweep precache entries left by prior builds; register.ts assumes this is on.
+        // Sweep precache entries left by prior builds; register.svelte.ts assumes this is on.
         cleanupOutdatedCaches: true,
         // The app chunk is large (MapLibre), so raise the precache size ceiling.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

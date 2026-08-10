@@ -3,6 +3,7 @@ export type {
   PrivacyReport,
 } from './device-privacy';
 export {
+  BINNACLE_CACHE_NAMES,
   BINNACLE_PRIVACY_CHANNEL,
   createBinnaclePrivacyRegistry,
   createBroadcastChannelBroadcaster,

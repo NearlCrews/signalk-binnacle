@@ -1,2 +1,3 @@
 export { OnlineStatus } from './online.svelte';
-export { registerPwa } from './register';
+export type { PwaStatus } from './register.svelte';
+export { registerPwa } from './register.svelte';

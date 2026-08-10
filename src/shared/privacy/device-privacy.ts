@@ -396,10 +396,15 @@ const BINNACLE_INDEXED_DB_NAMES = [
   'binnacle-weather-point',
 ] as const;
 
-const BINNACLE_CACHE_NAMES = [
+// Every runtime cache the service worker declares, mirrored here because the erase inventory and
+// sw-caching.ts cannot import each other (the worker config is serialized without module scope).
+// The seam is pinned from the sw-caching side: its test asserts every declared cacheName appears
+// in this list, so a new route cannot silently escape the privacy erase.
+export const BINNACLE_CACHE_NAMES = [
   'binnacle-basemap-style',
   'binnacle-basemap',
   'binnacle-chart-tiles',
+  'binnacle-volatile-overlays',
   'binnacle-overlay-tiles',
   'binnacle-tides',
   'binnacle-radar-index',

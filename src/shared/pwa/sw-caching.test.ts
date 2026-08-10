@@ -1,5 +1,6 @@
 import { CHART_SOURCES, type ChartSource } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
+import { BINNACLE_CACHE_NAMES } from '$shared/privacy';
 import {
   isBasemapAsset,
   isBasemapStyle,
@@ -8,19 +9,22 @@ import {
   isOverlayTile,
   isRadarIndex,
   isRadarTile,
+  isVolatileOverlayTile,
   runtimeCaching,
 } from './sw-caching';
 
 const ctx = (url: string, sameOrigin = false) => ({ url: new URL(url), sameOrigin });
 
-// The catalog's own URL for a source, whichever shape its mode carries. Only the host matters to
-// these matchers, so an unexpanded {z}/{x}/{y} template parses fine.
+// The catalog's own URL for a source, whichever shape its mode carries. The matchers read the host
+// and, on the nowcoast host, the LAYERS parameter, so a WMS base gets the same LAYERS value its
+// GetMap requests carry, and an unexpanded {z}/{x}/{y} template parses fine.
 function upstreamUrl(source: ChartSource): string {
   const upstream = source.upstream;
   switch (upstream.mode) {
     case 'style':
       return upstream.styleUrl;
     case 'wms':
+      return `${upstream.base}?SERVICE=WMS&REQUEST=GetMap&LAYERS=${upstream.layers}`;
     case 'arcgis':
       return upstream.base;
     default:
@@ -51,15 +55,56 @@ describe('service worker route matchers', () => {
     }
   });
 
-  it('routes every other catalog source as an overlay tile', () => {
+  it('routes every other catalog source as an overlay tile, volatile ones never the 7-day cache', () => {
     for (const source of CHART_SOURCES) {
-      if (source.upstream.mode === 'style') continue;
+      if (source.upstream.mode === 'style' || source.maxAgeSeconds !== undefined) continue;
       const request = ctx(upstreamUrl(source));
       expect(
         isOverlayTile(request),
         `${source.id} (${request.url.hostname}) is cached by no runtime route`,
       ).toBe(true);
+      expect(isVolatileOverlayTile(request), `${source.id} is wrongly routed as time-dynamic`).toBe(
+        false,
+      );
     }
+  });
+
+  it('routes every time-dynamic catalog source through the short-lived NetworkFirst cache', () => {
+    const volatile = CHART_SOURCES.filter((source) => source.maxAgeSeconds !== undefined);
+    expect(volatile.length).toBeGreaterThan(0);
+    for (const source of volatile) {
+      const request = ctx(upstreamUrl(source));
+      // First-match routing: the first rule claiming the request must be the volatile one, so the
+      // overlapping 7-day nowcoast route can never serve a stale frame as current.
+      const route = runtimeCaching.find((entry) =>
+        (entry.urlPattern as (c: typeof request) => boolean)(request),
+      );
+      expect(route?.options.cacheName, `${source.id} is not routed as time-dynamic`).toBe(
+        'binnacle-volatile-overlays',
+      );
+      expect(route?.handler).toBe('NetworkFirst');
+      expect(route?.options.expiration.maxAgeSeconds).toBeLessThanOrEqual(60 * 60);
+    }
+  });
+
+  it('reads the layer parameter shape a WMS or WMTS request carries', () => {
+    // Synthetic layer names: the matcher's parameter handling is what is under test here; the real
+    // family names are covered by the catalog-derived tests above.
+    expect(
+      isVolatileOverlayTile(ctx('https://nowcoast.noaa.gov/g/ows?layers=weather_radar:x')),
+    ).toBe(true);
+    expect(
+      isVolatileOverlayTile(ctx('https://nowcoast.noaa.gov/g/wmts?LAYER=alerts:x&STYLE=')),
+    ).toBe(true);
+    expect(
+      isVolatileOverlayTile(ctx('https://nowcoast.noaa.gov/g/ows?LAYERS=bluetopo:a,alerts:x')),
+    ).toBe(true);
+    expect(isVolatileOverlayTile(ctx('https://nowcoast.noaa.gov/g/ows?LAYERS=bluetopo:a'))).toBe(
+      false,
+    );
+    expect(isVolatileOverlayTile(ctx('https://example.com/ows?LAYERS=weather_radar:x'))).toBe(
+      false,
+    );
   });
 
   it('matches plugin chart tiles only same-origin and only tile-shaped paths', () => {
@@ -122,6 +167,25 @@ describe('service worker route matchers', () => {
     for (const entry of runtimeCaching) {
       expect(entry.options.expiration.maxEntries).toBeGreaterThan(0);
       expect(entry.options.expiration.maxAgeSeconds).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the base style cached at least as long as the tiles it references', () => {
+    // A style expiring before its tiles blanks the base map on a long offline stretch even though
+    // the tiles are still cached; revalidation already bounds online staleness.
+    const ageOf = (pattern: unknown): number =>
+      runtimeCaching.find((e) => e.urlPattern === pattern)?.options.expiration.maxAgeSeconds ?? 0;
+    expect(ageOf(isBasemapStyle)).toBeGreaterThan(0);
+    expect(ageOf(isBasemapStyle)).toBeGreaterThanOrEqual(ageOf(isBasemapAsset));
+  });
+
+  it('lists every runtime cache in the privacy erase inventory', () => {
+    // The erase inventory cannot import this config (the worker serializes it without module
+    // scope), so this seam pins the mirror: a new route whose cache is missing there would
+    // survive a device-data erase while the erase reports success.
+    const inventory: readonly string[] = BINNACLE_CACHE_NAMES;
+    for (const entry of runtimeCaching) {
+      expect(inventory).toContain(entry.options.cacheName);
     }
   });
 });

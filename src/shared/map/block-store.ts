@@ -238,34 +238,55 @@ export function createBlockStore(options: BlockStoreOptions = {}): BlockStore {
       idb.write(
         async () => {
           const conn = await db();
-          const metaStore = conn.transaction(META, 'readonly').objectStore(META);
-          // Issue both reads synchronously on the one transaction; awaiting between requests
-          // would let the transaction auto-commit and the second request would throw.
-          const metasReq = metaStore.getAll();
-          const keysReq = metaStore.getAllKeys();
-          const [metas, keys] = await Promise.all([
-            reqPromise<BlockMeta[]>(metasReq),
-            reqPromise<IDBValidKey[]>(keysReq),
-          ]);
-          const items = keys.map((key, at) => ({ key: String(key), ...metas[at] }));
-          const expired = items.filter((item) => now - item.lastAccess >= ttlMs);
-          const live = items
-            .filter((item) => now - item.lastAccess < ttlMs)
-            .sort((a, b) => a.lastAccess - b.lastAccess);
-          let total = live.reduce((sum, item) => sum + item.size, 0);
-          const evicted: string[] = [];
-          for (const item of live) {
-            if (total <= maxBytes) break;
-            evicted.push(item.key);
-            total -= item.size;
-          }
-          const toDelete = [...expired.map((item) => item.key), ...evicted];
-          if (toDelete.length === 0) return;
+          // One readwrite transaction for the whole pass, like purgeArchive above: classifying in a
+          // readonly transaction and deleting in a second one leaves a window where a concurrent
+          // putBlocks or touch lands between classifying a block and evicting it, so the fresh
+          // block is the one dropped. getAll plus getAllKeys keep the pass to two requests, where
+          // a per-row cursor would hold this exclusive lock across thousands of row events and
+          // queue every concurrent getBlocks read behind it; both read only meta rows, never the
+          // block bytes. The deletes are issued from the second request's success event, so they
+          // join the same still-active transaction (an await between requests would let it
+          // auto-commit).
           await runTransaction(conn, [BLOCKS, META], 'readwrite', (tx) => {
-            for (const key of toDelete) {
-              tx.objectStore(BLOCKS).delete(key);
-              tx.objectStore(META).delete(key);
-            }
+            const metaStore = tx.objectStore(META);
+            const blocksStore = tx.objectStore(BLOCKS);
+            const drop = (key: IDBValidKey) => {
+              blocksStore.delete(key);
+              metaStore.delete(key);
+            };
+            // Same store, issued in order, so rowsReq has settled by the time keysReq fires; both
+            // return primary-key order, so the indexes correspond.
+            const rowsReq = metaStore.getAll();
+            const keysReq = metaStore.getAllKeys();
+            keysReq.onsuccess = () => {
+              const rows = rowsReq.result as BlockMeta[];
+              const live: { key: IDBValidKey; size: number; lastAccess: number }[] = [];
+              keysReq.result.forEach((key, index) => {
+                const meta = rows[index];
+                // A corrupt row (non-finite size or lastAccess) is evicted, never counted: NaN
+                // in the byte total would poison the budget comparison below and the eviction
+                // loop would silently drain every live block in one pass.
+                if (
+                  meta === undefined ||
+                  !Number.isFinite(meta.size) ||
+                  !Number.isFinite(meta.lastAccess) ||
+                  now - meta.lastAccess >= ttlMs
+                ) {
+                  drop(key);
+                  return;
+                }
+                live.push({ key, size: meta.size, lastAccess: meta.lastAccess });
+              });
+              // Evict the oldest-touched live blocks beyond the byte budget.
+              let total = live.reduce((sum, item) => sum + item.size, 0);
+              if (total <= maxBytes) return;
+              live.sort((a, b) => a.lastAccess - b.lastAccess);
+              for (const item of live) {
+                if (total <= maxBytes) break;
+                drop(item.key);
+                total -= item.size;
+              }
+            };
           });
         },
         () => memory.prune(now),

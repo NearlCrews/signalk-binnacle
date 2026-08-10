@@ -118,7 +118,8 @@ served by a plugin, and the streaming overlays. Browsers expose the service work
 APIs only in a secure context, meaning HTTPS or `http://localhost`. The Signal K server serves
 Binnacle over plain HTTP on the local network by default, so that layer stays inert there and every
 live function degrades cleanly to online-only. The Offline charts landing page says so directly when
-the page was loaded over plain HTTP.
+the page was loaded over plain HTTP, and it likewise shows a notice when the browser rejected the
+server certificate, since both conditions leave the browser cache off.
 
 There are two good ways to add HTTPS to Signal K:
 
@@ -135,8 +136,9 @@ HTTPS alone is not enough: the browser must also **trust** the certificate. A se
 certificate, including one the signalk-ssl plugin generates, is not trusted by default, and browsers
 refuse to register a service worker from an origin whose certificate they do not trust even after
 the certificate warning is clicked through. The symptom is a page that loads normally while offline
-caching never activates, with a console message like "service worker registration failed: an SSL
-certificate error occurred." The fix is environmental, not a Binnacle setting: install the
+caching never activates: the Offline charts landing page shows a certificate notice, and the console
+logs an informational line saying offline caching is off because the browser does not trust the
+server certificate. The fix is environmental, not a Binnacle setting: install the
 certificate authority's root, the QR code or `.pem` file the plugin provides, into the browser or
 operating system trust store, mark it trusted, then reload over HTTPS. The service worker then
 registers, and the base map and chart tiles cache for offline use.

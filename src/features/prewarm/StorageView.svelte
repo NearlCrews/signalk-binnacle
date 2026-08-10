@@ -108,6 +108,7 @@ const {
     min={0}
     max={365}
     step={1}
+    disabled={!adminAccess}
     onCommit={onCommitTtl}
   />
   <p class="muted-note">
@@ -118,7 +119,9 @@ const {
     errorMessage="Could not save the auto-clear setting."
     onRetry={onRetryTtl}
   />
-  {#if confirmingClear}
+  {#if confirmingClear && adminAccess}
+    <!-- Access dropping mid-confirm collapses back to the disabled button: a live Confirm whose
+         click silently does nothing would read as a broken control. -->
     <InlineConfirm
       question="Clear recently viewed charts? Your saved areas are kept."
       onConfirm={onConfirmClear}
