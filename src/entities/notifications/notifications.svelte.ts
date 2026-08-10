@@ -105,6 +105,12 @@ export class NotificationsStore {
     return this.#store.notificationsVersion;
   }
 
+  // Passthrough to the mirror's snapshot reconcile, so a controller holding this entity does not
+  // also need the raw SignalKStore.
+  reconcile(paths: ReadonlySet<string>, snapshotEpoch: number): void {
+    this.#store.reconcileNotifications(paths, snapshotEpoch);
+  }
+
   list(): ActiveNotification[] {
     const version = this.#store.notificationsVersion;
     if (this.#cache && this.#cacheVersion === version) return this.#cache;

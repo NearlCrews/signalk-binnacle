@@ -97,6 +97,28 @@ describe('SkConnection', () => {
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
+  it('setUrl leaves the live socket alone and takes effect on the next connect', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const conn = new SkConnection('ws://test/signalk/v1/stream?token=old', {
+      onState: () => {},
+      onDelta: () => {},
+    });
+    conn.connect();
+    const first = FakeWebSocket.instances[0];
+    first.open();
+
+    conn.setUrl('ws://test/signalk/v1/stream?token=new');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(first.readyState).toBe(WebSocket.OPEN);
+
+    // The socket drops; the automatic reconnect must open with the new token, not the stale one.
+    first.close();
+    vi.runOnlyPendingTimers();
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(FakeWebSocket.instances[1].url).toContain('token=new');
+    expect(FakeWebSocket.instances[1].url).not.toContain('token=old');
+  });
+
   it('disconnect() ends in closed and the stopped flag blocks any zombie reconnect', () => {
     const states: ConnectionState[] = [];
     const conn = new SkConnection('ws://test', {

@@ -88,6 +88,13 @@ export class WorkerCore {
     this.#connection.connect();
   }
 
+  // Update the URL the next socket attempt opens (a fresh auth token). The live socket keeps
+  // running; SkConnection reads the URL at connect time, so this takes effect on the next
+  // reconnect. A no-op before the first connect, which receives its URL directly.
+  setUrl(url: string): void {
+    this.#connection?.setUrl(url);
+  }
+
   subscribe(entries: SubscribeEntry[]): void {
     this.#registry.add(entries);
   }

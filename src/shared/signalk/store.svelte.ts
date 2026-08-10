@@ -2,10 +2,10 @@ import { sameJsonValue } from '$shared/lib';
 import type { AisTargetState, ConnectionState, PathSource, SKFrame, Value } from './types';
 import {
   INITIAL_CONNECTION_STATE,
+  isRaisedNotificationValue,
   isSoundingNotification,
   NOTIFICATIONS_PREFIX,
   notificationSeverityRank,
-  notificationState,
 } from './types';
 
 // How many distinct raised notification paths the mirror will hold. Comfortably above any
@@ -85,6 +85,14 @@ export class SignalKStore {
   }
   notificationsVersion = $state(0);
 
+  // The receipt epoch of the last frame that carried data (self values or AIS targets), zero until
+  // one arrives. Connection-only frames do not stamp it, so an open socket delivering nothing lets
+  // this age against the clock: the app derives its "Connected, no data" cue from exactly that.
+  // Plain like selfContext, not $state: the one consumer re-derives on the 1 Hz clock tick and
+  // reads the current value then, and a reactive write here would re-schedule that derived on
+  // every flushed data frame (up to 60 a second) for a 30 second threshold.
+  lastDataEpoch = 0;
+
   // Grows as new paths arrive and is never pruned: this is safe because the subscribed path set is
   // finite and stable, so cells reach a fixed size. A misbehaving server emitting novel paths every
   // delta would grow this without bound, but that is out of scope for a well-formed stream.
@@ -117,8 +125,15 @@ export class SignalKStore {
       // Retain values and safety latches for continuity, but force AIS consumers to rebuild and
       // reject path samples whose generation no longer matches.
       this.aisVersion += 1;
+      // A reopened socket restarts the data-stall window: the outage itself already had its own
+      // cue, so the stalled badge must not fire the instant the stream reopens. Zero still means
+      // no data ever arrived.
+      if (this.lastDataEpoch > 0) this.lastDataEpoch = frame.epoch;
     }
     if (!this.selfContext && frame.selfContext) this.selfContext = frame.selfContext;
+    if (frame.self.size > 0 || (frame.ais !== undefined && frame.ais.size > 0)) {
+      this.lastDataEpoch = frame.epoch;
+    }
     for (const [path, value] of frame.self) {
       const cell = this.cell(path);
       if (
@@ -185,17 +200,16 @@ export class SignalKStore {
   // A null value or one without a state string is a cleared notification (raw v1 producers
   // publish null to clear); it leaves the mirror so only raised notifications are listed.
   #mirrorNotification(path: string, value: Value): void {
-    const state = notificationState(value);
     // A cleared, normal, or nominal notification leaves the mirror rather than accumulating in
     // it: the alert list only ever shows raised states, and servers can republish normal-state
     // values every cycle for telemetry paths under notifications.*.
-    if (typeof state !== 'string' || state === 'normal' || state === 'nominal') {
+    if (!isRaisedNotificationValue(value)) {
       if (this.#notifications.delete(path)) this.notificationsVersion += 1;
       return;
     }
     // Bump only on a real change: a persistent alarm republished identically every delta cycle
-    // must not rebuild every consumer's list per frame. State, message, id, position, and the four
-    // status flags carry everything the list renders.
+    // must not rebuild every consumer's list per frame. State, message, id, position, method,
+    // createdAt, and the four status flags carry everything the list and the audible gate read.
     const previous = this.#notifications.get(path);
     if (previous && typeof previous === 'object' && typeof value === 'object' && value) {
       const a = previous as {
@@ -203,6 +217,8 @@ export class SignalKStore {
         message?: unknown;
         id?: unknown;
         position?: unknown;
+        method?: unknown;
+        createdAt?: unknown;
         status?: Flags;
       };
       const b = value as {
@@ -210,13 +226,20 @@ export class SignalKStore {
         message?: unknown;
         id?: unknown;
         position?: unknown;
+        method?: unknown;
+        createdAt?: unknown;
         status?: Flags;
       };
       if (
         a.state === b.state &&
         a.message === b.message &&
         a.id === b.id &&
+        a.createdAt === b.createdAt &&
         samePosition(a.position, b.position) &&
+        // The delivery-method list feeds the audible gate, so escalating ['visual'] to
+        // ['visual', 'sound'] is a real change; sameJsonValue's array compare is order-sensitive,
+        // which is the cheap direction (a reordered list re-renders, never goes missed).
+        sameJsonValue(a.method, b.method) &&
         sameFlags(a.status, b.status)
       ) {
         // Structurally identical to the stored value: leave the mirror untouched. Re-storing the
@@ -251,6 +274,32 @@ export class SignalKStore {
     if (worstPath === undefined) return false;
     this.#notifications.delete(worstPath);
     return true;
+  }
+
+  // Drop mirrored notifications the server no longer holds raised, from a REST snapshot taken on
+  // the reconnect edge. Deltas are the only other removal path, and a notification cleared or
+  // reaped while the socket was down never sends one, so without this the alert list shows a
+  // raised alarm the server has forgotten for the rest of the session. The caller passes the full
+  // set of currently raised paths and the epoch it requested the snapshot at; a failed snapshot
+  // fetch must not reach here at all, so the fail-safe direction (keep alarms on doubt) stays
+  // with the caller.
+  reconcileNotifications(paths: ReadonlySet<string>, snapshotEpoch: number): void {
+    let changed = false;
+    for (const path of this.#notifications.keys()) {
+      if (paths.has(path)) continue;
+      // A delta that arrived at or after the snapshot request outranks it: in that race the
+      // snapshot is the stale party, and deleting the fresh raise would silently drop a live
+      // alarm no later delta restores (transition-only producers never republish).
+      const cell = this.#cells.get(path);
+      if (cell?.streamed && cell.epoch >= snapshotEpoch) continue;
+      this.#notifications.delete(path);
+      changed = true;
+      // The keyed cells feed their own consumers (the anchor drag grade reads the raw cell), so
+      // a reaped notification must clear there too, or the anchor strip alarms forever while
+      // the alert list shows nothing. Mimic the clearing delta the server never sent.
+      if (cell !== undefined && isRaisedNotificationValue(cell.value)) cell.value = null;
+    }
+    if (changed) this.notificationsVersion += 1;
   }
 
   pruneAis(now: number, ttlMs: number): number {

@@ -38,6 +38,44 @@ describe('AuthBanner', () => {
     expect(body).toContain('Request again');
   });
 
+  it('explains an unreachable initial request without claiming a denial, keeping the device id', () => {
+    const body = render(AuthBanner, {
+      props: {
+        auth: {
+          status: 'denied',
+          accessOutcome: 'unreachable',
+          clientId: 'binnacle-9f3a21bc',
+          upgrading: false,
+          writeBlocked: false,
+        } as AuthController,
+        requestsUrl: 'http://boat.local/admin/#/security/access-requests',
+      },
+    }).body;
+    expect(body).toContain('Could not reach the Signal K server');
+    expect(body).toContain('Try again');
+    expect(body).toContain('binnacle-9f3a21bc');
+    expect(body).not.toContain('declined access');
+    expect(body).not.toContain('new device ID');
+  });
+
+  it('explains an unanswered initial request as still waiting, not refused', () => {
+    const body = render(AuthBanner, {
+      props: {
+        auth: {
+          status: 'denied',
+          accessOutcome: 'unanswered',
+          clientId: 'binnacle-9f3a21bc',
+          upgrading: false,
+          writeBlocked: false,
+        } as AuthController,
+        requestsUrl: 'http://boat.local/admin/#/security/access-requests',
+      },
+    }).body;
+    expect(body).toContain('was not approved in time');
+    expect(body).toContain('Try again');
+    expect(body).not.toContain('declined access');
+  });
+
   it('explains a declined write upgrade with a retry, over the generic read-only copy', () => {
     const body = render(AuthBanner, {
       props: {

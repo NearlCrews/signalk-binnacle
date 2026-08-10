@@ -28,6 +28,7 @@ export type {
 } from './notifications-client';
 export {
   acknowledgeNotification,
+  fetchRaisedNotificationPaths,
   postMobNotification,
   postNotification,
   resolveNotification,
@@ -35,7 +36,7 @@ export {
   updateNotification,
 } from './notifications-client';
 export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
-export { createPathMetaCache } from './path-meta-cache.svelte';
+export { createPathMetaCache, RETRY_DELAY_MS } from './path-meta-cache.svelte';
 export { SK_PATHS } from './paths';
 export { fetchProviderIdList, safeProviderId } from './provider-probe';
 export {
@@ -75,6 +76,7 @@ export type {
 export {
   ALL_VESSELS_CONTEXT,
   isConnectionDown,
+  isConnectionOpen,
   isSoundingNotification,
   NOTIFICATION_SEVERITY_RANK,
   NOTIFICATIONS_PREFIX,

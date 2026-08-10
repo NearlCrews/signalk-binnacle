@@ -43,6 +43,14 @@ export function isSoundingNotification(value: unknown): boolean {
   return state !== undefined && SOUNDING_NOTIFICATION_STATES.has(state);
 }
 
+// Whether a notifications.* value is currently raised: it carries a state string other than the
+// quiet normal and nominal grades. The store mirror admits exactly these, and the reconnect
+// reconcile keeps exactly these, so the two must share one predicate.
+export function isRaisedNotificationValue(value: unknown): boolean {
+  const state = notificationState(value);
+  return typeof state === 'string' && state !== 'normal' && state !== 'nominal';
+}
+
 // The full Signal K alarm-state set (server-api ALARM_STATE). 'nominal' and 'normal' are the
 // quiet grades; the rest escalate alert < warn < alarm < emergency.
 export type NotificationState = 'nominal' | 'normal' | 'alert' | 'warn' | 'alarm' | 'emergency';
@@ -95,6 +103,12 @@ export type ConnectionPhase = 'connecting' | 'open' | 'reconnecting' | 'closed';
 // connection, so a future phase cannot leave one panel silently claiming the stream is healthy.
 export function isConnectionDown(phase: ConnectionPhase): boolean {
   return phase === 'reconnecting' || phase === 'closed';
+}
+
+// The mirror predicate: the socket is delivering. Not the negation of isConnectionDown, since
+// 'connecting' is neither.
+export function isConnectionOpen(phase: ConnectionPhase): boolean {
+  return phase === 'open';
 }
 
 export interface ConnectionState {
@@ -187,6 +201,10 @@ export interface CourseCalculations {
 
 export interface SignalKClientApi {
   connect(url: string, onFrame: (frame: SKFrame) => void): Promise<void>;
+  // Point the next socket attempt at a new URL without touching a healthy live socket. The
+  // connection reads its URL at connect time, so a changed auth token pushed here takes effect on
+  // the next reconnect instead of freezing the connect-time token for the session.
+  setUrl(url: string): Promise<void>;
   subscribe(entries: SubscribeEntry[]): Promise<void>;
   unsubscribe(paths: Path[], context?: Context): Promise<void>;
   // Send a client delta to the server (e.g. to publish a notification). Dropped if the

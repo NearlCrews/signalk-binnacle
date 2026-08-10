@@ -7,6 +7,12 @@ import { fetchPathMeta, type PathMeta } from './meta';
 // quiet for the session.
 const MAX_ATTEMPTS = 3;
 
+// How long a failed fetch holds its sentinel before the retry window reopens. Version-reactive
+// consumers re-enter on the settle itself, so an immediate reopen let one brief outage burn the
+// whole attempt budget back to back; the pause spreads the budget across the outage instead.
+// Exported for the tests that advance fake timers across the retry window.
+export const RETRY_DELAY_MS = 5_000;
+
 // How many distinct paths one session's cache retains. In practice a server's distinct path count
 // is small and stable, so this never binds. It exists because the key space is not ours: pointed at
 // per-vessel (AIS context) paths, or at a server emitting novel paths, an uncapped Map would grow
@@ -20,13 +26,17 @@ const MAX_CACHED_PATHS = 500;
 // surface that reads meta reactively (the instruments zones, the shallow monitor's server
 // threshold). A null entry means a fetch is in flight, or that the path gave up after
 // MAX_ATTEMPTS failures; a resolved fetch caches its PathMeta; a failed fetch under the cap
-// deletes the sentinel so the next reactive visit (the settle itself for a version-reactive
-// consumer, a token arriving, a path changing) retries instead of pinning the whole session to a
-// meta-less view on one transient error. Reads pair with `version`, a $state counter bumped after
-// every settle, so a $derived over the plain Map re-evaluates when a fetch lands.
+// deletes the sentinel after RETRY_DELAY_MS so the next reactive visit retries instead of pinning
+// the whole session to a meta-less view on one transient error. A changed token restores every
+// spent budget and give-up sentinel: attempts burned tokenless before auth resolved, or during an
+// outage the old credentials could not outlive, say nothing about the new credentials. Reads pair
+// with `version`, a $state counter bumped after every settle, so a $derived over the plain Map
+// re-evaluates when a fetch lands.
 export function createPathMetaCache(origin: string, getToken: () => string | undefined) {
   const cache = new Map<string, PathMeta | null>();
   const attempts = new Map<string, number>();
+  const inFlight = new Set<string>();
+  let lastToken = getToken();
   let version = $state(0);
 
   function evictOldestIfFull(): void {
@@ -38,6 +48,16 @@ export function createPathMetaCache(origin: string, getToken: () => string | und
   // Resolve a path's meta once. Safe to call from an effect: the sentinel makes repeat calls
   // no-ops while a fetch is in flight, after one resolved, and after the attempt cap is spent.
   function load(path: string): void {
+    const token = getToken();
+    if (token !== lastToken) {
+      lastToken = token;
+      attempts.clear();
+      // Reopen every give-up sentinel; an in-flight sentinel stays, or a stale fetch settling
+      // later could clobber what a fresh one stored.
+      for (const [key, value] of cache) {
+        if (value === null && !inFlight.has(key)) cache.delete(key);
+      }
+    }
     if (cache.has(path)) return;
     evictOldestIfFull();
     const tried = attempts.get(path) ?? 0;
@@ -48,14 +68,22 @@ export function createPathMetaCache(origin: string, getToken: () => string | und
     }
     attempts.set(path, tried + 1);
     cache.set(path, null);
-    void fetchPathMeta(origin, getToken(), path).then((result) => {
+    inFlight.add(path);
+    void fetchPathMeta(origin, token, path).then((result) => {
+      inFlight.delete(path);
       if (result !== undefined) {
         cache.set(path, result);
         attempts.delete(path);
-      } else {
-        cache.delete(path);
+        version += 1;
+        return;
       }
-      version += 1;
+      setTimeout(() => {
+        // Only clear the sentinel this failure left: a token-change sweep may already have
+        // removed it, and a newer load may have replaced it with an in-flight fetch of its own.
+        if (inFlight.has(path) || cache.get(path) !== null) return;
+        cache.delete(path);
+        version += 1;
+      }, RETRY_DELAY_MS);
     });
   }
 

@@ -132,8 +132,8 @@ export function createShallowController(deps: ShallowControllerDeps) {
   });
 
   // Keyed on the path, the cache version, and (through the cache's token read) the auth token, so
-  // a failed fetch re-enters on its own settle while a 1 Hz depth sample never does. The cache's
-  // per-path attempt cap bounds the resulting retries.
+  // a failed fetch re-enters when its paced retry window reopens while a 1 Hz depth sample never
+  // does. The cache's per-path attempt cap bounds the resulting retries.
   $effect(() => {
     void metaCache.version;
     if (winningPath !== undefined) metaCache.load(winningPath);

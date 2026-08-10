@@ -256,6 +256,37 @@ describe('SignalKStore', () => {
     expect(store.notificationsVersion).toBe(2);
   });
 
+  it('updates the mirror when only the delivery method changes, so an escalation to sound lands', () => {
+    const store = new SignalKStore();
+    const raise = { state: 'alarm', message: 'Dragging', id: 'abc', method: ['visual'] };
+    store.applyFrame(frame({ 'notifications.navigation.anchor': raise }));
+    const before = store.notificationsVersion;
+    // The producer re-publishes the same alarm with sound added; the audible gate reads the
+    // mirror, so an unchanged mirror would keep this station silent.
+    const escalated = { ...raise, method: ['visual', 'sound'] };
+    store.applyFrame(frame({ 'notifications.navigation.anchor': escalated }));
+    expect(store.notificationsVersion).toBe(before + 1);
+    expect(store.notifications.get('notifications.navigation.anchor')).toBe(escalated);
+    // An identical method list on the next cycle is not a change.
+    store.applyFrame(
+      frame({ 'notifications.navigation.anchor': { ...escalated, method: ['visual', 'sound'] } }),
+    );
+    expect(store.notificationsVersion).toBe(before + 1);
+  });
+
+  it('updates the mirror when only createdAt changes', () => {
+    const store = new SignalKStore();
+    const raise = { state: 'alarm', message: 'Dragging', createdAt: '2026-08-09T00:00:00Z' };
+    store.applyFrame(frame({ 'notifications.navigation.anchor': raise }));
+    const before = store.notificationsVersion;
+    store.applyFrame(
+      frame({
+        'notifications.navigation.anchor': { ...raise, createdAt: '2026-08-09T01:00:00Z' },
+      }),
+    );
+    expect(store.notificationsVersion).toBe(before + 1);
+  });
+
   it('updates the notification mirror when only its position changes', () => {
     const store = new SignalKStore();
     const value = {
@@ -288,6 +319,92 @@ describe('SignalKStore', () => {
     expect(store.notifications.size).toBe(0);
     // Clearing a path that was never mirrored must not bump the version.
     expect(store.notificationsVersion).toBe(0);
+  });
+
+  it('reconciles the mirror against a snapshot, dropping only what the server no longer raises', () => {
+    const store = new SignalKStore();
+    store.applyFrame(
+      frame({
+        'notifications.navigation.anchor': { state: 'alarm', message: 'Dragging' },
+        'notifications.mob': { state: 'emergency', message: 'MOB' },
+      }),
+    );
+    const before = store.notificationsVersion;
+    store.reconcileNotifications(new Set(['notifications.mob']), 2000);
+    expect(store.notifications.has('notifications.navigation.anchor')).toBe(false);
+    expect(store.notifications.has('notifications.mob')).toBe(true);
+    expect(store.notificationsVersion).toBe(before + 1);
+    // The reaped notification's raw cell clears too: keyed consumers (the anchor drag grade)
+    // read the cell, and leaving it raised would alarm forever beside an empty alert list.
+    expect(store.cell('notifications.navigation.anchor').value).toBeNull();
+    // A snapshot matching the mirror exactly is a no-op, with no version bump.
+    store.reconcileNotifications(new Set(['notifications.mob']), 2000);
+    expect(store.notificationsVersion).toBe(before + 1);
+    // An empty snapshot (a restarted server) clears the mirror.
+    store.reconcileNotifications(new Set(), 2000);
+    expect(store.notifications.size).toBe(0);
+    expect(store.notificationsVersion).toBe(before + 2);
+  });
+
+  it('keeps a notification whose delta arrived after the snapshot was requested', () => {
+    const store = new SignalKStore();
+    // The snapshot was requested at epoch 900; the raise arrived by delta at epoch 1000. The
+    // snapshot cannot know about the newer raise, so reconciling against it must not delete the
+    // live alarm, and the raw cell must stay raised for the keyed consumers.
+    store.applyFrame(frame({ 'notifications.mob': { state: 'emergency', message: 'MOB' } }));
+    store.reconcileNotifications(new Set(), 900);
+    expect(store.notifications.has('notifications.mob')).toBe(true);
+    expect(store.cell('notifications.mob').value).not.toBeNull();
+  });
+
+  it('stamps lastDataEpoch on data frames only, never on connection-only frames', () => {
+    const store = new SignalKStore();
+    expect(store.lastDataEpoch).toBe(0);
+    store.applyFrame({
+      self: new Map(),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 500,
+    });
+    expect(store.lastDataEpoch).toBe(0);
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    expect(store.lastDataEpoch).toBe(1000);
+    // An AIS-only frame is data too.
+    store.applyFrame({
+      self: new Map(),
+      ais: aisMap({ 'vessels.a': { name: 'A' } }),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2000,
+    });
+    expect(store.lastDataEpoch).toBe(2000);
+    // A rejected older-generation frame must not advance it.
+    store.applyFrame({ ...frame({ 'navigation.speedOverGround': 6 }), epoch: 3000, generation: 2 });
+    expect(store.lastDataEpoch).toBe(3000);
+    store.applyFrame({ ...frame({ 'navigation.speedOverGround': 7 }), epoch: 4000, generation: 1 });
+    expect(store.lastDataEpoch).toBe(3000);
+  });
+
+  it('restarts the data-stall window when the stream reopens after an outage', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      self: new Map([['navigation.speedOverGround', 5]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+      generation: 1,
+    });
+    expect(store.lastDataEpoch).toBe(1000);
+    // A reopen after a long outage delivers a connection-only frame with a new generation; the
+    // stalled badge must get a fresh window instead of firing off the pre-outage epoch.
+    store.applyFrame({
+      self: new Map(),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 90_000,
+      generation: 2,
+    });
+    expect(store.lastDataEpoch).toBe(90_000);
   });
 
   it('prunes targets older than the ttl', () => {

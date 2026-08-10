@@ -22,16 +22,16 @@ function setup(options: { accessResolved?: boolean; token?: string } = {}) {
   const net = $state({ online: true });
   const store = new SignalKStore();
   const subscribe = vi.fn().mockResolvedValue(undefined);
+  const setUrl = vi.fn().mockResolvedValue(undefined);
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
     reconnect: vi.fn().mockResolvedValue(undefined),
     restart: vi.fn(),
-    raw: { subscribe },
+    raw: { subscribe, setUrl },
   } as unknown as SignalKClient;
   const onToken = vi.fn();
   const onFrame = vi.fn();
-  const onInitialSubscription = vi.fn().mockResolvedValue(undefined);
-  const onReconnect = vi.fn();
+  const onOpen = vi.fn();
   const onWorkerRestart = vi.fn();
   const controller = createStreamController({
     client,
@@ -41,8 +41,7 @@ function setup(options: { accessResolved?: boolean; token?: string } = {}) {
     token: () => access.token,
     onToken,
     onFrame,
-    onInitialSubscription,
-    onReconnect,
+    onOpen,
     onWorkerRestart,
   });
   return {
@@ -51,10 +50,10 @@ function setup(options: { accessResolved?: boolean; token?: string } = {}) {
     controller,
     net,
     onFrame,
-    onInitialSubscription,
-    onReconnect,
+    onOpen,
     onToken,
     onWorkerRestart,
+    setUrl,
     store,
     subscribe,
   };
@@ -94,7 +93,7 @@ describe('createStreamController', () => {
     test.access.token = 'read token';
     test.access.resolved = true;
     flushSync();
-    await vi.waitFor(() => expect(test.onInitialSubscription).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
 
     expect(test.client.restart).not.toHaveBeenCalled();
     expect(test.onWorkerRestart).not.toHaveBeenCalled();
@@ -127,9 +126,6 @@ describe('createStreamController', () => {
     expect(vi.mocked(test.client.connect).mock.invocationCallOrder[0]).toBeLessThan(
       test.subscribe.mock.invocationCallOrder[0],
     );
-    expect(test.subscribe.mock.invocationCallOrder[0]).toBeLessThan(
-      test.onInitialSubscription.mock.invocationCallOrder[0],
-    );
     expect(test.controller.error).toBe(false);
   });
 
@@ -143,10 +139,10 @@ describe('createStreamController', () => {
     flushSync();
     await vi.waitFor(() => expect(test.controller.error).toBe(true));
     expect(consoleError).toHaveBeenCalledWith('Signal K stream failed to connect', error);
-    expect(test.onInitialSubscription).not.toHaveBeenCalled();
+    expect(test.subscribe).not.toHaveBeenCalled();
 
     test.controller.retry();
-    await vi.waitFor(() => expect(test.onInitialSubscription).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
     expect(test.client.restart).toHaveBeenCalledOnce();
     expect(test.onWorkerRestart).toHaveBeenCalledOnce();
     expect(test.controller.error).toBe(false);
@@ -165,7 +161,7 @@ describe('createStreamController', () => {
 
     test.access.resolved = true;
     test.controller.reconnect();
-    await vi.waitFor(() => expect(test.onInitialSubscription).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
     expect(test.client.restart).toHaveBeenCalledOnce();
     expect(test.controller.error).toBe(false);
   });
@@ -201,11 +197,11 @@ describe('createStreamController', () => {
     await vi.waitFor(() => expect(test.client.reconnect).toHaveBeenCalledOnce());
   });
 
-  it('hydrates reconnect-only data with the current token after a reopened stream', () => {
+  it('hands every open edge the current token, so reconnect refreshes never use a stale one', () => {
     const test = mount({ token: 'old token' });
     test.store.connection = { phase: 'open', attempt: 0 };
     flushSync();
-    expect(test.onReconnect).not.toHaveBeenCalled();
+    expect(test.onOpen).toHaveBeenCalledWith(true, 'old token');
 
     test.access.token = 'live token';
     test.store.connection = { phase: 'reconnecting', attempt: 1 };
@@ -213,7 +209,145 @@ describe('createStreamController', () => {
     test.store.connection = { phase: 'open', attempt: 1 };
     flushSync();
 
-    expect(test.onReconnect).toHaveBeenCalledOnce();
-    expect(test.onReconnect).toHaveBeenCalledWith('live token');
+    expect(test.onOpen).toHaveBeenCalledTimes(2);
+    expect(test.onOpen).toHaveBeenLastCalledWith(false, 'live token');
+  });
+
+  it('invokes onOpen on every open edge, marking only the first as the first', () => {
+    const test = mount();
+    test.store.connection = { phase: 'open', attempt: 0 };
+    flushSync();
+    // The first open gets the hook even though it is not a reconnect: a failed pre-open REST
+    // hydrate would otherwise never be retried until a later outage. It is marked as the first,
+    // so replay logic that must wait for the reconnect reconcile on later opens can still run
+    // immediately here.
+    expect(test.onOpen).toHaveBeenCalledOnce();
+    expect(test.onOpen).toHaveBeenCalledWith(true, undefined);
+
+    test.store.connection = { phase: 'reconnecting', attempt: 1 };
+    flushSync();
+    test.store.connection = { phase: 'open', attempt: 1 };
+    flushSync();
+    expect(test.onOpen).toHaveBeenCalledTimes(2);
+    expect(test.onOpen).toHaveBeenLastCalledWith(false, undefined);
+  });
+
+  it('pushes a changed token into the worker stream URL for the next reconnect', async () => {
+    const test = mount({ token: 'read token' });
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
+    expect(test.setUrl).not.toHaveBeenCalled();
+
+    test.access.token = 'rw token';
+    flushSync();
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    expect(test.setUrl).toHaveBeenCalledWith(
+      `${scheme}//${location.host}/signalk/v1/stream?token=rw%20token`,
+    );
+    expect(test.onToken).toHaveBeenLastCalledWith('rw token');
+    // The live socket is healthy, so no forced reconnect.
+    expect(test.client.reconnect).not.toHaveBeenCalled();
+  });
+
+  it('reconnects immediately on a token change while the stream is down', async () => {
+    const test = mount({ token: 'read token' });
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
+
+    test.store.connection = { phase: 'reconnecting', attempt: 3 };
+    test.access.token = 'rw token';
+    flushSync();
+    await vi.waitFor(() => expect(test.client.reconnect).toHaveBeenCalledOnce());
+    expect(test.setUrl).toHaveBeenCalledOnce();
+  });
+
+  it('turns a reported worker failure into the worker-restarting retry state', async () => {
+    const test = mount({ token: 'tok' });
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
+    expect(test.controller.error).toBe(false);
+
+    test.controller.onWorkerFailure();
+    expect(test.controller.error).toBe(true);
+
+    // The Reconnect action now escalates to a full retry, restarting the dead worker.
+    test.controller.reconnect();
+    await vi.waitFor(() => expect(test.client.restart).toHaveBeenCalledOnce());
+    expect(test.onWorkerRestart).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(test.controller.error).toBe(false));
+    expect(test.client.reconnect).not.toHaveBeenCalled();
+  });
+
+  it('clears a spurious worker failure once a live open frame proves the stream healthy', async () => {
+    const test = mount({ token: 'tok' });
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
+
+    // Worker.onerror also fires for non-fatal uncaught exceptions. The synthesized closed frame
+    // is then overwritten by a real flush from the still-healthy socket, and that open edge must
+    // release the error latch instead of leaving auto-reconnect disabled for the session.
+    test.controller.onWorkerFailure();
+    expect(test.controller.error).toBe(true);
+    test.store.applyFrame({
+      self: new Map(),
+      connection: { phase: 'closed', attempt: 0 },
+      epoch: 1,
+    });
+    flushSync();
+    test.store.applyFrame({ self: new Map(), connection: { phase: 'open', attempt: 0 }, epoch: 2 });
+    flushSync();
+    expect(test.controller.error).toBe(false);
+    // The healthy socket is left alone: no redial happened on the recovery.
+    expect(test.client.connect).toHaveBeenCalledOnce();
+  });
+
+  it('reopens the socket when the token changed while the connect was in flight', async () => {
+    const test = mount({ token: 'old' });
+    const gate = deferred<void>();
+    test.subscribe.mockReturnValueOnce(gate.promise);
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.client.connect).toHaveBeenCalledOnce());
+    // The socket comes up mid-connect, so the token effect's down-stream reconnect arm is
+    // genuinely not applicable, not just vacuously skipped by a transitional phase.
+    test.store.applyFrame({ self: new Map(), connection: { phase: 'open', attempt: 0 }, epoch: 1 });
+    flushSync();
+
+    // A write upgrade lands mid-connect: the token effect pushes the new URL but its reconnect
+    // arm leaves the live socket alone, so connect itself owes the reopen, or the socket stays
+    // on the revocable old grant.
+    test.access.token = 'new';
+    flushSync();
+    await vi.waitFor(() => expect(test.setUrl).toHaveBeenCalled());
+    expect(test.client.reconnect).not.toHaveBeenCalled();
+
+    gate.resolve();
+    await vi.waitFor(() => expect(test.client.reconnect).toHaveBeenCalledOnce());
+  });
+
+  it('releases a hung worker reconnect into the error state instead of latching forever', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    try {
+      const test = mount();
+      vi.mocked(test.client.reconnect).mockReturnValueOnce(new Promise<void>(() => {}));
+      test.controller.reconnect();
+      expect(test.controller.error).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(test.controller.error).toBe(true);
+
+      // The connecting latch is released: retry is reachable and restarts the worker.
+      test.access.resolved = true;
+      test.controller.reconnect();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(test.client.restart).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

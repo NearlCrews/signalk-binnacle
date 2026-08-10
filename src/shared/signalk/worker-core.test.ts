@@ -214,6 +214,22 @@ describe('WorkerCore', () => {
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
+  it('setUrl() points the next reconnect at the new URL without dropping the live socket', () => {
+    const core = new WorkerCore();
+    core.connect('ws://test?token=old', () => {});
+    const first = FakeWebSocket.instances[0];
+    first.open();
+
+    core.setUrl('ws://test?token=new');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(first.readyState).toBe(WebSocket.OPEN);
+
+    core.reconnect();
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(FakeWebSocket.instances[1].url).toContain('token=new');
+    expect(FakeWebSocket.instances[1].url).not.toContain('token=old');
+  });
+
   it('increments the connection generation on every successful open', () => {
     const frames: SKFrame[] = [];
     const core = new WorkerCore();

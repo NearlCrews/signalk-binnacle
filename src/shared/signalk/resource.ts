@@ -1,4 +1,4 @@
-import { hasControlCharacters, isRecord, readBoundedJson, withTimeout } from '$shared/lib';
+import { isRecord, isUnsafeProviderKey, readBoundedJson, withTimeout } from '$shared/lib';
 
 // Helpers shared by the resource clients (charts, notes, tracks): the bearer-auth request init
 // and the string guards for parsing untyped resource JSON. A token is sent only when present.
@@ -141,16 +141,7 @@ export function asKeyedObject(body: unknown): Record<string, unknown> | undefine
   if (entries.length > 10_000) return undefined;
   const clean = Object.create(null) as Record<string, unknown>;
   for (const [id, value] of entries) {
-    if (
-      id.length === 0 ||
-      id.length > 512 ||
-      hasControlCharacters(id) ||
-      id === '__proto__' ||
-      id === 'prototype' ||
-      id === 'constructor'
-    ) {
-      continue;
-    }
+    if (isUnsafeProviderKey(id)) continue;
     clean[id] = value;
   }
   return clean;

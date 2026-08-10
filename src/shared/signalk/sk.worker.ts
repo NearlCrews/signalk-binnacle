@@ -9,6 +9,10 @@ class SignalKWorker implements SignalKClientApi {
     this.#core.connect(url, onFrame);
   }
 
+  async setUrl(url: string): Promise<void> {
+    this.#core.setUrl(url);
+  }
+
   async subscribe(entries: SubscribeEntry[]): Promise<void> {
     this.#core.subscribe(entries);
   }

@@ -1,5 +1,6 @@
-import { deleteResource, jsonOr, sendJson } from './resource';
-import { NOTIFICATIONS_PREFIX, type NotificationState } from './types';
+import { isRecord, isUnsafeProviderKey } from '$shared/lib';
+import { deleteResource, fetchAuthedJsonOutcome, jsonOr, sendJson } from './resource';
+import { isRaisedNotificationValue, NOTIFICATIONS_PREFIX, type NotificationState } from './types';
 
 // Thin client for the server's v2 Notifications API (signalk-server src/api/notifications).
 // Raising returns a server-assigned uuid notification id; silence, acknowledge, update, and
@@ -111,6 +112,51 @@ export async function acknowledgeNotification(
 ): Promise<NotificationActionResult> {
   const response = await postJson(`${base}${NOTIFICATIONS_API}/${id}/acknowledge`, token);
   return notificationActionResult(response);
+}
+
+// The v1 REST snapshot of the self notifications tree, for reconciling the store's mirror after a
+// reconnect. Bounds on the walk keep a hostile or broken tree from recursing or collecting without
+// limit; both sit comfortably above any well-formed server.
+const NOTIFICATIONS_SNAPSHOT_PATH = '/signalk/v1/api/vessels/self/notifications';
+const MAX_SNAPSHOT_DEPTH = 12;
+const MAX_SNAPSHOT_PATHS = 5_000;
+
+// Fetch the currently raised notification paths ('notifications.'-prefixed, matching the store
+// mirror's keys). A 404 is a server with no notifications branch at all, which is a real empty set;
+// only a transport or server failure resolves undefined, so the caller can leave its mirror
+// untouched rather than clear live alarms on a flaky link.
+export async function fetchRaisedNotificationPaths(
+  base: string,
+  token: string | undefined,
+): Promise<ReadonlySet<string> | undefined> {
+  const outcome = await fetchAuthedJsonOutcome<unknown>(
+    `${base}${NOTIFICATIONS_SNAPSHOT_PATH}`,
+    token,
+  );
+  if (outcome.state === 'failed') return undefined;
+  const paths = new Set<string>();
+  if (outcome.state === 'ok') collectRaisedPaths(outcome.value, '', paths, 0);
+  // A snapshot that hit the collection cap is not the full raised set, and reconciling deletions
+  // against a partial set could drop live alarms, so it reads as a failed fetch instead.
+  if (paths.size >= MAX_SNAPSHOT_PATHS) return undefined;
+  return paths;
+}
+
+// A node carrying `value` is a leaf in the v1 full-model tree; every other key is a path segment.
+// Segment guards mirror the resource-id hygiene in asKeyedObject: a dotted, oversized, or
+// control-bearing key cannot produce a well-formed mirror path, so its subtree is skipped.
+function collectRaisedPaths(node: unknown, prefix: string, out: Set<string>, depth: number): void {
+  if (!isRecord(node) || depth > MAX_SNAPSHOT_DEPTH || out.size >= MAX_SNAPSHOT_PATHS) return;
+  if (Object.hasOwn(node, 'value')) {
+    if (prefix.length > 0 && isRaisedNotificationValue(node.value)) {
+      out.add(`${NOTIFICATIONS_PREFIX}${prefix}`);
+    }
+    return;
+  }
+  for (const [key, child] of Object.entries(node)) {
+    if (isUnsafeProviderKey(key) || key.includes('.')) continue;
+    collectRaisedPaths(child, prefix.length > 0 ? `${prefix}.${key}` : key, out, depth + 1);
+  }
 }
 
 // The server's MOB convenience route: raises an emergency at notifications.mob.{id} with

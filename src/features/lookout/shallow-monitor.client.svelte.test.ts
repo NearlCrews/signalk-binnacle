@@ -4,6 +4,7 @@ import { UnitsStore } from '$entities/units';
 import type { DepthReading } from '$entities/vessel';
 import type { UnitsMode } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, PersistedValue, type Thresholds } from '$shared/settings';
+import { RETRY_DELAY_MS } from '$shared/signalk';
 import {
   createFakeAlarmControl,
   createFakeStorage,
@@ -276,26 +277,31 @@ describe('createShallowController', () => {
   });
 
   it('retries a failed zone fetch up to the cap, then settles for the session', async () => {
-    // A transient failure must not pin the whole session to the local threshold: each settle
-    // re-triggers one retry through the version-reactive effect. The cache's per-path attempt cap
-    // then stops a dead endpoint from being hammered forever.
-    const test = mount({ token: 'tok-1', status: 500 });
-    for (let round = 0; round < 6; round += 1) {
-      await flushPromises();
-      flushSync();
-    }
-    expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
+    // A transient failure must not pin the whole session to the local threshold: each reopened
+    // retry window spends one more attempt through the version-reactive effect. The cache's
+    // per-path attempt cap then stops a dead endpoint from being hammered forever.
+    vi.useFakeTimers();
+    try {
+      const test = mount({ token: 'tok-1', status: 500 });
+      for (let round = 0; round < 6; round += 1) {
+        await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+        flushSync();
+      }
+      expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
 
-    // Settled: revisiting the path does not spend more attempts.
-    test.setDepth(reading({ source: 'transducer', path: TRANSDUCER_PATH }));
-    await flushPromises();
-    flushSync();
-    test.setDepth(reading());
-    for (let round = 0; round < 3; round += 1) {
-      await flushPromises();
+      // Settled: revisiting the path does not spend more attempts, even across retry windows.
+      test.setDepth(reading({ source: 'transducer', path: TRANSDUCER_PATH }));
+      await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
       flushSync();
+      test.setDepth(reading());
+      for (let round = 0; round < 3; round += 1) {
+        await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+        flushSync();
+      }
+      expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
     }
-    expect(metaCalls(test.fetchMock, KEEL_PATH)).toHaveLength(3);
   });
 
   it('phrases the alert as a zone hit when the depth is not under the displayed limit', async () => {

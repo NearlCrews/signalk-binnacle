@@ -16,7 +16,11 @@ export interface SignalKClient {
   raw: Comlink.Remote<SignalKClientApi>;
 }
 
-export function createSignalKClient(): SignalKClient {
+// onWorkerFailure fires when the worker dies after a connect succeeded (a load-time failure rejects
+// the pending connect instead). The synthesized closed frame below flips the badge, but the stream
+// controller cannot see it as a worker fault; this callback lets it enter the error state whose
+// retry restarts the worker, instead of reconnecting into a dead one.
+export function createSignalKClient(onWorkerFailure?: () => void): SignalKClient {
   let worker: Worker;
   let raw: Comlink.Remote<SignalKClientApi>;
   // A worker that fails to load (the "Class extends value undefined" trap, a chunk miss) otherwise
@@ -48,6 +52,7 @@ export function createSignalKClient(): SignalKClient {
         connection: { phase: 'closed', attempt: 0 },
         epoch: Date.now(),
       });
+      onWorkerFailure?.();
     };
     nextWorker.onmessageerror = (event) => {
       if (worker === nextWorker) {

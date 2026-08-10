@@ -96,6 +96,37 @@ describe('createSignalKClient', () => {
     client.dispose();
   });
 
+  it('reports a post-connect worker failure through onWorkerFailure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onWorkerFailure = vi.fn();
+    const client = createSignalKClient(onWorkerFailure);
+    const sink = vi.fn();
+    await client.connect('ws://boat', sink);
+
+    workers[0].onerror?.({ message: 'killed' } as ErrorEvent);
+
+    expect(onWorkerFailure).toHaveBeenCalledOnce();
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ connection: { phase: 'closed', attempt: 0 } }),
+    );
+    client.dispose();
+  });
+
+  it('does not report a load-time failure through onWorkerFailure: the connect rejection covers it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onWorkerFailure = vi.fn();
+    const client = createSignalKClient(onWorkerFailure);
+    const pending = deferred<undefined>();
+    workers[0].remote.connect.mockImplementation(() => pending.promise);
+    const connecting = client.connect('ws://boat', vi.fn());
+
+    workers[0].onerror?.({ message: 'chunk missing' } as ErrorEvent);
+
+    await expect(connecting).rejects.toThrow('chunk missing');
+    expect(onWorkerFailure).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
   it('ignores queued frame callbacks from a replaced worker', async () => {
     const client = createSignalKClient();
     const firstSink = vi.fn();

@@ -9,7 +9,9 @@ export type AuthStatus = 'unknown' | 'unsecured' | 'authenticated' | 'requesting
 // ('declined'), the request landed but was never answered before it expired or the poll budget ran
 // out ('unanswered', so it may still be sitting in the admin's Access Requests list), or the POST
 // never reached the server ('unreachable'). Drives the read-only banner's follow-up copy and its
-// retry cue; undefined means no upgrade has failed since the last attempt or grant.
+// retry cue; undefined means no upgrade has failed since the last attempt or grant. The initial
+// access flow reuses the 'unanswered' and 'unreachable' members for its own exhaustion outcome
+// (accessOutcome below), so both flows describe a non-refusal in one vocabulary.
 export type UpgradeOutcome = 'declined' | 'unanswered' | 'unreachable';
 
 interface AuthIdentity {
@@ -56,6 +58,12 @@ const CLIENT_DESCRIPTION = 'Binnacle Chartplotter';
 // transit) after this many attempts (about 10 min at the default 3 s interval) so a
 // never-approved request is not an unbounded loop.
 const MAX_POLL_ATTEMPTS = 200;
+
+// After the fast probe budget is spent (a server down longer than the ten-minute window), the
+// startup probe degrades to this slow heartbeat instead of stopping. A fixed helm display gets no
+// focus, visibility, or net-online event to trigger a recheck, so without it a stored-token shell
+// that loaded during a server outage stays dead until a manual tap.
+const PROBE_HEARTBEAT_MS = 60_000;
 
 // A short, recognizable client id (binnacle-<8 hex>) so the Signal K access-requests list shows a
 // name the user recognizes, not a bare UUID. crypto.randomUUID needs a secure context, so fall
@@ -147,6 +155,12 @@ export class AuthController {
   // declined request, an unanswered one, and an unreachable server apart and offer a retry rather
   // than silently reverting.
   upgradeOutcome = $state<UpgradeOutcome | undefined>();
+  // Why status is 'denied' when it is not an admin refusal: the initial access poll exhausted its
+  // budget with the request still unanswered ('unanswered', it may sit in the admin's list yet) or
+  // without ever reaching the server ('unreachable'). Undefined for a real refusal, so the banner
+  // and requestAccess treat only a genuine denial as one; a retry after either non-refusal keeps
+  // the same clientId so a pending server-side request or approval still counts.
+  accessOutcome = $state<UpgradeOutcome | undefined>();
 
   #base: string;
   #fetch: typeof fetch;
@@ -158,6 +172,11 @@ export class AuthController {
   #stopped = false;
   #checking = false;
   #checkingUpgrade = false;
+  #probing = false;
+  // Whether the current initial-access flow ever got a real answer from the server (a landed POST
+  // or a non-transport poll response). Distinguishes an unanswered request from an unreachable
+  // server when the poll budget exhausts.
+  #accessReachedServer = false;
   #watching = false;
   // Reactive: today every write is paired with a reactive sibling (upgrading, upgradeOutcome) so
   // the banner happens to update, but a later path that changes one without the other would leave
@@ -167,6 +186,13 @@ export class AuthController {
   // attempt budget, and scheduled flag; the shared driver keeps the cadence identical across both.
   #accessPoll: AccessRequestPoll;
   #upgradePoll: AccessRequestPoll;
+  // Retries a startup probe whose fetch failed in transit while a stored token exists. Without it
+  // the status latches 'unknown' with no timer-driven retry, and the stream never connects until a
+  // reload. On exhaustion it degrades to the slow probe heartbeat: 'unknown' stays retryable
+  // through the focus, visibility, and net-online rechecks, and it must never read as a denial
+  // while a possibly-valid token is still stored.
+  #probePoll: AccessRequestPoll;
+  #probeHeartbeat: unknown;
 
   constructor(base: string, opts: AuthOptions = {}) {
     this.#base = base;
@@ -183,9 +209,20 @@ export class AuthController {
       this.#cancelSchedule,
       this.#pollMs,
       () => !this.#stopped && this.status !== 'authenticated',
+      // Exhaustion is never an admin refusal (a real one resolves through checkRequest); record
+      // whether the request was ever seen by the server so the banner offers a same-id retry
+      // instead of announcing a denial the admin never made.
       () => {
+        this.accessOutcome = this.#accessReachedServer ? 'unanswered' : 'unreachable';
         this.status = 'denied';
       },
+    );
+    this.#probePoll = new AccessRequestPoll(
+      this.#schedule,
+      this.#cancelSchedule,
+      this.#pollMs,
+      () => !this.#stopped && this.status === 'unknown',
+      () => this.#armProbeHeartbeat(),
     );
     // The upgrade poll runs only while an upgrade href is in flight; exhausting its budget ends the
     // upgrade and leaves the live read token in place.
@@ -226,7 +263,18 @@ export class AuthController {
   }
 
   async probe(): Promise<void> {
-    if (this.#stopped) return;
+    // The in-flight guard mirrors checkRequest: a tab return fires focus and visibilitychange
+    // together, and the scheduled re-probe can overlap either, so one probe runs at a time.
+    if (this.#stopped || this.#probing) return;
+    this.#probing = true;
+    try {
+      await this.#probeOnce();
+    } finally {
+      this.#probing = false;
+    }
+  }
+
+  async #probeOnce(): Promise<void> {
     let identityGeneration = this.#identityGeneration;
     // A stored token is the source of truth: the WebSocket stream needs it, and a
     // working token means the server is secured and we are good. Check it first.
@@ -239,17 +287,27 @@ export class AuthController {
         credentials: 'omit',
       });
       if (this.#stopped || identityGeneration !== this.#identityGeneration) return;
+      // A definitive answer is success or an explicit auth rejection; a transport failure or a
+      // proxy 502 while the server boots is indefinite. Only definitive answers restore the fast
+      // budget, or a spinning proxy would keep the fast poll alive forever instead of letting it
+      // degrade to the heartbeat.
+      const definitive =
+        authed !== undefined && (authed.ok || authed.status === 401 || authed.status === 403);
+      if (definitive) this.#probePoll.reset();
       if (authed?.ok) {
         this.token = stored;
         this.status = 'authenticated';
         return;
       }
-      // A transport failure proves nothing about the token: clearing it here would wipe an
+      // An indefinite outcome proves nothing about the token: clearing it here would wipe an
       // admin-approved token on a flaky boat network. Keep it, skip the anonymous probe (it
-      // would also fail and could mislabel the server), and let a later probe retry.
-      if (!authed) return;
-      // Likewise a non-auth error (a 500, a proxy hiccup) is not a rejection of the token.
-      if (authed.status !== 401 && authed.status !== 403) return;
+      // would also fail and could mislabel the server), and schedule a bounded re-probe: without
+      // one, a PWA shell that loaded while the server was still booting (usually a proxy 502,
+      // sometimes a failed fetch) stays 'unknown' forever and the stream never connects.
+      if (!definitive) {
+        this.#probePoll.schedule(() => void this.probe());
+        return;
+      }
       // Only a definite rejection invalidates the stored token.
       this.#applyIdentity({ ...this.#identity.value, token: null }, true);
       identityGeneration = this.#identityGeneration;
@@ -289,14 +347,17 @@ export class AuthController {
   }
 
   // Poll a pending access-request href once. 'gone' = the request expired or was cleared (404/410),
-  // 'pending' = not yet answered or a transient error, 'denied' = completed but not approved, and an
-  // object carries the approved token. Shared by the initial flow and the read/write upgrade flow.
+  // 'unreachable' = the fetch never completed (rescheduled like 'pending', but it proves nothing
+  // about the request), 'pending' = the server answered without a verdict yet, 'denied' = completed
+  // but not approved, and an object carries the approved token. Shared by the initial flow and the
+  // read/write upgrade flow.
   async #pollAccessRequest(
     href: string,
-  ): Promise<'gone' | 'pending' | 'denied' | { token: string }> {
+  ): Promise<'gone' | 'pending' | 'unreachable' | 'denied' | { token: string }> {
     const res = await this.#safeFetch(`${this.#base}${href}`, { credentials: 'omit' });
-    if (res && (res.status === 404 || res.status === 410)) return 'gone';
-    if (!res?.ok) return 'pending';
+    if (!res) return 'unreachable';
+    if (res.status === 404 || res.status === 410) return 'gone';
+    if (!res.ok) return 'pending';
     const body = await jsonOr<Record<string, unknown>>(res, {});
     if (body.state !== 'COMPLETED') return 'pending';
     const request = (body.accessRequest ?? {}) as { permission?: string; token?: string };
@@ -314,8 +375,25 @@ export class AuthController {
     if (this.#stopped) return;
     // A declined clientId stays declined: the server re-returns the existing refused grant, so a
     // retry has to introduce Binnacle as a new device or it is a silent no-op. Same reasoning as
-    // requestWriteAccess, which mints a fresh id for exactly this reason.
-    if (this.status === 'denied') this.forgetDeviceCredentials();
+    // requestWriteAccess, which mints a fresh id for exactly this reason. An exhaustion outcome
+    // ('unanswered' or 'unreachable') is not a refusal: the original request may still be waiting
+    // server-side, so the id survives and the retry can pick up its approval.
+    // A user retry after exhaustion or refusal is a fresh attempt: it needs a fresh poll budget
+    // (or the retry button visibly does nothing after exhaustion) and fresh reached-server
+    // evidence (or a retry whose POSTs all fail in transit reports 'unanswered' on the previous
+    // attempt's evidence, sending the navigator to the admin instead of the network). This runs
+    // BEFORE the forget below: forgetting routes through #applyIdentity, which moves status off
+    // 'denied', so a later guard would silently skip the genuine-refusal path.
+    if (this.status === 'denied') {
+      this.#accessPoll.reset();
+      this.#accessReachedServer = false;
+    }
+    if (this.status === 'denied' && this.accessOutcome === undefined) {
+      this.forgetDeviceCredentials();
+    }
+    // A fresh attempt supersedes any prior exhaustion outcome, as requestWriteAccess does with its
+    // upgradeOutcome.
+    this.accessOutcome = undefined;
     const identityGeneration = this.#identityGeneration;
     const clientId = this.clientId;
     this.status = 'requesting';
@@ -332,6 +410,7 @@ export class AuthController {
       this.#accessPoll.schedule(() => void this.requestAccess());
       return;
     }
+    this.#accessReachedServer = true;
     this.#accessPoll.reset();
     this.#accessPoll.href = href;
     if (!href) {
@@ -361,13 +440,17 @@ export class AuthController {
       // Widened read: the entry guard narrowed this.status, and control-flow analysis cannot
       // see the cross-await mutation #onStorage makes.
       if ((this.status as AuthStatus) === 'authenticated') return;
+      if (result !== 'unreachable') this.#accessReachedServer = true;
       if (result === 'gone') {
         // The request expired or was cleared server-side; start a fresh one rather than poll a dead
         // href forever (which left the first tab stuck until the user opened a new one).
         await this.requestAccess();
-      } else if (result === 'pending') {
+      } else if (result === 'pending' || result === 'unreachable') {
         this.#accessPoll.schedule(() => void this.checkRequest());
       } else if (result === 'denied') {
+        // A real admin refusal, so no exhaustion outcome may soften it: the next requestAccess
+        // must introduce a fresh device id.
+        this.accessOutcome = undefined;
         this.status = 'denied';
       } else {
         this.#applyIdentity({ ...this.#identity.value, token: result.token }, true);
@@ -387,12 +470,19 @@ export class AuthController {
     this.#watching = true;
     window.addEventListener('focus', this.#onFocus);
     window.addEventListener('storage', this.#onStorage);
+    // The network returning is the same "circumstances changed, revalidate" signal as a tab
+    // return, and it belongs to this controller's lifecycle, not the composition root: any
+    // precondition recheck() learns applies to every wake path at once.
+    window.addEventListener('online', this.#onFocus);
     if (typeof document !== 'undefined')
       document.addEventListener('visibilitychange', this.#onFocus);
   }
 
   recheck(): void {
     if (this.#stopped) return;
+    // 'unknown' means a startup probe failed in transit (or never ran): re-probe so a stored token
+    // is revalidated the moment the tab returns, instead of latching a dead session until reload.
+    if (this.status === 'unknown') void this.probe();
     if (this.status === 'requesting') void this.checkRequest();
     if (this.upgrading) void this.checkUpgrade();
   }
@@ -472,7 +562,7 @@ export class AuthController {
         upgradeClientId !== this.#upgradeClientId
       )
         return;
-      if (result === 'pending') {
+      if (result === 'pending' || result === 'unreachable') {
         this.#upgradePoll.schedule(() => void this.checkUpgrade());
         return;
       }
@@ -491,13 +581,31 @@ export class AuthController {
     }
   }
 
+  // Each failed heartbeat probe re-enters through the exhausted poll's schedule call, so the
+  // heartbeat sustains itself at its own slow cadence until a probe succeeds or the controller
+  // stops.
+  #armProbeHeartbeat(): void {
+    if (this.#stopped || this.status !== 'unknown' || this.#probeHeartbeat !== undefined) return;
+    this.#probeHeartbeat = this.#schedule(() => {
+      this.#probeHeartbeat = undefined;
+      if (this.#stopped || this.status !== 'unknown') return;
+      void this.probe();
+    }, PROBE_HEARTBEAT_MS);
+  }
+
   stop(): void {
     this.#stopped = true;
     this.#accessPoll.cancel();
+    this.#probePoll.cancel();
+    if (this.#probeHeartbeat !== undefined) {
+      this.#cancelSchedule(this.#probeHeartbeat);
+      this.#probeHeartbeat = undefined;
+    }
     this.#endUpgrade();
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', this.#onFocus);
       window.removeEventListener('storage', this.#onStorage);
+      window.removeEventListener('online', this.#onFocus);
     }
     if (typeof document !== 'undefined')
       document.removeEventListener('visibilitychange', this.#onFocus);
@@ -541,6 +649,8 @@ export class AuthController {
     this.status = identity.token === null ? 'unknown' : 'authenticated';
     this.writeBlocked = false;
     this.upgradeOutcome = undefined;
+    this.accessOutcome = undefined;
+    this.#accessReachedServer = false;
     this.#accessPoll.cancel();
     this.#accessPoll.href = undefined;
     this.#endUpgrade();

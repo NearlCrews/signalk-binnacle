@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PersistedValue } from '$shared/settings';
-import { SignalKStore, type SKFrame } from '$shared/signalk';
+import { RETRY_DELAY_MS, SignalKStore, type SKFrame } from '$shared/signalk';
 import { jsonResponse } from '$shared/testing';
 import { flushPromises, makeDeps, mustTile } from './controller-test-helpers';
 import { createInstrumentsController } from './instruments-controller.svelte';
@@ -295,32 +295,37 @@ describe('createInstrumentsController', () => {
   });
 
   it('a failed meta fetch retries on later opens up to the attempt cap', async () => {
-    const fetchMock = vi.fn(async (..._args: unknown[]) => jsonResponse(401, {}));
-    vi.stubGlobal('fetch', fetchMock);
-    const metaCalls = () =>
-      fetchMock.mock.calls.filter((call) => String(call[0]).includes('/meta')).length;
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn(async (..._args: unknown[]) => jsonResponse(401, {}));
+      vi.stubGlobal('fetch', fetchMock);
+      const metaCalls = () =>
+        fetchMock.mock.calls.filter((call) => String(call[0]).includes('/meta')).length;
 
-    let token: string | undefined;
-    const deps = { ...makeDeps(), getToken: () => token };
-    deps.tilesStore.set(['depth']);
-    const ctrl = createInstrumentsController(deps);
+      let token: string | undefined;
+      const deps = { ...makeDeps(), getToken: () => token };
+      deps.tilesStore.set(['depth']);
+      const ctrl = createInstrumentsController(deps);
 
-    ctrl.setOpen(true);
-    await flushPromises();
-    expect(metaCalls()).toBeGreaterThan(0);
-
-    // A failure is transient (a restarting server, a dropped link), so later visits try again
-    // rather than pinning the whole session to a meta-less tile; the cache's per-path attempt cap
-    // then stops a dead endpoint from being hammered on every open.
-    token = 'valid-token';
-    for (let round = 0; round < 4; round += 1) {
-      ctrl.setOpen(false);
       ctrl.setOpen(true);
-      await flushPromises();
-    }
-    expect(metaCalls()).toBe(3);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(metaCalls()).toBe(1);
 
-    ctrl.dispose();
+      // A failure is transient (a restarting server, a dropped link), so later visits try again
+      // once each paced retry window reopens; the changed token restores the tokenless attempt,
+      // and the cache's per-path cap then stops a dead endpoint from being hammered on every open.
+      token = 'valid-token';
+      for (let round = 0; round < 5; round += 1) {
+        ctrl.setOpen(false);
+        ctrl.setOpen(true);
+        await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS);
+      }
+      expect(metaCalls()).toBe(4);
+
+      ctrl.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('battery discovery is called on first open, catalog includes discovered instances', async () => {

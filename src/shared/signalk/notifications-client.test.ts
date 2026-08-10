@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectBearerAuth, stubFetch } from '$shared/testing';
 import {
   acknowledgeNotification,
+  fetchRaisedNotificationPaths,
   postMobNotification,
   postNotification,
   resolveNotification,
@@ -142,6 +143,53 @@ describe('silence and acknowledge', () => {
     stubFetch({ ok: false, status: 501 });
     await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
     await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
+  });
+});
+
+describe('fetchRaisedNotificationPaths', () => {
+  it('flattens the v1 snapshot tree to raised, prefixed paths', async () => {
+    const mock = stubFetch({
+      ok: true,
+      body: {
+        navigation: {
+          anchor: { value: { state: 'alarm', message: 'Dragging' } },
+          closestApproach: { value: { state: 'normal' } },
+        },
+        mob: { value: { state: 'emergency', message: 'MOB' } },
+        cleared: { value: null },
+      },
+    });
+    const paths = await fetchRaisedNotificationPaths(BASE, 'tok');
+    expect(paths).toEqual(new Set(['notifications.navigation.anchor', 'notifications.mob']));
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toBe(`${BASE}/signalk/v1/api/vessels/self/notifications`);
+    expectBearerAuth(init, 'tok');
+  });
+
+  it('treats a missing notifications branch as a real empty set', async () => {
+    stubFetch({ ok: false, status: 404 });
+    await expect(fetchRaisedNotificationPaths(BASE, undefined)).resolves.toEqual(new Set());
+  });
+
+  it('returns undefined on transport and server failures, so the mirror stays untouched', async () => {
+    stubFetch('reject');
+    await expect(fetchRaisedNotificationPaths(BASE, undefined)).resolves.toBeUndefined();
+    stubFetch({ ok: false, status: 500 });
+    await expect(fetchRaisedNotificationPaths(BASE, undefined)).resolves.toBeUndefined();
+  });
+
+  it('skips malformed segments that could not name a mirrored path', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        'bad.dotted': { value: { state: 'alarm' } },
+        'bad\u0000control': { value: { state: 'alarm' } },
+        good: { value: { state: 'warn' } },
+      },
+    });
+    await expect(fetchRaisedNotificationPaths(BASE, undefined)).resolves.toEqual(
+      new Set(['notifications.good']),
+    );
   });
 });
 

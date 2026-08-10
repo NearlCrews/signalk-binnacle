@@ -16,7 +16,12 @@ import type { CompanionStatus } from '$features/prewarm';
 import type { TimeTravelController } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
 import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
-import { acknowledgeNotification, SELF_CONTEXT, silenceNotification } from '$shared/signalk';
+import {
+  acknowledgeNotification,
+  fetchRaisedNotificationPaths,
+  SELF_CONTEXT,
+  silenceNotification,
+} from '$shared/signalk';
 import { createCollisionNotificationPublisher } from './collision-notification-publisher';
 
 interface NotificationsControllerDeps {
@@ -201,11 +206,23 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     deps.genericAlarm.muteActiveHere();
   }
 
+  // Repair the notifications mirror after a stream reopen: alarms cleared or reaped server-side
+  // during the outage sent no clearing delta on the new socket, so the mirror is reconciled
+  // against a REST snapshot. An undefined snapshot means the fetch failed; the mirror stays
+  // untouched then, keeping the fail-safe direction. The returned promise settles after the
+  // reconcile, so a caller can order replay decisions that read the mirror behind it.
+  async function reconcileAfterReconnect(token: string | undefined): Promise<void> {
+    const snapshotEpoch = Date.now();
+    const paths = await fetchRaisedNotificationPaths(deps.origin, token);
+    if (paths) deps.notificationsStore.reconcile(paths, snapshotEpoch);
+  }
+
   return {
     toggleCollisionMute,
     onSilenceNotification,
     onAcknowledgeNotification,
     muteGenericHere,
+    reconcileAfterReconnect,
     dispose: collisionPublisher.dispose,
     get genericAlarms() {
       return genericNotifications;

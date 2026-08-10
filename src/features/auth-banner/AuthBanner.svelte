@@ -31,6 +31,22 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
       server.
     </p>
   </div>
+{:else if auth.status === 'denied' && auth.accessOutcome}
+  <div class="auth-banner warn" role="status" aria-live="polite">
+    <p>
+      {auth.accessOutcome === 'unreachable'
+        ? 'Could not reach the Signal K server to request access, so Binnacle cannot read or save boat data yet.'
+        : 'The access request was not approved in time. It may still be waiting in Signal K under Security, then Access Requests.'}
+      <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestAccess()}>
+        Try again
+      </button>
+    </p>
+    <p class="muted-note">
+      Trying again keeps the same device ID, <strong>{auth.clientId}</strong>, so an approval
+      already waiting in Signal K still counts. Grant <strong>read and write</strong> when
+      approving.
+    </p>
+  </div>
 {:else if auth.status === 'denied'}
   <div class="auth-banner denied" role="alert">
     <p>

@@ -51,6 +51,12 @@ export class SkConnection {
     };
   }
 
+  // Swap the URL the next connect() call opens. The live socket is left alone: reconnect attempts
+  // reopen from the stored URL, so this is how a changed auth token reaches a later reconnect.
+  setUrl(url: string): void {
+    this.#url = url;
+  }
+
   send(message: unknown): void {
     // The socket may still be CONNECTING when the first subscriptions arrive.
     // Dropping the send is safe: the registry resubscribes everything on open.

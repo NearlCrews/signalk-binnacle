@@ -129,6 +129,63 @@ describe('AuthController', () => {
     await auth.requestAccess();
     await auth.checkRequest();
     expect(auth.status).toBe('denied');
+    // A real refusal carries no exhaustion outcome, so the banner reads it as the denial it is.
+    expect(auth.accessOutcome).toBeUndefined();
+  });
+
+  it('reports an unreachable outcome, not a refusal, when the poll budget exhausts offline', async () => {
+    const scheduled: Array<() => void> = [];
+    let offline = true;
+    const fetchFn = vi.fn(async (url: string) => {
+      if (offline) throw new Error('offline');
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/r1' });
+      return res(false, {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: (run) => {
+        scheduled.push(run);
+      },
+    });
+    await auth.requestAccess();
+    const requestedAs = auth.clientId;
+    for (let i = 0; i < scheduled.length && i < 250; i += 1) {
+      scheduled[i]();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(auth.status).toBe('denied');
+    expect(auth.accessOutcome).toBe('unreachable');
+
+    // Retrying keeps the same device id: no refusal happened, and a fresh id would orphan a
+    // request that may still land or be approved.
+    offline = false;
+    await auth.requestAccess();
+    expect(auth.clientId).toBe(requestedAs);
+    expect(auth.status).toBe('requesting');
+    expect(auth.accessOutcome).toBeUndefined();
+  });
+
+  it('reports an unanswered outcome when a landed request is never approved in time', async () => {
+    const scheduled: Array<() => void> = [];
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.endsWith('/access/requests')) return res(true, { href: '/signalk/v1/requests/r1' });
+      return res(true, { state: 'PENDING' });
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage(),
+      schedule: (run) => {
+        scheduled.push(run);
+      },
+    });
+    await auth.requestAccess();
+    for (let i = 0; i < scheduled.length && i < 250; i += 1) {
+      scheduled[i]();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(auth.status).toBe('denied');
+    expect(auth.accessOutcome).toBe('unanswered');
   });
 
   it('requests again as a new device after a denial', async () => {
@@ -205,16 +262,96 @@ describe('AuthController', () => {
     expect(auth.token).toBe('tok2');
   });
 
-  it('does not recheck when not currently requesting', async () => {
+  it('re-probes on recheck while auth is unknown, and goes quiet once resolved', async () => {
     const fetchFn = vi.fn(async () => res(true, {}));
     const auth = new AuthController(BASE, {
       fetch: fetchFn as unknown as typeof fetch,
       storage: storage(),
       schedule: noSchedule,
     });
+    // 'unknown' means the startup probe never resolved (or failed in transit), so a tab return
+    // must retry it: before this, a failed first probe latched the whole session offline.
     auth.recheck();
     await new Promise((r) => setTimeout(r, 0));
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalled();
+    expect(auth.status).toBe('unsecured');
+    const settled = fetchFn.mock.calls.length;
+    auth.recheck();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchFn.mock.calls.length).toBe(settled);
+  });
+
+  it('schedules a bounded re-probe after a stored-token probe fails in transit', async () => {
+    const scheduled: Array<() => void> = [];
+    let offline = true;
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (offline) throw new Error('network down');
+      return res(Boolean(init?.headers), {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'keepme' }),
+      }),
+      schedule: (run) => {
+        scheduled.push(run);
+      },
+    });
+    await auth.probe();
+    expect(auth.status).toBe('unknown');
+    expect(scheduled).toHaveLength(1);
+    // The server comes up; the scheduled re-probe authenticates without a reload.
+    offline = false;
+    scheduled[0]();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(auth.status).toBe('authenticated');
+    expect(auth.token).toBe('keepme');
+  });
+
+  it('degrades to a slow probe heartbeat once the fast budget is spent, then recovers', async () => {
+    const scheduled: Array<{ run: () => void; ms: number }> = [];
+    let offline = true;
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (offline) throw new Error('network down');
+      return res(Boolean(init?.headers), {});
+    });
+    const auth = new AuthController(BASE, {
+      fetch: fetchFn as unknown as typeof fetch,
+      storage: storage({
+        'binnacle:signalk-auth': JSON.stringify({ clientId: 'binnacle-1', token: 'keepme' }),
+      }),
+      schedule: (run, ms) => {
+        scheduled.push({ run, ms });
+      },
+    });
+    await auth.probe();
+    // A server down longer than the fast window (a night shutdown under an always-on helm
+    // display): drain the whole budget, after which the poll degrades to the slow heartbeat
+    // instead of stopping, because no focus, visibility, or net-online event ever fires there.
+    let heartbeat: { run: () => void; ms: number } | undefined;
+    for (let i = 0; i < 250 && !heartbeat; i += 1) {
+      const next = scheduled.shift();
+      if (!next) break;
+      next.run();
+      await new Promise((r) => setTimeout(r, 0));
+      heartbeat = scheduled.find((entry) => entry.ms === 60_000);
+    }
+    expect(heartbeat).toBeDefined();
+    expect(auth.status).toBe('unknown');
+
+    // A failed heartbeat probe re-arms itself at the same slow cadence.
+    scheduled.length = 0;
+    heartbeat?.run();
+    await new Promise((r) => setTimeout(r, 0));
+    const again = scheduled.find((entry) => entry.ms === 60_000);
+    expect(again).toBeDefined();
+
+    // The server comes back; the next heartbeat authenticates with no user event at all.
+    offline = false;
+    again?.run();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(auth.status).toBe('authenticated');
+    expect(auth.token).toBe('keepme');
   });
 
   it('adopts a token approved in another tab', async () => {
