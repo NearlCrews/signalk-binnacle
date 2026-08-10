@@ -102,7 +102,13 @@ Binnacle ships its full feature set as a Signal K webapp:
   readings remain clearly marked and never replace live values. Dynamic options name both the reading
   and source, while a catalog-level fallback keeps future repeated labels distinct. Every tile's
   detail names its live Signal K source and, on watch-critical paths, calls out a recent source
-  change or several alternating sources so a quiet failover never goes unnoticed. Instrument
+  change or several alternating sources so a quiet failover never goes unnoticed; when two or more
+  sources feed the shown path, a Recent sources list shows what each one reports, neutrally.
+  Staleness honors the server first: a path the server's meta.timeout enforcement declares timed
+  out reads Stale (server declared) across every surface at once, keeps its last good value
+  visible with an honest age, and names the source that went quiet, and a path's own declared
+  timeout replaces the default tile staleness window so a legitimately slow sensor is never
+  flashed stale. Instrument
   dashboard (KIP) launches the installed KIP webapp; when KIP is absent, the item stays visible but
   unavailable and explains how to add it.
 - **Time travel:** review 1 hour, 6 hours, 24 hours, or 7 days from one registered Signal K history
