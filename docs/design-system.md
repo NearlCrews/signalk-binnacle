@@ -82,8 +82,8 @@ Pick the token by role, never by eye:
 | `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), stepped-up form-control text (`UnitField` numerals, `.text-field.large`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates |
-| `--text-readout-lg` | 1.75 | instrument tile hero values only |
+| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg` with its grade word at `--text-base` weight 700, since the top alert's decision numbers outrank an ordinary numeral |
+| `--text-readout-lg` | 1.75 | instrument tile hero values, and the collision strip's decision numbers above |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
 token. A component that wants a size this table does not grant its role is asking for a design-system
@@ -150,6 +150,24 @@ Rules:
   component must not set the competing property (background, border-color) in its scoped base, or it
   will defeat the shared state. See `.row-interactive` in `overlays.css` for the worked pattern,
   including the border-longhand technique for reserving a lit border.
+
+`vendor.css` owns the MapLibre chrome contract, coupled to vendor class names (re-verify at
+night-red on any MapLibre upgrade):
+
+- Vendor glyphs never keep their baked colors: the attribution "i" and the zoom plus and minus are
+  masked and recolored with `--text-muted` (the attribution through a pseudo-element because its
+  compact background repeats; the zoom by masking the icon span directly, which keeps the vendor's
+  disabled dimming), so every control glyph follows the theme instead of vanishing at dusk and
+  night-red.
+- The scale control is a classic open-bracket bar: side and bottom hairlines, block-end radius
+  only, a mono `--text-xs` label with tabular numerals, no label word, and a faint surface wash so
+  the text survives bright day charts without reading as a form card.
+- Floating chart chrome shares one `--space-3` edge gutter, and everything in the bottom band (the
+  chart badge, the bottom-right vendor controls, the bottom strip stack, and the full-screen
+  dock's scroll padding) yields to `--rail-clearance`, the measured safety-rail height published
+  on the chart host and mirrored onto the app shell root. It resolves to `0px` while no alerts are
+  up, so consumers apply it unconditionally, and lifted chrome stays below the strips in z: a
+  safety card may never be painted over, and may never half-cover the chrome underneath it either.
 
 ## 5. Global utility classes (the shared vocabulary)
 
@@ -521,8 +539,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 - The app menu is the `AppMenu` launcher: a `.surface-elevated` frame holding a grid of tiles grouped by
   helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar pill,
-  `icon` a lucide component, `group` a section heading, `pressed` for a toggle's lit state,
-  `disabled` plus `disabledLabel`, `available` plus `unavailableHint`, `onSelect`). Groups today:
+  `sublabel` for a quiet second tile line when an item's current state is part of its identity
+  (the Orientation tile's mode, the instrument dashboard's KIP acronym) so the label keeps one
+  voice across the grid, `icon` a lucide component, `group` a section heading, `pressed` for a
+  toggle's lit state, `disabled` plus `disabledLabel`, `available` plus `unavailableHint`,
+  `onSelect`). Groups today:
   Map, Navigate, Safety, Weather, Instruments, Offline charts, and Settings.
   Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
   `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
