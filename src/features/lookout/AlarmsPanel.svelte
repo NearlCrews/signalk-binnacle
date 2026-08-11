@@ -269,6 +269,7 @@ $effect(() => {
         <Bell size={18} aria-hidden="true" />
       {/if}
       <span>Mute collision alarm</span>
+      <span class="mute-state" aria-hidden="true">{collisionMuted ? 'On' : 'Off'}</span>
     </button>
     {#if collisionMuted && collisionMuteRemainingMin !== undefined}
       <!-- A status region, like every other state line here. It re-announces once a minute while
@@ -290,6 +291,7 @@ $effect(() => {
         <Bell size={18} aria-hidden="true" />
       {/if}
       <span>Mute waypoint arrival alarm</span>
+      <span class="mute-state" aria-hidden="true">{arrivalMuted ? 'On' : 'Off'}</span>
     </button>
   </section>
   <section class="panel-section" aria-label="Collision thresholds">
@@ -472,6 +474,19 @@ $effect(() => {
   justify-content: flex-start;
   gap: var(--space-2);
   text-align: start;
+}
+/* The trailing state word makes the row read as the toggle it is, not a form field at rest:
+   aria-pressed already tells assistive tech, this tells the eye. Accent while the mute is on,
+   matching the lit row treatment. */
+.mute-state {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.mute-row.is-on .mute-state {
+  color: var(--accent);
 }
 /* Each severity block is its own bordered card on the shared .card-frame surface, so Danger and
    Warning read as two groups at a glance instead of one four-field stack; only the column layout

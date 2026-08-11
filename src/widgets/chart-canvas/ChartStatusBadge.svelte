@@ -65,11 +65,13 @@ const copy = $derived(COPY[status]);
 </button>
 
 <style>
-/* Bottom-leading corner, above MapLibre's scale control, inside the chart surface. */
+/* Bottom-leading corner on the shared --space-3 chrome gutter, lifted by the measured safety-rail
+   clearance so a danger or MOB strip can never half-cover the chart-trust statement. The variable
+   resolves to 0px while no alerts are up, and the badge stays below the strips in z. */
 .chart-status {
   position: absolute;
-  inset-block-end: calc(var(--space-6) + var(--space-5));
-  inset-inline-start: var(--space-2);
+  inset-block-end: calc(var(--space-3) + var(--rail-clearance, 0px));
+  inset-inline-start: var(--space-3);
   z-index: var(--z-overlay);
   background: var(--surface-overlay);
   color: var(--text-muted);

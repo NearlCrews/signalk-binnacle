@@ -138,6 +138,12 @@ const depthLabel = $derived.by(() => {
   if (shallowState === 'no-reading') return 'Depth unavailable, watch paused';
   return 'Depth';
 });
+// While the watch is paused, the label carries the whole message; a dashed value and datum tag
+// beside "Depth stale, watch paused" add nine characters of nothing, exactly where a degraded
+// strip is already at its widest.
+const depthWatchPaused = $derived(
+  shallowState === 'stale' || shallowState === 'no-reading' || depth.stale,
+);
 </script>
 
 <footer class="status-strip" class:editing>
@@ -293,10 +299,12 @@ const depthLabel = $derived.by(() => {
       class:fix-lost={depth.stale || shallowState !== 'monitoring'}
       title={depthTitle(depth, shallowAlarming)}
       >{depthLabel}
-      <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
-      {lengthUnit(units.mode)}
-      {#if depth.source}
-        <span class="datum">{DEPTH_SOURCE_LABELS[depth.source]}</span>
+      {#if !depthWatchPaused}
+        <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
+        {lengthUnit(units.mode)}
+        {#if depth.source}
+          <span class="datum">{DEPTH_SOURCE_LABELS[depth.source]}</span>
+        {/if}
       {/if}</span
     >
     {#if radarHealth.state !== 'quiet'}
@@ -342,7 +350,7 @@ const depthLabel = $derived.by(() => {
         ></span
       >
     {/if}
-    <span class="readout" title="Local time"
+    <span class="readout time-readout" title="Local time"
       >Time
       <b class="num">{formatClockTime(clock.now)}</b></span
     >
@@ -382,6 +390,11 @@ const depthLabel = $derived.by(() => {
 }
 .strip-start {
   display: flex;
+  /* Wrapping at every width, not only under 900px: the 1fr column shrinks below its content when
+     degraded chips lengthen the row (No GPS fix, Depth stale, Reconnect), and an unwrappable row
+     then paints under the centered pills, hiding safety text and burying the Reconnect tap
+     target. A second readout line is always better than an occluded one. */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   min-inline-size: 0;
@@ -389,22 +402,22 @@ const depthLabel = $derived.by(() => {
 /* The vessel position reads as one group at the trailing edge; the Position instrument tile
    covers the same value on demand, so this is the first thing dropped once space is tight.
    justify-content pins it to the far edge of its now-equal-share column (the true-centering grid
-   above makes that column wider than its own content), matching where it sat before. */
+   above makes that column wider than its own content), matching where it sat before. Wraps for
+   the same occlusion reason as the leading column, mirrored. */
 .center-cluster {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   min-inline-size: 0;
 }
-/* Between a phone and a full desktop width, a landscape tablet is wide enough to keep the
-   three-column grid but too narrow to fit the flanking readouts and every pinned action pill on
-   one row; the pill row is flex-wrap and has no floor, so it is what breaks, dropping one pill
-   onto its own ragged second row. Freeing the trailing position cluster's column here, before
-   that wrap point, keeps the pinned actions on one row across the whole tablet range instead of
-   tuning to one device width. */
+/* Between a phone and a full desktop width, a landscape tablet keeps the three-column grid but
+   cannot fit the readouts, every pinned pill, and both trailing readouts on one row. Time goes
+   first (any watch or phone shows it; nothing else on the strip shows position), and the
+   position readout follows only below 900, where the strip stacks anyway. */
 @media (max-width: 1200px) {
-  .center-cluster {
+  .center-cluster .time-readout {
     display: none;
   }
 }
@@ -419,8 +432,10 @@ const depthLabel = $derived.by(() => {
     gap: var(--space-2);
   }
   .strip-start {
-    flex-wrap: wrap;
     justify-content: center;
+  }
+  .center-cluster {
+    display: none;
   }
 }
 @media (max-width: 600px) {

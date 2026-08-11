@@ -220,6 +220,27 @@ const sampleDepth = unitSample(formatLengthOr, lengthUnit);
 const samplePressure = unitSample(formatPressureOr, pressureUnit);
 const sampleTemperature = unitSample(formatTemperatureOr, temperatureUnit);
 
+// The retained stale value's age, so a stale tile says how old its number is instead of wearing
+// a confident numeral beside a whisper badge; undefined while live. Ages from the same epoch the
+// staleness grade used (the server-declared last good value when present, else stream receipt).
+export function staleAgeText(
+  deps: TileDeps,
+  def: TileDef,
+  reading: TileReading,
+): string | undefined {
+  if (reading.state !== 'stale') return undefined;
+  const path =
+    reading.activePath ??
+    def.paths.find((candidate) => deps.store.cell(candidate).epoch > 0) ??
+    def.paths[0];
+  if (!path) return undefined;
+  const cell = deps.store.cell(path);
+  const epoch = cell.serverStale?.lastValueEpoch ?? cell.epoch;
+  if (epoch <= 0) return undefined;
+  const seconds = Math.max(0, Math.round((deps.clock.now - epoch) / 1000));
+  return seconds < 90 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+}
+
 // Wraps a radian angle to -π..π so a relative bearing stays in the port-starboard range.
 function normalizeAngle(a: number): number {
   return ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;

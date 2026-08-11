@@ -15,7 +15,9 @@ source, and surrounding traffic before relying on it.
   recentering: Follow stays armed through the outage and resumes on the next fresh fix. While the
   chart is rotated (course-up or heading-up) and the boat is making way, Follow adds a bounded
   look-ahead that sits the boat low on screen so the water ahead gets the pixels.
-- **Orientation** cycles north-up, course-up, and heading-up. North-up is the default; the rotating
+- **Orientation** cycles north-up, course-up, and heading-up. The launcher tile reads Orientation
+  with the current mode on a quiet second line, and the bar pill shows the bare mode name, which
+  flips on tap. North-up is the default; the rotating
   modes are explicit, profile-owned choices. Heading-up needs fresh true heading and course-up
   needs fresh COG with way on; a stale or missing reference falls back to north immediately.
   While a rotating mode is chosen, a status-strip chip keeps the live orientation and its
@@ -166,7 +168,11 @@ source, and surrounding traffic before relying on it.
 
 ## Instruments
 
-- **Instrument dock** opens the live instrument tiles. Customize can show, hide, and reorder tiles,
+- **Instrument dock** opens the live instrument tiles. Each tile leads with its loud abbreviation
+  (SOG, HDG, AWS) over the quiet long name, states render as tinted chips (Alarm outranks Stale,
+  and Stale outranks a zone Warning computed from the untrusted value), a stale tile keeps its
+  retained number at muted contrast with its age on the secondary line, and the wind tile's angle
+  freshness folds into the same chip line. Customize can show, hide, and reorder tiles,
   including bounded discovered batteries, engines, tanks, solar controllers, and cabin sensors. A
   Rescan checks the live Signal K model first. When a registered history provider is available, it
   also checks the preceding year for concrete paths that populated under `vessels.self`, so seasonal
@@ -205,7 +211,8 @@ source, and surrounding traffic before relying on it.
   warranted) that is visible and read by screen readers. Eligible instrument details can
   open one focused trend without changing the saved overview. Back restores the same detail and
   focus, while Close returns to the chart.
-- **Instrument dashboard (KIP)** opens the installed KIP webapp in a new tab. Transport or access failures keep its
+- **Instrument dashboard** (KIP, named on the tile's quiet second line) opens the installed KIP
+  webapp in a new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
 - **Time travel** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available

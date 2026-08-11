@@ -210,7 +210,7 @@ const reorder = createLayerReorder(
       <section class="category" aria-label="Chart sources">
         <h3 class="category-head pinned-head">
           <span class="category-title caps-label">Chart sources</span>
-          <span class="category-count" aria-hidden="true">{chartRows.length}</span>
+          <span class="pill-count category-count" aria-hidden="true">{chartRows.length}</span>
         </h3>
         {#if chartRows.length === 0}
           <p class="muted-note empty-note">No chart sources yet.</p>
@@ -294,7 +294,7 @@ const reorder = createLayerReorder(
                   aria-hidden="true"
                 />
                 <span class="category-title caps-label">{cat.title}</span>
-                <span class="category-count" aria-hidden="true">{cat.rows.length}</span>
+                <span class="pill-count category-count" aria-hidden="true">{cat.rows.length}</span>
               </button>
             </h3>
             <ul class="category-rows bare-list" id={panelId} hidden={!expanded}>
@@ -410,11 +410,9 @@ const reorder = createLayerReorder(
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The shared .pill-count chip carries the look; only the flex behavior is local. */
 .category-count {
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 .category-rows {
   margin: var(--space-1) 0 0;

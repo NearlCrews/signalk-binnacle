@@ -12,10 +12,12 @@ interface Props {
   sensorGloss: string;
   kind?: string;
   abbr?: string;
+  // See NumericTile: the retained stale value's age, shown while the reading is stale.
+  staleAgeText?: string;
   onOpen?: () => void;
 }
 
-const { label, reading, zone, sensorGloss, kind, abbr, onOpen }: Props = $props();
+const { label, reading, zone, sensorGloss, kind, abbr, staleAgeText, onOpen }: Props = $props();
 
 // One expression, so the formatter cannot split the label from its reference parenthetical.
 const labelText = $derived(
@@ -47,14 +49,70 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
              so the rose says which way the boat is pointing without a legend. -->
         <polygon points="50,3 45.5,13 54.5,13" fill="var(--text-muted)" />
         <!-- 3 major quarter ticks: starboard beam, stern, port beam -->
-        <line x1="94" y1="50" x2="84" y2="50" stroke="var(--text-muted)" stroke-width="2" />
-        <line x1="50" y1="94" x2="50" y2="84" stroke="var(--text-muted)" stroke-width="2" />
-        <line x1="6" y1="50" x2="16" y2="50" stroke="var(--text-muted)" stroke-width="2" />
+        <line
+          x1="94"
+          y1="50"
+          x2="84"
+          y2="50"
+          stroke="var(--text-muted)"
+          stroke-width="2"
+          vector-effect="non-scaling-stroke"
+        />
+        <line
+          x1="50"
+          y1="94"
+          x2="50"
+          y2="84"
+          stroke="var(--text-muted)"
+          stroke-width="2"
+          vector-effect="non-scaling-stroke"
+        />
+        <line
+          x1="6"
+          y1="50"
+          x2="16"
+          y2="50"
+          stroke="var(--text-muted)"
+          stroke-width="2"
+          vector-effect="non-scaling-stroke"
+        />
         <!-- 4 minor ticks on the 45s -->
-        <line x1="81" y1="19" x2="75" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
-        <line x1="81" y1="81" x2="75" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
-        <line x1="19" y1="81" x2="25" y2="75" stroke="var(--text-muted)" stroke-width="1.5" />
-        <line x1="19" y1="19" x2="25" y2="25" stroke="var(--text-muted)" stroke-width="1.5" />
+        <line
+          x1="81"
+          y1="19"
+          x2="75"
+          y2="25"
+          stroke="var(--text-muted)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+        <line
+          x1="81"
+          y1="81"
+          x2="75"
+          y2="75"
+          stroke="var(--text-muted)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+        <line
+          x1="19"
+          y1="81"
+          x2="25"
+          y2="75"
+          stroke="var(--text-muted)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+        <line
+          x1="19"
+          y1="19"
+          x2="25"
+          y2="25"
+          stroke="var(--text-muted)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
         <!-- Needle: points up at 0 rad (bow-up); rotate by wind angle around center -->
         {#if typeof reading.angleRad === 'number'}
           <line
@@ -75,21 +133,22 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
         ><span class="angle">{formatSignedAngleOr(reading.angleRad)}</span>
       </span>
     </div>
-    {#if reading.angleState}
-      <!-- The needle is already gone; this names why, so a live speed beside a dashed angle does
-           not read as a broken display. -->
-      <span class="tile-secondary">angle {reading.angleState}</span>
+    {#if staleAgeText}
+      <span class="tile-secondary">{staleAgeText}</span>
     {:else if reading.secondary}
       <span class="tile-secondary">{reading.secondary}</span>
     {/if}
   {/if}
+  <!-- The abbreviation leads and carries the loud voice, matching NumericTile. -->
   <span class="caps-label"
-    >{labelText}
-    {#if abbr}
+    >{#if abbr}
       <span class="abbr">{abbr}</span>
-    {/if}</span
+    {/if}
+    {labelText}</span
   >
-  <TileStateBadge state={reading.state} {zone} />
+  <!-- The angle freshness folds into the one badge line: the needle is already gone, and the
+       badge names why, so a live speed beside a missing angle never reads as a broken display. -->
+  <TileStateBadge state={reading.state} {zone} angleState={reading.angleState} />
 </button>
 
 <!-- The tile column, value size, unit, and zone tints come from the global .tile vocabulary in

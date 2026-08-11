@@ -551,6 +551,9 @@ const INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX = 900;
 const narrowQuery = createMediaQuery(`(max-width: ${NARROW_BREAKPOINT_PX}px)`);
 const narrow = $derived(narrowQuery.matches);
 let instrumentsFullScreen = $state(false);
+// The safety rail's measured clearance, bound out of PlotterView so App-level fixed overlays (the
+// full-screen dock) can reserve the space the rail floats over.
+let safetyRailClearance = $state('0px');
 const openPanel = (panel: PanelId): void => {
   if (instrumentsFullScreen && instruments.open) instruments.setOpen(false);
   if (activePanel === 'trends' && panel !== 'trends') {
@@ -1540,7 +1543,10 @@ const menuItems = $derived<MenuItem[]>([
   },
   {
     id: 'orientation',
-    label: `Orientation: ${ORIENTATION_TILE_LABELS[chartOrientation.value]}`,
+    // One label voice with its siblings; the current mode rides the quiet sublabel line, and the
+    // bar pill keeps the bare mode name, which flips on tap and so reveals the cycling itself.
+    label: 'Orientation',
+    sublabel: ORIENTATION_TILE_LABELS[chartOrientation.value],
     shortLabel: ORIENTATION_TILE_LABELS[chartOrientation.value],
     icon: Compass,
     group: 'Map',
@@ -1741,8 +1747,10 @@ const menuItems = $derived<MenuItem[]>([
   {
     id: 'open-kip',
     // Named for what it is, an instrument dashboard, so a navigator who has never heard the
-    // acronym knows what will open before launching another webapp.
-    label: 'Instrument dashboard (KIP)',
+    // acronym knows what will open; the acronym rides the sublabel, where it cannot force the
+    // label to permanently truncate at tile widths.
+    label: 'Instrument dashboard',
+    sublabel: 'KIP',
     icon: ExternalLink,
     group: 'Instruments',
     available: kipPresent === true,
@@ -2587,7 +2595,9 @@ const plotterActions = {
 };
 </script>
 
-<main class="binnacle-shell">
+<!-- The measured safety-rail clearance rides the shell root so App-level overlays the rail can
+     float over (the full-screen instrument dock) inherit it; 0px while no alerts are up. -->
+<main class="binnacle-shell" style:--rail-clearance={safetyRailClearance}>
   <LiveRegions
     safety={safetyAnnunciator.assertive}
     safetyQueue={safetyAnnunciator.polite}
@@ -2673,6 +2683,7 @@ const plotterActions = {
     {selectedWaypointId}
     {tidesOpenedFrom}
     bind:menuOpen
+    bind:safetyRailClearance
     {layersView}
     {noteLoader}
     bind:selectedNote

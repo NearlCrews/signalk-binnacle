@@ -87,9 +87,11 @@
   opacity: var(--disabled-opacity);
   cursor: default;
 }
-/* A caution variant of the strip action (the collision Mute), warning-colored so the two safety
-   buttons (Mute and the accent Acknowledge) do not read as twins. The pressed state tints with the
-   warning token so the fill matches the amber border and text. */
+/* A caution variant of the strip action for consequence-bearing taps (the anchor Raise, the MOB
+   and route-edit Cancels), warning-colored so they read apart from the plain actions beside them.
+   The collision Mute deliberately stays a plain .ack: a mute toggle is not destructive
+   (DangerStrip records the reason at its markup). The pressed state tints with the warning token
+   so the fill matches the amber border and text. */
 .bottom-strip .ack--warning {
   color: var(--warning);
   border-color: var(--warning);

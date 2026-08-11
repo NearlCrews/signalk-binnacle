@@ -195,8 +195,10 @@ describe('applyBaseIconVisibility', () => {
     expect(map.getPaintProperty('poi_r1', 'icon-opacity')).toBe(1);
     expect(map.getPaintProperty('road_shield', 'icon-opacity')).toBe(1);
     expect(map.getPaintProperty('binnacle-ais-symbol', 'icon-opacity')).toBeUndefined();
+    // Dusk fades the pre-colored sprite icons instead of hiding them: a pure-white highway
+    // shield is otherwise the brightest element on the dark dusk chart.
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
     applyBaseIconVisibility(map as any, mapThemePaint('dusk'));
-    expect(map.getPaintProperty('poi_r1', 'icon-opacity')).toBe(1);
+    expect(map.getPaintProperty('poi_r1', 'icon-opacity')).toBe(0.4);
   });
 });

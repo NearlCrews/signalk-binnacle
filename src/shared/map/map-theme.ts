@@ -158,8 +158,10 @@ const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
     trackFast: '#ff6e00',
     trackSolid: '#c84600',
     scrubMarker: '#ff6e00',
-    ownVessel: { r: 0xe0, g: 0x47, b: 0x3a, a: 0xff },
-    aisTarget: { r: 0xb0, g: 0x2e, b: 0x22, a: 0xff },
+    // Zero blue, per the night-red contract: a blue component reads pink on the black chart.
+    // Brightness ladder holds: below danger and scrubMarker, above the road and label tiers.
+    ownVessel: { r: 0xe0, g: 0x42, b: 0x00, a: 0xff },
+    aisTarget: { r: 0xb0, g: 0x2e, b: 0x00, a: 0xff },
     rasterSaturation: -1,
     rasterBrightnessMax: 0.45,
   },

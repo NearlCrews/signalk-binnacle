@@ -127,13 +127,17 @@ test('keeps chart controls legible and the instrument title on one line', async 
     .toBe('20px 20px');
   const scale = page.locator('.maplibregl-ctrl-scale');
   await expect(scale).toBeVisible({ timeout: 15_000 });
+  // The open-bracket scale bar: mono label, no "Scale" word, and no top border, so it reads as a
+  // measuring bracket rather than a form card.
   await expect
     .poll(() => scale.evaluate((element) => getComputedStyle(element, '::before').content), {
       timeout: 15_000,
     })
-    .toBe('"Scale"');
-  await expect(scale).toHaveCSS('display', 'flex');
-  await expect(scale).toHaveCSS('flex-direction', 'column');
+    .toBe('none');
+  await expect(scale).toHaveCSS('border-top-style', 'none');
+  await expect
+    .poll(() => scale.evaluate((element) => getComputedStyle(element).fontFamily))
+    .toContain('JetBrains');
   await expect
     .poll(() =>
       scale.evaluate(

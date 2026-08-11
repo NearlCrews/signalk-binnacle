@@ -513,9 +513,9 @@ test('orientation falls back to north on a stale reference and survives a manual
 
   // The orientation tile cycles north to course to heading; the menu closes on each select.
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: /Orientation: North up/ }).click();
+  await page.getByRole('button', { name: /Orientation North up/ }).click();
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('button', { name: /Orientation: Course up/ }).click();
+  await page.getByRole('button', { name: /Orientation Course up/ }).click();
 
   const chip = page.locator('.status-strip .orientation-chip');
   await sendDelta(page, OWN_FIX);

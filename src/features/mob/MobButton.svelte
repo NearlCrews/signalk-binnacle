@@ -83,14 +83,33 @@ function onTimeout(): void {
 {/if}
 
 <style>
-/* The button reads as the emergency control it is: alarm-colored at rest, alarm-tinted while a
-   mark is active (when it becomes fly-to-mark instead of re-marking). */
+/* The helm's hardware convention: a solid red MOB key. Solid alarm fill appears nowhere else in
+   the chrome (alarm surfaces speak in tints and borders), so the filled pill uniquely means MOB
+   rather than crying alarm. Active (fly-to-mark) adds an inset contrast ring on the same fill, so
+   the engaged state never reads dimmer than rest. */
 .mob-btn {
-  color: var(--alarm);
   border-color: var(--alarm);
-  font-weight: 600;
+  background: var(--alarm);
+  color: var(--alarm-contrast);
+  font-weight: 700;
 }
 .mob-btn.is-on {
-  background: var(--alarm-tint);
+  background: var(--alarm);
+  box-shadow: inset 0 0 0 2px var(--alarm-contrast);
+}
+/* Night brightness discipline: with no mark active the resting key drops to the tinted plane with
+   warning-brightness text, a brightness borrow inside the red band, not a semantic reuse; the full
+   alarm fill is reserved for an active mark, so the brightest pixel at night is only ever a live
+   emergency. */
+:global(:root[data-theme="night-red"]) .mob-btn {
+  border-color: var(--warning);
+  background: var(--alarm-tint-strong);
+  color: var(--warning);
+}
+:global(:root[data-theme="night-red"]) .mob-btn.is-on {
+  border-color: var(--alarm);
+  background: var(--alarm);
+  color: var(--alarm-contrast);
+  box-shadow: none;
 }
 </style>

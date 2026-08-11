@@ -67,6 +67,10 @@ function sourceColor(
       return paint.land;
     case 'boundary':
       return paint.boundary;
+    // The low-zoom worldwide landcover source-layer (distinct from landcover); unmapped it kept
+    // its source greens through the night recolor at ocean-crossing zooms.
+    case 'globallandcover':
+      return paint.landcover;
     case 'transportation':
       return paint.road;
     // Aeroway aprons read as land; runways and taxiways read as roads.
@@ -103,9 +107,15 @@ export function applyBaseTheme(map: MapLibreMap, paint: MapThemePaint, layers?: 
     if (!themed) continue;
     try {
       setPaintProp(map, layer.id, themed.property, themed.color);
-      // fill-pattern is a paint property in MapLibre, not a layout one; clearing it lets the
-      // flat themed color show through the wetland hatch and paved-area textures.
-      if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-pattern', undefined);
+      if (layer.type === 'fill') {
+        // fill-pattern is a paint property in MapLibre, not a layout one; clearing it lets the
+        // flat themed color show through the wetland hatch and paved-area textures.
+        map.setPaintProperty(layer.id, 'fill-pattern', undefined);
+        // An explicit fill-outline-color (park and reserve outlines are green in the source
+        // style) survives a fill-color recolor on its own; align it with the themed fill so no
+        // source hue outlines the night map.
+        map.setPaintProperty(layer.id, 'fill-outline-color', themed.color);
+      }
       if (layer.type === 'symbol')
         map.setPaintProperty(layer.id, 'text-halo-color', paint.background);
     } catch {
@@ -117,18 +127,30 @@ export function applyBaseTheme(map: MapLibreMap, paint: MapThemePaint, layers?: 
 // The base style's sprite icons (POI dots, road and transit shields, aerodrome marks) are pre-colored
 // in the published sprite, so the source-layer recolor never reaches them and they keep their original
 // blues, greens, and whites. Binnacle draws its own navigation symbols and does not rely on any base
-// sprite icon, so hide every base icon at night-red to keep the map pure red on black, while leaving
-// the text labels (already recolored) visible. Other themes show the icons normally.
+// sprite icon, so hide every base icon at night-red to keep the map pure red on black, and fade them
+// at dusk, where a pure-white highway shield is otherwise the brightest element on the dark chart.
+// The text labels (already recolored) stay visible. Circle layers (POI dots) are pre-colored the
+// same way with no recolorable sprite, so they follow the night hide too.
 // Accepts a precomputed layer list (same contract as applyBaseTheme).
 export function applyBaseIconVisibility(
   map: MapLibreMap,
   paint: MapThemePaint,
   layers?: BaseLayer[],
 ): void {
-  const opacity = paint.theme === 'night-red' ? 0 : 1;
+  const opacity = paint.theme === 'night-red' ? 0 : paint.theme === 'dusk' ? 0.4 : 1;
+  const circleOpacity = paint.theme === 'night-red' ? 0 : 1;
   // Overlay-owned symbol layers (own vessel, AIS, notes) theme themselves and carry user-set
   // opacity, so themableBaseLayers excludes them: they must never be hidden here or forced back to 1.
   for (const layer of layers ?? themableBaseLayers(map)) {
+    if (layer.type === 'circle') {
+      try {
+        map.setPaintProperty(layer.id, 'circle-opacity', circleOpacity);
+        map.setPaintProperty(layer.id, 'circle-stroke-opacity', circleOpacity);
+      } catch {
+        // A circle layer without these properties is fine; skip it.
+      }
+      continue;
+    }
     if (layer.type !== 'symbol' || !layer.layout?.['icon-image']) continue;
     try {
       map.setPaintProperty(layer.id, 'icon-opacity', opacity);
@@ -169,6 +191,7 @@ export type BaseSnapshot = Array<{
   color: unknown;
   halo?: unknown;
   pattern?: unknown;
+  outline?: unknown;
   isFill?: boolean;
   isSymbol?: boolean;
 }>;
@@ -216,6 +239,13 @@ export function captureBaseTheme(
       } catch {
         // No pattern on this fill; restore clears it to undefined either way.
       }
+      // The theme aligns fill-outline-color with the fill, so the source outline (often absent,
+      // sometimes an explicit green) must be captured, undefined included, for the day restore.
+      try {
+        entry.outline = map.getPaintProperty(layer.id, 'fill-outline-color');
+      } catch {
+        // No outline to read; restore resets it to the style default either way.
+      }
     }
     snapshot.push(entry);
   }
@@ -233,7 +263,10 @@ export function restoreBaseTheme(map: MapLibreMap, snapshot: BaseSnapshot): void
       if (entry.isSymbol) setPaintProp(map, entry.id, 'text-halo-color', entry.halo);
       // fill-pattern is a paint property in MapLibre; restoring it (often undefined) brings back
       // the source style's hatch where the recolor had cleared it.
-      if (entry.isFill) setPaintProp(map, entry.id, 'fill-pattern', entry.pattern);
+      if (entry.isFill) {
+        setPaintProp(map, entry.id, 'fill-pattern', entry.pattern);
+        setPaintProp(map, entry.id, 'fill-outline-color', entry.outline);
+      }
     } catch {
       // A layer that no longer exists or lacks the property is fine; skip it.
     }

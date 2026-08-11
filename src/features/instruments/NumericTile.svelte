@@ -16,10 +16,24 @@ interface Props {
   abbr?: string;
   viz?: TileDef['viz'];
   sparkPoints?: number[];
+  // The retained stale value's age, shown in place of the secondary line while stale, so the
+  // muted numeral carries the fact that makes retention honest.
+  staleAgeText?: string;
   onOpen?: () => void;
 }
 
-const { label, reading, zone, sensorGloss, kind, abbr, viz, sparkPoints, onOpen }: Props = $props();
+const {
+  label,
+  reading,
+  zone,
+  sensorGloss,
+  kind,
+  abbr,
+  viz,
+  sparkPoints,
+  staleAgeText,
+  onOpen,
+}: Props = $props();
 
 // One expression, so the formatter cannot split the label from its reference parenthetical.
 const labelText = $derived(
@@ -54,15 +68,19 @@ const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, s
     {:else if sparkPoints}
       <Sparkline points={sparkPoints} />
     {/if}
-    {#if reading.secondary}
+    {#if staleAgeText}
+      <span class="tile-secondary">{staleAgeText}</span>
+    {:else if reading.secondary}
       <span class="tile-secondary">{reading.secondary}</span>
     {/if}
   {/if}
+  <!-- The abbreviation leads and carries the loud voice: a mariner scans for SOG or HDG, not for
+       the long name, which stays as the quiet gloss beside it. -->
   <span class="caps-label"
-    >{labelText}
-    {#if abbr}
+    >{#if abbr}
       <span class="abbr">{abbr}</span>
-    {/if}</span
+    {/if}
+    {labelText}</span
   >
   <TileStateBadge state={reading.state} {zone} />
 </button>

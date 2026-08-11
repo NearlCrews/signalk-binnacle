@@ -6,6 +6,22 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- A helm-visibility pass across the chrome. Instrument tiles lead with their loud abbreviation
+  (SOG, HDG, AWS) over the quiet long name, states render as tinted chips where Alarm outranks
+  Stale and Stale outranks a warning computed from an untrusted value, a stale tile keeps its
+  retained number with its age beside it, and the wind tile's angle freshness folds into the same
+  chip line. The collision strip's CPA and TCPA numbers and its grade word take the large readout
+  treatment. The MOB button is a solid red key in day and dusk, the one solid alarm fill in the
+  chrome, with a dimmed resting state at night so the brightest night pixel is only ever a live
+  emergency. The map scale is a classic open-bracket bar with a mono label instead of a labeled
+  box, and the zoom glyphs now follow the theme, so they stay visible at dusk and night. The
+  Orientation tile reads Orientation with its mode on a quiet second line, the instrument
+  dashboard tile no longer truncates, menu groups separate by heading alone in day and dusk, the
+  menu keeps a scroll shadow when tiles continue past the fold, the layers headers count with the
+  shared chip, and the alarm mute rows say On or Off at a glance.
+
 ### Added
 
 - Server-declared staleness is honored end to end. When the Signal K server's meta.timeout
@@ -30,6 +46,15 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Status strip text can no longer slide under the centered toolbar pills on desktop widths: the
+  readouts wrap instead, a paused depth watch drops its dashed value in favor of its label, and
+  between 900 and 1200 pixels the strip now keeps the vessel position visible, dropping the clock
+  first. On phones, the collision strip no longer covers the chart badge, the scale, or the
+  instrument dock's last row: chart chrome and the dock reserve the strip's measured height, and
+  the strip gives the contact name its own line instead of truncating it. Dusk no longer leaves
+  pure-white highway shields as the brightest pixels on the chart, night-red recolors park
+  outlines, POI dots, and low-zoom landcover that previously kept their source colors, and the
+  own-vessel and AIS markers at night are pure red-family tones rather than pink.
 - Enabling the NOAA ENC chart layer now flips the chart badge to Chart: the badge counts the ENC
   as a real nautical chart within its actual regional coverage (US coasts, Great Lakes, Alaska,
   Hawaii, and island territories), and mid-ocean or foreign waters still read Outside chart

@@ -114,6 +114,8 @@
   /* Darkened from #c8401f to clear WCAG AA (4.5:1) as text on --surface and both alarm-tint
      variants; the previous value fell to 3.62-4.19:1 depending on background. */
   --alarm: #a9361a;
+  /* Text that sits ON a solid --alarm fill (the MOB key). White clears 7:1 on the day alarm. */
+  --alarm-contrast: #ffffff;
   /* Caution tier, one step below --alarm: a dark amber by day (dark enough to read as text on the
      light surface and clearly gold rather than red), a lighter amber by dusk, and a dimmer red at
      night that stays in the red band and is told from the brighter --alarm by brightness, not hue. */
@@ -174,6 +176,9 @@
   --select: #ffc24d;
   --ok: #3fae6a;
   --alarm: #e0703a;
+  /* White on the brighter dusk alarm fails AA at button-label size; a near-black from the dusk
+     surface family clears 5:1. */
+  --alarm-contrast: #0f1a24;
   --warning: #d9a441;
   --shadow-overlay: 0 2px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 30px rgb(0 0 0 / 0.5);
@@ -216,6 +221,8 @@
      perceptible on true black. */
   --ok: #a23500;
   --alarm: #ff6e00;
+  /* Matches --accent-contrast: near-black text on the bright night alarm fill. */
+  --alarm-contrast: #1a0000;
   /* A medium tone, dimmer than the brighter --alarm so danger and caution stay distinguishable by
      brightness alone. */
   --warning: #c05800;

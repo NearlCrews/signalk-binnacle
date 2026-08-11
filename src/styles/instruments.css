@@ -46,13 +46,24 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+/* The state badge is a chip, not a third muted caps line: at arm's length Stale, Warning, and
+   Alarm must read as STATUS beside the label, and the chip colors itself by what it says (a Stale
+   chip stays caution-amber inside a warning-tinted tile; see TileStateBadge). */
 .tile-state {
+  padding: 0.1rem var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
   color: var(--text-muted);
 }
-.tile--warning .tile-state {
+.tile-state--caution {
+  border-color: var(--warning);
+  background: var(--warning-tint);
   color: var(--warning);
 }
-.tile--alarm .tile-state {
+.tile-state--alarm {
+  border-color: var(--alarm);
+  background: var(--alarm-tint);
   color: var(--alarm);
 }
 .tile--warning {
@@ -95,9 +106,12 @@
 .tile--position .num {
   font-size: var(--text-readout);
 }
-/* The template's natural whitespace before the tag provides the gap, so no margin: the formatter
+/* The abbreviation is the tile's loud name: a mariner scans for SOG, HDG, or AWS, so it leads the
+   label line at body contrast and weight while the long name stays the quiet gloss. The
+   template's natural whitespace after the tag provides the gap, so no margin: the formatter
    inserts a text node there and a margin would double it. */
 .abbr {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }

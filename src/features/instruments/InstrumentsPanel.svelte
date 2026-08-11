@@ -5,7 +5,7 @@ import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import NumericTile from './NumericTile.svelte';
-import type { TileDeps } from './tile-catalog';
+import { staleAgeText, type TileDeps } from './tile-catalog';
 import { createTileHistory } from './tile-history.svelte';
 import WindTile from './WindTile.svelte';
 
@@ -129,6 +129,7 @@ $effect(() => {
       {#each tiles as def (def.id)}
         {@const reading = def.read(deps)}
         {@const zone = controller.zoneState(def, reading.siValue)}
+        {@const staleAge = staleAgeText(deps, def, reading)}
         {#if def.kind === 'wind'}
           <WindTile
             label={controller.resolvedLabel(def)}
@@ -137,6 +138,7 @@ $effect(() => {
             sensorGloss={def.sensorGloss}
             kind={def.kind}
             abbr={def.abbr}
+            staleAgeText={staleAge}
             onOpen={() => (detailId = def.id)}
           />
         {:else}
@@ -149,6 +151,7 @@ $effect(() => {
             abbr={def.abbr}
             viz={def.viz}
             sparkPoints={def.viz === 'spark' ? history.series(def.id) : undefined}
+            staleAgeText={staleAge}
             onOpen={() => (detailId = def.id)}
           />
         {/if}
@@ -174,6 +177,14 @@ $effect(() => {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3);
+}
+@media (max-width: 900px) {
+  /* The full-screen dock sits under the floating safety rail; reserving the rail's measured
+     clearance in the scroll area keeps the last tile row reachable during an alert. 0px when
+     quiet, so the reserve costs nothing on a calm watch. */
+  .tiles {
+    padding-block-end: calc(var(--space-2) + var(--rail-clearance, 0px));
+  }
 }
 .empty {
   grid-column: 1 / -1;

@@ -183,6 +183,9 @@ describe('StatusStrip depth alarm', () => {
     expect(noSource).not.toContain('watch paused<');
     const stale = body({ ...baseProps(), shallowState: 'stale' as const });
     expect(stale).toContain('Depth stale, watch paused');
+    // The paused label carries the whole message: the dashed value and the datum tag are dropped
+    // so a degraded strip does not spend its widest moment on nine characters of nothing.
+    expect(stale).not.toContain('Xducer');
     const noReading = body({ ...baseProps(), shallowState: 'no-reading' as const });
     expect(noReading).toContain('Depth unavailable, watch paused');
     expect(body(baseProps())).not.toContain('watch paused');

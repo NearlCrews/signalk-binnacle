@@ -68,6 +68,40 @@ describe('NumericTile', () => {
     expect(html).toContain('stale. Open details');
   });
 
+  it('shows the retained value age while stale', () => {
+    const html = render(NumericTile, {
+      props: {
+        label: LABEL,
+        reading: STALE,
+        zone: normal,
+        sensorGloss: GLOSS,
+        staleAgeText: '19 s ago',
+      },
+    }).body;
+    expect(html).toContain('19 s ago');
+  });
+
+  it('lets Stale outrank a warning zone on the badge, while Alarm outranks Stale', () => {
+    // A zone verdict computed from an untrusted value is not a live warning; the alarm bias wins
+    // the other direction.
+    const staleWarning = numericBody({
+      label: LABEL,
+      reading: STALE,
+      zone: 'warning',
+      sensorGloss: GLOSS,
+    });
+    expect(staleWarning).toContain('>Stale<');
+    expect(staleWarning).not.toContain('>Warning<');
+    const staleAlarm = numericBody({
+      label: LABEL,
+      reading: STALE,
+      zone: 'alarm',
+      sensorGloss: GLOSS,
+    });
+    expect(staleAlarm).toContain('>Alarm<');
+    expect(staleAlarm).not.toContain('>Stale<');
+  });
+
   it('adds tile--alarm class for alarm zone', () => {
     const html = numericBody({
       label: LABEL,

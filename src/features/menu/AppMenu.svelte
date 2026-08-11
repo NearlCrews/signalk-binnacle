@@ -197,6 +197,9 @@ function onCardFocusOut(event: FocusEvent): void {
                 />
                 <MenuItemIcon {item} size={28} />
                 <span class="tile-label">{item.label}</span>
+                {#if item.sublabel}
+                  <span class="tile-sublabel">{item.sublabel}</span>
+                {/if}
                 <MenuItemCount {item} />
               </button>
             {/each}
@@ -236,6 +239,23 @@ function onCardFocusOut(event: FocusEvent): void {
   gap: var(--space-2);
   min-block-size: 0;
   overflow-y: auto;
+  /* Scroll-edge shadows (the local-attachment technique): a soft cue that a tile row continues
+     past the cap, gone when the edge is reached because the surface-colored cover scrolls over
+     it. Effectively invisible at night-red on the near-black surface, where the heavier group
+     rules carry the structure instead. */
+  background:
+    linear-gradient(var(--surface) 30%, transparent),
+    linear-gradient(transparent, var(--surface) 70%) 0 100%,
+    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.18), transparent),
+    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.18), transparent) 0 100%;
+  background-color: var(--surface);
+  background-repeat: no-repeat;
+  background-size:
+    100% 40px,
+    100% 40px,
+    100% 12px,
+    100% 12px;
+  background-attachment: local, local, scroll, scroll;
 }
 /* Matches the StatusStrip's own 900px stack breakpoint, so a landscape tablet never lands in the
    gap where the menu is still a corner dropdown but the status strip below it has already
@@ -316,27 +336,28 @@ function onCardFocusOut(event: FocusEvent): void {
   flex-direction: column;
   gap: var(--space-1);
 }
+/* The caps group heading alone carries the section break by day and dusk; a hairline on top of it
+   double-codes the same boundary, so the day rule keeps only the rhythm spacing. */
 .group + .group {
   margin-block-start: var(--space-1);
   padding-block-start: var(--space-2);
-  border-block-start: 1px solid var(--border);
 }
-/* night-red's --border is a deep red close to the near-black surface, too low-contrast at 1px to
-   read as a section break at a glance; a heavier rule keeps groups visually distinct without
-   introducing a brighter color at night. */
+/* At night the dimmed caps heading is not enough of a break on its own, so night-red keeps a
+   heavier rule: groups stay visually distinct without introducing a brighter color at night. */
 :root[data-theme="night-red"] .group + .group {
-  border-block-start-width: 2px;
+  border-block-start: 2px solid var(--border);
 }
 .group-label {
   padding-inline: var(--space-1);
 }
 /* auto-fit collapses to as many columns as the group has items (a 1-item group gets one
    full-width tile, a 2-item group gets two half-width tiles) rather than always reserving 3
-   columns and leaving dead cells; a 5.5rem floor still settles a large group at 3 per row at the
-   launcher's own width, so labels like "Layers and charts" and "Anchor watch" are not truncated. */
+   columns and leaving dead cells; the 6.5rem floor settles a large group at 3 per row on a 390px
+   phone sheet with enough width that "Nearby vessels (AIS)" fits its two clamped lines instead of
+   ellipsizing the qualifier. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
   gap: var(--space-1);
 }
 .tile {
@@ -412,5 +433,13 @@ function onCardFocusOut(event: FocusEvent): void {
   -webkit-box-orient: vertical;
   line-clamp: 2;
   overflow: hidden;
+}
+/* The quiet state line under a tile label (the Orientation tile's current mode): one line,
+   muted, so the label keeps one voice across the grid while the state stays visible. */
+.tile-sublabel {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  text-align: center;
 }
 </style>

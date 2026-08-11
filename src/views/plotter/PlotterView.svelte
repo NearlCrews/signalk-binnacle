@@ -166,6 +166,9 @@ interface FlatProps {
   radarOpenedFrom: 'menu' | 'layers';
   radarDraftDirty: boolean;
   radarPanelRequest: 'close' | 'instruments' | undefined;
+  // The measured safety-rail clearance ('0px' while no alerts are up), bound out so App-level
+  // surfaces the rail can float over (the full-screen instrument dock) can reserve the space.
+  safetyRailClearance: string;
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
   chartLockerAccessUrl: string;
@@ -405,6 +408,7 @@ let {
   radarOpenedFrom = $bindable(),
   radarDraftDirty = $bindable(),
   radarPanelRequest = $bindable(),
+  safetyRailClearance = $bindable('0px'),
   mapInstance = $bindable(),
   companionBase,
   chartLockerAccessUrl,
@@ -568,6 +572,10 @@ function retryLazyPanel(): void {
 // active conditions, so the stack's bottom offset tracks the measured rail height.
 let railHeight = $state(0);
 const railClearance = $derived(railHeight > 0 ? `calc(${railHeight}px + var(--space-2))` : '0px');
+// Mirror the clearance to the bindable prop for App-level consumers outside the chart host.
+$effect(() => {
+  safetyRailClearance = railClearance;
+});
 
 function closeWeatherPanel(): void {
   weatherPanelOpen = false;
@@ -814,9 +822,14 @@ $effect(() => {
   {/if}
 {/snippet}
 
+<!-- --rail-clearance is published on the host root, not on .bottom-stack, so every piece of
+     floating chart chrome (the chart badge, MapLibre's bottom-right controls, the bottom stack
+     by inheritance) can yield to the measured safety-rail height with one variable. It resolves
+     to 0px while no alerts are up, so consumers apply it unconditionally. -->
 <section
   class="chart-host"
   class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
+  style:--rail-clearance={railClearance}
   aria-label="Chart"
 >
   <ChartCanvas
@@ -914,11 +927,7 @@ $effect(() => {
       <div class="alert-note alert-note--filled toast-banner" role="alert">{toastMessage}</div>
     {/if}
   </div>
-  <div
-    class="bottom-stack"
-    class:above-weather={weatherPanelOpen}
-    style:--rail-clearance={railClearance}
-  >
+  <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
     <div class="secondary-strips">
       {#if timeTravel.active}
         {#await historyStripForAttempt()}

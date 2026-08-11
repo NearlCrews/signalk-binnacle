@@ -47,18 +47,19 @@ describe('mapThemePaint', () => {
     }
   });
 
-  it('uses no blue for the night-red own vessel', () => {
+  it('uses zero blue for the night-red own vessel', () => {
+    // The loose b < 0x40 tolerance is what let a pink vessel (b = 0x3a) ship; the contract is a
+    // pure red-family tone, so blue is exactly zero.
     const { ownVessel } = mapThemePaint('night-red');
-    expect(ownVessel.r).toBeGreaterThan(ownVessel.b);
-    expect(ownVessel.b).toBeLessThan(0x40);
+    expect(ownVessel.r).toBeGreaterThan(ownVessel.g);
+    expect(ownVessel.b).toBe(0);
   });
 
-  it('keeps the night-red AIS target in the red band, with no green or blue spike', () => {
+  it('keeps the night-red AIS target in the red band, with zero blue and no green spike', () => {
     const { aisTarget } = mapThemePaint('night-red');
     expect(aisTarget.r).toBeGreaterThan(aisTarget.g);
-    expect(aisTarget.r).toBeGreaterThan(aisTarget.b);
     expect(aisTarget.g).toBeLessThan(0x50);
-    expect(aisTarget.b).toBeLessThan(0x40);
+    expect(aisTarget.b).toBe(0);
   });
 });
 

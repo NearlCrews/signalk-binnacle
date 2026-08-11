@@ -12,6 +12,10 @@ export interface MenuItem {
   // The tooltip a bottom-bar pill shows while the action is disabled, when the reason differs from the
   // label (for example "Layers and charts (chart is loading)"). Falls back to the label when unset.
   disabledLabel?: string;
+  // A quiet second line under the launcher tile's label, for an item whose current state is part
+  // of its identity (the Orientation tile's mode) without running the state into the label voice.
+  // Only the launcher tiles render it; pills and overflow rows stay one line.
+  sublabel?: string;
   // Optional leading icon (a lucide-svelte component).
   icon?: LucideIcon;
   disabled?: boolean;

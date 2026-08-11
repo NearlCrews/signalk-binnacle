@@ -76,8 +76,8 @@ Pick the token by role, never by eye:
 
 | Token | rem | Roles |
 | --- | --- | --- |
-| `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), abbreviations (`.abbr`), badges, panel footers |
-| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, the form-control baseline (`.input`) |
+| `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
+| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, the form-control baseline (`.input`), the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
 | `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), stepped-up form-control text (`UnitField` numerals, `.text-field.large`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
@@ -196,7 +196,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   row uses `aria-current="true"`, an accent border, an accent tint, and a leading inset accent line;
   hover or keyboard preview alone must not claim selection.
 - Instruments (`instruments.css`): the `.tile` vocabulary on the `.card-frame` surface, shared by
-  NumericTile and WindTile: the `--text-readout-lg` hero `.num`, the `--text-xs` `.unit` and `.abbr`,
+  NumericTile and WindTile: the `--text-readout-lg` hero `.num`, the `--text-xs` `.unit`, and the
+  loud leading `.abbr` (the abbreviation is the tile's scanned name: SOG, HDG, AWS at `--text-sm`
+  weight 700, with the long name as the quiet gloss beside it),
   the zone tints (`.tile--warning`, `.tile--alarm`, `.tile--stale`), `.tile--wide`, and `.tile--empty`.
   Tiles in one grid stay equal height in every state: the `.value` slot reserves the hero line box
   (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
@@ -215,7 +217,15 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   customize order only where a hole would otherwise sit. Instrument tiles are buttons: selecting one
   opens an in-dock detail view with value, status, zone, source, update age, and the Signal K paths
   behind the reading. The button's accessible name includes the value, unit, freshness, alarm zone,
-  and action. Warning, Alarm, and Stale also render as visible text badges, never color alone.
+  and action. Warning, Alarm, and Stale render as tinted chips (`.tile-state--caution`,
+  `.tile-state--alarm`), never color alone and never a third muted caps line; the chip colors
+  itself by what it says, Alarm outranks Stale, and Stale outranks Warning, since a zone verdict
+  computed from an untrusted value is not a live warning. A stale tile keeps its retained value at
+  muted contrast WITH its age in the secondary line: the tile has a badge channel, so a retained
+  number plus its age is more honest than dashes, while the status strip, which has no badge
+  channel, dashes the same value; that divergence is deliberate. The wind tile's angle freshness
+  folds into the same chip line (Angle stale, Angle unavailable) rather than stacking a second
+  fragment.
   Customize groups available instruments by category, and its Rescan action reruns instance discovery
   for batteries, engines, tanks, solar, and cabin sensors. Discovery unions the live Signal K model
   with concrete paths recorded during the preceding year by registered history providers within a
@@ -573,9 +583,12 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   owned by `App` and never duplicated.
 - The lit state is `.is-on` (accent color, accent border, accent-tint fill). Hover tints to
   `--accent-tint`. Both come from the shared classes; do not invent a per-component lit style (the MOB
-  alarm-tint and the instrument tile's zone tint, `.tile--warning` and `.tile--alarm` from the global
-  `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised notifications, are the
-  two sanctioned exceptions).
+  key's solid `--alarm` fill with `--alarm-contrast` text, the one control allowed a solid alarm
+  fill because a red MOB key is the hardware convention and solid alarm appears nowhere else,
+  dimming to `--alarm-tint-strong` at rest under night-red so the brightest night pixel is only
+  ever a live emergency, and the instrument tile's zone tint, `.tile--warning` and `.tile--alarm`
+  from the global `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised
+  notifications, are the two sanctioned exceptions).
 - Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
   `prefers-reduced-motion`, and Time travel disables automatic playback while keeping manual
   stepping and scrubbing available.

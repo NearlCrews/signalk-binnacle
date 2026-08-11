@@ -35,7 +35,9 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
        a persistent role=alert region), so announcing this whole contact list assertively too would
        double-speak the danger. This stays a labeled visual landmark. -->
   <aside
-    class="bottom-strip {worstIsDanger ? 'bottom-strip--alarm' : 'bottom-strip--warning'}"
+    class="bottom-strip collision-strip {worstIsDanger
+      ? 'bottom-strip--alarm'
+      : 'bottom-strip--warning'}"
     class:is-ack={acknowledged}
     aria-label={worstIsDanger ? 'Collision danger' : 'Collision warning'}
   >
@@ -45,7 +47,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
         <span class="note ack-tag">Acknowledged</span>
       {/if}
       {#if computedFallback}
-        <span class="note">computing locally</span>
+        <span class="note note--provenance">computing locally</span>
       {/if}
       {#if !acknowledged}
         <div class="actions actions--safety">
@@ -105,5 +107,30 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
 .more {
   margin-block-start: 0.3rem;
   font-size: var(--text-xs);
+}
+/* The top alert's decision numbers outrank an ordinary instrument numeral, and the grade word
+   outranks body text: these are what the helm acts on. Applies to Danger and Caution alike; the
+   route strip keeps the calm shared sizing. */
+.title {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+.metric b {
+  font-size: var(--text-readout-lg);
+}
+@media (max-width: 600px) {
+  /* The contact name owns its own line at phone width instead of truncating beside two metrics,
+     and the provenance note yields its space: which device computed CPA is the least
+     decision-relevant fact on the card, and the source-trace surfaces retain it. */
+  .note--provenance {
+    display: none;
+  }
+  .row {
+    flex-wrap: wrap;
+  }
+  .row .name {
+    flex-basis: 100%;
+    white-space: normal;
+  }
 }
 </style>
