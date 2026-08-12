@@ -157,7 +157,7 @@ test('keeps chart controls legible and the instrument title on one line', async 
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
     await page
       .locator('#app-menu-launcher')
-      .getByRole('button', { name: 'Instruments', exact: true })
+      .getByRole('button', { name: 'Instrument dock', exact: true })
       .click();
   }
   const heading = page.getByRole('heading', { name: 'Instruments', exact: true });
@@ -205,7 +205,12 @@ test('keeps long battery readings distinguishable in a night-red tablet dock', a
   );
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Instruments' }).first().click();
+  // The dock is not a default toolbar pin, so open it from the launcher.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Instrument dock', exact: true })
+    .click();
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
   await dock.getByRole('button', { name: 'Customize instruments' }).click();

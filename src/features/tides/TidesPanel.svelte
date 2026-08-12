@@ -159,7 +159,14 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 }
 </script>
 
-<SlideOver title="Tides" closeLabel="Close tides panel" {onClose} {onBack} bodyFlex {minimize}>
+<SlideOver
+  title="Tides and currents"
+  closeLabel="Close tides panel"
+  {onClose}
+  {onBack}
+  bodyFlex
+  {minimize}
+>
   <p class="muted-note">
     Automatic mode finds nearby stations. Manual choices use NOAA CO-OPS and stay selected while you
     pan.

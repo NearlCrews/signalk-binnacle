@@ -125,7 +125,7 @@ test('warms Tide controls before a visible station marker is selected', async ({
 
   const panelChunk = page.waitForResponse(/\/assets\/TidesPanel-[^/]+\.js$/);
   await page.goto('/');
-  await expect(page.getByRole('complementary', { name: 'Tides' })).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Tides and currents' })).toHaveCount(0);
   expect((await panelChunk).status()).toBe(200);
 });
 
@@ -170,7 +170,7 @@ test('opens Tides from a station enabled only through Layers and charts', async 
   const center = await waitForCenterStationHit(page);
   await page.mouse.click(center.x, center.y);
 
-  const panel = page.getByRole('complementary', { name: 'Tides' });
+  const panel = page.getByRole('complementary', { name: 'Tides and currents' });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('button', { name: /Harbor tide/ })).toHaveAttribute(
     'aria-current',
@@ -207,7 +207,7 @@ test('opens Tides from a direct chart touch tap', async ({ page }) => {
   const center = await waitForCenterStationHit(page);
   await touchTap(page, center);
 
-  const panel = page.getByRole('complementary', { name: 'Tides' });
+  const panel = page.getByRole('complementary', { name: 'Tides and currents' });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('button', { name: /Harbor tide/ })).toHaveAttribute(
     'aria-current',
@@ -233,9 +233,9 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Tides', exact: true })
+    .getByRole('button', { name: 'Tides and currents', exact: true })
     .click();
-  const panel = page.getByRole('complementary', { name: 'Tides' });
+  const panel = page.getByRole('complementary', { name: 'Tides and currents' });
   await expect(panel.getByRole('button', { name: /Pass tide/ })).toBeVisible();
   await expect(panel).toHaveCount(1);
 
@@ -262,7 +262,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await expect(panel.getByRole('button', { name: 'Back to menu' })).toBeVisible();
 
   await panel.getByRole('button', { name: 'Close tides panel' }).click();
-  const chartOpenedPanel = page.getByRole('complementary', { name: 'Tides' });
+  const chartOpenedPanel = page.getByRole('complementary', { name: 'Tides and currents' });
 
   // Keep the chart center clear of the phone-height Measure strip while proving that its delegated
   // marker gate consumes the exact Tide station tap.
@@ -295,7 +295,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
     .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
     .toBe(true);
   const accessibility = await new AxeBuilder({ page })
-    .include('aside[aria-label="Tides"]')
+    .include('aside[aria-label="Tides and currents"]')
     .analyze();
   expect(accessibility.violations).toEqual([]);
 });
@@ -322,9 +322,9 @@ test('can leave Tides while its controls are still loading', async ({ page }) =>
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
     const menuTides = page
       .locator('#app-menu-launcher')
-      .getByRole('button', { name: 'Tides', exact: true });
+      .getByRole('button', { name: 'Tides and currents', exact: true });
     await menuTides.click();
-    const pending = page.getByRole('complementary', { name: 'Tides' });
+    const pending = page.getByRole('complementary', { name: 'Tides and currents' });
     await expect(pending.getByText('Loading Tides controls…', { exact: true })).toBeVisible();
     await pending.getByRole('button', { name: 'Back to menu' }).click();
     await expect(pending).not.toBeVisible();

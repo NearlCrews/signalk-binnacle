@@ -812,7 +812,12 @@ test('layers and charts opens chart sources before overlay stack controls', asyn
   });
   await page.goto('/');
 
-  const charts = page.getByRole('button', { name: 'Charts' }).first();
+  // Layers and charts is not a default toolbar pin: open it from the launcher, so this test keeps
+  // exercising the menu entry rather than whichever control happens to mention charts.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const charts = page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: 'Layers and charts', exact: true });
   await expect(charts).toBeEnabled({ timeout: 15_000 });
   await charts.click();
 

@@ -1354,7 +1354,7 @@ $effect(() => {
       {:else if activePanel === 'tides'}
         {#await tidesPanelForAttempt()}
           <LazyPanelState
-            title="Tides"
+            title="Tides and currents"
             closeLabel="Close tides panel"
             state="loading"
             message="Loading Tides controls…"
@@ -1375,7 +1375,7 @@ $effect(() => {
 
             {#snippet fallback(_error, reset)}
               <LazyPanelState
-                title="Tides"
+                title="Tides and currents"
                 closeLabel="Close tides panel"
                 state="error"
                 message="Tides controls stopped unexpectedly."
@@ -1387,7 +1387,7 @@ $effect(() => {
           </ErrorBoundary>
         {:catch}
           <LazyPanelState
-            title="Tides"
+            title="Tides and currents"
             closeLabel="Close tides panel"
             state="error"
             message="Tides controls could not load. Check the connection, then retry."
