@@ -1,5 +1,7 @@
 <script lang="ts">
+import type { UpgradeOutcome } from '$shared/signalk';
 import { SlideOver, WriteAccessNote } from '$shared/ui';
+import SetupChecklist from './SetupChecklist.svelte';
 
 // Help and helm setup: the first-run orientation, the advisory boundary, the setup routes into
 // the real panels (never duplicated controls), the operating-context starter profiles, and the
@@ -11,8 +13,15 @@ interface Props {
   writeBlocked: boolean;
   requestingWrite: boolean;
   onRequestWrite: () => void;
+  // How the last read and write request ended, so the outcome lands beside the button here too.
+  writeOutcome?: UpgradeOutcome;
   audioBlocked: boolean;
   onEnableSound: () => void;
+  // Live setup state for the checklist: a nautical chart layer is visible, the server has ever
+  // published a position, and whether it stores saved data (undefined while the probe is out).
+  chartOn?: boolean;
+  gpsSeen?: boolean;
+  savedDataProvisioned?: boolean;
   onOpenLayers: () => void;
   onOpenProfiles: () => void;
   onOpenAlarms: () => void;
@@ -27,8 +36,12 @@ const {
   writeBlocked,
   requestingWrite,
   onRequestWrite,
+  writeOutcome,
   audioBlocked,
   onEnableSound,
+  chartOn = false,
+  gpsSeen = false,
+  savedDataProvisioned,
   onOpenLayers,
   onOpenProfiles,
   onOpenAlarms,
@@ -39,7 +52,7 @@ const {
 
 let hintsReset = $state(false);
 
-const GLOSSARY: Array<{ term: string; meaning: string }> = [
+const GLOSSARY: Array<{ term: string; meaning: string; word?: boolean }> = [
   { term: 'SOG', meaning: 'Speed over ground: the GPS-measured speed of the boat.' },
   {
     term: 'COG',
@@ -66,6 +79,24 @@ const GLOSSARY: Array<{ term: string; meaning: string }> = [
   {
     term: 'ETA',
     meaning: 'Estimated time of arrival, from current progress plus the planning speed.',
+  },
+  {
+    term: 'Keel',
+    meaning: 'Depth below the keel: the water under the deepest part of the boat.',
+    word: true,
+  },
+  { term: 'Surface', meaning: 'Depth below the waterline.', word: true },
+  {
+    term: 'Xducer',
+    meaning:
+      'Depth below the transducer, the echo-sounder sensor in the hull, with no keel or waterline correction.',
+    word: true,
+  },
+  {
+    term: 'Signal K',
+    meaning:
+      'The open marine data server this display connects to; its admin UI manages security, plugins, and data sources.',
+    word: true,
   },
   {
     term: 'KIP',
@@ -103,6 +134,18 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
     </div>
   {/if}
 
+  <!-- After the advisory framing, never before it: the safety orientation leads. -->
+  <SetupChecklist
+    {chartOn}
+    {gpsSeen}
+    writeAllowed={!writeBlocked}
+    soundEnabled={!audioBlocked}
+    {savedDataProvisioned}
+    {onOpenLayers}
+    {onRequestWrite}
+    {onEnableSound}
+  />
+
   <section class="panel-section" aria-label="Safe use">
     <h3 class="caps-label">Safe use</h3>
     <p class="muted-note">
@@ -128,24 +171,52 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
     <h3 class="caps-label">Signal K access</h3>
     <p class="muted-note">
       Binnacle stores routes, waypoints, tracks, alarms, and profiles on the Signal K server, so it
-      needs read/write approval from the server admin. Read-only access keeps every view working and
-      disables writes honestly.
+      needs read and write approval from the server admin. Read-only access keeps every view working
+      and disables writes honestly.
+    </p>
+    <p class="muted-note">
+      Connections over plain HTTP are not encrypted, so credentials and boat data can be observed on
+      the local network. Enable HTTPS in Signal K to protect them; that also unlocks offline caching
+      in the browser.
     </p>
     {#if writeBlocked}
       <WriteAccessNote
-        message="This display has read-only access. Request a read/write token to save and control from here."
+        message="This display has read-only access. Request read and write access to save and control from here; the boat's Signal K admin approves it."
         requesting={requestingWrite}
         onRequest={onRequestWrite}
+        outcome={writeOutcome}
       />
     {/if}
+  </section>
+
+  <section class="panel-section" aria-label="Connection">
+    <h3 class="caps-label">Connection</h3>
+    <p class="muted-note">
+      Reconnecting means the link to the Signal K server dropped; Binnacle retries by itself, and
+      the strip's Reconnect button retries now. Connected, no data means the server is reachable but
+      nothing has arrived for half a minute; check the server's data sources. Data link failed means
+      the retries stopped; tap Retry.
+    </p>
   </section>
 
   <section class="panel-section" aria-label="GPS readiness">
     <h3 class="caps-label">GPS readiness</h3>
     <p class="muted-note">
       Waiting for GPS means the server has not published a position yet; check the GPS source in the
-      server's Data Browser. No GPS fix means the position was lost, and readouts dash rather than
-      showing stale numbers as current.
+      Data Browser of the Signal K server admin UI. No GPS fix means the position was lost, and
+      readouts dash rather than showing stale numbers as current.
+    </p>
+  </section>
+
+  <section class="panel-section" aria-label="When something looks wrong">
+    <h3 class="caps-label">When something looks wrong</h3>
+    <p class="muted-note">
+      Stale means a value stopped updating: the status strip dashes it, while an instrument tile
+      keeps the last number with its age, so how old it is stays visible. While the server link
+      itself is down, the strip dims the readouts that pause with it, and Reconnect is the one
+      action. Unassessed AIS targets are vessels whose course or motion data is missing or stale, so
+      collision risk cannot be computed for them. Tapping a degraded strip chip shows its
+      explanation.
     </p>
   </section>
 
@@ -190,7 +261,8 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
     <h3 class="caps-label">Glossary</h3>
     <dl class="glossary">
       {#each GLOSSARY as entry (entry.term)}
-        <dt class="num">{entry.term}</dt>
+        <!-- The tabular-numeral face suits the acronym terms; plain words keep the text face. -->
+        <dt class:num={!entry.word}>{entry.term}</dt>
         <dd>{entry.meaning}</dd>
       {/each}
     </dl>

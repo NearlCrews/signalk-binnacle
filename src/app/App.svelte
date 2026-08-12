@@ -13,6 +13,7 @@ import History from '@lucide/svelte/icons/history';
 import Layers from '@lucide/svelte/icons/layers';
 import LocateFixed from '@lucide/svelte/icons/locate-fixed';
 import MapPin from '@lucide/svelte/icons/map-pin';
+import Menu from '@lucide/svelte/icons/menu';
 import Navigation from '@lucide/svelte/icons/navigation';
 import Radar from '@lucide/svelte/icons/radar';
 import Route from '@lucide/svelte/icons/route';
@@ -56,6 +57,7 @@ import { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
+import { NOAA_ENC_SOURCE_ID, noaaEncCoversPosition } from '$features/depth-charts';
 import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
   createInstrumentsController,
@@ -156,7 +158,7 @@ import {
   Toast,
 } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
-import { DEFAULT_OVERLAY_STATE, probeCompanion } from '$shared/map';
+import { DEFAULT_OVERLAY_STATE, hasVisibleNavigationChart, probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
   BINNACLE_PRIVACY_CHANNEL,
@@ -193,6 +195,7 @@ import {
   fetchHistoryProviders,
   fetchServerFeatures,
   fetchSymbols,
+  isConnectionDown,
   isConnectionOpen,
   recentSourceRefs,
   SELF_CONTEXT,
@@ -562,7 +565,10 @@ const openPanel = (panel: PanelId): void => {
     trendReturnInstrumentId = undefined;
   }
   if (panel !== 'ais') selectedAisId = undefined;
-  if (panel !== 'waypoints') selectedWaypointId = undefined;
+  if (panel !== 'waypoints') {
+    selectedWaypointId = undefined;
+    armNavigateWaypointId = undefined;
+  }
   if (panel !== 'poi-search') hoveredPoi = undefined;
   activePanel = panel;
   if (panel === 'trends') trends.setOpen(true);
@@ -1493,6 +1499,39 @@ const showHelpWelcome = $derived(
     activePanel !== 'help',
 );
 
+// The region-aware chart offer: in US waters the app already holds everything needed to turn a
+// reference-map view into a real chart, and nothing points at it. One dismissible banner, once per
+// device. It stays out of the way while any panel is open, so a navigator who has just turned
+// their last chart off in the Charts tab is never second-guessed by a banner under the sheet.
+// The plain-HTTP warning, dismissible per device: a stock server serves Binnacle over HTTP on the
+// LAN, so a permanent banner spends every first impression on the one thing a navigator cannot fix
+// from here. Help's Signal K access section carries the durable explanation.
+const insecureNoteSeen = new PersistedValue<boolean>(
+  binnacleStorageKey('insecureNote'),
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
+const encPromptSeen = new PersistedValue<boolean>(
+  binnacleStorageKey('encPrompt'),
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
+const showEncPrompt = $derived.by(() => {
+  if (encPromptSeen.value || emergencySafetyActive || activePanel !== undefined) return false;
+  const items = layersView?.items;
+  if (!items || hasVisibleNavigationChart(items)) return false;
+  const position = vessel.position;
+  return position !== undefined && !vessel.positionStale && noaaEncCoversPosition(position);
+});
+function enableNoaaEnc(): void {
+  // The manager honors the pinned floor, restores remembered sub-layers, and persists the choice,
+  // so turning the chart on is one call and survives a reload.
+  layersView?.toggle(NOAA_ENC_SOURCE_ID, true);
+  encPromptSeen.set(true);
+}
+
 // The one spoken safety channel: structured events in fixed priority order, worst-first speech,
 // polite delivery for the rest. The per-channel alert strings stay owned by their controllers.
 const safetyAnnunciator = createSafetyAnnunciator();
@@ -1515,7 +1554,7 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Center on boat',
     shortLabel: 'Center',
     icon: LocateFixed,
-    group: 'Map',
+    group: 'Chart',
     disabled: !mapCommands || !vessel.position || vessel.positionStale,
     disabledLabel: !mapCommands
       ? 'Center (chart is loading)'
@@ -1529,7 +1568,7 @@ const menuItems = $derived<MenuItem[]>([
     label: 'Follow boat',
     shortLabel: 'Follow',
     icon: Navigation,
-    group: 'Map',
+    group: 'Chart',
     // While armed, the tile stays enabled through a stale fix so follow can still be toggled off
     // during a GPS outage without panning the chart.
     disabled: !mapCommands || (!follow.following && (!vessel.position || vessel.positionStale)),
@@ -1549,11 +1588,55 @@ const menuItems = $derived<MenuItem[]>([
     sublabel: ORIENTATION_TILE_LABELS[chartOrientation.value],
     shortLabel: ORIENTATION_TILE_LABELS[chartOrientation.value],
     icon: Compass,
-    group: 'Map',
+    group: 'Chart',
     disabled: !mapCommands,
     disabledLabel: 'Orientation (chart is loading)',
     pressed: chartOrientation.value !== 'north',
     onSelect: cycleOrientation,
+  },
+  {
+    id: 'layers',
+    label: 'Layers and charts',
+    shortLabel: 'Charts',
+    icon: Layers,
+    group: 'Chart',
+    disabled: !layersView,
+    disabledLabel: 'Layers and charts (chart is loading)',
+    pressed: activePanel === 'layers',
+    onSelect: () => {
+      layersInitialMode = 'charts';
+      togglePanel('layers');
+    },
+  },
+  // Keep this safety-relevant capability discoverable even when its optional provider is absent. The
+  // tile explains the exact requirement instead of disappearing, then becomes the single landing
+  // place for saved areas, automatic caching, installed charts, and storage when Chart Locker appears.
+  {
+    id: 'regions',
+    label: 'Offline charts',
+    shortLabel: 'Offline',
+    icon: DownloadCloud,
+    group: 'Chart',
+    available: companionBase !== null,
+    unavailableHint:
+      companionProbe === undefined
+        ? 'Checking whether Chart Locker is available on the Signal K server.'
+        : companionProbe.state === 'access-refused'
+          ? 'Signal K refused access to Chart Locker. Sign in to Signal K administration, then approve Binnacle read access on a secured server.'
+          : companionProbe.state === 'absent'
+            ? 'Install and start signalk-chart-locker from the Signal K Appstore to enable offline charts.'
+            : 'Chart Locker could not be reached. Check the Signal K connection and Chart Locker service, then retry.',
+    pressed: activePanel === 'regions' || activePanel === 'charts-management',
+    // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
+    // exists. An absent provider uses available rather than disabled so tapping explains the setup.
+    disabled:
+      (companionBase !== null && mapInstance === undefined) ||
+      marineRadar.store.areaDraft?.chartEditing === true,
+    disabledLabel:
+      marineRadar.store.areaDraft?.chartEditing === true
+        ? 'Offline charts (finish the radar-area chart edit first)'
+        : 'Offline charts (chart is loading)',
+    onSelect: () => togglePanel('regions'),
   },
   {
     id: 'routes',
@@ -1580,6 +1663,24 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Navigate',
     pressed: activePanel === 'tracks',
     onSelect: () => togglePanel('tracks'),
+  },
+  // Playback is not a LeftPanel; it has its own active flag and enter and exit API. It grays like
+  // the radar tile when no history provider is known, rather than opening to an empty mode. It
+  // sits beside Tracks so the two answers to "where was I?" are one neighborhood.
+  {
+    id: 'time-travel',
+    label: 'Playback',
+    icon: History,
+    group: 'Navigate',
+    available: (historyProviders?.ids.length ?? 0) > 0,
+    unavailableHint:
+      historyProviderState === 'checking' || historyProviderState === 'retrying'
+        ? 'Checking for a Signal K history provider.'
+        : historyProviderState === 'failed'
+          ? 'Could not check for a history provider. Reconnect or reload to check again.'
+          : 'Playback needs a history provider plugin on the server, such as signalk-questdb.',
+    pressed: timeTravel.active,
+    onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
   },
   {
     id: 'poi-search',
@@ -1621,23 +1722,13 @@ const menuItems = $derived<MenuItem[]>([
     onSelect: armMeasure,
   },
   {
-    id: 'layers',
-    label: 'Layers and charts',
-    shortLabel: 'Charts',
-    icon: Layers,
-    group: 'Navigate',
-    disabled: !layersView,
-    disabledLabel: 'Layers and charts (chart is loading)',
-    pressed: activePanel === 'layers',
-    onSelect: () => {
-      layersInitialMode = 'charts';
-      togglePanel('layers');
-    },
-  },
-  {
     id: 'ais',
     label: 'Nearby vessels (AIS)',
     shortLabel: 'AIS',
+    // Danger-grade contacts only: the warning grade is "getting close", not a collision risk, and
+    // a closed panel that claims one would be crying wolf.
+    count: collision.assessment.contacts.filter((c) => c.severity === 'danger').length,
+    countNoun: 'collision risk',
     icon: Ship,
     group: 'Safety',
     pressed: activePanel === 'ais',
@@ -1708,7 +1799,10 @@ const menuItems = $derived<MenuItem[]>([
   },
   {
     id: 'tides',
-    label: 'Tides',
+    // The panel picks tidal-current stations as well as tide heights, which the shorter name hid;
+    // the pill keeps the bare word.
+    label: 'Tides and currents',
+    shortLabel: 'Tides',
     icon: Waves,
     group: 'Weather',
     pressed: activePanel === 'tides',
@@ -1750,7 +1844,7 @@ const menuItems = $derived<MenuItem[]>([
     // acronym knows what will open; the acronym rides the sublabel, where it cannot force the
     // label to permanently truncate at tile widths.
     label: 'Instrument dashboard',
-    sublabel: 'KIP',
+    sublabel: 'KIP, opens in a new tab',
     icon: ExternalLink,
     group: 'Instruments',
     available: kipPresent === true,
@@ -1765,60 +1859,27 @@ const menuItems = $derived<MenuItem[]>([
       if (!opened) toast.show('The browser blocked the KIP window. Allow pop-ups, then try again.');
     },
   },
-  // Time travel is not a LeftPanel; it has its own active flag and enter and exit API. It grays like
-  // the radar tile when no history provider is known, rather than opening to an empty mode.
-  {
-    id: 'time-travel',
-    label: 'Time travel',
-    icon: History,
-    group: 'Instruments',
-    available: (historyProviders?.ids.length ?? 0) > 0,
-    unavailableHint:
-      historyProviderState === 'checking' || historyProviderState === 'retrying'
-        ? 'Checking for a Signal K history provider.'
-        : historyProviderState === 'failed'
-          ? 'Could not check for a history provider. Open Data trends to retry.'
-          : 'Time travel needs a history provider plugin on the server, such as signalk-questdb.',
-    pressed: timeTravel.active,
-    onSelect: () => (timeTravel.active ? timeTravel.exit() : void timeTravel.enter()),
-  },
-  // Keep this safety-relevant capability discoverable even when its optional provider is absent. The
-  // tile explains the exact requirement instead of disappearing, then becomes the single landing
-  // place for saved areas, automatic caching, installed charts, and storage when Chart Locker appears.
-  {
-    id: 'regions',
-    label: 'Offline charts',
-    shortLabel: 'Offline',
-    icon: DownloadCloud,
-    group: 'Offline',
-    available: companionBase !== null,
-    unavailableHint:
-      companionProbe === undefined
-        ? 'Checking whether Chart Locker is available on the Signal K server.'
-        : companionProbe.state === 'access-refused'
-          ? 'Signal K refused access to the Chart Locker route. Sign in to Signal K administration, then approve Binnacle read access on a secured server.'
-          : companionProbe.state === 'absent'
-            ? 'Install and start signalk-chart-locker from the Signal K Appstore to enable offline charts.'
-            : 'Chart Locker could not be reached. Check the Signal K connection and Chart Locker service, then retry.',
-    pressed: activePanel === 'regions' || activePanel === 'charts-management',
-    // The landing panel draws saved-area bounds on the chart, so wait for MapLibre once the provider
-    // exists. An absent provider uses available rather than disabled so tapping explains the setup.
-    disabled:
-      (companionBase !== null && mapInstance === undefined) ||
-      marineRadar.store.areaDraft?.chartEditing === true,
-    disabledLabel:
-      marineRadar.store.areaDraft?.chartEditing === true
-        ? 'Offline charts (finish the radar-area chart edit first)'
-        : 'Offline charts (chart is loading)',
-    onSelect: () => togglePanel('regions'),
-  },
   {
     id: 'profiles',
     label: 'Profiles',
+    // Units, sync, and device privacy all live inside the profiles panel, and a navigator looking
+    // for feet instead of meters scans Settings for the word Units, not for Profiles.
+    sublabel: 'Units, sync, and privacy',
     icon: UserCog,
     group: 'Settings',
     pressed: activePanel === 'profiles',
     onSelect: () => togglePanel('profiles'),
+  },
+  // The bottom bar's own opener. barOnly keeps it out of the launcher grid it opens, except while
+  // customizing, where tapping a tile is the only way to pin or unpin. Pinned by default: on a
+  // phone the topbar hamburger is a cross-screen reach, and the sheet it opens is at the thumb.
+  {
+    id: 'menu',
+    label: 'Menu',
+    icon: Menu,
+    barOnly: true,
+    pressed: menuOpen,
+    onSelect: () => (menuOpen = !menuOpen),
   },
   {
     id: 'help',
@@ -2075,6 +2136,18 @@ async function confirmDroppedWaypoint(result: { name: string; icon?: string }): 
   await waypointsController.confirmAddWaypoint(result);
 }
 
+// "Mark that spot and go there": save the new mark, then open the Waypoints panel with its card
+// current and its navigation confirm armed. Navigation still needs that confirm, which names the
+// destination, so nothing starts a course on one tap.
+let armNavigateWaypointId = $state<string | undefined>();
+async function saveWaypointAndNavigate(result: { name: string; icon?: string }): Promise<void> {
+  const saved = await waypointsController.confirmAddWaypoint(result);
+  if (!saved) return;
+  selectedWaypointId = saved.id;
+  armNavigateWaypointId = saved.id;
+  openPanel('waypoints');
+}
+
 function onStartRouteHere(position: LatLon): void {
   openPanel('routes');
   routeController.beginNewRoute(position);
@@ -2193,6 +2266,16 @@ const dataStalled = $derived(
 );
 const connectionLabel = $derived(
   dataStalled ? 'Connected, no data' : CONNECTION_LABELS[store.connection.phase],
+);
+// The fuller explanation behind the conn chip's short label: the label also feeds the visible
+// stalled readout and the live announcement, so it must stay short, and this title carries the
+// diagnosis a hover or chip tap reveals.
+const connectionTitle = $derived(
+  dataStalled
+    ? "Connected to Signal K, but no data has arrived for 30 seconds; check the server's data sources."
+    : isConnectionDown(store.connection.phase)
+      ? 'The link to the Signal K server dropped. Binnacle retries by itself, and Reconnect retries now.'
+      : 'Connected to the Signal K server.',
 );
 // The own fix has aged out: the footer dashes SOG and COG and shows a calm "No GPS fix" note rather
 // than presenting a frozen speed and course as if they were live.
@@ -2582,6 +2665,9 @@ const plotterActions = {
   enableAlarmSound: primeAlarmAudio,
   resetChartHints,
   dismissHelpOrientation: () => helpOrientationSeen.set(true),
+  onDismissInsecureNote: () => insecureNoteSeen.set(true),
+  onEnableNoaaEnc: enableNoaaEnc,
+  onDismissEncPrompt: () => encPromptSeen.set(true),
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,
@@ -2608,6 +2694,7 @@ const plotterActions = {
     <span class="topbar-start">
       <AppMenu
         items={menuItems}
+        showTrigger={!pinnedActions.value.includes('menu')}
         open={menuOpen}
         onOpenChange={(next) => (menuOpen = next)}
         pinnedIds={pinnedActions.value}
@@ -2681,6 +2768,7 @@ const plotterActions = {
     {activePanel}
     {selectedAisId}
     {selectedWaypointId}
+    {armNavigateWaypointId}
     {tidesOpenedFrom}
     bind:menuOpen
     bind:safetyRailClearance
@@ -2710,6 +2798,8 @@ const plotterActions = {
     {audioBlocked}
     helpFirstRun={!helpOrientationSeen.value}
     {showHelpWelcome}
+    {showEncPrompt}
+    insecureNoteDismissed={insecureNoteSeen.value}
     {weatherProvider}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}
@@ -2865,6 +2955,7 @@ const plotterActions = {
 
   <StatusStrip
     {connectionLabel}
+    {connectionTitle}
     {streamError}
     {dataStalled}
     online={net.online}
@@ -2889,6 +2980,8 @@ const plotterActions = {
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}
+    onOpenHelp={() => openPanel('help')}
+    onOpenAnchor={() => openPanel('anchor')}
     onReconnect={() => {
       // On a fixed helm display no focus or visibility event ever re-probes an exhausted auth
       // poll, so the one visible retry action must also revalidate access, or it silently no-ops
@@ -2905,6 +2998,9 @@ const plotterActions = {
     symbols={symbolsStore}
     busy={waypointsController.busy}
     onSave={(result) => void confirmDroppedWaypoint(result)}
+    onSaveAndNavigate={auth.writeBlocked
+      ? undefined
+      : (result) => void saveWaypointAndNavigate(result)}
     onCancel={waypointsController.cancelAddWaypoint}
   />
 {/if}

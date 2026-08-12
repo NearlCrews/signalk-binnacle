@@ -225,4 +225,50 @@ describe('StatusStrip depth alarm', () => {
     expect(unsupported).not.toContain('>Enable<');
     expect(unsupported).not.toContain('>Retry<');
   });
+
+  it('subordinates the consequence chips while the link itself is the failure, radar excluded', () => {
+    const down = body({
+      ...baseProps(),
+      connectionLabel: 'Not connected',
+      connectionPhase: 'closed',
+      fixStale: true,
+      radarHealth: { state: 'stale' } as const,
+    });
+    // The dashed SOG and the No GPS fix chip dim; the radar chip rides its own transport and
+    // must never dim with the Signal K link.
+    const sog = down.slice(down.indexOf('sog-readout'));
+    expect(sog.slice(0, sog.indexOf('>'))).toContain('subordinate');
+    const fix = down.indexOf('No GPS fix');
+    expect(down.slice(down.lastIndexOf('<span', fix), fix)).toContain('subordinate');
+    const radar = down.indexOf('Radar stale');
+    expect(down.slice(down.lastIndexOf('<button', radar), radar)).not.toContain('subordinate');
+    // A healthy link never subordinates anything.
+    expect(body({ ...baseProps(), fixStale: true })).not.toContain('subordinate');
+  });
+
+  it('renders the anchor chip as a door to the panel, named by its live content', () => {
+    const props = baseProps();
+    props.anchor.dropLocal({ latitude: 60, longitude: 24 }, 40);
+    const html = body({ ...props, onOpenAnchor: () => {} });
+    const anchorAt = html.indexOf('anchor-chip');
+    expect(html.slice(html.lastIndexOf('<', anchorAt), anchorAt)).toContain('<button');
+    expect(html).toContain('Opens Anchor watch');
+    expect(html).not.toContain('aria-label="Open anchor watch"');
+  });
+
+  it('offers a Help action on the Waiting for GPS chip when the host wires one', () => {
+    const withHelp = body({ ...baseProps(), gpsNeverReceived: true, onOpenHelp: () => {} });
+    expect(withHelp).toContain('Waiting for GPS');
+    expect(withHelp).toContain('>Help</button>');
+    const without = body({ ...baseProps(), gpsNeverReceived: true });
+    expect(without).not.toContain('>Help</button>');
+  });
+
+  it('renders the explanatory chips as buttons carrying their titles, with no new live regions', () => {
+    const html = body({ ...baseProps(), aisCount: 3, connectionPhase: 'open' });
+    const ais = html.indexOf('AIS targets being watched for collision risk');
+    expect(html.slice(html.lastIndexOf('<button', ais), ais)).toContain('chip-btn');
+    // The conn dot keeps its single live region inside the button.
+    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
+  });
 });

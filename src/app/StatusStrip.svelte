@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onDestroy } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import {
@@ -18,11 +19,14 @@ import {
   formatLongitude,
   lengthUnit,
   type ReactiveClock,
+  Toast,
 } from '$shared/lib';
 import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
+import { TransientNote } from '$shared/ui';
 
 let {
   connectionLabel,
+  connectionTitle = '',
   streamError,
   dataStalled = false,
   online,
@@ -46,8 +50,12 @@ let {
   editing = false,
   clock,
   onReconnect,
+  onOpenHelp = undefined,
+  onOpenAnchor = undefined,
 }: {
   connectionLabel: string;
+  // The fuller diagnosis behind the conn chip's short label, shown on hover and on a chip tap.
+  connectionTitle?: string;
   streamError: boolean;
   dataStalled?: boolean;
   online: boolean;
@@ -84,12 +92,42 @@ let {
   editing?: boolean;
   clock: ReactiveClock;
   onReconnect: () => void;
+  // Opens the Help panel from the Waiting-for-GPS chip, where the fix lives in prose.
+  onOpenHelp?: () => void;
+  // Opens the Anchor watch panel: overnight the chip is the monitoring surface, so it is a door.
+  onOpenAnchor?: () => void;
 } = $props();
 
 // COG is meaningless while the boat is stationary; under this speed the readout dashes.
 const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(isConnectionDown(connectionPhase));
+
+// Explanations for the degraded chips live in title attributes, and titles are dead on touch:
+// tapping an explanatory chip shows the same text as a transient note above the strip.
+const chipNote = new Toast();
+onDestroy(() => chipNote.dispose());
+
+// While the Signal K link itself is down or silent, the per-sensor consequences (No GPS fix,
+// dashed SOG, COG, and HDG, the paused depth watch) are one failure with one action, Reconnect.
+// Subordinating them keeps the strip presenting that one failure instead of five. Radar is
+// deliberately excluded: its picture rides the radar provider's own stream, not this link.
+const linkDown = $derived(connectionDown || dataStalled || streamError);
+
+const connTitle = $derived(connectionTitle || connectionLabel);
+const aisTitle = $derived(
+  aisUnassessed > 0
+    ? `AIS targets being watched for collision risk; ${aisUnassessed} cannot be assessed because course or motion data is missing or stale`
+    : 'AIS targets being watched for collision risk',
+);
+const radarTitle = $derived.by(() => {
+  if (radarHealth.state !== 'failed') {
+    return 'Radar is transmitting but no fresh echo frames are arriving';
+  }
+  return radarHealth.reason === 'renderer'
+    ? 'Radar is transmitting but the echo display failed on this device; open Radar controls'
+    : 'Radar is transmitting but its data stream failed; open Radar controls';
+});
 
 // The phone-width strip carries a bounded, context-prioritized readout set instead of hiding COG,
 // heading, and AIS with fixed CSS: underway or navigating, COG is the course reference; a boat
@@ -148,16 +186,18 @@ const depthWatchPaused = $derived(
 
 <footer class="status-strip" class:editing>
   <div class="strip-start">
-    <span
-      class="conn"
+    <button
+      type="button"
+      class="conn chip-btn"
       class:conn--down={connectionDown || dataStalled}
-      role="status"
-      aria-live="polite"
-      title={connectionLabel}
+      title={connTitle}
+      onclick={() => chipNote.show(connTitle)}
     >
-      <span class="status-dot" aria-hidden="true"></span>
-      <span class="visually-hidden">{connectionLabel}</span>
-    </span>
+      <span class="conn-live" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="visually-hidden">{connectionLabel}</span>
+      </span>
+    </button>
     {#if streamError}
       <span class="readout fix-lost" role="alert" aria-live="assertive">
         Data link failed
@@ -168,7 +208,7 @@ const depthWatchPaused = $derived(
            never name; connectionLabel already says which). Not a live region: the always-mounted
            conn dot above announces every phase, and a second region carrying the same label
            announced the drop twice. This is the sighted half. -->
-      <span class="readout fix-lost">
+      <span class="readout fix-lost" title="Readouts pause until data returns">
         {connectionLabel}
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
       </span>
@@ -177,7 +217,9 @@ const depthWatchPaused = $derived(
       <span class="readout offline" role="status" aria-live="polite">Offline</span>
     {/if}
     {#if fixStale}
-      <span class="readout fix-lost" role="status" aria-live="polite">No GPS fix</span>
+      <span class="readout fix-lost" class:subordinate={linkDown} role="status" aria-live="polite"
+        >No GPS fix</span
+      >
     {:else if gpsNeverReceived}
       <!-- Connected, but no position has ever arrived: without this the strip looks healthy while
            every position-dependent feature silently waits. -->
@@ -188,6 +230,9 @@ const depthWatchPaused = $derived(
         title="Connected, but the server has not published a GPS position. Check the GPS source in the Signal K server's Data Browser, or open Help."
       >
         Waiting for GPS
+        {#if onOpenHelp}
+          <button type="button" class="btn btn-compact" onclick={onOpenHelp}>Help</button>
+        {/if}
       </span>
     {/if}
     {#if audioState === 'blocked'}
@@ -234,25 +279,29 @@ const depthWatchPaused = $derived(
       </span>
     {/if}
     {#if showLookout}
-      <span
-        class="readout lookout"
-        title={aisUnassessed > 0
-          ? `AIS targets the lookout is tracking; ${aisUnassessed} cannot be assessed for collision because course or motion data is missing or stale`
-          : 'AIS targets the lookout is tracking'}
+      <button
+        type="button"
+        class="readout lookout chip-btn"
+        title={aisTitle}
+        onclick={() => chipNote.show(aisTitle)}
       >
         AIS <b class="num">{aisCount}</b>
         {#if aisUnassessed > 0}
           <span class="sev-warning">{aisUnassessed} unassessed</span>
         {/if}
-      </span>
+      </button>
     {/if}
     {#if anchor.watching}
-      <span
-        class="readout anchor-chip"
+      <!-- Named by its content, never a masking label: the alarm cue ("Anchor no GPS", distance
+           over radius) must reach assistive tech; the open-panel action lives in the title. -->
+      <button
+        type="button"
+        class="readout anchor-chip chip-btn"
         class:anchor-chip--alarm={anchor.dragging || anchor.fixLost}
         title={anchor.fixLost
-          ? 'Anchor watch: no GPS fix, drag detection degraded'
-          : 'Anchor watch: distance from the anchor over the watch radius'}
+          ? 'Anchor watch: no GPS fix, drag detection degraded. Opens Anchor watch.'
+          : 'Anchor watch: distance from the anchor over the watch radius. Opens Anchor watch.'}
+        onclick={onOpenAnchor}
       >
         {#if anchor.fixLost}
           Anchor <b>no GPS</b>
@@ -263,18 +312,19 @@ const depthWatchPaused = $derived(
           >
           {lengthUnit(units.mode)}
         {/if}
-      </span>
+      </button>
     {/if}
     <span
       class="readout sog-readout"
       class:fix-lost={fixStale || vessel.sogStale}
+      class:subordinate={linkDown}
       title="Speed over ground"
       >SOG
       <b class="num">{formatKnotsOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps)}</b>
       kn</span
     >
     {#if showCog}
-      <span class="readout cog-readout" title="Course over ground"
+      <span class="readout cog-readout" class:subordinate={linkDown} title="Course over ground"
         >COG
         <b class="num"
           >{formatBearingOr(
@@ -286,50 +336,57 @@ const depthWatchPaused = $derived(
       >
     {/if}
     {#if showHdg}
-      <span class="readout hdg-readout" class:fix-lost={vessel.headingStale} title="Heading, true"
+      <span
+        class="readout hdg-readout"
+        class:fix-lost={vessel.headingStale}
+        class:subordinate={linkDown}
+        title="Heading, true"
         >HDG
         <b class="num"
           >{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
         >&deg;T</span
       >
     {/if}
-    <span
-      class="readout depth-readout"
+    <button
+      type="button"
+      class="readout depth-readout chip-btn"
       class:depth-alarm={shallowAlarming}
       class:fix-lost={depth.stale || shallowState !== 'monitoring'}
+      class:subordinate={linkDown && !shallowAlarming}
       title={depthTitle(depth, shallowAlarming)}
-      >{depthLabel}
+      onclick={() => chipNote.show(depthTitle(depth, shallowAlarming))}
+    >
+      {depthLabel}
       {#if !depthWatchPaused}
         <b class="num">{formatLengthOr(depth.stale ? undefined : depth.meters, units.mode)}</b>
         {lengthUnit(units.mode)}
         {#if depth.source}
           <span class="datum">{DEPTH_SOURCE_LABELS[depth.source]}</span>
         {/if}
-      {/if}</span
-    >
+      {/if}
+    </button>
     {#if radarHealth.state !== 'quiet'}
       <!-- Radar trouble stays visible with Radar Controls closed: the picture the helm relies on
            has quietly stopped, which the panel alone cannot say. role=status announces once. -->
-      <span
-        class="readout"
+      <button
+        type="button"
+        class="readout chip-btn"
         class:sev-danger={radarHealth.state === 'failed'}
         class:sev-warning={radarHealth.state === 'stale'}
-        role="status"
-        aria-live="polite"
-        title={radarHealth.state === 'stale'
-          ? 'Radar is transmitting but no fresh echo frames are arriving'
-          : radarHealth.reason === 'renderer'
-            ? 'Radar is transmitting but the echo display failed on this device; open Radar controls'
-            : 'Radar is transmitting but its data stream failed; open Radar controls'}
+        title={radarTitle}
+        onclick={() => chipNote.show(radarTitle)}
       >
-        {radarHealth.state === 'stale'
-          ? 'Radar stale'
-          : radarHealth.reason === 'renderer'
-            ? 'Radar display failed'
-            : 'Radar stream failed'}
-      </span>
+        <span role="status" aria-live="polite">
+          {radarHealth.state === 'stale'
+            ? 'Radar stale'
+            : radarHealth.reason === 'renderer'
+              ? 'Radar display failed'
+              : 'Radar stream failed'}
+        </span>
+      </button>
     {/if}
   </div>
+  <TransientNote message={chipNote.message} noteClass="chip-note" />
   <PinnedActions actions={pinnedActions} />
   <div class="center-cluster">
     {#if retainedFix}
@@ -381,6 +438,8 @@ const depthWatchPaused = $derived(
   border-block-start: 1px solid var(--border);
   color: var(--text-muted);
   font-size: var(--text-md);
+  /* The positioning context for the chip-tap note, which floats above the strip. */
+  position: relative;
 }
 /* The bar's half of the two-part pin/unpin interaction (the app menu's tiles are the other half):
    a static accent edge, not animated, so the navigator sees this row is part of an active editing
@@ -471,6 +530,39 @@ const depthWatchPaused = $derived(
 }
 .conn--down .status-dot {
   --dot-color: var(--warning);
+}
+/* Interactive chips: a tap shows the chip's title explanation as a visible note (or opens the
+   panel the chip monitors), with the UA button chrome stripped so a chip-button reads exactly
+   like its span siblings. The block padding grows the touch target toward the compact-control
+   size, and the negative block margin cancels it out of the strip's height. */
+.chip-btn {
+  border: 0;
+  background: none;
+  padding: var(--space-2) var(--space-1);
+  margin-block: calc(-1 * var(--space-2));
+  margin-inline: calc(-1 * var(--space-1));
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.conn-live {
+  display: inline-flex;
+  align-items: center;
+}
+/* Subordinated consequence chips while the link itself is the failure: dimmed, never hidden or
+   recolored, so the strip presents one failure with one action and the alarm-versus-warning
+   brightness ladder stays intact at night-red. */
+.subordinate {
+  opacity: 0.55;
+}
+/* The chip-tap note floats above the strip, lifted over any safety rail by the shared clearance
+   variable and layered below the safety strips so it can never cover a safety card. */
+:global(.chip-note) {
+  inset-block-end: calc(100% + var(--rail-clearance, 0px) + var(--space-1));
+  z-index: calc(var(--z-safety-strips) - 1);
+  max-inline-size: min(22rem, calc(100vw - 2 * var(--space-3)));
+  font-size: var(--text-sm);
 }
 /* A lost own fix is a caution, not an alarm: the boat is still where it was, the position is just no
    longer updating. Warning-colored and calm, beside the dashed SOG and COG. */

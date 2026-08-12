@@ -44,7 +44,7 @@ import { loadTrendsPanel } from '$features/trends';
 import { loadWaypointsPanel } from '$features/waypoints';
 import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
-import type { LayerSettings } from '$shared/map';
+import { hasVisibleNavigationChart, type LayerSettings } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
 import type { OnlineStatus, PwaStatus } from '$shared/pwa';
 import type {
@@ -155,6 +155,8 @@ interface FlatProps {
   activePanel: PanelId | null;
   selectedAisId: string | undefined;
   selectedWaypointId: string | undefined;
+  // A waypoint just saved with "Save and navigate", whose navigation confirm the panel arms once.
+  armNavigateWaypointId?: string;
   tidesOpenedFrom: 'menu' | 'chart';
   menuOpen: boolean;
   layersView: LayersView | undefined;
@@ -189,6 +191,8 @@ interface FlatProps {
   helpFirstRun?: boolean;
   // Show the compact first-run welcome banner inviting the safety orientation.
   showHelpWelcome?: boolean;
+  showEncPrompt?: boolean;
+  insecureNoteDismissed?: boolean;
   weatherProvider: WeatherProvider | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
@@ -258,6 +262,10 @@ interface FlatProps {
   enableAlarmSound: () => void;
   resetChartHints: () => void;
   dismissHelpOrientation: () => void;
+  // The region-aware chart offer's two answers: turn NOAA ENC on, or never ask again here.
+  onEnableNoaaEnc: () => void;
+  onDismissEncPrompt: () => void;
+  onDismissInsecureNote: () => void;
   closeTracksPanel: () => void;
   backFromTracksPanel: () => void;
   closeWaypointsPanel: () => void;
@@ -363,6 +371,9 @@ type ActionKey =
   | 'enableAlarmSound'
   | 'resetChartHints'
   | 'dismissHelpOrientation'
+  | 'onEnableNoaaEnc'
+  | 'onDismissEncPrompt'
+  | 'onDismissInsecureNote'
   | 'closeTracksPanel'
   | 'backFromTracksPanel'
   | 'closeWaypointsPanel'
@@ -397,6 +408,7 @@ let {
   activePanel,
   selectedAisId,
   selectedWaypointId,
+  armNavigateWaypointId,
   tidesOpenedFrom,
   menuOpen = $bindable(),
   layersView,
@@ -426,6 +438,8 @@ let {
   audioBlocked = false,
   helpFirstRun = false,
   showHelpWelcome = false,
+  showEncPrompt = false,
+  insecureNoteDismissed = false,
   weatherProvider,
   collisionMute,
   collisionMuteRemainingMin,
@@ -534,6 +548,9 @@ const {
   enableAlarmSound,
   resetChartHints,
   dismissHelpOrientation,
+  onEnableNoaaEnc,
+  onDismissEncPrompt,
+  onDismissInsecureNote,
   closeTracksPanel,
   backFromTracksPanel,
   closeWaypointsPanel,
@@ -899,7 +916,12 @@ $effect(() => {
     {onMapDestroyed}
   />
   <div class="banner-slot">
-    <AuthBanner {auth} requestsUrl={accessRequestsUrl} {insecureTransport} />
+    <AuthBanner
+      {auth}
+      requestsUrl={accessRequestsUrl}
+      insecureTransport={insecureTransport && !insecureNoteDismissed}
+      onDismissInsecure={onDismissInsecureNote}
+    />
   </div>
   <div class="top-banner-stack">
     {#if criticalOverlayError}
@@ -914,11 +936,27 @@ $effect(() => {
       <!-- A compact invitation, never a panel forced over the chart: a helm display must come
            back to the chart on every boot. Dismiss persists on this device. -->
       <div class="alert-note toast-banner" role="status">
-        <span>First time with Binnacle? Read the short safety orientation.</span>
+        <span>First time with Binnacle? Read the short safety orientation, or set up charts.</span>
         <button type="button" class="btn btn-compact" onclick={openHelpPanel}>Open Help</button>
+        <!-- The new navigator's actual first question is where the charts are, and the reference
+             base map alone never answers it. -->
+        <button type="button" class="btn btn-compact" onclick={() => openLayersPanel('charts')}>
+          Set up charts
+        </button>
         <button type="button" class="btn btn-compact" onclick={dismissHelpOrientation}>
           Dismiss
         </button>
+      </div>
+    {/if}
+    {#if showEncPrompt}
+      <!-- The boat is inside NOAA's published chart coverage with no nautical chart on, which is
+           the one case the app can fix in a tap. Dismiss persists on this device. -->
+      <div class="alert-note toast-banner" role="status">
+        <span>The official US nautical charts (NOAA ENC) cover these waters.</span>
+        <button type="button" class="btn btn-compact" onclick={onEnableNoaaEnc}>
+          Turn on NOAA ENC
+        </button>
+        <button type="button" class="btn btn-compact" onclick={onDismissEncPrompt}>Dismiss</button>
       </div>
     {/if}
     <!-- The toast channel carries failures and refusals only (see Toast), so it announces as an
@@ -933,7 +971,7 @@ $effect(() => {
         {#await historyStripForAttempt()}
           <div class="bottom-strip bottom-strip--accent">
             <div class="head">
-              <span class="title">Time travel</span>
+              <span class="title">Playback</span>
               <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
             </div>
             <div class="row">
@@ -947,7 +985,7 @@ $effect(() => {
             {#snippet fallback(_error, reset)}
               <div class="bottom-strip bottom-strip--accent" role="alert">
                 <div class="row">
-                  <span class="alert-note">Time travel controls stopped unexpectedly.</span>
+                  <span class="alert-note">Playback controls stopped unexpectedly.</span>
                   <button type="button" class="ack" onclick={reset}>Retry</button>
                   <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
                 </div>
@@ -957,7 +995,7 @@ $effect(() => {
         {:catch}
           <div class="bottom-strip bottom-strip--accent" role="alert">
             <div class="row">
-              <span class="alert-note">Time travel controls could not load.</span>
+              <span class="alert-note">Playback controls could not load.</span>
               <button type="button" class="ack" onclick={retryLazyPanel}>Retry</button>
               <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
             </div>
@@ -1030,6 +1068,7 @@ $effect(() => {
       {collision}
       collisionMuted={collisionMute.active}
       onToggleCollisionMute={toggleCollisionMute}
+      onSelectAisTarget={onAisSelect}
       {mob}
       onMobSteer={mobController.onSteer}
       onMobCancel={mobController.onCancel}
@@ -1064,6 +1103,7 @@ $effect(() => {
         writeBlocked={auth.writeBlocked}
         onRequestWriteAccess={() => void auth.requestWriteAccess()}
         requestingWriteAccess={auth.upgrading}
+        writeOutcome={auth.upgradeOutcome}
         busy={personalNotesController.busy}
         mutationError={personalNotesController.error}
         onDismissMutationError={personalNotesController.clearError}
@@ -1146,6 +1186,7 @@ $effect(() => {
               activeId={routeStore.activeId}
               refreshing={routeController.refreshing}
               loadState={routeController.loadState}
+              provisioning={routeController.provisioning}
               busy={routeController.busy}
               highlight={routeStore.highlight}
               {onHighlightLeg}
@@ -1156,6 +1197,8 @@ $effect(() => {
               onNew={routeController.beginNewRoute}
               onEditRoute={routeController.onEditRoute}
               onSave={routeController.onSaveRoute}
+              onRename={routeController.onRenameRoute}
+              onOpenOfflineCharts={companionBase !== null ? backToOfflineCharts : undefined}
               onCancelEdit={routeController.onCancelRouteEdit}
               onToggleShown={routeController.onToggleRouteShown}
               onLocate={routeController.showRoute}
@@ -1272,11 +1315,13 @@ $effect(() => {
               selectedId={selectedWaypointId}
               waypoints={waypointsStore.waypoints}
               loadState={waypointsController.loadState}
+              provisioning={waypointsController.provisioning}
               busy={waypointsController.busy}
               routeBusy={routeController.busy}
               onRetry={() => void waypointsController.refreshWaypoints()}
               onLocate={(waypoint) => flyToPosition(waypoint.position)}
               onGoTo={(waypoint) => void routeController.onGoToWaypoint(waypoint)}
+              armNavigateId={armNavigateWaypointId}
               onEdit={waypointsController.onOpenEditWaypoint}
               onDelete={waypointsController.onDeleteWaypoint}
               onClose={closeWaypointsPanel}
@@ -1625,6 +1670,12 @@ $effect(() => {
               writeBlocked={auth.writeBlocked}
               requestingWrite={auth.upgrading}
               onRequestWrite={() => void auth.requestWriteAccess()}
+              writeOutcome={auth.upgradeOutcome}
+              chartOn={layersView !== undefined && hasVisibleNavigationChart(layersView.items)}
+              gpsSeen={vessel.positionReceived}
+              savedDataProvisioned={waypointsController.provisioning === 'unknown'
+                ? undefined
+                : waypointsController.provisioning === 'provisioned'}
               {audioBlocked}
               onEnableSound={enableAlarmSound}
               onOpenLayers={() => openLayersPanel('charts')}
