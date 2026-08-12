@@ -9,9 +9,12 @@ interface Props {
   // so silencing the alarm during a close-quarters situation is one tap, not a dive into the menu.
   muted: boolean;
   onToggleMute: () => void;
+  // Open this contact's AIS detail. Mid-incident, identifying the vessel the strip already names
+  // otherwise costs four taps from the far corner of the screen.
+  onSelectContact?: (id: string) => void;
 }
 
-const { collision, muted, onToggleMute }: Props = $props();
+const { collision, muted, onToggleMute, onSelectContact }: Props = $props();
 
 const MAX_ROWS = 4;
 
@@ -66,12 +69,25 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
     <ul class="bare-list list">
       {#each top as contact (contact.id)}
         <li class="row">
-          <span
-            class="name"
-            class:sev-danger={contact.severity === 'danger'}
-            class:sev-warning={contact.severity === 'warning'}
-            >{vesselLabel(contact.name, contact.id)}</span
-          >
+          {#if onSelectContact}
+            <button
+              type="button"
+              class="name name-btn"
+              class:sev-danger={contact.severity === 'danger'}
+              class:sev-warning={contact.severity === 'warning'}
+              title="Open this vessel in Nearby vessels"
+              onclick={() => onSelectContact(contact.id)}
+            >
+              {vesselLabel(contact.name, contact.id)}
+            </button>
+          {:else}
+            <span
+              class="name"
+              class:sev-danger={contact.severity === 'danger'}
+              class:sev-warning={contact.severity === 'warning'}
+              >{vesselLabel(contact.name, contact.id)}</span
+            >
+          {/if}
           <span class="metric" title="Closest point of approach: how near this vessel will pass">
             CPA <b>{formatNm(contact.cpaMeters)}</b> nm
           </span>
@@ -98,6 +114,19 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
 .bottom-strip .ack[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--accent-tint);
+}
+/* The contact name is the door to its live detail: the strip's own row styling, with the button
+   chrome stripped and an underline so it reads as the one tappable thing in the row. */
+.name-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
 }
 .list {
   display: flex;

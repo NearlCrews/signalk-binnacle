@@ -26,7 +26,13 @@ import {
 } from './course-client';
 import { parseGpxRoutesDetailed } from './gpx-import';
 import { downloadRouteGpx } from './route-gpx';
-import { deleteRoute, fetchRoutes, routeHref, saveRoute } from './routes-client';
+import {
+  deleteRoute,
+  fetchRoutes,
+  fetchRoutesProvisioned,
+  routeHref,
+  saveRoute,
+} from './routes-client';
 
 export interface RouteControllerDeps {
   origin: string;
@@ -56,6 +62,9 @@ export interface RouteControllerDeps {
 }
 
 export type RouteLoadState = 'idle' | 'loading' | 'ready' | 'error';
+// Whether the server has a routes resource provider at all: 'unknown' until the probe answers,
+// then sticky through transient outages so the admin-path note never flashes at a healthy server.
+export type RoutesProvisioning = 'unknown' | 'provisioned' | 'unprovisioned';
 
 export function createRouteController(deps: RouteControllerDeps) {
   const { origin, routeStore, courseGuidance } = deps;
@@ -68,6 +77,7 @@ export function createRouteController(deps: RouteControllerDeps) {
   let editorLoadFailed = $state(false);
   let refreshing = $state(false);
   let loadState = $state<RouteLoadState>('idle');
+  let provisioning = $state<RoutesProvisioning>('unknown');
   let busy = $state(false);
   let refreshSequence = 0;
   let hydrateSequence = 0;
@@ -150,9 +160,16 @@ export function createRouteController(deps: RouteControllerDeps) {
     const sequence = ++refreshSequence;
     refreshing = true;
     loadState = 'loading';
-    const routes = await fetchRoutes(origin, deps.getToken());
+    const token = deps.getToken();
+    const [routes, provisioned] = await Promise.all([
+      fetchRoutes(origin, token),
+      fetchRoutesProvisioned(origin, token),
+    ]);
     if (sequence !== refreshSequence) return;
     refreshing = false;
+    // An unanswered probe keeps the last known value (the tracks pattern): a transient outage
+    // must not flash the no-route-storage note at a server that has a provider.
+    if (provisioned !== undefined) provisioning = provisioned ? 'provisioned' : 'unprovisioned';
     if (routes) {
       routeStore.setRoutes(routes);
       loadState = 'ready';
@@ -220,7 +237,9 @@ export function createRouteController(deps: RouteControllerDeps) {
       return;
     }
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to create routes.');
+      flagRouteError(
+        'Read-only access: the route was not created. Request read and write access to continue.',
+      );
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -239,7 +258,9 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   function onEditRoute(id: string): void {
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to edit routes.');
+      flagRouteError(
+        'Read-only access: the route was not changed. Request read and write access to continue.',
+      );
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -272,7 +293,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   function retryRouteEdit(): void {
     if (!lastEditRequest) return;
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to edit routes.');
+      flagRouteError(
+        'Read-only access: the route was not changed. Request read and write access to continue.',
+      );
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -292,7 +315,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onSaveRoute(name: string): Promise<boolean> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to save routes.');
+      flagRouteError(
+        'Read-only access: the route was not saved. Request read and write access to continue.',
+      );
       return false;
     }
     const working = routeStore.working;
@@ -315,6 +340,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     routeStore.setWorking(undefined);
     routeStore.upsertRoute(route);
     routeStore.toggleShown(route.id, true);
+    // A write the server accepted is direct proof a routes provider is registered, which is
+    // stronger evidence than the probe and covers a server whose _providers route never answers.
+    provisioning = 'provisioned';
     if (route.id === routeStore.activeId) {
       if (!(await refreshActiveRoute(origin, deps.getToken()))) {
         flagRouteError('The route was saved, but active navigation could not refresh.');
@@ -333,7 +361,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onDeleteRoute(id: string): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to delete routes.');
+      flagRouteError(
+        'Read-only access: the route was not deleted. Request read and write access to continue.',
+      );
       return;
     }
     invalidateRefresh();
@@ -366,7 +396,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onActivateRoute(id: string): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to start navigation.');
+      flagRouteError(
+        'Read-only access: navigation was not started. Request read and write access to continue.',
+      );
       return;
     }
     hydrateSequence += 1;
@@ -385,7 +417,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onStopCourse(): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to stop navigation.');
+      flagRouteError(
+        'Read-only access: navigation was not stopped. Request read and write access to continue.',
+      );
       return;
     }
     if (!(await stopActiveCourse())) {
@@ -395,7 +429,9 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   function onSkipPoint(delta: number): void {
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to change the active waypoint.');
+      flagRouteError(
+        'Read-only access: the active waypoint was not changed. Request read and write access to continue.',
+      );
       return;
     }
     arrivalAdvanceSequence += 1;
@@ -414,7 +450,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   // double-step when another station sends the same target concurrently.
   function onArrivalAdvance(snapshot: ActiveRoute): void {
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to advance the active waypoint.');
+      flagRouteError(
+        'Read-only access: the active waypoint was not advanced. Request read and write access to continue.',
+      );
       return;
     }
     const href = snapshot.href;
@@ -459,7 +497,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onSaveTrackAsRoute(name: string): Promise<boolean> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to save routes.');
+      flagRouteError(
+        'Read-only access: the route was not saved. Request read and write access to continue.',
+      );
       return false;
     }
     const points = deps.getTrackPoints();
@@ -484,7 +524,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onTrackHome(): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to start navigation.');
+      flagRouteError(
+        'Read-only access: navigation was not started. Request read and write access to continue.',
+      );
       return;
     }
     const points = deps.getTrackPoints();
@@ -515,10 +557,36 @@ export function createRouteController(deps: RouteControllerDeps) {
     await hydrateAndSeedCourse();
   }
 
+  // Rename in place. The strip's quick Save lands a route under a dated default name, so a route
+  // drawn from the chart needs a way to be named without re-entering chart edit mode.
+  async function onRenameRoute(id: string, name: string): Promise<boolean> {
+    clearRouteError();
+    if (deps.writeBlocked()) {
+      flagRouteError(
+        'Read-only access: the route was not renamed. Request read and write access to continue.',
+      );
+      return false;
+    }
+    const route = routeStore.routeById(id);
+    const trimmed = name.trim();
+    if (!route || !trimmed || trimmed === route.name) return false;
+    invalidateRefresh();
+    const renamed = { ...route, name: trimmed };
+    const saved = await saveRoute(origin, deps.getToken(), renamed);
+    if (!accepted(saved, writeRefusedMessage('route'), 'Could not rename the route.')) {
+      return false;
+    }
+    routeStore.upsertRoute(renamed);
+    await refreshRoutes();
+    return true;
+  }
+
   async function onReverseRoute(id: string): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to reverse routes.');
+      flagRouteError(
+        'Read-only access: the route was not reversed. Request read and write access to continue.',
+      );
       return;
     }
     const route = routeStore.routeById(id);
@@ -546,7 +614,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function onImportRouteGpx(gpxText: string): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to import routes.');
+      flagRouteError(
+        'Read-only access: the route was not imported. Request read and write access to continue.',
+      );
       return;
     }
     const parsedResult = parseGpxRoutesDetailed(gpxText);
@@ -608,7 +678,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   ): Promise<void> {
     clearRouteError();
     if (deps.writeBlocked()) {
-      flagRouteError('A write token is needed to start navigation.');
+      flagRouteError(
+        'Read-only access: navigation was not started. Request read and write access to continue.',
+      );
       return;
     }
     hydrateSequence += 1;
@@ -652,6 +724,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onArrivalAdvance,
     onSaveTrackAsRoute: withBusy(onSaveTrackAsRoute, false),
     onTrackHome: withBusy(onTrackHome),
+    onRenameRoute: withBusy(onRenameRoute, false),
     onReverseRoute: withBusy(onReverseRoute),
     onExportRouteGpx,
     onImportRouteGpx: withBusy(onImportRouteGpx),
@@ -679,6 +752,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     },
     get loadState() {
       return loadState;
+    },
+    get provisioning() {
+      return provisioning;
     },
     get busy() {
       return busy;

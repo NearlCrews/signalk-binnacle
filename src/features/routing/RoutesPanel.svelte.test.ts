@@ -53,6 +53,18 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
 }
 
 describe('RoutesPanel', () => {
+  it('names the missing Resources Provider instead of blaming the connection', () => {
+    const missing = renderPanel({ provisioning: 'unprovisioned', loadState: 'error' });
+    expect(missing).toContain('This Signal K server has no route storage');
+    expect(missing).toContain('Resources Provider (built-in)');
+    expect(missing).toContain('Check again');
+    expect(missing).not.toContain('Check the connection, then retry.');
+    // A provider that exists keeps the honest connection copy for a genuine fetch failure.
+    const provisioned = renderPanel({ provisioning: 'provisioned', loadState: 'error' });
+    expect(provisioned).toContain('Could not load routes. Check the connection, then retry.');
+    expect(provisioned).not.toContain('no route storage');
+  });
+
   it('distinguishes the loading state from a genuinely empty route list', () => {
     expect(renderPanel({ refreshing: true, loadState: 'loading' })).toContain('Loading routes…');
     expect(renderPanel()).toContain('No routes yet.');
@@ -80,7 +92,7 @@ describe('RoutesPanel', () => {
   it('disables route writes without write access while keeping read actions available', () => {
     const body = renderPanel({ auth: { writeBlocked: true }, routes: [route] });
     expect(body).toMatch(/aria-label="Start navigation on route"[^>]*disabled/);
-    expect(body).toContain('A write token is needed');
+    expect(body).toContain('This display has read-only access');
     expect(body).toContain('aria-label="More actions for Passage"');
   });
 });

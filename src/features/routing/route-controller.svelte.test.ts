@@ -21,6 +21,7 @@ vi.mock('./course-client', () => ({
 vi.mock('./routes-client', () => ({
   deleteRoute: vi.fn(),
   fetchRoutes: vi.fn(),
+  fetchRoutesProvisioned: vi.fn(),
   routeHref: (id: string) => `/resources/routes/${encodeURIComponent(id)}`,
   saveRoute: vi.fn(),
 }));
@@ -102,6 +103,7 @@ describe('createRouteController', () => {
     vi.mocked(courseClient.hydrateCourse).mockResolvedValue({});
     vi.mocked(courseClient.activationFromCourse).mockReturnValue({});
     vi.mocked(routesClient.fetchRoutes).mockResolvedValue([]);
+    vi.mocked(routesClient.fetchRoutesProvisioned).mockResolvedValue(true);
     vi.mocked(routesClient.saveRoute).mockResolvedValue('ok');
     vi.mocked(routesClient.deleteRoute).mockResolvedValue('ok');
     vi.mocked(courseClient.clearCourse).mockResolvedValue(true);
@@ -409,7 +411,9 @@ describe('createRouteController', () => {
     const { controller, routeStore, toast } = makeController(true);
     controller.beginNewRoute({ latitude: 42, longitude: -83 });
     expect(routeStore.working).toBeUndefined();
-    expect(toast.show).toHaveBeenCalledWith('A write token is needed to create routes.');
+    expect(toast.show).toHaveBeenCalledWith(
+      'Read-only access: the route was not created. Request read and write access to continue.',
+    );
   });
 
   it('blocks new and existing route editing while another chart tool owns gestures', () => {
@@ -502,7 +506,9 @@ describe('createRouteController', () => {
       await controller.onGoToWaypoint(waypoint);
 
       expect(courseClient.setDestination).not.toHaveBeenCalled();
-      expect(toast.show).toHaveBeenCalledWith('A write token is needed to start navigation.');
+      expect(toast.show).toHaveBeenCalledWith(
+        'Read-only access: navigation was not started. Request read and write access to continue.',
+      );
     });
   });
 

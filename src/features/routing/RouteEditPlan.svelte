@@ -20,7 +20,8 @@ interface Props {
   // Which leg or waypoint of the working route is cross-highlighted, so the matching rows light up.
   highlight: RouteHighlight | undefined;
   // Tap a leg row to highlight it on the chart, and pan the chart to it when it is off-screen.
-  onHighlightLeg: (index: number) => void;
+  // Absent for the read-only plan a saved card shows, where the rows are a table, not controls.
+  onHighlightLeg?: (index: number) => void;
   // The planning speed in m/s, persisted, that turns leg distances into per-waypoint passage times.
   // SI in storage like every other measure; this panel is the only place it becomes knots.
   planningSpeed: PersistedValue<number>;
@@ -138,36 +139,45 @@ function endpointName(fromIndex: number): string {
     aria-label="Planned departure date and time, used for the arrival clock times"
   >
 </label>
+{#snippet legBody(leg: (typeof workingLegs)[number])}
+  {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
+  <span class="leg-line">
+    <span class="leg-no num">{leg.fromIndex + 1}</span>
+    <span class="leg-name">{endpointName(leg.fromIndex)}</span>
+    <span
+      class="leg-arrive num"
+      title="Planned local arrival at this point, from the departure and planning speed"
+      >{arrivalText(leg.cumulativeMeters)}</span
+    >
+  </span>
+  <span class="leg-line leg-line--metrics">
+    <span class="num">{formatNm(leg.distanceMeters)} nm</span>
+    <span class="num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
+    <span class="num leg-elapsed" title="Cumulative elapsed time to reach this point">
+      Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
+    </span>
+  </span>
+{/snippet}
 {#if workingLegs.length > 0}
   <ol class="legs bare-list" aria-label="Legs">
     {#each workingLegs as leg (leg.fromIndex)}
-      {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
       <li>
-        <button
-          type="button"
-          class="leg-row row-interactive"
-          class:is-on={litLegs.has(leg.fromIndex)}
-          aria-pressed={litLegs.has(leg.fromIndex)}
-          aria-label={`Highlight leg ${leg.fromIndex + 1} to ${endpointName(leg.fromIndex)}`}
-          onclick={() => onHighlightLeg(leg.fromIndex)}
-        >
-          <span class="leg-line">
-            <span class="leg-no num">{leg.fromIndex + 1}</span>
-            <span class="leg-name">{endpointName(leg.fromIndex)}</span>
-            <span
-              class="leg-arrive num"
-              title="Planned local arrival at this point, from the departure and planning speed"
-              >{arrivalText(leg.cumulativeMeters)}</span
-            >
-          </span>
-          <span class="leg-line leg-line--metrics">
-            <span class="num">{formatNm(leg.distanceMeters)} nm</span>
-            <span class="num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
-            <span class="num leg-elapsed" title="Cumulative elapsed time to reach this point">
-              Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
-            </span>
-          </span>
-        </button>
+        <!-- One row body, two hosts: a button while the chart edit can act on a tap, and a plain
+             row for the read-only plan a saved card shows, where nothing is highlightable. -->
+        {#if onHighlightLeg}
+          <button
+            type="button"
+            class="leg-row row-interactive"
+            class:is-on={litLegs.has(leg.fromIndex)}
+            aria-pressed={litLegs.has(leg.fromIndex)}
+            aria-label={`Highlight leg ${leg.fromIndex + 1} to ${endpointName(leg.fromIndex)}`}
+            onclick={() => onHighlightLeg(leg.fromIndex)}
+          >
+            {@render legBody(leg)}
+          </button>
+        {:else}
+          <div class="leg-row">{@render legBody(leg)}</div>
+        {/if}
       </li>
     {/each}
   </ol>

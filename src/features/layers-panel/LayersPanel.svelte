@@ -5,7 +5,7 @@ import Plus from '@lucide/svelte/icons/plus';
 import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import type { UserCharts } from '$entities/user-charts';
 import type { Bbox4 } from '$shared/geo';
-import type { LayerListItem } from '$shared/map';
+import { hasVisibleNavigationChart, type LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import { createPanelMinimize, SlideOver, WriteAccessNote } from '$shared/ui';
@@ -86,6 +86,9 @@ const categories = $derived.by(() => {
 const chartRows = $derived.by(() =>
   movable.flatMap((item, i) => (layerCategory(item).id === 'charts' ? [{ item, i }] : [])),
 );
+// The same predicate the chart badge grades with: depth shading is reference only and carries
+// neither chart field, so enabling it correctly leaves this true.
+const noNavigationChart = $derived(!hasVisibleNavigationChart(view.items));
 const overlayCategories = $derived(categories.filter((cat) => cat.id !== 'charts'));
 
 function isOpen(id: string): boolean {
@@ -141,6 +144,7 @@ const reorder = createLayerReorder(
         writeBlocked={auth.writeBlocked}
         onRequestWriteAccess={() => void auth.requestWriteAccess()}
         requestingWriteAccess={auth.upgrading}
+        writeOutcome={auth.upgradeOutcome}
         onBack={() => (detailId = undefined)}
         onShowBounds={(bounds) => {
           onShowChartBounds?.(bounds);
@@ -173,13 +177,23 @@ const reorder = createLayerReorder(
     </div>
 
     {#if mode === 'charts'}
+      {#if noNavigationChart}
+        <!-- The badge's explanation lives in a title, which is dead on touch, and the likeliest
+             first fix in EU waters (turning on depth shading) does not change the badge at all. -->
+        <p class="alert-note" role="status">
+          No nautical chart is on, so the view is a reference map. Turn on a chart source that
+          covers your waters. Depth shading (GEBCO, EMODnet, and BlueTopo) is reference only and
+          does not count as a chart.
+        </p>
+      {/if}
       {#if auth.writeBlocked}
         <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so
              the request stays one tap away from the block it explains. -->
         <WriteAccessNote
-          message="URL charts can still be stored on this device. Read/write access is needed to share them with Signal K or change charts that are already shared."
+          message="URL charts can still be stored on this device. Read and write access is needed to share them with Signal K or change charts that are already shared."
           requesting={auth.upgrading}
           onRequest={() => void auth.requestWriteAccess()}
+          outcome={auth.upgradeOutcome}
         />
       {/if}
       {#if chartsLoadState === 'loading'}
@@ -239,6 +253,11 @@ const reorder = createLayerReorder(
           </ul>
         {/if}
       </section>
+
+      <p class="muted-note">
+        Outside US waters, add your own chart here or install a Signal K chart plugin on the server;
+        the built-in depth layers are reference only.
+      </p>
 
       {#if userCharts}
         <div class="add-chart-area">

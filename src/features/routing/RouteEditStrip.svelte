@@ -12,7 +12,9 @@ interface Props {
   // to it instead of assuming it is on screen.
   editorOpen: boolean;
   onOpenEditor: () => void;
-  // Save with the panel-owned naming flow when at least two points exist.
+  // Quick save under the working name, or a dated default when the route has none: the panel is
+  // collapsed on a phone while the chart edit runs, so the strip cannot host the naming form. The
+  // saved card's Rename action is the naming step for a route drawn this way.
   onSave: () => void;
   canSave: boolean;
   onCancel: () => void;

@@ -1,6 +1,7 @@
 <script lang="ts">
 import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
 import Download from '@lucide/svelte/icons/download';
+import ListOrdered from '@lucide/svelte/icons/list-ordered';
 import Navigation from '@lucide/svelte/icons/navigation';
 import Plus from '@lucide/svelte/icons/plus';
 import Save from '@lucide/svelte/icons/save';
@@ -12,7 +13,7 @@ import X from '@lucide/svelte/icons/x';
 import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
 import { createMediaQuery, formatNm } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
-import type { AuthController } from '$shared/signalk';
+import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
   ArmedRow,
   createPanelMinimize,
@@ -29,7 +30,7 @@ import {
   WriteAccessNote,
 } from '$shared/ui';
 import RouteEditPlan from './RouteEditPlan.svelte';
-import type { RouteLoadState } from './route-controller.svelte';
+import type { RouteLoadState, RoutesProvisioning } from './route-controller.svelte';
 
 interface Props {
   auth: AuthController;
@@ -41,6 +42,9 @@ interface Props {
   activeId: string | undefined;
   refreshing: boolean;
   loadState: RouteLoadState;
+  // Whether the server has a routes provider at all, which is why a load can fail on a server
+  // that is otherwise reachable and authorized.
+  provisioning?: RoutesProvisioning;
   busy: boolean;
   // Which leg or waypoint of the working route is cross-highlighted, so the matching rows light up.
   highlight: RouteHighlight | undefined;
@@ -65,6 +69,12 @@ interface Props {
   onActivate: (id: string) => void;
   onStop: () => void;
   // Save a reversed copy of the route, for the return leg.
+  // Rename a saved route in place, resolving whether the write was accepted so the form can stay
+  // open with the typed name on a failure. Absent hides the action.
+  onRename?: (id: string, name: string) => Promise<boolean>;
+  // Open Offline charts, so the advisory route-coverage check is reachable from the plan a
+  // navigator is reading rather than two groups away. Absent hides the link.
+  onOpenOfflineCharts?: () => void;
   onReverse: (id: string) => void;
   // Download the route as a GPX file for another chartplotter.
   onExportGpx: (id: string) => void;
@@ -85,6 +95,7 @@ const {
   activeId,
   refreshing,
   loadState,
+  provisioning = 'unknown',
   busy,
   highlight,
   onHighlightLeg,
@@ -100,6 +111,8 @@ const {
   onLocate,
   onActivate,
   onStop,
+  onRename,
+  onOpenOfflineCharts,
   onReverse,
   onExportGpx,
   onImportGpx,
@@ -110,6 +123,7 @@ const {
 }: Props = $props();
 
 const writesDisabled = $derived(auth.writeBlocked || busy);
+const storageMissing = $derived(provisioning === 'unprovisioned');
 
 // Delete is destructive and, for the active route, also stops navigation, so it arms a confirm step
 // rather than firing on a single tap where a mis-tap on a rolling deck would lose a saved route.
@@ -123,13 +137,17 @@ let actionMenuId = $state<string | undefined>();
 function requestActivation(id: string): void {
   confirmingStopId = undefined;
   armedDelete.cancel();
+  renamingId = undefined;
   confirmingActivateId = id;
 }
 
 function confirmActivation(): void {
   const id = confirmingActivateId;
   confirmingActivateId = undefined;
-  if (id && !writesDisabled) onActivate(id);
+  if (!id || writesDisabled) return;
+  onActivate(id);
+  // The Locate idiom: the chart and the new guidance strip are the point once navigation starts.
+  minimize.collapse();
 }
 
 // Stopping ends navigation for the whole boat, so it confirms in the card the way activation and
@@ -178,12 +196,37 @@ async function importGpx(): Promise<void> {
 // at the moment a save failed, which is exactly when it is worth keeping.
 let naming = $state(false);
 let savingName = $state(false);
+// The card whose inline rename form is open, and its own busy flag: renaming a saved route is a
+// separate write from saving the working route, so they never share a form or a spinner.
+let renamingId = $state<string | undefined>();
+// The saved card whose read-only passage plan is open. Reviewing a plan used to require entering
+// chart edit mode, which needs write access, blocks Measure, and risks moving the geometry.
+let planId = $state<string | undefined>();
+let savingRename = $state(false);
+async function confirmRename(id: string, value: string): Promise<boolean> {
+  if (savingRename || !onRename) return false;
+  savingRename = true;
+  try {
+    const ok = await onRename(id, resolveSaveName(value, 'Route'));
+    if (ok) renamingId = undefined;
+    return ok;
+  } finally {
+    savingRename = false;
+  }
+}
 async function confirmName(value: string): Promise<boolean> {
   if (savingName) return false;
   savingName = true;
+  // The working route's id survives the save, and the save clears the editing block, so capture it
+  // first: "draw then go" is the common intent, and hunting the new card in a server-ordered list
+  // is the friction that offer removes.
+  const savedId = working?.id;
   try {
     const ok = await onSave(resolveSaveName(value, 'Route'));
-    if (ok) naming = false;
+    if (ok) {
+      naming = false;
+      if (savedId) requestActivation(savedId);
+    }
     return ok;
   } finally {
     savingName = false;
@@ -259,9 +302,10 @@ $effect(() => {
   {/if}
   {#if auth.writeBlocked}
     <WriteAccessNote
-      message="A write token is needed to save, activate, or delete routes. Request a read/write token to continue."
+      message="This display has read-only access, so routes cannot be saved, activated, or deleted. Request read and write access; the boat's Signal K admin approves it."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {/if}
 
@@ -340,7 +384,17 @@ $effect(() => {
     </div>
   {/if}
 
-  {#if loadState === 'error'}
+  {#if storageMissing}
+    <!-- A stock server ships the Resources Provider disabled, so the first open fails for a
+         reason no connection copy could name. The probe distinguishes the two. -->
+    <p class="alert-note" role="alert">
+      {resourcesProviderNote(
+        'This Signal K server has no route storage, so routes cannot be saved to it.',
+        'enable routes under Resources',
+      )}
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+  {:else if loadState === 'error'}
     <p class="alert-note" role="alert">
       {routes.length > 0
         ? 'Could not refresh routes. Showing the last loaded routes.'
@@ -356,9 +410,11 @@ $effect(() => {
     items={savedCards}
     empty={loadState === 'loading' || refreshing
       ? 'Loading routes…'
-      : loadState === 'error'
-        ? 'Routes are unavailable.'
-        : 'No routes yet. Tap New route, then tap the chart to drop points along your path.'}
+      : storageMissing
+        ? 'Saved routes are unavailable until this server has route storage.'
+        : loadState === 'error'
+          ? 'Routes are unavailable.'
+          : 'No routes yet. Tap New route, then tap the chart to drop points along your path.'}
     key={({ route }) => route.id}
     isActive={({ route }) => route.id === activeId}
   >
@@ -388,7 +444,15 @@ $effect(() => {
         <dt class="caps-label">Waypoints</dt>
         <dd><span class="num">{route.waypoints.length}</span></dd>
       </dl>
-      {#if confirmingActivateId === route.id}
+      {#if renamingId === route.id}
+        <NameEntry
+          label="Rename route"
+          value={route.name}
+          onConfirm={(value) => confirmRename(route.id, value)}
+          busy={savingRename}
+          onCancel={() => (renamingId = undefined)}
+        />
+      {:else if confirmingActivateId === route.id}
         <InlineConfirm
           question={`Start navigation on ${route.name}? Check the route before relying on it.`}
           confirmLabel="Start navigation"
@@ -458,6 +522,24 @@ $effect(() => {
               <SquarePen size={18} aria-hidden="true" />
               Edit route
             </button>
+            {#if onRename}
+              <button
+                type="button"
+                role="menuitem"
+                class="menu-item"
+                disabled={writesDisabled}
+                onclick={() => {
+                  actionMenuId = undefined;
+                  confirmingActivateId = undefined;
+                  confirmingStopId = undefined;
+                  armedDelete.cancel();
+                  renamingId = route.id;
+                }}
+              >
+                <SquarePen size={18} aria-hidden="true" />
+                Rename route
+              </button>
+            {/if}
             <button
               type="button"
               role="menuitem"
@@ -470,6 +552,18 @@ $effect(() => {
             >
               <ArrowLeftRight size={18} aria-hidden="true" />
               Save reversed copy
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              class="menu-item"
+              onclick={() => {
+                actionMenuId = undefined;
+                planId = planId === route.id ? undefined : route.id;
+              }}
+            >
+              <ListOrdered size={18} aria-hidden="true" />
+              {planId === route.id ? 'Hide passage plan' : 'View passage plan'}
             </button>
             <button
               type="button"
@@ -499,11 +593,33 @@ $effect(() => {
           </OverflowActions>
         </div>
       {/if}
+      {#if planId === route.id}
+        <!-- The same plan the edit session shows, read-only: the leg table, planned arrivals, and
+             the live speed and departure fields, with no way to move a point. -->
+        <div class="saved-plan" role="group" aria-label={`Passage plan for ${route.name}`}>
+          <RouteEditPlan working={route} highlight={undefined} {planningSpeed} />
+          {#if onOpenOfflineCharts}
+            <button type="button" class="btn btn-ghost" onclick={onOpenOfflineCharts}>
+              Check offline chart coverage
+            </button>
+          {/if}
+        </div>
+      {/if}
     {/snippet}
   </SavedList>
 </SlideOver>
 
 <style>
+/* The read-only plan sits inside its own card, indented from the card actions so the leg table
+   reads as detail about that route rather than another card. */
+.saved-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--border);
+}
 .editing {
   display: flex;
   flex-direction: column;

@@ -29,6 +29,8 @@ interface Props {
   collision: CollisionAssessment;
   collisionMuted: boolean;
   onToggleCollisionMute: () => void;
+  // Open a named collision contact's AIS detail straight from the strip row.
+  onSelectAisTarget?: (id: string) => void;
   mob: MobStore;
   onMobSteer: () => void;
   onMobCancel: () => void;
@@ -52,6 +54,7 @@ const {
   collision,
   collisionMuted,
   onToggleCollisionMute,
+  onSelectAisTarget,
   mob,
   onMobSteer,
   onMobCancel,
@@ -189,7 +192,12 @@ function chipDescription(condition: ChipCondition): string {
         activeCourse={mobActiveCourse}
       />
     {:else if stack.shownId === 'collision'}
-      <DangerStrip {collision} muted={collisionMuted} onToggleMute={onToggleCollisionMute} />
+      <DangerStrip
+        {collision}
+        muted={collisionMuted}
+        onToggleMute={onToggleCollisionMute}
+        onSelectContact={onSelectAisTarget}
+      />
     {:else if stack.shownId === 'anchor'}
       <AnchorStrip {anchor} {units} onRaise={onAnchorRaise} />
     {:else if stack.shownId === 'generic'}

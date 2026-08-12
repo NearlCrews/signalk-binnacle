@@ -14,10 +14,22 @@ interface Props {
   symbols?: SymbolsStore;
   busy?: boolean;
   onSave: (result: { name: string; icon?: string }) => void;
+  // Save the new mark and then arm navigation to it, for the "mark that spot and go there" moment
+  // (a crab pot, an anchorage, a rendezvous). Add mode only: an edit has no such moment, and the
+  // waypoint is already navigable from its card.
+  onSaveAndNavigate?: (result: { name: string; icon?: string }) => void;
   onCancel: () => void;
 }
 
-const { defaultName, waypoint, symbols, busy = false, onSave, onCancel }: Props = $props();
+const {
+  defaultName,
+  waypoint,
+  symbols,
+  busy = false,
+  onSave,
+  onSaveAndNavigate,
+  onCancel,
+}: Props = $props();
 
 const WAYPOINT_DEFAULT: DefaultOption = {
   iconId: 'waypoint',
@@ -57,9 +69,18 @@ let wpName = $state(waypoint?.name ?? '');
 // svelte-ignore state_referenced_locally
 let icon = $state(pickerValueFromStoredIcon(waypoint?.icon));
 
+function result(): { name: string; icon?: string } {
+  return { name: wpName.trim() || defaultName, icon: finalIconRef(icon) };
+}
+
 function save(): void {
   if (busy) return;
-  onSave({ name: wpName.trim() || defaultName, icon: finalIconRef(icon) });
+  onSave(result());
+}
+
+function saveAndNavigate(): void {
+  if (busy) return;
+  onSaveAndNavigate?.(result());
 }
 
 const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
@@ -95,6 +116,11 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
   </div>
   <footer>
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
+    {#if onSaveAndNavigate && !waypoint}
+      <button type="button" class="btn btn-pill" onclick={saveAndNavigate} disabled={busy}>
+        Save and navigate
+      </button>
+    {/if}
     <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={busy}>
       {busy ? 'Saving…' : 'Save'}
     </button>
