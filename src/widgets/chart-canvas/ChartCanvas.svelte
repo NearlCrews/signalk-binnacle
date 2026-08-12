@@ -115,6 +115,11 @@ interface Props {
   // The user's imported charts, so a server chart that is also a local user chart (a URL chart this
   // device synced to the server) is registered once, from the local descriptor, not twice.
   userCharts?: UserCharts;
+  // The Chart Locker tile base, resolved by the app against real credentials and read as a getter
+  // so the raster overlays route through the boat's shared cache. The mount-time probe below runs
+  // before auth resolves, so its answer alone would strand a secured install on direct upstream
+  // URLs for the whole session, which is the offline goal quietly lost.
+  companionTiles?: () => string | null;
   chartsToken?: string;
   // The view to open at, restored from the last visit; defaults to a world view.
   initialView?: MapView;
@@ -203,6 +208,7 @@ const {
   trackSettings,
   savedTracks,
   userCharts,
+  companionTiles,
   chartsToken,
   initialView,
   savedLayers,
@@ -645,23 +651,26 @@ onMount(async () => {
       // The bathymetry band (Seascape's DEM pair, the existing STREAMING_CHART_SOURCES rasters, and
       // Seascape's vector pair, in that registration order) is built by buildBathymetryOverlays; see
       // its own comment for why that relative order is load-bearing.
+      // Read at registration time, not at mount: the mount probe below runs before credentials
+      // exist, so on a secured server it is a 403 that reads as "no companion". The app re-probes
+      // once auth resolves, and this is the latest answer available by the time tiles are routed.
+      // It falls back to the mount probe so a standalone install is unchanged.
+      const tileBase = companionTiles?.() ?? companionBase;
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local async accumulator
       const serverChartIds = new Set<string>();
       const providerResults = await mgr.registerBatch([
-        ...buildBathymetryOverlays({ companionBase }),
+        ...buildBathymetryOverlays({ companionBase: tileBase }),
         ...buildOceanSources().map((source) => createOceanOverlay(source)),
         // Within the safety band, registration order is z, so the seamark navigation aids draw over
         // the reference area fills and boundary lines beneath them.
-        ...proxiedSources(BOUNDARY_SOURCES, companionBase).map((source) =>
+        ...proxiedSources(BOUNDARY_SOURCES, tileBase).map((source) =>
           createBoundaryOverlay(source),
         ),
-        ...proxiedSources(INFRASTRUCTURE_SOURCES, companionBase).map((source) =>
+        ...proxiedSources(INFRASTRUCTURE_SOURCES, tileBase).map((source) =>
           createInfrastructureOverlay(source),
         ),
-        ...proxiedSources(MPA_SOURCES, companionBase).map((source) => createMpaOverlay(source)),
-        ...proxiedSources(SEAMARK_SOURCES, companionBase).map((source) =>
-          createSeamarkOverlay(source),
-        ),
+        ...proxiedSources(MPA_SOURCES, tileBase).map((source) => createMpaOverlay(source)),
+        ...proxiedSources(SEAMARK_SOURCES, tileBase).map((source) => createSeamarkOverlay(source)),
       ]);
       if (isDestroyed()) return;
       for (const result of providerResults) {

@@ -16,6 +16,9 @@ describe('bboxSpanText', () => {
     expect(bboxSpanText([0, 10, 5, 10])).toBeUndefined();
     expect(bboxSpanText([0, 20, 5, 10])).toBeUndefined();
     expect(bboxSpanText([Number.NaN, 0, 5, 10])).toBeUndefined();
+    // Zero WIDTH, with real height, so it clears the latitude guard and reaches the longitude
+    // arithmetic. Unwrapping a west-equals-east box would call it half the globe wide.
+    expect(bboxSpanText([0, 40, 0, 50])).toBeUndefined();
   });
 });
 
@@ -49,6 +52,7 @@ describe('areaSummary', () => {
     expect(text).not.toMatch(/ready|passage/i);
   });
 
+  // Zero on both axes, so it exits on the latitude guard; the longitude half is covered above.
   it('omits the span for a degenerate box rather than inventing one', () => {
     expect(
       areaSummary({

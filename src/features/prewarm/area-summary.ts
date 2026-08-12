@@ -14,7 +14,7 @@ import { DETAIL_PRESETS, presetForRange } from './detail-level';
 export function bboxSpanText([west, south, east, north]: LngLatBbox): string | undefined {
   if (![west, south, east, north].every(Number.isFinite)) return undefined;
   if (north <= south) return undefined;
-  const eastUnwrapped = east <= west ? east + 360 : east;
+  const eastUnwrapped = east < west ? east + 360 : east;
   const midLat = (south + north) / 2;
   const widthM = haversineMeters(midLat, 0, midLat, Math.min(eastUnwrapped - west, 180));
   const heightM = haversineMeters(south, 0, north, 0);

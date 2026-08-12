@@ -57,7 +57,7 @@ import { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
-import { NOAA_ENC_SOURCE_ID, noaaEncCoversPosition } from '$features/depth-charts';
+import { NOAA_ENC_SOURCE_ID, shouldOfferNoaaEnc } from '$features/depth-charts';
 import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
   createInstrumentsController,
@@ -158,7 +158,7 @@ import {
   Toast,
 } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings } from '$shared/map';
-import { DEFAULT_OVERLAY_STATE, hasVisibleNavigationChart, probeCompanion } from '$shared/map';
+import { DEFAULT_OVERLAY_STATE, probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
   BINNACLE_PRIVACY_CHANNEL,
@@ -499,6 +499,9 @@ let layersInitialMode = $state<'charts' | 'overlays'>('charts');
 // the menu after it closed on selection.
 let menuOpen = $state(false);
 let menuEditing = $state(false);
+// Closing a panel drops everything that panel put on the chart or armed inside it, so nothing it
+// owned outlives it: a dismissed confirm cannot come back armed, and a hover ring cannot strand on
+// the chart with no panel to clear it.
 const closePanel = (): void => {
   if (activePanel === 'trends') {
     trends.setOpen(false);
@@ -506,20 +509,18 @@ const closePanel = (): void => {
     trendReturnInstrumentId = undefined;
   }
   if (activePanel === 'ais') selectedAisId = undefined;
-  if (activePanel === 'waypoints') selectedWaypointId = undefined;
+  if (activePanel === 'waypoints') {
+    selectedWaypointId = undefined;
+    armNavigateWaypointId = undefined;
+  }
+  if (activePanel === 'poi-search') hoveredPoi = undefined;
   activePanel = null;
 };
 // Back returns to the menu: close the panel and reopen the hamburger in one update, so the navigator
-// can move menu to panel to back to another panel without reopening the menu by hand.
+// can move menu to panel to back to another panel without reopening the menu by hand. It delegates
+// the teardown rather than restating it, so the two paths cannot drift.
 const backToMenu = (): void => {
-  if (activePanel === 'trends') {
-    trends.setOpen(false);
-    trends.setFocus(undefined);
-    trendReturnInstrumentId = undefined;
-  }
-  if (activePanel === 'ais') selectedAisId = undefined;
-  if (activePanel === 'waypoints') selectedWaypointId = undefined;
-  activePanel = null;
+  closePanel();
   menuOpen = true;
 };
 function profilesPanelForAttempt() {
@@ -805,6 +806,13 @@ const companionBase = $derived(
   companionProbe?.state === 'present' || companionProbe?.state === 'access-refused'
     ? companionProbe.base
     : null,
+);
+// The base the raster overlays may actually be ROUTED through, which is not the same question.
+// companionBase deliberately keeps an access-refused base so the panels can offer the access
+// request against it, but routing chart tiles through a route that refuses them would replace a
+// working direct upstream chart with a broken proxied one.
+const companionTileBase = $derived(
+  companionProbe?.state === 'present' ? companionProbe.base : null,
 );
 let companionProbeGeneration = 0;
 
@@ -1512,13 +1520,16 @@ const encPromptSeen = new PersistedValue<boolean>(
   undefined,
   booleanPersistedCodec,
 );
-const showEncPrompt = $derived.by(() => {
-  if (encPromptSeen.value || emergencySafetyActive || activePanel !== undefined) return false;
-  const items = layersView?.items;
-  if (!items || hasVisibleNavigationChart(items)) return false;
-  const position = vessel.position;
-  return position !== undefined && !vessel.positionStale && noaaEncCoversPosition(position);
-});
+const showEncPrompt = $derived.by(() =>
+  shouldOfferNoaaEnc({
+    dismissed: encPromptSeen.value,
+    emergencyActive: emergencySafetyActive,
+    panelOpen: activePanel !== null,
+    layers: layersView?.items,
+    position: vessel.position,
+    positionStale: vessel.positionStale,
+  }),
+);
 function enableNoaaEnc(): void {
   // The manager honors the pinned floor, restores remembered sub-layers, and persists the choice,
   // so turning the chart on is one call and survives a reload.
@@ -2782,6 +2793,7 @@ const plotterActions = {
     bind:radarPanelRequest
     bind:mapInstance
     {companionBase}
+    companionTiles={() => companionTileBase}
     {chartLockerAccessUrl}
     chartLockerState={companionStatus.state}
     chartLockerAdminAccess={companionStatus.state === 'serving'}

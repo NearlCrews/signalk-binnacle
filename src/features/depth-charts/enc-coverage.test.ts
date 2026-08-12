@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { requireCatalogSource } from '$shared/map';
-import { NOAA_ENC_SOURCE_ID, noaaEncCoversPosition } from './enc-coverage';
+import {
+  type EncPromptConditions,
+  NOAA_ENC_SOURCE_ID,
+  noaaEncCoversPosition,
+  shouldOfferNoaaEnc,
+} from './enc-coverage';
 
 describe('noaaEncCoversPosition', () => {
   it('grades against the catalog coverage boxes, not the service envelope', () => {
@@ -24,5 +29,35 @@ describe('noaaEncCoversPosition', () => {
         true,
       );
     }
+  });
+});
+
+describe('shouldOfferNoaaEnc', () => {
+  // Tampa Bay with a reference base map on and nothing else: the one state the offer exists for.
+  const offered: EncPromptConditions = {
+    dismissed: false,
+    emergencyActive: false,
+    panelOpen: false,
+    layers: [{ visible: true }],
+    position: { latitude: 27.7, longitude: -82.7 },
+    positionStale: false,
+  };
+
+  it('offers the chart to a boat in covered waters with no navigation chart on', () => {
+    expect(shouldOfferNoaaEnc(offered)).toBe(true);
+  });
+
+  it.each<[string, Partial<EncPromptConditions>]>([
+    ['already dismissed', { dismissed: true }],
+    ['an emergency owns the screen', { emergencyActive: true }],
+    // The regression: an open panel must suppress the offer, and only an open one.
+    ['a panel is docked', { panelOpen: true }],
+    ['the layer list has not resolved', { layers: undefined }],
+    ['a navigation chart is already visible', { layers: [{ visible: true, chart: {} }] }],
+    ['there is no fix', { position: undefined }],
+    ['the fix is stale', { positionStale: true }],
+    ['the fix is outside NOAA coverage', { position: { latitude: -20, longitude: 75 } }],
+  ])('stays quiet when %s', (_reason, override) => {
+    expect(shouldOfferNoaaEnc({ ...offered, ...override })).toBe(false);
   });
 });

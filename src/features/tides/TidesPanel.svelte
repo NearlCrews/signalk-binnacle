@@ -115,6 +115,10 @@ function choices(
 
 const tideChoices = $derived(choices(store.nearbyTideStations, store.requestedTide));
 const currentChoices = $derived(choices(store.nearbyCurrentStations, store.requestedCurrent));
+// An empty candidate list only means "nothing nearby" once a search actually finished. Before one
+// starts, while one runs, or after one fails, the list is empty for a reason that has nothing to do
+// with the water, and claiming no stations exist there would be a false statement about coverage.
+const stationsSearched = $derived(store.status === 'ready' || store.status === 'no-coverage');
 
 function isSelected(selection: TideStationSelection, stationId?: string): boolean {
   if (stationId === undefined) return selection.mode === 'automatic';
@@ -222,7 +226,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           </span>
         </button>
       {/each}
-      {#if tideChoices.length === 0 && store.status !== 'loading'}
+      {#if tideChoices.length === 0 && stationsSearched}
         <p class="muted-note">No NOAA tide stations are within 100 km of the chart center.</p>
       {/if}
     </div>
@@ -252,7 +256,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           </span>
         </button>
       {/each}
-      {#if currentChoices.length === 0 && store.status !== 'loading'}
+      {#if currentChoices.length === 0 && stationsSearched}
         <p class="muted-note">No NOAA current stations are within 60 km of the chart center.</p>
       {/if}
     </div>

@@ -173,6 +173,9 @@ interface FlatProps {
   safetyRailClearance: string;
   mapInstance: MapLibreMap | undefined;
   companionBase: string | null;
+  // Read as a getter, not captured: the companion is re-probed once real credentials arrive, so a
+  // value taken at mount is the pre-auth answer for the whole session.
+  companionTiles: () => string | null;
   chartLockerAccessUrl: string;
   chartLockerState: import('$features/prewarm').CompanionState;
   chartLockerAdminAccess: boolean;
@@ -425,6 +428,7 @@ let {
   safetyRailClearance = $bindable('0px'),
   mapInstance = $bindable(),
   companionBase,
+  companionTiles,
   chartLockerAccessUrl,
   chartLockerState,
   chartLockerAdminAccess,
@@ -882,6 +886,7 @@ $effect(() => {
     {trackSettings}
     savedTracks={trackController.savedSource}
     {userCharts}
+    {companionTiles}
     {chartsToken}
     initialView={savedView}
     savedLayers={layerSettings}
