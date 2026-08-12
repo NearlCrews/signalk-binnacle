@@ -187,6 +187,8 @@ interface FlatProps {
   notificationsApi: boolean;
   // Alarm audio cannot sound while a watch is armed (no priming gesture since load).
   audioBlocked?: boolean;
+  // The full audio grade, for the surfaces that must also state a failed or unsupported device.
+  audioState?: import('$shared/audio').AlarmAudioState;
   // The first-run orientation has not been dismissed on this device yet.
   helpFirstRun?: boolean;
   // Show the compact first-run welcome banner inviting the safety orientation.
@@ -436,6 +438,7 @@ let {
   serverFeatures,
   notificationsApi,
   audioBlocked = false,
+  audioState = 'ready',
   helpFirstRun = false,
   showHelpWelcome = false,
   showEncPrompt = false,
@@ -1569,7 +1572,7 @@ $effect(() => {
               onDrop={() => void anchorController.onDrop()}
               onRaise={() => void anchorController.onRaise()}
               onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
-              {audioBlocked}
+              {audioState}
               onClose={closePanel}
               onBack={backToMenu}
             />
@@ -1623,7 +1626,7 @@ $effect(() => {
               error={alarmActionError}
               onSilence={notificationsApi ? onSilenceNotification : undefined}
               onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
-              {audioBlocked}
+              {audioState}
               shallow={shallowMonitor}
               onClose={closePanel}
               onBack={backToMenu}

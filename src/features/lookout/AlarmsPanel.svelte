@@ -9,7 +9,7 @@ import {
   type NotificationsStore,
 } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
-import { ALARM_AUDIO_BLOCKED_NOTE } from '$shared/audio';
+import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
 import {
   feetToMeters,
   formatClockTime,
@@ -50,7 +50,7 @@ interface Props {
   auth: AuthController;
   connectionPhase: ConnectionPhase;
   // Alarm audio cannot sound (no priming gesture since load), so alarms are visual-only.
-  audioBlocked?: boolean;
+  audioState?: AlarmAudioState;
   notifications: NotificationsStore;
   // A transient silence or acknowledge failure, surfaced because a refused action is otherwise
   // indistinguishable from a slow stream echo while the alarm keeps sounding.
@@ -74,7 +74,7 @@ interface Props {
 const {
   auth,
   connectionPhase,
-  audioBlocked = false,
+  audioState = 'ready',
   notifications,
   error,
   onSilence,
@@ -190,9 +190,9 @@ $effect(() => {
       Signal K is disconnected. Active alarm status may be stale until the stream reconnects.
     </p>
   {/if}
-  {#if audioBlocked}
+  {#if alarmAudioNote(audioState)}
     <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
-    <p class="alert-note">{ALARM_AUDIO_BLOCKED_NOTE}</p>
+    <p class="alert-note">{alarmAudioNote(audioState)}</p>
   {/if}
   <p class="muted-note">
     Active alarms show here. Silence stops the sound, acknowledge clears it. Tune the collision

@@ -174,11 +174,13 @@ source, and surrounding traffic before relying on it.
   The shallow threshold merges the server's depth zones with the locally configured limit
   conservatively: whichever bound is deeper governs, so the server can tighten the alarm but never
   quietly loosen it. The panel names which one is in force and says when no depth source is
-  publishing. While any audible watch is live (an armed anchor or MOB watch, or an open stream
-  whose shallow, collision, and generic alarms could sound) and no gesture has primed alarm audio,
-  the status strip shows an alarm-colored "Sound off" chip; any tap anywhere turns audio on, and
-  tapping the chip both does that and explains it. The Anchor watch and Alarms panels carry a
-  matching visual-only-audio note. One alarm sounds at
+  publishing. Alarm audio is reported where an alarm lives, not in the status strip: the Alarms and
+  Anchor watch panels state the grade (blocked until this display is tapped, failed to start, or
+  unavailable on this display), and the Help setup checklist carries it as a row. Any tap or key
+  anywhere primes the audio, so the blocked grade clears itself in ordinary use. The strip stays a
+  readout row: a browser-permission condition is not a helm reading, and on a boat with nothing
+  audible armed a standing chip claimed a silence that could not happen while costing the readouts
+  a wrapped row. One alarm sounds at
   a time through a single audio authority: man overboard and an escalating collision danger
   interleave at the top, lower alarms rotate with bounded reminders, and courtesy tones yield.
 - **Watch handoff** takes a timestamped review-status snapshot for the change of watch: fix and

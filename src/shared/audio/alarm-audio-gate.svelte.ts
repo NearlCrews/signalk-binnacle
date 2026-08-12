@@ -11,6 +11,10 @@ export const ALARM_AUDIO_BLOCKED_NOTE =
 export const ALARM_AUDIO_FAILED_NOTE =
   'Alarm sound failed to start on this display. Any tap tries again, which can recover once the audio device is back.';
 
+// Terminal: no Web Audio here at all, so there is no action to offer, only the fact.
+export const ALARM_AUDIO_UNSUPPORTED_NOTE =
+  'Audible alarms are unavailable on this display. Alerts remain visual only.';
+
 // The honest capability grades. 'blocked' means any gesture will help; 'failed' means the last
 // context construction threw and a later gesture may help once the audio device returns;
 // 'unsupported' is terminal: audible alarms are unavailable on this display.
@@ -57,4 +61,16 @@ export class AlarmAudioGate {
   get blocked(): boolean {
     return this.state === 'blocked';
   }
+}
+
+/**
+ * The explanation an alarm surface renders for a degraded audio grade, or undefined when audio is
+ * ready. Every surface that can sound (the Alarms and Anchor panels, and Help) reads this one
+ * mapping, so a navigator meets the same words wherever they notice the alarm is silent.
+ */
+export function alarmAudioNote(state: AlarmAudioState): string | undefined {
+  if (state === 'blocked') return ALARM_AUDIO_BLOCKED_NOTE;
+  if (state === 'failed') return ALARM_AUDIO_FAILED_NOTE;
+  if (state === 'unsupported') return ALARM_AUDIO_UNSUPPORTED_NOTE;
+  return undefined;
 }

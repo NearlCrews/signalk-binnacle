@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import type { DepthReading, OwnVessel } from '$entities/vessel';
+import type { AlarmAudioState } from '$shared/audio';
 import type { AuthController } from '$shared/signalk';
 import AnchorPanel from './AnchorPanel.svelte';
 
@@ -18,7 +19,7 @@ function renderPanel(
   anchorDepth: DepthReading = NO_DEPTH,
   safetyDepth: DepthReading = NO_DEPTH,
   auth: AuthController = { writeBlocked: false } as AuthController,
-  extras: { anchor?: Record<string, unknown>; audioBlocked?: boolean } = {},
+  extras: { anchor?: Record<string, unknown>; audioState?: AlarmAudioState } = {},
 ): string {
   return render(AnchorPanel, {
     props: {
@@ -41,7 +42,7 @@ function renderPanel(
         safetyDepth,
       } as OwnVessel,
       units: { mode } as UnitsStore,
-      audioBlocked: extras.audioBlocked ?? false,
+      audioState: extras.audioState ?? 'ready',
       onDrop: vi.fn(),
       onRaise: vi.fn(),
       onSetRadius: vi.fn(),
@@ -134,9 +135,20 @@ describe('AnchorPanel', () => {
   });
 
   it('warns that alarms are visual-only while audio is blocked', () => {
-    const blocked = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, { audioBlocked: true });
+    const blocked = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, { audioState: 'blocked' });
     expect(blocked).toContain('Alarm sound is off');
     expect(renderPanel('metric')).not.toContain('Alarm sound is off');
+  });
+
+  it('states a failed or unsupported audio device, which the status strip no longer reports', () => {
+    const failed = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, { audioState: 'failed' });
+    expect(failed).toContain('failed to start');
+    const unsupported = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      audioState: 'unsupported',
+    });
+    expect(unsupported).toContain('Audible alarms are unavailable');
+    // Terminal and gesture-recoverable states must not be flattened into one message.
+    expect(unsupported).not.toContain('Any tap');
   });
 
   it('explains the missing depth row on a keel-only sounder', () => {

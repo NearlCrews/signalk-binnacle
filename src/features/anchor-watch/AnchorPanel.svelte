@@ -11,7 +11,7 @@ import {
 } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
-import { ALARM_AUDIO_BLOCKED_NOTE } from '$shared/audio';
+import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
 import { feetToMeters, formatLengthOr, lengthUnit, metersToFeet, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import {
@@ -31,7 +31,7 @@ interface Props {
   error?: string;
   busy?: boolean;
   // Alarm audio cannot sound (no priming gesture since load), so an armed watch is visual-only.
-  audioBlocked?: boolean;
+  audioState?: AlarmAudioState;
   onDrop: () => void;
   onRaise: () => void;
   onSetRadius: (meters: number) => void;
@@ -46,7 +46,7 @@ const {
   units,
   error,
   busy = false,
-  audioBlocked = false,
+  audioState = 'ready',
   onDrop,
   onRaise,
   onSetRadius,
@@ -147,9 +147,9 @@ function captureFromDistance(): void {
   <p class="muted-note">
     Drop the anchor to start a drift alarm that sounds if the boat swings past the watch radius.
   </p>
-  {#if audioBlocked}
+  {#if alarmAudioNote(audioState)}
     <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
-    <p class="alert-note">{ALARM_AUDIO_BLOCKED_NOTE}</p>
+    <p class="alert-note">{alarmAudioNote(audioState)}</p>
   {/if}
   <p
     class="muted-note status"

@@ -168,6 +168,13 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
   target stacked beneath it, and every such chip cost the chart an extra row. Label and action now
   share one row, which also stops the first-run and chart-offer banners from stacking one button
   per line.
+- Alarm audio left the status strip. It was shown whenever the Signal K stream was merely
+  connected, so a boat with no depth sensor, no AIS traffic, and no anchor watch carried a standing
+  warning about a silence that could not happen, and at tablet widths it pushed the readouts onto a
+  second row. The Alarms and Anchor watch panels now state the grade (blocked, failed to start, or
+  unavailable on this display), the Help checklist carries it as a setup row, and any tap or key
+  still primes the audio. Previously the strip was the only surface that reported a failed or
+  unsupported audio device at all.
 - The alarm-audio chips state their condition instead of carrying a button. Any tap or key anywhere
   already primes or retries the shared audio context, so Sound off and Sound unavailable are now
   readouts that explain themselves on tap, the way the connection, AIS, depth, and radar chips do.

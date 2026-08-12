@@ -9,7 +9,6 @@ import {
   type OwnVessel,
 } from '$entities/vessel';
 import { type MenuItem, PinnedActions } from '$features/menu';
-import { ALARM_AUDIO_BLOCKED_NOTE, ALARM_AUDIO_FAILED_NOTE } from '$shared/audio';
 import {
   createMediaQuery,
   formatBearingOr,
@@ -43,7 +42,6 @@ let {
   shallowAlarming,
   shallowState = 'monitoring',
   radarHealth = { state: 'quiet' },
-  audioState,
   orientation = undefined,
   onResetOrientation = undefined,
   pinnedActions,
@@ -79,9 +77,6 @@ let {
   shallowState?: import('$features/lookout').ShallowMonitorState;
   // Helm-visible radar health: failure and staleness stay visible with Radar Controls closed.
   radarHealth?: import('$features/marine-radar').RadarHelmHealth;
-  // 'ready' hides the chip; the other three state the condition and explain it on tap, since any
-  // gesture anywhere primes or retries the shared audio context and 'unsupported' is terminal.
-  audioState: import('$shared/audio').AlarmAudioState;
   // The chart orientation while a rotating mode is chosen: its live label (including a fallback to
   // north when the reference is stale) stays visible, and one tap returns to north-up. Absent in
   // the default north-up mode, where an unrotated chart speaks for itself.
@@ -232,43 +227,6 @@ const depthWatchPaused = $derived(
         {#if onOpenHelp}
           <button type="button" class="btn btn-compact" onclick={onOpenHelp}>Help</button>
         {/if}
-      </span>
-    {/if}
-    {#if audioState === 'blocked'}
-      <!-- A statement, not a control: any tap or key anywhere primes the shared audio context, so
-           an inline Enable button bought nothing except a stacked 44px row off the chart. Tapping
-           the chip both primes audio through that global gesture and shows the explanation, the
-           way every other degraded chip here explains itself. role=status on the inner span keeps
-           the chip's mount the polite announcement that alarm audio is off. -->
-      <button
-        type="button"
-        class="readout sound-off chip-btn"
-        title={ALARM_AUDIO_BLOCKED_NOTE}
-        onclick={() => chipNote.show(ALARM_AUDIO_BLOCKED_NOTE)}
-      >
-        <span role="status" aria-live="polite">Sound off</span>
-      </button>
-    {:else if audioState === 'failed'}
-      <!-- Audio setup failed outright. Retrying is the same gesture priming does, so this chip is
-           a statement too: any tap re-attempts context construction, which can recover once the
-           audio device returns. -->
-      <button
-        type="button"
-        class="readout sound-off chip-btn"
-        title={ALARM_AUDIO_FAILED_NOTE}
-        onclick={() => chipNote.show(ALARM_AUDIO_FAILED_NOTE)}
-      >
-        <span role="status" aria-live="polite">Sound unavailable</span>
-      </button>
-    {:else if audioState === 'unsupported'}
-      <!-- No Web Audio API here at all: state the fact plainly, with no dead action. -->
-      <span
-        class="readout sound-off"
-        role="status"
-        aria-live="polite"
-        title="Audible alarms are unavailable on this display; alerts remain visual only"
-      >
-        Sound unavailable
       </span>
     {/if}
     {#if orientation}
@@ -574,12 +532,6 @@ const depthWatchPaused = $derived(
    longer updating. Warning-colored and calm, beside the dashed SOG and COG. */
 .fix-lost {
   color: var(--warning);
-  font-weight: 600;
-}
-/* Alarm audio is blocked (no priming gesture since load): alarm-colored, because an armed watch
-   is silently visual-only until the operator taps. */
-.sound-off {
-  color: var(--alarm);
   font-weight: 600;
 }
 /* The lookout chip is muted chrome: it confirms the AIS watch is live without competing with the

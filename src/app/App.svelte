@@ -240,10 +240,12 @@ const store = new SignalKStore();
 // A one-second reactive clock drives every staleness check (a frozen GPS fix, a dropped feed), so
 // they re-evaluate even while no data arrives. Disposed on teardown.
 const clock = new Clock();
-// Alarm audio readiness on the reactive clock. audioBlocked is the raw gate the panels render as
-// an informational note; the status-strip chip's armed-watch policy derives beside the watches
-// it reads, below.
+// Alarm audio readiness on the reactive clock. Every surface that can sound renders the grade as
+// its own note: the status strip deliberately carries none, because a readout row is not where a
+// browser-permission condition belongs, and on a boat with nothing audible armed the chip stated a
+// silence that could not happen while costing the readouts a whole wrapped row.
 const alarmAudioGate = new AlarmAudioGate(clock);
+const audioState = $derived(alarmAudioGate.state);
 const audioBlocked = $derived(alarmAudioGate.blocked);
 const vessel = new OwnVessel(store, clock);
 const aisTargets = new AisTargets(store);
@@ -335,14 +337,6 @@ const anchorAlarm = new GatedAlarm(
 // Man overboard: one tap on the strip button marks the spot, publishes the boat-wide alarm, and
 // raises the recovery strip; a remote station's notifications.mob raises it here too.
 const mob = new MobStore(store, vessel, clock);
-// The status-strip chip alerts on degraded audio only while something audible is armed: a
-// client-side anchor or MOB watch, or an open stream whose shallow, collision, and generic
-// alarms could sound. The panels keep rendering the raw audioBlocked (gesture-recoverable only)
-// as an informational note, since their tap-to-enable copy is wrong for the terminal grades.
-const soundAlertArmed = $derived(
-  anchor.watching || mob.active || isConnectionOpen(store.connection.phase),
-);
-const audioChipState = $derived(soundAlertArmed ? alarmAudioGate.state : 'ready');
 const mobAlarm = new GatedAlarm(MOB_TONE, alarmCoordinator.channel({ id: 'mob', rank: () => 0 }));
 
 // The measure tool: armed from the menu, fed by chart taps, read by its overlay and strip.
@@ -2801,6 +2795,7 @@ const plotterActions = {
     {serverFeatures}
     {notificationsApi}
     {audioBlocked}
+    {audioState}
     helpFirstRun={!helpOrientationSeen.value}
     {showHelpWelcome}
     {showEncPrompt}
@@ -2976,7 +2971,6 @@ const plotterActions = {
     shallowAlarming={shallowController.alarming}
     shallowState={shallowController.monitorState}
     {radarHealth}
-    audioState={audioChipState}
     orientation={chartOrientation.value !== 'north'
       ? { label: orientation.label, active: orientation.active }
       : undefined}

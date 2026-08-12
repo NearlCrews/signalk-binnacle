@@ -30,7 +30,6 @@ function baseProps() {
     units: new UnitsStore(),
     vessel,
     shallowAlarming: false,
-    audioState: 'ready' as import('$shared/audio').AlarmAudioState,
     onEnableSound: () => {},
     pinnedActions: [],
     clock,
@@ -46,6 +45,14 @@ function body(props: ComponentProps<typeof StatusStrip>): string {
 }
 
 describe('StatusStrip depth alarm', () => {
+  it('carries no alarm-audio chip: a browser-permission condition is not a helm readout', () => {
+    // The Alarms and Anchor panels state the grade instead, so the readout row is not spent on a
+    // silence that a boat with nothing audible armed could not have anyway.
+    const html = body(baseProps());
+    expect(html).not.toContain('Sound off');
+    expect(html).not.toContain('Sound unavailable');
+  });
+
   it('shows the toolbar clock as local time, not UTC', () => {
     const html = body(baseProps());
     expect(html).toContain('title="Local time"');
@@ -157,27 +164,6 @@ describe('StatusStrip depth alarm', () => {
     expect(html).not.toContain('>4.0<');
   });
 
-  it('states blocked audio without spending a strip row on an Enable button', () => {
-    const blocked = body({ ...baseProps(), audioState: 'blocked' as const });
-    expect(blocked).toContain('Sound off');
-    // Any gesture anywhere primes the shared context, so an inline control bought nothing except
-    // a stacked 44px row off the chart. The chip explains itself on tap instead.
-    expect(blocked).not.toContain('>Enable<');
-    expect(blocked).toContain('chip-btn');
-    expect(blocked).toContain('Any tap turns it on.');
-
-    const healthy = body(baseProps());
-    expect(healthy).not.toContain('Sound off');
-    expect(healthy).not.toContain('Sound unavailable');
-  });
-
-  it('states a failed audio device the same way, since retrying is the same gesture', () => {
-    const failed = body({ ...baseProps(), audioState: 'failed' as const });
-    expect(failed).toContain('Sound unavailable');
-    expect(failed).not.toContain('>Retry<');
-    expect(failed).toContain('Any tap tries again');
-  });
-
   it('names a paused shallow watch instead of a bare depth placeholder', () => {
     // Never-had-a-source keeps the plain label: nothing was ever watching, so there is no pause
     // to name, and the phone footer must not permanently wrap for a boat with no sounder. The
@@ -220,16 +206,6 @@ describe('StatusStrip depth alarm', () => {
     const stale = body({ ...baseProps(), radarHealth: { state: 'stale' } as const });
     expect(stale).toContain('Radar stale');
     expect(body(baseProps())).not.toContain('Radar');
-  });
-
-  it('states that audible alarms are unavailable with no action when unsupported', () => {
-    const unsupported = body({ ...baseProps(), audioState: 'unsupported' as const });
-    expect(unsupported).toContain('Sound unavailable');
-    expect(unsupported).toContain('Audible alarms are unavailable on this display');
-    expect(unsupported).not.toContain('>Enable<');
-    expect(unsupported).not.toContain('>Retry<');
-    // Terminal, so it is the one audio chip with nothing to explain on tap.
-    expect(unsupported).not.toContain('chip-btn"');
   });
 
   it('subordinates the consequence chips while the link itself is the failure, radar excluded', () => {
