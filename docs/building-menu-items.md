@@ -59,16 +59,17 @@ Tooling traps, each of which has bitten us:
 The menu and bottom bar are data-driven, so these four steps are the whole integration. Doing one or
 two leaves a tile that opens nothing, or a panel with no way in.
 
-1. Add a `MenuItem` to the `menuItems` array, in the right intent group. The groups today are Map,
-   Navigate, Safety, Weather, Instruments, Offline charts, and Settings. Safety stays before Weather
-   and Instruments; Settings (Profiles) MUST stay last. Set `id`, `label`, `icon` (a lucide component),
+1. Add a `MenuItem` to the `menuItems` array, in the right intent group. The groups today are
+   Chart, Navigate, Safety, Weather, Instruments, and Settings. Groups derive from contiguous item
+   order, so a group move means relocating the literal, not only editing its `group` string. Safety
+   stays before Weather and Instruments; Settings (Profiles) MUST stay last. Set `id`, `label`, `icon` (a lucide component),
    `group`, `pressed: activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add
    `shortLabel` when the label is long (the bottom-bar pill renders `shortLabel ?? label`). Add
    `disabled` plus `disabledLabel` for a transient block, such as a chart still loading. When a
    user-relevant optional provider is absent, keep the item visible with `available: false` plus an
    actionable `unavailableHint`; do not hide it with a conditional spread. Offline charts is the
    canonical example: one entry is always present, and its hint explains how to install, start, or
-   sign in to Signal K as an administrator. Radar, Time travel, and Instrument dashboard (KIP) follow the same
+   sign in to Signal K as an administrator. Radar, Playback, and Instrument dashboard (KIP) follow the same
    availability rule. When discovery has multiple failure states, derive the hint from current state
    so absence, an access refusal, malformed provider data, and a transport failure do not collapse
    into the same message.
@@ -98,7 +99,7 @@ tap does not start the chunk request.
 
 When a menu destination depends on a matching chart layer, opening the destination must establish the
 visible state it needs. Use `togglePanel('<id>', () => setLayerVisible('<layer-id>', true))`, as Find
-places does for Points of interest. The panel must still render explicit hidden, loading, empty,
+places does for the Places layer. The panel must still render explicit hidden, loading, empty,
 offline, and error states reported by the provider path. Do not infer them all from an empty list.
 
 ---
@@ -155,7 +156,7 @@ level. Inside, in this order:
     position must become unavailable instead of keeping frozen range or bearing values.
 12. A provider load with automatic cooldown must also offer an explicit retry that bypasses that
     cooldown. Keep already accepted data visible during refresh and after failure. Chart sources,
-    Forecast, Tides, Data trends, and Time travel are the canonical examples.
+    Forecast, Tides and currents, Data trends, and Playback are the canonical examples.
 13. Bound every externally supplied collection, string, coordinate, and numeric range before it
     reaches reactive state or rendering. This includes server resources, plugin discovery, imported
     files, local persistence, IndexedDB replay, and history-provider rows.

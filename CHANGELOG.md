@@ -73,6 +73,34 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
 - A path's explicitly declared meta.timeout replaces the ten-second client staleness window on
   its instrument tile, so a legitimately slow sensor is not flashed stale; a declared timeout of
   zero means never stale.
+- A Get set up checklist at the top of Help, with a live state and one action per row: turn on a
+  nautical chart, see a GPS position, get read and write access, enable alarm sound, and enable
+  saved data on the server. Every row routes to a surface that already exists, and the section
+  retires itself once the durable rows pass.
+- In US waters, a dismissible offer to turn on the official NOAA electronic navigation charts
+  when no nautical chart is on. It grades the boat's own fix against NOAA's published regional
+  coverage, so it never appears where the charts do not reach, and it stays quiet while a panel
+  is open or an emergency is live.
+- The bottom bar can carry the menu itself: Menu can now be pinned there and ships in the
+  default toolbar set alongside Center, Follow, and AIS, so a phone journey no longer starts with
+  a reach to the opposite corner. Pinning it hides the top-bar hamburger, leaving one opener.
+- Saved routes gain a read-only passage plan: the same leg table, planned arrivals, plan speed,
+  and departure the edit session shows, reviewable from the card without entering chart edit mode,
+  with a link to check offline chart coverage for the route.
+- Save and navigate in the waypoint drop dialog, for the mark-that-spot-and-go moment. It saves
+  the mark and arms the same navigation confirmation naming the destination; plain Save stays the
+  primary action.
+- Rename on a saved route card, so a route drawn on the chart and quick-saved under a dated name
+  can be named afterward without re-entering the editor.
+- Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
+  chip, the depth chip, or a radar-trouble chip shows the explanation that used to live only in a
+  hover tooltip. Waiting for GPS carries a Help action, and the anchor chip opens Anchor watch.
+- Help covers the states it previously left to tooltips: what each connection state means, what
+  Stale means and why the strip dashes a value while the dock keeps it with its age, what an
+  unassessed AIS target is, and glossary entries for the Keel, Surface, and Xducer depth datums
+  and for Signal K itself.
+- The nearby-vessels menu item carries a live count of danger-grade collision contacts, so a
+  closed panel says something is waiting.
 
 ### Changed
 
@@ -106,11 +134,43 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
   dashboard tile no longer truncates, menu groups separate by heading alone in day and dusk, the
   menu keeps a scroll shadow when tiles continue past the fold, the layers headers count with the
   shared chip, and the alarm mute rows say On or Off at a glance.
+- Menu naming and grouping follow chartplotter habits: the Map group is now Chart and absorbs
+  Layers and charts along with Offline charts, Time travel is now Playback and sits beside Tracks
+  under Navigate, Tides is now Tides and currents, the Points of interest layer row is now
+  Places, and the Profiles tile names what it holds (units, sync, and privacy). Saved profiles,
+  pinned toolbars, and layer settings are unaffected: they key on ids, not titles.
+- Write-blocked copy speaks the same language everywhere: read and write access, approved by the
+  boat's Signal K admin, instead of tokens. The outcome of a request (declined, unanswered, or
+  unreachable) now lands in the panel that asked, not only in the app-wide banner, and while a
+  request is out the panel says where the approval happens.
+- Routes and Waypoints name a missing Resources Provider instead of blaming the connection: on a
+  stock server the first open of either panel now explains the exact admin step and offers Check
+  again, matching what Tracks already did.
+- The Charts tab explains a reference-only view where the fix is made, including that depth
+  shading never counts as a chart and what to do outside US waters, and the first-run banner
+  offers Set up charts beside the safety orientation.
+- The instrument detail says Stale plainly and explains the server's declaration in a sentence
+  instead of labeling the badge "server declared". Radar and history hints name a next step, and
+  the Chart Locker access hint no longer calls an HTTP endpoint a route.
+- The not-encrypted warning can be dismissed per device, with the durable explanation kept in
+  Help, so a stock plain-HTTP install does not spend every first impression on a warning the
+  navigator cannot act on from here.
+- While the Signal K link itself is down, the strip subordinates the readouts that pause with it
+  (GPS, speed, course, heading, and the depth watch) so one failure with one action reads as one
+  failure. Radar health is deliberately excluded: it rides its own stream.
 
 ### Fixed
 
 - Pull request CI accepts the active version's explicit Unreleased changelog heading, while the
   publication gate continues to require a dated heading for that same version.
+- Starting navigation from a phone no longer leaves the sheet covering the chart and the new
+  guidance strip: confirming a route activation, a waypoint destination, or a track retrace
+  collapses the sheet the way Locate already did.
+- The route-edit strip's Save no longer claims a naming flow it never had. It quick-saves under
+  the working or dated name, which the new card Rename can change, and saving from the panel now
+  offers to start navigation on the route just drawn.
+- A named contact on the collision strip is tappable, opening that vessel's AIS detail instead of
+  costing four taps from the far corner of the screen mid-incident.
 - Status strip text can no longer slide under the centered toolbar pills on desktop widths: the
   readouts wrap instead, a paused depth watch drops its dashed value in favor of its label, and
   between 900 and 1200 pixels the strip now keeps the vessel position visible, dropping the clock

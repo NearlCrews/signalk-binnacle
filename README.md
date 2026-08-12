@@ -35,9 +35,17 @@ calling the reference base map a chart.
 The helm itself sharpens: one alarm authority ranks every sound so MOB and a closing contact
 interleave instead of colliding, the collision strip's CPA and TCPA take the largest numerals on
 screen, instrument tiles lead with SOG-style abbreviations and honest state chips, the MOB button
-becomes the chrome's one solid-red key (dimmed at rest at night), zoom and scale controls follow
-the theme so night vision survives them, and first-run help orients a new crew without nagging a
-returning one. See the changelog for the complete list.
+becomes the chrome's one solid-red key (dimmed at rest at night), and zoom and scale controls
+follow the theme so night vision survives them.
+
+Getting underway is shorter. A live Get set up checklist in Help tracks the five things a fresh
+install needs and routes to each one, US waters get a one-tap offer to turn on the official NOAA
+charts when none is on, the bottom bar can carry the menu itself so a phone journey no longer
+starts across the screen, a named contact on the collision strip opens that vessel directly, and
+saved routes show their passage plan without entering edit mode. The words got plainer too: read
+and write access instead of tokens, a request's outcome reported where it was asked for, a missing
+Resources Provider named instead of blaming the connection, and every degraded status chip
+explaining itself on a tap. See the changelog for the complete list.
 
 ## What it does
 

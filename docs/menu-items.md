@@ -7,7 +7,7 @@ panels distinguish loading, retained-data refresh, empty results, and failure.
 Navigation output is advisory. Confirm the destination, route, chart coverage, weather age, tide
 source, and surrounding traffic before relying on it.
 
-## Map
+## Chart
 
 - **Center on boat** moves the chart to the latest vessel position. It is disabled while the chart is
   loading, before GPS is available, and when the last fix is stale.
@@ -28,38 +28,6 @@ source, and surrounding traffic before relying on it.
 - Long press, right-click, the Context Menu key, and Shift+F10 open chart actions. Keyboard actions
   use the chart center.
 
-## Navigate
-
-- **Routes** loads Signal K route resources independently of the live WebSocket. Creating, editing,
-  importing, reversing, deleting, activating, stopping, skipping, and chart-side route actions
-  require write access. Route activation, stopping navigation (in the panel and on the navigation
-  strip), and chart-position navigation require confirmation. Failed
-  refreshes keep the last accepted list and offer Retry. Secondary card actions live in a labeled
-  overflow menu. Route ids, names, geometry, and collection size are bounded before use. GPX imports
-  accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
-  coordinates are skipped, but their records still count toward the limits.
-- **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
-  location, and confirmed navigation. Navigation sends the waypoint's resource reference so the
-  destination name reaches the navigation strip and other stations. The panel searches name and
-  description ignoring case and accents, sorts by name, distance, or bearing with fresh-fix-only
-  metrics, and states its render and ingestion caps. Locate collapses the phone panel so the chart
-  stays visible, and failed loads offer Retry. See [Waypoints](waypoints.md).
-- **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
-  remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
-  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
-  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
-  panel names the one-time Resources Provider step with a Check again action. See
-  [Tracks](tracks.md).
-- **Find places** searches chart notes and points of interest, including cached offline results.
-  Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
-  distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
-  [Find places](find-places.md).
-- **Measure** arms chart taps for rhumb-line distance and true bearing. Points can be selected through
-  a 44 px chart target or the strip, moved deliberately by drag, chart tap, or chart-center keyboard
-  workflow, deleted, and restored through operation-based Undo. The strip shows both legs adjacent to
-  a selected point, while collision-managed chart labels show distance only above a bounded zoom.
-  Clear confirms, nested Escape cancels movement before ending Measure, route editing is excluded in
-  both directions, and selecting Measure again preserves current work. See [Measure](measure.md).
 - **Layers and charts** opens to chart sources first. Signal K chart discovery can be retried without
   removing the last loaded sources. A broken source cannot stop the chart from opening. URL-backed
   PMTiles imports accept bounded HTTP or HTTPS URLs, validate metadata, and persist locally. Plain
@@ -79,11 +47,90 @@ source, and surrounding traffic before relying on it.
   nautical chart through its actual regional coverage list rather than its near-worldwide service
   envelope, so mid-ocean still reads Outside chart coverage. Bathymetry references (GEBCO,
   EMODnet, BlueTopo, Seascape) never flip the badge: they carry no aids to navigation and are not
-  reduced to chart datum. Tapping the badge opens this panel.
+  reduced to chart datum. Tapping the badge opens this panel. When no nautical chart is on, the
+  Charts tab says so at the top and states that depth shading does not count as a chart, and a
+  line beside Add a chart sets expectations outside US waters. In US waters with no chart on, a
+  dismissible chart-corner banner offers to turn NOAA ENC on, graded against the boat's own fix
+  and NOAA's published regional coverage, and it stays quiet while a panel is open.
+- **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
+  and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
+  storage. The installation probe distinguishes a missing plugin, refused access, and a service or
+  network failure. The access-needed header status opens Signal K administrator sign-in directly.
+  Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
+  an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
+  Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
+  Repeated status failures offer Retry status without starting another download. Removed chart
+  sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
+  adjusted copy uses available sources. Saved-area cards lead with an at-a-glance summary: plain
+  detail level, chart count with any unavailable ones, and the approximate span in nautical miles.
+  While navigating a route, an advisory route-coverage check samples a chosen 1, 5, or 10
+  nautical-mile corridor (the route line and both edges) against the ready saved areas, the
+  catalog coverage of their included charts, and a requested detail level; it reports Complete,
+  Partial, or Unknown, highlights uncovered and insufficient-detail stretches read-only on the
+  chart, clears with the route, and states that it does not certify navigation or passage safety.
+  Provider readiness stays a separate readout.
+  See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
+  [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
+
+## Navigate
+
+- **Routes** loads Signal K route resources independently of the live WebSocket. Creating, editing,
+  importing, reversing, deleting, activating, stopping, skipping, and chart-side route actions
+  require write access. Route activation, stopping navigation (in the panel and on the navigation
+  strip), and chart-position navigation require confirmation. Failed
+  refreshes keep the last accepted list and offer Retry. Secondary card actions live in a labeled
+  overflow menu, which also carries Rename route and a read-only passage plan: the same leg table,
+  planned arrivals, plan speed, and departure the edit session shows, reviewable without entering
+  chart edit mode, with a link to check the route's offline chart coverage. Saving from the panel
+  offers to start navigation on the route just drawn, using the same confirmation. The strip's
+  Save is a quick save under the working or dated name, which Rename can change afterward. On a
+  server with no routes resource provider the panel names the one-time Resources Provider step
+  with a Check again action. Route ids, names, geometry, and collection size are bounded before
+  use. GPX imports
+  accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
+  coordinates are skipped, but their records still count toward the limits.
+- **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
+  location, and confirmed navigation. Navigation sends the waypoint's resource reference so the
+  destination name reaches the navigation strip and other stations. The panel searches name and
+  description ignoring case and accents, sorts by name, distance, or bearing with fresh-fix-only
+  metrics, and states its render and ingestion caps. Locate and a confirmed navigation start both
+  collapse the phone panel so the chart and the guidance strip stay visible, and failed loads offer
+  Retry. The chart drop dialog also offers Save and navigate, which saves the mark and arms the
+  same destination-naming confirmation; plain Save stays primary and edit mode never offers it. On
+  a server with no waypoints resource provider the panel names the one-time Resources Provider
+  step with a Check again action instead of blaming the connection. See [Waypoints](waypoints.md).
+- **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
+  remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
+  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
+  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
+  panel names the one-time Resources Provider step with a Check again action. See
+  [Tracks](tracks.md).
+- **Playback** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
+  history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
+  scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
+  offer Slow, Normal, and Fast (0.5x, 1x, and 2x) speeds, pause when the document is hidden, and stay disabled for reduced
+  motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
+  correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
+  loaded sample without another network query. Tracks records the boat's own
+  breadcrumb trail; Playback reviews the server's recorded history.
+- **Find places** searches chart notes and places, including cached offline results. The layer
+  row for the same data is named Places, so one noun covers the panel, the pill, the toolbar
+  action, and the overlay.
+  Loading, zoom limits, hidden layers, empty results, offline cache, and provider failure remain
+  distinct. Its direct Show places on chart control uses the same visibility state as Overlays. See
+  [Find places](find-places.md).
+- **Measure** arms chart taps for rhumb-line distance and true bearing. Points can be selected through
+  a 44 px chart target or the strip, moved deliberately by drag, chart tap, or chart-center keyboard
+  workflow, deleted, and restored through operation-based Undo. The strip shows both legs adjacent to
+  a selected point, while collision-managed chart labels show distance only above a bounded zoom.
+  Clear confirms, nested Escape cancels movement before ending Measure, route editing is excluded in
+  both directions, and selecting Measure again preserves current work. See [Measure](measure.md).
 
 ## Safety
 
-- **Nearby vessels (AIS)** searches reported names and Maritime Mobile Service Identity numbers,
+- **Nearby vessels (AIS)** carries a live count of danger-grade collision contacts on its menu
+  entry, and a named contact on the collision strip opens that vessel's detail here directly. It
+  searches reported names and Maritime Mobile Service Identity numbers,
   filters collision risks and getting-close targets, then renders up to 500 matches by distance,
   closest point of approach (CPA), or name. A list row or generous chart hit target opens the same
   live in-panel detail, and the selected chart target gains a ring below the collision styling.
@@ -151,7 +198,7 @@ source, and surrounding traffic before relying on it.
   warnings state when warning data is unavailable or cached. The routes shown on the chart draw
   read-only over the forecast with their named waypoints; they are not offered as a weather layer,
   cannot be edited there, and never imply the forecast was routed along the path.
-- **Tides** independently selects tide-height and tidal-current stations. Automatic mode is the
+- **Tides and currents** independently selects tide-height and tidal-current stations. Automatic mode is the
   session default, prefers signalk-tides for tide height, and uses NOAA CO-OPS as the US-waters
   fallback and current source. Up to eight NOAA stations of each kind are listed within the supported
   radius. A manual choice fetches that exact NOAA station, survives chart pans for the session, and
@@ -211,43 +258,15 @@ source, and surrounding traffic before relying on it.
   warranted) that is visible and read by screen readers. Eligible instrument details can
   open one focused trend without changing the saved overview. Back restores the same detail and
   focus, while Close returns to the chart.
-- **Instrument dashboard** (KIP, named on the tile's quiet second line) opens the installed KIP
-  webapp in a new tab. Transport or access failures keep its
+- **Instrument dashboard** opens the installed KIP webapp in a new tab; the tile's quiet second
+  line names both the acronym and the new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
-- **Time travel** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
-  history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
-  scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
-  offer Slow, Normal, and Fast (0.5x, 1x, and 2x) speeds, pause when the document is hidden, and stay disabled for reduced
-  motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
-  correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
-  loaded sample without another network query.
-
-## Offline
-
-- **Offline charts** stays visible without Chart Locker and explains installation, startup, access,
-  and chart-loading requirements. It manages saved areas, automatic caching, installed charts, and
-  storage. The installation probe distinguishes a missing plugin, refused access, and a service or
-  network failure. The access-needed header status opens Signal K administrator sign-in directly.
-  Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
-  an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
-  Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
-  Repeated status failures offer Retry status without starting another download. Removed chart
-  sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
-  adjusted copy uses available sources. Saved-area cards lead with an at-a-glance summary: plain
-  detail level, chart count with any unavailable ones, and the approximate span in nautical miles.
-  While navigating a route, an advisory route-coverage check samples a chosen 1, 5, or 10
-  nautical-mile corridor (the route line and both edges) against the ready saved areas, the
-  catalog coverage of their included charts, and a requested detail level; it reports Complete,
-  Partial, or Unknown, highlights uncovered and insufficient-detail stretches read-only on the
-  chart, clears with the route, and states that it does not certify navigation or passage safety.
-  Provider readiness stays a separate readout.
-  See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
-  [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 
 ## Settings
 
-- **Profiles** saves portable chart, weather, threshold, toolbar, instrument, Data trends, track,
+- **Profiles** (tile subtitle: units, sync, and privacy) saves portable chart, weather, threshold,
+  toolbar, instrument, Data trends, track,
   unit-fallback, planning, chart-orientation, and preferred anchor-radius settings. The active profile saves
   automatically after a short debounce. Each device keeps its own active choice, while profiles and
   the default sync
@@ -269,7 +288,27 @@ source, and surrounding traffic before relying on it.
   lost. Profile writes are suspended during erasure so queued work cannot recreate local data. See
   [Profiles and settings](profiles.md).
 - **Help** opens the permanent help panel: the safe-use framing (an advisory chartplotter, not a
-  navigation chart), the reference-map-versus-charts distinction, Signal K access and alarm-sound
-  setup with direct actions, a marine glossary, operating-context checklists for a coastal day, a
-  night passage, and lying at anchor, and a reset for the chart hints. The first-run orientation
-  banner reopens from here; dismissing it persists per device.
+  navigation chart), a live Get set up checklist (nautical chart on, GPS position seen, read and
+  write access, alarm sound, and server saved-data storage, each with one action, retiring itself
+  once the durable rows pass), the reference-map-versus-charts distinction, Signal K access and
+  alarm-sound setup with direct actions, what each connection state means, a When something looks
+  wrong section covering staleness and unassessed AIS targets, a marine glossary including the
+  Keel, Surface, and Xducer depth datums and Signal K itself, operating-context checklists for a
+  coastal day, a night passage, and lying at anchor, and a reset for the chart hints. The
+  first-run orientation banner reopens from here; dismissing it persists per device, and its
+  Set up charts action opens the Charts tab.
+
+## Toolbar and status strip
+
+- The bottom toolbar carries pinned actions, chosen by tapping tiles while customizing. The
+  default set is Menu, Center, Follow, and AIS: the Menu opener sits in the bar because on a phone
+  the top-bar hamburger is a cross-screen reach, and AIS keeps one Safety action thumb-reachable
+  with its live collision-risk count. Pinning Menu hides the top-bar hamburger, so exactly one
+  control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
+  since tapping a tile is the pin control.
+- Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
+  chip, the depth chip, or a radar-trouble chip shows its explanation as a transient note above
+  the strip. Waiting for GPS carries a Help action, and the anchor chip opens Anchor watch.
+- While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
+  course, heading, and the depth watch) are subordinated so the strip presents one failure with
+  one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

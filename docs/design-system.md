@@ -241,7 +241,12 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   computed from an untrusted value is not a live warning. A stale tile keeps its retained value at
   muted contrast WITH its age in the secondary line: the tile has a badge channel, so a retained
   number plus its age is more honest than dashes, while the status strip, which has no badge
-  channel, dashes the same value; that divergence is deliberate. The wind tile's angle freshness
+  channel, dashes the same value; that divergence is deliberate and the Help panel's "When
+  something looks wrong" section explains it in prose, since no tooltip reaches a gloved hand.
+  While the Signal K link itself is down or silent, the strip subordinates its downstream
+  consequence chips (fix, speed, course, heading, depth) to a dimmed treatment so one failure with
+  one action does not read as five, without ever hiding or recoloring them. Radar health is
+  excluded from that rule: it rides the radar provider's own stream, not the Signal K link. The wind tile's angle freshness
   folds into the same chip line (Angle stale, Angle unavailable) rather than stacking a second
   fragment.
   Customize groups available instruments by category, and its Rescan action reruns instance discovery
@@ -392,10 +397,20 @@ Shared behavior lives here. Compose these; do not re-implement them.
   consistent across browsers (Firefox renders no native clear control on `type="search"`). Used by
   the AIS, Find places, and Waypoints list panels; use it for any list filter field, never a raw
   `<input type="search">`.
-- `WriteAccessNote`: the write-blocked notice plus its "Request read/write access" button, rendered
-  inside a panel whose writes are blocked (waypoints, tracks, note detail). Pass the panel's own
-  `message` with plain `requesting` and `onRequest` values; it never reads the auth store itself.
-  Use it instead of an inline note-plus-button block.
+- `WriteAccessNote`: the write-blocked notice plus its "Request read and write access" button,
+  rendered inside a panel whose writes are blocked (waypoints, tracks, note detail). Pass the
+  panel's own `message` with plain `requesting`, `onRequest`, and `outcome` values; it never reads
+  the auth store itself. Use it instead of an inline note-plus-button block. The vocabulary is
+  fixed: read and write access, approved by the boat's Signal K admin, never "token". A finished
+  request's outcome (declined, unanswered, or unreachable) renders from the shared
+  `UPGRADE_OUTCOME_COPY` map in `$shared/signalk`, so the panel and the app-wide banner cannot
+  drift, and the requesting state names where the approval happens.
+- `TransientNote`: the timed explanatory note a tap on a blocked or informational control shows,
+  since the title tooltip such a control also carries is mouse-hover-only. Backed by a `Toast`, it
+  is absolutely positioned by the host's own class so it never contributes layout height. Shared
+  by the menu's blocked tiles, the bar's blocked pills, and the status strip's degraded chips; the
+  strip's copy layers below `--z-safety-strips` and lifts by `--rail-clearance` so it can never
+  cover a safety card.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
   seeded default starts selected). Seed it with `defaultSaveName`.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
@@ -543,8 +558,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   (the Orientation tile's mode, the instrument dashboard's KIP acronym) so the label keeps one
   voice across the grid, `icon` a lucide component, `group` a section heading, `pressed` for a
   toggle's lit state, `disabled` plus `disabledLabel`, `available` plus `unavailableHint`,
-  `onSelect`). Groups today:
-  Map, Navigate, Safety, Weather, Instruments, Offline charts, and Settings.
+  `barOnly` for an action whose home is the bottom bar (the Menu opener, which would otherwise be
+  a tile inside the menu it opens; it still renders as a tile while customizing, since tapping a
+  tile is the pin control), `onSelect`). Groups today:
+  Chart, Navigate, Safety, Weather, Instruments, and Settings.
   Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
   `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
   `available: false` with an `unavailableHint`: the launcher and bottom bar render it grayed and
@@ -611,7 +628,7 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   from the global `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised
   notifications, are the two sanctioned exceptions).
 - Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
-  `prefers-reduced-motion`, and Time travel disables automatic playback while keeping manual
+  `prefers-reduced-motion`, and Playback disables automatic advance while keeping manual
   stepping and scrubbing available.
 
 ## 10. Icons

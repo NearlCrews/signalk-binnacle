@@ -13,7 +13,7 @@ providers can contribute marinas, anchorages, services, hazards, and other place
 same resource API.
 
 The chart overlay fetches a padded area for efficient panning, but Find places clips those records to
-the current visible chart bounds. Opening Find places also turns on the Points of interest overlay, so
+the current visible chart bounds. Opening Find places also turns on the Places overlay (the same Signal K notes the chart shows), so
 the list and the chart markers cannot disagree because of a hidden layer. The panel's **Show places on
 chart** control reads and writes that same overlay state and restores a hidden layer directly. Panning
 or zooming refreshes the list. Below zoom level 9, the panel asks the navigator to zoom in before it
