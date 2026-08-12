@@ -55,6 +55,17 @@ export function isRaisedNotificationValue(value: unknown): boolean {
 // quiet grades; the rest escalate alert < warn < alarm < emergency.
 export type NotificationState = 'nominal' | 'normal' | 'alert' | 'warn' | 'alarm' | 'emergency';
 
+// Mirror of @signalk/server-api AlarmStatus. Kept local because importing the server package into
+// browser or worker code pulls in Node's EventEmitter and breaks the worker bundle.
+export interface AlarmStatus {
+  silenced: boolean;
+  acknowledged: boolean;
+  acknowledgedAt?: string;
+  canSilence: boolean;
+  canAcknowledge: boolean;
+  canClear: boolean;
+}
+
 // The grades a raised notification carries: the escalating subset of NotificationState, excluding
 // the quiet 'nominal' and 'normal'. A parsed active alert is always one of these.
 export type RaisedNotificationState = Exclude<NotificationState, 'nominal' | 'normal'>;

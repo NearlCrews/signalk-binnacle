@@ -41,6 +41,8 @@ export interface ActiveNotification {
   id?: string;
   silenced?: boolean;
   acknowledged?: boolean;
+  // ISO 8601, from status.acknowledgedAt on server-api 2.31 and later.
+  acknowledgedAt?: string;
   canSilence?: boolean;
   canAcknowledge?: boolean;
 }
@@ -83,6 +85,7 @@ function parseNotification(
     id: cleanString(raw.id, MAX_NOTIFICATION_ID_LENGTH),
     silenced: boolField(status.silenced),
     acknowledged: boolField(status.acknowledged),
+    acknowledgedAt: cleanString(status.acknowledgedAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
     canSilence: boolField(status.canSilence),
     canAcknowledge: boolField(status.canAcknowledge),
   };

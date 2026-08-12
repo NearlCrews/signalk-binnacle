@@ -76,6 +76,12 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
 
 ### Changed
 
+- A retained stale GPS fix now places a large question badge over the own-vessel symbol without
+  rotating the badge, so the chart itself cannot make an old position look current. The stream also
+  requests the own-vessel name, MMSI, and VHF call sign leaf paths supported by Signal K 2.31 while
+  remaining compatible with older servers.
+- Alarm acknowledgments now retain and display the server's local acknowledgment time when Signal K
+  supplies the `acknowledgedAt` field added in server-api 2.31.
 - Routes editing is an exclusive mode with a persistent strip that keeps the mode, point count,
   and exit actions visible even when another panel replaces the Routes panel, and the navigation
   strip names the provenance of every course figure (server estimate or locally computed) per

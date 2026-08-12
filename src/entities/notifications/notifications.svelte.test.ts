@@ -34,7 +34,7 @@ describe('NotificationsStore', () => {
     ]);
   });
 
-  it('carries the v2 id, status flags, and createdAt timestamp when present', () => {
+  it('carries the v2 id, status fields, and timestamps when present', () => {
     const { notifications } = setup({
       'notifications.navigation.anchor': {
         state: 'alarm',
@@ -42,7 +42,13 @@ describe('NotificationsStore', () => {
         message: 'Anchor drag',
         id: 'abc-123',
         createdAt: '2026-06-12T08:00:00Z',
-        status: { silenced: true, acknowledged: false, canSilence: true, canAcknowledge: true },
+        status: {
+          silenced: true,
+          acknowledged: true,
+          acknowledgedAt: '2026-06-12T08:05:00Z',
+          canSilence: true,
+          canAcknowledge: true,
+        },
       },
     });
     const [n] = notifications.list();
@@ -50,7 +56,8 @@ describe('NotificationsStore', () => {
       id: 'abc-123',
       timestamp: '2026-06-12T08:00:00Z',
       silenced: true,
-      acknowledged: false,
+      acknowledged: true,
+      acknowledgedAt: '2026-06-12T08:05:00Z',
       canSilence: true,
       canAcknowledge: true,
     });
@@ -65,6 +72,7 @@ describe('NotificationsStore', () => {
     expect(n.timestamp).toBeUndefined();
     expect(n.silenced).toBeUndefined();
     expect(n.acknowledged).toBeUndefined();
+    expect(n.acknowledgedAt).toBeUndefined();
   });
 
   it('distinguishes an absent or malformed method from an explicitly empty one', () => {

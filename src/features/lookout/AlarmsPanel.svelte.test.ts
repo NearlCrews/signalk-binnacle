@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { NotificationsStore } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
+import { formatClockTime } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import AlarmsPanel from './AlarmsPanel.svelte';
@@ -11,7 +12,12 @@ import { ACTION_BUTTON } from './test-helpers';
 type ShallowProps = ComponentProps<typeof AlarmsPanel>['shallow'];
 
 function renderPanel(
-  capabilities: { canSilence?: boolean; canAcknowledge?: boolean },
+  capabilities: {
+    acknowledged?: boolean;
+    acknowledgedAt?: string;
+    canSilence?: boolean;
+    canAcknowledge?: boolean;
+  },
   shallow?: ShallowProps,
   mute: { collisionMuted?: boolean; collisionMuteRemainingMin?: number } = {},
 ): string {
@@ -56,8 +62,12 @@ function renderPanel(
   );
 }
 
-const renderAlert = (capabilities: { canSilence?: boolean; canAcknowledge?: boolean }): string =>
-  renderPanel(capabilities);
+const renderAlert = (capabilities: {
+  acknowledged?: boolean;
+  acknowledgedAt?: string;
+  canSilence?: boolean;
+  canAcknowledge?: boolean;
+}): string => renderPanel(capabilities);
 
 const THRESHOLD_FIELD = 'Shallow water depth threshold';
 
@@ -72,6 +82,12 @@ describe('AlarmsPanel notification actions', () => {
     const body = renderAlert({ canSilence: true, canAcknowledge: true });
     expect(body).toMatch(ACTION_BUTTON('Silence'));
     expect(body).toMatch(ACTION_BUTTON('Acknowledge'));
+  });
+
+  it('shows the local acknowledgment time when the server supplies it', () => {
+    const acknowledgedAt = '2026-08-12T07:05:00Z';
+    const body = renderAlert({ acknowledged: true, acknowledgedAt });
+    expect(body).toContain(`Acknowledged ${formatClockTime(Date.parse(acknowledgedAt))}`);
   });
 });
 

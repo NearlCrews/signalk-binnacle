@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OwnVessel } from '$entities/vessel';
 import { mapThemePaint } from '$shared/map';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap, fakeOverlayContext } from '$shared/testing';
+import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { createVesselOverlay } from './vessel-overlay';
 
 // ImageData is a browser global; the overlay builds the vessel icon with it, so the
@@ -29,9 +29,40 @@ describe('vessel overlay', () => {
     const overlay = createVesselOverlay(new OwnVessel(store));
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
-    expect(map.images.size).toBe(1);
+    expect(map.images.size).toBe(2);
     expect(map.sources.size).toBe(1);
-    expect(map.layers.size).toBe(1);
+    expect(map.layers.size).toBe(2);
+    expect(map.layers.get('binnacle-own-vessel-stale')).toMatchObject({
+      filter: ['==', ['get', 'stale'], true],
+      layout: { 'icon-rotation-alignment': 'viewport' },
+    });
+  });
+
+  it('shows the unrotated question badge when the retained fix becomes stale', async () => {
+    const store = new SignalKStore();
+    const overlay = createVesselOverlay(new OwnVessel(store));
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    store.applyFrame({
+      self: new Map([['navigation.position', { latitude: 36.8, longitude: -121.7 }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1,
+    });
+    await overlay.add(ctx);
+    expect(
+      sourceFeatures<{ properties: { stale: boolean } }>(map, 'binnacle-own-vessel')[0],
+    ).toMatchObject({ properties: { stale: false } });
+
+    store.applyFrame({
+      self: new Map(),
+      selfStales: new Map([['navigation.position', {}]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2,
+    });
+    overlay.sync(ctx);
+    expect(
+      sourceFeatures<{ properties: { stale: boolean } }>(map, 'binnacle-own-vessel')[0],
+    ).toMatchObject({ properties: { stale: true } });
   });
 
   it('updates the source position from the store', async () => {
@@ -59,6 +90,7 @@ describe('vessel overlay', () => {
     await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
     expect(map.updatedImages).toContain('binnacle-vessel');
+    expect(map.updatedImages).toContain('binnacle-vessel-stale-badge');
   });
 
   it('dims review rendering without changing the accepted layer opacity', async () => {
@@ -69,22 +101,37 @@ describe('vessel overlay', () => {
     const ctx = fakeOverlayContext(map);
     await overlay.add(ctx);
     overlay.setOpacity?.(ctx, 0.8);
-    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8,
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-own-vessel-stale',
       'icon-opacity',
       0.8,
     );
     reviewing = true;
     overlay.sync(ctx);
-    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8 * 0.35,
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-own-vessel-stale',
       'icon-opacity',
       0.8 * 0.35,
     );
     reviewing = false;
     overlay.sync(ctx);
-    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-own-vessel-symbol',
+      'icon-opacity',
+      0.8,
+    );
+    expect(map.setPaintProperty).toHaveBeenLastCalledWith(
+      'binnacle-own-vessel-stale',
       'icon-opacity',
       0.8,
     );
