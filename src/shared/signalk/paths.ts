@@ -26,6 +26,8 @@ export const SK_PATHS = {
   // Wildcard subscription so every raised notification (any producer) reaches the store mirror.
   allNotifications: `${NOTIFICATIONS_PREFIX}*`,
   name: 'name',
+  mmsi: 'mmsi',
+  callsignVhf: 'communication.callsignVhf',
   aisShipType: 'design.aisShipType',
   navigationState: 'navigation.state',
   courseNextPoint: 'navigation.course.nextPoint',

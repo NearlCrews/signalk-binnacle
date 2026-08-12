@@ -2,6 +2,7 @@ import { sameJsonValue } from '$shared/lib';
 import type { SourceTransition } from './source-trace';
 import type {
   AisTargetState,
+  AlarmStatus,
   ConnectionState,
   PathSource,
   PathStaleMarker,
@@ -40,17 +41,15 @@ export interface SourceSample {
   epoch: number;
 }
 
-// The four v2 status flags the alert list renders, so the notification dedup compares them field by
-// field; serializing the status object would allocate per delta for active alarms. canClear is
-// intentionally omitted: Binnacle renders no clear affordance, so a canClear-only change should not
-// bump the version.
-type Flags =
-  | { silenced?: unknown; acknowledged?: unknown; canSilence?: unknown; canAcknowledge?: unknown }
-  | undefined;
+// The status fields the alert list renders, so the notification dedup compares them field by field;
+// serializing the status object would allocate per delta for active alarms. canClear is intentionally
+// omitted: Binnacle renders no clear affordance, so a canClear-only change should not bump the version.
+type Flags = Partial<Record<keyof AlarmStatus, unknown>> | undefined;
 function sameFlags(a: Flags, b: Flags): boolean {
   return (
     a?.silenced === b?.silenced &&
     a?.acknowledged === b?.acknowledged &&
+    a?.acknowledgedAt === b?.acknowledgedAt &&
     a?.canSilence === b?.canSilence &&
     a?.canAcknowledge === b?.canAcknowledge
   );
@@ -376,7 +375,7 @@ export class SignalKStore {
     }
     // Bump only on a real change: a persistent alarm republished identically every delta cycle
     // must not rebuild every consumer's list per frame. State, message, id, position, method,
-    // createdAt, and the four status flags carry everything the list and the audible gate read.
+    // createdAt, and the status fields carry everything the list and the audible gate read.
     const previous = this.#notifications.get(path);
     if (previous && typeof previous === 'object' && typeof value === 'object' && value) {
       const a = previous as {

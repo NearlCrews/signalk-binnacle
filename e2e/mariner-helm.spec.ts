@@ -103,7 +103,10 @@ async function stubRestApis(page: Page): Promise<void> {
   );
   // The weather panel's external providers: failed fetches leave the panel in its error state,
   // which is all the layout scenarios need.
-  await page.route(/open-meteo\.com|rainviewer\.com/, (route) => route.fulfill({ status: 500 }));
+  await page.route(
+    /^https?:\/\/(?:[^/]+\.)?(?:open-meteo\.com|rainviewer\.com)(?:[/:?#]|$)/,
+    (route) => route.fulfill({ status: 500 }),
+  );
 }
 
 async function openApp(page: Page): Promise<void> {

@@ -350,6 +350,29 @@ describe('SignalKStore', () => {
     expect(store.notificationsVersion).toBe(2);
   });
 
+  it('updates the notification mirror when only acknowledgedAt changes', () => {
+    const store = new SignalKStore();
+    const status = {
+      silenced: false,
+      acknowledged: true,
+      acknowledgedAt: '2026-08-12T03:00:00Z',
+      canSilence: true,
+      canAcknowledge: false,
+    };
+    const raised = { state: 'alarm', message: 'Dragging', status };
+    store.applyFrame(frame({ 'notifications.navigation.anchor': raised }));
+    const before = store.notificationsVersion;
+    store.applyFrame(
+      frame({
+        'notifications.navigation.anchor': {
+          ...raised,
+          status: { ...status, acknowledgedAt: '2026-08-12T03:01:00Z' },
+        },
+      }),
+    );
+    expect(store.notificationsVersion).toBe(before + 1);
+  });
+
   it('updates the mirror when only the delivery method changes, so an escalation to sound lands', () => {
     const store = new SignalKStore();
     const raise = { state: 'alarm', message: 'Dragging', id: 'abc', method: ['visual'] };

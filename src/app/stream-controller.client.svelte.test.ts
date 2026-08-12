@@ -114,6 +114,9 @@ describe('createStreamController', () => {
     expect(subscriptions).toEqual(
       expect.arrayContaining([
         { path: SK_PATHS.position, policy: 'instant', minPeriod: 1000 },
+        { path: SK_PATHS.name, policy: 'instant', minPeriod: 5000 },
+        { path: SK_PATHS.mmsi, policy: 'instant', minPeriod: 5000 },
+        { path: SK_PATHS.callsignVhf, policy: 'instant', minPeriod: 5000 },
         { path: SK_PATHS.allNotifications, policy: 'instant', minPeriod: 1000 },
         {
           path: SK_PATHS.closestApproach,

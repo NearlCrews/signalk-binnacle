@@ -96,8 +96,8 @@ const alerts = $derived(notifications.list());
 let pendingAction = $state<string | undefined>();
 let confirmingReset = $state(false);
 
-const alertTime = (n: ActiveNotification): string | undefined => {
-  const ms = n.timestamp ? Date.parse(n.timestamp) : Number.NaN;
+const localTime = (timestamp: string | undefined): string | undefined => {
+  const ms = timestamp ? Date.parse(timestamp) : Number.NaN;
   return Number.isFinite(ms) ? formatClockTime(ms) : undefined;
 };
 
@@ -200,7 +200,8 @@ $effect(() => {
   <section class="panel-section" aria-label="Active alerts">
     <h3 class="caps-label">Active alerts</h3>
     {#each alerts as n (n.path)}
-      {@const time = alertTime(n)}
+      {@const time = localTime(n.timestamp)}
+      {@const acknowledgedTime = localTime(n.acknowledgedAt)}
       <div class="alert-row card-frame">
         <span class="state-tag caps-label {n.state}">{stateLabel(n.state)}</span>
         <div class="alert-main">
@@ -224,7 +225,9 @@ $effect(() => {
             </button>
           {/if}
           {#if n.acknowledged}
-            <span class="flag-tag muted-note">Acknowledged</span>
+            <span class="flag-tag muted-note"
+              >Acknowledged{acknowledgedTime ? ` ${acknowledgedTime}` : ''}</span
+            >
           {:else if onAcknowledge && canAcknowledgeNotification(n)}
             <button
               type="button"
