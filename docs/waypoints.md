@@ -19,7 +19,7 @@ hazards, conditions, and direct observation.
 6. Tap a mark on the chart to open the Waypoints panel with that mark's card current. A hidden or
    fully faded waypoint layer is not a tap target, and chart editing tools keep the tap.
 
-Adding, editing, deleting, and starting navigation require read/write access on a secured Signal K
+Adding, editing, deleting, and starting navigation require read and write access on a secured Signal K
 server. The panel leaves local read actions available and explains when writes are blocked.
 
 ## Signal K resources

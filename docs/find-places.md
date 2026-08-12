@@ -62,7 +62,7 @@ other fields resemble a Binnacle note.
 The v2 resource route is the only write transport. A server that exposes only the v1 collection
 continues to supply places but is labeled read-only. If no notes provider is available, the editor
 explains how to enable Notes in Signal K's built-in Resources Provider. Read-only authorization offers
-a direct read/write access request. A refused or failed save keeps the editor and all entered values
+a direct read and write access request. A refused or failed save keeps the editor and all entered values
 open; a refused or failed delete keeps the selected note and confirmation context intact.
 
 After Signal K accepts a create, edit, move, or delete, the chart and Find places apply that result

@@ -120,8 +120,10 @@ level. Inside, in this order:
    stable `SlideOver`. Do not branch into duplicate panel shells because that discards scroll, focus,
    and child-local state.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
-   role="alert">{error}</p>`, and a write-gate teach note as `<p class="muted-note">A write token is
-   needed to ...</p>` when `auth.writeBlocked`.
+   role="alert">{error}</p>`, and and a write-gate teach note through the shared
+   `WriteAccessNote` when `auth.writeBlocked`, whose message names what is blocked in the panel's
+   own words. The vocabulary is fixed: read and write access, approved by the boat's Signal K
+   admin, never "token".
 3. A one-line teach intro in plain helm voice: `<p class="muted-note">...</p>`.
 4. One or more `<section aria-label="...">` blocks, each led by an `<h3 class="caps-label">` heading,
    then its control primitives and readouts. A sub-heading is `<h4 class="caps-label">`.

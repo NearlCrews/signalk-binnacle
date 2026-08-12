@@ -129,7 +129,7 @@ Binnacle ships its full feature set as a Signal K webapp:
   flashed stale. Instrument
   dashboard (KIP) launches the installed KIP webapp; when KIP is absent, the item stays visible but
   unavailable and explains how to add it.
-- **Time travel:** review 1 hour, 6 hours, 24 hours, or 7 days from one registered Signal K history
+- **Playback:** review 1 hour, 6 hours, 24 hours, or 7 days from one registered Signal K history
   provider. Scrub or replay the synchronized recorded track, vessel position, depth, apparent wind,
   barometer, and speed over ground at 0.5x, 1x, or 2x. Full local dates identify day transitions,
   Now returns to the newest loaded sample without another query, and a failed range keeps the last
@@ -282,7 +282,7 @@ npm install signalk-binnacle
 **Optional offline-chart management.** Install **Chart Locker** (`signalk-chart-locker`) from the
 Signal K App Store, then start the plugin. Binnacle detects it automatically. A secured server may
 require you to sign in to Signal K as an administrator before downloads and chart-name edits are
-enabled. This is separate from approving Binnacle's ordinary read/write access request. Chart Locker
+enabled. This is separate from approving Binnacle's ordinary read and write access request. Chart Locker
 management calls use the browser's Signal K administrator session, not Binnacle's device token.
 Binnacle checks Signal K's live login status before suggesting sign-in, so a Chart Locker permission
 failure does not mislabel an authenticated administrator as signed out.

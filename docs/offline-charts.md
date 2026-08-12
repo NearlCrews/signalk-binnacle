@@ -17,7 +17,7 @@ Chart Locker needs to be installed, started, or accessed through an administrato
 ## Administrator access
 
 Chart Locker protects its management API with Signal K's administrator session. This is separate from
-Binnacle's ordinary device access request and its read/write token.
+Binnacle's ordinary device access request and its read and write access.
 
 When the header says **Charts: sign in**:
 

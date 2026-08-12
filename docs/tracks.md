@@ -18,7 +18,7 @@ against the chart, hazards, conditions, and the vessel's capabilities before nav
 5. Use the eye control to show or hide a saved track. Download exports that saved track as GeoJSON.
 6. Use **Discard** only to clear the active recording. It does not delete a saved server resource.
 
-On a secured Signal K server, Save, Save as route, Retrace track, and Delete require read/write access.
+On a secured Signal K server, Save, Save as route, Retrace track, and Delete require read and write access.
 The panel explains when the current grant is read-only.
 
 Saving also requires the server to have track storage. Tracks are not a standard Signal K resource
@@ -90,7 +90,7 @@ standard types and only the custom types an administrator configures, and that c
 to empty, so a stock server registers no provider for tracks at all.
 
 With no provider registered, both the collection read and the save answer 404, and they do so before
-the authorization check. A read-only token and a read/write token get the identical answer, and a
+the authorization check. A read-only token and a read and write token get the identical answer, and a
 registered provider that throws while writing also answers 404, so the status code alone cannot tell
 missing storage from a rejected or failed write.
 
@@ -146,7 +146,7 @@ segment is drawable. Record another connected point, or use the earlier trail on
   administrator step. Select **Check again** once the custom resource type has been added.
 - **Track storage is memory-only:** IndexedDB is unavailable or failed. Save the current trail to the
   server before reloading or closing the tab.
-- **Write token needed:** approve Binnacle for read/write access in Signal K. Read-only actions, such as
+- **Read and write access needed:** approve Binnacle for read and write access in Signal K. Read-only actions, such as
   visibility and download, remain available.
 - **Route action disabled:** the latest continuous segment needs at least two points, another track or
   route mutation is pending, or write access is unavailable.
