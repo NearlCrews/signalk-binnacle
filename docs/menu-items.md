@@ -112,7 +112,11 @@ source, and surrounding traffic before relying on it.
   motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
   correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
   loaded sample without another network query. Tracks records the boat's own
-  breadcrumb trail; Playback reviews the server's recorded history.
+  breadcrumb trail; Playback reviews the server's recorded history. The two do not cross-link to a
+  specific moment: a saved track resource carries its geometry, distance, and timespan, but not the
+  clock time of its points (they are reconstructed with a zero timestamp), so there is nothing to
+  seek Playback to. Reviewing a saved passage at its own time would first require persisting point
+  times in the track resource.
 - **Find places** searches chart notes and places, including cached offline results. The layer
   row for the same data is named Places, so one noun covers the panel, the pill, the toolbar
   action, and the overlay.

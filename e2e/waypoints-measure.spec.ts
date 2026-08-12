@@ -56,7 +56,12 @@ test('waypoints loads without the stream and confirms navigation on a narrow scr
 test('measure edits middle points with pointer and keyboard paths, then restores the cursor', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 320, height: 568 });
+  // A taller phone than the layout tests use, on purpose: the measure strip is a tool surface that
+  // grows with each point up to its documented 60dvh cap (.bottom-stack), and this test re-clicks
+  // the middle point at a remembered screen position after that growth. At 568 the capped strip
+  // leaves barely thirty pixels of chart above it, so the remembered point ends up underneath the
+  // tool. Narrow-width layout behavior is covered by the panel test above.
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
@@ -114,6 +119,14 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   if (!editBox) throw new Error('map canvas did not lay out for editing');
   const middleX = editBox.x + editBox.width / 2 + middleOffset.dx;
   const middleY = editBox.y + editBox.height / 2 + middleOffset.dy;
+  // Fail loudly if the grown strip has covered the point: a silent miss here reads as a broken
+  // selection rather than a layout change, which cost real time once.
+  const grownStrip = await strip.boundingBox();
+  if (grownStrip && middleY > grownStrip.y - 8) {
+    throw new Error(
+      `the measure strip grew over the middle point: point y ${Math.round(middleY)} against strip top ${Math.round(grownStrip.y)}`,
+    );
+  }
   await page.mouse.click(middleX, middleY);
   await expect(strip.getByText('Point 2 selected', { exact: false })).toBeVisible();
   await expect(strip.getByLabel('Previous measurement point')).toBeEnabled();

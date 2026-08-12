@@ -608,6 +608,19 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 - 44 px (`--control-size`) for every action target; `--row-size` for list rows, defined as the same
   value so a row can never fall below that floor.
+- The one carve-out is the status strip's explain-tap chips (`.chip-btn`), whose hit box is about
+  33 px: the text line plus `--space-2` of block padding, with a matching negative block margin so
+  the target costs the strip no height. They are readouts first, and their tap reveals a
+  `TransientNote` explanation, never a state change, so a missed tap costs nothing. Raising them to
+  44 px is NOT an improvement: `.strip-start` wraps with a 12 px row gap (8 px under 600 px), so a
+  44 px box would reach about 13 px past its own text on each side and overlap the neighboring
+  row's target, turning a near miss into a tap on the wrong chip. Every real action in the strip
+  (Retry, Reconnect, Help, N up) keeps the full 44 px target.
+- A chip does not carry both an explain-tap and an action that already routes to the same
+  explanation. The link chips sit beside the connection dot, whose tap states the connection
+  diagnosis; Waiting for GPS carries Help, which opens the GPS readiness section; the orientation
+  chip's label is its own explanation and N up is its action. Adding a second target to those would
+  crowd the row without telling the navigator anything new.
 - Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
   fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened
