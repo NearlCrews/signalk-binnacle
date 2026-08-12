@@ -179,9 +179,10 @@ $effect(() => {
   {/if}
   {#if auth.writeBlocked}
     <WriteAccessNote
-      message="A write token is needed to silence or acknowledge alarms. Request a read/write token to continue."
+      message="This display has read-only access, so alarms cannot be silenced or acknowledged from here. Request read and write access; the boat's Signal K admin approves it."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {/if}
   {#if isConnectionDown(connectionPhase)}

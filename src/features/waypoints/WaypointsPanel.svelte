@@ -13,7 +13,7 @@ import {
   type NavSortState,
   toggleSort,
 } from '$shared/nav';
-import type { AuthController } from '$shared/signalk';
+import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
   ArmedRow,
   createPanelMinimize,
@@ -24,7 +24,7 @@ import {
   SlideOver,
   WriteAccessNote,
 } from '$shared/ui';
-import type { WaypointLoadState } from './waypoint-controller.svelte';
+import type { WaypointLoadState, WaypointsProvisioning } from './waypoint-controller.svelte';
 import { filterWaypointRows, sortWaypointRows, toWaypointRows } from './waypoint-rows';
 import { MAX_WAYPOINTS } from './waypoints-client';
 
@@ -34,6 +34,9 @@ interface Props {
   vessel: OwnVessel;
   units: UnitsStore;
   loadState: WaypointLoadState;
+  // Whether the server has a waypoints provider at all, which is why a load can fail on a server
+  // that is otherwise reachable and authorized.
+  provisioning?: WaypointsProvisioning;
   busy: boolean;
   routeBusy: boolean;
   // The mark last tapped on the chart, so its card reads as the current one. Undefined when the
@@ -44,6 +47,9 @@ interface Props {
   onLocate: (waypoint: Waypoint) => void;
   // Arm the Course API destination at this waypoint; the action renders only when provided.
   onGoTo?: (waypoint: Waypoint) => void;
+  // A waypoint just saved with "Save and navigate": open its navigation confirm once. The
+  // destination is still named in that confirm, so the waypoints contract holds.
+  armNavigateId?: string;
   // Opens the edit dialog (name + icon) for this waypoint.
   onEdit: (waypoint: Waypoint) => void;
   onDelete: (id: string) => void;
@@ -57,12 +63,14 @@ const {
   vessel,
   units,
   loadState,
+  provisioning = 'unknown',
   busy,
   routeBusy,
   selectedId,
   onRetry,
   onLocate,
   onGoTo,
+  armNavigateId,
   onEdit,
   onDelete,
   onClose,
@@ -70,6 +78,7 @@ const {
 }: Props = $props();
 
 const writesDisabled = $derived(auth.writeBlocked || busy);
+const storageMissing = $derived(provisioning === 'unprovisioned');
 const navigationDisabled = $derived(writesDisabled || routeBusy);
 
 // Deleting a waypoint is destructive, so it arms a confirm step rather than firing on a single
@@ -112,6 +121,20 @@ $effect(() => {
   lastSelectedId = selectedId;
 });
 
+// Arm the navigation confirm for a mark saved with "Save and navigate". Change-keyed rather than
+// read once at mount: the panel does not remount when it was already open, and the arm must wait
+// for the row to be renderable, or the confirm guard below cancels it on the same tick.
+let lastArmedId: string | undefined;
+$effect(() => {
+  const id = armNavigateId;
+  if (!id || id === lastArmedId) return;
+  const row = displayRows.find((candidate) => candidate.id === id);
+  if (!row) return;
+  lastArmedId = id;
+  const waypoint = waypoints.find((candidate) => candidate.id === id);
+  if (waypoint) confirmingNavigate = waypoint;
+});
+
 const SORTS: { key: NavSortKey; label: string }[] = [
   { key: 'name', label: 'Name' },
   { key: 'distance', label: 'Distance' },
@@ -120,14 +143,19 @@ const SORTS: { key: NavSortKey; label: string }[] = [
 
 // An empty card list means something different in each state: still reading, failed, filtered down
 // to nothing, or genuinely nothing saved yet.
-function emptyText(state: WaypointLoadState, hasWaypoints: boolean): string {
+function emptyText(
+  state: WaypointLoadState,
+  hasWaypoints: boolean,
+  missingStorage: boolean,
+): string {
   if (state === 'loading') return 'Loading waypoints…';
+  if (missingStorage) return 'Waypoints are unavailable until this server has waypoint storage.';
   if (state === 'error') return 'Waypoints are unavailable.';
   if (hasWaypoints) return 'No waypoints match your search. Clear it to see all saved waypoints.';
   return 'No waypoints yet. Press and hold the chart to drop one.';
 }
 
-const emptyMessage = $derived(emptyText(loadState, waypoints.length > 0));
+const emptyMessage = $derived(emptyText(loadState, waypoints.length > 0, storageMissing));
 
 function chooseSort(key: NavSortKey): void {
   sortTouched = true;
@@ -144,6 +172,9 @@ function confirmNavigation(): void {
   confirmingNavigate = undefined;
   if (!waypoint || navigationDisabled) return;
   onGoTo?.(waypoint);
+  // The Locate idiom: once navigation starts, the chart and the new guidance strip are the point,
+  // so the phone sheet stops covering both. Widths above phone ignore the collapse.
+  minimize.collapse();
 }
 
 // Before the navigator chooses a sort, follow GPS availability: nearest first as soon as a fresh fix
@@ -158,7 +189,9 @@ $effect(() => {
 // with its card, so clearing the search never brings back a confirm the navigator did not just arm.
 $effect(() => {
   const armed = confirmingNavigate;
-  if (armed && !rows.some((row) => row.id === armed.id)) confirmingNavigate = undefined;
+  // displayRows, not rows: a chart-selected or just-saved mark is pinned into view past the cap
+  // and the current search, and its confirm must survive with it.
+  if (armed && !displayRows.some((row) => row.id === armed.id)) confirmingNavigate = undefined;
   if (!rows.some((row) => armedDelete.isArmed(row.id))) armedDelete.cancel();
 });
 </script>
@@ -173,9 +206,10 @@ $effect(() => {
 >
   {#if auth.writeBlocked}
     <WriteAccessNote
-      message="A write token is needed to add, edit, or delete waypoints. Request a read/write token to continue."
+      message="This display has read-only access, so waypoints cannot be added, edited, or deleted. Request read and write access; the boat's Signal K admin approves it."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {/if}
 
@@ -183,7 +217,17 @@ $effect(() => {
     Press and hold, right-click, or use Shift+F10 on the chart to drop a waypoint.
   </p>
 
-  {#if loadState === 'error'}
+  {#if storageMissing}
+    <!-- A stock server ships the Resources Provider disabled, so the first open fails for a
+         reason no connection copy could name. The probe distinguishes the two. -->
+    <p class="alert-note" role="alert">
+      {resourcesProviderNote(
+        'This Signal K server has no waypoint storage, so waypoints cannot be saved to it.',
+        'enable waypoints under Resources',
+      )}
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+  {:else if loadState === 'error'}
     <p class="alert-note" role="alert">
       {waypoints.length > 0
         ? 'Could not refresh waypoints. Showing the last loaded waypoints.'

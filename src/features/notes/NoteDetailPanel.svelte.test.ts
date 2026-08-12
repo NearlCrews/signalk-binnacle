@@ -42,7 +42,7 @@ describe('NoteDetailPanel', () => {
 
   it('offers the read/write request beside the note that needs it', () => {
     const blocked = renderPanel({ writeBlocked: true, onRequestWriteAccess: vi.fn() });
-    expect(blocked).toContain('Request read/write access');
+    expect(blocked).toContain('Request read and write access');
 
     const requesting = renderPanel({
       writeBlocked: true,
@@ -51,7 +51,7 @@ describe('NoteDetailPanel', () => {
     });
     expect(requesting).toContain('Requesting access…');
 
-    expect(renderPanel({ writeBlocked: true })).not.toContain('Request read/write access');
+    expect(renderPanel({ writeBlocked: true })).not.toContain('Request read and write access');
   });
 
   it('offers a dismiss control on a mutation error', () => {

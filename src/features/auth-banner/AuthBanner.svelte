@@ -1,13 +1,17 @@
 <script lang="ts">
-import type { AuthController } from '$shared/signalk';
+import { type AuthController, UPGRADE_OUTCOME_COPY } from '$shared/signalk';
 
 interface Props {
   auth: AuthController;
   requestsUrl: string;
   insecureTransport?: boolean;
+  // Dismiss the not-encrypted warning on this device. A warning a navigator cannot act on without
+  // server-side work, shown on every load forever, trains them to ignore warnings; the durable
+  // copy lives in Help's Signal K access section. Absent leaves the banner permanent.
+  onDismissInsecure?: () => void;
 }
 
-const { auth, requestsUrl, insecureTransport = false }: Props = $props();
+const { auth, requestsUrl, insecureTransport = false, onDismissInsecure }: Props = $props();
 </script>
 
 {#if auth.status === 'requesting'}
@@ -28,7 +32,7 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
       leave this tab open. Binnacle connects automatically after approval. Grant
       <strong>read and write</strong>
       so routes, waypoints, personal notes, tracks, course control, alarms, and profiles can use the
-      server.
+      server. Approval needs the server admin's sign-in, so ask the boat's admin if that is not you.
     </p>
   </div>
 {:else if auth.status === 'denied' && auth.accessOutcome}
@@ -44,7 +48,8 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
     <p class="muted-note">
       Trying again keeps the same device ID, <strong>{auth.clientId}</strong>, so an approval
       already waiting in Signal K still counts. Grant <strong>read and write</strong> when
-      approving.
+      approving. Approval needs the server admin's sign-in, so ask the boat's admin if that is not
+      you.
     </p>
   </div>
 {:else if auth.status === 'denied'}
@@ -61,34 +66,21 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
       Approve the newest entry in Signal K under Security, then Access Requests, and grant
       <strong>read and write</strong>
       so routes, waypoints, personal notes, tracks, course control, alarms, and profiles can use the
-      server.
+      server. Approval needs the server admin's sign-in, so ask the boat's admin if that is not you.
     </p>
   </div>
 {:else if auth.upgrading}
   <div class="auth-banner" role="status" aria-live="polite">
     Requesting read and write access as <strong>{auth.upgradeClientId ?? auth.clientId}</strong>.
     Approve it in Signal K under Security, then Access Requests; the current read-only access keeps
-    working until then.
+    working until then. Approval needs the server admin's sign-in, so ask the boat's admin if that
+    is not you.
     <a class="btn btn-ghost btn-pill" href={requestsUrl} target="_blank" rel="noopener noreferrer">
       Approve in Signal K
     </a>
   </div>
 {:else if auth.upgradeOutcome}
-  {@const outcomeCopy = {
-    declined: {
-      message: 'Write access was declined. Binnacle still has read-only access.',
-      action: 'Request again',
-    },
-    unanswered: {
-      message:
-        'The write access request was not approved in time. It may still be waiting in Signal K under Security, then Access Requests.',
-      action: 'Request again',
-    },
-    unreachable: {
-      message: 'Could not reach the server to request write access. Binnacle still has read-only access.',
-      action: 'Try again',
-    },
-  }[auth.upgradeOutcome]}
+  {@const outcomeCopy = UPGRADE_OUTCOME_COPY[auth.upgradeOutcome]}
   <div class="auth-banner warn" role="status" aria-live="polite">
     {outcomeCopy.message}
     <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestWriteAccess()}>
@@ -100,7 +92,7 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
     Binnacle has read-only access. Saving routes, waypoints, personal notes, tracks, course, alarms,
     and radar controls needs read and write.
     <button type="button" class="btn btn-ghost btn-pill" onclick={() => auth.requestWriteAccess()}>
-      Request read/write access
+      Request read and write access
     </button>
   </div>
 {/if}
@@ -109,6 +101,11 @@ const { auth, requestsUrl, insecureTransport = false }: Props = $props();
   <div class="auth-banner warn" role="status">
     This connection is not encrypted. Signal K device credentials and boat data can be observed on
     this network. Enable HTTPS in Signal K to protect them.
+    {#if onDismissInsecure}
+      <button type="button" class="btn btn-ghost btn-pill" onclick={onDismissInsecure}>
+        Dismiss
+      </button>
+    {/if}
   </div>
 {/if}
 

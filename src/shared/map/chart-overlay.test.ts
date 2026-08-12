@@ -33,7 +33,7 @@ describe('chart overlay', () => {
     expect(overlay.supportsOpacity).toBe(false);
     expect(overlay.layerIds).toEqual([]);
     expect(overlay.available?.()).toBe(false);
-    expect(overlay.unavailableHint).toContain('cannot display it yet');
+    expect(overlay.unavailableHint).toContain('cannot display yet');
 
     await overlay.add(ctx);
     overlay.setVisible(ctx, true);

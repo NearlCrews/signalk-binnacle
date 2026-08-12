@@ -127,7 +127,7 @@ describe('InstrumentsPanel', () => {
     expect(body).toContain('trend-action');
   });
 
-  it('labels a server-declared stale reading and names the quiet source', () => {
+  it('keeps the plain Stale label for a server-declared stale reading and explains it in prose', () => {
     const body = detailBody(
       {
         epoch: 40_000,
@@ -138,7 +138,9 @@ describe('InstrumentsPanel', () => {
       },
       { state: 'stale', value: '10.7', unit: 'kn', siValue: 5.5 },
     );
-    expect(body).toContain('Stale (server declared)');
+    expect(body).toContain('>Stale<');
+    expect(body).not.toContain('Stale (server declared)');
+    expect(body).toContain('The Signal K server reports this sensor stopped updating.');
     expect(body).toContain('No update from gps0.GP.');
     // The Updated row ages from the last good value, not the declaration.
     expect(body).toContain('30s ago');
@@ -150,7 +152,7 @@ describe('InstrumentsPanel', () => {
       { state: 'stale', value: '10.7', unit: 'kn', siValue: 5.5 },
     );
     expect(body).toContain('>Stale<');
-    expect(body).not.toContain('Stale (server declared)');
+    expect(body).not.toContain('stopped updating');
     expect(body).not.toContain('No update from');
   });
 

@@ -76,7 +76,7 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
   async function save(input: PersonalNoteInput): Promise<void> {
     if (busy || !editor) return;
     if (deps.writeBlocked()) {
-      error = 'Binnacle has read-only access. Request read/write access to save this note.';
+      error = 'Binnacle has read-only access. Request read and write access to save this note.';
       return;
     }
     if (capability === 'read-only-v1') {
@@ -97,7 +97,7 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
       const outcome = await savePersonalNote(deps.origin, deps.getToken(), id, input);
       if (outcome.result === 'access-denied') {
         error =
-          'Signal K refused the write. The note is still open while read/write access is requested.';
+          'Signal K refused the write. The note is still open while read and write access is requested.';
         void deps.requestWriteAccess();
         return;
       }
@@ -124,7 +124,7 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
   async function remove(note: NoteSelection): Promise<void> {
     if (busy || !note.ownedByBinnacle) return;
     if (deps.writeBlocked()) {
-      error = 'Binnacle has read-only access. Request read/write access to delete this note.';
+      error = 'Binnacle has read-only access. Request read and write access to delete this note.';
       return;
     }
     busy = true;
@@ -133,7 +133,7 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
       const result = await deletePersonalNote(deps.origin, deps.getToken(), note);
       if (result === 'access-denied') {
         error =
-          'Signal K refused the delete. The note remains selected while read/write access is requested.';
+          'Signal K refused the delete. The note remains selected while read and write access is requested.';
         void deps.requestWriteAccess();
         return;
       }

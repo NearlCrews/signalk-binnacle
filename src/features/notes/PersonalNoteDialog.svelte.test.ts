@@ -27,20 +27,20 @@ describe('PersonalNoteDialog write access', () => {
   it('keeps the entered note and offers the request while access is read-only', () => {
     const body = blocked();
     expect(body).toContain('Binnacle has read-only access.');
-    expect(body).toContain('Request read/write access');
+    expect(body).toContain('Request read and write access');
     expect(body).toMatch(/role="status"/);
   });
 
   it('reports an outstanding request on the button instead of a second control', () => {
     const body = blocked(true);
     expect(body).toContain('Requesting access…');
-    expect(body).not.toContain('Request read/write access');
+    expect(body).not.toContain('Request read and write access');
     expect(body).toMatch(/<button[^>]+disabled/);
   });
 
   it('says nothing about access when the token can write', () => {
     const body = renderDialog();
     expect(body).not.toContain('Binnacle has read-only access.');
-    expect(body).not.toContain('Request read/write access');
+    expect(body).not.toContain('Request read and write access');
   });
 });

@@ -106,7 +106,7 @@ describe('createTrackController', () => {
     await expect(controller.onSaveTrack('Passage')).resolves.toBe(false);
     expect(requestWriteAccess).toHaveBeenCalledOnce();
     expect(toast.show).toHaveBeenCalledWith(
-      'Signal K refused the write. Your track is kept while read/write access is requested.',
+      'Signal K refused the write. Your track is kept while read and write access is requested.',
     );
   });
 
@@ -116,7 +116,7 @@ describe('createTrackController', () => {
     await controller.onDeleteSavedTrack('a');
     expect(requestWriteAccess).toHaveBeenCalledOnce();
     expect(toast.show).toHaveBeenCalledWith(
-      'Signal K refused the delete. Read/write access is being requested.',
+      'Signal K refused the delete. Read and write access is being requested.',
     );
   });
 

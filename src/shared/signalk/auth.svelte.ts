@@ -527,7 +527,7 @@ export class AuthController {
     this.upgrading = true;
     const { ok, href } = await this.#postAccessRequest(
       upgradeClientId,
-      `${CLIENT_DESCRIPTION} (read/write)`,
+      `${CLIENT_DESCRIPTION} (read and write)`,
     );
     if (
       this.#stopped ||

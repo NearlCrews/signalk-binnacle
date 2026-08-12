@@ -138,9 +138,10 @@ function captureFromDistance(): void {
     <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
          request stays one tap away from the block it explains. -->
     <WriteAccessNote
-      message="Server anchor changes need a write token. A browser-only watch remains available when no server watch is active."
+      message="Server anchor changes need read and write access. A browser-only watch remains available when no server watch is active."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {/if}
   <p class="muted-note">

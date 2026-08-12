@@ -94,8 +94,8 @@ describe('AnchorPanel', () => {
   it('offers the read/write request while server anchor changes are blocked', () => {
     const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, blockedAuth(false));
 
-    expect(body).toContain('Server anchor changes need a write token.');
-    expect(body).toContain('Request read/write access');
+    expect(body).toContain('Server anchor changes need read and write access.');
+    expect(body).toContain('Request read and write access');
   });
 
   it('rests the request control while a request is outstanding', () => {

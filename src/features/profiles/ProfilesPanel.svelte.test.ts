@@ -118,8 +118,8 @@ describe('ProfilesPanel', () => {
   it('offers the read/write request while syncing is blocked', () => {
     const body = renderPanel({ auth: blockedAuth(false) });
 
-    expect(body).toContain('A write token is needed to sync them to other stations.');
-    expect(body).toContain('Request read/write access');
+    expect(body).toContain('Read and write access is needed to sync them to other stations.');
+    expect(body).toContain('Request read and write access');
   });
 
   it('rests the request control while a request is outstanding', () => {

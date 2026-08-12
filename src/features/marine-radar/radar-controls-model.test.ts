@@ -23,7 +23,9 @@ describe('controlWriteBlockReason', () => {
     expect(controlWriteBlockReason(writable, { value: 10, allowed: false }, false)).toContain(
       'not allowing',
     );
-    expect(controlWriteBlockReason(writable, { value: 10 }, true)).toContain('Read-write');
+    expect(controlWriteBlockReason(writable, { value: 10 }, true)).toContain(
+      'Read and write access',
+    );
   });
 
   it('does not attribute a Binnacle-built fallback definition to the radar', () => {

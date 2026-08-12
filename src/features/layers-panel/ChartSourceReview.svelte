@@ -67,8 +67,8 @@ const queryNoteRole = $derived(shareWithServer && shareChanged ? 'alert' : 'stat
 {#if writeBlocked}
   <p class="privacy-note" role="status">
     {shareWithServer
-      ? 'Read/write Signal K access is needed to change sharing for this server chart.'
-      : 'This chart stays on this device. Read/write Signal K access is needed to share it with the server.'}
+      ? 'Read and write Signal K access is needed to change sharing for this server chart.'
+      : 'This chart stays on this device. Read and write Signal K access is needed to share it with the server.'}
   </p>
 {:else if hasQuery}
   <p class:alert-note={shareWithServer} class="privacy-note" role={queryNoteRole}>

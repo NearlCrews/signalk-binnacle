@@ -8,6 +8,7 @@ import * as waypointsClient from './waypoints-client';
 vi.mock('./waypoints-client', () => ({
   deleteWaypoint: vi.fn(),
   fetchWaypoints: vi.fn(),
+  fetchWaypointsProvisioned: vi.fn(),
   saveWaypoint: vi.fn(),
 }));
 
@@ -36,6 +37,7 @@ describe('createWaypointsController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(waypointsClient.fetchWaypoints).mockResolvedValue([]);
+    vi.mocked(waypointsClient.fetchWaypointsProvisioned).mockResolvedValue(true);
     vi.mocked(waypointsClient.saveWaypoint).mockResolvedValue('ok');
     vi.mocked(waypointsClient.deleteWaypoint).mockResolvedValue('ok');
   });
@@ -66,7 +68,9 @@ describe('createWaypointsController', () => {
     const { controller, toast } = makeController(true);
     controller.onDropWaypoint({ latitude: 44, longitude: -86 });
     expect(controller.addWaypointAt).toBeUndefined();
-    expect(toast.show).toHaveBeenCalledWith('A write token is needed to add a waypoint.');
+    expect(toast.show).toHaveBeenCalledWith(
+      'Read-only access: the waypoint was not added. Request read and write access to save it.',
+    );
   });
 
   it('keeps an accepted add locally when the follow-up refresh fails', async () => {
@@ -89,7 +93,7 @@ describe('createWaypointsController', () => {
     await controller.confirmAddWaypoint({ name: 'Harbor' });
     expect(requestWriteAccess).toHaveBeenCalledOnce();
     expect(toast.show).toHaveBeenCalledWith(
-      'Signal K refused the write. Your waypoint is kept while read/write access is requested.',
+      'Signal K refused the write. Your waypoint is kept while read and write access is requested.',
     );
     expect(controller.addWaypointAt).toEqual({ latitude: 44, longitude: -86 });
   });

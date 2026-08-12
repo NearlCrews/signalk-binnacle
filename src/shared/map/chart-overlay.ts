@@ -26,7 +26,7 @@ const OPACITY_PROPERTY = {
 } as const;
 const RASTER_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
 const STYLE_CHART_UNAVAILABLE_HINT =
-  'Binnacle lists this style-document chart for compatibility but cannot display it yet.';
+  'This chart is delivered as a map style document, a format Binnacle cannot display yet. It stays listed so you can see the server offers it.';
 
 // The opacity paint property for a layer type, or undefined for a type the chart adapter never
 // emits (only fill, line, and raster are produced). setOpacity skips an undefined so an unexpected

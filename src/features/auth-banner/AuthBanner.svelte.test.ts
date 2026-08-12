@@ -90,7 +90,7 @@ describe('AuthBanner', () => {
     }).body;
     expect(body).toContain('Write access was declined');
     expect(body).toContain('Request again');
-    expect(body).not.toContain('Request read/write access');
+    expect(body).not.toContain('Request read and write access');
   });
 
   it('explains an unanswered write upgrade without blaming connectivity', () => {
@@ -124,6 +124,6 @@ describe('AuthBanner', () => {
     }).body;
     expect(body).toContain('Could not reach the server');
     expect(body).toContain('Try again');
-    expect(body).not.toContain('Request read/write access');
+    expect(body).not.toContain('Request read and write access');
   });
 });

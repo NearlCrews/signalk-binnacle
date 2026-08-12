@@ -86,11 +86,11 @@ export class MarineRadarStore {
       case 'auth-required':
         return 'Radar access is restricted. Approve Binnacle in Signal K, then reconnect.';
       case 'unreachable':
-        return 'The Signal K radar provider could not be reached.';
+        return 'The radar on the Signal K server could not be reached. Check the Signal K connection, then reopen Radar.';
       case 'invalid':
-        return 'The radar provider returned invalid radar geometry or metadata.';
+        return 'The radar plugin sent data Binnacle could not read. Update or reconfigure the radar plugin on the server.';
       default:
-        return 'No radar detected. Configure a Signal K Radar API provider, such as Mayara.';
+        return 'No radar found on the Signal K server. Connecting one needs a radar plugin, such as Mayara, installed and running there.';
     }
   });
 

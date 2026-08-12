@@ -145,7 +145,7 @@ describe('TracksPanel write access', () => {
       { writeBlocked: true, requestWriteAccess },
     );
 
-    panel.click('Request read/write access');
+    panel.click('Request read and write access');
 
     expect(requestWriteAccess).toHaveBeenCalledOnce();
   });

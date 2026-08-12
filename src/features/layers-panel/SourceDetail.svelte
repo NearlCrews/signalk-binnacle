@@ -15,6 +15,7 @@ import {
 } from '$entities/user-charts';
 import { type Bbox4, formatBounds } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
+import type { UpgradeOutcome } from '$shared/signalk';
 import { InlineConfirm, SubViewHeader, TextField, WriteAccessNote } from '$shared/ui';
 import ChartSourceReview from './ChartSourceReview.svelte';
 import ChartSpecList from './ChartSpecList.svelte';
@@ -29,6 +30,8 @@ interface Props {
   onRequestWriteAccess?: () => void;
   // A read/write request is already outstanding, so the request action reports itself and rests.
   requestingWriteAccess?: boolean;
+  // How the last read and write request ended, so the outcome lands beside the button here too.
+  writeOutcome?: UpgradeOutcome;
   onBack: () => void;
   onShowBounds?: (bounds: Bbox4) => void;
 }
@@ -40,6 +43,7 @@ const {
   writeBlocked = false,
   onRequestWriteAccess,
   requestingWriteAccess = false,
+  writeOutcome,
   onBack,
   onShowBounds,
 }: Props = $props();
@@ -264,9 +268,10 @@ function changeSharing(share: boolean): void {
       <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
            request stays one tap away from the block it explains. -->
       <WriteAccessNote
-        message="Read/write Signal K access is needed to rename this shared chart."
+        message="Read and write Signal K access is needed to rename this shared chart."
         requesting={requestingWriteAccess}
         onRequest={onRequestWriteAccess}
+        outcome={writeOutcome}
       />
     {/if}
   {/if}
@@ -406,12 +411,12 @@ function changeSharing(share: boolean): void {
 
       {#if sourceMutationBlocked}
         <p class="muted-note" role="status">
-          Read/write Signal K access is needed to repair or refresh this shared chart.
+          Read and write Signal K access is needed to repair or refresh this shared chart.
         </p>
       {:else if writeBlocked}
         <p class="muted-note" role="status">
-          This device-only chart can be repaired locally. Read/write Signal K access is needed to
-          share it.
+          This device-only chart can be repaired locally. Read and write Signal K access is needed
+          to share it.
         </p>
       {/if}
     </section>
@@ -420,7 +425,7 @@ function changeSharing(share: boolean): void {
       <!-- A prerequisite, not an alarm: it teaches what is missing before the delete can finish, so
         it takes the quiet note styling that matches its polite announcement. -->
       <p class="muted-note" role="status">
-        Read/write Signal K access is needed to remove the remaining server copy before deleting
+        Read and write Signal K access is needed to remove the remaining server copy before deleting
         this chart from the device.
       </p>
     {/if}

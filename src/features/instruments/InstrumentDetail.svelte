@@ -84,17 +84,19 @@ const age = $derived(
     ? ageLabel(primaryCell.serverStale?.lastValueEpoch ?? primaryCell.epoch)
     : 'Not streamed',
 );
+// Both stale flavors answer the navigator's question identically, so the badge stays plain
+// "Stale"; who noticed first belongs in the explanation sentence below, not in the label.
 const stateLabel = $derived.by(() => {
   if (reading.state === 'live') return 'Live';
-  if (reading.state === 'stale') {
-    return primaryCell?.serverStale !== undefined ? 'Stale (server declared)' : 'Stale';
-  }
+  if (reading.state === 'stale') return 'Stale';
   return reading.state === 'placeholder' ? 'Reported blank' : 'No report';
 });
-// Which source went quiet, when the server named one in its declaration.
+// The server's own staleness declaration, and which source went quiet when it named one.
 const staleSourceNote = $derived.by(() => {
-  const ref = primaryCell?.serverStale?.sourceRef;
-  return ref ? `No update from ${ref}.` : undefined;
+  if (primaryCell?.serverStale === undefined) return undefined;
+  const ref = primaryCell.serverStale.sourceRef;
+  const lead = 'The Signal K server reports this sensor stopped updating.';
+  return ref ? `${lead} No update from ${ref}.` : lead;
 });
 // What each recent source reports, neutrally: values and ages, no disagreement judgment. Signal K
 // remains the source authority. Values re-read through the 1 Hz clock (the age text forces it);

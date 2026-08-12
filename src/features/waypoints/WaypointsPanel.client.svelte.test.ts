@@ -126,7 +126,7 @@ describe('WaypointsPanel write access', () => {
     const requestWriteAccess = vi.fn(async () => {});
     const panel = mountPanel({ writeBlocked: true, requestWriteAccess });
 
-    panel.click('Request read/write access');
+    panel.click('Request read and write access');
 
     expect(requestWriteAccess).toHaveBeenCalledOnce();
   });

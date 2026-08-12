@@ -121,7 +121,7 @@ describe('SourceDetail', () => {
     }).body;
 
     expect(html).toContain('needed to rename this shared chart');
-    expect(html).toContain('Request read/write access');
+    expect(html).toContain('Request read and write access');
   });
 
   it('rests the request control while a request is outstanding', () => {

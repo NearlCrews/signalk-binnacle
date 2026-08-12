@@ -114,7 +114,9 @@ describe('RadarControls status', () => {
     store.setAvailability('unreachable', 'Radar discovery returned HTTP 503.');
     const { target } = mountControls(store);
 
-    expect(target.textContent).toContain('The Signal K radar provider could not be reached.');
+    expect(target.textContent).toContain(
+      'The radar on the Signal K server could not be reached. Check the Signal K connection, then reopen Radar.',
+    );
     expect(target.textContent).toContain('Radar discovery returned HTTP 503.');
   });
 });

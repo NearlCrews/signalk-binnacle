@@ -112,6 +112,7 @@ function chooseCategory(event: Event): void {
           message="Binnacle has read-only access. Your entries stay in this editor while access is requested."
           requesting={auth.upgrading}
           onRequest={() => void auth.requestWriteAccess()}
+          outcome={auth.upgradeOutcome}
         />
       </div>
     {/if}

@@ -11,7 +11,12 @@ import {
   type ResourceMutationResult,
   writeRefusedMessage,
 } from '$shared/signalk';
-import { deleteWaypoint, fetchWaypoints, saveWaypoint } from './waypoints-client';
+import {
+  deleteWaypoint,
+  fetchWaypoints,
+  fetchWaypointsProvisioned,
+  saveWaypoint,
+} from './waypoints-client';
 
 export interface WaypointControllerDeps {
   origin: string;
@@ -28,6 +33,9 @@ export interface WaypointControllerDeps {
 }
 
 export type WaypointLoadState = 'idle' | 'loading' | 'ready' | 'error';
+// Whether the server has a waypoints resource provider at all: 'unknown' until the probe answers,
+// then sticky through transient outages so the admin-path note never flashes at a healthy server.
+export type WaypointsProvisioning = 'unknown' | 'provisioned' | 'unprovisioned';
 
 export function createWaypointsController(deps: WaypointControllerDeps) {
   // One place to turn a write outcome into a toast and, when the server refused, into a fresh
@@ -49,14 +57,22 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   let addWaypointAt = $state<LatLon | undefined>();
   let editingWaypoint = $state<Waypoint | undefined>();
   let loadState = $state<WaypointLoadState>('idle');
+  let provisioning = $state<WaypointsProvisioning>('unknown');
   let busy = $state(false);
   let refreshGeneration = 0;
 
   async function refreshWaypoints(): Promise<void> {
     const generation = ++refreshGeneration;
     loadState = 'loading';
-    const fetched = await fetchWaypoints(origin, deps.getToken());
+    const token = deps.getToken();
+    const [fetched, provisioned] = await Promise.all([
+      fetchWaypoints(origin, token),
+      fetchWaypointsProvisioned(origin, token),
+    ]);
     if (generation !== refreshGeneration) return;
+    // An unanswered probe keeps the last known value (the tracks pattern): a transient outage
+    // must not flash the no-waypoint-storage note at a server that has a provider.
+    if (provisioned !== undefined) provisioning = provisioned ? 'provisioned' : 'unprovisioned';
     if (fetched) {
       waypointsStore.setWaypoints(fetched);
       loadState = 'ready';
@@ -68,20 +84,29 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   function onDropWaypoint(position: LatLon): void {
     if (busy || !isLatLon(position)) return;
     if (deps.writeBlocked()) {
-      deps.toast.show('A write token is needed to add a waypoint.');
+      deps.toast.show(
+        'Read-only access: the waypoint was not added. Request read and write access to save it.',
+      );
       return;
     }
     addWaypointAt = position;
   }
 
-  async function confirmAddWaypoint(result: { name: string; icon?: string }): Promise<void> {
-    if (busy) return;
+  // Resolves to the saved waypoint so a caller can chain an action on the new mark (save and
+  // navigate), or undefined when nothing was saved.
+  async function confirmAddWaypoint(result: {
+    name: string;
+    icon?: string;
+  }): Promise<Waypoint | undefined> {
+    if (busy) return undefined;
     if (deps.writeBlocked()) {
-      deps.toast.show('A write token is needed to add a waypoint.');
-      return;
+      deps.toast.show(
+        'Read-only access: the waypoint was not added. Request read and write access to save it.',
+      );
+      return undefined;
     }
     const position = addWaypointAt;
-    if (!position || !isLatLon(position)) return;
+    if (!position || !isLatLon(position)) return undefined;
     const icon = cleanWaypointIcon(result.icon);
     const waypoint: Waypoint = {
       id: uuidv4(),
@@ -100,12 +125,15 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
           'Could not save the waypoint. Check the connection and write access.',
         )
       ) {
-        return;
+        return undefined;
       }
       waypointsStore.upsertWaypoint(waypoint);
       loadState = 'ready';
+      // A write the server accepted is direct proof a waypoints provider is registered.
+      provisioning = 'provisioned';
       addWaypointAt = undefined;
       await refreshWaypoints();
+      return waypoint;
     } finally {
       busy = false;
     }
@@ -119,7 +147,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   async function onSaveWaypointEdit(result: { name: string; icon?: string }): Promise<void> {
     if (busy) return;
     if (deps.writeBlocked()) {
-      deps.toast.show('A write token is needed to edit a waypoint.');
+      deps.toast.show(
+        'Read-only access: the waypoint was not changed. Request read and write access to edit it.',
+      );
       return;
     }
     const existing = editingWaypoint;
@@ -145,6 +175,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       }
       waypointsStore.upsertWaypoint(updated);
       loadState = 'ready';
+      provisioning = 'provisioned';
       editingWaypoint = undefined;
       await refreshWaypoints();
     } finally {
@@ -155,7 +186,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   async function onDeleteWaypoint(id: string): Promise<void> {
     if (busy) return;
     if (deps.writeBlocked()) {
-      deps.toast.show('A write token is needed to delete a waypoint.');
+      deps.toast.show(
+        'Read-only access: the waypoint was not deleted. Request read and write access to delete it.',
+      );
       return;
     }
     busy = true;
@@ -208,6 +241,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     },
     get loadState() {
       return loadState;
+    },
+    get provisioning() {
+      return provisioning;
     },
     get busy() {
       return busy;

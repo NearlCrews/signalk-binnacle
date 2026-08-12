@@ -362,8 +362,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   }
 
   function errorMessage(status: number): string {
-    if (status === 401 || status === 403) return 'Read-write radar access is required.';
-    if (status === 0) return 'The radar provider could not be reached.';
+    if (status === 401 || status === 403)
+      return 'Read and write access is required for radar controls.';
+    if (status === 0) return 'The radar on the Signal K server could not be reached.';
     return `The radar rejected the change (HTTP ${status}).`;
   }
 

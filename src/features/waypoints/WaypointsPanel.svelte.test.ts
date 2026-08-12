@@ -57,6 +57,17 @@ describe('WaypointsPanel', () => {
     expect(unpinned).not.toContain('chart-selected waypoint');
   });
 
+  it('names the missing Resources Provider instead of blaming the connection', () => {
+    const missing = renderPanel({ provisioning: 'unprovisioned', loadState: 'error' });
+    expect(missing).toContain('This Signal K server has no waypoint storage');
+    expect(missing).toContain('Resources Provider (built-in)');
+    expect(missing).toContain('Check again');
+    expect(missing).not.toContain('Check the connection, then retry.');
+    const provisioned = renderPanel({ provisioning: 'provisioned', loadState: 'error' });
+    expect(provisioned).toContain('Could not load waypoints. Check the connection, then retry.');
+    expect(provisioned).not.toContain('no waypoint storage');
+  });
+
   it('distinguishes loading, failure, refresh, and genuinely empty lists', () => {
     expect(renderPanel({ loadState: 'loading' })).toContain('Loading waypoints…');
     expect(renderPanel({ loadState: 'error' })).toContain('Could not load waypoints.');
@@ -72,7 +83,7 @@ describe('WaypointsPanel', () => {
       waypoints: [waypoint],
     });
     expect(body.match(/disabled/g)).toHaveLength(3);
-    expect(body).toContain('A write token is needed');
+    expect(body).toContain('This display has read-only access');
   });
 
   it('marks the mark selected on the chart as the current card', () => {

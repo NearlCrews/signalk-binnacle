@@ -21,7 +21,7 @@ import {
   type ReactiveClock,
 } from '$shared/lib';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
-import type { AuthController } from '$shared/signalk';
+import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
   ArmedRow,
   createPanelMinimize,
@@ -173,6 +173,12 @@ async function confirmName(value: string): Promise<boolean> {
 // saved-track delete rather than a blocking window.confirm.
 let confirmingClear = $state(false);
 let confirmingRetrace = $state(false);
+function confirmRetrace(): void {
+  confirmingRetrace = false;
+  onTrackHome();
+  // The Locate idiom: the chart and the new guidance strip are the point once navigation starts.
+  minimize.collapse();
+}
 function confirmClear(): void {
   confirmingClear = false;
   recorder.clear();
@@ -190,16 +196,18 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 <SlideOver title="Tracks" closeLabel="Close tracks panel" bodyFlex {onClose} {onBack} {minimize}>
   {#if auth.writeBlocked}
     <WriteAccessNote
-      message="A write token is needed to save or delete tracks. Request a read/write token to continue."
+      message="This display has read-only access, so tracks cannot be saved or deleted. Request read and write access; the boat's Signal K admin approves it."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {/if}
   {#if storageMissing}
     <p class="alert-note" role="alert">
-      This Signal K server has no track storage, so tracks cannot be saved to it. An administrator
-      can enable it: open the Signal K admin UI, choose Server, then Plugin Config, then Resources
-      Provider (built-in), add tracks under Resources (custom), and submit.
+      {resourcesProviderNote(
+        'This Signal K server has no track storage, so tracks cannot be saved to it.',
+        'add tracks under Resources (custom)',
+      )}
     </p>
     <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
   {/if}
@@ -212,7 +220,8 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
   {/if}
   <p class="muted-note">
     A track is the breadcrumb trail of where the boat has been. Recording starts automatically while
-    underway.
+    underway. Looking for older movement? Playback reviews bounded ranges from the server's own
+    history, up to seven days.
   </p>
   <p class="muted-note status" class:status--on={!recorder.paused && !waitingForGps} role="status">
     {recorder.paused
@@ -332,10 +341,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <InlineConfirm
       question="Start navigation back along the latest continuous track segment? Check the route before relying on it."
       confirmLabel="Start retrace"
-      onConfirm={() => {
-        confirmingRetrace = false;
-        onTrackHome();
-      }}
+      onConfirm={confirmRetrace}
       onCancel={() => (confirmingRetrace = false)}
     />
   {/if}

@@ -6,6 +6,7 @@ import Star from '@lucide/svelte/icons/star';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import X from '@lucide/svelte/icons/x';
 import { categoryLabel } from '$entities/poi-icons';
+import type { UpgradeOutcome } from '$shared/signalk';
 import { InlineConfirm, SlideOver, WriteAccessNote } from '$shared/ui';
 import type { NoteSelection } from './notes-client';
 import type { NormalizedItem, NoteDetail } from './notes-detail';
@@ -27,6 +28,8 @@ interface Props {
   onRequestWriteAccess?: () => void;
   // A read/write request is already outstanding, so the request action reports itself and rests.
   requestingWriteAccess?: boolean;
+  // How the last read and write request ended, so the outcome lands beside the button here too.
+  writeOutcome?: UpgradeOutcome;
   busy?: boolean;
   mutationError?: string;
   // Dismiss the mutation error. The panel does not own the message, so it cannot clear it itself.
@@ -44,6 +47,7 @@ const {
   writeBlocked = false,
   onRequestWriteAccess,
   requestingWriteAccess = false,
+  writeOutcome,
   busy = false,
   mutationError,
   onDismissMutationError,
@@ -135,9 +139,10 @@ function measure(item: NormalizedItem): string {
   </div>
   {#if selection.ownedByBinnacle && writeBlocked}
     <WriteAccessNote
-      message="A read/write token is needed to edit or delete this personal note."
+      message="Read and write access is needed to edit or delete this personal note."
       requesting={requestingWriteAccess}
       onRequest={onRequestWriteAccess}
+      outcome={writeOutcome}
     />
   {/if}
   {#if confirmingDelete && onDelete}

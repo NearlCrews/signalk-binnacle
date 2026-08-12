@@ -391,7 +391,7 @@ test('a server staleness declaration relabels the fix and names the quiet source
     .click();
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: /speed/i }).first().click();
-  await expect(dock).toContainText('Stale (server declared)');
+  await expect(dock).toContainText('The Signal K server reports this sensor stopped updating.');
   await expect(dock).toContainText('No update from gps0.GP.');
 });
 
