@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
 const proseOnly = process.argv.includes('--prose-only');
+const requireDatedChangelog = process.argv.includes('--release');
 const textExtensions = new Set([
   '.cjs',
   '.css',
@@ -126,7 +127,16 @@ if (packageLock.packages?.['']?.version !== packageJson.version) {
 }
 
 const escapedVersion = packageJson.version.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-if (!new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm').test(changelog)) {
+const versionHeadings = [
+  ...changelog.matchAll(
+    new RegExp(`^## \\[${escapedVersion}\\] - (Unreleased|\\d{4}-\\d{2}-\\d{2})$`, 'gm'),
+  ),
+];
+if (versionHeadings.length !== 1) {
+  metadataFailures.push(
+    `CHANGELOG.md must contain exactly one ${packageJson.version} heading marked Unreleased or dated YYYY-MM-DD.`,
+  );
+} else if (requireDatedChangelog && versionHeadings[0][1] === 'Unreleased') {
   metadataFailures.push(`CHANGELOG.md is missing a dated ${packageJson.version} release heading.`);
 }
 

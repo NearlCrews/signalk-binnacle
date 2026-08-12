@@ -40,7 +40,9 @@ application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICEN
 guides linked from the README. It must not contain source maps, source files, test artifacts, local
 configuration, or scratch files.
 
-Run `package:check` through npm. Its package-content validator uses npm's environment-provided
+Normal pull request CI runs `package:check`, which accepts the active version's explicit Unreleased
+heading. `verify:release` uses `package:check:release`, which requires the matching dated heading.
+Run these checks through npm. The package-content validator uses npm's environment-provided
 JavaScript entry point instead of a platform-specific command shim, which keeps the same validation
 path on Linux, macOS, and Windows.
 

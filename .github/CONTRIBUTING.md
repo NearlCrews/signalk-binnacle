@@ -31,7 +31,7 @@ serves, and any implementation ideas you have.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
 6. Run `npm run verify`. Run `npm run verify:browser` when browser behavior is affected. CI runs
-   `npm run verify:release`, including Chromium, WebKit, package, and runtime audit checks.
+   `npm run verify:ci`, including Chromium, WebKit, package, and runtime audit checks.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 

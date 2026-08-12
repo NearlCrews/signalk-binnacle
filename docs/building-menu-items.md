@@ -28,7 +28,7 @@ During edits, the fast per-file loop:
 
 Then run `npm run verify:commit` before committing. The pre-push hook runs
 `npm run verify:browser`, including type checks, coverage, a production build, bundle budgets, and
-Chromium E2E without a duplicate build. CI runs `npm run verify:release` for Chromium, WebKit,
+Chromium E2E without a duplicate build. CI runs `npm run verify:ci` for Chromium, WebKit,
 package, and runtime dependency coverage.
 
 Tooling traps, each of which has bitten us:
