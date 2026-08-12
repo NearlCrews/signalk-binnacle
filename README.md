@@ -14,25 +14,30 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.19.1
+## What's new in 0.20.0
 
-A polish and hardening release across the whole chartplotter. Follow mode now survives a GPS
-outage: it pauses recentering while the fix is stale and resumes on the next fresh fix, instead of
-silently disarming during a docking approach, and the chart context menu is no longer dismissed by
-a follow recenter, so Go to here can be completed while following with live GPS.
+The watchkeeping release. A change of watch gets a real handoff: a timestamped snapshot of the
+fix, course, alarms, closest contact, depth watch, radar, weather and tide ages, and route
+coverage, shared between stations through Signal K and honest about what is device-only. The
+chart learns course-up and heading-up as explicit profile-owned modes that fall back to north the
+moment their reference goes stale, the route plan becomes a passage plan with departure time and
+a local-clock arrival at every point, and an advisory coverage check reports whether the charts
+along a route are actually cached for offline use.
 
-Waypoints join the chart's tap targets: tapping a mark opens the Waypoints panel with that card
-current, the way a tapped note opens its details. A profile updated on another station now says
-which setting categories changed before you choose, and the profile switcher carries an update
-indicator so the offer is discoverable mid-passage. Panels that cannot save because Signal K write
-access is missing now offer the request button in place.
+Trust is the through-line. When the Signal K server declares a path timed out, every surface
+reacts at once: retained values are labeled with their age instead of posing as current, the
+instrument detail names the source that went quiet, and with two GPS units the surviving one
+keeps the position live. The detail also lists what each recent source reports, a
+recent-source-change cue catches quiet failovers, and an ambient chart badge grades every view
+honestly, counting the NOAA ENC as a chart only inside its real regional coverage and never
+calling the reference base map a chart.
 
-Assistive technology gets real attention: the man-overboard announcement carries bearing and range
-to the mark, alarm announcements use helm voice and fire only for grades that sound or render, and
-a long list of association gaps closes across sliders, toggles, and live regions. On the narrowest
-phones the toolbar pills go icon-only so all four defaults stay one tap away, Android launchers get
-true maskable icons instead of a clipped compass badge, and one launcher order applies at every
-width. See the changelog for the complete list.
+The helm itself sharpens: one alarm authority ranks every sound so MOB and a closing contact
+interleave instead of colliding, the collision strip's CPA and TCPA take the largest numerals on
+screen, instrument tiles lead with SOG-style abbreviations and honest state chips, the MOB button
+becomes the chrome's one solid-red key (dimmed at rest at night), zoom and scale controls follow
+the theme so night vision survives them, and first-run help orients a new crew without nagging a
+returning one. See the changelog for the complete list.
 
 ## What it does
 

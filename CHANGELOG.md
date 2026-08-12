@@ -4,26 +4,56 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+<a id="v0200"></a>
 
-### Changed
+## [0.20.0] - Unreleased
 
-- A helm-visibility pass across the chrome. Instrument tiles lead with their loud abbreviation
-  (SOG, HDG, AWS) over the quiet long name, states render as tinted chips where Alarm outranks
-  Stale and Stale outranks a warning computed from an untrusted value, a stale tile keeps its
-  retained number with its age beside it, and the wind tile's angle freshness folds into the same
-  chip line. The collision strip's CPA and TCPA numbers and its grade word take the large readout
-  treatment. The MOB button is a solid red key in day and dusk, the one solid alarm fill in the
-  chrome, with a dimmed resting state at night so the brightest night pixel is only ever a live
-  emergency. The map scale is a classic open-bracket bar with a mono label instead of a labeled
-  box, and the zoom glyphs now follow the theme, so they stay visible at dusk and night. The
-  Orientation tile reads Orientation with its mode on a quiet second line, the instrument
-  dashboard tile no longer truncates, menu groups separate by heading alone in day and dusk, the
-  menu keeps a scroll shadow when tiles continue past the fold, the layers headers count with the
-  shared chip, and the alarm mute rows say On or Off at a glance.
+The watchkeeping release: the helm learns to hand off a watch, rotate the chart, plan a passage,
+and say plainly what it trusts. New work continues to land here until 0.20.0 is cut.
 
 ### Added
 
+- Watch handoff: a timestamped review-status snapshot for the change of watch, capturing the fix
+  and its age, the course with cross-track error and a basis-qualified time to go, raised alarms
+  and the collision mute expiry, the top contact, the depth watch, radar health, weather and tide
+  ages, whether the active route's offline coverage was checked, and a short operator note. Facts
+  are rendered to plain text at snapshot time, shared between stations through Signal K
+  applicationData, queued on the device when the store is unreachable, and every record states
+  shared, waiting to sync, or device-only. The surface never says a watch is safe to take.
+- Chart orientation: north-up, course-up, and heading-up, as explicit profile-owned choices with
+  north-up the default. A rotating mode needs a fresh reference (course-up also needs way on) and
+  falls back to north immediately when it goes stale, naming why; a status-strip chip keeps the
+  live orientation visible with a one-tap return to north, and Follow adds a bounded look-ahead
+  while rotated so the water ahead gets the pixels. Rotation gestures stay disabled: the mode is
+  the only author of chart bearing.
+- The route plan is a real passage plan: a plan speed and an editable departure time produce a
+  named leg table with cumulative elapsed time and a local-clock arrival at every endpoint, dated
+  when it lands past midnight, plus the whole-route duration. Deliberately simple arithmetic,
+  never weather-, current-, or polar-aware, and labeled as such.
+- An advisory route offline-coverage check: sample a chosen corridor around a route against ready
+  saved areas, their included charts, and a requested detail level, report Complete, Partial, or
+  Unknown, and highlight uncovered or insufficient-detail stretches on the chart, read-only. The
+  forecast mini-map now draws the active route for weather context, and saved-area cards lead
+  with at-a-glance readiness facts. The check never certifies safety.
+- The chart-trust badge: an ambient corner control grading the current view (Chart, Chart
+  overzoomed, Reference map only, Outside chart coverage, Chart source failed, or Base map
+  unavailable) that opens Layers and charts. A reference base map is never called a chart.
+- An emergency rail with deterministic alarm priority: one audio authority ranks every alarm
+  channel, so MOB and an escalating collision interleave at the top, lower alarms rotate with
+  bounded reminders, courtesy tones yield entirely, and blocked audio is reported honestly beside
+  every alarm surface with one enable action.
+- A recent-source trace on watch-critical paths: the instrument detail calls out a source change
+  with the prior label, or several recently alternating sources, within a ten-minute window, so a
+  quiet sensor failover never goes unnoticed. Trend charts carry an honest data-coverage line
+  (percent present, longest gap, newest sample age, Partial or Stale marks).
+- First-run orientation and a permanent Help panel: the advisory framing, the reference-map
+  versus nautical-chart distinction, Signal K access and alarm-sound setup with direct actions, a
+  marine glossary, and operating-context checklists for a coastal day, a night passage, and lying
+  at anchor. The banner offers once and never nags again.
+- The starter profiles carry their presentation half (Coastal day explicit north-up, Night
+  passage course-up with radar raised, At anchor with tides raised), and the top-bar profile
+  control is a real switcher: one menu item per profile with the active row marked, plus a Manage
+  profiles row.
 - Server-declared staleness is honored end to end. When the Signal K server's meta.timeout
   enforcement declares a path timed out, every surface that grades freshness reacts at once: the
   status strip relabels the retained fix as Last fix with its age, chart orientation falls back
@@ -44,6 +74,33 @@ All notable changes to Binnacle are documented here. The format follows
   its instrument tile, so a legitimately slow sensor is not flashed stale; a declared timeout of
   zero means never stale.
 
+### Changed
+
+- Routes editing is an exclusive mode with a persistent strip that keeps the mode, point count,
+  and exit actions visible even when another panel replaces the Routes panel, and the navigation
+  strip names the provenance of every course figure (server estimate or locally computed) per
+  field instead of as one blanket label.
+- AIS assessment is honest about what it cannot grade: contacts missing course or motion data are
+  counted as unassessed rather than silently skipped, per-field freshness windows drop expired
+  positions, approaches, and motion instead of freezing them, and helm health surfaces (radar,
+  stream, audio) report their real states.
+- The heavy dock panels load on demand, so the main bundle stays inside its budget and first
+  paint on a Pi-class helm gets its headroom back.
+- MapLibre GL moves to 6.2.0 and the toolchain to its current releases across the board.
+- A helm-visibility pass across the chrome. Instrument tiles lead with their loud abbreviation
+  (SOG, HDG, AWS) over the quiet long name, states render as tinted chips where Alarm outranks
+  Stale and Stale outranks a warning computed from an untrusted value, a stale tile keeps its
+  retained number with its age beside it, and the wind tile's angle freshness folds into the same
+  chip line. The collision strip's CPA and TCPA numbers and its grade word take the large readout
+  treatment. The MOB button is a solid red key in day and dusk, the one solid alarm fill in the
+  chrome, with a dimmed resting state at night so the brightest night pixel is only ever a live
+  emergency. The map scale is a classic open-bracket bar with a mono label instead of a labeled
+  box, and the zoom glyphs now follow the theme, so they stay visible at dusk and night. The
+  Orientation tile reads Orientation with its mode on a quiet second line, the instrument
+  dashboard tile no longer truncates, menu groups separate by heading alone in day and dusk, the
+  menu keeps a scroll shadow when tiles continue past the fold, the layers headers count with the
+  shared chip, and the alarm mute rows say On or Off at a glance.
+
 ### Fixed
 
 - Status strip text can no longer slide under the centered toolbar pills on desktop widths: the
@@ -63,6 +120,24 @@ All notable changes to Binnacle are documented here. The format follows
   panning across the antimeridian.
 - A Signal K source identified only by its $source reference no longer renders as "Unknown" in
   the instrument detail, and its handoffs now feed the source-changed cue.
+- The pinned always-on-top guarantee (own vessel, active alarms) is enforced at every visibility
+  door, so a corrupted or hand-edited profile document applied, imported, or synced from another
+  station can never hide the boat.
+- Man-overboard raises and clears lost to a closed socket are replayed on reconnect, anchor watch
+  treats a lost fix as an explicit episode with an audible escalation and a healthy hold before it
+  ends, and the sound-off chip cannot report audio as enabled when the browser still blocks it.
+- Radar control values reconcile from the live stream for every radar rather than only the
+  selected one, and stream reconnection has a single authority, so a mid-outage reopen cannot
+  race a stale connection back to life.
+- Stream and authentication recovery survives server reboots, network outages, and worker faults:
+  the subscription registry replays everything on reopen, a refreshed token takes effect on the
+  next reconnect, and a dead worker is rebuilt rather than left silent.
+- Offline caches enforce their lifetimes with an atomic prune, every cache name is registered
+  with the privacy erase so a device-data wipe misses nothing, and the offline landing page
+  explains a service-worker registration blocked by an untrusted certificate instead of failing
+  quietly.
+- The Measure tile stays disabled until the chart tap handler is ready, so an early tap cannot
+  arm a measurement that no tap can extend.
 
 <a id="v0191"></a>
 
