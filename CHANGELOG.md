@@ -103,6 +103,8 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
 
 ### Fixed
 
+- Pull request CI accepts the active version's explicit Unreleased changelog heading, while the
+  publication gate continues to require a dated heading for that same version.
 - Status strip text can no longer slide under the centered toolbar pills on desktop widths: the
   readouts wrap instead, a paused depth watch drops its dashed value in favor of its label, and
   between 900 and 1200 pixels the strip now keeps the vessel position visible, dropping the clock

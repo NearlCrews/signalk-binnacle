@@ -458,6 +458,7 @@ npm run size       # compressed production bundle budgets
 npm run verify     # complete non-browser local and CI gate
 npm run test:e2e:fast # Build, then run the Chromium browser checks only (no offline/PWA or WebKit coverage; use test:e2e:cross-browser or test:e2e:gate for the full spread)
 npm run test:e2e:cross-browser # Build, then run Chromium, PWA, and WebKit checks
+npm run verify:ci  # full pull request gate, including an Unreleased development version
 npm run verify:release # full gate, cross-browser E2E, package checks, and runtime audit
 ```
 

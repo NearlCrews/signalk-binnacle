@@ -54,7 +54,7 @@ jobs:
         run: npm install --global npm@11.19.0
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
-      - run: npm run verify:release
+      - run: npm run verify:ci
       - name: Upload browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
