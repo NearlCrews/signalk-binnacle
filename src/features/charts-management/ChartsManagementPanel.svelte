@@ -84,12 +84,12 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
 
 {#snippet saveIndicator(key: string, errorMessage: string, onRetry: () => void)}
   {#if saveStates[key] === 'saving'}
-    <p class="muted-note save-note" role="status">Saving…</p>
+    <p class="muted-note" role="status">Saving…</p>
   {:else if saveStates[key] === 'saved'}
-    <p class="muted-note save-note" role="status">Saved.</p>
+    <p class="muted-note" role="status">Saved.</p>
   {:else if saveStates[key] === 'error'}
     <div class="save-error" role="alert">
-      <p class="alert-note save-note">{errorMessage}</p>
+      <p class="alert-note">{errorMessage}</p>
       <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
     </div>
   {/if}

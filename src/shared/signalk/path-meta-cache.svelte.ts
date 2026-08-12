@@ -100,8 +100,22 @@ export function createPathMetaCache(
     });
   }
 
+  // Drop every settled answer so the next visit refetches. The server's meta is not immutable: an
+  // admin can change a path's zones or its meta.timeout while Binnacle is connected, and without
+  // this a session that has already cached the old declaration never sees the new one. In-flight
+  // sentinels stay, for the same reason the token sweep keeps them: a fetch settling after the
+  // sweep would otherwise clobber what a fresh one stored.
+  function refresh(): void {
+    for (const [key] of cache) {
+      if (!inFlight.has(key)) cache.delete(key);
+    }
+    attempts.clear();
+    version += 1;
+  }
+
   return {
     load,
+    refresh,
     // The cached meta, null while a fetch is in flight or after the path gave up, undefined when
     // never fetched or awaiting a retry.
     get(path: string): PathMeta | null | undefined {

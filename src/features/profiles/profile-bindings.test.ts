@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PORTABLE_PROFILE_SETTING_KEYS } from '$entities/profile';
 import { createProfileBindings, type ProfileBindingDeps } from './profile-bindings';
 
 // Minimal stand-ins: the bindings only read `.value`/`.theme` and call `.set`, so a plain object with
@@ -47,6 +48,16 @@ function makeDeps(): ProfileBindingDeps {
 }
 
 describe('createProfileBindings', () => {
+  // The table's `satisfies` clause is homomorphic, so an OPTIONAL ProfileSettings field can be left
+  // out of it without a build error: the profile would then sync and restore silently missing that
+  // setting. Assert the captured bundle against the portable key list instead, which is the list
+  // sync and import actually walk.
+  it('captures a value for every portable setting key', () => {
+    const bundle = createProfileBindings(makeDeps()).capture();
+    const captured = Object.keys(bundle);
+    expect([...PORTABLE_PROFILE_SETTING_KEYS].filter((key) => !captured.includes(key))).toEqual([]);
+  });
+
   it('captures every portable setting into one bundle', () => {
     const bindings = createProfileBindings(makeDeps());
     const bundle = bindings.capture();

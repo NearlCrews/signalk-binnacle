@@ -1,6 +1,5 @@
 import { isRecord } from '$shared/lib';
 import {
-  fetchAuthedJson,
   fetchAuthedJsonOutcome,
   fetchHistoryProviderPathCatalogs,
   fetchPopulatedHistoryPathsForProvider,
@@ -315,15 +314,4 @@ export async function discoverHistoricalInstrumentInstances(
     state: complete ? 'complete' : 'partial',
     instances: historicalInstrumentInstances([...populated]),
   };
-}
-
-export async function discoverBatteries(
-  origin: string,
-  token: string | undefined,
-): Promise<string[]> {
-  const body = await fetchAuthedJson<unknown>(
-    `${origin}/signalk/v1/api/vessels/self/electrical/batteries`,
-    token,
-  );
-  return sortedInstances(body, BATTERY_BRANCH_KEYS);
 }

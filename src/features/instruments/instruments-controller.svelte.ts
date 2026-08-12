@@ -308,6 +308,9 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   }
 
   function refreshLiveCatalog(): void {
+    // Also drop cached path meta: zones and a declared staleness window are server state an admin
+    // can change mid-session, and a cached answer would outlive the change for the whole session.
+    metaCache.refresh();
     discover(true, false);
   }
 
@@ -450,6 +453,18 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     discover();
   }
 
+  // Memoized rather than rebuilt per read: both are read from templates that re-evaluate on any
+  // reactive change, and each read otherwise allocated a fresh array of the whole catalog (and, for
+  // the trend list, re-resolved every label). $derived.by recomputes only when dynamicCatalog or a
+  // label input actually changes.
+  const catalog = $derived.by(() => [...TILE_CATALOG, ...dynamicCatalog]);
+  const trendCatalog = $derived.by(() =>
+    catalog.flatMap((def) => {
+      const descriptor = trendDescriptorFor(def, resolvedLabel(def));
+      return descriptor ? [descriptor] : [];
+    }),
+  );
+
   return {
     get open() {
       return deps.openStore.value === true;
@@ -461,7 +476,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return selectedIds;
     },
     get catalog(): TileDef[] {
-      return [...TILE_CATALOG, ...dynamicCatalog];
+      return catalog;
     },
     get discovering() {
       return liveDiscovering || historyDiscovering;
@@ -470,10 +485,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
       return historyStatus;
     },
     get trendCatalog() {
-      return [...TILE_CATALOG, ...dynamicCatalog].flatMap((def) => {
-        const descriptor = trendDescriptorFor(def, resolvedLabel(def));
-        return descriptor ? [descriptor] : [];
-      });
+      return trendCatalog;
     },
     isHistoricalOnly(id: string): boolean {
       return historicalOnlyIds.has(id);

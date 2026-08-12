@@ -1,6 +1,7 @@
 import { isRecord, withTimeout } from '$shared/lib';
 import { binnacleStorageKey } from '$shared/persistence';
 import { createPersistedCodec, PersistedValue } from '$shared/settings';
+import { isSameOriginPath } from './admin-session';
 import { jsonOr } from './resource';
 
 export type AuthStatus = 'unknown' | 'unsecured' | 'authenticated' | 'requesting' | 'denied';
@@ -343,7 +344,12 @@ export class AuthController {
     });
     if (!res?.ok) return { ok: false };
     const body = await jsonOr<Record<string, unknown>>(res, {});
-    return { ok: true, href: typeof body.href === 'string' ? body.href : undefined };
+    // The href is server-supplied and is concatenated onto the origin, so it must be an absolute
+    // same-origin path. A protocol-relative or backslash form would send the access-request poll,
+    // and the approved token it carries, to another host.
+    const href =
+      typeof body.href === 'string' && isSameOriginPath(body.href) ? body.href : undefined;
+    return { ok: true, href };
   }
 
   // Poll a pending access-request href once. 'gone' = the request expired or was cleared (404/410),

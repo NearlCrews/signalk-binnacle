@@ -149,7 +149,7 @@ function cancelDraft(): void {
   {:else}
     <section class="server-path" aria-label="Chart files on this server">
       <span class="caps-label">Chart files on this server</span>
-      <p class="hint">
+      <p class="muted-note muted-note--xs">
         Put PMTiles files in your server chart provider, such as Chart Locker or
         signalk-pmtiles-plugin. Server charts appear in this list automatically and are available to
         every station.
@@ -178,7 +178,7 @@ function cancelDraft(): void {
           Import
         </button>
       </div>
-      <p class="hint">
+      <p class="muted-note muted-note--xs">
         Use this for a chart archive hosted outside your Signal K server. URLs with query values
         stay on this device by default, and sharing is reviewed before save.
       </p>
@@ -214,11 +214,6 @@ function cancelDraft(): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
-}
-.hint {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 /* The review-and-rename step shown after an import is staged, before it is saved. */
 .review {

@@ -532,18 +532,10 @@ function discardActiveDraft(): void {
 }
 .control-description,
 .control-state,
-.control-error,
 .radar-identity {
   margin: 0;
   font-size: var(--text-xs);
-}
-.control-description,
-.control-state,
-.radar-identity {
   color: var(--text-muted);
-}
-.control-error {
-  color: var(--alarm);
 }
 .field-head {
   display: flex;

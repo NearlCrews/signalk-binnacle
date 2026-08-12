@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy, onMount } from 'svelte';
 import { MAX_HANDOFF_NOTE_LENGTH } from '$entities/handoff';
-import { Clock, formatClockTime, MINUTE_MS } from '$shared/lib';
+import { Clock, formatClockTime, formatMonthDay, MINUTE_MS } from '$shared/lib';
 import { SlideOver } from '$shared/ui';
 import type { HandoffController } from './handoff-controller.svelte';
 
@@ -33,12 +33,6 @@ function ageText(createdAt: number): string {
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${(minutes % 60).toString().padStart(2, '0')}m ago`;
-}
-
-function dayText(createdAt: number): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-    new Date(createdAt),
-  );
 }
 
 const SYNC_LABELS = {
@@ -95,7 +89,7 @@ const SYNC_LABELS = {
             <div class="snapshot-head">
               <span class="num when">
                 {formatClockTime(record.createdAt)}
-                {dayText(record.createdAt)}
+                {formatMonthDay(record.createdAt)}
               </span>
               <span class="muted-note age">{ageText(record.createdAt)}</span>
               <span class="caps-label sync" class:sync-shared={record.sync === 'shared'}>

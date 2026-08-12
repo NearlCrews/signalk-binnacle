@@ -132,12 +132,20 @@ export function applyBaseTheme(map: MapLibreMap, paint: MapThemePaint, layers?: 
 // The text labels (already recolored) stay visible. Circle layers (POI dots) are pre-colored the
 // same way with no recolorable sprite, so they follow the night hide too.
 // Accepts a precomputed layer list (same contract as applyBaseTheme).
+// How much of the base style's own icon and label art each theme keeps. Night-red hides it: the
+// sprite is full-color and cannot be recolored, so any of it on screen breaks dark adaptation.
+// Dusk dims it rather than hiding it, since the chart is still being read by eye.
+const BASE_ICON_OPACITY: Partial<Record<MapThemePaint['theme'], number>> = {
+  'night-red': 0,
+  dusk: 0.4,
+};
+
 export function applyBaseIconVisibility(
   map: MapLibreMap,
   paint: MapThemePaint,
   layers?: BaseLayer[],
 ): void {
-  const opacity = paint.theme === 'night-red' ? 0 : paint.theme === 'dusk' ? 0.4 : 1;
+  const opacity = BASE_ICON_OPACITY[paint.theme] ?? 1;
   const circleOpacity = paint.theme === 'night-red' ? 0 : 1;
   // Overlay-owned symbol layers (own vessel, AIS, notes) theme themselves and carry user-set
   // opacity, so themableBaseLayers excludes them: they must never be hidden here or forced back to 1.

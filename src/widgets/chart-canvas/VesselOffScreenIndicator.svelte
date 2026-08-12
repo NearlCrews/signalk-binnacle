@@ -57,7 +57,8 @@ $effect(() => {
 });
 
 // Vessel position updates over the WebSocket independent of any camera move, so it needs its own
-// trigger; this effect reruns whenever position changes.
+// trigger. The bare read is the dependency: recompute reads the map, not the prop, so without it
+// the effect would never rerun on a fix that did not also move the camera.
 $effect(() => {
   void position;
   recompute();

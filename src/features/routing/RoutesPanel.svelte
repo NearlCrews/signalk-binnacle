@@ -282,6 +282,17 @@ $effect(() => {
   }
   wasEditing = editing;
 });
+
+// Why the saved list is empty, most specific cause first: a load in flight is not an empty boat, and
+// a server without route storage is a different problem from a failed read. Ordered guards rather
+// than a nested ternary, so a new state cannot land on the wrong branch.
+function emptyReason(): string {
+  if (loadState === 'loading' || refreshing) return 'Loading routes…';
+  if (storageMissing) return 'Saved routes are unavailable until this server has route storage.';
+  if (loadState === 'error') return 'Routes are unavailable.';
+  return 'No routes yet. Tap New route, then tap the chart to drop points along your path.';
+}
+const emptyMessage = $derived(emptyReason());
 </script>
 
 <SlideOver
@@ -408,13 +419,7 @@ $effect(() => {
   <SavedList
     heading="Saved routes"
     items={savedCards}
-    empty={loadState === 'loading' || refreshing
-      ? 'Loading routes…'
-      : storageMissing
-        ? 'Saved routes are unavailable until this server has route storage.'
-        : loadState === 'error'
-          ? 'Routes are unavailable.'
-          : 'No routes yet. Tap New route, then tap the chart to drop points along your path.'}
+    empty={emptyMessage}
     key={({ route }) => route.id}
     isActive={({ route }) => route.id === activeId}
   >

@@ -100,12 +100,10 @@ let warningsAttemptedAt = 0;
 
 // providerName alone remains accepted while the host migrates from its former id-in-name contract.
 const effectiveProviderId = $derived(providerId ?? providerName);
+// A provider's own display name when it publishes one, else the id resolved to a friendly name.
+// providerName alone is still accepted as the id, which is why it can land on either side.
 const providerLabel = $derived(
-  providerId
-    ? (providerName ?? providerDisplayName(providerId))
-    : providerName
-      ? providerDisplayName(providerName)
-      : undefined,
+  providerName ?? (effectiveProviderId ? providerDisplayName(effectiveProviderId) : undefined),
 );
 
 // A position rounded to about 110 m, kept as a string so the $derived halts propagation when the

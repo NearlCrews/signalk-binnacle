@@ -347,7 +347,7 @@ $effect(() => {
 // global-state rather than rebuilding filters or paint, so this only needs to push the current
 // mode whenever it changes; units is a prop backed by reactive state, so this effect tracks it.
 // setGlobalStateProperty is the Map-level API (setGlobalState is an internal Style method, not
-// exposed on Map in maplibre-gl 5.24).
+// exposed on Map).
 $effect(() => {
   const map = mapRef;
   if (!map) return;
@@ -364,7 +364,9 @@ $effect(() => {
   if (!measure.active && !routeEditing && !radarEditing) return;
   const canvas = map.getCanvas();
   const prior = canvas.style.cursor;
-  const cursor = radarEditing ? 'crosshair' : measure.moveArmed ? 'move' : 'crosshair';
+  // Move only for an armed measure drag; every other tap mode is a crosshair, radar editing
+  // included, which is why radar wins over an armed move rather than the other way around.
+  const cursor = !radarEditing && measure.moveArmed ? 'move' : 'crosshair';
   canvas.style.cursor = cursor;
   return () => {
     if (canvas.style.cursor === cursor) {

@@ -82,7 +82,7 @@ dialog.modal-card {
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  inline-size: min(var(--menu-width, 13rem), calc(100vw - 1rem));
+  inline-size: min(var(--menu-width, 13rem), calc(100vw - var(--space-4)));
   padding: var(--space-1);
   transform-origin: left var(--anchored-origin-y, top);
 }

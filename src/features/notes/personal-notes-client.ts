@@ -22,7 +22,6 @@ export type PersonalNotesCapability =
 
 // Retained as an alias so the notes call sites keep reading in their own vocabulary; the shape and
 // the status mapping are the shared resource-write ones.
-export type PersonalNoteMutationResult = ResourceMutationResult;
 
 // Probe only one entry. The v2 route is the sole write transport; a v1-only response is useful for
 // display but must never be mistaken for edit capability.
@@ -44,7 +43,7 @@ export async function savePersonalNote(
   token: string | undefined,
   id: string,
   input: PersonalNoteInput,
-): Promise<{ result: PersonalNoteMutationResult; note?: NotePoint }> {
+): Promise<{ result: ResourceMutationResult; note?: NotePoint }> {
   if (!isPersonalNoteId(id)) return { result: 'failed' };
   const clean = cleanPersonalNoteInput(input);
   const resource = clean ? personalNoteResource(clean) : undefined;
@@ -79,7 +78,7 @@ export async function deletePersonalNote(
   base: string,
   token: string | undefined,
   note: Pick<NotePoint, 'id' | 'ownedByBinnacle'>,
-): Promise<PersonalNoteMutationResult> {
+): Promise<ResourceMutationResult> {
   if (!note.ownedByBinnacle || !isPersonalNoteId(note.id)) return 'failed';
   return mutationResultFor(
     await sendJson(`${base}${NOTES_PATH}/${encodeURIComponent(note.id)}`, token, 'DELETE'),

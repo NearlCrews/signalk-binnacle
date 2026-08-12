@@ -2333,6 +2333,9 @@ function refreshAfterStreamReconnect(token: string | undefined): void {
     ),
   );
   if (instruments.open) instruments.refreshLiveCatalog();
+  // A reconnect can land on a restarted or reconfigured server, so cached path meta (zones, a
+  // declared staleness window) is refetched rather than trusted for the rest of the session.
+  shallowController.refreshMeta();
   if (untrack(() => companionBase === null)) refreshCompanionProbe();
   void units.syncFromServer(origin);
   // The MOB replay decision reads the mirror, so it runs behind the mirror reconcile: before

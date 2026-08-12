@@ -5,6 +5,7 @@ import {
   formatClockTime,
   formatDuration,
   formatDurationParts,
+  formatMonthDay,
   formatNm,
   knotsToMetersPerSecond,
   metersPerSecondToKnots,
@@ -85,10 +86,7 @@ function arrivalText(cumulativeMeters: number): string {
   if (at === undefined) return PLACEHOLDER;
   const clock = formatClockTime(at);
   if (!crossesLocalMidnight(departureMs, at)) return clock;
-  const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-    new Date(at),
-  );
-  return `${clock} ${day}`;
+  return `${clock} ${formatMonthDay(at)}`;
 }
 
 function endpointName(fromIndex: number): string {

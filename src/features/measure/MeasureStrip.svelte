@@ -16,19 +16,22 @@ let clearArmed = $state(false);
 const selectedNumber = $derived(
   measure.selectedIndex === undefined ? undefined : measure.selectedIndex + 1,
 );
-const instruction = $derived(
-  measure.moveArmed && selectedNumber !== undefined
-    ? `Move point ${selectedNumber}: drag it or tap a new chart position. Escape cancels.`
-    : selectedNumber !== undefined
-      ? `Point ${selectedNumber} selected. Choose Move point to reposition it.`
-      : measure.atLimit
-        ? 'Point limit reached. Select, delete, undo, or clear a point to continue.'
-        : measure.isEmpty
-          ? 'Tap the chart to set the start point'
-          : measure.vertices.length === 1
-            ? 'Tap the chart to set the next point'
-            : `${measure.vertices.length} points. Tap the chart to add another`,
-);
+// What to do next, worst-constrained state first: an armed move, then a selection, then the point
+// cap, then the ordinary tap-to-continue sequence. Written as ordered guards rather than a nested
+// ternary so inserting a state cannot silently land on the wrong side of a branch.
+function nextInstruction(): string {
+  if (selectedNumber !== undefined) {
+    return measure.moveArmed
+      ? `Move point ${selectedNumber}: drag it or tap a new chart position. Escape cancels.`
+      : `Point ${selectedNumber} selected. Choose Move point to reposition it.`;
+  }
+  if (measure.atLimit)
+    return 'Point limit reached. Select, delete, undo, or clear a point to continue.';
+  if (measure.isEmpty) return 'Tap the chart to set the start point';
+  if (measure.vertices.length === 1) return 'Tap the chart to set the next point';
+  return `${measure.vertices.length} points. Tap the chart to add another`;
+}
+const instruction = $derived(nextInstruction());
 
 function selectPoint(event: Event): void {
   const value = (event.currentTarget as HTMLSelectElement).value;

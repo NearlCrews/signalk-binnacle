@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGpxRoutes, parseGpxRoutesDetailed } from './gpx-import';
+import { parseGpxRoutesDetailed } from './gpx-import';
 import { routeToGpx } from './route-gpx';
 
 const GPX = `<?xml version="1.0" encoding="UTF-8"?>
@@ -12,9 +12,9 @@ const GPX = `<?xml version="1.0" encoding="UTF-8"?>
   </rte>
 </gpx>`;
 
-describe('parseGpxRoutes', () => {
+describe('parseGpxRoutesDetailed', () => {
   it('parses a GPX rte into a route with waypoints and unescaped names', () => {
-    const routes = parseGpxRoutes(GPX);
+    const { routes } = parseGpxRoutesDetailed(GPX);
     expect(routes).toHaveLength(1);
     expect(routes[0].name).toBe('Bay & "run"');
     expect(routes[0].waypoints).toHaveLength(3);
@@ -35,7 +35,7 @@ describe('parseGpxRoutes', () => {
         { position: { latitude: 11, longitude: 21 } },
       ],
     };
-    const back = parseGpxRoutes(routeToGpx(route));
+    const { routes: back } = parseGpxRoutesDetailed(routeToGpx(route));
     expect(back).toHaveLength(1);
     expect(back[0].name).toBe('Passage');
     expect(back[0].waypoints[0]).toEqual({ position: { latitude: 10, longitude: 20 }, name: 'A' });
@@ -46,7 +46,7 @@ describe('parseGpxRoutes', () => {
     const ns = `<gpx:gpx><gpx:rte><gpx:name>NS</gpx:name>
       <gpx:rtept lon="5" lat="50"><gpx:name>P1</gpx:name></gpx:rtept>
       <gpx:rtept lat="51" lon="6"/></gpx:rte></gpx:gpx>`;
-    const routes = parseGpxRoutes(ns);
+    const { routes } = parseGpxRoutesDetailed(ns);
     expect(routes).toHaveLength(1);
     expect(routes[0].name).toBe('NS');
     expect(routes[0].waypoints[0].position).toEqual({ latitude: 50, longitude: 5 });
@@ -55,14 +55,14 @@ describe('parseGpxRoutes', () => {
   it('drops routes with fewer than two valid points and names unnamed routes', () => {
     const sparse = `<gpx><rte><rtept lat="1" lon="1"/></rte>
       <rte><rtept lat="2" lon="2"/><rtept lat="3" lon="3"/></rte></gpx>`;
-    const routes = parseGpxRoutes(sparse);
+    const { routes } = parseGpxRoutesDetailed(sparse);
     expect(routes).toHaveLength(1);
     expect(routes[0].name).toBe('Imported route 1');
   });
 
   it('returns an empty array for non-route or malformed input', () => {
-    expect(parseGpxRoutes('<gpx></gpx>')).toEqual([]);
-    expect(parseGpxRoutes('not xml at all')).toEqual([]);
+    expect(parseGpxRoutesDetailed('<gpx></gpx>').routes).toEqual([]);
+    expect(parseGpxRoutesDetailed('not xml at all').routes).toEqual([]);
   });
 
   it('reports a file that carries tracks instead of routes', () => {
@@ -77,7 +77,7 @@ describe('parseGpxRoutes', () => {
       <rtept lat="42north" lon="-83"/><rtept lat="42" lon="-83west"/>
       <rtept lat="Infinity" lon="0"/><rtept lat="1" lon="1"/>
     </rte></gpx>`;
-    expect(parseGpxRoutes(malformed)).toEqual([]);
+    expect(parseGpxRoutesDetailed(malformed).routes).toEqual([]);
   });
 
   it('rejects files over the import size limit', () => {
@@ -117,7 +117,7 @@ describe('parseGpxRoutes', () => {
 
   it('caps imported route and waypoint names', () => {
     const longName = 'n'.repeat(300);
-    const routes = parseGpxRoutes(`<gpx><rte><name>${longName}</name>
+    const { routes } = parseGpxRoutesDetailed(`<gpx><rte><name>${longName}</name>
       <rtept lat="1" lon="1"><name>${longName}</name></rtept>
       <rtept lat="2" lon="2"/></rte></gpx>`);
     expect(routes[0].name).toHaveLength(256);

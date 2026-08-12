@@ -1,23 +1,24 @@
-import { readBoundedJson, withTimeout } from '$shared/lib';
+import { hasControlCharacters, readBoundedJson, withTimeout } from '$shared/lib';
 import { adminSessionInit } from './resource.js';
 
 export type AdminSessionState = 'admin' | 'non-admin' | 'signed-out' | 'unknown';
 
-function safeReturnPath(path: string): string {
-  const hasControlCharacter = [...path].some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint < 32 || codePoint === 127;
-  });
-  if (
+// Whether a server-supplied string is a same-origin absolute path, safe to concatenate onto the
+// server origin. A protocol-relative "//host" or a backslash would escape to another origin once a
+// browser normalizes it, and a control character can split a header or a URL. Exported because the
+// access-request poll concatenates a server-supplied href the same way this redirect does.
+export function isSameOriginPath(path: string): boolean {
+  return (
     path.startsWith('/') &&
     !path.startsWith('//') &&
     !path.includes('\\') &&
-    !hasControlCharacter &&
-    !path.startsWith('/admin/#/login')
-  ) {
-    return path;
-  }
-  return '/signalk-binnacle/';
+    !hasControlCharacters(path)
+  );
+}
+
+function safeReturnPath(path: string): string {
+  // Bouncing the login form back to itself would loop the navigator through login forever.
+  return isSameOriginPath(path) && !path.startsWith('/admin/#/login') ? path : '/signalk-binnacle/';
 }
 
 // Signal K's administrator UI owns the login form. Its redirect contract must return to an in-scope

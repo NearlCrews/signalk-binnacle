@@ -261,7 +261,3 @@ export function parseGpxRoutesDetailed(xml: string): GpxParseResult {
   }
   return sawTracks ? { routes, sawTracks } : { routes };
 }
-
-export function parseGpxRoutes(xml: string): Route[] {
-  return parseGpxRoutesDetailed(xml).routes;
-}

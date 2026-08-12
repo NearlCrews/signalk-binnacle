@@ -6,6 +6,8 @@ import {
   AnchoredMenu,
   CustomizeToggle,
   menuFocusLeft,
+  nextRovingIndex,
+  type RovingKey,
   TransientNote,
   UnavailableHint,
 } from '$shared/ui';
@@ -108,29 +110,32 @@ function select(item: MenuItem): void {
 // On open, move focus to the first actionable tile via a $effect (not inside the transition) so a
 // keyboard user lands inside the menu without a DOM query at transition time.
 $effect(() => {
-  if (open) card?.querySelector<HTMLButtonElement>('.tile:not([aria-disabled="true"])')?.focus();
+  if (open)
+    card?.querySelector<HTMLButtonElement>('.menu-tile:not([aria-disabled="true"])')?.focus();
 });
 
-// Arrow keys step through the tiles in reading order, wrapping; Home and End jump to the ends.
+// The tiles wrap into a grid, so both axes step through them in reading order: right and down go
+// forward, left and up go back. Mapped onto the shared 1D roving math rather than re-deriving the
+// wraparound, which is what let this copy skip the first tile when focus was on the card itself.
+const MENU_ROVING_KEYS: Partial<Record<string, RovingKey>> = {
+  ArrowRight: 'ArrowDown',
+  ArrowDown: 'ArrowDown',
+  ArrowLeft: 'ArrowUp',
+  ArrowUp: 'ArrowUp',
+  Home: 'Home',
+  End: 'End',
+};
+
 function onCardKeydown(event: KeyboardEvent): void {
+  const key = MENU_ROVING_KEYS[event.key];
+  if (key === undefined) return;
   // Keep blocked tiles in arrow navigation. They remain focusable so keyboard users can invoke them
   // and receive the same visible explanation as pointer users.
-  const tiles = [...(card?.querySelectorAll<HTMLButtonElement>('.tile') ?? [])];
+  const tiles = [...(card?.querySelectorAll<HTMLButtonElement>('.menu-tile') ?? [])];
   if (tiles.length === 0) return;
-  const at = Math.max(0, tiles.indexOf(document.activeElement as HTMLButtonElement));
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-    event.preventDefault();
-    tiles[(at + 1) % tiles.length]?.focus();
-  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-    event.preventDefault();
-    tiles[(at - 1 + tiles.length) % tiles.length]?.focus();
-  } else if (event.key === 'Home') {
-    event.preventDefault();
-    tiles[0]?.focus();
-  } else if (event.key === 'End') {
-    event.preventDefault();
-    tiles.at(-1)?.focus();
-  }
+  event.preventDefault();
+  const at = tiles.indexOf(document.activeElement as HTMLButtonElement);
+  tiles[nextRovingIndex(key, at, tiles.length)]?.focus();
 }
 
 function onCardFocusOut(event: FocusEvent): void {
@@ -196,7 +201,7 @@ function onCardFocusOut(event: FocusEvent): void {
             {#each group.items as item (item.id)}
               <button
                 type="button"
-                class="tile"
+                class="menu-tile"
                 class:is-on={editing ? pinnedSet.has(item.id) : item.pressed === true}
                 aria-pressed={editing ? pinnedSet.has(item.id) : item.pressed}
                 aria-disabled={!editing && itemBlocked(item) ? true : undefined}
@@ -362,7 +367,7 @@ function onCardFocusOut(event: FocusEvent): void {
   grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
   gap: var(--space-1);
 }
-.tile {
+.menu-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -387,38 +392,39 @@ function onCardFocusOut(event: FocusEvent): void {
    these selectors would otherwise beat MenuItemIcon's own color rule for that badge in some tile
    state, silently recoloring it back to the same muted gray as the icon it exists to stand apart
    from. MenuItemIcon owns the badge's color uncontested in every state instead. */
-.tile :global(svg:not(.menu-item-icon__badge)) {
+.menu-tile :global(svg:not(.menu-item-icon__badge)) {
   color: var(--text-muted);
   transition: color var(--transition-fast);
 }
-.tile:hover:not(:disabled):not([aria-disabled="true"]) {
+.menu-tile:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--accent-tint);
 }
-.tile:hover:not(:disabled):not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)),
-.tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
+.menu-tile:hover:not(:disabled):not([aria-disabled="true"])
+  :global(svg:not(.menu-item-icon__badge)),
+.menu-tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
-.tile:active:not(:disabled):not([aria-disabled="true"]) {
+.menu-tile:active:not(:disabled):not([aria-disabled="true"]) {
   filter: brightness(var(--brightness-press));
 }
-/* Scoped on-state: the global .is-on cannot override .tile because Svelte's hash class raises
-   .tile's specificity above the global utility, so the accent color, border, and fill are applied
+/* Scoped on-state: the global .is-on cannot override .menu-tile because Svelte's hash class raises
+   .menu-tile's specificity above the global utility, so the accent color, border, and fill are applied
    here instead. The tile also recolors its svg icon to the accent so the shape cue complements the
    color cue under night-red. */
-.tile.is-on {
+.menu-tile.is-on {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-tint);
 }
-.tile.is-on :global(svg:not(.menu-item-icon__badge)) {
+.menu-tile.is-on :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
 /* An unavailable tile (aria-disabled) is grayed like a disabled one, but stays focusable and
    hoverable so its title tooltip shows and a screen reader reaches the reason it is grayed; a real
    disabled button suppresses both. The click is guarded in select(). This mirrors the detect-and-
    degrade layer rows, which also gray and explain rather than vanish. */
-.tile:disabled,
-.tile[aria-disabled="true"] {
+.menu-tile:disabled,
+.menu-tile[aria-disabled="true"] {
   color: var(--text-muted);
   opacity: var(--disabled-opacity);
   cursor: default;

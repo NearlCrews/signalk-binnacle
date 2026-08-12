@@ -86,3 +86,12 @@ input[type="radio"] {
   border: none;
   background: var(--accent);
 }
+
+/* A control's own validation message: the alarm-voiced counterpart to .muted-note--xs, sitting
+   directly under the field it refuses. One rule, so a panel's field errors read the same as the
+   next panel's rather than each re-spelling the margin, size, and color. */
+.control-error {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--alarm);
+}

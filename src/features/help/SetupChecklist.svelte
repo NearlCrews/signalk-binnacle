@@ -76,15 +76,21 @@ const rows = $derived([
     id: 'storage',
     done: savedDataProvisioned === true,
     label: 'Enable saved data on the server',
-    detail:
-      savedDataProvisioned === false
-        ? 'This server has no resources provider, so routes and waypoints cannot be saved. An administrator can enable the built-in Resources Provider in the Signal K admin UI.'
-        : savedDataProvisioned === true
-          ? 'The server stores routes, waypoints, and tracks.'
-          : 'Checking whether this server stores routes and waypoints.',
+    detail: savedDataDetail(savedDataProvisioned),
     action: undefined,
   },
 ]);
+
+// The storage line for each answer of the tri-state probe. Undefined is "still checking", which
+// must never read as either verdict: telling a navigator their server cannot save is a false alarm
+// before the probe answers, and telling them it can is worse.
+function savedDataDetail(provisioned: boolean | undefined): string {
+  if (provisioned === false) {
+    return 'This server has no resources provider, so routes and waypoints cannot be saved. An administrator can enable the built-in Resources Provider in the Signal K admin UI.';
+  }
+  if (provisioned === true) return 'The server stores routes, waypoints, and tracks.';
+  return 'Checking whether this server stores routes and waypoints.';
+}
 </script>
 
 {#if !durableDone}

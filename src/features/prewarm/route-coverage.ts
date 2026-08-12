@@ -81,17 +81,25 @@ function sourceCoversPoint(
   });
 }
 
+// A ready area with its seam split done once. The split is per AREA, not per sample point, and a
+// route check samples thousands of points against every area: recomputing it inside the loop was
+// three splits per point per area.
+interface ReadyRegion {
+  region: SavedRegionDto;
+  parts: Bbox4[];
+}
+
 function classifyPoint(
   latitude: number,
   longitude: number,
-  regions: readonly SavedRegionDto[],
+  regions: readonly ReadyRegion[],
   requiredMaxzoom: number,
 ): SampleClass {
   const lon = wrapLongitude(longitude);
   const point = { latitude, longitude: lon };
   let best: SampleClass = UNCOVERED;
-  for (const region of regions) {
-    if (!regionParts(region.bbox).some((part) => bboxContainsPoint(part, point))) continue;
+  for (const { region, parts } of regions) {
+    if (!parts.some((part) => bboxContainsPoint(part, point))) continue;
     if (!sourceCoversPoint(region.sourceIds, latitude, lon, [region.minzoom, region.maxzoom])) {
       continue;
     }
@@ -126,7 +134,9 @@ export function checkRouteCoverage(input: RouteCoverageInput): RouteCoverageRepo
   if (regions === null) {
     return { ...base, verdict: 'unknown', unknownReason: 'Saved areas could not be loaded.' };
   }
-  const ready = regions.filter((region) => region.status === 'ready');
+  const ready: ReadyRegion[] = regions
+    .filter((region) => region.status === 'ready')
+    .map((region) => ({ region, parts: regionParts(region.bbox) }));
   const requiredMaxzoom = rangeForPreset(detail)[1];
   const corridorM = nauticalMilesToMeters(corridorNm);
 

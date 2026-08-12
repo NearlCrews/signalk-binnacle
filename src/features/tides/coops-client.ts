@@ -23,13 +23,15 @@ import {
 const MDAPI = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json';
 const DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const MAX_STATIONS = 20_000;
+// Hoisted: tested once per station across the whole catalog, which is up to MAX_STATIONS entries.
+const STATION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 // Validates and returns the cleaned id, so the string the pattern accepted is the same string that
 // reaches the request URL and the station map key. Testing the pattern against the untrimmed
 // original instead would reject a padded id outright.
 function safeStationId(value: unknown): string | undefined {
   const id = cleanBoundedText(value, MAX_TIDE_STATION_ID_LENGTH);
-  return id !== undefined && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
+  return id !== undefined && STATION_ID_PATTERN.test(id) ? id : undefined;
 }
 
 function coopsUrl(base: string, params: Record<string, string>): string {

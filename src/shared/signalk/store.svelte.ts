@@ -23,6 +23,13 @@ import {
 // problem. The alert list renders fewer still; this bounds what is retained, not what is shown.
 const MAX_MIRRORED_NOTIFICATIONS = 1_000;
 
+// The same bound on notification CELLS, which is a separate leak from the mirror above. The mirror
+// drops a notification the moment it resolves, but the path's cell stays in #cells forever, and a
+// v2 raise mints a new id per notification: one hazard alarming through a long passage leaves a
+// fresh `notifications.<hazard>.<uuid>` cell behind every time. Every other subscribed path is
+// finite and stable, so this is the one family that needs pruning.
+const MAX_NOTIFICATION_CELLS = 1_000;
+
 // How many source transitions a traced cell retains. A well-behaved installation sees a handful in
 // a whole passage; the bound only caps a pathological alternation, whose cue reads the same at
 // eight entries as at eight hundred.
@@ -143,9 +150,15 @@ export class SignalKStore {
   lastDataEpoch = 0;
 
   // Grows as new paths arrive and is never pruned: this is safe because the subscribed path set is
-  // finite and stable, so cells reach a fixed size. A misbehaving server emitting novel paths every
-  // delta would grow this without bound, but that is out of scope for a well-formed stream.
+  // finite and stable, so cells reach a fixed size. The one unbounded family, notifications.*, is
+  // pruned separately below. A misbehaving server emitting other novel paths every delta would grow
+  // this without bound, but that is out of scope for a well-formed stream.
   #cells = new Map<string, PathCell>();
+
+  // The notification paths that have a cell, in creation order, so the oldest can be dropped at the
+  // cap without scanning #cells. A dropped cell only loses a resolved notification's last value and
+  // its sounding-activation count; the raised set the alert list renders lives in #notifications.
+  #notificationCellPaths = new Set<string>();
 
   // The watch-critical paths whose cells keep a bounded source-transition trace. Opt-in, so the
   // hundreds of untraced paths pay nothing per frame.
@@ -160,8 +173,18 @@ export class SignalKStore {
     if (!cell) {
       cell = new PathCell();
       this.#cells.set(path, cell);
+      if (path.startsWith(NOTIFICATIONS_PREFIX)) this.#trackNotificationCell(path);
     }
     return cell;
+  }
+
+  #trackNotificationCell(path: string): void {
+    this.#notificationCellPaths.add(path);
+    if (this.#notificationCellPaths.size <= MAX_NOTIFICATION_CELLS) return;
+    const oldest = this.#notificationCellPaths.values().next();
+    if (oldest.done || oldest.value === path) return;
+    this.#notificationCellPaths.delete(oldest.value);
+    this.#cells.delete(oldest.value);
   }
 
   // Pre-create the cells a consumer reads. cell() creates a PathCell lazily on first access; if that
@@ -199,22 +222,26 @@ export class SignalKStore {
         }
       }
     }
-    if (!this.selfContext && frame.selfContext) this.selfContext = frame.selfContext;
+    // No first-wins latch: a reconnect can land on a different vessel context (a server restored
+    // from another boat's backup, a station repointed at a different server), and the frame's own
+    // context is always the current connection's answer.
+    if (frame.selfContext) this.selfContext = frame.selfContext;
     if (frame.self.size > 0 || (frame.ais !== undefined && frame.ais.size > 0)) {
       this.lastDataEpoch = frame.epoch;
     }
     for (const [path, value] of frame.self) {
+      // Tested once, read twice: this runs per path per flushed frame, and the sounding-activation
+      // branch and the mirror ask the same question of the same string.
+      const isNotification = path.startsWith(NOTIFICATIONS_PREFIX);
       const cell = this.cell(path);
-      if (
-        path.startsWith(NOTIFICATIONS_PREFIX) &&
-        !isSoundingNotification(cell.value) &&
-        isSoundingNotification(value)
-      ) {
+      if (isNotification && !isSoundingNotification(cell.value) && isSoundingNotification(value)) {
         cell.activation += 1;
       }
       cell.value = value;
       const source = frame.selfSources?.get(path);
-      cell.source = source;
+      // Assigned only on change: cell.source is $state, and a same-source republish (the common
+      // case, every frame, for every path) would otherwise wake every consumer that reads it.
+      if (cell.source !== source) cell.source = source;
       const at = frame.selfEpochs?.get(path) ?? frame.epoch;
       if (this.#tracedPaths.has(path)) this.#recordTraced(cell, source, value, at);
       cell.epoch = at;
@@ -223,7 +250,7 @@ export class SignalKStore {
       // Any accepted value clears a server stale declaration, null included: the server clears
       // its own record on any accepted delta (a resumed sounder reporting no bottom is live).
       if (cell.serverStale !== undefined) cell.serverStale = undefined;
-      if (path.startsWith(NOTIFICATIONS_PREFIX)) this.#mirrorNotification(path, value);
+      if (isNotification) this.#mirrorNotification(path, value);
     }
     if (frame.selfStales) {
       for (const [path, marker] of frame.selfStales) this.#applyStaleMarker(path, marker);
@@ -249,8 +276,11 @@ export class SignalKStore {
           changed = true;
         }
         let targetChanged = false;
+        // One Map lookup for the whole target rather than one per path: aisEpochs is keyed by
+        // context, and a target reports a dozen paths a frame.
+        const contextEpochs = frame.aisEpochs?.get(context);
         for (const [path, value] of incoming) {
-          const receivedAt = frame.aisEpochs?.get(context)?.get(path) ?? frame.epoch;
+          const receivedAt = contextEpochs?.get(path) ?? frame.epoch;
           const previous = target.values.get(path);
           targetChanged ||=
             (previous === undefined && !target.values.has(path)) ||

@@ -2,13 +2,13 @@ import {
   CHART_SOURCES,
   chartSourceById,
   DEFAULT_TILE_BYTES_BY_MODE,
+  estimateBytes,
   tileCountInBbox,
 } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
 import {
   bboxFromRectangle,
   coveringSources,
-  estimateBytes,
   estimateRegionBytes,
   exceedsRegionsFree,
   formatBySource,

@@ -615,19 +615,13 @@ function backFromWeatherPanel(): void {
   menuOpen = true;
 }
 
-function regionsPanelForAttempt() {
+// Retry a lazy panel import when the navigator taps Retry. The bare read of lazyPanelAttempt is
+// the dependency that makes the {#await} re-run: the loaders are cached, so re-awaiting a settled
+// rejection would otherwise hand back the same failure forever. One generic wrapper rather than
+// eighteen identical ones, each of which was a chance to forget the dependency read.
+function forAttempt<T>(load: () => Promise<T>): Promise<T> {
   void lazyPanelAttempt;
-  return loadRegionsPanel();
-}
-
-function chartsPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadChartsManagementPanel();
-}
-
-function radarControlsForAttempt() {
-  void lazyPanelAttempt;
-  return loadRadarControls();
+  return load();
 }
 
 function startRadarAreaChartEdit(controlId: string): string | undefined {
@@ -688,81 +682,6 @@ function requestTideStationSelection(selection: TideStationSelectionEvent): void
   // Radar and ordinary leading panels share one dock. Route this transition through the same
   // discard guard as Close and Back so Tides cannot mount underneath Radar or drop an area draft.
   requestRadarPanelAction({ kind: 'tides', selection });
-}
-
-function weatherMapForAttempt() {
-  void lazyPanelAttempt;
-  return loadWeatherMap();
-}
-
-function trendsPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadTrendsPanel();
-}
-
-function tidesPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadTidesPanel();
-}
-
-function aisListPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadAisListPanel();
-}
-
-function historyStripForAttempt() {
-  void lazyPanelAttempt;
-  return loadHistoryStrip();
-}
-
-function measureStripForAttempt() {
-  void lazyPanelAttempt;
-  return loadMeasureStrip();
-}
-
-function layersPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadLayersPanel();
-}
-
-function routesPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadRoutesPanel();
-}
-
-function tracksPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadTracksPanel();
-}
-
-function waypointsPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadWaypointsPanel();
-}
-
-function poiSearchPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadPoiSearchPanel();
-}
-
-function anchorPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadAnchorPanel();
-}
-
-function alarmsPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadAlarmsPanel();
-}
-
-function helpPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadHelpPanel();
-}
-
-function handoffPanelForAttempt() {
-  void lazyPanelAttempt;
-  return loadHandoffPanel();
 }
 
 const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`);
@@ -981,7 +900,7 @@ $effect(() => {
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
     <div class="secondary-strips">
       {#if timeTravel.active}
-        {#await historyStripForAttempt()}
+        {#await forAttempt(loadHistoryStrip)}
           <div class="bottom-strip bottom-strip--accent">
             <div class="head">
               <span class="title">Playback</span>
@@ -1032,7 +951,7 @@ $effect(() => {
         />
       {/if}
       {#if measure.active}
-        {#await measureStripForAttempt()}
+        {#await forAttempt(loadMeasureStrip)}
           <aside class="bottom-strip bottom-strip--accent" aria-label="Measure">
             <div class="head">
               <span class="title">Measure</span>
@@ -1126,7 +1045,7 @@ $effect(() => {
   {#if activePanel && activePanel !== 'profiles'}
     <div class="panel-slot" id={activePanel === 'layers' ? 'layers-panel' : undefined}>
       {#if activePanel === 'layers' && layersView}
-        {#await layersPanelForAttempt()}
+        {#await forAttempt(loadLayersPanel)}
           <LazyPanelState
             title="Layers and charts"
             closeLabel="Close layers and charts"
@@ -1180,7 +1099,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'routes'}
-        {#await routesPanelForAttempt()}
+        {#await forAttempt(loadRoutesPanel)}
           <LazyPanelState
             title="Routes"
             closeLabel="Close routes panel"
@@ -1250,7 +1169,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'tracks'}
-        {#await tracksPanelForAttempt()}
+        {#await forAttempt(loadTracksPanel)}
           <LazyPanelState
             title="Tracks"
             closeLabel="Close tracks panel"
@@ -1310,7 +1229,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'waypoints'}
-        {#await waypointsPanelForAttempt()}
+        {#await forAttempt(loadWaypointsPanel)}
           <LazyPanelState
             title="Waypoints"
             closeLabel="Close waypoints panel"
@@ -1365,7 +1284,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'tides'}
-        {#await tidesPanelForAttempt()}
+        {#await forAttempt(loadTidesPanel)}
           <LazyPanelState
             title="Tides and currents"
             closeLabel="Close tides panel"
@@ -1410,7 +1329,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'trends'}
-        {#await trendsPanelForAttempt()}
+        {#await forAttempt(loadTrendsPanel)}
           <LazyPanelState
             title="Data trends"
             closeLabel="Close trends, return to chart"
@@ -1463,7 +1382,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'ais'}
-        {#await aisListPanelForAttempt()}
+        {#await forAttempt(loadAisListPanel)}
           <LazyPanelState
             title="Nearby vessels (AIS)"
             closeLabel="Close nearby vessels"
@@ -1512,7 +1431,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'poi-search'}
-        {#await poiSearchPanelForAttempt()}
+        {#await forAttempt(loadPoiSearchPanel)}
           <LazyPanelState
             title="Find places"
             closeLabel="Close find places"
@@ -1561,7 +1480,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'anchor'}
-        {#await anchorPanelForAttempt()}
+        {#await forAttempt(loadAnchorPanel)}
           <LazyPanelState
             title="Anchor watch"
             closeLabel="Close anchor watch"
@@ -1611,7 +1530,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'alarms'}
-        {#await alarmsPanelForAttempt()}
+        {#await forAttempt(loadAlarmsPanel)}
           <LazyPanelState
             title="Alarms"
             closeLabel="Close alarms panel"
@@ -1666,7 +1585,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'help'}
-        {#await helpPanelForAttempt()}
+        {#await forAttempt(loadHelpPanel)}
           <LazyPanelState
             title="Help and helm setup"
             closeLabel="Close help"
@@ -1723,7 +1642,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'handoff'}
-        {#await handoffPanelForAttempt()}
+        {#await forAttempt(loadHandoffPanel)}
           <LazyPanelState
             title="Watch handoff"
             closeLabel="Close watch handoff"
@@ -1760,7 +1679,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
-        {#await regionsPanelForAttempt()}
+        {#await forAttempt(loadRegionsPanel)}
           <LazyPanelState
             title="Offline charts"
             closeLabel="Close offline charts"
@@ -1811,7 +1730,7 @@ $effect(() => {
           />
         {/await}
       {:else if activePanel === 'charts-management' && companionBase !== null}
-        {#await chartsPanelForAttempt()}
+        {#await forAttempt(loadChartsManagementPanel)}
           <LazyPanelState
             title="Installed charts"
             closeLabel="Close installed charts panel"
@@ -1877,7 +1796,7 @@ $effect(() => {
           : undefined}
         footer={marineRadar.store.areaDraft?.chartEditing ? radarPlacementFooter : undefined}
       >
-        {#await radarControlsForAttempt()}
+        {#await forAttempt(loadRadarControls)}
           <div class="panel-loading" role="status">Loading radar controls…</div>
         {:then module}
           <ErrorBoundary>
@@ -1919,7 +1838,7 @@ $effect(() => {
     </div>
   {/if}
   {#if weatherPanelOpen}
-    {#await weatherMapForAttempt()}
+    {#await forAttempt(loadWeatherMap)}
       <div class="panel-loading panel-loading--cover" tabindex="-1" use:dialog={closeWeatherPanel}>
         <span role="status">Loading weather view…</span>
         <div class="panel-controls">

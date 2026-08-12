@@ -12,6 +12,8 @@ export { pickTextFile, readErrorMessage } from './file-pick';
 export {
   focusOnMount,
   isTabKey,
+  nextRovingIndex,
+  type RovingKey,
   rovingFocus,
   trapFocus,
 } from './focus';

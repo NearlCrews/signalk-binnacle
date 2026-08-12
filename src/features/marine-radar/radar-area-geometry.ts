@@ -1,4 +1,5 @@
 import type { LatLon } from '$shared/geo';
+import { emptyFeatureCollection, featureCollection } from '$shared/map';
 import { geodesicDestination, haversineMeters, rhumbBearingRad } from '$shared/nav';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
 import { clockwiseRadarSpan, FULL_CIRCLE_RADIANS, radarAngleInRange } from './radar-angle';
@@ -214,7 +215,7 @@ export function radarAreaFeatures(
   heading: number | undefined,
   radarRange: number | undefined = store.selected?.range,
 ): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-  if (!center) return { type: 'FeatureCollection', features: [] };
+  if (!center) return emptyFeatureCollection<GeoJSON.Polygon>();
   const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   for (const definition of store.capabilities) {
     const active = store.areaDraft?.controlId === definition.id;
@@ -268,7 +269,7 @@ export function radarAreaFeatures(
         features.push(areaFeature(definition.id, 'rect', value.enabled, active, geometry));
     }
   }
-  return { type: 'FeatureCollection', features };
+  return featureCollection(features);
 }
 
 export function radarAreaChartInstruction(draft: RadarAreaDraft): string {

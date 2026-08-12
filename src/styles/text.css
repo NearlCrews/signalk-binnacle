@@ -59,6 +59,13 @@
   font-size: var(--text-sm);
 }
 
+/* The extra-small variant, for a note that sits under a control rather than beside body text: an
+   input's format hint, a privacy line, a radar control's description. Same muted voice, one step
+   down, so those never drift into three near-identical scoped rules again. */
+.muted-note--xs {
+  font-size: var(--text-xs);
+}
+
 /* An inline note led by a status icon, with the text wrapping under itself rather than under the
    icon: the weather warning banners and the degraded-monitor notes both read this way. The 0.15rem
    icon nudge is the settled offset that sits a 14px glyph on the first line's cap height at the

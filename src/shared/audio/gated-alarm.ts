@@ -15,7 +15,8 @@ export class GatedAlarm {
     this.#alarm = alarm;
   }
 
-  // Resume the audio context from a user gesture (browser autoplay policy).
+  // Edge-triggered: only a change starts or stops the tone, so a condition re-evaluated every frame
+  // does not restart the burst loop. Priming the audio context is primeAlarmAudio's job, not this.
   update(shouldSound: boolean): void {
     if (shouldSound === this.#sounding) return;
     this.#sounding = shouldSound;

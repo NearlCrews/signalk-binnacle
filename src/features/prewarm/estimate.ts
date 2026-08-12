@@ -16,9 +16,6 @@ import { formatBytes } from '$shared/lib';
 import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { CacheStats, WarmStatus } from './regions-client.js';
 
-/** Re-exported from the shared package so the panel, the plugin, and any caller share one estimate. */
-export { estimateBytes };
-
 // The region list includes the basemap, while the position-warm list and the new-box auto-select
 // exclude it: it is global and large.
 

@@ -3,18 +3,12 @@ import { onDestroy } from 'svelte';
 import { formatLengthOr, lengthUnit, RAD_TO_DEG, type UnitsMode } from '$shared/lib';
 import { InlineConfirm, registerDismiss, UnitField } from '$shared/ui';
 import { displayRadarDistance, siRadarDistance } from './radar-area-units';
-import { controlWriteBlockReason } from './radar-controls-model';
-import {
-  isNativeRectDefinition,
-  radarRectSignature,
-  radarRectValue,
-  validateRadarRect,
-} from './radar-rect-model';
+import { controlWriteBlockReason, validateStructuredControl } from './radar-controls-model';
+import { isNativeRectDefinition, radarRectSignature, radarRectValue } from './radar-rect-model';
 import {
   isNativeSectorDefinition,
   radarSectorSignature,
   radarSectorValue,
-  validateRadarSector,
 } from './radar-sector-model';
 import type {
   ControlDefinition,
@@ -25,12 +19,7 @@ import type {
   RadarStructuredValue,
   RadarZoneValue,
 } from './radar-types';
-import {
-  isNativeZoneDefinition,
-  radarZoneSignature,
-  radarZoneValue,
-  validateRadarZone,
-} from './radar-zone-model';
+import { isNativeZoneDefinition, radarZoneSignature, radarZoneValue } from './radar-zone-model';
 
 type EditState = 'idle' | 'editing' | 'dirty';
 
@@ -124,12 +113,7 @@ function readStructuredValue(): RadarStructuredValue | undefined {
 }
 
 function validateStructuredValue(value: RadarStructuredValue): string | undefined {
-  if (definition.type === 'zone' && 'startDistance' in value)
-    return validateRadarZone(definition, value);
-  if (definition.type === 'sector' && 'value' in value && !('startDistance' in value))
-    return validateRadarSector(definition, value);
-  if (definition.type === 'rect' && 'x1' in value) return validateRadarRect(definition, value);
-  return 'The structured value does not match this radar control.';
+  return validateStructuredControl(definition, value);
 }
 
 function structuredSignature(value: RadarStructuredValue): string {
@@ -503,16 +487,10 @@ onDestroy(() => {
 {/if}
 
 <style>
-.area-summary,
-.control-error {
+.area-summary {
   margin: 0;
   font-size: var(--text-xs);
-}
-.area-summary {
   color: var(--text-muted);
-}
-.control-error {
-  color: var(--alarm);
 }
 .area-editor {
   display: flex;

@@ -65,19 +65,26 @@ const queryNoteRole = $derived(shareWithServer && shareChanged ? 'alert' : 'stat
   <span>Share the full chart URL with the Signal K server</span>
 </label>
 {#if writeBlocked}
-  <p class="privacy-note" role="status">
+  <p class="muted-note muted-note--xs privacy-note" role="status">
     {shareWithServer
       ? 'Read and write Signal K access is needed to change sharing for this server chart.'
       : 'This chart stays on this device. Read and write Signal K access is needed to share it with the server.'}
   </p>
 {:else if hasQuery}
-  <p class:alert-note={shareWithServer} class="privacy-note" role={queryNoteRole}>
+  <!-- Exclusive, not layered: .muted-note is defined after .alert-note in text.css, so carrying
+       both would repaint the sharing warning in the muted color it is warning against. -->
+  <p
+    class:alert-note={shareWithServer}
+    class:muted-note={!shareWithServer}
+    class="muted-note--xs privacy-note"
+    role={queryNoteRole}
+  >
     {shareWithServer
       ? 'Sharing sends the full URL, including every query value, to the Signal K server.'
       : 'This URL contains query values that may be private. It stays on this device unless you choose to share the full URL.'}
   </p>
 {:else}
-  <p class="privacy-note">
+  <p class="muted-note muted-note--xs privacy-note">
     Sharing lets other Signal K clients discover this chart. Turn it off to keep the full URL on
     this device.
   </p>
@@ -93,10 +100,5 @@ const queryNoteRole = $derived(shareWithServer && shareChanged ? 'alert' : 'stat
 .share-choice input {
   flex: 0 0 auto;
   margin-block-start: 0.15rem;
-}
-.privacy-note {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
 }
 </style>

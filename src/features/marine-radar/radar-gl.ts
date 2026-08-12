@@ -221,6 +221,12 @@ export class RadarGl {
       data: gl.getUniformLocation(program, 'u_data'),
       legend: gl.getUniformLocation(program, 'u_legend'),
     };
+    // Sampler unit assignments are program state, not per-frame state, and this program is created
+    // once with no context-restore path, so bind them here instead of on every frame.
+    gl.useProgram(program);
+    gl.uniform1i(this.#loc.data, 0);
+    gl.uniform1i(this.#loc.legend, 1);
+    gl.useProgram(null);
   }
 
   setData(buffer: ArrayBuffer, spokesPerRev: number, maxSpokeLen: number): void {
@@ -328,10 +334,8 @@ export class RadarGl {
     gl.uniform3fv(loc.sweepColor, this.#sweepColor);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.#dataTex);
-    gl.uniform1i(loc.data, 0);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.#legendTex);
-    gl.uniform1i(loc.legend, 1);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

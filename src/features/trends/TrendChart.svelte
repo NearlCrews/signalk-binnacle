@@ -21,6 +21,9 @@ const FALLBACK_WIDTH = 280;
 let host: HTMLDivElement | undefined = $state();
 let chart = $state.raw<uPlot | undefined>();
 
+// Read live rather than resolved once at build: uPlot re-invokes the stroke callbacks below on
+// every redraw, which is what recolors an existing chart when the theme changes. Caching the value
+// would leave a night-red chart drawn in day colors until it was rebuilt.
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'currentColor';
 }

@@ -56,6 +56,7 @@ export {
   formatKnotsOr,
   formatLengthOr,
   formatMetersOrNm,
+  formatMonthDay,
   formatNm,
   formatNmOr,
   formatPercent,

@@ -342,7 +342,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           <dl class="stat-grid">
             <dt>
               {nextCurrent
-                ? `Next ${nextCurrent.kind === 'ebb' ? 'ebb' : nextCurrent.kind === 'flood' ? 'flood' : 'slack'}`
+                ? `Next ${nextCurrent.kind}`
                 : 'Next current'}
             </dt>
             <dd>
@@ -354,7 +354,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
               {/if}
             </dd>
             {#if followingFlow}
-              <dt>{`Then ${followingFlow.kind === 'ebb' ? 'ebb' : 'flood'}`}</dt>
+              <dt>{`Then ${followingFlow.kind}`}</dt>
               <dd>
                 <span class="num"
                   >{formatClockTime(followingFlow.timeMs)},

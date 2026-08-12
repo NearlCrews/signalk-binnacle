@@ -60,21 +60,17 @@ function historyHintId(id: string): string {
   return `instrument-history-${encodeURIComponent(id).replace(/\./g, '%2E')}`;
 }
 
-const historyStatusMessage = $derived(
-  controller.historyStatus === 'checking'
-    ? 'Checking for recorded instruments.'
-    : controller.historyStatus === 'scanning'
-      ? 'Scanning recorded instruments.'
-      : controller.historyStatus === 'complete'
-        ? 'Recorded instruments scanned.'
-        : controller.historyStatus === 'partial'
-          ? 'Some recorded instruments could not be scanned. Accepted results were retained.'
-          : controller.historyStatus === 'failed'
-            ? 'Recorded instruments could not be scanned. Live instruments are still available.'
-            : controller.historyStatus === 'unavailable'
-              ? 'No history provider is available. Showing live instruments.'
-              : '',
-);
+// One announcement per discovery state. A table rather than a chain, so adding a state is one entry
+// and an unhandled one announces nothing rather than borrowing its neighbor's wording.
+const HISTORY_STATUS_MESSAGES: Partial<Record<string, string>> = {
+  checking: 'Checking for recorded instruments.',
+  scanning: 'Scanning recorded instruments.',
+  complete: 'Recorded instruments scanned.',
+  partial: 'Some recorded instruments could not be scanned. Accepted results were retained.',
+  failed: 'Recorded instruments could not be scanned. Live instruments are still available.',
+  unavailable: 'No history provider is available. Showing live instruments.',
+};
+const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.historyStatus] ?? '');
 </script>
 
 <!-- The reorder controller measures rows and listens for scroll on this element, so it is the one
@@ -102,7 +98,9 @@ const historyStatusMessage = $derived(
           describedBy={hintId}
         />
         {#if historicalOnly}
-          <span id={hintId} class="history-note">Previously seen, no live data</span>
+          <span id={hintId} class="muted-note muted-note--xs history-note"
+            >Previously seen, no live data</span
+          >
         {/if}
         <button
           type="button"
@@ -132,7 +130,7 @@ const historyStatusMessage = $derived(
   </div>
   {#if historyStatusMessage}
     <p
-      class="scan-status"
+      class="muted-note scan-status"
       class:visually-hidden={controller.historyStatus === 'complete'}
       role="status"
     >
@@ -166,7 +164,9 @@ const historyStatusMessage = $derived(
                 describedBy={hintId}
               />
               {#if historicalOnly}
-                <span id={hintId} class="history-note">Previously seen, no live data</span>
+                <span id={hintId} class="muted-note muted-note--xs history-note"
+                  >Previously seen, no live data</span
+                >
               {:else if unavailable}
                 <UnavailableHint id={hintId} hint={unavailableHint} />
               {/if}
@@ -207,15 +207,10 @@ const historyStatusMessage = $derived(
   padding: 0 var(--space-3) var(--space-2);
 }
 .scan-status {
-  margin: 0;
   padding: 0 var(--space-3) var(--space-2);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
 }
 .history-note {
   flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
   white-space: nowrap;
 }
 /* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the

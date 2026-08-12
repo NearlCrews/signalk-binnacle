@@ -215,7 +215,6 @@ export function addNoteLayers(
   }
 }
 
-// Remove the six note layers and both note sources.
 export function removeNoteLayers(map: MapLibreMap): void {
   removeLayersAndSources(map, LAYERS, [SOURCE_ID, SELECT_SOURCE]);
 }

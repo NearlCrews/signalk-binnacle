@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '$shared/testing';
 import {
-  discoverBatteries,
   discoverHistoricalInstrumentInstances,
   discoverInstrumentInstances,
   historicalInstrumentInstances,
@@ -69,7 +68,7 @@ describe('discoverInstrumentInstances', () => {
   it('sends the bearer header when a token is present', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { house: { voltage: {} } }));
     vi.stubGlobal('fetch', fetchMock);
-    await discoverBatteries('http://pi', 'my-token');
+    await discoverInstrumentInstances('http://pi', 'my-token');
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://pi/signalk/v1/api/vessels/self/electrical/batteries');
     expect(((init as RequestInit).headers as Record<string, string>).Authorization).toBe(

@@ -147,6 +147,9 @@ export function createShallowController(deps: ShallowControllerDeps) {
     // Silence the tone outright (teardown). There is no prime here: the app resumes one shared
     // audio context through primeAlarmAudio(), so a per-alarm prime would be dead weight.
     stop: () => alarm.stop(),
+    // Drop cached depth-path meta so a server-side zone edit reaches the watch. Called on the
+    // stream open edge, where a restarted or reconfigured server is exactly what may have changed.
+    refreshMeta: () => metaCache.refresh(),
     get alarming() {
       return alarming;
     },

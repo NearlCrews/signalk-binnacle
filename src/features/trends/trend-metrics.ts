@@ -131,7 +131,7 @@ export interface TrendCoverage {
 }
 
 // A series missing more than a tenth of its slots is marked partial.
-export const TREND_PARTIAL_BELOW = 0.9;
+const TREND_PARTIAL_BELOW = 0.9;
 // A newest sample older than this, or than three median sample intervals when that is longer, is
 // marked stale: the chart still shows history, but its right edge is not the present.
 export const TREND_STALE_AFTER_SEC = 600;

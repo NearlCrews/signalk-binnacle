@@ -91,7 +91,7 @@ export const trapFocus: Action<HTMLElement, boolean> = (node, enabled) => {
  * host element can carry a non-interactive role without tripping the a11y interaction lint.
  */
 const ROVING_KEYS = ['ArrowDown', 'ArrowUp', 'Home', 'End'] as const;
-type RovingKey = (typeof ROVING_KEYS)[number];
+export type RovingKey = (typeof ROVING_KEYS)[number];
 
 export function isRovingKey(key: string): key is RovingKey {
   return (ROVING_KEYS as readonly string[]).includes(key);

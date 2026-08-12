@@ -558,6 +558,12 @@ export interface PointConditions {
   riskCues?: string[];
 }
 
+// Hoisted: these are re-parsed on every weather record otherwise, and a provider sends one per
+// forecast step per fetch.
+const TENDENCY_RISING = /^(rising|rise|increasing|increase|up)$/;
+const TENDENCY_FALLING = /^(falling|fall|decreasing|decrease|down)$/;
+const TENDENCY_STEADY = /^(steady|stable|unchanged|level)$/;
+
 export function normalizePressureTendency(value: string | number | undefined): string | undefined {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return undefined;
@@ -567,9 +573,9 @@ export function normalizePressureTendency(value: string | number | undefined): s
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim().toLowerCase();
   if (!normalized) return undefined;
-  if (/^(rising|rise|increasing|increase|up)$/.test(normalized)) return 'rising';
-  if (/^(falling|fall|decreasing|decrease|down)$/.test(normalized)) return 'falling';
-  if (/^(steady|stable|unchanged|level)$/.test(normalized)) return 'steady';
+  if (TENDENCY_RISING.test(normalized)) return 'rising';
+  if (TENDENCY_FALLING.test(normalized)) return 'falling';
+  if (TENDENCY_STEADY.test(normalized)) return 'steady';
   return undefined;
 }
 

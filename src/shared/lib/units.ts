@@ -280,6 +280,16 @@ export function formatClockTime(
   return new Date(timeMs).toLocaleTimeString([], opts?.seconds ? CLOCK_OPTS_HMS : CLOCK_OPTS_HM);
 }
 
+// A short calendar date ("Mar 4"), for a label that has already given the time and only needs to
+// say which DAY it belongs to: an arrival that crosses local midnight, a handoff snapshot from
+// yesterday. Constructed once rather than per call; an Intl formatter is expensive to build and
+// this one takes no options that vary.
+const MONTH_DAY_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
+export function formatMonthDay(timeMs: number): string {
+  return Number.isFinite(timeMs) ? MONTH_DAY_FORMAT.format(new Date(timeMs)) : '';
+}
+
 // A weekday wall-clock label ("Thu, 12:00 PM"), optionally with the zone, and optionally hour-only
 // (minute: false) for the compact forecast step columns. The weather valid-time labels carry the
 // zone so a crew keeping ship's time in UTC cannot misread a front by hours; one helper so the
