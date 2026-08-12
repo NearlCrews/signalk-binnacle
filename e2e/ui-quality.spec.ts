@@ -1,23 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { expectInsideViewport, openMenuItem } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
-
-async function expectInsideViewport(surface: Locator, page: Page): Promise<void> {
-  await expect(surface).toBeVisible();
-  const [box, viewport] = await Promise.all([
-    surface.boundingBox(),
-    page.evaluate(() => ({
-      width: document.documentElement.clientWidth,
-      height: document.documentElement.clientHeight,
-    })),
-  ]);
-  if (!box) throw new Error('Floating surface did not lay out.');
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
-}
 
 test('restores night-red before interaction and updates browser chrome', async ({ page }) => {
   await page.addInitScript(() => {
@@ -81,11 +66,7 @@ test('keeps a scrolled layer opacity popover inside a narrow viewport', async ({
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Layers and charts', exact: true })
-    .click();
+  await openMenuItem(page, 'Layers and charts');
   const panel = page.locator('#layers-panel');
   const tabs = panel.getByLabel('Layers and charts view');
   await tabs.getByRole('button', { name: 'Overlays' }).click();
@@ -183,11 +164,7 @@ test('keeps chart controls legible and the instrument title on one line', async 
   if (await pinnedInstruments.isVisible()) {
     await pinnedInstruments.click();
   } else {
-    await page.getByRole('button', { name: 'Menu', exact: true }).click();
-    await page
-      .locator('#app-menu-launcher')
-      .getByRole('button', { name: 'Instrument dock', exact: true })
-      .click();
+    await openMenuItem(page, 'Instrument dock');
   }
   const heading = page.getByRole('heading', { name: 'Instruments', exact: true });
   await expect(heading).toBeVisible();
@@ -235,11 +212,7 @@ test('keeps long battery readings distinguishable in a night-red tablet dock', a
 
   await page.goto('/');
   // The dock is not a default toolbar pin, so open it from the launcher.
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
   await dock.getByRole('button', { name: 'Customize instruments' }).click();

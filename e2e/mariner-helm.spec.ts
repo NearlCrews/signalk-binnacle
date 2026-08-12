@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page, test } from '@playwright/test';
+import { openMenuItem, stubVesselsSelf } from './helpers';
 
 // The mariner helm scenarios: emergency reachability, alarm pileups, and staleness honesty under
 // phone-sized, landscape, large-text, and safe-area conditions. This project runs against the
@@ -98,9 +99,7 @@ const CLOSING_TARGET: DeltaValue[] = [
 ];
 
 async function stubRestApis(page: Page): Promise<void> {
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   // The weather panel's external providers: failed fetches leave the panel in its error state,
   // which is all the layout scenarios need.
   await page.route(
@@ -127,11 +126,7 @@ async function raiseMob(page: Page): Promise<Locator> {
 }
 
 async function openForecast(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Forecast', exact: true })
-    .click();
+  await openMenuItem(page, 'Forecast');
 }
 
 // Full visibility for an emergency control: inside the viewport, not cropped by any
@@ -279,11 +274,7 @@ test('full-screen Instruments keeps MOB initiation and response reachable', asyn
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   const dialog = page.getByRole('dialog', { name: 'Instruments' });
   await expect(dialog).toBeVisible();
 
@@ -384,11 +375,7 @@ test('a server staleness declaration relabels the fix and names the quiet source
   await expect(cluster).not.toContainText('Vessel');
 
   // The instrument detail names the declaration and the source that went quiet, not "Unknown".
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: /speed/i }).first().click();
   await expect(dock).toContainText('The Signal K server reports this sensor stopped updating.');
@@ -405,11 +392,7 @@ test('stale wind angle is not presented as live beside fresh speed', async ({ pa
     { path: 'environment.wind.speedApparent', value: 6 },
     { path: 'environment.wind.angleApparent', value: 0.8 },
   ]);
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   const tile = dock.getByRole('button', { name: /wind/i }).first();
   await expect(tile).toBeVisible();
@@ -429,20 +412,12 @@ test('route editing stays visible with its exit actions when its panel is replac
   // after another panel replaces the Routes panel, so editing can never continue invisibly.
   await page.setViewportSize({ width: 320, height: 568 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Routes', exact: true })
-    .click();
+  await openMenuItem(page, 'Routes');
   await page.getByRole('button', { name: 'New route' }).click();
   const strip = page.getByRole('complementary', { name: 'Route editing' });
   await expect(strip).toBeVisible();
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Waypoints', exact: true })
-    .click();
+  await openMenuItem(page, 'Waypoints');
   await expect(strip).toBeVisible();
   await expectActionReachable(strip.getByRole('button', { name: 'Open editor' }));
   const cancel = strip.getByRole('button', { name: 'Cancel' });

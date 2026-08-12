@@ -103,10 +103,8 @@ export function createRouteController(deps: RouteControllerDeps) {
     deps.toast.show(message);
   }
 
-  // One place to turn a write outcome into a message and, when the server refused, into a fresh
-  // access request. Returns whether the write landed, so a caller reads as
-  // `if (!accepted(outcome, ...)) return;`. Without this the refusal branch was copied at every
-  // mutation, which is one more place per write to forget the re-request.
+  // Reports through the route error state rather than a bare toast, so a failed write lands where
+  // the routes panel already looks for one.
   const accepted = createWriteOutcomeGate({
     report: flagRouteError,
     requestWriteAccess: () => deps.requestWriteAccess(),

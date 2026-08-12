@@ -184,12 +184,16 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   `.icon-btn--danger`, `.icon-pill` (a pill-shaped icon toggle), the `.panel-close` and
   `.panel-minimize` panel header controls, and the shared `.is-on` lit state (accent color, accent
   border, accent-tint fill) that lights any composing control.
-- Forms (`forms.css`): `.input` (text inputs and selects, 44px, raised fill), `.range` (the live
+- Forms (`forms.css`): `.control-error` (a control's own validation message, the alarm-voiced
+  counterpart to `.muted-note--xs`, sitting directly under the field it refuses), `.input` (text
+  inputs and selects, 44px, raised fill), `.range` (the live
   slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header),
   and `.search-input` (the full-width search field with its 44px clear affordance, applied through
   the `SearchInput` primitive in the AIS, Find places, and Waypoints panels).
 - Text (`text.css`): `.caps-label` (the uppercase, tracked, muted SECTION heading), `.muted-note` (a
-  quiet hint for empty states and inline guidance), `.alert-note` (an outline alarm banner) and its
+  quiet hint for empty states and inline guidance) plus its `--xs` modifier (the same voice one step
+  down, for a note sitting under a control rather than beside body text: an input's format hint, a
+  privacy line, a radar control's description), `.alert-note` (an outline alarm banner) and its
   `.alert-note--filled` tinted variant, `.icon-note` (a note led by a status icon, with the text
   wrapping under itself rather than under the icon; composed over the note's own look and severity
   color by the weather warning banners and the degraded-monitor notes), `.action-note` plus its

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -10,9 +11,7 @@ test('waypoints loads without the stream and confirms navigation on a narrow scr
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/resources\/waypoints$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -66,9 +65,7 @@ test('measure edits middle points with pointer and keyboard paths, then restores
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Measure', exact: true }).click();
@@ -156,6 +153,9 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   await strip.getByRole('button', { name: 'Move point' }).click();
   await canvas.focus();
   await page.keyboard.press('ArrowRight');
+  // MapLibre eases a keyboard pan over its own animation, and the button below commits the CURRENT
+  // center, so the assertion depends on the pan having landed. Its end fires on the map, not the
+  // page, so a settle window is what is available here.
   await page.waitForTimeout(150);
   await strip.getByRole('button', { name: 'Move to chart center' }).click();
   await expect(strip.getByText('Point 2 selected', { exact: false })).toBeVisible();
@@ -181,9 +181,7 @@ test('measure and route editing refuse overlapping chart gestures in both direct
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Measure', exact: true }).click();

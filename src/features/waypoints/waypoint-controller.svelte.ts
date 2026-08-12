@@ -34,9 +34,8 @@ export type WaypointLoadState = 'idle' | 'loading' | 'ready' | 'error';
 export type WaypointsProvisioning = 'unknown' | 'provisioned' | 'unprovisioned';
 
 export function createWaypointsController(deps: WaypointControllerDeps) {
-  // One place to turn a write outcome into a toast and, when the server refused, into a fresh
-  // access request. The dialog and its entered values stay put on any failure; only the
-  // explanation and the recovery differ.
+  // The dialog and its entered values stay put on any failure; only the explanation and the
+  // recovery differ, which is what the shared gate resolves.
   const accepted = createWriteOutcomeGate({
     report: (message) => deps.toast.show(message),
     requestWriteAccess: () => deps.requestWriteAccess(),

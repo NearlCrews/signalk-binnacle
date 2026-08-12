@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -16,9 +17,7 @@ test('find places enables its layer, searches provider metadata, and keeps selec
   });
 
   let listRequests = 0;
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/resources\/notes/, async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/harbor-1')) {
@@ -122,9 +121,7 @@ test('place detail returns to find places on a narrow screen', async ({ page }) 
     localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/resources\/notes/, async (route) => {
     if (route.request().url().endsWith('/harbor-1')) {
       await route.fulfill({
@@ -166,9 +163,7 @@ test('personal notes create, edit, move, and delete through the v2 notes provide
     localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
 
   const notes = new Map<string, Record<string, unknown>>();
   let failNextCollectionRefresh = false;

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
+import { openMenuItem, stubVesselsSelf } from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 test.use({ serviceWorkers: 'block' });
@@ -118,9 +119,7 @@ test('warms Tide controls before a visible station marker is selected', async ({
       JSON.stringify({ tides: { visible: true, opacity: 1 } }),
     );
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await mockCoops(page);
 
   const panelChunk = page.waitForResponse(/\/assets\/TidesPanel-[^/]+\.js$/);
@@ -136,19 +135,13 @@ test('opens Tides from a station enabled only through Layers and charts', async 
     localStorage.setItem('binnacle:help-orientation', 'true');
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 27.7, lon: -82.7, zoom: 10 }));
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   const workerProof = await installMapLibreWorkerProof(page);
   await mockCoops(page);
   await page.goto('/');
   await workerProof.assertInitialNavigation();
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Layers and charts', exact: true })
-    .click();
+  await openMenuItem(page, 'Layers and charts');
   const layers = page.locator('#layers-panel');
   await layers
     .getByLabel('Layers and charts view')
@@ -190,9 +183,7 @@ test('opens Tides from a direct chart touch tap', async ({ page }) => {
       JSON.stringify({ tides: { visible: true, opacity: 1 } }),
     );
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   const workerProof = await installMapLibreWorkerProof(page);
   await mockCoops(page);
   const prediction = page.waitForResponse(
@@ -224,17 +215,11 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   });
   const workerProof = await installMapLibreWorkerProof(page);
   await mockCoops(page);
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.goto('/');
   await workerProof.assertInitialNavigation();
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Tides and currents', exact: true })
-    .click();
+  await openMenuItem(page, 'Tides and currents');
   const panel = page.getByRole('complementary', { name: 'Tides and currents' });
   await expect(panel.getByRole('button', { name: /Pass tide/ })).toBeVisible();
   await expect(panel).toHaveCount(1);
@@ -305,9 +290,7 @@ test('can leave Tides while its controls are still loading', async ({ page }) =>
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   let releaseChunk = () => {};
   const chunkGate = new Promise<void>((resolve) => {
     releaseChunk = resolve;

@@ -1,33 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
+import { expectInsideViewport, openMenuItem, stubVesselsSelf } from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 // Smoke tests route selected external APIs. Blocking service workers keeps those requests visible
 // to Playwright instead of letting a previously installed worker bypass the route hooks.
 test.use({ serviceWorkers: 'block' });
-
-async function openInstruments(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
-}
-
-async function openTrends(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Data trends', exact: true })
-    .click();
-}
-
-async function openTimeTravel(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Playback', exact: true })
-    .click();
-}
 
 async function mockChartLocker(page: Page, regions: unknown[] = []): Promise<void> {
   await page.route(/\/plugins\/signalk-chart-locker\//, async (route) => {
@@ -116,9 +93,7 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
     route.fulfill({
       status: 200,
@@ -174,7 +149,7 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
   });
 
   await page.goto('/');
-  await openTimeTravel(page);
+  await openMenuItem(page, 'Playback');
   const strip = page.getByRole('complementary', { name: 'Playback' });
   await expect(strip).toBeVisible();
   await expect.poll(() => requests.at(-1)).toEqual({ duration: '86400', resolution: '60' });
@@ -219,9 +194,7 @@ test('time travel can exit while its lazy controls are still loading', async ({ 
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
     route.fulfill({
       status: 200,
@@ -243,7 +216,7 @@ test('time travel can exit while its lazy controls are still loading', async ({ 
 
   try {
     await page.goto('/');
-    await openTimeTravel(page);
+    await openMenuItem(page, 'Playback');
     const pending = page
       .locator('.bottom-strip')
       .filter({ hasText: 'Loading time travel controls' });
@@ -251,7 +224,7 @@ test('time travel can exit while its lazy controls are still loading', async ({ 
     await pending.getByRole('button', { name: 'Exit' }).click();
     await expect(pending).not.toBeVisible();
 
-    await openTimeTravel(page);
+    await openMenuItem(page, 'Playback');
     await expect(pending).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(pending).not.toBeVisible();
@@ -265,9 +238,7 @@ test('weather can exit while its lazy view is still loading', async ({ page }) =
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   let releaseChunk = () => {};
   const chunkGate = new Promise<void>((resolve) => {
     releaseChunk = resolve;
@@ -311,9 +282,7 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   const workerProof = await installMapLibreWorkerProof(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
@@ -381,9 +350,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
   const radarWrites: Array<{ pathname: string; body: unknown }> = [];
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/features/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -625,9 +592,7 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
       },
     },
   });
-  const panelBox = await panel.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect((panelBox?.x ?? 0) + (panelBox?.width ?? 0)).toBeLessThanOrEqual(320);
+  await expectInsideViewport(panel, page);
   await panel.getByRole('button', { name: 'Transmit', exact: true }).click();
   const transmitConfirm = panel.getByRole('group', { name: 'Start transmitting radar energy?' });
   await expect(transmitConfirm).toBeVisible();
@@ -682,21 +647,13 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   await panel.getByRole('button', { name: 'Edit guard zone' }).click();
   await panel.getByRole('spinbutton', { name: 'End angle' }).fill('45');
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   await expect(discardConfirm).toBeVisible();
   await discardConfirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(panel).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Instruments' })).not.toBeVisible();
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   await expect(discardConfirm).toBeVisible();
   await discardConfirm.getByRole('button', { name: 'Discard' }).click();
   await expect(panel).not.toBeVisible();
@@ -789,11 +746,7 @@ test('offline areas explain removed chart sources before re-download', async ({ 
   await expect(page.getByTitle('Offline charts: online, cache 0 B')).toBeVisible({
     timeout: 10_000,
   });
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Offline charts', exact: true })
-    .click();
+  await openMenuItem(page, 'Offline charts');
 
   const panel = page.locator('aside.slide-over');
   await expect(
@@ -874,11 +827,7 @@ test('style-document charts stay visible and explain that they are unsupported',
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Layers and charts', exact: true })
-    .click();
+  await openMenuItem(page, 'Layers and charts');
 
   const panel = page.locator('#layers-panel');
   const row = panel.locator('[data-layer-row="chart-provider-style"]');
@@ -969,6 +918,9 @@ test('route editing confirms before discarding plotted changes', async ({ page }
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
   if (!box) throw new Error('map canvas did not lay out');
+  // Terra Draw attaches its own canvas listeners after the route editor mounts, and a click landing
+  // before it does is swallowed with no visible trace. There is no event to await for that, so this
+  // is a settle window rather than a poll.
   await page.waitForTimeout(500);
   await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.4);
   await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.55);
@@ -987,9 +939,7 @@ test('saved route secondary actions use a labeled overflow menu', async ({ page 
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   let routeRequests = 0;
   await page.route(/\/signalk\/v2\/api\/resources\/routes$/, async (route) => {
     routeRequests += 1;
@@ -1033,7 +983,7 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   page,
 }) => {
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // The chart host stays in the layout beside the dock (true split, not an overlay).
@@ -1065,9 +1015,7 @@ test('data trends discovers instruments independently and enforces the profile s
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, async (route) => {
     providerRequests += 1;
     if (providerRequests === 1) {
@@ -1099,7 +1047,7 @@ test('data trends discovers instruments independently and enforces the profile s
   );
 
   await page.goto('/');
-  await openTrends(page);
+  await openMenuItem(page, 'Data trends');
   const panel = page.locator('.slide-over[aria-label="Data trends"]');
   await expect(panel).toBeVisible();
   await expect.poll(() => providerRequests, { timeout: 15_000 }).toBeGreaterThan(0);
@@ -1172,9 +1120,7 @@ test('history-only engine readings stay identifiable through selection and detai
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
     route.fulfill({
       status: 200,
@@ -1231,7 +1177,7 @@ test('history-only engine readings stay identifiable through selection and detai
   });
 
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await expect.poll(() => pathRequests).toBeGreaterThan(0);
@@ -1281,7 +1227,7 @@ test('focused trends return to instrument detail without changing the saved over
   );
 
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   let dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
   await dock.getByRole('checkbox', { name: 'Water speed', exact: true }).check();
@@ -1308,7 +1254,7 @@ test('focused trends return to instrument detail without changing the saved over
   await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Instruments' })).not.toBeVisible();
 
-  await openTrends(page);
+  await openMenuItem(page, 'Data trends');
   const overview = page.locator('.slide-over[aria-label="Data trends"]');
   await overview.getByRole('button', { name: 'Customize trends' }).click();
   await expect(overview.getByText('4 of 8 selected')).toBeVisible();
@@ -1326,9 +1272,7 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
   let historyValueRequests = 0;
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/history\/_providers$/, (route) =>
     route.fulfill({
       status: 200,
@@ -1370,7 +1314,7 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
   });
 
   await page.goto('/');
-  await openTrends(page);
+  await openMenuItem(page, 'Data trends');
   const panel = page.locator('.slide-over[aria-label="Data trends"]');
   const scrubber = panel.getByRole('slider', { name: 'Browse Depth history' });
   await expect.poll(() => historyValueRequests, { timeout: 15_000 }).toBeGreaterThan(0);
@@ -1430,7 +1374,7 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
 
 test('a touch drag on a customize grip reorders the shown instruments', async ({ page }) => {
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
 
@@ -1465,7 +1409,7 @@ test('instrument tiles take the full screen under the breakpoint with their own 
 }) => {
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   const dock = page.getByRole('dialog', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // Full-screen mode swaps the close label; this chrome is the only way back on a phone.
@@ -1476,15 +1420,11 @@ test('instrument tiles take the full screen under the breakpoint with their own 
 test('full-screen instruments and chart panels yield ownership to each other', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto('/');
-  await openInstruments(page);
+  await openMenuItem(page, 'Instrument dock');
   const instruments = page.locator('aside.instruments');
   await expect(instruments).toBeVisible();
 
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Tracks', exact: true })
-    .click();
+  await openMenuItem(page, 'Tracks');
   const tracks = page.getByRole('complementary', { name: 'Tracks' });
   await expect(tracks).toBeVisible();
   await expect(instruments).toBeVisible();
@@ -1496,11 +1436,7 @@ test('full-screen instruments and chart panels yield ownership to each other', a
   await expect(tracks).toBeVisible();
 
   // In the opposite direction, opening full-screen Instruments closes the existing chart panel.
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page
-    .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Instrument dock', exact: true })
-    .click();
+  await openMenuItem(page, 'Instrument dock');
   await expect(tracks).not.toBeVisible();
   await expect(instruments).toBeVisible();
 });
@@ -1577,9 +1513,7 @@ test('forecast keeps the shown route as read-only context', async ({ page }) => 
     localStorage.clear();
     localStorage.setItem('binnacle:help-orientation', 'true');
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/resources\/routes$/, async (route) => {
     await route.fulfill({
       status: 200,

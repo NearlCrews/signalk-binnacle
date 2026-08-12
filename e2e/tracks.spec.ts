@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -10,9 +11,7 @@ test('tracks loads saved resources without a live stream and fits a narrow scree
     localStorage.clear();
     localStorage.setItem('binnacle:map-view', JSON.stringify({ lat: 42.6, lon: -83.5, zoom: 12 }));
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   await page.route(/\/signalk\/v2\/api\/resources\/tracks$/, async (route) => {
     await route.fulfill({
       status: 200,

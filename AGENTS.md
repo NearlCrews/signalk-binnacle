@@ -78,6 +78,14 @@ For substantial changes, run the full gate before claiming done:
 Run `npm run verify:browser` when the app shell, layout, instruments, chart lifecycle, or browser
 behavior is touched. The preview server may require approval to bind localhost in sandboxed Codex
 sessions.
+
+Browser specs share `e2e/helpers.ts`: `stubVesselsSelf` (the self-vessel document every spec needs
+answered), `openMenuItem` (open the app menu and activate one tile, scoped to the launcher so a
+label that also names a bar pill cannot match the wrong control), and `expectInsideViewport`. Reach
+for those before writing a file-local copy, because a file-local helper is invisible to the other
+specs and each one ends up re-rolling it. `scripts/check-package.mjs` cross-checks the projects
+`test:e2e:gate` names against `playwright.config.ts`, so a new project cannot fall out of the local
+push gate while CI keeps covering it.
 For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
 publishing.
 

@@ -35,8 +35,6 @@ export interface TrackControllerDeps {
 export function createTrackController(deps: TrackControllerDeps) {
   const { origin } = deps;
 
-  // One place to turn a write outcome into a toast and, when the server refused, into a fresh
-  // access request.
   const accepted = createWriteOutcomeGate({
     report: (message) => deps.toast.show(message),
     requestWriteAccess: () => deps.requestWriteAccess(),

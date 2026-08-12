@@ -1,13 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { stubVesselsSelf } from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 test.use({ serviceWorkers: 'block' });
 
 test('WebKit supports the app shell and a primary panel interaction', async ({ page }) => {
   await page.addInitScript(() => localStorage.clear());
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
+  await stubVesselsSelf(page);
   const workerProof = await installMapLibreWorkerProof(page);
   await page.goto('/');
 

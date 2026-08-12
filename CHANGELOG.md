@@ -223,6 +223,33 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
   quietly.
 - The Measure tile stays disabled until the chart tap handler is ready, so an early tap cannot
   arm a measurement that no tap can extend.
+- The NOAA ENC chart offer renders. Its guard compared a nullable panel id against `undefined`,
+  so it was always true and the offer had never appeared once since it shipped: a boat inside US
+  ENC waters with only a reference base map was never told a real chart was available.
+- The chart routes its raster overlays through Chart Locker on a secured server. The tile-proxy
+  probe used a credential captured before authentication resolved, so the server answered "no
+  access" and the session ran on direct upstream tile URLs for its whole life, quietly skipping
+  the boat's shared offline cache.
+- The tides picker no longer claims no stations are nearby when the station search failed or has
+  not run. An empty list was read as an answer about the water, so the panel showed that false
+  claim beside the accurate connection error.
+- Closing a panel now clears what that panel armed or drew: a dismissed "Save and navigate"
+  confirm cannot come back armed on reopen, and a highlighted point of interest cannot strand its
+  ring on the chart when the full-screen instrument dock closes the panel that owned it.
+- A saved offline area with no width reports no span instead of a coverage figure about half the
+  globe wide.
+- Server-declared path metadata (alarm zones, a declared staleness window) is refetched on
+  reconnect instead of being trusted for the rest of the session, so an alarm threshold changed on
+  the server reaches an already-open station. A reconnect that lands on a different vessel context
+  now adopts it rather than keeping the first one seen.
+- The access-request poll validates the server-supplied address as a same-origin path before
+  using it, so a malformed response cannot send the poll, or the approved token it carries, to
+  another host.
+- The mirrored notification set is bounded on both sides. Raised notifications were already
+  capped, but the per-path cells behind them grew without limit, and each raise mints a new id, so
+  a hazard alarming repeatedly through a passage accumulated one cell per raise.
+- The app menu's arrow keys no longer skip the first tile when focus sits on the menu itself, now
+  that all three menus share one definition of the roving-focus arithmetic.
 
 <a id="v0191"></a>
 

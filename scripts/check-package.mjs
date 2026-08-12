@@ -170,6 +170,30 @@ const screenshots = Array.isArray(screenshotValues)
       .filter(Boolean)
   : [];
 
+// The local push gate names its Playwright projects one by one, while CI runs the whole config. A
+// project added to the config and not to the gate is covered in CI and silently absent locally,
+// which is the worst arrangement: the failure lands after the push rather than before it.
+const gateScript = packageJson.scripts?.['test:e2e:gate'] ?? '';
+const gateProjects = new Set([...gateScript.matchAll(/--project=([\w-]+)/gu)].map((m) => m[1]));
+const configProjects = [
+  ...readFileSync('playwright.config.ts', 'utf8').matchAll(/^\s*name: '([\w-]+)',$/gmu),
+].map((m) => m[1]);
+if (configProjects.length === 0) {
+  metadataFailures.push('Could not read any Playwright project names from playwright.config.ts.');
+}
+const ungated = configProjects.filter((name) => !gateProjects.has(name));
+if (ungated.length > 0) {
+  metadataFailures.push(
+    `test:e2e:gate is missing Playwright ${ungated.length === 1 ? 'project' : 'projects'}: ${ungated.join(', ')}.`,
+  );
+}
+const unknown = [...gateProjects].filter((name) => !configProjects.includes(name));
+if (unknown.length > 0) {
+  metadataFailures.push(
+    `test:e2e:gate names projects playwright.config.ts does not define: ${unknown.join(', ')}.`,
+  );
+}
+
 if (metadataFailures.length > 0) {
   console.error(metadataFailures.join('\n'));
   process.exit(1);

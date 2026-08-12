@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { expectInsideViewport, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -85,9 +86,7 @@ async function installProfileServer(page: Page, document: Record<string, unknown
       JSON.stringify({ clientId: 'binnacle-e2e', token: 'profile-token' }),
     );
   });
-  await page.route(/\/signalk\/v1\/api\/vessels\/self$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  );
+  await stubVesselsSelf(page);
   await page.route(
     /\/signalk\/v1\/applicationData\/user\/signalk-binnacle\/2\.0\.0$/,
     async (route) => {
@@ -125,12 +124,7 @@ test('profile overflow actions stay inside a narrow viewport', async ({ page }) 
 
   const actions = page.getByRole('menu', { name: 'More actions for Test helm' });
   await expect(actions).toBeVisible();
-  const box = await actions.boundingBox();
-  if (!box) throw new Error('Profile overflow menu did not lay out.');
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(360);
-  expect(box.y + box.height).toBeLessThanOrEqual(640);
+  await expectInsideViewport(actions, page);
 });
 
 test('profiles restore instrument order in a different browser', async ({ browser, page }) => {
