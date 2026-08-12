@@ -172,8 +172,9 @@ source, and surrounding traffic before relying on it.
   quietly loosen it. The panel names which one is in force and says when no depth source is
   publishing. While any audible watch is live (an armed anchor or MOB watch, or an open stream
   whose shallow, collision, and generic alarms could sound) and no gesture has primed alarm audio,
-  the status strip shows an alarm-colored "Sound off" chip whose Enable tap turns audio on, and
-  the Anchor watch and Alarms panels carry a matching visual-only-audio note. One alarm sounds at
+  the status strip shows an alarm-colored "Sound off" chip; any tap anywhere turns audio on, and
+  tapping the chip both does that and explains it. The Anchor watch and Alarms panels carry a
+  matching visual-only-audio note. One alarm sounds at
   a time through a single audio authority: man overboard and an escalating collision danger
   interleave at the top, lower alarms rotate with bounded reminders, and courtesy tones yield.
 - **Watch handoff** takes a timestamped review-status snapshot for the change of watch: fix and
@@ -307,8 +308,10 @@ source, and surrounding traffic before relying on it.
   control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
   since tapping a tile is the pin control.
 - Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
-  chip, the depth chip, or a radar-trouble chip shows its explanation as a transient note above
-  the strip. Waiting for GPS carries a Help action, and the anchor chip opens Anchor watch.
+  chip, the depth chip, a radar-trouble chip, or either alarm-audio chip shows its explanation as a
+  transient note above the strip. Waiting for GPS carries a Help action, and the anchor chip opens
+  Anchor watch. A chip that carries an action keeps it on the same row as its label, never stacked
+  beneath it, so one degraded state costs the chart one row and not two.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
   course, heading, and the depth watch) are subordinated so the strip presents one failure with
   one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

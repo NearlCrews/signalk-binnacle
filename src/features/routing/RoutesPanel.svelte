@@ -293,8 +293,8 @@ $effect(() => {
   onBack={onBack ? () => requestExit('back') : undefined}
 >
   {#if error}
-    <p class="alert-note" role="alert">
-      {error}
+    <p class="alert-note action-note" role="alert">
+      <span>{error}</span>
       {#if editorLoadFailed}
         <button type="button" class="btn btn-ghost" onclick={onRetryEditor}>Retry</button>
       {/if}

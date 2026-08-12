@@ -935,7 +935,7 @@ $effect(() => {
     {#if showHelpWelcome}
       <!-- A compact invitation, never a panel forced over the chart: a helm display must come
            back to the chart on every boot. Dismiss persists on this device. -->
-      <div class="alert-note toast-banner" role="status">
+      <div class="alert-note toast-banner action-note action-note--wrap" role="status">
         <span>First time with Binnacle? Read the short safety orientation, or set up charts.</span>
         <button type="button" class="btn btn-compact" onclick={openHelpPanel}>Open Help</button>
         <!-- The new navigator's actual first question is where the charts are, and the reference
@@ -951,7 +951,7 @@ $effect(() => {
     {#if showEncPrompt}
       <!-- The boat is inside NOAA's published chart coverage with no nautical chart on, which is
            the one case the app can fix in a tap. Dismiss persists on this device. -->
-      <div class="alert-note toast-banner" role="status">
+      <div class="alert-note toast-banner action-note action-note--wrap" role="status">
         <span>The official US nautical charts (NOAA ENC) cover these waters.</span>
         <button type="button" class="btn btn-compact" onclick={onEnableNoaaEnc}>
           Turn on NOAA ENC
@@ -2018,6 +2018,16 @@ $effect(() => {
   font-weight: 600;
 }
 /* The toast reuses the shared .alert-note--filled treatment; only sizing and shadow are local. */
+/* A wrapped action row centers under this centered banner rather than hanging at the inline start.
+   The width cap is load-bearing, not cosmetic: as a flex row the banner's max-content is its text
+   plus every button on one line, so a bare fit-content resolves to the whole stack width and the
+   banner reaches across a docked panel, swallowing that panel's controls. The stack's contract is
+   that each banner stays a content-sized box, and 32rem keeps the text on one line while leaving
+   an edge-docked panel (22rem) clear at desktop widths. */
+.toast-banner.action-note {
+  justify-content: center;
+  max-inline-size: min(32rem, calc(100% - var(--space-6)));
+}
 .toast-banner {
   pointer-events: auto;
   inline-size: fit-content;

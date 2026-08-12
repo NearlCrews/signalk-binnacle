@@ -8,6 +8,7 @@ export {
 } from './alarm';
 export {
   ALARM_AUDIO_BLOCKED_NOTE,
+  ALARM_AUDIO_FAILED_NOTE,
   AlarmAudioGate,
   type AlarmAudioState,
 } from './alarm-audio-gate.svelte';

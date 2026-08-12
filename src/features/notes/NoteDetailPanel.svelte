@@ -153,7 +153,7 @@ function measure(item: NormalizedItem): string {
     />
   {/if}
   {#if mutationError}
-    <p class="alert-note error-note" role="alert">
+    <p class="alert-note error-note action-note" role="alert">
       <span>{mutationError}</span>
       {#if onDismissMutationError}
         <button
@@ -282,11 +282,6 @@ function measure(item: NormalizedItem): string {
 }
 /* The mutation error keeps its message and its dismiss control on one row, with the message taking
    the free space so the control stays at the end. */
-.error-note {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
 .error-note span {
   flex: 1;
 }

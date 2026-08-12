@@ -223,9 +223,9 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
   <section class="panel-section" aria-label="Alarm sound">
     <h3 class="caps-label">Alarm sound</h3>
     <p class="muted-note">
-      Browsers block audio until a display is touched once, so tap anywhere (or the Enable chip)
-      after loading a helm display. Alarms stay visual either way, and each alarm separates
-      acknowledge, boat-wide silence, and mute-on-this-display.
+      Browsers block audio until a display is touched once, so tap anywhere after loading a helm
+      display; the status strip says so until you do. Alarms stay visual either way, and each alarm
+      separates acknowledge, boat-wide silence, and mute-on-this-display.
     </p>
     {#if audioBlocked}
       <button type="button" class="btn btn-ghost" onclick={onEnableSound}>

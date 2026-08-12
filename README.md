@@ -159,7 +159,7 @@ Binnacle ships its full feature set as a Signal K webapp:
   alarm sounds at a time through a single audio authority: man overboard and an escalating
   collision danger interleave at the top, lower alarms rotate with bounded reminders so none is
   hidden, courtesy tones like arrival yield to real alarms, and blocked or failed alarm audio is
-  stated on the status strip with a one-tap Enable.
+  stated on the status strip, where any tap restores it.
 - **Anchor watch:** drop the anchor at the boat, set the swing radius (or capture it from the live
   distance), and get a drag alarm that latches until acknowledged. It drives the
   signalk-anchoralarm-plugin when installed (so the alarm keeps running with the browser closed) and

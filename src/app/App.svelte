@@ -2234,7 +2234,10 @@ function backFromPoiSearch(): void {
 // alarm, including ones constructed later, can sound on its own. A real AudioContext resumes
 // asynchronously and a browser may reject a given gesture (a bare modifier key, for one), so the
 // listeners stay registered and self-remove only once a later gesture finds the context already
-// running. Keydown is included so keyboard-only operators get audible alarms too.
+// running. Keydown is included so keyboard-only operators get audible alarms too. Pointerup is
+// included because pointerdown carries user activation only for a mouse: on a touchscreen the
+// activation arrives on release, so a helm tablet's first tap would otherwise be rejected, which
+// matters now that the strip states the blocked condition instead of carrying an Enable button.
 const primeAudio = () => {
   if (alarmAudioPrimed()) {
     removePrimeListeners();
@@ -2244,6 +2247,7 @@ const primeAudio = () => {
 };
 const removePrimeListeners = () => {
   window.removeEventListener('pointerdown', primeAudio);
+  window.removeEventListener('pointerup', primeAudio);
   window.removeEventListener('keydown', primeAudio);
 };
 
@@ -2433,6 +2437,7 @@ onMount(() => {
   refreshCompanionProbe();
   companionStatus.start();
   window.addEventListener('pointerdown', primeAudio);
+  window.addEventListener('pointerup', primeAudio);
   window.addEventListener('keydown', primeAudio);
   // The auth controller owns the focus and cross-tab listeners that pick up an approval.
   auth.watch();
@@ -2972,7 +2977,6 @@ const plotterActions = {
     shallowState={shallowController.monitorState}
     {radarHealth}
     audioState={audioChipState}
-    onEnableSound={primeAlarmAudio}
     orientation={chartOrientation.value !== 'north'
       ? { label: orientation.label, active: orientation.active }
       : undefined}

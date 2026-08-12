@@ -47,6 +47,35 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
     .toBe(true);
 });
 
+test('keeps a status-strip action chip on one control row', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  // The orientation chip is the action chip that needs no server, no stream, and no gesture. It is
+  // driven through the menu rather than a seeded key, because chart orientation is a portable
+  // profile setting and the starter profile writes north back over a seed at boot.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page
+    .locator('#app-menu-launcher')
+    .getByRole('button', { name: /^Orientation/ })
+    .click();
+
+  const chip = page.locator('.status-strip .orientation-chip');
+  await expect(chip).toBeVisible();
+  const action = chip.getByRole('button', { name: 'N up' });
+  const [chipBox, actionBox] = await Promise.all([chip.boundingBox(), action.boundingBox()]);
+  if (!chipBox || !actionBox) throw new Error('The orientation chip did not lay out.');
+  // The action keeps its full touch target, and the chip is that one row rather than a label line
+  // with the target stacked beneath it, which used to cost the chart an extra row per chip.
+  expect(actionBox.height).toBeGreaterThanOrEqual(44);
+  expect(chipBox.height).toBeLessThanOrEqual(actionBox.height + 1);
+  // A chip that grew wider than it is tall must still not push the strip sideways.
+  await expect
+    .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
+    .toBe(true);
+});
+
 test('keeps a scrolled layer opacity popover inside a narrow viewport', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
   await page.addInitScript(() => localStorage.clear());

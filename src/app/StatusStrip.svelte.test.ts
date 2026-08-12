@@ -157,21 +157,25 @@ describe('StatusStrip depth alarm', () => {
     expect(html).not.toContain('>4.0<');
   });
 
-  it('shows the sound-off chip with its enable action only while audio is blocked', () => {
+  it('states blocked audio without spending a strip row on an Enable button', () => {
     const blocked = body({ ...baseProps(), audioState: 'blocked' as const });
     expect(blocked).toContain('Sound off');
-    expect(blocked).toContain('Enable');
+    // Any gesture anywhere primes the shared context, so an inline control bought nothing except
+    // a stacked 44px row off the chart. The chip explains itself on tap instead.
+    expect(blocked).not.toContain('>Enable<');
+    expect(blocked).toContain('chip-btn');
+    expect(blocked).toContain('Any tap turns it on.');
 
     const healthy = body(baseProps());
     expect(healthy).not.toContain('Sound off');
     expect(healthy).not.toContain('Sound unavailable');
   });
 
-  it('offers Retry for a failed audio setup instead of a dead Enable', () => {
+  it('states a failed audio device the same way, since retrying is the same gesture', () => {
     const failed = body({ ...baseProps(), audioState: 'failed' as const });
     expect(failed).toContain('Sound unavailable');
-    expect(failed).toContain('Retry');
-    expect(failed).not.toContain('>Enable<');
+    expect(failed).not.toContain('>Retry<');
+    expect(failed).toContain('Any tap tries again');
   });
 
   it('names a paused shallow watch instead of a bare depth placeholder', () => {
@@ -224,6 +228,8 @@ describe('StatusStrip depth alarm', () => {
     expect(unsupported).toContain('Audible alarms are unavailable on this display');
     expect(unsupported).not.toContain('>Enable<');
     expect(unsupported).not.toContain('>Retry<');
+    // Terminal, so it is the one audio chip with nothing to explain on tap.
+    expect(unsupported).not.toContain('chip-btn"');
   });
 
   it('subordinates the consequence chips while the link itself is the failure, radar excluded', () => {

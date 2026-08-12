@@ -192,7 +192,14 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   quiet hint for empty states and inline guidance), `.alert-note` (an outline alarm banner) and its
   `.alert-note--filled` tinted variant, `.icon-note` (a note led by a status icon, with the text
   wrapping under itself rather than under the icon; composed over the note's own look and severity
-  color by the weather warning banners and the degraded-monitor notes), `.sev-danger` and
+  color by the weather warning banners and the degraded-monitor notes), `.action-note` plus its
+  `--wrap` modifier (a note or readout chip that carries its own action inline, so the label and its
+  control share one row: a `.btn` is a block-level flex box, so a control set beside inline text
+  otherwise stacks a full 44px target under its own label, which costs the status strip an entire
+  row off the chart and stretches a banner's buttons to the banner's width; apply it per element and
+  never to a family like `.readout`, whose chips would get the gap between their own words, and note
+  that a control living inside flowing prose uses AuthBanner's scoped `inline-flex` with
+  `vertical-align: middle` instead), `.sev-danger` and
   `.sev-warning` (severity text coloring),
   `.panel-title` and `.panel-title--sub` (the panel header title and subtitle), `.num` (mono tabular
   numerals for any aligned readout), and `.truncate` (single-line ellipsis truncation; the span still

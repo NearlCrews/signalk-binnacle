@@ -6,8 +6,13 @@ import { alarmAudioConstructionFailed, alarmAudioPrimed, alarmAudioSupported } f
 export const ALARM_AUDIO_BLOCKED_NOTE =
   'Alarm sound is off: the browser blocks audio until this display is tapped or a key is pressed. Any tap turns it on.';
 
-// The honest capability grades. 'blocked' means a gesture (Enable) will help; 'failed' means the
-// last context construction threw and a Retry may help once the audio device returns;
+// The one explanation for a failed audio device, shared for the same reason: retrying construction
+// is the same thing priming does, so the fix a navigator can act on is identical.
+export const ALARM_AUDIO_FAILED_NOTE =
+  'Alarm sound failed to start on this display. Any tap tries again, which can recover once the audio device is back.';
+
+// The honest capability grades. 'blocked' means any gesture will help; 'failed' means the last
+// context construction threw and a later gesture may help once the audio device returns;
 // 'unsupported' is terminal: audible alarms are unavailable on this display.
 export type AlarmAudioState = 'ready' | 'blocked' | 'failed' | 'unsupported';
 

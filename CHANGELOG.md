@@ -163,6 +163,16 @@ and say plainly what it trusts. New work continues to land here until 0.20.0 is 
 
 - Pull request CI accepts the active version's explicit Unreleased changelog heading, while the
   publication gate continues to require a dated heading for that same version.
+- The status strip no longer doubles in height when a chip carries an action. A button set beside
+  inline text is a block-level box, so the label was pushed onto its own line with a full-size
+  target stacked beneath it, and every such chip cost the chart an extra row. Label and action now
+  share one row, which also stops the first-run and chart-offer banners from stacking one button
+  per line.
+- The alarm-audio chips state their condition instead of carrying a button. Any tap or key anywhere
+  already primes or retries the shared audio context, so Sound off and Sound unavailable are now
+  readouts that explain themselves on tap, the way the connection, AIS, depth, and radar chips do.
+  Alarm audio also primes on pointer release, not only on press, so the first tap on a touchscreen
+  reliably turns sound on.
 - Starting navigation from a phone no longer leaves the sheet covering the chart and the new
   guidance strip: confirming a route activation, a waypoint destination, or a track retrace
   collapses the sheet the way Locate already did.

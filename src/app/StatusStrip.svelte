@@ -9,6 +9,7 @@ import {
   type OwnVessel,
 } from '$entities/vessel';
 import { type MenuItem, PinnedActions } from '$features/menu';
+import { ALARM_AUDIO_BLOCKED_NOTE, ALARM_AUDIO_FAILED_NOTE } from '$shared/audio';
 import {
   createMediaQuery,
   formatBearingOr,
@@ -43,7 +44,6 @@ let {
   shallowState = 'monitoring',
   radarHealth = { state: 'quiet' },
   audioState,
-  onEnableSound,
   orientation = undefined,
   onResetOrientation = undefined,
   pinnedActions,
@@ -79,10 +79,9 @@ let {
   shallowState?: import('$features/lookout').ShallowMonitorState;
   // Helm-visible radar health: failure and staleness stay visible with Radar Controls closed.
   radarHealth?: import('$features/marine-radar').RadarHelmHealth;
-  // 'ready' hides the chip; 'blocked' offers Enable (a gesture helps); 'failed' offers Retry; and
-  // 'unsupported' states that audible alarms are unavailable on this display, with no dead action.
+  // 'ready' hides the chip; the other three state the condition and explain it on tap, since any
+  // gesture anywhere primes or retries the shared audio context and 'unsupported' is terminal.
   audioState: import('$shared/audio').AlarmAudioState;
-  onEnableSound: () => void;
   // The chart orientation while a rotating mode is chosen: its live label (including a fallback to
   // north when the reference is stale) stays visible, and one tap returns to north-up. Absent in
   // the default north-up mode, where an unrotated chart speaks for itself.
@@ -199,7 +198,7 @@ const depthWatchPaused = $derived(
       </span>
     </button>
     {#if streamError}
-      <span class="readout fix-lost" role="alert" aria-live="assertive">
+      <span class="readout fix-lost action-note" role="alert" aria-live="assertive">
         Data link failed
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>
@@ -208,7 +207,7 @@ const depthWatchPaused = $derived(
            never name; connectionLabel already says which). Not a live region: the always-mounted
            conn dot above announces every phase, and a second region carrying the same label
            announced the drop twice. This is the sighted half. -->
-      <span class="readout fix-lost" title="Readouts pause until data returns">
+      <span class="readout fix-lost action-note" title="Readouts pause until data returns">
         {connectionLabel}
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
       </span>
@@ -224,7 +223,7 @@ const depthWatchPaused = $derived(
       <!-- Connected, but no position has ever arrived: without this the strip looks healthy while
            every position-dependent feature silently waits. -->
       <span
-        class="readout fix-lost"
+        class="readout fix-lost action-note"
         role="status"
         aria-live="polite"
         title="Connected, but the server has not published a GPS position. Check the GPS source in the Signal K server's Data Browser, or open Help."
@@ -236,24 +235,31 @@ const depthWatchPaused = $derived(
       </span>
     {/if}
     {#if audioState === 'blocked'}
-      <!-- role=status makes the chip's mount the polite announcement that alarm audio is off; the
-           Enable tap is a user gesture, so it primes the shared context directly. -->
-      <span class="readout sound-off" role="status" aria-live="polite">
-        Sound off
-        <button type="button" class="btn btn-compact" onclick={onEnableSound}>Enable</button>
-      </span>
-    {:else if audioState === 'failed'}
-      <!-- Audio setup failed outright; a Retry re-attempts context construction, which can
-           recover once the audio device returns. -->
-      <span
-        class="readout sound-off"
-        role="status"
-        aria-live="polite"
-        title="Alarm audio failed to start; retry once the audio device is back"
+      <!-- A statement, not a control: any tap or key anywhere primes the shared audio context, so
+           an inline Enable button bought nothing except a stacked 44px row off the chart. Tapping
+           the chip both primes audio through that global gesture and shows the explanation, the
+           way every other degraded chip here explains itself. role=status on the inner span keeps
+           the chip's mount the polite announcement that alarm audio is off. -->
+      <button
+        type="button"
+        class="readout sound-off chip-btn"
+        title={ALARM_AUDIO_BLOCKED_NOTE}
+        onclick={() => chipNote.show(ALARM_AUDIO_BLOCKED_NOTE)}
       >
-        Sound unavailable
-        <button type="button" class="btn btn-compact" onclick={onEnableSound}>Retry</button>
-      </span>
+        <span role="status" aria-live="polite">Sound off</span>
+      </button>
+    {:else if audioState === 'failed'}
+      <!-- Audio setup failed outright. Retrying is the same gesture priming does, so this chip is
+           a statement too: any tap re-attempts context construction, which can recover once the
+           audio device returns. -->
+      <button
+        type="button"
+        class="readout sound-off chip-btn"
+        title={ALARM_AUDIO_FAILED_NOTE}
+        onclick={() => chipNote.show(ALARM_AUDIO_FAILED_NOTE)}
+      >
+        <span role="status" aria-live="polite">Sound unavailable</span>
+      </button>
     {:else if audioState === 'unsupported'}
       <!-- No Web Audio API here at all: state the fact plainly, with no dead action. -->
       <span
@@ -269,7 +275,7 @@ const depthWatchPaused = $derived(
       <!-- The sound-off idiom: the chip states the live orientation (including its fallback), and
            the compact action is the one-tap return to north up. -->
       <span
-        class="readout orientation-chip"
+        class="readout orientation-chip action-note"
         class:sev-warning={!orientation.active}
         role="status"
         title="Chart orientation and its reference; N up returns to north up"

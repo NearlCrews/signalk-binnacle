@@ -74,6 +74,29 @@
   margin-block-start: 0.15rem;
 }
 
+/* A note or readout chip that carries its own action inline: the label and its control share one
+   row. A .btn is a block-level flex box, so a control set beside inline text otherwise generates
+   anonymous blocks, dropping the label onto its own line and stacking a full 44px target beneath
+   it. In the status strip that costs an entire extra row off the chart; in a banner it stretches
+   every button to the banner's width. Centered rather than .icon-note's first-line alignment,
+   because here the row's height IS the control.
+   Scope is semantic, a label plus its own action, NOT every flex row: the generic
+   display-flex-align-center-gap trio appears throughout the app and stays where it is.
+   Apply it per element, never to a family like .readout: a chip whose words are separate text runs
+   and elements (AIS 3, Anchor 12/30 m, 085 degrees T) would have every real space replaced by the
+   gap. This module is the earliest utility import, so never compose it onto an element whose
+   display comes from buttons.css, overlays.css, panels.css, or strips.css. */
+.action-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* Banners wrap the label and its actions as a group; the strip's chips never do, so a chip can
+   not re-stack its own action under width pressure. */
+.action-note--wrap {
+  flex-wrap: wrap;
+}
+
 /* Severity name coloring shared by the two collision surfaces (the danger strip and the AIS list),
    so how a contact name reads by collision grade cannot drift between them. */
 .sev-danger {

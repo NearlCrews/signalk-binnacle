@@ -155,7 +155,7 @@ const liveMessage = $derived.by(() => {
     {/if}
 
     {#if errorText}
-      <div class="alert-note load-error" role="alert">
+      <div class="alert-note load-error action-note" role="alert">
         <span>{errorText}</span>
         <button type="button" class="btn btn-ghost" onclick={() => void controller.retry()}>
           Retry
@@ -332,9 +332,6 @@ const liveMessage = $derived.by(() => {
 }
 
 .load-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   margin-block: var(--space-2);
 }
 

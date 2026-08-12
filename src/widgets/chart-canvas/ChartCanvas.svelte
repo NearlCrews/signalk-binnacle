@@ -891,7 +891,7 @@ onDestroy(() => {
     <div class="chart-booting" role="status">Loading chart…</div>
   {/if}
   {#if showContextHint}
-    <div class="context-hint popover-card" role="status">
+    <div class="context-hint popover-card action-note" role="status">
       <span>Press and hold the chart for actions.</span>
       <button type="button" class="btn btn-ghost" onclick={dismissContextHint}>Got it</button>
     </div>
@@ -967,9 +967,6 @@ onDestroy(() => {
   inset-block-start: var(--space-2);
   inset-inline-start: 50%;
   z-index: var(--z-menu);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   inline-size: max-content;
   max-inline-size: calc(100% - 2 * var(--space-4));
   padding: var(--space-1) var(--space-2);
