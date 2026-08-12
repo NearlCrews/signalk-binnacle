@@ -11,7 +11,7 @@ import {
   tileCountInBbox,
   type ZoomRange,
 } from 'signalk-chart-sources';
-import { boundsOfPoints, isLatitude } from '$shared/geo';
+import { boundsOfPoints, isLatitude, unwrapEast, wrapLongitude } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
 import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { CacheStats, WarmStatus } from './regions-client.js';
@@ -121,7 +121,9 @@ export function bboxFromRectangle(ring: Array<[number, number]>): LngLatBbox {
     if (!Number.isFinite(lng) || !isLatitude(lat)) {
       throw new RangeError('rectangle coordinates must be finite geographic coordinates');
     }
-    let longitude = ((((lng + 180) % 360) + 360) % 360) - 180;
+    // The shared wrap folds 180 onto -180, the same meridian. A drawn rectangle's east edge is a
+    // distinct corner from its west one, so a box drawn to exactly +180 restores it here.
+    let longitude = wrapLongitude(lng);
     if (longitude === -180 && lng > 0) longitude = 180;
     points.push({ latitude: lat, longitude });
   }
@@ -134,7 +136,7 @@ export function bboxFromRectangle(ring: Array<[number, number]>): LngLatBbox {
  * Terra Draw seeds the short rectangle instead of drawing nearly the whole world. */
 export function rectangleRingFromBbox(bbox: LngLatBbox): Array<[number, number]> {
   const [west, south, east, north] = bbox;
-  const drawEast = east < west ? east + 360 : east;
+  const drawEast = unwrapEast(west, east);
   return [
     [west, south],
     [drawEast, south],

@@ -45,6 +45,8 @@ export {
   adminSessionInit,
   asKeyedObject,
   authInit,
+  cleanTruncatedText,
+  createWriteOutcomeGate,
   deleteRefusedMessage,
   deleteResource,
   deleteResourceOutcome,

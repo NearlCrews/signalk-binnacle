@@ -1,4 +1,4 @@
-import { hasControlCharacters, isRecord } from '$shared/lib';
+import { cleanBoundedText, isRecord } from '$shared/lib';
 import {
   notificationState,
   type RaisedNotificationState,
@@ -11,13 +11,6 @@ const MAX_NOTIFICATION_PATH_LENGTH = 512;
 const MAX_NOTIFICATION_MESSAGE_LENGTH = 2_048;
 const MAX_NOTIFICATION_ID_LENGTH = 512;
 const MAX_NOTIFICATION_TIMESTAMP_LENGTH = 128;
-
-function cleanString(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
 
 // The Signal K notification delivery methods (server-api), the only values method carries.
 type NotificationMethod = 'visual' | 'sound';
@@ -66,7 +59,7 @@ function parseNotification(
   activation: number,
 ): ActiveNotification | undefined {
   if (!isRecord(value)) return undefined;
-  const safePath = cleanString(path, MAX_NOTIFICATION_PATH_LENGTH);
+  const safePath = cleanBoundedText(path, MAX_NOTIFICATION_PATH_LENGTH);
   if (!safePath) return undefined;
   const raw = value;
   const state = notificationState(value);
@@ -74,18 +67,18 @@ function parseNotification(
   if (state === undefined || !Object.hasOwn(SEVERITY_RANK, state)) return undefined;
   const method = parseMethods(raw.method);
   const status = isRecord(raw.status) ? raw.status : {};
-  const message = cleanString(raw.message, MAX_NOTIFICATION_MESSAGE_LENGTH) ?? '';
+  const message = cleanBoundedText(raw.message, MAX_NOTIFICATION_MESSAGE_LENGTH) ?? '';
   return {
     path: safePath,
     state: state as RaisedNotificationState,
     message,
     method,
     activation,
-    timestamp: cleanString(raw.createdAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
-    id: cleanString(raw.id, MAX_NOTIFICATION_ID_LENGTH),
+    timestamp: cleanBoundedText(raw.createdAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
+    id: cleanBoundedText(raw.id, MAX_NOTIFICATION_ID_LENGTH),
     silenced: boolField(status.silenced),
     acknowledged: boolField(status.acknowledged),
-    acknowledgedAt: cleanString(status.acknowledgedAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
+    acknowledgedAt: cleanBoundedText(status.acknowledgedAt, MAX_NOTIFICATION_TIMESTAMP_LENGTH),
     canSilence: boolField(status.canSilence),
     canAcknowledge: boolField(status.canAcknowledge),
   };

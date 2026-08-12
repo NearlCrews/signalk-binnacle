@@ -1,10 +1,6 @@
 import { hasDrawableTrack, type SavedTracksSource, type TrackPoint } from '$entities/track';
-import { type Toast, uuidv4 } from '$shared/lib';
-import {
-  deleteRefusedMessage,
-  type ResourceMutationResult,
-  writeRefusedMessage,
-} from '$shared/signalk';
+import { createBusyGate, type Toast, uuidv4 } from '$shared/lib';
+import { createWriteOutcomeGate, deleteRefusedMessage, writeRefusedMessage } from '$shared/signalk';
 import { downloadGeoJson } from './track-export';
 import {
   deleteTrack,
@@ -41,22 +37,24 @@ export function createTrackController(deps: TrackControllerDeps) {
 
   // One place to turn a write outcome into a toast and, when the server refused, into a fresh
   // access request.
-  function accepted(
-    outcome: ResourceMutationResult,
-    refused: string,
-    failed: string,
-  ): outcome is 'ok' {
-    if (outcome === 'ok') return true;
-    if (outcome === 'access-denied') void deps.requestWriteAccess();
-    deps.toast.show(outcome === 'access-denied' ? refused : failed);
-    return false;
-  }
+  const accepted = createWriteOutcomeGate({
+    report: (message) => deps.toast.show(message),
+    requestWriteAccess: () => deps.requestWriteAccess(),
+  });
 
   let savedTracks = $state.raw<SavedTrack[]>([]);
   let shownSaved = $state<ReadonlySet<string>>(new Set());
   let loadState = $state<TrackLoadState>('idle');
   let provisioning = $state<TracksProvisioning>('unknown');
   let busy = $state(false);
+  // Every mutating action is serialized against one busy flag, so a second tap while a write is in
+  // flight is dropped rather than racing it.
+  const withBusy = createBusyGate(
+    () => busy,
+    (next) => {
+      busy = next;
+    },
+  );
   let savedVersion = 0;
   let refreshGeneration = 0;
 
@@ -95,68 +93,56 @@ export function createTrackController(deps: TrackControllerDeps) {
   // Resolves whether the track was saved, so the panel can keep its name form (and the name the
   // navigator typed) on screen when it was not.
   async function onSaveTrack(name: string): Promise<boolean> {
-    if (busy) return false;
     const points = deps.getRecorderPoints().map((point) => ({ ...point }));
     if (!hasDrawableTrack(points)) return false;
-    busy = true;
     refreshGeneration += 1;
     const id = uuidv4();
-    try {
-      const outcome = await saveTrack(origin, deps.getToken(), id, name, points);
-      // With provisioning unconfirmed (an older server whose probe route never answered), a missing
-      // tracks provider is just as likely as a connection problem, so the copy must not point at
-      // only the wrong causes.
-      if (
-        !accepted(
-          outcome,
-          writeRefusedMessage('track'),
-          provisioning === 'provisioned'
-            ? 'Could not save the track. Check the connection and access.'
-            : 'Could not save the track. Check the connection and access, and whether this server has track storage.',
-        )
-      ) {
-        return false;
-      }
-      const saved = savedTrackFromPoints(id, name, points);
-      savedTracks = [saved, ...savedTracks.filter((track) => track.id !== id)];
-      shownSaved = new Set(shownSaved).add(id);
-      loadState = 'ready';
-      // A write the server accepted is direct proof that a tracks provider is registered, which is
-      // stronger evidence than the probe and covers a server whose _providers route never answers.
-      provisioning = 'provisioned';
-      bumpSaved();
-      deps.clearRecorderThrough(points[points.length - 1].t);
-      await refreshSavedTracks();
-      return true;
-    } finally {
-      busy = false;
+    const outcome = await saveTrack(origin, deps.getToken(), id, name, points);
+    // With provisioning unconfirmed (an older server whose probe route never answered), a missing
+    // tracks provider is just as likely as a connection problem, so the copy must not point at
+    // only the wrong causes.
+    if (
+      !accepted(
+        outcome,
+        writeRefusedMessage('track'),
+        provisioning === 'provisioned'
+          ? 'Could not save the track. Check the connection and access.'
+          : 'Could not save the track. Check the connection and access, and whether this server has track storage.',
+      )
+    ) {
+      return false;
     }
+    const saved = savedTrackFromPoints(id, name, points);
+    savedTracks = [saved, ...savedTracks.filter((track) => track.id !== id)];
+    shownSaved = new Set(shownSaved).add(id);
+    loadState = 'ready';
+    // A write the server accepted is direct proof that a tracks provider is registered, which is
+    // stronger evidence than the probe and covers a server whose _providers route never answers.
+    provisioning = 'provisioned';
+    bumpSaved();
+    deps.clearRecorderThrough(points[points.length - 1].t);
+    await refreshSavedTracks();
+    return true;
   }
 
   async function onDeleteSavedTrack(id: string): Promise<void> {
-    if (busy) return;
-    busy = true;
     refreshGeneration += 1;
-    try {
-      const deleted = await deleteTrack(origin, deps.getToken(), id);
-      if (
-        !accepted(
-          deleted,
-          deleteRefusedMessage(),
-          'Could not delete the track. Check the connection and access.',
-        )
-      ) {
-        return;
-      }
-      savedTracks = savedTracks.filter((track) => track.id !== id);
-      const next = new Set(shownSaved);
-      next.delete(id);
-      shownSaved = next;
-      bumpSaved();
-      await refreshSavedTracks();
-    } finally {
-      busy = false;
+    const deleted = await deleteTrack(origin, deps.getToken(), id);
+    if (
+      !accepted(
+        deleted,
+        deleteRefusedMessage(),
+        'Could not delete the track. Check the connection and access.',
+      )
+    ) {
+      return;
     }
+    savedTracks = savedTracks.filter((track) => track.id !== id);
+    const next = new Set(shownSaved);
+    next.delete(id);
+    shownSaved = next;
+    bumpSaved();
+    await refreshSavedTracks();
   }
 
   function onToggleSaved(id: string, shown: boolean): void {
@@ -179,8 +165,9 @@ export function createTrackController(deps: TrackControllerDeps) {
 
   return {
     refreshSavedTracks,
-    onSaveTrack,
-    onDeleteSavedTrack,
+    // onSaveTrack reports whether it saved, so a dropped call must answer false, not undefined.
+    onSaveTrack: withBusy(onSaveTrack, false),
+    onDeleteSavedTrack: withBusy(onDeleteSavedTrack),
     onToggleSaved,
     onExportSavedTrack,
     get savedSource() {

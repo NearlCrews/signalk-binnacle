@@ -1,6 +1,7 @@
 export {
-  cleanTideStationText,
   isTideStation,
+  MAX_PLAUSIBLE_TIDE_HEIGHT_M,
+  MAX_TIDE_EVENTS,
   MAX_TIDE_STATION_ID_LENGTH,
   MAX_TIDE_STATION_NAME_LENGTH,
 } from './tide-station';

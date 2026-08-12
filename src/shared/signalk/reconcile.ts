@@ -17,6 +17,9 @@ const MAX_CONTEXT_LENGTH = 512;
 const MAX_PATH_LENGTH = 512;
 const MAX_SOURCE_LABEL_LENGTH = 256;
 
+// $shared/lib's cleanBoundedText answers the same question, but this runs per delta leaf on every
+// frame: the indexed charCodeAt walk avoids the code-point iterator's per-character allocation, so
+// the copy stays here deliberately. Keep the two in step if either changes what it rejects.
 function boundedText(value: unknown, maximum: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();

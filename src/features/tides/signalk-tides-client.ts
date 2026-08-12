@@ -1,5 +1,6 @@
 import {
-  cleanTideStationText,
+  MAX_PLAUSIBLE_TIDE_HEIGHT_M,
+  MAX_TIDE_EVENTS,
   MAX_TIDE_STATION_ID_LENGTH,
   MAX_TIDE_STATION_NAME_LENGTH,
   TIDE_WINDOW_HOURS,
@@ -8,7 +9,7 @@ import {
   type TideStation,
 } from '$entities/tides';
 import { isLatitude, isLongitude } from '$shared/geo';
-import { HOUR_MS } from '$shared/lib';
+import { cleanBoundedText, HOUR_MS } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { fetchAuthedJson } from '$shared/signalk';
 
@@ -25,7 +26,6 @@ const RESOURCE_PATH = '/signalk/v2/api/resources/tides';
 // day plus 48 hours) so the panel's curve and next-event readouts read the same whichever source
 // served them.
 const SYNTHETIC_STATION = 'Local tides (signalk-tides)';
-const MAX_EVENTS = 200;
 
 export interface SignalkTidesOptions {
   origin?: string;
@@ -70,13 +70,13 @@ function parseExtremes(raw: unknown): TideEvent[] {
     if (
       !kind ||
       heightMeters === undefined ||
-      Math.abs(heightMeters) > 100 ||
+      Math.abs(heightMeters) > MAX_PLAUSIBLE_TIDE_HEIGHT_M ||
       !Number.isFinite(timeMs)
     ) {
       continue;
     }
     events.push({ timeMs, heightMeters, kind });
-    if (events.length >= MAX_EVENTS) break;
+    if (events.length >= MAX_TIDE_EVENTS) break;
   }
   return events.sort((a, b) => a.timeMs - b.timeMs);
 }
@@ -92,8 +92,8 @@ function parseStation(raw: unknown, lat: number, lon: number): TideStation {
   const latitude = isLatitude(rawLatitude) ? rawLatitude : undefined;
   const longitude = isLongitude(rawLongitude) ? rawLongitude : undefined;
   return {
-    id: cleanTideStationText(record.id, MAX_TIDE_STATION_ID_LENGTH) ?? SIGNALK_TIDES_PLUGIN_ID,
-    name: cleanTideStationText(record.name, MAX_TIDE_STATION_NAME_LENGTH) ?? SYNTHETIC_STATION,
+    id: cleanBoundedText(record.id, MAX_TIDE_STATION_ID_LENGTH) ?? SIGNALK_TIDES_PLUGIN_ID,
+    name: cleanBoundedText(record.name, MAX_TIDE_STATION_NAME_LENGTH) ?? SYNTHETIC_STATION,
     latitude: latitude ?? lat,
     longitude: longitude ?? lon,
   };

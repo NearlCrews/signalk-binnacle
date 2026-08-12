@@ -37,8 +37,17 @@ export interface NoteSelection {
 }
 
 export const NOTES_PATH = '/signalk/v2/api/resources/notes';
-const NOTES_V1_PATH = '/signalk/v1/api/resources/notes';
+export const NOTES_V1_PATH = '/signalk/v1/api/resources/notes';
 export const MAX_NOTES_PER_VIEW = 5_000;
+
+// A displayed note field, trimmed and clipped to what the panel shows. Deliberately WITHOUT the
+// control-character rejection the resource decoders apply: a merged notes provider is the one place
+// a stray character has never been rejected, and tightening that is a behavior change on live data
+// rather than a hoist. Shared with notes-detail so the two views clip the same fields the same way.
+export function cleanNoteText(value: unknown, maxLength: number): string | undefined {
+  const text = str(value)?.trim();
+  return text ? text.slice(0, maxLength) : undefined;
+}
 
 function cleanId(value: string): string | undefined {
   const id = value.trim();
@@ -72,26 +81,22 @@ function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
   const ownership = isPersonalNoteId(id)
     ? personalNoteOwnership(props[PERSONAL_NOTE_NAMESPACE])
     : undefined;
-  const clean = (value: unknown, maxLength: number): string | undefined => {
-    const text = str(value)?.trim();
-    return text ? text.slice(0, maxLength) : undefined;
-  };
   return {
     id: resourceId,
-    name: clean(note.name, 256) ?? clean(note.title, 256) ?? resourceId,
+    name: cleanNoteText(note.name, 256) ?? cleanNoteText(note.title, 256) ?? resourceId,
     position,
     category:
       ownership?.category ??
       poiCategoryForType(
         typeof props.crowsNest?.type === 'string' ? (props.crowsNest.type as PoiType) : undefined,
       ) ??
-      categoryForSkIcon(clean(props.skIcon, 256)),
+      categoryForSkIcon(cleanNoteText(props.skIcon, 256)),
     description: ownership ? cleanPersonalNoteText(note.description) : undefined,
-    skIcon: clean(props.skIcon, 256),
+    skIcon: cleanNoteText(props.skIcon, 256),
     ownedByBinnacle: ownership ? true : undefined,
-    url: clean(note.url, 2048),
-    source: clean(props.source, 256),
-    attribution: clean(props.attribution, 1024),
+    url: cleanNoteText(note.url, 2048),
+    source: cleanNoteText(props.source, 256),
+    attribution: cleanNoteText(props.attribution, 1024),
   };
 }
 

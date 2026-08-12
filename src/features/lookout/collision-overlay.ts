@@ -14,6 +14,7 @@ import {
   removeLayersAndSources,
   setLayersVisibility,
   setSourceData,
+  severityMatchExpression,
 } from '$shared/map';
 
 const SOURCE_ID = 'binnacle-collision';
@@ -46,18 +47,10 @@ function contactsToFeatures(contacts: readonly DangerContact[]): GeoJSON.Feature
   );
 }
 
-// A severity match over the danger and warning grades, with the warning value doubling as the
-// fallback for an unknown severity. Shared by the ring radius, stroke width, and stroke color.
-const severityMatch = (danger: number | string, warning: number | string) =>
-  [
-    'match',
-    ['get', 'severity'],
-    'danger',
-    danger,
-    'warning',
-    warning,
-    warning,
-  ] as ExpressionSpecification;
+// The ring reuses its warning grade as the fallback, so an ungraded target still reads as traffic
+// worth seeing rather than disappearing. Shared by the ring radius, stroke width, and stroke color.
+const severityMatch = <T extends number | string>(danger: T, warning: T) =>
+  severityMatchExpression(danger, warning, warning);
 
 // A graded ring around each dangerous AIS target, colored by severity from the theme.
 function strokeColor(paint: MapThemePaint): ExpressionSpecification {

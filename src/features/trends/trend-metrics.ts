@@ -3,6 +3,7 @@ import type {
   InstrumentTrendDisplayKind,
 } from '$entities/instrument-trend';
 import {
+  CUBIC_METERS_TO_US_GALLONS,
   lengthUnit,
   metersPerSecondToKnots,
   metersToFeet,
@@ -89,7 +90,9 @@ function converter(
     case 'rate-of-turn':
       return (value) => value * RAD_TO_DEG * 60;
     case 'volume':
-      return mode === 'imperial' ? (value) => value * 264.172052 : (value) => value * 1000;
+      return mode === 'imperial'
+        ? (value) => value * CUBIC_METERS_TO_US_GALLONS
+        : (value) => value * 1000;
     case 'voltage':
     case 'current':
     case 'power':

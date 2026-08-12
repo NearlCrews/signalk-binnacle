@@ -5,15 +5,13 @@ import {
   type ResourceMutationResult,
   sendJson,
 } from '$shared/signalk';
-import { NOTES_PATH } from './notes-client';
+import { NOTES_PATH, NOTES_V1_PATH } from './notes-client';
 import {
   cleanPersonalNoteInput,
   isPersonalNoteId,
   type PersonalNoteInput,
   personalNoteResource,
 } from './personal-note-contract';
-
-const NOTES_V1_PATH = '/signalk/v1/api/resources/notes';
 
 export type PersonalNotesCapability =
   | 'unknown'

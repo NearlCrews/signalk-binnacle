@@ -11,7 +11,9 @@ export {
   normalizeBounds,
   padBbox,
   splitAtAntimeridian,
+  unwrapEast,
   VIEWPORT_FETCH_PAD_FRACTION,
+  wrapLongitude,
 } from './bounds';
 export type { LatLon, LonLat } from './geo-guards';
 export {

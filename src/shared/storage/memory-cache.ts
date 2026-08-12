@@ -1,3 +1,5 @@
+import { evictOldestKey } from '$shared/lib';
+
 // A bounded, insertion-ordered in-memory cache with an optional TTL. Eviction is oldest-first by
 // Map insertion order, so callers that rely on FIFO eviction (the tides per-station caches) and on
 // dropping the least-recently-inserted view (the weather grid cache) both get the order they expect.
@@ -46,9 +48,7 @@ export class MemoryCache<V> {
     this.#entries.delete(key);
     this.#entries.set(key, { value, expires });
     while (this.#entries.size > this.#maxEntries) {
-      const oldest = this.#entries.keys().next().value;
-      if (oldest === undefined) break;
-      this.#entries.delete(oldest);
+      if (evictOldestKey(this.#entries) === undefined) break;
     }
   }
 }

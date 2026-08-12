@@ -10,6 +10,7 @@ import { DEPTH_SOURCE_LABELS, type OwnVessel } from '$entities/vessel';
 import { asNumber, isLatLon } from '$shared/geo';
 import type { ReactiveClock, UnitsMode } from '$shared/lib';
 import {
+  CUBIC_METERS_TO_US_GALLONS,
   formatBearingOr,
   formatDuration,
   formatFixed,
@@ -22,6 +23,7 @@ import {
   formatPercent,
   formatPressureOr,
   formatTemperatureOr,
+  JOULES_PER_KWH,
   lengthUnit,
   PLACEHOLDER,
   pressureUnit,
@@ -220,6 +222,22 @@ const sampleDepth = unitSample(formatLengthOr, lengthUnit);
 const samplePressure = unitSample(formatPressureOr, pressureUnit);
 const sampleTemperature = unitSample(formatTemperatureOr, temperatureUnit);
 
+// The path whose value a tile is actually SHOWING. The reading's own resolved path wins: on a
+// fallback-chain tile the first populated path can differ from the one the shown number came from,
+// and naming the wrong source or age beside a live number is worse than naming none. Undefined only
+// for a computed tile with no paths at all.
+export function primaryPathFor(
+  deps: TileDeps,
+  def: TileDef,
+  reading: TileReading,
+): string | undefined {
+  return (
+    reading.activePath ??
+    def.paths.find((candidate) => deps.store.cell(candidate).epoch > 0) ??
+    def.paths[0]
+  );
+}
+
 // The retained stale value's age, so a stale tile says how old its number is instead of wearing
 // a confident numeral beside a whisper badge; undefined while live. Ages from the same epoch the
 // staleness grade used (the server-declared last good value when present, else stream receipt).
@@ -229,10 +247,7 @@ export function staleAgeText(
   reading: TileReading,
 ): string | undefined {
   if (reading.state !== 'stale') return undefined;
-  const path =
-    reading.activePath ??
-    def.paths.find((candidate) => deps.store.cell(candidate).epoch > 0) ??
-    def.paths[0];
+  const path = primaryPathFor(deps, def, reading);
   if (!path) return undefined;
   const cell = deps.store.cell(path);
   const epoch = cell.serverStale?.lastValueEpoch ?? cell.epoch;
@@ -941,12 +956,14 @@ function wattsUnit(value: number | undefined): string {
 
 function formatEnergy(valueJoules: number | undefined): string {
   if (valueJoules === undefined || Number.isNaN(valueJoules)) return PLACEHOLDER;
-  return (valueJoules / 3_600_000).toFixed(1);
+  return (valueJoules / JOULES_PER_KWH).toFixed(1);
 }
 
 function formatVolume(m3: number | undefined, mode: TileDeps['units']['mode']): string {
   if (m3 === undefined || Number.isNaN(m3)) return PLACEHOLDER;
-  return mode === 'imperial' ? (m3 * 264.172052).toFixed(1) : (m3 * 1000).toFixed(0);
+  return mode === 'imperial'
+    ? (m3 * CUBIC_METERS_TO_US_GALLONS).toFixed(1)
+    : (m3 * 1000).toFixed(0);
 }
 
 function volumeUnit(mode: TileDeps['units']['mode']): string {

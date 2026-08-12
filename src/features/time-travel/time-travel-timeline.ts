@@ -1,5 +1,5 @@
 import { isLatLon } from '$shared/geo';
-import { DAY_MS, HOUR_MS, MINUTE_MS, nearestBySorted } from '$shared/lib';
+import { DAY_MS, HOUR_MS, lowerBound, MINUTE_MS, nearestBySorted } from '$shared/lib';
 import { columnIndex, type HistoryValues, SK_PATHS } from '$shared/signalk';
 
 export interface HistorySample {
@@ -94,17 +94,12 @@ export function nextPlaybackSample(
   stepMs: number,
 ): HistorySample | undefined {
   if (samples.length === 0) return undefined;
-  const target = currentMs + stepMs;
-  let low = 0;
-  let high = samples.length;
-  while (low < high) {
-    const mid = (low + high) >>> 1;
-    if (samples[mid].t < target) low = mid + 1;
-    else high = mid;
-  }
+  const low = lowerBound(samples, (sample) => sample.t, currentMs + stepMs);
   return samples[Math.min(low, samples.length - 1)];
 }
 
+// Deliberately not lowerBound: stepping back needs the last sample at or BEFORE the target, an
+// upper bound, so a step from exactly on a sample moves rather than returning that same sample.
 export function previousPlaybackSample(
   samples: readonly HistorySample[],
   currentMs: number,

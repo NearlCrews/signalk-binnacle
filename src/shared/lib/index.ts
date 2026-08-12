@@ -32,9 +32,16 @@ export {
   createRetryableLazyLoader,
   createRetryableLazyUiLoader,
 } from './retryable-lazy-loader';
-export { capitalize, hasControlCharacters, isUnsafeProviderKey } from './strings';
+export { createBusyGate } from './serialize-action';
+export {
+  capitalize,
+  cleanBoundedText,
+  hasControlCharacters,
+  isUnsafeProviderKey,
+} from './strings';
 export { Toast } from './toast.svelte';
 export {
+  CUBIC_METERS_TO_US_GALLONS,
   DAY_MS,
   DEG_TO_RAD,
   degreesToRadians,
@@ -59,6 +66,7 @@ export {
   formatTemperatureOr,
   HOUR_MS,
   headingDegrees,
+  JOULES_PER_KWH,
   knotsToMetersPerSecond,
   landDistanceUnit,
   lengthUnit,

@@ -24,6 +24,19 @@ export function markerIconSizeExpression(
   return interpolate as ExpressionSpecification;
 }
 
+// A MapLibre `match` on a feature's collision severity, the one grading both traffic overlays paint
+// by. The fallback is explicit rather than reusing the warning value, because the two overlays
+// disagree on what an ungraded target should look like: the danger ring reuses its warning grade,
+// while a vector line falls back to the ordinary AIS color. One shape, so a new severity grade is
+// added in one place.
+export function severityMatchExpression<T extends number | string>(
+  danger: T,
+  warning: T,
+  fallback: T,
+): ExpressionSpecification {
+  return ['match', ['get', 'severity'], 'danger', danger, 'warning', warning, fallback];
+}
+
 // Per-feature icon offset as a MapLibre `match` on a feature property, wrapped in the marker zoom
 // interpolation (camera expressions must wrap data expressions, not the other way around). The
 // match keeps each provided symbol's offset as a real literal array in the style, and every

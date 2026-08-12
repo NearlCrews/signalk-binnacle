@@ -1,4 +1,4 @@
-import { type Bbox4, bboxContainsPoint, type LatLon } from '$shared/geo';
+import { type Bbox4, bboxContainsPoint, type LatLon, wrapLongitude } from '$shared/geo';
 import type { ChartCoverageInfo, ChartLayerInfo } from './types';
 
 // The ambient chart-trust grade for the current view: whether a usable nautical chart actually
@@ -99,7 +99,7 @@ export function chartViewStatus(input: ChartViewInput): ChartViewStatusKind {
   // normalizes it first.
   const center: LatLon = {
     latitude: input.center.latitude,
-    longitude: ((((input.center.longitude + 180) % 360) + 360) % 360) - 180,
+    longitude: wrapLongitude(input.center.longitude),
   };
   // Undeclared bounds mean worldwide coverage by the charts API contract.
   const covering = visibleCharts.filter(

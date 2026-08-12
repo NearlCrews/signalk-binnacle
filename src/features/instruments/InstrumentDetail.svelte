@@ -2,7 +2,7 @@
 import { tick } from 'svelte';
 import { recentSourceRefs, sourceCue, type ZoneState } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
-import type { TileDef, TileDeps, TileReading } from './tile-catalog';
+import { primaryPathFor, type TileDef, type TileDeps, type TileReading } from './tile-catalog';
 
 interface Props {
   def: TileDef;
@@ -55,13 +55,7 @@ function ageLabel(epoch: number): string {
   return `${minutes}m ago`;
 }
 
-const primaryPath = $derived.by(() => {
-  // The reading's own resolved path first: on a fallback-chain tile the first populated path can
-  // differ from the path the shown value actually came from, and the detail must never name the
-  // wrong source or age for the number on screen.
-  if (reading.activePath) return reading.activePath;
-  return def.paths.find((path) => deps.store.cell(path).epoch > 0) ?? def.paths[0];
-});
+const primaryPath = $derived(primaryPathFor(deps, def, reading));
 const primaryCell = $derived(primaryPath ? deps.store.cell(primaryPath) : undefined);
 
 const sourceLabel = $derived(

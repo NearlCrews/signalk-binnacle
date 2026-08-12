@@ -7,6 +7,12 @@ export const METERS_PER_NAUTICAL_MILE = 1852;
 // 3600 (seconds per hour) / 1852 (meters per nautical mile): meters per second to knots.
 const MS_TO_KNOTS = 3600 / METERS_PER_NAUTICAL_MILE;
 const KELVIN_OFFSET = 273.15;
+// One cubic meter in US liquid gallons, and one kilowatt-hour in joules. Both appear in more than
+// one display formatter; a mistyped digit in a second copy is a wrong tank or battery reading with
+// nothing to compare it against.
+export const CUBIC_METERS_TO_US_GALLONS = 264.172052;
+export const JOULES_PER_KWH = 3_600_000;
+
 export const PA_PER_HPA = 100;
 
 // Degrees-to-radians as a plain multiplier, for tight numeric loops (haversine, grid sampling)

@@ -1,6 +1,12 @@
 import { chartSourceById, tileCountInBbox } from 'signalk-chart-sources';
 import type { RouteWaypoint } from '$entities/route';
-import { type Bbox4, bboxContainsPoint, splitAtAntimeridian } from '$shared/geo';
+import {
+  type Bbox4,
+  bboxContainsPoint,
+  splitAtAntimeridian,
+  unwrapEast,
+  wrapLongitude,
+} from '$shared/geo';
 import { nauticalMilesToMeters } from '$shared/lib';
 import { antimeridianLineGeometry } from '$shared/map';
 import { geodesicDestination, rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
@@ -45,17 +51,12 @@ const DETAIL_SHORT = 1;
 const UNCOVERED = 2;
 type SampleClass = typeof COVERED | typeof DETAIL_SHORT | typeof UNCOVERED;
 
-function wrapLon(lon: number): number {
-  return ((((lon + 180) % 360) + 360) % 360) - 180;
-}
-
 // A saved region's box in the one or two in-range parts that cover the same ground. Chart Locker
 // boxes drawn across the seam arrive either unwrapped (east past 180) or in the west-greater-than-
 // east crossing convention; both normalize through the shared splitter.
 function regionParts(bbox: SavedRegionDto['bbox']): Bbox4[] {
   const [west, south, east, north] = bbox;
-  const eastUnwrapped = east < west ? east + 360 : east;
-  return splitAtAntimeridian([west, south, eastUnwrapped, north]);
+  return splitAtAntimeridian([west, south, unwrapEast(west, east), north]);
 }
 
 // Whether one of the region's selected charts covers this point at all, per the catalog's own
@@ -86,7 +87,7 @@ function classifyPoint(
   regions: readonly SavedRegionDto[],
   requiredMaxzoom: number,
 ): SampleClass {
-  const lon = wrapLon(longitude);
+  const lon = wrapLongitude(longitude);
   const point = { latitude, longitude: lon };
   let best: SampleClass = UNCOVERED;
   for (const region of regions) {
@@ -151,7 +152,7 @@ export function checkRouteCoverage(input: RouteCoverageInput): RouteCoverageRepo
     sampleCount += 1;
     if (cls === UNCOVERED) uncoveredCount += 1;
     else if (cls === DETAIL_SHORT) detailShortCount += 1;
-    const point: [number, number] = [wrapLon(lon), lat];
+    const point: [number, number] = [wrapLongitude(lon), lat];
     if (previousPoint !== undefined && previousClass !== undefined) {
       const segmentClass = Math.max(cls, previousClass) as SampleClass;
       if (segmentClass !== COVERED) {
@@ -189,8 +190,13 @@ export function checkRouteCoverage(input: RouteCoverageInput): RouteCoverageRepo
       const lat = from.latitude + (to.latitude - from.latitude) * t;
       const lon = from.longitude + deltaLon * t;
       // The corridor at this point: the route line and its two edges abeam.
-      const port = geodesicDestination(lat, wrapLon(lon), bearing - Math.PI / 2, corridorM);
-      const starboard = geodesicDestination(lat, wrapLon(lon), bearing + Math.PI / 2, corridorM);
+      const port = geodesicDestination(lat, wrapLongitude(lon), bearing - Math.PI / 2, corridorM);
+      const starboard = geodesicDestination(
+        lat,
+        wrapLongitude(lon),
+        bearing + Math.PI / 2,
+        corridorM,
+      );
       const cls = Math.max(
         classifyPoint(lat, lon, ready, requiredMaxzoom),
         classifyPoint(port[1], port[0], ready, requiredMaxzoom),

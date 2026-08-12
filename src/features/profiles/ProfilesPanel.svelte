@@ -31,6 +31,10 @@ import DevicePrivacySection from './DevicePrivacySection.svelte';
 import { type ImportedProfile, parseProfilesJson } from './profile-io';
 import { profileChangeSummary } from './setting-labels';
 
+// The stem the save form seeds its name from, in the placeholder and in the accept path. Naming it
+// keeps the field a navigator SEES and the name a blank field SAVES from drifting apart.
+const FALLBACK_PROFILE_NAME = 'Profile';
+
 interface Props {
   auth: AuthController;
   // The display-unit resolution, so the panel can say where units come from: the server's
@@ -97,7 +101,7 @@ let naming = $state<{ mode: 'new' } | { mode: 'rename'; id: string } | null>(nul
 function confirmName(value: string): void {
   if (naming === null) return;
   if (naming.mode === 'new') {
-    onSaveNew(value.trim() || defaultSaveName('Profile'));
+    onSaveNew(value.trim() || defaultSaveName(FALLBACK_PROFILE_NAME));
   } else {
     const trimmed = value.trim();
     if (trimmed) onRename(naming.id, trimmed);
@@ -244,7 +248,7 @@ function useProfile(id: string): void {
   {#if naming?.mode === 'new'}
     <NameEntry
       label="Name this profile"
-      value={defaultSaveName('Profile')}
+      value={defaultSaveName(FALLBACK_PROFILE_NAME)}
       onConfirm={confirmName}
       onCancel={() => (naming = null)}
     />

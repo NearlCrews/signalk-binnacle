@@ -1,5 +1,5 @@
 import { type Bbox4, isBbox4 } from '$shared/geo';
-import { hasControlCharacters, isRecord, uuidv4 } from '$shared/lib';
+import { cleanBoundedText, hasControlCharacters, isRecord, uuidv4 } from '$shared/lib';
 import { readPmtilesMeta, type SignalKChart } from '$shared/map';
 
 const MAX_USER_CHARTS = 1_000;
@@ -9,13 +9,6 @@ export const MAX_USER_CHART_URL_LENGTH = 4_096;
 const MAX_USER_CHART_LAYERS = 512;
 const MAX_USER_CHART_LAYER_ID_LENGTH = 256;
 const MAX_CHART_ZOOM = 30;
-
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
 
 function normalizeUserChartUrl(value: string): string | undefined {
   const trimmed = value.trim();
@@ -111,8 +104,8 @@ export interface UserChartSource {
 // blobs no longer have a store.
 export function cleanUserChartSource(value: unknown): UserChartSource | undefined {
   if (!isRecord(value)) return undefined;
-  const id = cleanText(value.id, MAX_USER_CHART_ID_LENGTH);
-  const name = cleanText(value.name, MAX_USER_CHART_NAME_LENGTH);
+  const id = cleanBoundedText(value.id, MAX_USER_CHART_ID_LENGTH);
+  const name = cleanBoundedText(value.name, MAX_USER_CHART_NAME_LENGTH);
   if (!id || !name) return undefined;
   if (value.kind !== 'vector' && value.kind !== 'raster') return undefined;
   const origin = value.origin;
@@ -146,7 +139,7 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
     const seen = new Set<string>();
     layers = [];
     for (const layer of value.layers) {
-      const cleaned = cleanText(layer, MAX_USER_CHART_LAYER_ID_LENGTH);
+      const cleaned = cleanBoundedText(layer, MAX_USER_CHART_LAYER_ID_LENGTH);
       if (!cleaned) return undefined;
       if (!seen.has(cleaned)) layers.push(cleaned);
       seen.add(cleaned);
@@ -344,7 +337,7 @@ export class UserCharts {
     if (this.sources.some((source) => source.id === draft.source.id)) {
       throw new Error('That chart is already saved.');
     }
-    const nextName = cleanText(name, MAX_USER_CHART_NAME_LENGTH) ?? draft.source.name;
+    const nextName = cleanBoundedText(name, MAX_USER_CHART_NAME_LENGTH) ?? draft.source.name;
     const source = cleanUserChartSource({ ...draft.source, name: nextName, shareWithServer });
     if (!source) throw new Error('Chart metadata is invalid.');
     this.sources = [...this.sources, source];
@@ -355,7 +348,7 @@ export class UserCharts {
   rename(id: string, name: string): void {
     const index = this.sources.findIndex((source) => source.id === id);
     if (index < 0) return;
-    const safeName = cleanText(name, MAX_USER_CHART_NAME_LENGTH);
+    const safeName = cleanBoundedText(name, MAX_USER_CHART_NAME_LENGTH);
     if (!safeName) return;
     const renamed = { ...this.sources[index], name: safeName };
     this.sources = this.sources.with(index, renamed);

@@ -26,7 +26,11 @@ import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { loadAlarmsPanel } from '$features/lookout';
-import { loadRadarControls, radarAreaChartInstruction } from '$features/marine-radar';
+import {
+  loadRadarControls,
+  MARINE_RADAR_OVERLAY_ID,
+  radarAreaChartInstruction,
+} from '$features/marine-radar';
 import { loadMeasureStrip } from '$features/measure';
 import { NavStrip, type RouteProgress } from '$features/navigation';
 import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
@@ -35,6 +39,7 @@ import { loadRegionsPanel } from '$features/prewarm';
 import { loadRoutesPanel, RouteEditStrip } from '$features/routing';
 import {
   loadTidesPanel,
+  TIDES_OVERLAY_ID,
   type TideStationSelectionEvent,
   type TidesController,
 } from '$features/tides';
@@ -627,7 +632,7 @@ function radarControlsForAttempt() {
 
 function startRadarAreaChartEdit(controlId: string): string | undefined {
   const error = marineRadar.startAreaChartEdit(controlId);
-  if (!error) setLayerVisible('marine-radar', true);
+  if (!error) setLayerVisible(MARINE_RADAR_OVERLAY_ID, true);
   return error;
 }
 
@@ -770,7 +775,7 @@ function activeRouteForCoverage(): { name: string; waypoints: RouteWaypoint[] } 
   const route = routeStore.routeById(id);
   return route === undefined ? undefined : { name: route.name, waypoints: route.waypoints };
 }
-const radarEchoShown = $derived(layerSettings['marine-radar']?.visible ?? false);
+const radarEchoShown = $derived(layerSettings[MARINE_RADAR_OVERLAY_ID]?.visible ?? false);
 // Whole-route time: the active leg's own estimate (server timeToGo, else positive-VMG) plus the
 // explicit planning speed across the legs ahead. Never cross-track SOG for the whole route: an
 // off-course five knots would promise an arrival the boat is not making. Any missing input leaves
@@ -1144,7 +1149,7 @@ $effect(() => {
               onBack={backToMenu}
               {onShowChartBounds}
               onManageLayer={(id) => {
-                if (id === 'marine-radar') {
+                if (id === MARINE_RADAR_OVERLAY_ID) {
                   radarOpenedFrom = 'layers';
                   radarControlsOpen = true;
                 }
@@ -1375,8 +1380,8 @@ $effect(() => {
               store={tidesStore}
               controller={tidesController}
               {units}
-              stationsShown={layerSettings.tides?.visible ?? false}
-              onToggleStations={(shown) => setLayerVisible('tides', shown)}
+              stationsShown={layerSettings[TIDES_OVERLAY_ID]?.visible ?? false}
+              onToggleStations={(shown) => setLayerVisible(TIDES_OVERLAY_ID, shown)}
               onClose={closePanel}
               onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
             />
@@ -1888,7 +1893,7 @@ $effect(() => {
               onSelectRadar={(id) => requestRadarPanelAction({ kind: 'select', radarId: id })}
               onSetPower={onSetRadarPower}
               echoShown={radarEchoShown}
-              onToggleEcho={(shown) => setLayerVisible('marine-radar', shown)}
+              onToggleEcho={(shown) => setLayerVisible(MARINE_RADAR_OVERLAY_ID, shown)}
               discardRequested={radarDiscardRequested}
               onDraftDirtyChange={(dirty) => (radarDraftDirty = dirty)}
               onDiscardResolved={resolveRadarDraftDiscard}

@@ -1,5 +1,5 @@
-import { type Bbox4, isBbox4 } from '$shared/geo';
-import { hasControlCharacters, isFiniteNumber, isRecord } from '$shared/lib';
+import { type Bbox4, isBbox4, isLatitude, isLongitude } from '$shared/geo';
+import { cleanBoundedText, isFiniteNumber, isRecord } from '$shared/lib';
 import type { SignalKChart } from '$shared/map';
 import { deleteResource, fetchKeyedResource, putResource } from '$shared/signalk';
 
@@ -14,18 +14,11 @@ const MAX_LAYERS = 512;
 const MAX_LAYER_ID_LENGTH = 256;
 const CHART_TYPES = new Set(['tilelayer', 'WMS', 'WMTS', 'tileJSON', 'mapstyleJSON', 'S-57']);
 
-function cleanString(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
-
 function safeBounds(value: unknown): Bbox4 | undefined {
   if (!isBbox4(value)) return undefined;
   const [west, south, east, north] = value;
-  if (west < -180 || west > 180 || east < -180 || east > 180) return undefined;
-  if (south < -90 || north > 90 || south > north) return undefined;
+  if (!isLongitude(west) || !isLongitude(east)) return undefined;
+  if (!isLatitude(south) || !isLatitude(north) || south > north) return undefined;
   return value;
 }
 
@@ -40,11 +33,11 @@ function safeZoom(value: unknown): number | undefined {
 // within the collection. An embedded identifier is provider metadata and cannot replace that key.
 function chartFromEntry(id: string, raw: unknown): SignalKChart | undefined {
   if (!isRecord(raw)) return undefined;
-  const identifier = cleanString(id, MAX_ID_LENGTH);
+  const identifier = cleanBoundedText(id, MAX_ID_LENGTH);
   const embeddedIdentifier =
-    raw.identifier === undefined ? undefined : cleanString(raw.identifier, MAX_ID_LENGTH);
-  const name = cleanString(raw.name, MAX_NAME_LENGTH);
-  const type = cleanString(raw.type, 32);
+    raw.identifier === undefined ? undefined : cleanBoundedText(raw.identifier, MAX_ID_LENGTH);
+  const name = cleanBoundedText(raw.name, MAX_NAME_LENGTH);
+  const type = cleanBoundedText(raw.type, 32);
   if (
     !identifier ||
     (raw.identifier !== undefined && !embeddedIdentifier) ||
@@ -55,7 +48,7 @@ function chartFromEntry(id: string, raw: unknown): SignalKChart | undefined {
     return undefined;
   }
   const chart: SignalKChart = { identifier, name, type: type as SignalKChart['type'] };
-  const description = cleanString(raw.description, MAX_DESCRIPTION_LENGTH);
+  const description = cleanBoundedText(raw.description, MAX_DESCRIPTION_LENGTH);
   if (description) chart.description = description;
   const bounds = safeBounds(raw.bounds);
   if (bounds) chart.bounds = bounds;
@@ -65,16 +58,16 @@ function chartFromEntry(id: string, raw: unknown): SignalKChart | undefined {
   if (maxzoom !== undefined && (minzoom === undefined || maxzoom >= minzoom)) {
     chart.maxzoom = maxzoom;
   }
-  const format = cleanString(raw.format, 64);
-  const url = cleanString(raw.url, MAX_URL_LENGTH);
-  const tilemapUrl = cleanString(raw.tilemapUrl, MAX_URL_LENGTH);
+  const format = cleanBoundedText(raw.format, 64);
+  const url = cleanBoundedText(raw.url, MAX_URL_LENGTH);
+  const tilemapUrl = cleanBoundedText(raw.tilemapUrl, MAX_URL_LENGTH);
   if (format) chart.format = format;
   if (url) chart.url = url;
   if (tilemapUrl) chart.tilemapUrl = tilemapUrl;
   if (isFiniteNumber(raw.scale) && raw.scale > 0) chart.scale = raw.scale;
   if (Array.isArray(raw.layers) && raw.layers.length <= MAX_LAYERS) {
     const layers = raw.layers
-      .map((layer) => cleanString(layer, MAX_LAYER_ID_LENGTH))
+      .map((layer) => cleanBoundedText(layer, MAX_LAYER_ID_LENGTH))
       .filter((layer): layer is string => layer !== undefined);
     if (layers.length > 0) chart.layers = layers;
   }

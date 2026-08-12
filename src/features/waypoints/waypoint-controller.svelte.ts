@@ -5,12 +5,8 @@ import {
   type WaypointsStore,
 } from '$entities/waypoint';
 import { isLatLon, type LatLon } from '$shared/geo';
-import { type Toast, uuidv4 } from '$shared/lib';
-import {
-  deleteRefusedMessage,
-  type ResourceMutationResult,
-  writeRefusedMessage,
-} from '$shared/signalk';
+import { createBusyGate, type Toast, uuidv4 } from '$shared/lib';
+import { createWriteOutcomeGate, deleteRefusedMessage, writeRefusedMessage } from '$shared/signalk';
 import {
   deleteWaypoint,
   fetchWaypoints,
@@ -41,16 +37,10 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   // One place to turn a write outcome into a toast and, when the server refused, into a fresh
   // access request. The dialog and its entered values stay put on any failure; only the
   // explanation and the recovery differ.
-  function accepted(
-    outcome: ResourceMutationResult,
-    refused: string,
-    failed: string,
-  ): outcome is 'ok' {
-    if (outcome === 'ok') return true;
-    if (outcome === 'access-denied') void deps.requestWriteAccess();
-    deps.toast.show(outcome === 'access-denied' ? refused : failed);
-    return false;
-  }
+  const accepted = createWriteOutcomeGate({
+    report: (message) => deps.toast.show(message),
+    requestWriteAccess: () => deps.requestWriteAccess(),
+  });
 
   const { origin, waypointsStore } = deps;
 
@@ -60,6 +50,15 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   let provisioning = $state<WaypointsProvisioning>('unknown');
   let busy = $state(false);
   let refreshGeneration = 0;
+  // Every mutating action is serialized against one busy flag, so a second tap while a write is in
+  // flight is dropped rather than racing it. The synchronous guards below (drop, open-edit, cancel)
+  // read the same flag without owning it.
+  const withBusy = createBusyGate(
+    () => busy,
+    (next) => {
+      busy = next;
+    },
+  );
 
   async function refreshWaypoints(): Promise<void> {
     const generation = ++refreshGeneration;
@@ -98,7 +97,6 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     name: string;
     icon?: string;
   }): Promise<Waypoint | undefined> {
-    if (busy) return undefined;
     if (deps.writeBlocked()) {
       deps.toast.show(
         'Read-only access: the waypoint was not added. Request read and write access to save it.',
@@ -114,29 +112,24 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       position,
       ...(icon ? { icon } : {}),
     };
-    busy = true;
     refreshGeneration += 1;
-    try {
-      const saved = await saveWaypoint(origin, deps.getToken(), waypoint);
-      if (
-        !accepted(
-          saved,
-          writeRefusedMessage('waypoint'),
-          'Could not save the waypoint. Check the connection and write access.',
-        )
-      ) {
-        return undefined;
-      }
-      waypointsStore.upsertWaypoint(waypoint);
-      loadState = 'ready';
-      // A write the server accepted is direct proof a waypoints provider is registered.
-      provisioning = 'provisioned';
-      addWaypointAt = undefined;
-      await refreshWaypoints();
-      return waypoint;
-    } finally {
-      busy = false;
+    const saved = await saveWaypoint(origin, deps.getToken(), waypoint);
+    if (
+      !accepted(
+        saved,
+        writeRefusedMessage('waypoint'),
+        'Could not save the waypoint. Check the connection and write access.',
+      )
+    ) {
+      return undefined;
     }
+    waypointsStore.upsertWaypoint(waypoint);
+    loadState = 'ready';
+    // A write the server accepted is direct proof a waypoints provider is registered.
+    provisioning = 'provisioned';
+    addWaypointAt = undefined;
+    await refreshWaypoints();
+    return waypoint;
   }
 
   function onOpenEditWaypoint(waypoint: Waypoint): void {
@@ -145,7 +138,6 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   }
 
   async function onSaveWaypointEdit(result: { name: string; icon?: string }): Promise<void> {
-    if (busy) return;
     if (deps.writeBlocked()) {
       deps.toast.show(
         'Read-only access: the waypoint was not changed. Request read and write access to edit it.',
@@ -160,56 +152,45 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       name: cleanWaypointName(result.name, existing.name),
       ...(icon ? { icon } : { icon: undefined }),
     };
-    busy = true;
     refreshGeneration += 1;
-    try {
-      const saved = await saveWaypoint(origin, deps.getToken(), updated);
-      if (
-        !accepted(
-          saved,
-          writeRefusedMessage('waypoint'),
-          'Could not save the waypoint. Check the connection and write access.',
-        )
-      ) {
-        return;
-      }
-      waypointsStore.upsertWaypoint(updated);
-      loadState = 'ready';
-      provisioning = 'provisioned';
-      editingWaypoint = undefined;
-      await refreshWaypoints();
-    } finally {
-      busy = false;
+    const saved = await saveWaypoint(origin, deps.getToken(), updated);
+    if (
+      !accepted(
+        saved,
+        writeRefusedMessage('waypoint'),
+        'Could not save the waypoint. Check the connection and write access.',
+      )
+    ) {
+      return;
     }
+    waypointsStore.upsertWaypoint(updated);
+    loadState = 'ready';
+    provisioning = 'provisioned';
+    editingWaypoint = undefined;
+    await refreshWaypoints();
   }
 
   async function onDeleteWaypoint(id: string): Promise<void> {
-    if (busy) return;
     if (deps.writeBlocked()) {
       deps.toast.show(
         'Read-only access: the waypoint was not deleted. Request read and write access to delete it.',
       );
       return;
     }
-    busy = true;
     refreshGeneration += 1;
-    try {
-      const deleted = await deleteWaypoint(origin, deps.getToken(), id);
-      if (
-        !accepted(
-          deleted,
-          deleteRefusedMessage(),
-          'Could not delete the waypoint. Check the connection and write access.',
-        )
-      ) {
-        return;
-      }
-      waypointsStore.removeWaypoint(id);
-      loadState = 'ready';
-      await refreshWaypoints();
-    } finally {
-      busy = false;
+    const deleted = await deleteWaypoint(origin, deps.getToken(), id);
+    if (
+      !accepted(
+        deleted,
+        deleteRefusedMessage(),
+        'Could not delete the waypoint. Check the connection and write access.',
+      )
+    ) {
+      return;
     }
+    waypointsStore.removeWaypoint(id);
+    loadState = 'ready';
+    await refreshWaypoints();
   }
 
   // The dialogs render while these states are set, so Cancel must clear them here: the
@@ -227,12 +208,12 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   return {
     refreshWaypoints,
     onDropWaypoint,
-    confirmAddWaypoint,
+    confirmAddWaypoint: withBusy(confirmAddWaypoint),
     cancelAddWaypoint,
     onOpenEditWaypoint,
-    onSaveWaypointEdit,
+    onSaveWaypointEdit: withBusy(onSaveWaypointEdit),
     cancelEditWaypoint,
-    onDeleteWaypoint,
+    onDeleteWaypoint: withBusy(onDeleteWaypoint),
     get addWaypointAt() {
       return addWaypointAt;
     },

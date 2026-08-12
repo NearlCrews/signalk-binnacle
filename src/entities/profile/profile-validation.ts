@@ -1,9 +1,10 @@
 import { isTrendInstrumentId, MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
 import {
-  hasControlCharacters,
+  cleanBoundedText,
   isFiniteNumber,
   isRecord,
   isSafeNonNegativeInteger,
+  isUnsafeProviderKey,
   knotsToMetersPerSecond,
 } from '$shared/lib';
 import type { LayerSettings } from '$shared/map';
@@ -45,21 +46,16 @@ const KNOWN_SETTING_KEYS = new Set<string>([
   // a profile written before the SI migration carries it, and sanitizeProfileSettings drops it.
   'planningSpeedKn',
 ]);
+// Kept for the SEGMENT walk below, which asks a narrower question than isUnsafeProviderKey: a
+// dotted id may legitimately contain an empty segment, which the shared key predicate rejects.
 const DANGEROUS_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength || hasControlCharacters(trimmed)) return undefined;
-  return trimmed;
-}
-
 export function cleanProfileName(value: unknown): string | undefined {
-  return cleanText(value, MAX_PROFILE_NAME_LENGTH);
+  return cleanBoundedText(value, MAX_PROFILE_NAME_LENGTH);
 }
 
 export function cleanProfileId(value: unknown): string | undefined {
-  const id = cleanText(value, MAX_PROFILE_ID_LENGTH);
+  const id = cleanBoundedText(value, MAX_PROFILE_ID_LENGTH);
   return id &&
     id === value &&
     !id.split(/[./]/).some((segment) => DANGEROUS_PATH_SEGMENTS.has(segment))
@@ -68,7 +64,7 @@ export function cleanProfileId(value: unknown): string | undefined {
 }
 
 function validRecordKey(value: string, maxLength = MAX_PROFILE_ID_LENGTH): boolean {
-  return cleanText(value, maxLength) === value && !DANGEROUS_PATH_SEGMENTS.has(value);
+  return cleanBoundedText(value, maxLength) === value && !isUnsafeProviderKey(value);
 }
 
 function validStringList(value: unknown, maxEntries: number): value is string[] {
@@ -76,14 +72,14 @@ function validStringList(value: unknown, maxEntries: number): value is string[] 
     Array.isArray(value) &&
     value.length <= maxEntries &&
     new Set(value).size === value.length &&
-    value.every((entry) => cleanText(entry, MAX_PROFILE_ID_LENGTH) === entry)
+    value.every((entry) => cleanBoundedText(entry, MAX_PROFILE_ID_LENGTH) === entry)
   );
 }
 
 function validLayerSettings(value: unknown): value is LayerSettings {
   if (!isRecord(value) || Object.keys(value).length > MAX_LAYER_ENTRIES) return false;
   return Object.entries(value).every(([id, setting]) => {
-    const cleanedId = cleanText(id, MAX_PROFILE_ID_LENGTH);
+    const cleanedId = cleanBoundedText(id, MAX_PROFILE_ID_LENGTH);
     return (
       cleanedId === id &&
       validRecordKey(id) &&
@@ -276,7 +272,7 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   ) {
     return false;
   }
-  if (value.mode !== undefined && cleanText(value.mode, 64) !== value.mode) return false;
+  if (value.mode !== undefined && cleanBoundedText(value.mode, 64) !== value.mode) return false;
   const extensionBudget = { remaining: MAX_EXTENSION_NODES };
   for (const [key, extension] of Object.entries(value)) {
     if (!validRecordKey(key)) return false;

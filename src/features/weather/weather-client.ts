@@ -4,7 +4,9 @@ import {
   type WeatherGrid,
   type WeatherSourceMetadata,
 } from '$entities/weather';
+import { wrapLongitude } from '$shared/geo';
 import { DEG_TO_RAD, isRecord, PA_PER_HPA, readBoundedJson, withTimeout } from '$shared/lib';
+import { haversineMeters, normalizeLonDeltaDeg } from '$shared/nav';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
@@ -182,7 +184,7 @@ function buildUrl(
 ): string {
   const params = new URLSearchParams({
     latitude: points.map((p) => p.lat.toFixed(4)).join(','),
-    longitude: points.map((p) => providerLongitude(p.lon).toFixed(4)).join(','),
+    longitude: points.map((p) => wrapLongitude(p.lon).toFixed(4)).join(','),
     hourly,
     forecast_days: String(opts.forecastDays),
     timeformat: 'unixtime',
@@ -192,10 +194,6 @@ function buildUrl(
     ...extra,
   });
   return `${baseUrl}?${params}`;
-}
-
-function providerLongitude(lon: number): number {
-  return ((((lon + 180) % 360) + 360) % 360) - 180;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -479,6 +477,9 @@ function maxSourceDisplacement(
   );
 }
 
+// The shared haversine, given a seam-normalized east longitude so a provider point across the
+// antimeridian does not read as most of a world away. A non-finite input answers infinity, which
+// the callers treat as "too far to pair", rather than propagating NaN into a comparison.
 function distanceMeters(
   a: { latitude: number; longitude: number },
   b: { latitude: number; longitude: number },
@@ -486,11 +487,6 @@ function distanceMeters(
   if (![a.latitude, a.longitude, b.latitude, b.longitude].every(Number.isFinite)) {
     return Number.POSITIVE_INFINITY;
   }
-  const dLat = (b.latitude - a.latitude) * DEG_TO_RAD;
-  const longitudeDelta = ((b.longitude - a.longitude + 540) % 360) - 180;
-  const dLon = longitudeDelta * DEG_TO_RAD;
-  const lat1 = a.latitude * DEG_TO_RAD;
-  const lat2 = b.latitude * DEG_TO_RAD;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  const longitude = a.longitude + normalizeLonDeltaDeg(b.longitude - a.longitude);
+  return haversineMeters(a.latitude, a.longitude, b.latitude, longitude);
 }

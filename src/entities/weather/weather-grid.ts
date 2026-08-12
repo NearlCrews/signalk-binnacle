@@ -1,4 +1,4 @@
-import { type LngLatBoundsLike, lngLatBoundsToBbox4 } from '$shared/geo';
+import { type LngLatBoundsLike, lngLatBoundsToBbox4, wrapLongitude } from '$shared/geo';
 import { lerp, nearestBy } from '$shared/lib';
 
 export interface Bbox {
@@ -107,8 +107,6 @@ export function sampleGrid(bbox: Bbox, maxCells: number): { lats: number[]; lons
   const rows = Math.max(2, Math.floor(maxCells / cols));
   return { lats: axis(south, north, rows), lons: axis(west, east, cols) };
 }
-
-const wrapLongitude = (lon: number): number => ((((lon + 180) % 360) + 360) % 360) - 180;
 
 // Canonicalize equivalent world copies to one unwrapped interval. Antimeridian crossings remain
 // continuous, such as 170..-170 becoming 170..190, so regular grid axes stay ascending.

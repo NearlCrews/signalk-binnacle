@@ -1,7 +1,7 @@
 import type { PoiType } from '$entities/poi-icons';
 import { readBoundedJson, withTimeout } from '$shared/lib';
 import { asKeyedObject, authInit, str } from '$shared/signalk';
-import { NOTES_PATH } from './notes-client';
+import { cleanNoteText, NOTES_PATH, NOTES_V1_PATH } from './notes-client';
 
 const ITEM_KINDS = [
   'text',
@@ -18,11 +18,6 @@ type NormalizedItemKind = (typeof ITEM_KINDS)[number];
 const MAX_SECTIONS = 32;
 const MAX_ITEMS_PER_SECTION = 100;
 const MAX_FALLBACK_TEXT = 20_000;
-
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  const text = str(value)?.trim();
-  return text ? text.slice(0, maxLength) : undefined;
-}
 
 function suffixedSectionId(id: string, suffix: number): string {
   const ending = `:${suffix}`;
@@ -53,8 +48,6 @@ export interface NoteDetail {
   url?: string;
 }
 
-const V1 = '/signalk/v1/api/resources/notes';
-
 // A provider description is untrusted, so it is shown as plain text; its markup is never injected.
 export function plainText(html: string): string {
   return html
@@ -83,7 +76,7 @@ function isItemKind(value: unknown): value is NormalizedItemKind {
 function parseItem(raw: unknown): NormalizedItem | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as { label?: unknown; value?: unknown; kind?: unknown; unit?: unknown };
-  const label = cleanText(r.label, 256);
+  const label = cleanNoteText(r.label, 256);
   if (label === undefined) return undefined;
   const value = r.value;
   if (
@@ -101,7 +94,7 @@ function parseItem(raw: unknown): NormalizedItem | undefined {
   ) {
     return undefined;
   }
-  const unit = cleanText(r.unit, 64);
+  const unit = cleanNoteText(r.unit, 64);
   if (unit !== undefined) item.unit = unit;
   // The panel renders units only for measures, so a kind-less item with a unit would silently
   // drop it; a unit is what makes a measure.
@@ -115,14 +108,14 @@ function parseSections(raw: unknown): NormalizedSection[] | undefined {
   for (const s of raw.slice(0, MAX_SECTIONS)) {
     if (!s || typeof s !== 'object') continue;
     const sec = s as { id?: unknown; title?: unknown; items?: unknown };
-    const title = cleanText(sec.title, 256);
+    const title = cleanNoteText(sec.title, 256);
     if (title === undefined || !Array.isArray(sec.items)) continue;
     const items = sec.items
       .slice(0, MAX_ITEMS_PER_SECTION)
       .map(parseItem)
       .filter((i): i is NormalizedItem => i !== undefined);
     if (items.length === 0) continue;
-    candidates.push({ id: cleanText(sec.id, 256) ?? title, title, items });
+    candidates.push({ id: cleanNoteText(sec.id, 256) ?? title, title, items });
   }
   if (candidates.length === 0) return undefined;
 
@@ -172,20 +165,20 @@ async function tryFetch(
     const cn = props.crowsNest;
     const detail: NoteDetail = {
       id,
-      name: cleanText(note.name, 256) ?? cleanText(note.title, 256) ?? id,
+      name: cleanNoteText(note.name, 256) ?? cleanNoteText(note.title, 256) ?? id,
       type: typeof cn?.type === 'string' ? (cn.type as PoiType) : undefined,
-      attribution: cleanText(props.attribution, 1024),
+      attribution: cleanNoteText(props.attribution, 1024),
       sources: Array.isArray(props.sources)
         ? [
             ...new Set(
               props.sources
                 .slice(0, 32)
-                .map((source) => cleanText(source, 256))
+                .map((source) => cleanNoteText(source, 256))
                 .filter((source): source is string => source !== undefined),
             ),
           ]
         : undefined,
-      url: cleanText(note.url, 2048),
+      url: cleanNoteText(note.url, 2048),
     };
     // Only schema version 1 sections are mapped; a later version falls through to the plain-text body.
     const sections = cn?.schemaVersion === 1 ? parseSections(cn.sections) : undefined;
@@ -213,7 +206,7 @@ export async function fetchNoteDetail(
   // reachable only if a v2 list once served ids and the server later stopped answering v2.
   return (
     (await tryFetch(`${base}${NOTES_PATH}${path}`, token, id)) ??
-    (await tryFetch(`${base}${V1}${path}`, token, id))
+    (await tryFetch(`${base}${NOTES_V1_PATH}${path}`, token, id))
   );
 }
 

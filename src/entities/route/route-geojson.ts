@@ -1,19 +1,13 @@
 import { isLonLat, type LonLat, latLonToLonLat, lonLatToLatLon } from '$shared/geo';
 import { hasControlCharacters, isRecord } from '$shared/lib';
 import { rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
-import { str } from '$shared/signalk';
+import { cleanTruncatedText, str } from '$shared/signalk';
 import type { Route, RouteWaypoint } from './route-types';
 
 export const MAX_ROUTE_WAYPOINTS = 10_000;
 const MAX_ROUTE_ID_LENGTH = 512;
 const MAX_ROUTE_NAME_LENGTH = 256;
 const MAX_ROUTE_WAYPOINT_NAME_LENGTH = 256;
-
-function cleanText(value: unknown, maxLength: number): string | undefined {
-  const text = str(value)?.trim();
-  if (!text || hasControlCharacters(text)) return undefined;
-  return text.slice(0, maxLength);
-}
 
 export function cleanRouteId(value: unknown): string | undefined {
   const text = str(value);
@@ -47,14 +41,15 @@ export function routeToFeature(route: Route): RouteResourceBody {
   // (or href), so an unnamed-waypoint placeholder of {} is rejected. Emit coordinatesMeta only when
   // a waypoint is named, filling the unnamed gaps with their 1-based index, and omit it otherwise.
   const names = route.waypoints.map((waypoint) =>
-    cleanText(waypoint.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH),
+    cleanTruncatedText(waypoint.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH),
   );
   const named = names.some(Boolean);
   const properties = named
     ? { coordinatesMeta: names.map((name, index) => ({ name: name ?? `${index + 1}` })) }
     : {};
   return {
-    name: cleanText(route.name, MAX_ROUTE_NAME_LENGTH) ?? cleanRouteId(route.id) ?? 'Route',
+    name:
+      cleanTruncatedText(route.name, MAX_ROUTE_NAME_LENGTH) ?? cleanRouteId(route.id) ?? 'Route',
     distance: routeDistanceMeters(route.waypoints),
     feature: {
       type: 'Feature',
@@ -88,10 +83,10 @@ export function featureToRoute(id: string, raw: unknown): Route | undefined {
   const waypoints: RouteWaypoint[] = [];
   for (const [i, coord] of geom.coordinates.entries()) {
     if (!isLonLat(coord)) return undefined;
-    const name = cleanText(meta[i]?.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH);
+    const name = cleanTruncatedText(meta[i]?.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH);
     waypoints.push({ position: lonLatToLatLon(coord), ...(name ? { name } : {}) });
   }
-  const name = cleanText(r.name, MAX_ROUTE_NAME_LENGTH) ?? safeId;
+  const name = cleanTruncatedText(r.name, MAX_ROUTE_NAME_LENGTH) ?? safeId;
   return { id: safeId, name, waypoints };
 }
 

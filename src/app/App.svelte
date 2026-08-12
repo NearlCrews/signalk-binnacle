@@ -77,6 +77,7 @@ import {
 } from '$features/lookout';
 import {
   createMarineRadarController,
+  MARINE_RADAR_OVERLAY_ID,
   type RadarStatus,
   radarChartEditBlockedReason,
   radarHelmHealth,
@@ -119,6 +120,7 @@ import {
   fetchSignalkTidesReading,
   loadTidesPanel,
   SIGNALK_TIDES_PLUGIN_ID,
+  TIDES_OVERLAY_ID,
   type TideStationSelectionEvent,
 } from '$features/tides';
 import { createTimeTravelController } from '$features/time-travel';
@@ -983,7 +985,7 @@ function applyProfileRuntime(s: ProfileSettings): void {
   // auto-enable to it (a profile that deliberately keeps the echo off must win). A profile saved before
   // radar existed carries no marine-radar entry, so it must NOT latch, or it would permanently suppress
   // first-discovery auto-enable on this device.
-  if (s.layers['marine-radar']) radarAutoEnabled.set(true);
+  if (s.layers[MARINE_RADAR_OVERLAY_ID]) radarAutoEnabled.set(true);
 }
 
 const profilesController = createProfilesController({
@@ -1107,7 +1109,7 @@ const userCharts = new UserCharts(
 // panel. With both off (the default) a pan must not issue NOAA station and prediction fetches that
 // nothing renders.
 const tidesWanted = $derived(
-  (layerSettings.value.tides?.visible ?? false) || activePanel === 'tides',
+  (layerSettings.value[TIDES_OVERLAY_ID]?.visible ?? false) || activePanel === 'tides',
 );
 
 // The view changes once per animation frame while panning; persist only after it
@@ -1213,7 +1215,7 @@ function setLayerVisible(id: string, visible: boolean): void {
 }
 
 function onTideStationSelect(selection: TideStationSelectionEvent): void {
-  setLayerVisible('tides', true);
+  setLayerVisible(TIDES_OVERLAY_ID, true);
   if (activePanel !== 'tides') {
     tidesOpenedFrom = 'chart';
     openPanel('tides');
@@ -1300,7 +1302,7 @@ let radarPanelRequest = $state<'close' | 'instruments' | undefined>();
 $effect(() => {
   if (!marineRadar.store.hasRadar || radarAutoEnabled.value) return;
   radarAutoEnabled.set(true);
-  setLayerVisible('marine-radar', true);
+  setLayerVisible(MARINE_RADAR_OVERLAY_ID, true);
 });
 
 // The controls hydration poll only feeds the radar panel, so run it only while the panel is open. Live
@@ -1313,7 +1315,7 @@ $effect(() => {
 // shows the picture in one action.
 function onSetRadarPower(status: RadarStatus): void {
   void marineRadar.setPower(status).then((ok) => {
-    if (ok && status === 'transmit') setLayerVisible('marine-radar', true);
+    if (ok && status === 'transmit') setLayerVisible(MARINE_RADAR_OVERLAY_ID, true);
   });
 }
 
@@ -1370,7 +1372,7 @@ const muteGenericHere = notificationsController.muteGenericHere;
 // never disagree about the same picture.
 const radarHealth = $derived(
   radarHelmHealth({
-    echoShown: layerSettings.value['marine-radar']?.visible ?? false,
+    echoShown: layerSettings.value[MARINE_RADAR_OVERLAY_ID]?.visible ?? false,
     operationalStatus: marineRadar.store.operationalStatus,
     connection: marineRadar.store.status,
     renderer: marineRadar.store.rendererStatus,

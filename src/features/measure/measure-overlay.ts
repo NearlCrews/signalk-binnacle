@@ -9,7 +9,7 @@ import type {
   SymbolLayerSpecification,
 } from 'maplibre-gl';
 import type { MeasureLeg, MeasureStore, MeasureVertex } from '$entities/measure';
-import { type LatLon, latLonToLonLat } from '$shared/geo';
+import { type LatLon, latLonToLonLat, wrapLongitude } from '$shared/geo';
 import { formatMetersOrNm, type UnitsMode } from '$shared/lib';
 import {
   antimeridianLineGeometry,
@@ -23,6 +23,7 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
+import { normalizeLonDeltaDeg } from '$shared/nav';
 import { MEASURE_LAYER_IDS, MEASURE_OVERLAY_ID } from './measure-overlay-contract';
 
 const SRC = 'binnacle-measure';
@@ -30,11 +31,6 @@ const [LINE_LAYER, HIT_LAYER, SELECTED_LAYER, VERTEX_LAYER, LEG_LABEL_LAYER, TOT
   MEASURE_LAYER_IDS;
 const LEG_LABEL_MIN_ZOOM = 8;
 const TRAILING_CLICK_WINDOW_MS = 500;
-
-function normalizeLongitude(longitude: number): number {
-  const normalized = (((longitude + 180) % 360) + 360) % 360;
-  return normalized - 180;
-}
 
 // A rhumb line is straight in Mercator space. Averaging there, with the longitude unwrapped to the
 // short side of the world, keeps a label on its visual leg even when that leg crosses 180 degrees.
@@ -48,10 +44,10 @@ export function rhumbDisplayMidpoint(from: LatLon, to: LatLon): LatLon {
   const fromY = mercatorY(from.latitude);
   const toY = mercatorY(to.latitude);
   const latitude = (2 * Math.atan(Math.exp((fromY + toY) / 2)) - Math.PI / 2) * (180 / Math.PI);
-  const rawDelta = normalizeLongitude(to.longitude - from.longitude);
+  const rawDelta = normalizeLonDeltaDeg(to.longitude - from.longitude);
   return {
     latitude,
-    longitude: normalizeLongitude(from.longitude + rawDelta / 2),
+    longitude: wrapLongitude(from.longitude + rawDelta / 2),
   };
 }
 

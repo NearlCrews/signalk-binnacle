@@ -5,7 +5,13 @@
 
 import type { LngLatBbox } from 'signalk-chart-sources';
 import { companionApiUrl } from '$shared/companion';
-import { readBoundedJson, withTimeout } from '$shared/lib';
+import {
+  hasControlCharacters,
+  isRecord,
+  isSafeNonNegativeInteger,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 import { adminSessionInit } from '$shared/signalk';
 import {
   CHART_LOCKER_MAX_REGION_NAME_LENGTH,
@@ -64,12 +70,6 @@ export interface CacheStats {
   ttlDays?: number;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNonNegativeSafeInteger = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && (value as number) >= 0;
-
 const isPositiveSafeNumber = (value: unknown): value is number =>
   typeof value === 'number' &&
   Number.isFinite(value) &&
@@ -101,10 +101,7 @@ function safeText(value: unknown, maxLength: number): value is string {
     typeof value === 'string' &&
     value.length > 0 &&
     value.length <= maxLength &&
-    ![...value].some((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      return code <= 0x1f || code === 0x7f;
-    })
+    !hasControlCharacters(value)
   );
 }
 
@@ -113,9 +110,9 @@ function safeText(value: unknown, maxLength: number): value is string {
 function parseCacheStats(value: unknown): CacheStats {
   if (!isRecord(value)) throw new InvalidCacheStatsError();
   if (
-    !isNonNegativeSafeInteger(value.rows) ||
-    !isNonNegativeSafeInteger(value.bytes) ||
-    !isNonNegativeSafeInteger(value.cap) ||
+    !isSafeNonNegativeInteger(value.rows) ||
+    !isSafeNonNegativeInteger(value.bytes) ||
+    !isSafeNonNegativeInteger(value.cap) ||
     !isRecord(value.perSourceAvgBytes)
   ) {
     throw new InvalidCacheStatsError();
@@ -148,11 +145,11 @@ function parseCacheStats(value: unknown): CacheStats {
     'regionsFreeBytes',
   ] as const;
   for (const field of optionalByteFields) {
-    if (value[field] !== undefined && !isNonNegativeSafeInteger(value[field])) {
+    if (value[field] !== undefined && !isSafeNonNegativeInteger(value[field])) {
       throw new InvalidCacheStatsError();
     }
   }
-  if (value.ttlDays !== undefined && !isNonNegativeSafeInteger(value.ttlDays)) {
+  if (value.ttlDays !== undefined && !isSafeNonNegativeInteger(value.ttlDays)) {
     throw new InvalidCacheStatsError();
   }
 
@@ -167,8 +164,8 @@ function parseCacheStats(value: unknown): CacheStats {
         !isRecord(row) ||
         !safeText(row.source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH) ||
         sources.has(row.source) ||
-        !isNonNegativeSafeInteger(row.bytes) ||
-        !isNonNegativeSafeInteger(row.rows)
+        !isSafeNonNegativeInteger(row.bytes) ||
+        !isSafeNonNegativeInteger(row.rows)
       ) {
         throw new InvalidCacheStatsError();
       }
@@ -288,14 +285,14 @@ function parseSavedRegion(value: unknown, response: SavedRegionResponse): SavedR
     !unavailableSourceIds.every((source) => safeText(source, CHART_LOCKER_MAX_SOURCE_ID_LENGTH)) ||
     new Set(unavailableSourceIds).size !== unavailableSourceIds.length ||
     !unavailableSourceIds.every((source) => sourceIds.includes(source)) ||
-    !isNonNegativeSafeInteger(value.minzoom) ||
-    !isNonNegativeSafeInteger(value.maxzoom) ||
+    !isSafeNonNegativeInteger(value.minzoom) ||
+    !isSafeNonNegativeInteger(value.maxzoom) ||
     value.minzoom > value.maxzoom ||
     value.maxzoom > CHART_LOCKER_MAX_WARM_ZOOM ||
-    !isNonNegativeSafeInteger(value.createdAt) ||
-    !(value.lastDownloadedAt === null || isNonNegativeSafeInteger(value.lastDownloadedAt)) ||
-    !isNonNegativeSafeInteger(value.bytes) ||
-    !isNonNegativeSafeInteger(cachedBytes) ||
+    !isSafeNonNegativeInteger(value.createdAt) ||
+    !(value.lastDownloadedAt === null || isSafeNonNegativeInteger(value.lastDownloadedAt)) ||
+    !isSafeNonNegativeInteger(value.bytes) ||
+    !isSafeNonNegativeInteger(cachedBytes) ||
     !REGION_STATUSES.has(value.status)
   ) {
     throw new TypeError('invalid saved region');
@@ -351,8 +348,8 @@ function parsePostRegionResponse(value: unknown, status: number): PostRegionResu
 function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRows: number } {
   if (
     !isRecord(value) ||
-    !isNonNegativeSafeInteger(value.freedBytes) ||
-    !isNonNegativeSafeInteger(value.freedRows)
+    !isSafeNonNegativeInteger(value.freedBytes) ||
+    !isSafeNonNegativeInteger(value.freedRows)
   ) {
     throw new TypeError('invalid cache clear result');
   }
@@ -362,13 +359,13 @@ function parseClearScrollResponse(value: unknown): { freedBytes: number; freedRo
 function parseWarmStatus(value: unknown): WarmStatus {
   if (!isRecord(value)) throw new TypeError('invalid region status');
   if (
-    !isNonNegativeSafeInteger(value.total) ||
-    !isNonNegativeSafeInteger(value.done) ||
+    !isSafeNonNegativeInteger(value.total) ||
+    !isSafeNonNegativeInteger(value.done) ||
     value.done > value.total ||
-    !isNonNegativeSafeInteger(value.skipped) ||
+    !isSafeNonNegativeInteger(value.skipped) ||
     value.done + value.skipped > value.total ||
-    !isNonNegativeSafeInteger(value.bytes) ||
-    !isNonNegativeSafeInteger(value.errors) ||
+    !isSafeNonNegativeInteger(value.bytes) ||
+    !isSafeNonNegativeInteger(value.errors) ||
     !WARM_STATES.has(value.state)
   ) {
     throw new TypeError('invalid region status');

@@ -38,7 +38,11 @@ export {
 } from './map-tap';
 export type { MapThemePaint } from './map-theme';
 export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
-export { iconOffsetExpression, markerIconSizeExpression } from './overlay-expressions';
+export {
+  iconOffsetExpression,
+  markerIconSizeExpression,
+  severityMatchExpression,
+} from './overlay-expressions';
 export {
   ensureGeoJsonSource,
   ensureGeoJsonSources,

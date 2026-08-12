@@ -1,6 +1,7 @@
 import {
   type CurrentEvent,
-  cleanTideStationText,
+  MAX_PLAUSIBLE_TIDE_HEIGHT_M,
+  MAX_TIDE_EVENTS,
   MAX_TIDE_STATION_ID_LENGTH,
   MAX_TIDE_STATION_NAME_LENGTH,
   TIDE_WINDOW_HOURS,
@@ -8,20 +9,26 @@ import {
   type TideStation,
 } from '$entities/tides';
 import { isLatitude, isLongitude } from '$shared/geo';
-import { DEG_TO_RAD, isFiniteNumber, isRecord, readBoundedJson, withTimeout } from '$shared/lib';
+import {
+  cleanBoundedText,
+  DEG_TO_RAD,
+  isFiniteNumber,
+  isRecord,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 
 // NOAA CO-OPS, the US tide and tidal-current authority. Public domain, key-free, CORS-open. The
 // metadata API lists stations; the datagetter returns predictions for one station.
 const MDAPI = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json';
 const DATAGETTER = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const MAX_STATIONS = 20_000;
-const MAX_EVENTS = 200;
 
 // Validates and returns the cleaned id, so the string the pattern accepted is the same string that
 // reaches the request URL and the station map key. Testing the pattern against the untrimmed
 // original instead would reject a padded id outright.
 function safeStationId(value: unknown): string | undefined {
-  const id = cleanTideStationText(value, MAX_TIDE_STATION_ID_LENGTH);
+  const id = cleanBoundedText(value, MAX_TIDE_STATION_ID_LENGTH);
   return id !== undefined && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
 }
 
@@ -71,7 +78,7 @@ async function fetchStations(
   for (const station of data.stations) {
     if (!isRecord(station)) continue;
     const id = safeStationId(station.id);
-    const name = cleanTideStationText(station.name, MAX_TIDE_STATION_NAME_LENGTH);
+    const name = cleanBoundedText(station.name, MAX_TIDE_STATION_NAME_LENGTH);
     if (!id || !name || !isLatitude(station.lat) || !isLongitude(station.lng)) continue;
     if (!stationsById.has(id)) {
       stationsById.set(id, { id, name, latitude: station.lat, longitude: station.lng });
@@ -108,7 +115,11 @@ export async function fetchTideEvents(
     station,
   });
   const data = await fetchJson(url);
-  if (!isRecord(data) || !Array.isArray(data.predictions) || data.predictions.length > MAX_EVENTS) {
+  if (
+    !isRecord(data) ||
+    !Array.isArray(data.predictions) ||
+    data.predictions.length > MAX_TIDE_EVENTS
+  ) {
     throw new Error('Invalid CO-OPS tide prediction response');
   }
   return data.predictions.flatMap((p) => {
@@ -118,7 +129,7 @@ export async function fetchTideEvents(
     if (
       !isFiniteNumber(timeMs) ||
       !isFiniteNumber(heightMeters) ||
-      Math.abs(heightMeters) > 100 ||
+      Math.abs(heightMeters) > MAX_PLAUSIBLE_TIDE_HEIGHT_M ||
       (p.type !== 'H' && p.type !== 'L')
     ) {
       return [];
@@ -150,7 +161,7 @@ export async function fetchCurrentEvents(
   const data = await fetchJson(url);
   const currentPredictions = isRecord(data) ? data.current_predictions : undefined;
   const cp = isRecord(currentPredictions) ? currentPredictions.cp : undefined;
-  if (!Array.isArray(cp) || cp.length > MAX_EVENTS) {
+  if (!Array.isArray(cp) || cp.length > MAX_TIDE_EVENTS) {
     throw new Error('Invalid CO-OPS current prediction response');
   }
   return cp.flatMap((c) => {

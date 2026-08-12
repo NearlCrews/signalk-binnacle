@@ -1,4 +1,4 @@
-import { fetchJsonOrUndefined, hasControlCharacters, isRecord } from '$shared/lib';
+import { fetchJsonOrUndefined, isRecord, isUnsafeProviderKey } from '$shared/lib';
 import { asKeyedObject, authInit } from './resource';
 
 // Several Signal K v2 APIs (history, weather, resources) expose a `_providers` sub-route that says
@@ -14,7 +14,6 @@ import { asKeyedObject, authInit } from './resource';
 // quietly passing as an empty provider list.
 
 const MAX_PROVIDER_ID_LENGTH = 128;
-const MAGIC_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export interface ProviderIds {
   // The accepted bounded provider ids, with the server's default first.
@@ -24,11 +23,7 @@ export interface ProviderIds {
 // Undefined passes so an optional provider query parameter shares the guard with a parsed id.
 export function safeProviderId(value: string | undefined): boolean {
   return (
-    value === undefined ||
-    (value.length > 0 &&
-      value.length <= MAX_PROVIDER_ID_LENGTH &&
-      !hasControlCharacters(value) &&
-      !MAGIC_OBJECT_KEYS.has(value))
+    value === undefined || (value.length <= MAX_PROVIDER_ID_LENGTH && !isUnsafeProviderKey(value))
   );
 }
 

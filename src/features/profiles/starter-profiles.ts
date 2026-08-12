@@ -35,6 +35,8 @@ export function seedStarterProfiles(store: ProfileStore, base: ProfileSettings):
       ...base,
       theme: 'night-red',
       chartOrientation: 'course',
+      // The literal, not MARINE_RADAR_OVERLAY_ID: a feature slice cannot import a sibling
+      // feature's module. A starter profile only names layers, so it takes the id by value.
       layers: { ...base.layers, 'marine-radar': DEFAULT_OVERLAY_STATE },
       pinnedActionIds: ['center', 'follow', 'radar', 'instruments'],
       instrumentTiles: ['heading', 'depth', 'course', 'course-xte'],

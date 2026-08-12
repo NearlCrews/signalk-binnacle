@@ -32,8 +32,10 @@ type CornerBounds = [[number, number], [number, number]];
 const DEGENERATE_PAD_DEG = 0.0005;
 
 // East below west is the antimeridian-crossing convention; unwrap east past 180 so a span or a fit is
-// measured the short way across the seam, not the long way around.
-function unwrapEast(west: number, east: number): number {
+// measured the short way across the seam, not the long way around. Deliberately unguarded: the
+// callers hand it coordinates they have already accepted, and a finiteness check here would change
+// what a malformed box does downstream rather than reject it any earlier.
+export function unwrapEast(west: number, east: number): number {
   return east < west ? east + 360 : east;
 }
 
@@ -80,10 +82,17 @@ function clampLatitudes([west, south, east, north]: Bbox4): Bbox4 {
   ];
 }
 
-// Wrap one longitude into [-180, 180). 180 itself becomes -180, which is the same meridian; the
-// callers below only wrap an edge they are about to cut at the seam anyway.
-function wrapLongitude(lon: number): number {
-  return ((((lon + 180) % 360) + 360) % 360) - 180;
+// Wrap one longitude into [-180, 180). 180 itself becomes -180, which is the same meridian. A
+// caller that must PRESERVE a literal +180 (the offline-area rectangle round-trip, where the drawn
+// east edge is a distinct corner from the west one) restores it itself, so the seam policy stays
+// visible at the one place it differs.
+//
+// Floored, not a modulo chain: subtracting a whole number of turns is an exact identity for a
+// longitude already in range, while (((lon + 180) % 360 + 360) % 360) - 180 accumulates about 3e-14
+// degrees of float error. That difference is invisible on a chart but not in arithmetic built on
+// it, such as the weather grid's shift, which must be exactly zero for an unshifted box.
+export function wrapLongitude(lon: number): number {
+  return lon - 360 * Math.floor((lon + 180) / 360);
 }
 
 // Cut an unwrapped box into the one or two in-range boxes that cover the same ground, for the

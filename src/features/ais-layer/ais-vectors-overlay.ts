@@ -15,6 +15,7 @@ import {
   rgbaCss,
   setLayersVisibility,
   setSourceData,
+  severityMatchExpression,
 } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
 import { createAisRefreshGate } from './ais-refresh';
@@ -34,15 +35,7 @@ const VECTOR_OPACITY = 0.8;
 const VECTOR_WIDTH = 2;
 
 function lineColor(paint: MapThemePaint): ExpressionSpecification {
-  return [
-    'match',
-    ['get', 'severity'],
-    'danger',
-    paint.danger,
-    'warning',
-    paint.warning,
-    rgbaCss(paint.aisTarget),
-  ];
+  return severityMatchExpression(paint.danger, paint.warning, rgbaCss(paint.aisTarget));
 }
 
 export function buildFeatures(

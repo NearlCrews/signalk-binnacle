@@ -1,4 +1,10 @@
-import { isRecord, isUnsafeProviderKey, readBoundedJson, withTimeout } from '$shared/lib';
+import {
+  hasControlCharacters,
+  isRecord,
+  isUnsafeProviderKey,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 
 // Helpers shared by the resource clients (charts, notes, tracks): the bearer-auth request init
 // and the string guards for parsing untyped resource JSON. A token is sent only when present.
@@ -153,6 +159,17 @@ export function str(value: unknown): string | undefined {
     : undefined;
 }
 
+// Trim a provider-controlled resource string and CLIP it to the caller's bound, rejecting only an
+// empty value or one carrying control characters. A route or waypoint name a provider sent longer
+// than Binnacle displays is still the mariner's name for that mark, so it is shortened rather than
+// dropped. Built on str, so it inherits the 16,384-character pre-bound before any slicing.
+// The reject-on-oversized counterpart is cleanBoundedText in $shared/lib.
+export function cleanTruncatedText(value: unknown, maxLength: number): string | undefined {
+  const text = str(value)?.trim();
+  if (!text || hasControlCharacters(text)) return undefined;
+  return text.slice(0, maxLength);
+}
+
 export function strArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value) || value.length > 1_000) return undefined;
   const out = value.filter(
@@ -267,6 +284,27 @@ export function writeRefusedMessage(noun: string): string {
 // reason as its sibling, which is that one server answer should read the same everywhere.
 export function deleteRefusedMessage(): string {
   return 'Signal K refused the delete. Read and write access is being requested.';
+}
+
+// Turn a write outcome into a message and, when the server refused, into a fresh access request.
+// Returns whether the write landed, so a caller reads as `if (!accepted(outcome, ...)) return;`.
+// Built once per controller against its own reporter and re-request, because the routes, waypoints,
+// and tracks controllers each spelled this branch by hand and the refusal arm is what a hand-rolled
+// copy forgets: without the re-request, a token revoked mid-passage never recovers.
+export function createWriteOutcomeGate(deps: {
+  report: (message: string) => void;
+  requestWriteAccess: () => Promise<void>;
+}) {
+  return function accepted(
+    outcome: ResourceMutationResult,
+    refused: string,
+    failed: string,
+  ): outcome is 'ok' {
+    if (outcome === 'ok') return true;
+    if (outcome === 'access-denied') void deps.requestWriteAccess();
+    deps.report(outcome === 'access-denied' ? refused : failed);
+    return false;
+  };
 }
 
 // Undefined means the request never completed (a network failure or a timeout), which is transient,

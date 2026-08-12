@@ -4,12 +4,12 @@ import { reverseRoute } from '$entities/route';
 import { type TrackPoint, trackToRoute } from '$entities/track';
 import { type Waypoint, waypointHref } from '$entities/waypoint';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
-import { ErrorState, type Toast, uuidv4 } from '$shared/lib';
+import { createBusyGate, ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import {
   type ActiveRoute,
   type CourseInfo,
+  createWriteOutcomeGate,
   deleteRefusedMessage,
-  type ResourceMutationResult,
   writeRefusedMessage,
 } from '$shared/signalk';
 import { defaultSaveName } from '$shared/ui';
@@ -107,16 +107,10 @@ export function createRouteController(deps: RouteControllerDeps) {
   // access request. Returns whether the write landed, so a caller reads as
   // `if (!accepted(outcome, ...)) return;`. Without this the refusal branch was copied at every
   // mutation, which is one more place per write to forget the re-request.
-  function accepted(
-    outcome: ResourceMutationResult,
-    refused: string,
-    failed: string,
-  ): outcome is 'ok' {
-    if (outcome === 'ok') return true;
-    if (outcome === 'access-denied') void deps.requestWriteAccess();
-    flagRouteError(outcome === 'access-denied' ? refused : failed);
-    return false;
-  }
+  const accepted = createWriteOutcomeGate({
+    report: flagRouteError,
+    requestWriteAccess: () => deps.requestWriteAccess(),
+  });
 
   function clearRouteError(): void {
     routeError.clear();
@@ -137,24 +131,12 @@ export function createRouteController(deps: RouteControllerDeps) {
     });
   }
 
-  // Generic over the result so an action that reports success (a save whose form must stay open on
-  // failure) keeps reporting it. `dropped` is what a call resolves to when another action is
-  // already running, so the wrapper's return type stays the action's own and no wiring site has to
-  // normalize a sentinel: for a save, a dropped call did not save.
-  function withBusy<Args extends unknown[], Result = void>(
-    action: (...args: Args) => Promise<Result>,
-    dropped: Result = undefined as Result,
-  ): (...args: Args) => Promise<Result> {
-    return async (...args) => {
-      if (busy) return dropped;
-      busy = true;
-      try {
-        return await action(...args);
-      } finally {
-        busy = false;
-      }
-    };
-  }
+  const withBusy = createBusyGate(
+    () => busy,
+    (next) => {
+      busy = next;
+    },
+  );
 
   async function refreshRoutes(): Promise<void> {
     const sequence = ++refreshSequence;
