@@ -118,7 +118,7 @@ test('profile overflow actions stay inside a narrow viewport', async ({ page }) 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Profiles', exact: true })
+    .getByRole('button', { name: /^Profiles/ })
     .click();
   const panel = page.getByRole('complementary', { name: 'Profiles' });
   await panel.getByRole('button', { name: 'More actions for Test helm' }).click();
@@ -181,7 +181,7 @@ test('profiles restore instrument order in a different browser', async ({ browse
   await secondPage.getByRole('button', { name: 'Menu', exact: true }).click();
   await secondPage
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Profiles', exact: true })
+    .getByRole('button', { name: /^Profiles/ })
     .click();
   const profiles = secondPage.getByRole('complementary', { name: 'Profiles' });
   await expect(profiles.getByText('Profiles are synced with this Signal K account.')).toBeVisible();

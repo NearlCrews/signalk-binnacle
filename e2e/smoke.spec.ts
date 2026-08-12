@@ -327,7 +327,7 @@ test('center and follow explain when no GPS fix is available', async ({ page }) 
   await expect(center).toHaveAttribute('title', /GPS position/, { timeout: 15_000 });
   await workerProof.assertInitialNavigation();
   await center.click({ force: true });
-  await expect(menu.locator('.blocked-note')).toContainText('GPS position');
+  await expect(menu.locator('.transient-note')).toContainText('GPS position');
 });
 
 test('menu prioritizes safety and customizes toolbar order without shifting blocked feedback', async ({
@@ -353,9 +353,8 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
   await menu.getByRole('button', { name: 'Customize toolbar' }).click();
   await menu.getByRole('button', { name: 'Reset toolbar' }).click();
   await menu.getByRole('button', { name: 'Reset', exact: true }).click();
-  await menu
-    .getByRole('button', { name: /Move Layers and charts, position 3 of 4/ })
-    .press('ArrowUp');
+  // The default set is Menu, Center, Follow, and AIS; moving Follow up swaps it with Center.
+  await menu.getByRole('button', { name: /Move Follow boat, position 3 of 4/ }).press('ArrowUp');
 
   await expect
     .poll(async () =>
@@ -363,16 +362,16 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
         .locator('footer .strip-center > button')
         .evaluateAll((buttons) => buttons.map((button) => button.textContent?.trim())),
     )
-    .toEqual(['Center', 'Charts', 'Follow', 'Instruments']);
+    .toEqual(['Menu', 'Follow', 'Center', 'AIS']);
 
   await menu.getByRole('button', { name: 'Done' }).click();
-  const mapBefore = await menu.getByRole('group', { name: 'Map' }).boundingBox();
-  if (!mapBefore) throw new Error('map group did not lay out');
+  const chartBefore = await menu.getByRole('group', { name: 'Chart' }).boundingBox();
+  if (!chartBefore) throw new Error('chart group did not lay out');
   await menu.getByRole('button', { name: /Radar/ }).click({ force: true });
-  await expect(menu.locator('.blocked-note')).toBeVisible();
-  const mapAfter = await menu.getByRole('group', { name: 'Map' }).boundingBox();
-  if (!mapAfter) throw new Error('map group moved out of layout');
-  expect(mapAfter.y).toBe(mapBefore.y);
+  await expect(menu.locator('.transient-note')).toBeVisible();
+  const chartAfter = await menu.getByRole('group', { name: 'Chart' }).boundingBox();
+  if (!chartAfter) throw new Error('chart group moved out of layout');
+  expect(chartAfter.y).toBe(chartBefore.y);
 });
 
 test('radar discovery opens a hydrated provider-driven controls panel', async ({ page }) => {
@@ -717,7 +716,7 @@ test('offline charts stays discoverable when Chart Locker is not installed', asy
   await expect(offline).toBeVisible();
   await expect(offline).toHaveAttribute('aria-disabled', 'true');
   await offline.click({ force: true });
-  await expect(menu.locator('.blocked-note')).toContainText('signalk-chart-locker');
+  await expect(menu.locator('.transient-note')).toContainText('signalk-chart-locker');
 });
 
 test('offline area review shows a planning estimate and catalog chart defaults', async ({
@@ -883,7 +882,7 @@ test('style-document charts stay visible and explain that they are unsupported',
   await expect(row.getByRole('checkbox', { name: 'Provider style' })).not.toBeChecked();
   await row.getByRole('button', { name: 'Open Provider style chart details' }).click();
 
-  await expect(panel.getByText('cannot display it yet')).toBeVisible();
+  await expect(panel.getByText('cannot display yet')).toBeVisible();
   await expect(panel.getByText('Style', { exact: true })).toBeVisible();
   await expect(panel.getByText('access_token=REDACTED')).toBeVisible();
   await expect(panel.getByText('access_token=secret')).toHaveCount(0);
