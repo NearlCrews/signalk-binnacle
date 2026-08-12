@@ -57,6 +57,23 @@ dialog.modal-card {
   box-shadow: var(--shadow-overlay);
 }
 
+/* The timed explanatory note a tap on a blocked or informational control shows (the menu's blocked
+   tiles, the bar's blocked pills, the status strip's degraded chips), layered on .popover-card and
+   rendered by the shared TransientNote primitive. Absolutely positioned and centered so it never
+   contributes layout height; each host declares only its own vertical anchor, width clamp, and any
+   z-index override. */
+.transient-note {
+  position: absolute;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-menu);
+  padding: var(--space-2) var(--space-3);
+  text-align: center;
+}
+.transient-note p {
+  margin: 0;
+}
+
 /* The anchored toolbar-menu surface layered on .popover-card, shared by the overflow menu, the
    bottom-bar More menu, and the profile switcher: the column layout, z-order, width clamp, and
    grow origin. A consumer declares only its real differences: the width via --menu-width, and the

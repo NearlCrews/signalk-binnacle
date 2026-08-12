@@ -9,6 +9,7 @@ import { isLatLon } from '$shared/geo';
 import {
   deleteResourceOutcome,
   fetchKeyedResource,
+  fetchProviderIdList,
   putResourceOutcome,
   type ResourceMutationResult,
 } from '$shared/signalk';
@@ -16,6 +17,25 @@ import {
 const V2 = '/signalk/v2/api/resources/routes';
 const V1 = '/signalk/v1/api/resources/routes';
 export const MAX_ROUTES = 1_000;
+const MAX_ROUTE_PROVIDERS = 8;
+
+// Whether this server can store routes at all. A stock server ships the Resources Provider
+// disabled, so the very first collection read 404s ahead of the auth gate, which makes a
+// status-only guess unsafe: a registered provider that throws answers 404 too. The _providers
+// sub-route is the honest signal, and undefined (the probe never answered) stays distinct from a
+// confirmed empty list, so a transient outage never claims the provider is missing.
+export async function fetchRoutesProvisioned(
+  base: string,
+  token?: string,
+): Promise<boolean | undefined> {
+  const providers = await fetchProviderIdList(
+    `${base}${V2}/_providers`,
+    token,
+    MAX_ROUTE_PROVIDERS,
+  );
+  if (!providers) return undefined;
+  return providers.ids.length > 0;
+}
 
 // Returns the routes, or undefined when both the v2 and v1 endpoints are unreachable (a transient
 // failure), so a caller can keep the current list rather than blanking it. A reachable but empty

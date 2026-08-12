@@ -8,6 +8,7 @@ export {
   type ChartViewStatusKind,
   chartViewCharts,
   chartViewStatus,
+  hasVisibleNavigationChart,
 } from './chart-view-status';
 export { depthShadingStops, shadeColor } from './color-ramp';
 export {

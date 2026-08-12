@@ -44,6 +44,10 @@ const BINNACLE_STORAGE_KEYS = {
   chartActionsHint: { key: 'binnacle:chart-actions-hint', scope: 'device' },
   // The first-run orientation was dismissed on this device; Help reopens it on demand.
   helpOrientation: { key: 'binnacle:help-orientation', scope: 'device' },
+  // The plain-HTTP warning was dismissed on this device; Help keeps the durable explanation.
+  insecureNote: { key: 'binnacle:insecure-note', scope: 'device' },
+  // The region-aware chart prompt was answered or dismissed on this device; it never returns.
+  encPrompt: { key: 'binnacle:enc-prompt', scope: 'device' },
   // Watch-handoff snapshots taken while the shared server store was unreachable, queued to sync.
   handoffDrafts: { key: 'binnacle:handoff-drafts', scope: 'draft' },
   chartOrientation: { key: 'binnacle:chart-orientation', scope: 'profile' },

@@ -1,4 +1,5 @@
 export { adminLoginUrl, fetchAdminSessionState } from './admin-session';
+export type { UpgradeOutcome } from './auth.svelte';
 export { AuthController } from './auth.svelte';
 export { fullJitterDelay } from './backoff';
 export type { SignalKClient } from './client';
@@ -38,6 +39,7 @@ export {
 export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
 export { createPathMetaCache, RETRY_DELAY_MS } from './path-meta-cache.svelte';
 export { SK_PATHS } from './paths';
+export { resourcesProviderNote } from './provider-note';
 export { fetchProviderIdList, safeProviderId } from './provider-probe';
 export {
   adminSessionInit,
@@ -84,3 +86,4 @@ export {
   notificationState,
   SELF_CONTEXT,
 } from './types';
+export { UPGRADE_OUTCOME_COPY } from './upgrade-outcome';

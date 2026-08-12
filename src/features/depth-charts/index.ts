@@ -1,3 +1,4 @@
+export { NOAA_ENC_SOURCE_ID, noaaEncCoversPosition } from './enc-coverage';
 export { createSeascapeDemOverlay } from './seascape-dem-overlay';
 export {
   SEASCAPE_DEM_SOURCES,

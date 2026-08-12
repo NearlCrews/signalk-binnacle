@@ -8,6 +8,7 @@ import { isLatLon } from '$shared/geo';
 import {
   deleteResourceOutcome,
   fetchKeyedResource,
+  fetchProviderIdList,
   putResourceOutcome,
   type ResourceMutationResult,
 } from '$shared/signalk';
@@ -15,6 +16,23 @@ import {
 const V2 = '/signalk/v2/api/resources/waypoints';
 const V1 = '/signalk/v1/api/resources/waypoints';
 export const MAX_WAYPOINTS = 5_000;
+const MAX_WAYPOINT_PROVIDERS = 8;
+
+// Whether this server can store waypoints at all: the routes probe's twin, and the same honest
+// _providers signal, so a stock server's disabled Resources Provider reads as the real cause
+// instead of a connection failure. undefined means the probe never answered; keep the last value.
+export async function fetchWaypointsProvisioned(
+  base: string,
+  token?: string,
+): Promise<boolean | undefined> {
+  const providers = await fetchProviderIdList(
+    `${base}${V2}/_providers`,
+    token,
+    MAX_WAYPOINT_PROVIDERS,
+  );
+  if (!providers) return undefined;
+  return providers.ids.length > 0;
+}
 
 // Returns the waypoints, or undefined when both the v2 and v1 endpoints are unreachable (a
 // transient failure), so a caller can keep the current list rather than blanking it. A reachable
