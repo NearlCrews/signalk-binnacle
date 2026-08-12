@@ -2,7 +2,7 @@
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy } from 'svelte';
 import { createMediaQuery, Toast } from '$shared/lib';
-import { AnchoredMenu, createMenuFocusMachine, UnavailableHint } from '$shared/ui';
+import { AnchoredMenu, createMenuFocusMachine, TransientNote, UnavailableHint } from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -58,11 +58,7 @@ $effect(() => machine.syncOpen(moreOpen));
 </script>
 
 <div class="pinned-actions strip-center">
-  {#if blockedNote.message}
-    <p class="blocked-pill-note popover-card" role="status" aria-live="polite">
-      {blockedNote.message}
-    </p>
-  {/if}
+  <TransientNote message={blockedNote.message} noteClass="blocked-pill-note" />
   {#each split.visible as action (action.id)}
     <button
       type="button"
@@ -164,16 +160,10 @@ $effect(() => machine.syncOpen(moreOpen));
 .more-wrap {
   position: relative;
 }
-.blocked-pill-note {
-  position: absolute;
+:global(.blocked-pill-note) {
   inset-block-end: calc(100% + var(--space-1));
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-menu);
   max-inline-size: 16rem;
-  padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  text-align: center;
 }
 :global(.bar-more) {
   --menu-width: 12rem;

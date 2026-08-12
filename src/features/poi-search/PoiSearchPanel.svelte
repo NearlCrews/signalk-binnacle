@@ -114,7 +114,8 @@ onDestroy(() => onHover(undefined));
   {minimize}
 >
   <p class="muted-note">
-    Harbors, anchorages, marinas, services, and hazards in the current chart view.
+    Harbors, anchorages, marinas, services, and hazards in the current chart view. Places come from
+    the same Signal K notes the chart shows, including notes you add yourself.
   </p>
   <ShowOnChartToggle
     visible={placesShown}

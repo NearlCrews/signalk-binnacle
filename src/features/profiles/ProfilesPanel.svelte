@@ -143,7 +143,14 @@ function useProfile(id: string): void {
 }
 </script>
 
-<SlideOver title="Profiles" bodyFlex closeLabel="Close profiles panel" {onClose} {onBack}>
+<SlideOver
+  title="Profiles"
+  subtitle="Changes save to the active profile automatically."
+  bodyFlex
+  closeLabel="Close profiles panel"
+  {onClose}
+  {onBack}
+>
   {#if syncState === 'capacity-conflict'}
     <p class="alert-note" role="alert">
       The combined device and server libraries exceed the
@@ -167,9 +174,10 @@ function useProfile(id: string): void {
     <!-- The app-wide banner offers the same request, but an open panel covers it on a phone, so the
          request stays one tap away from the block it explains. -->
     <WriteAccessNote
-      message="Profiles are saved on this device. A write token is needed to sync them to other stations."
+      message="Profiles are saved on this device. Read and write access is needed to sync them to other stations."
       requesting={auth.upgrading}
       onRequest={() => void auth.requestWriteAccess()}
+      outcome={auth.upgradeOutcome}
     />
   {:else if syncState === 'synced'}
     <p class="muted-note" role="status">Profiles are synced with this Signal K account.</p>

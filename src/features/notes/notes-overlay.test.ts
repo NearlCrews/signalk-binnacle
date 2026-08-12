@@ -84,7 +84,7 @@ describe('notes overlay', () => {
     const map = createFakeMap();
     await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('routes');
-    expect(overlay.title).toBe('Points of interest');
+    expect(overlay.title).toBe('Places');
     // The note source (clustered) plus the selection-ring source.
     expect(map.sources.size).toBe(2);
     expect(map.layers.has('binnacle-notes-symbol')).toBe(true);

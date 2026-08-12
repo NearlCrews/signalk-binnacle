@@ -95,18 +95,19 @@ const liveMessage = $derived.by(() => {
   if (controller.status === 'ready') return valueText;
   if (controller.status === 'loading') return 'Loading history';
   if (controller.status === 'no-provider') {
-    return 'Time travel needs a history provider on the server';
+    return 'Playback needs a history provider on the server';
   }
-  if (controller.status === 'empty') return 'No recorded history in this range';
+  if (controller.status === 'empty')
+    return 'No recorded history in this range. Recording your own track lives in Tracks.';
   if (controller.status === 'failed') return 'Could not load history';
   return '';
 });
 </script>
 
 {#if controller.active}
-  <aside class="bottom-strip bottom-strip--accent history-strip" aria-label="Time travel">
+  <aside class="bottom-strip bottom-strip--accent history-strip" aria-label="Playback">
     <div class="head">
-      <span class="title">Time travel</span>
+      <span class="title">Playback</span>
       {#if controller.samples.length > 0}
         <span class="note num" aria-hidden="true">{timestamp} · {relative}</span>
       {/if}

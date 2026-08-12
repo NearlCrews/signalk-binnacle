@@ -55,7 +55,7 @@ function safeQueryPaths(paths: readonly string[]): boolean {
   );
 }
 
-// The history-track window and bucket resolution. Time travel reuses these values for its default
+// The history-track window and bucket resolution. Playback reuses these values for its default
 // 24-hour preset, while its other presets define their own bounded resolutions.
 export const HISTORY_WINDOW_SECONDS = 24 * 60 * 60;
 export const HISTORY_RESOLUTION_SECONDS = 60;

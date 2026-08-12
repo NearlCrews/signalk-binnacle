@@ -89,6 +89,9 @@ function manage(): void {
         <span class="row-name truncate">{profile.name}</span>
       </button>
     {/each}
+    <!-- Profiles are live documents, not presets: a navigator arriving from preset-shaped systems
+         expects switching back to restore the original, so state the rule where switching happens. -->
+    <p class="switcher-note muted-note">Changes save to the active profile automatically.</p>
     <button type="button" role="menuitem" class="menu-item manage" onclick={manage}>
       Manage profiles
     </button>
@@ -96,6 +99,11 @@ function manage(): void {
 </div>
 
 <style>
+.switcher-note {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
 .profile-switcher {
   position: relative;
   display: flex;

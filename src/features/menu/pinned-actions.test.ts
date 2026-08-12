@@ -52,8 +52,10 @@ describe('resolvePinned', () => {
 });
 
 describe('DEFAULT_PINNED', () => {
-  it('is Center, Follow, Charts (the layers action), and Instruments', () => {
-    expect([...DEFAULT_PINNED]).toEqual(['center', 'follow', 'layers', 'instruments']);
+  it('leads with the Menu opener and keeps one Safety action thumb-reachable', () => {
+    expect([...DEFAULT_PINNED]).toEqual(['menu', 'center', 'follow', 'ais']);
+    // The phone cap is the default set's own length, so no default is pushed behind More.
+    expect(DEFAULT_PINNED).toHaveLength(MAX_COMPACT_BAR_PILLS);
   });
 });
 

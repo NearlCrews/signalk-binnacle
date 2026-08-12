@@ -1,8 +1,11 @@
 import type { MenuItem } from './menu-item';
 
-// The bar's default pinned set: Center, Follow, Charts (the layers action), and Instruments. The single source of
-// the default, imported by the composition root for the persisted-value fallback.
-export const DEFAULT_PINNED: readonly string[] = ['center', 'follow', 'layers', 'instruments'];
+// The bar's default pinned set: the Menu opener, Center, Follow, and AIS. The single source of the
+// default, imported by the composition root for the persisted-value fallback. Menu leads because
+// the topbar hamburger is a cross-screen reach on a phone, where every unpinned journey starts;
+// AIS holds the fourth slot so one Safety action is thumb-reachable out of the box, carrying its
+// live collision-risk count. Charts and Instruments stay one tap away inside the menu.
+export const DEFAULT_PINNED: readonly string[] = ['menu', 'center', 'follow', 'ais'];
 
 // The pinned actions in stored order, so toolbar customization controls both membership and position.
 // Unknown ids are skipped for forward and backward compatibility, and duplicates render once.

@@ -68,3 +68,39 @@ describe('AppMenu group order', () => {
     expect(APP_MENU_SOURCE).not.toMatch(/\border:\s*\d/);
   });
 });
+
+describe('AppMenu bar-only actions', () => {
+  function renderWithEditing(editing: boolean): string {
+    return render(AppMenu, {
+      props: {
+        items: [
+          item('menu', { barOnly: true, group: 'Chart' }),
+          item('center', { group: 'Chart' }),
+        ],
+        open: true,
+        onOpenChange: () => {},
+        editing,
+        pinnedIds: ['menu'],
+      },
+    }).body;
+  }
+
+  it('keeps a bar-only action out of the launcher it opens, but pinnable while customizing', () => {
+    const browsing = renderWithEditing(false);
+    expect(browsing).toContain('>center<');
+    expect(browsing).not.toContain('>menu<');
+    // Tapping a tile is the only pin control, so the tile must exist in edit mode.
+    expect(renderWithEditing(true)).toContain('>menu<');
+  });
+
+  it('drops the topbar trigger when the opener is pinned, so one control is named Menu', () => {
+    const withTrigger = render(AppMenu, {
+      props: { items: [], open: false, onOpenChange: () => {} },
+    }).body;
+    expect(withTrigger).toContain('aria-label="Menu"');
+    const without = render(AppMenu, {
+      props: { items: [], open: false, onOpenChange: () => {}, showTrigger: false },
+    }).body;
+    expect(without).not.toContain('aria-label="Menu"');
+  });
+});

@@ -64,7 +64,7 @@ describe('HistoryStrip', () => {
 
     const body = strip(controller);
 
-    expect(body).toContain('aria-label="Time travel"');
+    expect(body).toContain('aria-label="Playback"');
     expect(body).toContain('>1 h</button>');
     expect(body).toContain('>6 h</button>');
     expect(body).toContain('>24 h</button>');

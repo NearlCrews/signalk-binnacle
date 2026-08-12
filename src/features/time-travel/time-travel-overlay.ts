@@ -43,7 +43,7 @@ export function createTimeTravelOverlay(controller: TimeTravelController): TimeT
 
   return {
     id: 'time-travel-marker',
-    title: 'Time travel',
+    title: 'Playback',
     band: 'vessel',
     listed: false,
     supportsOpacity: false,
@@ -118,7 +118,7 @@ export function createTimeTravelTrackOverlay(controller: TimeTravelController): 
 
   return {
     id: 'time-travel-track',
-    title: 'Time travel track',
+    title: 'Playback track',
     band: 'track',
     listed: false,
     supportsOpacity: false,

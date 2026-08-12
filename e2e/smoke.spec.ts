@@ -25,7 +25,7 @@ async function openTimeTravel(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: 'Time travel', exact: true })
+    .getByRole('button', { name: 'Playback', exact: true })
     .click();
 }
 
@@ -175,7 +175,7 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
 
   await page.goto('/');
   await openTimeTravel(page);
-  const strip = page.getByRole('complementary', { name: 'Time travel' });
+  const strip = page.getByRole('complementary', { name: 'Playback' });
   await expect(strip).toBeVisible();
   await expect.poll(() => requests.at(-1)).toEqual({ duration: '86400', resolution: '60' });
   await expect(strip.getByText('Source: signalk-questdb. 24 hours loaded.')).toBeVisible();

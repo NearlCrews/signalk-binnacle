@@ -75,7 +75,7 @@ export interface OverlayModule {
   // on the Layers-panel row so a navigator sees at a glance which overlays apply to their waters. Absent
   // for the navigator's own data and live overlays, which are not region-specific.
   readonly region?: string;
-  // When false the overlay is not shown as a Layers-panel row: it is a tool (Measure, Time travel)
+  // When false the overlay is not shown as a Layers-panel row: it is a tool (Measure, Playback)
   // controlled from the menu, not a layer the navigator toggles or reorders. It is still registered
   // and rendered. Absent means listed.
   //

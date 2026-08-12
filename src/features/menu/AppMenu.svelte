@@ -2,7 +2,13 @@
 import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy } from 'svelte';
 import { Toast } from '$shared/lib';
-import { AnchoredMenu, CustomizeToggle, menuFocusLeft, UnavailableHint } from '$shared/ui';
+import {
+  AnchoredMenu,
+  CustomizeToggle,
+  menuFocusLeft,
+  TransientNote,
+  UnavailableHint,
+} from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -12,6 +18,9 @@ import ToolbarEditor from './ToolbarEditor.svelte';
 interface Props {
   items?: MenuItem[];
   label?: string;
+  // Whether to render the topbar trigger. False once the Menu action is pinned to the bottom bar,
+  // so exactly one control named Menu exists at a time and the sheet still renders here.
+  showTrigger?: boolean;
   // The open state is controlled by the parent, so a panel's "back to menu" action can reopen the
   // menu after it closed on selection. The menu renders the current state and requests transitions.
   open: boolean;
@@ -28,6 +37,7 @@ interface Props {
 const {
   items = [],
   label = 'Menu',
+  showTrigger = true,
   open,
   onOpenChange,
   pinnedIds = [],
@@ -56,6 +66,9 @@ onDestroy(() => blockedNote.dispose());
 const groups = $derived.by(() => {
   const out: { label: string; items: MenuItem[] }[] = [];
   for (const item of items) {
+    // A bar-only action (the Menu opener) is not a launcher tile: it would sit inside the menu it
+    // opens. It still appears while customizing, because tapping a tile is the only pin control.
+    if (item.barOnly && !editing) continue;
     const label = item.group ?? '';
     const last = out.at(-1);
     if (last && last.label === label) last.items.push(item);
@@ -131,20 +144,22 @@ function onCardFocusOut(event: FocusEvent): void {
 }
 </script>
 
-<button
-  type="button"
-  class="icon-pill"
-  class:is-on={open}
-  bind:this={trigger}
-  aria-haspopup="true"
-  aria-expanded={open}
-  aria-controls={open ? 'app-menu-launcher' : undefined}
-  aria-label={label}
-  title={label}
-  onclick={() => onOpenChange(!open)}
->
-  <Menu size={20} aria-hidden="true" />
-</button>
+{#if showTrigger}
+  <button
+    type="button"
+    class="icon-pill"
+    class:is-on={open}
+    bind:this={trigger}
+    aria-haspopup="true"
+    aria-expanded={open}
+    aria-controls={open ? 'app-menu-launcher' : undefined}
+    aria-label={label}
+    title={label}
+    onclick={() => onOpenChange(!open)}
+  >
+    <Menu size={20} aria-hidden="true" />
+  </button>
+{/if}
 <AnchoredMenu
   {open}
   onClose={() => closeMenu(true)}
@@ -159,11 +174,7 @@ function onCardFocusOut(event: FocusEvent): void {
   {#if items.length === 0}
     <span class="muted-note">No options</span>
   {:else}
-    {#if blockedNote.message}
-      <div class="blocked-note-slot popover-card" role="status" aria-live="polite">
-        <p class="blocked-note muted-note">{blockedNote.message}</p>
-      </div>
-    {/if}
+    <TransientNote message={blockedNote.message} noteClass="blocked-note-slot" />
     <div class="launcher-scroll">
       <div class="menu-head">
         <CustomizeToggle object="toolbar" {editing} onToggle={() => onEditingChange?.(!editing)} />
@@ -315,18 +326,9 @@ function onCardFocusOut(event: FocusEvent): void {
    absolutely positioned note scrolls away with the tiles and a navigator who has scrolled down the
    phone sheet never sees the explanation for the tile they just tapped. In flow and sticky, it
    stays at the top of the scrollport for as long as it is shown. */
-.blocked-note-slot {
-  position: absolute;
+:global(.blocked-note-slot) {
   inset-block-start: var(--space-3);
-  inset-inline-start: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-menu);
   max-inline-size: min(18rem, calc(100% - 2 * var(--space-3)));
-  padding: var(--space-2) var(--space-3);
-  text-align: center;
-}
-.blocked-note {
-  margin: 0;
 }
 /* Groups render in the order of the items the launcher is given, at every viewport. Do not add a
    width-conditional `order` here: the phone-only reorder this replaces gave a navigator two mental
