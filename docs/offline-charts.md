@@ -14,6 +14,13 @@ Binnacle keeps Offline charts visible when Chart Locker is absent or unavailable
 distinguishes a missing plugin, refused access, and an unreachable service so it can explain whether
 Chart Locker needs to be installed, started, or accessed through an administrator session.
 
+Saved areas are not the only thing Chart Locker serves. When it is installed and ready, Binnacle also
+routes its reference raster overlays (bathymetry, boundaries, infrastructure, protected areas, and
+seamarks) through the plugin's tile proxy, so those layers share the boat's one cache instead of each
+device fetching them from the internet separately. When Chart Locker is absent, every overlay keeps
+its direct upstream URL and a standalone install is unchanged. Time-dynamic sources such as weather
+radar are never proxied or pre-warmed: a stored weather frame is wrong before anyone sails into it.
+
 ## Administrator access
 
 Chart Locker protects its management API with Signal K's administrator session. This is separate from

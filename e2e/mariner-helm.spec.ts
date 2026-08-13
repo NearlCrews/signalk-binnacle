@@ -218,6 +218,13 @@ test('P0: four hazard families stay reachable through the emergency rail at 320x
   await expect(mob).toBeVisible();
   await expectMobActionsReachable(mob);
 
+  // Same refresh as below, and for the same reason: the MOB assertions above take longer than the
+  // 10-second position-freshness window on a loaded machine, and a stale fix correctly stands the
+  // collision assessment down. Without this the chip can vanish between its visibility check and
+  // its measurement, which reads as a layout failure rather than the staleness it really is.
+  await sendDelta(page, OWN_FIX);
+  await sendDelta(page, CLOSING_TARGET, TARGET_CONTEXT);
+
   // Every other hazard family is visibly represented by a reachable 44-pixel chip.
   const collisionChip = page.getByRole('button', { name: /^Collision danger.*show details$/ });
   const anchorChip = page.getByRole('button', { name: /^Anchor alarm.*show details$/ });

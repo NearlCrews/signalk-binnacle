@@ -216,9 +216,11 @@ source, and surrounding traffic before relying on it.
   needed, and expands a minimized panel. When chart markers overlap, the highest visible overlay
   owns the gesture. Cached readings, accepted station choices, provider attribution, and nearby
   catalogs survive a failed replacement, and **Retry** bypasses the automatic cooldown. A valid
-  empty response reports that no predictions are in the current window. Provider station and event
-  payloads are validated and bounded, and CO-OPS station identifiers are constrained before URL
-  construction. Choices are not persisted across reloads.
+  empty response reports that no predictions are in the current window. The station lists only report
+  that none is nearby once a search has actually finished; before one starts, while one runs, or
+  after one fails, the panel explains the real reason instead of making a claim about the water.
+  Provider station and event payloads are validated and bounded, and CO-OPS station identifiers are
+  constrained before URL construction. Choices are not persisted across reloads.
 
 ## Instruments
 

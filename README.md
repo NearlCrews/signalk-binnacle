@@ -14,7 +14,7 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 > is also not certified for safety-of-life navigation. Always carry redundant means of navigation,
 > cross-check against your primary instruments, and treat every display as advisory.
 
-## What's new in 0.20.0
+## What's new in 0.21.0
 
 The watchkeeping release. A change of watch gets a real handoff: a timestamped snapshot of the
 fix, course, alarms, closest contact, depth watch, radar, weather and tide ages, and route
@@ -45,7 +45,17 @@ starts across the screen, a named contact on the collision strip opens that vess
 saved routes show their passage plan without entering edit mode. The words got plainer too: read
 and write access instead of tokens, a request's outcome reported where it was asked for, a missing
 Resources Provider named instead of blaming the connection, and every degraded status chip
-explaining itself on a tap. See the changelog for the complete list.
+explaining itself on a tap.
+
+Two fixes are worth calling out because they restore capability that was silently absent. The NOAA
+chart offer had never once rendered: its guard tested a value that could not hold, so a boat inside
+US waters with only a reference base map was never told a real chart was available. And on a server
+with authentication enabled, the chart probed for Chart Locker before credentials existed, took the
+refusal as "not installed", and spent the whole session fetching tiles straight from the internet
+instead of the boat's own cache. Alongside them, the tides picker stops claiming no stations are
+nearby when the search simply failed, alarm zones changed on the server now reach a station that is
+already open, and closing a panel clears what it left on the chart. See the changelog for the
+complete list.
 
 ## What it does
 

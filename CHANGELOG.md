@@ -4,12 +4,12 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<a id="v0200"></a>
+<a id="v0210"></a>
 
-## [0.20.0] - Unreleased
+## [0.21.0] - 2026-08-13
 
 The watchkeeping release: the helm learns to hand off a watch, rotate the chart, plan a passage,
-and say plainly what it trusts. New work continues to land here until 0.20.0 is cut.
+and say plainly what it trusts.
 
 ### Added
 
