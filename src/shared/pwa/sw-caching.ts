@@ -1,9 +1,8 @@
-// The service worker's runtime caching table, extracted from vite.config.ts so the matchers are
-// unit-testable pure functions. The build serializes each urlPattern via Function.toString into the
-// generated worker WITHOUT its module scope, so every matcher must be SELF-CONTAINED: inline its
-// regexes and host lists, and never reference a module-level const or helper (it would be undefined
-// in the worker and throw ReferenceError on the first matched fetch, breaking all caching). Nothing
-// here may touch browser globals either.
+// The service worker's runtime caching table as pure data: src/sw.ts maps each entry to a serwist
+// strategy instance, and the unit tests exercise the matchers without service worker machinery, so
+// nothing here may import serwist or touch browser globals. The matchers are ordinary module
+// functions bundled into the worker (the old generateSW Function.toString serialization, which
+// forced every host list to be inlined, is gone).
 //
 // Layering: the worker caches byte-level GET assets (tiles, styles, WMS images) and only exists
 // over trusted https; parsed application data (weather grids, tides, notes, PMTiles blocks) is
@@ -17,32 +16,42 @@ const THIRTY_SIX_HOURS_SECONDS = 36 * 60 * 60;
 const TWO_HOURS_SECONDS = 60 * 60 * 2;
 const HOUR_SECONDS = 60 * 60;
 
-interface MatchContext {
+export interface MatchContext {
   url: URL;
   sameOrigin: boolean;
+}
+
+export interface RuntimeCacheRoute {
+  urlPattern: (context: MatchContext) => boolean;
+  handler: 'CacheFirst' | 'NetworkFirst' | 'StaleWhileRevalidate';
+  options: {
+    cacheName: string;
+    networkTimeoutSeconds?: number;
+    expiration: { maxEntries: number; maxAgeSeconds: number; purgeOnQuotaError?: boolean };
+    cacheableResponse: { statuses: readonly number[] };
+  };
 }
 
 export const isBasemapStyle = ({ url }: MatchContext): boolean =>
   url.origin === 'https://tiles.openfreemap.org' && url.pathname.startsWith('/styles/');
 
-// A superset of isBasemapStyle (same origin, any path). Workbox routes first-match, so the style
+// A superset of isBasemapStyle (same origin, any path). Routing is first-match, so the style
 // rule MUST stay listed before this one in runtimeCaching; reorder them and style documents fall
 // through to CacheFirst here and pin a stale style whose tile references have aged out.
 export const isBasemapAsset = ({ url }: MatchContext): boolean =>
   url.origin === 'https://tiles.openfreemap.org';
 
 // Raster chart tiles served by any Signal K charts plugin (@signalk/charts-plugin and kin) at
-// /charts/<id>/{z}/{x}/{y}, tolerating @2x and an extension. Same-origin only. The pattern is
-// inlined, not a shared const, so the serialized worker matcher stays self-contained (file header).
+// /charts/<id>/{z}/{x}/{y}, tolerating @2x and an extension. Same-origin only.
 export const isChartTile = ({ url, sameOrigin }: MatchContext): boolean =>
   sameOrigin && /^\/charts\/[^/]+\/\d+\/\d+\/\d+(?:@2x)?(?:\.\w+)?$/.test(url.pathname);
 
 // The time-dynamic nowcoast layer families (weather radar mosaics, watches and warnings, active
 // tropical cyclones, and sea surface temperature). They share the nowcoast host with the static
 // BlueTopo bathymetry pair, so the WMS LAYERS (or WMTS LAYER) value is what separates them. The
-// family list is inlined, not derived from the catalog, so the serialized worker matcher stays
-// self-contained (file header); the catalog-derived test in sw-caching.test.ts keeps it honest.
-// Workbox routes first-match, so this rule MUST stay listed before isOverlayTile in runtimeCaching;
+// family list is a copy of the catalog's time-dynamic families; the catalog-derived test in
+// sw-caching.test.ts keeps it honest.
+// Routing is first-match, so this rule MUST stay listed before isOverlayTile in runtimeCaching;
 // reorder them and a radar frame is served CacheFirst as current for 7 days.
 export const isVolatileOverlayTile = ({ url }: MatchContext): boolean => {
   if (url.hostname !== 'nowcoast.noaa.gov') return false;
@@ -60,8 +69,8 @@ export const isVolatileOverlayTile = ({ url }: MatchContext): boolean => {
 
 // The cross-origin overlay tile and WMS hosts Binnacle renders (NOAA ENC and MPA, GEBCO, the two
 // EMODnet services, BlueTopo via nowcoast, Marine Regions boundaries, OpenSeaMap seamarks, NASA
-// GIBS, and Seascape). The host list is inlined, not a shared const, so the serialized worker matcher stays
-// self-contained (file header). One shared cache with a 7 day TTL bounds chart-edition staleness.
+// GIBS, and Seascape). The host list is a copy of the catalog's overlay hosts; the catalog-derived
+// test keeps it honest. One shared cache with a 7 day TTL bounds chart-edition staleness.
 // The nowcoast time-dynamic layers are carved out by isVolatileOverlayTile, listed first.
 export const isOverlayTile = ({ url }: MatchContext): boolean =>
   url.hostname === 'gis.charttools.noaa.gov' ||
@@ -88,7 +97,7 @@ export const isRadarTile = ({ url }: MatchContext): boolean =>
 // PMTiles archives are deliberately ABSENT: their range requests answer 206, which the Cache API
 // refuses to store, so a worker route can never cache them. They are cached as aligned blocks in
 // IndexedDB by the pmtiles protocol layer instead, which also covers plain-http contexts.
-export const runtimeCaching = [
+export const runtimeCaching: readonly RuntimeCacheRoute[] = [
   {
     // The base style document: serve the last one instantly, refresh behind. Revalidation on every
     // online use, not expiry, is what keeps a rotated OpenFreeMap planet build from pinning a stale

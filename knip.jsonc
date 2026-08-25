@@ -1,5 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  // src/sw.ts is the service worker entry, referenced only by @serwist/vite's swSrc option,
+  // which knip has no plugin for; src/main.ts stays discovered through index.html.
+  "entry": ["src/sw.ts"],
   "ignore": ["static/theme-bootstrap.js"],
   "includeEntryExports": true,
   "treatConfigHintsAsErrors": true,

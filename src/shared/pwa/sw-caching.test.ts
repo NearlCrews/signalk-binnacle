@@ -180,9 +180,9 @@ describe('service worker route matchers', () => {
   });
 
   it('lists every runtime cache in the privacy erase inventory', () => {
-    // The erase inventory cannot import this config (the worker serializes it without module
-    // scope), so this seam pins the mirror: a new route whose cache is missing there would
-    // survive a device-data erase while the erase reports success.
+    // The erase inventory is a deliberately explicit mirror (no owner enumerates caches
+    // dynamically at erase time), so this seam pins it: a new route whose cache is missing there
+    // would survive a device-data erase while the erase reports success.
     const inventory: readonly string[] = BINNACLE_CACHE_NAMES;
     for (const entry of runtimeCaching) {
       expect(inventory).toContain(entry.options.cacheName);

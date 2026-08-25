@@ -190,12 +190,20 @@ not have to be corrected after the fact.
   retiring one of the two package names once the API stabilizes. WATCH TRIGGER, and it is one
   command, not a calendar entry: re-check when `npm view svelte-check peerDependencies` admits `^7`.
   typescript-eslint waits on the new compiler API expected in TypeScript 7.1 (7.0 ships none). npm
-  12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. Keep the Workbox
-  off-main-thread override on its newest
-  4.0.0-pre2 beta until Workbox adopts that line; it replaces the older EJS 3 dependency with EJS 6.
-  Workbox 7.4.1 is also the latest release and still constrains `glob` to major 11, whose publisher
-  marks it deprecated. Do not force a newer `glob` across that unsupported major boundary; keep the
-  runtime audit clean, and remove the constraint when Workbox updates it.
+  12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. The PWA pipeline is
+  @serwist/vite (with `serwist` in the worker and `@serwist/window` on the page; all three move
+  together on one version line), which replaced vite-plugin-pwa plus workbox-build and with them
+  retired the off-main-thread override, the EJS chain, and the deprecated transitive `glob` 11.
+  Do not reintroduce vite-plugin-pwa or a workbox package. The service worker is a real module,
+  `src/sw.ts`, bundled by the plugin's separate child Vite build (which carries the app's aliases
+  and defines but none of its plugins, so nothing imported from the worker may need the svelte
+  plugin or reach maplibre-gl through a barrel). In dev the plugin serves the worker without a
+  precache manifest and registration is skipped (`import.meta.env.MODE !== 'development'` guards
+  it; vitest runs under mode `test` on purpose), and sw.ts must omit `navigateFallback` whenever
+  `self.__SW_MANIFEST` is undefined or the Serwist constructor throws `non-precached-url` and
+  kills the worker at evaluation. Serwist's `cleanupOutdatedCaches` is opt-in and stays on: it
+  also sweeps the retired `workbox-precache-v2` cache on upgraded installations, and the privacy
+  erase keeps BOTH precache prefixes in App.svelte's `cachePrefixes` for the same reason.
   MapLibre 6 ships ESM-only, and bundlers cannot automatically discover the runtime worker
   filename it computes. `src/shared/map/maplibre-worker.ts` explicitly emits that worker through
   Vite's `?worker&url` import and calls `setWorkerUrl`; its side effect must run before every
@@ -512,10 +520,11 @@ must not be repeatable.
   and automatic caching. Do not replace the base map with a flat inline style to satisfy "offline":
   that yields a blank map. Verify reachability before assuming a host is unreachable; OpenFreeMap
   resolves and returns 200 from the boat network.
-- The offline/PWA caching (vite-plugin-pwa service worker) only activates in a SECURE CONTEXT:
+- The offline/PWA caching (the @serwist/vite service worker) only activates in a SECURE CONTEXT:
   HTTPS or `http://localhost`. The Signal K server serves Binnacle over plain HTTP on the LAN by
   default, where the browser disables the entire serviceWorker and CacheStorage APIs, so offline
-  caching is inert. The app must DEGRADE CLEANLY there (registerSW no-ops, OnlineStatus falls back
+  caching is inert. The app must DEGRADE CLEANLY there (getSerwist resolves undefined so
+  registration is never attempted, OnlineStatus falls back
   to navigator.onLine, zero errors), which it does. To activate offline, enable SSL in the Signal K
   server (Server > Settings > SSL). Do not chase "the service worker is not registering" as a code
   bug without first checking `window.isSecureContext`.

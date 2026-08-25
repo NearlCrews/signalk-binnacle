@@ -1,4 +1,5 @@
-import { registerSW } from 'virtual:pwa-register';
+import { getSerwist } from 'virtual:serwist';
+import type { Serwist } from '@serwist/window';
 
 // The registration outcome, surfaced so the offline charts page can explain a cache that stays
 // off instead of leaving the diagnosis in devtools: 'insecure-context' when the browser withholds
@@ -110,11 +111,11 @@ export function createReloadCoordinator(
   };
 }
 
-// Registers the service worker (prompt mode). onNeedRefresh fires when a new build is waiting so the
-// UI can offer a reload, and update() activates it. On plain http (no secure context) registerSW
-// no-ops, so this degrades cleanly. A registration error in a secure context is logged and surfaced
-// through the reactive status, so a genuine HTTPS failure is observable instead of silently
-// invisible.
+// Registers the service worker (prompt mode). onNeedRefresh fires when a new build is waiting so
+// the UI can offer a reload, and update() activates it by messaging the waiting worker. On plain
+// http (no secure context) the serviceWorker API is absent and registration is never attempted, so
+// this degrades cleanly. A registration error in a secure context is logged and surfaced through
+// the reactive status, so a genuine HTTPS failure is observable instead of silently invisible.
 export function registerPwa(onNeedRefresh?: () => void): PwaController {
   deleteOrphanCaches();
   // Ask the browser not to evict this origin's storage under pressure: the tile and chart caches
@@ -124,38 +125,56 @@ export function registerPwa(onNeedRefresh?: () => void): PwaController {
     void navigator.storage?.persist?.().catch(() => undefined);
   }
   // Over plain http the serviceWorker API is absent, so registration is never attempted and no
-  // callback below ever fires; classify that up front rather than leaving the status pending.
+  // listener below ever fires; classify that up front rather than leaving the status pending.
   let status = $state<PwaStatus>(
     typeof navigator !== 'undefined' && 'serviceWorker' in navigator
       ? 'pending'
       : 'insecure-context',
   );
   const coordinator = createReloadCoordinator();
-  const updateSW = registerSW({
-    onNeedRefresh,
-    onNeedReload: () => coordinator.onNeedReload(),
-    onRegisteredSW: () => {
-      status = 'active';
-    },
-    onRegisterError: (error) => {
-      // An untrusted server certificate makes the browser refuse to register a service worker, even
-      // after the user clicks through the page warning, so offline caching stays off (the app itself
-      // works fully). The match is a heuristic on the browser's non-standard error text; a miss just
-      // falls through to the generic warning below.
-      const message = error instanceof Error ? error.message : String(error);
-      if (/certificate|ssl/i.test(message)) {
-        status = 'untrusted-certificate';
-        console.info(
-          '[pwa] Offline caching is off: this browser does not trust the server certificate. Install the Signal K server certificate as a trusted root to enable offline use.',
-        );
-        return;
+  let serwist: Serwist | undefined;
+  // The dev server bundles the worker without a precache manifest, so registering it would fail
+  // where the old tooling was a silent no-op; skip in dev only (vitest runs under mode 'test').
+  if (import.meta.env.MODE !== 'development') {
+    void (async () => {
+      const instance = await getSerwist();
+      // Undefined means the serviceWorker API is withheld; status is already insecure-context.
+      if (!instance) return;
+      serwist = instance;
+      // Listeners attach before register() so a worker that was already waiting (its 'waiting'
+      // replays on a microtask after register resolves) cannot be missed.
+      instance.addEventListener('waiting', () => onNeedRefresh?.());
+      instance.addEventListener('controlling', (event) => {
+        // Only an UPDATE taking control reloads. With clientsClaim the very first install also
+        // fires 'controlling' (isUpdate false), and reloading a first visit would be wrong.
+        if (event.isUpdate) coordinator.onNeedReload();
+      });
+      try {
+        await instance.register();
+        status = 'active';
+      } catch (error) {
+        // An untrusted server certificate makes the browser refuse to register a service worker,
+        // even after the user clicks through the page warning, so offline caching stays off (the
+        // app itself works fully). The match is a heuristic on the browser's non-standard error
+        // text; a miss just falls through to the generic warning below.
+        const message = error instanceof Error ? error.message : String(error);
+        if (/certificate|ssl/i.test(message)) {
+          status = 'untrusted-certificate';
+          console.info(
+            '[pwa] Offline caching is off: this browser does not trust the server certificate. Install the Signal K server certificate as a trusted root to enable offline use.',
+          );
+          return;
+        }
+        status = 'failed';
+        console.warn('[pwa] service worker registration failed', error);
       }
-      status = 'failed';
-      console.warn('[pwa] service worker registration failed', error);
-    },
-  });
+    })();
+  }
   return {
-    update: () => coordinator.requestUpdate(() => void updateSW(true)),
+    // messageSkipWaiting() no-ops when nothing is waiting, and a click that lands before the
+    // registration promise resolves finds serwist undefined and falls through the same way; the
+    // coordinator's suppressed path still covers the reload-directly case.
+    update: () => coordinator.requestUpdate(() => serwist?.messageSkipWaiting()),
     get status() {
       return status;
     },

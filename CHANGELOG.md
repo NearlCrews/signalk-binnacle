@@ -4,6 +4,16 @@ All notable changes to Binnacle are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- MapLibre GL moves to 6.6.0 and the toolchain to its current releases across the board.
+- The offline service worker is now built with Serwist instead of Workbox. Caching behavior,
+  cache names, and the prompt-before-reload update flow are unchanged, cached charts and tiles
+  survive the upgrade, the retired Workbox precache is cleaned up automatically, and the very
+  first visit now starts filling the offline caches without needing a reload.
+
 <a id="v0210"></a>
 
 ## [0.21.0] - 2026-08-13
@@ -120,7 +130,7 @@ and say plainly what it trusts.
   stream, audio) report their real states.
 - The heavy dock panels load on demand, so the main bundle stays inside its budget and first
   paint on a Pi-class helm gets its headroom back.
-- MapLibre GL moves to 6.6.0 and the toolchain to its current releases across the board.
+- MapLibre GL moves to 6.2.0 and the toolchain to its current releases across the board.
 - A helm-visibility pass across the chrome. Instrument tiles lead with their loud abbreviation
   (SOG, HDG, AWS) over the quiet long name, states render as tinted chips where Alarm outranks
   Stale and Stale outranks a warning computed from an untrusted value, a stale tile keeps its

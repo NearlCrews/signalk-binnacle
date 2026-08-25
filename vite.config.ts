@@ -1,10 +1,9 @@
 import { fileURLToPath } from 'node:url';
+import { serwist } from '@serwist/vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { playwright } from '@vitest/browser-playwright';
-import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 import packageJson from './package.json' with { type: 'json' };
-import { runtimeCaching } from './src/shared/pwa/sw-caching.ts';
 import tsconfigBase from './tsconfig.base.json' with { type: 'json' };
 import tsconfigPaths from './tsconfig.paths.json' with { type: 'json' };
 
@@ -26,94 +25,23 @@ export default defineConfig({
   },
   plugins: [
     svelte(),
-    VitePWA({
-      // 'prompt', not 'autoUpdate': a chartplotter must not silently reload itself underway. A new
-      // build surfaces an Update control (registerPwa's onNeedRefresh) so the navigator chooses when
-      // to reload, rather than the chart vanishing mid-passage.
-      registerType: 'prompt',
-      // Precache each icon from exactly one source. Both this list and the manifest icons below
-      // are globbed against static/ and appended as additional manifest entries, while Workbox
-      // globs the built public/ separately; an asset reachable both ways lands in the precache
-      // manifest twice (Workbox does not deduplicate at generation time, and only tolerates it
-      // because the two revisions match). So globPatterns owns the SVG icons, this list owns the
-      // PNGs it does not match, and includeManifestIcons stays off.
-      includeManifestIcons: false,
-      includeAssets: [
-        'icon-192.png',
-        'icon-512.png',
-        'icon-maskable-192.png',
-        'icon-maskable-512.png',
-        'apple-touch-icon.png',
-      ],
-      manifest: {
-        name: 'Binnacle Chartplotter',
-        short_name: 'Binnacle',
-        description: 'A WebGL chartplotter for Signal K.',
-        start_url: base,
-        scope: base,
-        display: 'standalone',
-        display_override: ['window-controls-overlay', 'standalone'],
-        background_color: '#cfe0ec',
-        theme_color: '#cfe0ec',
-        // Two separate sets, not one dual-purpose set. The primary artwork reaches 275px from
-        // center on a 512 canvas, well past the 204.8px maskable safe-zone radius, so an Android
-        // adaptive launcher would clip the compass badge. The maskable variant carries the same
-        // artwork scaled into the safe zone over a full-bleed background.
-        icons: [
-          {
-            src: 'binnacle-icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
-          {
-            src: 'icon-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: 'icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: 'binnacle-icon-maskable.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'maskable',
-          },
-          {
-            src: 'icon-maskable-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-          {
-            src: 'icon-maskable-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      },
-      workbox: {
-        navigateFallback: `${base}index.html`,
-        // Do not answer file-like navigation requests (a path with an extension) from the app shell;
-        // they should hit the network or 404, not the HTML. The /signalk-binnacle/ scope already
-        // isolates the worker from the Signal K server API and admin paths, and a /^\/signalk/ entry
-        // would falsely match the app's own /signalk-binnacle/ routes and break the offline fallback.
-        navigateFallbackDenylist: [/\/[^/?]+\.[^/?]+$/],
-        // Sweep precache entries left by prior builds; register.svelte.ts assumes this is on.
-        cleanupOutdatedCaches: true,
-        // The app chunk is large (MapLibre), so raise the precache size ceiling.
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        // The full table lives in src/shared/pwa/sw-caching.ts, where the matchers are
-        // unit-tested; the build serializes the functions into the generated worker.
-        runtimeCaching: runtimeCaching as never,
-      },
+    // The service worker is a real module (src/sw.ts) bundled by the plugin's child build; its
+    // update flow stays prompt-mode (skipWaiting false there, the Update control in the UI). The
+    // web app manifest is a static file (static/manifest.webmanifest) linked from index.html. The
+    // fallback navigation route and its denylist live in sw.ts beside the runtime caching table.
+    serwist({
+      swSrc: 'src/sw.ts',
+      swDest: 'sw.js',
+      globDirectory: 'public',
+      // A classic worker in an iife bundle, matching the previous registration type.
+      rollupFormat: 'iife',
+      type: 'classic',
+      // The app chunk is large (MapLibre), so raise the precache size ceiling.
+      maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+      // One glob source for the whole precache. The root-only *.png entry takes the five icon
+      // PNGs without sweeping public/screenshots/, and *.webmanifest keeps the manifest available
+      // offline.
+      globPatterns: ['**/*.{js,css,html,svg,woff2}', '*.png', '*.webmanifest'],
     }),
   ],
   resolve: { alias },

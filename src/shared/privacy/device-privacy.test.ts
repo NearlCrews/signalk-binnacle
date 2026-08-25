@@ -237,11 +237,15 @@ describe('browser privacy owners', () => {
     expect(foreign.unregister).not.toHaveBeenCalled();
   });
 
-  it('deletes exact runtime caches and only the owned Workbox precache prefix', async () => {
+  it('deletes exact runtime caches and only the owned precache prefixes, both generations', async () => {
+    // The serwist precache is current; the workbox prefix is the retired generation an upgraded
+    // installation may still carry. Foreign-scope precaches of either generation stay untouched.
     const deleted: string[] = [];
     const storage = {
       keys: async () => [
         'binnacle-chart-tiles',
+        'serwist-precache-v2-http://pi/signalk-binnacle/',
+        'serwist-precache-v2-http://pi/other-app/',
         'workbox-precache-v2-http://pi/signalk-binnacle/',
         'workbox-precache-v2-http://pi/other-app/',
       ],
@@ -252,13 +256,17 @@ describe('browser privacy owners', () => {
     };
     const registry = createBinnaclePrivacyRegistry({
       cacheStorage: storage,
-      cachePrefixes: ['workbox-precache-v2-http://pi/signalk-binnacle/'],
+      cachePrefixes: [
+        'serwist-precache-v2-http://pi/signalk-binnacle/',
+        'workbox-precache-v2-http://pi/signalk-binnacle/',
+      ],
     });
 
     await registry.owners('device-data')[0].clear();
 
     expect(deleted).toEqual([
       'binnacle-chart-tiles',
+      'serwist-precache-v2-http://pi/signalk-binnacle/',
       'workbox-precache-v2-http://pi/signalk-binnacle/',
     ]);
   });

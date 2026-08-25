@@ -894,7 +894,11 @@ const privacyRegistry = createBinnaclePrivacyRegistry({
       ? navigator.serviceWorker
       : undefined,
   serviceWorkerScopes: appScope ? [appScope] : [],
-  cachePrefixes: appScope ? [`workbox-precache-v2-${appScope}`] : [],
+  // Both precache generations: serwist is current, and the retired workbox prefix stays so an
+  // erase on an upgraded installation still removes a stale workbox precache.
+  cachePrefixes: appScope
+    ? [`serwist-precache-v2-${appScope}`, `workbox-precache-v2-${appScope}`]
+    : [],
 });
 const privacySourceId =
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
