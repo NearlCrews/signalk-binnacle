@@ -125,6 +125,13 @@ export default defineConfig({
     // is not always possible.
     sourcemap: 'hidden',
     rolldownOptions: {
+      // rolldown 1.2.5 folds side-effect-bearing modules that only lazy chunks share into the
+      // eager entry (rolldown#10645). In this single-entry app every on-demand panel is reachable
+      // only through the entry, so the fold sweeps the lazy features (weather, instruments,
+      // profiles) into the main chunk and blows its size budget. In the released 1.2.5 the fold
+      // ships under avoidRedundantChunkLoads; disabling it restores per-dynamic-import splitting
+      // byte-identically, while mergeCommonChunks: false alone measurably changes nothing.
+      experimental: { chunkOptimization: { avoidRedundantChunkLoads: false } },
       output: {
         // Split the large vendor libraries into separate chunks for better cache hit rates across
         // releases (vendor code changes less often than app code) and parallel HTTP/2 download.

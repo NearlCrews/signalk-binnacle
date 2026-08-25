@@ -162,7 +162,7 @@ not have to be corrected after the fact.
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
 - Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6.0.3,
-  Svelte 5.56.8, MapLibre GL JS 6.3.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+  Svelte 5.56.8, MapLibre GL JS 6.6.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5.1.2 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder and
   test fixtures import `PbfWriter`). The `typescript` package stays on 6.x, and raising it to 7 is

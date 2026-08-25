@@ -306,8 +306,7 @@ const depthWatchPaused = $derived(
         class:subordinate={linkDown}
         title="Heading, true"
         >HDG
-        <b class="num"
-          >{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
+        <b class="num">{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
         >&deg;T</span
       >
     {/if}

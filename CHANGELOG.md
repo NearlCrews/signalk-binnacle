@@ -120,7 +120,7 @@ and say plainly what it trusts.
   stream, audio) report their real states.
 - The heavy dock panels load on demand, so the main bundle stays inside its budget and first
   paint on a Pi-class helm gets its headroom back.
-- MapLibre GL moves to 6.2.0 and the toolchain to its current releases across the board.
+- MapLibre GL moves to 6.6.0 and the toolchain to its current releases across the board.
 - A helm-visibility pass across the chrome. Instrument tiles lead with their loud abbreviation
   (SOG, HDG, AWS) over the quiet long name, states render as tinted chips where Alarm outranks
   Stale and Stale outranks a warning computed from an untrusted value, a stale tile keeps its
