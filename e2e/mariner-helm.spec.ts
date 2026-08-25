@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { openMenuItem, stubVesselsSelf } from './helpers';
+import { FIXTURE_SERVER, openMenuItem, stubVesselsSelf } from './helpers';
 
 // The mariner helm scenarios: emergency reachability, alarm pileups, and staleness honesty under
 // phone-sized, landscape, large-text, and safe-area conditions. This project runs against the
@@ -13,7 +13,6 @@ import { openMenuItem, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
-const FIXTURE_ORIGIN = 'http://127.0.0.1:4174';
 // A deterministic wall-clock stamp for every fixture delta; freshness derives from receipt time.
 const FIXED_TIMESTAMP = '2026-08-10T12:00:00.000Z';
 const TARGET_CONTEXT = 'vessels.urn:mrn:imo:mmsi:366123456';
@@ -21,7 +20,7 @@ const TARGET_CONTEXT = 'vessels.urn:mrn:imo:mmsi:366123456';
 type DeltaValue = { path: string; value: unknown; state?: unknown };
 
 async function fixturePost(page: Page, action: string, body?: unknown): Promise<void> {
-  const response = await page.request.post(`${FIXTURE_ORIGIN}/__fixture__/${action}`, {
+  const response = await page.request.post(`${FIXTURE_SERVER}/__fixture__/${action}`, {
     data: body ?? {},
   });
   expect(response.ok()).toBe(true);
@@ -184,7 +183,7 @@ test('stream fixture feeds the worker: subscriptions arrive and deltas render', 
   await openApp(page);
   await sendDelta(page, OWN_FIX);
   await expect(page.locator('.status-strip')).toContainText('5.8');
-  const state = await page.request.get(`${FIXTURE_ORIGIN}/__fixture__/state`);
+  const state = await page.request.get(`${FIXTURE_SERVER}/__fixture__/state`);
   const body = (await state.json()) as { received: Array<{ subscribe?: unknown }> };
   expect(body.received.some((message) => Array.isArray(message.subscribe))).toBe(true);
 });

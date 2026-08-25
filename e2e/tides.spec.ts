@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
-import { openMenuItem, stubVesselsSelf } from './helpers';
+import { expectNoHorizontalOverflow, openMenuItem, stubVesselsSelf } from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 test.use({ serviceWorkers: 'block' });
@@ -276,9 +276,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await expect(chartOpenedPanel.getByRole('button', { name: 'Back to menu' })).toHaveCount(0);
   await page.setViewportSize({ width: 320, height: 568 });
 
-  await expect
-    .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(page.locator('body'));
   const accessibility = await new AxeBuilder({ page })
     .include('aside[aria-label="Tides and currents"]')
     .analyze();

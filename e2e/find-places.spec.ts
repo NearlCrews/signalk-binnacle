@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stubVesselsSelf } from './helpers';
+import { expectNoHorizontalOverflow, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -91,9 +91,7 @@ test('find places enables its layer, searches provider metadata, and keeps selec
     page.getByRole('complementary', { name: 'Details for Harbor Marina' }),
   ).toBeVisible();
 
-  await expect
-    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(panel);
 });
 
 test('find places explains the chart zoom limit on a narrow screen', async ({ page }) => {
@@ -109,9 +107,7 @@ test('find places explains the chart zoom limit on a narrow screen', async ({ pa
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
   await expect(panel.getByText('Zoom in to level 9 or closer')).toBeVisible({ timeout: 15_000 });
-  await expect
-    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(panel);
 });
 
 test('place detail returns to find places on a narrow screen', async ({ page }) => {

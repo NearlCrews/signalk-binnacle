@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { expectInsideViewport, openMenuItem } from './helpers';
+import { expectInsideViewport, expectNoHorizontalOverflow, openMenuItem } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -27,9 +27,7 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
     expect(box.height).toBeGreaterThanOrEqual(44);
     expect(box.width).toBeGreaterThanOrEqual(44);
   }
-  await expect
-    .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(page.locator('body'));
 });
 
 test('keeps a status-strip action chip on one control row', async ({ page }) => {
@@ -56,9 +54,7 @@ test('keeps a status-strip action chip on one control row', async ({ page }) => 
   expect(actionBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(actionBox.height + 1);
   // A chip that grew wider than it is tall must still not push the strip sideways.
-  await expect
-    .poll(() => page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(page.locator('body'));
 });
 
 test('keeps a scrolled layer opacity popover inside a narrow viewport', async ({ page }) => {
@@ -231,15 +227,8 @@ test('keeps long battery readings distinguishable in a night-red tablet dock', a
   for (const label of labels) {
     await expect(dock.getByRole('button', { name: new RegExp(`^${label},`) })).toBeVisible();
   }
-  await expect
-    .poll(async () => {
-      const [bodyFits, dockFits] = await Promise.all([
-        page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1),
-        dock.evaluate((panel) => panel.scrollWidth <= panel.clientWidth + 1),
-      ]);
-      return bodyFits && dockFits;
-    })
-    .toBe(true);
+  await expectNoHorizontalOverflow(page.locator('body'));
+  await expectNoHorizontalOverflow(dock);
 });
 
 test('honors reduced motion and keeps menu keyboard focus contained', async ({ page }) => {

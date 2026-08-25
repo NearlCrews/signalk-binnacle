@@ -23,6 +23,22 @@ export async function openMenuItem(page: Page, itemName: string): Promise<void> 
     .click();
 }
 
+// The stream fixture's port and origins, in one place: playwright.config.ts starts the server
+// with this port, the mariner project navigates the app origin, and the spec drives the control
+// channel at the server root, so the three cannot desync.
+export const FIXTURE_PORT = 4174;
+export const FIXTURE_SERVER = `http://127.0.0.1:${FIXTURE_PORT}`;
+export const FIXTURE_ORIGIN = `${FIXTURE_SERVER}/signalk-binnacle/`;
+
+// Assert an element does not scroll horizontally. The one-pixel tolerance absorbs subpixel
+// rounding on fractional layouts, and the poll absorbs a layout that has not settled yet;
+// seventeen inline copies of this check drifted on exactly those two points.
+export async function expectNoHorizontalOverflow(surface: Locator): Promise<void> {
+  await expect
+    .poll(() => surface.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
+    .toBe(true);
+}
+
 // Assert a floating surface lies inside the viewport it was measured in. Measures the live document
 // rather than restating pixels, so a spec that sets its own viewport cannot leave a stale bound
 // asserting against a size the page no longer has. clientWidth and clientHeight, not viewportSize:

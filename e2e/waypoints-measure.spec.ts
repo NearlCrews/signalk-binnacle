@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stubVesselsSelf } from './helpers';
+import { expectNoHorizontalOverflow, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -47,9 +47,7 @@ test('waypoints loads without the stream and confirms navigation on a narrow scr
   expect(destinationWrites).toBe(0);
   await confirm.getByRole('button', { name: 'Start navigation' }).click();
   await expect.poll(() => destinationWrites).toBe(1);
-  await expect
-    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(panel);
 });
 
 test('measure edits middle points with pointer and keyboard paths, then restores the cursor', async ({
@@ -166,9 +164,7 @@ test('measure edits middle points with pointer and keyboard paths, then restores
   await strip.getByRole('button', { name: 'Move point' }).click();
   await page.keyboard.press('Escape');
   await expect(strip.getByText('Point 2 selected', { exact: false })).toBeVisible();
-  await expect
-    .poll(() => strip.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
+  await expectNoHorizontalOverflow(strip);
   await page.keyboard.press('Escape');
   await expect(strip).not.toBeVisible();
   await expect(canvas).not.toHaveCSS('cursor', 'crosshair');

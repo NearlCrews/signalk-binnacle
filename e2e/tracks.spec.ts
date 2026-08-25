@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { stubVesselsSelf } from './helpers';
+import { expectNoHorizontalOverflow, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -42,7 +42,5 @@ test('tracks loads saved resources without a live stream and fits a narrow scree
   await expect(panel.getByText('1h 00m')).toBeVisible();
   await panel.getByRole('button', { name: 'Delete track' }).click();
   await expect(panel.getByText('Delete this track?')).toBeVisible();
-  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
-    true,
-  );
+  await expectNoHorizontalOverflow(panel);
 });

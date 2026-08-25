@@ -1,5 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectInsideViewport, openMenuItem, stubVesselsSelf } from './helpers';
+import {
+  expectInsideViewport,
+  expectNoHorizontalOverflow,
+  openMenuItem,
+  stubVesselsSelf,
+} from './helpers';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
 
 // Smoke tests route selected external APIs. Blocking service workers keeps those requests visible
@@ -186,7 +191,7 @@ test('time travel changes bounded ranges, replays history, and retains accepted 
   const rangeBox = await rangeButton.boundingBox();
   if (!rangeBox) throw new Error('time travel range button did not lay out');
   expect(rangeBox.height).toBeGreaterThanOrEqual(44);
-  expect(await strip.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expectNoHorizontalOverflow(strip);
 });
 
 test('time travel can exit while its lazy controls are still loading', async ({ page }) => {
@@ -900,7 +905,7 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
   await expect(panel.getByText('current URL remains active')).toBeVisible();
   await panel.getByRole('button', { name: 'Cancel' }).click();
   await expect(panel.getByRole('button', { name: 'Refresh metadata' })).toBeVisible();
-  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expectNoHorizontalOverflow(panel);
 });
 
 test('route editing confirms before discarding plotted changes', async ({ page }) => {
@@ -1329,15 +1334,8 @@ test('trend charts stay scrub-accessible and night-readable on a 320 px phone', 
   await expect(scrubber).toHaveValue('1');
   await expect(scrubber).toHaveAttribute('aria-valuetext', /4/);
   await expect(panel.getByText(/Latest .*minimum .*maximum .*start .*end/).first()).toBeVisible();
-  await expect
-    .poll(async () => {
-      const [bodyFits, panelFits] = await Promise.all([
-        page.locator('body').evaluate((body) => body.scrollWidth <= body.clientWidth + 1),
-        panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
-      ]);
-      return bodyFits && panelFits;
-    })
-    .toBe(true);
+  await expectNoHorizontalOverflow(page.locator('body'));
+  await expectNoHorizontalOverflow(panel);
 
   const themeToggle = page.getByRole('button', { name: /Switch theme/ });
   await themeToggle.click();
@@ -1489,16 +1487,8 @@ test('weather remains usable without horizontal overflow on a narrow phone', asy
   await expect(panel).toBeVisible();
   await expect.poll(() => forecastRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(panel.getByRole('slider')).toBeVisible();
-  await expect
-    .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
-    .toBe(true);
-  await expect
-    .poll(() =>
-      panel
-        .locator('.weather-footer')
-        .evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
-    )
-    .toBe(true);
+  await expectNoHorizontalOverflow(panel);
+  await expectNoHorizontalOverflow(panel.locator('.weather-footer'));
 
   const mapBox = await panel.locator('.panel-map').boundingBox();
   const controlBox = await panel.locator('.scrubber button').first().boundingBox();

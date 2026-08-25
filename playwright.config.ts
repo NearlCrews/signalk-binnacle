@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { FIXTURE_ORIGIN, FIXTURE_PORT } from './e2e/helpers';
+
 const PREVIEW_ORIGIN = 'http://localhost:4173/signalk-binnacle/';
-const FIXTURE_PORT = 4174;
-const FIXTURE_ORIGIN = `http://127.0.0.1:${FIXTURE_PORT}/signalk-binnacle/`;
 
 export default defineConfig({
   testDir: './e2e',
