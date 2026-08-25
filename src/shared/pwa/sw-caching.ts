@@ -85,8 +85,9 @@ export const isBasemapAsset = ({ url }: MatchContext): boolean => STYLE_ORIGINS.
 
 // Raster chart tiles served by any Signal K charts plugin (@signalk/charts-plugin and kin) at
 // /charts/<id>/{z}/{x}/{y}, tolerating @2x and an extension. Same-origin only.
+const CHART_TILE_PATH = /^\/charts\/[^/]+\/\d+\/\d+\/\d+(?:@2x)?(?:\.\w+)?$/;
 export const isChartTile = ({ url, sameOrigin }: MatchContext): boolean =>
-  sameOrigin && /^\/charts\/[^/]+\/\d+\/\d+\/\d+(?:@2x)?(?:\.\w+)?$/.test(url.pathname);
+  sameOrigin && CHART_TILE_PATH.test(url.pathname);
 
 // The catalog's time-dynamic layer families (weather radar mosaics, watches and warnings, active
 // tropical cyclones, and sea surface temperature). They share the nowcoast host with the static

@@ -16,6 +16,7 @@ import {
   removeLayersAndSources,
   rgbaCss,
   setLayersVisibility,
+  setPaintProp,
   setSourceData,
 } from '$shared/map';
 
@@ -157,16 +158,16 @@ export function createCourseOverlay(guidance: CourseGuidance, vessel: OwnVessel)
     },
     applyTheme(ctx, next) {
       paint = next;
-      ctx.map.setPaintProperty(LINE_LAYER, 'line-color', paint.select);
-      ctx.map.setPaintProperty(POINT_LAYER, 'circle-color', paint.select);
+      setPaintProp(ctx.map, LINE_LAYER, 'line-color', paint.select);
+      setPaintProp(ctx.map, POINT_LAYER, 'circle-color', paint.select);
     },
     setVisible(ctx, visible) {
       setLayersVisibility(ctx.map, LAYERS, visible);
     },
     setOpacity(ctx, opacity) {
-      ctx.map.setPaintProperty(LINE_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(POINT_LAYER, 'circle-opacity', opacity);
-      ctx.map.setPaintProperty(POINT_LAYER, 'circle-stroke-opacity', opacity);
+      setPaintProp(ctx.map, LINE_LAYER, 'line-opacity', opacity);
+      setPaintProp(ctx.map, POINT_LAYER, 'circle-opacity', opacity);
+      setPaintProp(ctx.map, POINT_LAYER, 'circle-stroke-opacity', opacity);
     },
     remove(ctx) {
       removeLayersAndSources(ctx.map, LAYERS, [LINE_SRC, POINT_SRC]);

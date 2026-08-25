@@ -6,7 +6,7 @@ import {
   poiCategoryForType,
 } from '$entities/poi-icons';
 import { type Bbox4, fetchAcrossSeam, isLatLon } from '$shared/geo';
-import { hasControlCharacters } from '$shared/lib';
+import { cleanBoundedText } from '$shared/lib';
 import { fetchKeyedResource, str } from '$shared/signalk';
 import {
   cleanPersonalNoteText,
@@ -49,16 +49,11 @@ export function cleanNoteText(value: unknown, maxLength: number): string | undef
   return text ? text.slice(0, maxLength) : undefined;
 }
 
-function cleanId(value: string): string | undefined {
-  const id = value.trim();
-  return id && id.length <= 512 && !hasControlCharacters(id) ? id : undefined;
-}
-
 // Map one keyed resource entry to a NotePoint, or undefined to skip it. An error payload
 // ({state, statusCode, message}) has non-object values or no position, so it falls through here;
 // only real notes with a position become markers.
 function noteFromEntry(id: string, raw: unknown): NotePoint | undefined {
-  const resourceId = cleanId(id);
+  const resourceId = cleanBoundedText(id, 512);
   if (!resourceId) return undefined;
   if (!raw || typeof raw !== 'object') return undefined;
   const note = raw as {

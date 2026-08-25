@@ -9,37 +9,11 @@ interface SpecRow {
 const { rows }: { rows: SpecRow[] } = $props();
 </script>
 
-<dl class="spec-list">
+<dl class="detail-list detail-list--wrap">
   {#each rows as row (row.label)}
-    <div>
+    <div class="item">
       <dt>{row.label}</dt>
       <dd>{row.value}</dd>
     </div>
   {/each}
 </dl>
-
-<style>
-.spec-list {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  font-size: var(--text-sm);
-}
-.spec-list div {
-  display: grid;
-  grid-template-columns: 5rem 1fr;
-  gap: var(--space-2);
-  padding-block: 0.3rem;
-}
-/* A hairline between rows so a dense spec sheet scans as a table, not a gray block. */
-.spec-list div + div {
-  border-block-start: 1px solid var(--border);
-}
-.spec-list dt {
-  color: var(--text-muted);
-}
-.spec-list dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-</style>

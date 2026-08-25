@@ -11,6 +11,7 @@ import type { Theme } from '$shared/ui';
 import { type CanvasFactory, createFieldOverlay, type FieldOverlay } from './field-overlay';
 import { WEATHER_LAYER_IDS } from './fills';
 import { gridTimeGate } from './grid-time-gate';
+import { becameVisible } from './overlay-visibility';
 import { waveArrowFeatures } from './wave-arrows';
 import { waveArrowColor } from './wave-colormap';
 import { waveFieldRgba } from './wave-field';
@@ -86,11 +87,11 @@ export function createWavesOverlay(store: WeatherStore, makeCanvas?: CanvasFacto
       field.remove(ctx);
     },
     setVisible(ctx, value) {
-      const becameVisible = value && !visible;
+      const justBecameVisible = becameVisible(visible, value);
       visible = value;
       field.setVisible(ctx, value);
       setLayersVisibility(ctx.map, [ARROW_LAYER], value);
-      if (becameVisible) {
+      if (justBecameVisible) {
         gate.reset();
         this.sync(ctx);
       }

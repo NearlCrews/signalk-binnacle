@@ -121,7 +121,7 @@ function chartList(region: SavedRegionDto): string {
         {:else if region.status === 'downloading' && live && live.total > 0}
           {@const percent = Math.round((live.done / live.total) * 100)}
           <div
-            class="warm-track"
+            class="progress-track"
             role="progressbar"
             aria-label="Download progress"
             aria-valuemin="0"
@@ -129,7 +129,7 @@ function chartList(region: SavedRegionDto): string {
             aria-valuenow={live.done}
             aria-valuetext={progressText(live, percent)}
           >
-            <div class="warm-fill" style:inline-size="{percent}%"></div>
+            <div class="progress-fill" style:inline-size="{percent}%"></div>
           </div>
           <p class="progress-note muted-note" role="status">{progressText(live, percent)}</p>
         {:else if region.status === 'downloading'}
@@ -255,16 +255,5 @@ function chartList(region: SavedRegionDto): string {
 }
 .area-detail-actions .btn {
   flex: 1 1 auto;
-}
-.warm-track {
-  block-size: var(--range-track-h);
-  border-radius: var(--radius-pill);
-  background: var(--border);
-  overflow: hidden;
-}
-.warm-fill {
-  block-size: 100%;
-  background: var(--accent);
-  transition: inline-size var(--transition-fast);
 }
 </style>

@@ -45,11 +45,11 @@ export function navMetrics(
   };
 }
 
+// Module scope: normalized() runs once per field per row on every search keystroke.
+const DIACRITICS = /\p{Diacritic}/gu;
+
 function normalized(value: string | undefined): string {
-  return (value ?? '')
-    .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('en');
+  return (value ?? '').normalize('NFKD').replace(DIACRITICS, '').toLocaleLowerCase('en');
 }
 
 // The deterministic tie-break every nav sort ends with: collated name, then collated id, so two rows

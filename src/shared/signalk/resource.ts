@@ -164,6 +164,20 @@ export function str(value: unknown): string | undefined {
 // than Binnacle displays is still the mariner's name for that mark, so it is shortened rather than
 // dropped. Built on str, so it inherits the 16,384-character pre-bound before any slicing.
 // The reject-on-oversized counterpart is cleanBoundedText in $shared/lib.
+// The write-permission guard every mutating controller action opens with: when writes are
+// blocked, flag the caller's full read-only message and report blocked, so the four-line
+// guard/flag/return idiom lives once instead of twenty times across controllers.
+export function createWriteBlockGuard(
+  writeBlocked: () => boolean,
+  flagError: (message: string) => void,
+): (message: string) => boolean {
+  return (message) => {
+    if (!writeBlocked()) return false;
+    flagError(message);
+    return true;
+  };
+}
+
 const MAX_RESOURCE_ID_LENGTH = 512;
 
 // A Signal K resource id must round-trip byte-exact into the URL path, so reject rather than

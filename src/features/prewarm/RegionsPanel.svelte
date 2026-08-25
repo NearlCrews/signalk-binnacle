@@ -255,6 +255,30 @@ function chartLabel(id: string): string {
 }
 </script>
 
+{#snippet detailPicker(
+  groupLabel: string,
+  selectedKey: string,
+  choose: (key: string) => void,
+  announceRecommended: boolean,
+)}
+  <div class="segmented" role="group" aria-label={groupLabel}>
+    {#each DETAIL_PRESETS as preset (preset.key)}
+      <button
+        type="button"
+        class="btn"
+        class:is-on={selectedKey === preset.key}
+        aria-pressed={selectedKey === preset.key}
+        aria-label={announceRecommended && preset.recommended
+          ? `${preset.label}, recommended`
+          : preset.label}
+        onclick={() => choose(preset.key)}
+      >
+        {preset.label}
+      </button>
+    {/each}
+  </div>
+{/snippet}
+
 <SlideOver
   title={subViewTitle}
   subtitle={drawing ? 'Drag over the chart to select the area' : undefined}
@@ -337,19 +361,12 @@ function chartLabel(id: string): string {
             </button>
           {/each}
         </div>
-        <div class="segmented" role="group" aria-label="Required detail">
-          {#each DETAIL_PRESETS as preset (preset.key)}
-            <button
-              type="button"
-              class="btn"
-              class:is-on={coverageDetailKey === preset.key}
-              aria-pressed={coverageDetailKey === preset.key}
-              onclick={() => controller.setCoverageDetail(preset.key)}
-            >
-              {preset.label}
-            </button>
-          {/each}
-        </div>
+        {@render detailPicker(
+          'Required detail',
+          coverageDetailKey,
+          (key) => controller.setCoverageDetail(key as (typeof DETAIL_PRESETS)[number]['key']),
+          false,
+        )}
         <div class="panel-controls">
           <button type="button" class="btn btn--grow" onclick={() => controller.runCoverageCheck()}>
             Check route coverage
@@ -454,7 +471,7 @@ function chartLabel(id: string): string {
             {#each group.sources as source (source.id)}
               <div class="list-row">
                 <LayerToggle
-                  title={source.id === BASEMAP_SOURCE_ID
+                  label={source.id === BASEMAP_SOURCE_ID
                     ? 'Base map: land, roads, and place names'
                     : source.title}
                   description={sourceDescription(source.id)}
@@ -467,20 +484,12 @@ function chartLabel(id: string): string {
           {/each}
         </Disclosure>
 
-        <div class="segmented" role="group" aria-label="Detail level">
-          {#each DETAIL_PRESETS as preset (preset.key)}
-            <button
-              type="button"
-              class="btn"
-              class:is-on={detailPreset === preset.key}
-              aria-pressed={detailPreset === preset.key}
-              aria-label={preset.recommended ? `${preset.label}, recommended` : preset.label}
-              onclick={() => applyDetailPreset(preset.key)}
-            >
-              {preset.label}
-            </button>
-          {/each}
-        </div>
+        {@render detailPicker(
+          'Detail level',
+          detailPreset,
+          (key) => applyDetailPreset(key as (typeof DETAIL_PRESETS)[number]['key']),
+          true,
+        )}
         {#if selectedDetail}
           <p class="muted-note detail-explanation">{selectedDetail.description}</p>
         {:else}

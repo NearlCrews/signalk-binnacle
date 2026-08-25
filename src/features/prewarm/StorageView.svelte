@@ -53,7 +53,7 @@ const {
 <section class="panel-section" aria-label="Storage">
   {#if stats !== null}
     <div
-      class="storage-track"
+      class="progress-track"
       role="progressbar"
       aria-label="Offline chart storage used"
       aria-valuemin="0"
@@ -61,7 +61,7 @@ const {
       aria-valuenow={usedPercent}
       aria-valuetext={`${usedPercent}% used`}
     >
-      <div class="storage-fill" style:inline-size="{usedPercent}%"></div>
+      <div class="progress-fill" style:inline-size="{usedPercent}%"></div>
     </div>
     <p class="muted-note">{usedPercent}% of offline chart storage is in use.</p>
     <dl class="stat-grid">
@@ -139,17 +139,3 @@ const {
     <p class="muted-note">{clearNote}</p>
   {/if}
 </section>
-
-<style>
-.storage-track {
-  block-size: var(--range-track-h);
-  border-radius: var(--radius-pill);
-  background: var(--border);
-  overflow: hidden;
-}
-.storage-fill {
-  block-size: 100%;
-  background: var(--accent);
-  transition: inline-size var(--transition-fast);
-}
-</style>

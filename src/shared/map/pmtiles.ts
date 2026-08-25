@@ -71,8 +71,10 @@ async function readBoundedBody(response: Response, maxBytes: number): Promise<Ar
   return data.buffer;
 }
 
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+|\*)$/i;
+
 function parseContentRange(value: string | null): { start: number; end: number; total?: number } {
-  const match = value?.match(/^bytes (\d+)-(\d+)\/(\d+|\*)$/i);
+  const match = value?.match(CONTENT_RANGE);
   if (!match) throw new Error('PMTiles range response is missing a valid Content-Range header.');
   const start = Number(match[1]);
   const end = Number(match[2]);
@@ -374,15 +376,8 @@ export function unregisterPmtilesArchive(httpUrl: string): void {
     return;
   }
   archiveReferences.delete(httpUrl);
-  // Guard against an internal property rename across pmtiles versions: if `tiles` is not a Map,
-  // the delete would be a silent no-op that leaks the archive, so warn instead of failing hard.
-  if (protocol && protocol.tiles instanceof Map) {
-    protocol.tiles.delete(httpUrl);
-  } else if (protocol) {
-    console.warn(
-      '[pmtiles] protocol.tiles is not a Map; cannot unregister archive',
-      pmtilesUrlForError(httpUrl),
-    );
-  }
+  // tiles: Map is part of pmtiles 4's public typings, so a rename is a compile error here, not a
+  // runtime hazard worth a guard.
+  protocol?.tiles.delete(httpUrl);
   void blockStore?.purgeArchive(httpUrl);
 }

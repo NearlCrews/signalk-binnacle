@@ -170,3 +170,27 @@ dialog.modal-card {
   padding: var(--space-4);
   text-align: center;
 }
+
+/* The editor-dialog chrome the Notes and Waypoints editors share on top of .modal-card: a bordered
+   header with a text-lg h2, a grid body, and an end-aligned bordered footer. A dialog with its own
+   voice (the MOB confirm's alarm header) deliberately keeps its scoped chrome instead. */
+.modal-card .dialog-header {
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--border);
+}
+.modal-card .dialog-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.modal-card .dialog-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.modal-card .dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-block-start: 1px solid var(--border);
+}

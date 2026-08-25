@@ -89,7 +89,7 @@ const {
     {#each sources as source (source.id)}
       <div class="list-row">
         <LayerToggle
-          title={source.title}
+          label={source.title}
           description={sourceDescription(source.id)}
           visible={selectedSources.has(source.id)}
           disabled={!adminAccess}

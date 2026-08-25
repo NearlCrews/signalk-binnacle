@@ -18,6 +18,7 @@ import {
 import type { Theme } from '$shared/ui';
 import { WEATHER_LAYER_IDS } from './fills';
 import { gridTimeGate } from './grid-time-gate';
+import { becameVisible } from './overlay-visibility';
 import { windArrowFeatures } from './wind-arrows';
 import { windColorTexture } from './wind-color-texture';
 import { windColorExpression } from './wind-colormap';
@@ -229,12 +230,12 @@ export function createWindOverlay(store: WeatherStore): WindOverlay {
       removeLayersAndSources(ctx.map, [GL_LAYER_ID, LAYER_ID], [SOURCE_ID]);
     },
     setVisible(ctx, value) {
-      const becameVisible = value && !visible;
+      const justBecameVisible = becameVisible(visible, value);
       visible = value;
       if (ctx.map.getLayer(LAYER_ID)) {
         ctx.map.setLayoutProperty(LAYER_ID, 'visibility', value ? 'visible' : 'none');
       }
-      if (becameVisible) {
+      if (justBecameVisible) {
         gate.reset();
         this.sync(ctx);
       }

@@ -54,7 +54,7 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
   </button>
 </section>
 <section class="panel-section" aria-label="Live target details">
-  <h4 class="caps-label">Live target details</h4>
+  <h3 class="caps-label">Live target details</h3>
   <dl class="detail-list">
     <div class="item">
       <dt>Identifier</dt>

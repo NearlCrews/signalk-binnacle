@@ -107,6 +107,9 @@ let detailId = $state<string | undefined>();
 // clicks override freely in between (the old string-prop derived missed same-value requests).
 let mode = $derived<'charts' | 'overlays'>(request.mode);
 const minimize = createPanelMinimize();
+// One shared no-op for the non-draggable chart rows' required handle props, instead of a fresh
+// closure pair per row per render.
+const noopHandle = () => {};
 const detailItem = $derived(detailId ? view.items.find((item) => item.id === detailId) : undefined);
 const detailUserSource = $derived(
   detailItem?.chart?.source === 'user'
@@ -245,8 +248,8 @@ const reorder = createLayerReorder(
                 dropBefore={false}
                 dropAfter={false}
                 draggable={false}
-                onHandlePointerDown={() => {}}
-                onHandleKeydown={() => {}}
+                onHandlePointerDown={noopHandle}
+                onHandleKeydown={noopHandle}
                 manageLabel={item.chart ? `Open ${item.title} chart details` : undefined}
                 onManage={item.chart
                   ? () => (detailId = item.id)

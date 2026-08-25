@@ -1,8 +1,8 @@
 import type { UnitsMode } from '$shared/lib';
 import { displayRadarDistance, siRadarDistance } from './radar-area-units';
+import { MAX_RADAR_DISTANCE_METERS } from './radar-limits';
 import type { ControlDefinition, RadarControlEntry, RadarRectValue } from './radar-types';
 
-const MAX_RECT_DISTANCE_METERS = 1_000_000;
 const MIN_EDGE_METERS = 0.001;
 
 export interface RadarRectDraft {
@@ -23,7 +23,7 @@ export function isNativeRectDefinition(def: ControlDefinition): boolean {
     def.maxDistance !== undefined &&
     Number.isFinite(def.maxDistance) &&
     def.maxDistance > 0 &&
-    def.maxDistance <= MAX_RECT_DISTANCE_METERS
+    def.maxDistance <= MAX_RADAR_DISTANCE_METERS
   );
 }
 

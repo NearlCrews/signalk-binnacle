@@ -21,8 +21,10 @@ import {
   mapThemePaint,
   type OverlayContext,
   type OverlayModule,
+  overlayInteractive,
   removeLayersAndSources,
   setLayersVisibility,
+  setPaintProp,
   setSourceData,
 } from '$shared/map';
 import type { Theme } from '$shared/ui';
@@ -222,10 +224,8 @@ export function createTidesOverlay(
   let opacity = 1;
   let lastLabelMinute = -1;
   let lastMode: UnitsMode | undefined;
-  const hit = createTideHitHandlers(
-    store,
-    onSelect,
-    () => visible && opacity > 0 && interactionsAllowed(),
+  const hit = createTideHitHandlers(store, onSelect, () =>
+    overlayInteractive(visible, opacity, interactionsAllowed),
   );
 
   const syncHitVisibility = (ctx: OverlayContext): void => {
@@ -412,29 +412,29 @@ export function createTidesOverlay(
     },
     setOpacity(ctx, nextOpacity) {
       opacity = nextOpacity;
-      ctx.map.setPaintProperty(TIDES_SELECTED_LAYER, 'circle-stroke-opacity', nextOpacity);
-      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-opacity', nextOpacity);
-      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-stroke-opacity', nextOpacity);
-      ctx.map.setPaintProperty(TIDES_CURRENT_LAYER, 'circle-stroke-opacity', nextOpacity);
-      ctx.map.setPaintProperty(TIDES_GLYPH_LAYER, 'text-opacity', nextOpacity);
-      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_SELECTED_LAYER, 'circle-stroke-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_TIDE_LAYER, 'circle-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_TIDE_LAYER, 'circle-stroke-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_CURRENT_LAYER, 'circle-stroke-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_GLYPH_LAYER, 'text-opacity', nextOpacity);
+      setPaintProp(ctx.map, TIDES_LABEL_LAYER, 'text-opacity', nextOpacity);
       syncHitVisibility(ctx);
     },
     applyTheme(ctx, paint) {
       theme = paint.theme;
-      ctx.map.setPaintProperty(TIDES_SELECTED_LAYER, 'circle-stroke-color', paint.select);
-      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-color', paint.tide);
-      ctx.map.setPaintProperty(TIDES_TIDE_LAYER, 'circle-stroke-color', paint.background);
-      ctx.map.setPaintProperty(TIDES_CURRENT_LAYER, 'circle-stroke-color', paint.tide);
-      ctx.map.setPaintProperty(TIDES_GLYPH_LAYER, 'text-color', [
+      setPaintProp(ctx.map, TIDES_SELECTED_LAYER, 'circle-stroke-color', paint.select);
+      setPaintProp(ctx.map, TIDES_TIDE_LAYER, 'circle-color', paint.tide);
+      setPaintProp(ctx.map, TIDES_TIDE_LAYER, 'circle-stroke-color', paint.background);
+      setPaintProp(ctx.map, TIDES_CURRENT_LAYER, 'circle-stroke-color', paint.tide);
+      setPaintProp(ctx.map, TIDES_GLYPH_LAYER, 'text-color', [
         'match',
         ['get', 'kind'],
         'tide',
         paint.markerGlyph,
         paint.tide,
       ]);
-      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-color', paint.tide);
-      ctx.map.setPaintProperty(TIDES_LABEL_LAYER, 'text-halo-color', paint.background);
+      setPaintProp(ctx.map, TIDES_LABEL_LAYER, 'text-color', paint.tide);
+      setPaintProp(ctx.map, TIDES_LABEL_LAYER, 'text-halo-color', paint.background);
     },
     remove(ctx) {
       visible = false;

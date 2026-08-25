@@ -1,7 +1,7 @@
 import { hasDrawableTrack, type SavedTracksSource, type TrackPoint } from '$entities/track';
 import { createBusyGate, type Toast, uuidv4 } from '$shared/lib';
 import { createWriteOutcomeGate, deleteRefusedMessage, writeRefusedMessage } from '$shared/signalk';
-import { downloadGeoJson } from './track-export';
+import { downloadGeoJsonFromSegments } from './track-export';
 import {
   deleteTrack,
   fetchSavedTracks,
@@ -152,13 +152,7 @@ export function createTrackController(deps: TrackControllerDeps) {
   }
 
   function onExportSavedTrack(track: SavedTrack): void {
-    const points: TrackPoint[] = [];
-    track.points.forEach((segment, segmentIndex) => {
-      segment.forEach((point, pointIndex) => {
-        points.push(pointIndex === 0 && segmentIndex > 0 ? { ...point, gap: true } : point);
-      });
-    });
-    downloadGeoJson(track.name, points);
+    downloadGeoJsonFromSegments(track.name, track.points);
   }
 
   return {

@@ -1,5 +1,10 @@
 import { PbfReader } from 'pbf';
-import { MAX_RADAR_MESSAGE_BYTES, MAX_SPOKE_LENGTH, MAX_SPOKES_PER_MESSAGE } from './radar-limits';
+import {
+  MAX_RADAR_DISTANCE_METERS,
+  MAX_RADAR_MESSAGE_BYTES,
+  MAX_SPOKE_LENGTH,
+  MAX_SPOKES_PER_MESSAGE,
+} from './radar-limits';
 
 export interface RadarSpoke {
   angle: number;
@@ -45,7 +50,7 @@ function isValidSpoke(spoke: RadarSpoke, maxSpokeBytes: number): boolean {
     spoke.angle >= 0 &&
     Number.isSafeInteger(spoke.range) &&
     spoke.range >= 0 &&
-    spoke.range <= 1_000_000 &&
+    spoke.range <= MAX_RADAR_DISTANCE_METERS &&
     (spoke.bearing === undefined || (Number.isSafeInteger(spoke.bearing) && spoke.bearing >= 0)) &&
     (spoke.time === undefined || (Number.isSafeInteger(spoke.time) && spoke.time >= 0)) &&
     (spoke.lat === undefined ||

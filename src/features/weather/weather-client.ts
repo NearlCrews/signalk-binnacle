@@ -5,7 +5,14 @@ import {
   type WeatherSourceMetadata,
 } from '$entities/weather';
 import { wrapLongitude } from '$shared/geo';
-import { DEG_TO_RAD, isRecord, PA_PER_HPA, readBoundedJson, withTimeout } from '$shared/lib';
+import {
+  DEG_TO_RAD,
+  isFiniteNumber,
+  isRecord,
+  PA_PER_HPA,
+  readBoundedJson,
+  withTimeout,
+} from '$shared/lib';
 import { haversineMeters, normalizeLonDeltaDeg } from '$shared/nav';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -285,7 +292,7 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
 }
 
 function finite(value: number | null | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return isFiniteNumber(value) ? value : undefined;
 }
 
 function sourceMetadata(

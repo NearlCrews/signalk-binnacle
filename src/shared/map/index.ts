@@ -47,9 +47,11 @@ export {
   ensureGeoJsonSource,
   ensureGeoJsonSources,
   ensureSource,
+  overlayInteractive,
   removeLayersAndSources,
   removeSharedSourceIfOrphaned,
   setLayersVisibility,
+  setPaintProp,
   setSourceData,
 } from './overlay-helpers';
 export type { Syncable } from './overlay-tick';

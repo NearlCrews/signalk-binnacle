@@ -10,6 +10,7 @@ import {
   removeLayersAndSources,
   rgbaCss,
   setLayersVisibility,
+  setPaintProp,
   setSourceData,
 } from '$shared/map';
 import { routeLineFeatures, waypointFeatures } from './route-features';
@@ -114,17 +115,17 @@ export function createRouteOverlay(store: RouteStore, opts?: { listed?: boolean 
     },
     setOpacity(ctx, opacity) {
       // The casing carries its own alpha in CASING_COLOR, so scale it by the layer opacity too.
-      ctx.map.setPaintProperty(LINE_CASING_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(LINE_LAYER, 'line-opacity', opacity);
-      ctx.map.setPaintProperty(WPT_LAYER, 'circle-opacity', opacity);
-      ctx.map.setPaintProperty(WPT_LAYER, 'circle-stroke-opacity', opacity);
+      setPaintProp(ctx.map, LINE_CASING_LAYER, 'line-opacity', opacity);
+      setPaintProp(ctx.map, LINE_LAYER, 'line-opacity', opacity);
+      setPaintProp(ctx.map, WPT_LAYER, 'circle-opacity', opacity);
+      setPaintProp(ctx.map, WPT_LAYER, 'circle-stroke-opacity', opacity);
       // Dim the waypoint labels with the rest, so the opacity slider fades the whole route, matching
       // the tides and notes overlays.
-      ctx.map.setPaintProperty(WPT_LABEL_LAYER, 'text-opacity', opacity);
+      setPaintProp(ctx.map, WPT_LABEL_LAYER, 'text-opacity', opacity);
     },
     applyTheme(ctx, next) {
       paint = next;
-      ctx.map.setPaintProperty(LINE_LAYER, 'line-color', lineColor(paint));
+      setPaintProp(ctx.map, LINE_LAYER, 'line-color', lineColor(paint));
       recolorWaypointLayers(ctx.map, WPT_LAYER, WPT_LABEL_LAYER, paint);
     },
     remove(ctx) {

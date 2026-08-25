@@ -91,7 +91,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
         class:drop-after={indicator.after}
       >
         <LayerToggle
-          {title}
+          label={title}
           description={def.description}
           visible={true}
           onToggle={() => controller.toggleTile(def.id)}
@@ -157,7 +157,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
               title={historicalOnly || unavailable ? unavailableHint : undefined}
             >
               <LayerToggle
-                {title}
+                label={title}
                 description={def.description}
                 visible={false}
                 onToggle={() => controller.toggleTile(def.id)}

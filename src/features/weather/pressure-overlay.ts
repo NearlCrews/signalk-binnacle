@@ -15,6 +15,7 @@ import {
 import type { Theme } from '$shared/ui';
 import { WEATHER_LAYER_IDS } from './fills';
 import { gridTimeGate } from './grid-time-gate';
+import { becameVisible } from './overlay-visibility';
 import { isobarColors } from './pressure-colors';
 import { isobarFeatures } from './pressure-isobars';
 
@@ -105,10 +106,10 @@ export function createPressureOverlay(store: WeatherStore): PressureOverlay {
       removeLayersAndSources(ctx.map, [LABEL_LAYER, LINE_LAYER], [LABEL_SOURCE, LINE_SOURCE]);
     },
     setVisible(ctx, value) {
-      const becameVisible = value && !visible;
+      const justBecameVisible = becameVisible(visible, value);
       visible = value;
       setLayersVisibility(ctx.map, [LINE_LAYER, LABEL_LAYER], value);
-      if (becameVisible) {
+      if (justBecameVisible) {
         gate.reset();
         this.sync(ctx);
       }

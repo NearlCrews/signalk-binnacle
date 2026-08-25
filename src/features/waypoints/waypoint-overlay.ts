@@ -18,6 +18,7 @@ import {
   markerIconSizeExpression,
   type OverlayContext,
   type OverlayModule,
+  overlayInteractive,
   removeLayersAndSources,
   type Syncable,
   setLayersVisibility,
@@ -74,7 +75,7 @@ export function createWaypointOverlay(
     },
     {
       band: BAND,
-      interactionsAllowed: () => visible && opacity > 0 && externalInteractionsAllowed(),
+      interactionsAllowed: () => overlayInteractive(visible, opacity, externalInteractionsAllowed),
     },
   );
   // Provided symbols (signalk-symbol-manager), absent on a stock server. The resolver owns the

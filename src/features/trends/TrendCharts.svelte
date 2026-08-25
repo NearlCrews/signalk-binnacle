@@ -53,7 +53,10 @@ const sections = $derived(
     const session = controller.sessionSeries(item.id);
     const historyAvailable = hasTrendSamples(history);
     const sourceSeries: AttributedTrendSeries = historyAvailable && history ? history : session;
-    const source = historyAvailable ? 'history' : hasTrendSamples(session) ? 'session' : 'none';
+    // Ordered guards rather than a nested ternary, matching the panel's stated house practice.
+    let source: 'history' | 'session' | 'none' = 'none';
+    if (historyAvailable) source = 'history';
+    else if (hasTrendSamples(session)) source = 'session';
     const display = trendDisplayFor(descriptor, mode);
     return {
       item,

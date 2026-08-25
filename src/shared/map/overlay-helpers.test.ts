@@ -6,6 +6,7 @@ import {
   ensureGeoJsonSources,
   ensureSource,
   getPaintProp,
+  overlayInteractive,
   removeLayersAndSources,
   removeSharedSourceIfOrphaned,
   setLayersVisibility,
@@ -112,9 +113,15 @@ describe('removeLayersAndSources', () => {
 
 describe('setPaintProp and getPaintProp', () => {
   it('passes a dynamically named property straight through to the map', () => {
-    const map = fakeMap();
+    const map = { ...fakeMap(), getLayer: () => ({}) } as unknown as MapLibreMap;
     setPaintProp(map, 'a', 'line-color', '#ff0000');
     expect(map.setPaintProperty).toHaveBeenCalledWith('a', 'line-color', '#ff0000');
+  });
+
+  it('is a no-op on an absent layer, so a recolor pass cannot abort mid-sweep', () => {
+    const map = fakeMap();
+    expect(() => setPaintProp(map, 'gone', 'line-color', '#ff0000')).not.toThrow();
+    expect(map.setPaintProperty).not.toHaveBeenCalled();
   });
 
   it('reads a dynamically named property back', () => {
@@ -144,6 +151,29 @@ describe('ensureSource', () => {
     });
     expect(map.sources.get('shared')?.tiles).toEqual(TILES);
     expect(map.sources.size).toBe(1);
+  });
+});
+
+describe('overlayInteractive', () => {
+  it('is true when visible, opaque, and there is no gate', () => {
+    expect(overlayInteractive(true, 1)).toBe(true);
+  });
+
+  it('is false when hidden', () => {
+    expect(overlayInteractive(false, 1)).toBe(false);
+  });
+
+  it('is false at zero opacity', () => {
+    expect(overlayInteractive(true, 0)).toBe(false);
+  });
+
+  it('is false when the gate refuses, even when visible and opaque', () => {
+    expect(overlayInteractive(true, 1, () => false)).toBe(false);
+  });
+
+  it('is true when the gate allows, and the gate is optional', () => {
+    expect(overlayInteractive(true, 1, () => true)).toBe(true);
+    expect(overlayInteractive(true, 1, undefined)).toBe(true);
   });
 });
 

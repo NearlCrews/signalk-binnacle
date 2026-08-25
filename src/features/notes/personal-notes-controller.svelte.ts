@@ -1,6 +1,6 @@
 import type { NotePoint, PersonalNotesStore } from '$entities/poi';
 import { isLatLon, type LatLon } from '$shared/geo';
-import { uuidv4 } from '$shared/lib';
+import { createBusyGate, uuidv4 } from '$shared/lib';
 import type { NoteSelection } from './notes-client';
 import type { PersonalNoteInput } from './personal-note-contract';
 import {
@@ -73,8 +73,15 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
     editor = undefined;
   }
 
-  async function save(input: PersonalNoteInput): Promise<void> {
-    if (busy || !editor) return;
+  const withBusy = createBusyGate(
+    () => busy,
+    (next) => {
+      busy = next;
+    },
+  );
+
+  async function performSave(input: PersonalNoteInput): Promise<void> {
+    if (!editor) return;
     if (deps.writeBlocked()) {
       error = 'Binnacle has read-only access. Request read and write access to save this note.';
       return;
@@ -91,70 +98,62 @@ export function createPersonalNotesController(deps: PersonalNotesControllerDeps)
     }
     const current = editor;
     const id = current.kind === 'edit' ? current.note.id : uuidv4();
-    busy = true;
     error = undefined;
-    try {
-      const outcome = await savePersonalNote(deps.origin, deps.getToken(), id, input);
-      if (outcome.result === 'access-denied') {
-        error =
-          'Signal K refused the write. The note is still open while read and write access is requested.';
-        void deps.requestWriteAccess();
-        return;
-      }
-      if (outcome.result === 'unavailable') {
-        capability = 'unavailable';
-        error = 'The Signal K notes provider does not accept writes. The note is still open.';
-        return;
-      }
-      if (outcome.result !== 'ok' || !outcome.note) {
-        error = 'Could not save the note. Check the connection, then try again.';
-        return;
-      }
-      capability = 'read-write';
-      deps.personalNotes.upsert(outcome.note);
-      deps.personalNotes.requestRefresh();
-      deps.invalidateDetail(id);
-      editor = undefined;
-      deps.onSelect(selectionFor(outcome.note));
-    } finally {
-      busy = false;
+    const outcome = await savePersonalNote(deps.origin, deps.getToken(), id, input);
+    if (outcome.result === 'access-denied') {
+      error =
+        'Signal K refused the write. The note is still open while read and write access is requested.';
+      void deps.requestWriteAccess();
+      return;
     }
+    if (outcome.result === 'unavailable') {
+      capability = 'unavailable';
+      error = 'The Signal K notes provider does not accept writes. The note is still open.';
+      return;
+    }
+    if (outcome.result !== 'ok' || !outcome.note) {
+      error = 'Could not save the note. Check the connection, then try again.';
+      return;
+    }
+    capability = 'read-write';
+    deps.personalNotes.upsert(outcome.note);
+    deps.personalNotes.requestRefresh();
+    deps.invalidateDetail(id);
+    editor = undefined;
+    deps.onSelect(selectionFor(outcome.note));
   }
+  const save = withBusy(performSave);
 
-  async function remove(note: NoteSelection): Promise<void> {
-    if (busy || !note.ownedByBinnacle) return;
+  async function performRemove(note: NoteSelection): Promise<void> {
+    if (!note.ownedByBinnacle) return;
     if (deps.writeBlocked()) {
       error = 'Binnacle has read-only access. Request read and write access to delete this note.';
       return;
     }
-    busy = true;
     error = undefined;
-    try {
-      const result = await deletePersonalNote(deps.origin, deps.getToken(), note);
-      if (result === 'access-denied') {
-        error =
-          'Signal K refused the delete. The note remains selected while read and write access is requested.';
-        void deps.requestWriteAccess();
-        return;
-      }
-      if (result === 'unavailable') {
-        capability = 'unavailable';
-        error = 'The Signal K notes provider does not accept deletes.';
-        return;
-      }
-      if (result !== 'ok') {
-        error = 'Could not delete the note. Check the connection, then try again.';
-        return;
-      }
-      capability = 'read-write';
-      deps.personalNotes.remove(note);
-      deps.personalNotes.requestRefresh();
-      deps.invalidateDetail(note.id);
-      deps.onSelect(undefined);
-    } finally {
-      busy = false;
+    const result = await deletePersonalNote(deps.origin, deps.getToken(), note);
+    if (result === 'access-denied') {
+      error =
+        'Signal K refused the delete. The note remains selected while read and write access is requested.';
+      void deps.requestWriteAccess();
+      return;
     }
+    if (result === 'unavailable') {
+      capability = 'unavailable';
+      error = 'The Signal K notes provider does not accept deletes.';
+      return;
+    }
+    if (result !== 'ok') {
+      error = 'Could not delete the note. Check the connection, then try again.';
+      return;
+    }
+    capability = 'read-write';
+    deps.personalNotes.remove(note);
+    deps.personalNotes.requestRefresh();
+    deps.invalidateDetail(note.id);
+    deps.onSelect(undefined);
   }
+  const remove = withBusy(performRemove);
 
   function clearError(): void {
     error = undefined;

@@ -4,6 +4,7 @@ import {
   formatPressureOr,
   HOUR_MS,
   knotsToMetersPerSecond,
+  nearestBySorted,
   PA_PER_HPA,
   pressureUnit,
   type UnitsMode,
@@ -57,11 +58,11 @@ function freeAtTime(
   targetMs: number,
 ): PointConditions | undefined {
   if (!grid || !position || grid.times.length === 0) return undefined;
-  let bestIndex = 0;
-  for (let i = 1; i < grid.times.length; i++) {
-    if (Math.abs(grid.times[i] - targetMs) < Math.abs(grid.times[bestIndex] - targetMs))
-      bestIndex = i;
-  }
+  // grid.times is ascending (the grid builder guarantees it), so the nearest step is a binary
+  // search rather than a scan of every forecast step.
+  const stepIndices = grid.times.map((_, index) => index);
+  const bestIndex = nearestBySorted(stepIndices, (index) => grid.times[index], targetMs);
+  if (bestIndex === undefined) return undefined;
   if (Math.abs(grid.times[bestIndex] - targetMs) > COMPATIBLE_VALID_TIME_MS) return undefined;
   const [lat, lon] = position;
   const readout = readoutAt(grid, lon, lat, bestIndex);
@@ -161,7 +162,6 @@ function pickRows(
     const seenTimes = new Set<number>();
     const providerRows = parsedSeries
       .filter((conditions) => !Number.isNaN(conditions.timeMs) && conditions.timeMs >= targetMs)
-      .slice()
       .sort((a, b) => a.timeMs - b.timeMs)
       .filter((conditions) => {
         if (seenTimes.has(conditions.timeMs)) return false;

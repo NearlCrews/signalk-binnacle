@@ -159,6 +159,7 @@ export function readoutAtBracket(
       frac,
     ),
     waterTempK: scalar(grid.seaSurfaceTemperature),
+    // Step precipitation reads the lower bracket only, mirroring precip-field.ts's precipFieldRgba.
     precipitationMm:
       grid.precipitationInterpolation === 'step'
         ? fieldAt(grid, grid.precipitation, lo, lon, lat)

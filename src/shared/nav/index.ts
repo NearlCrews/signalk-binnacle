@@ -23,6 +23,7 @@ export {
 export { crossesLocalMidnight, plannedArrivalMs } from './passage-plan';
 export {
   etaSeconds,
+  mercatorIsometricLatitude,
   rhumbBearingRad,
   rhumbCrossTrackErrorMeters,
   rhumbDistanceMeters,

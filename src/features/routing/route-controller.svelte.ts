@@ -8,6 +8,7 @@ import { createBusyGate, ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import {
   type ActiveRoute,
   type CourseInfo,
+  createWriteBlockGuard,
   createWriteOutcomeGate,
   deleteRefusedMessage,
   writeRefusedMessage,
@@ -110,6 +111,15 @@ export function createRouteController(deps: RouteControllerDeps) {
     requestWriteAccess: () => deps.requestWriteAccess(),
   });
 
+  const blockedWrite = createWriteBlockGuard(deps.writeBlocked, flagRouteError);
+
+  // Discard any in-flight course hydration or arrival-advance so a callback from a superseded
+  // one cannot land after this action starts a fresh course change.
+  function invalidatePendingCourseIO(): void {
+    hydrateSequence += 1;
+    arrivalAdvanceSequence += 1;
+  }
+
   function clearRouteError(): void {
     routeError.clear();
   }
@@ -159,8 +169,7 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   async function stopActiveCourse(): Promise<boolean> {
-    hydrateSequence += 1;
-    arrivalAdvanceSequence += 1;
+    invalidatePendingCourseIO();
     if (!(await clearCourse(origin, deps.getToken()))) return false;
     routeStore.setActive(undefined);
     gotoActive = false;
@@ -216,10 +225,11 @@ export function createRouteController(deps: RouteControllerDeps) {
       flagRouteError('Save or cancel the route under edit before starting a new one.');
       return;
     }
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not created. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -237,10 +247,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   function onEditRoute(id: string): void {
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not changed. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -272,10 +283,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   function retryRouteEdit(): void {
     if (!lastEditRequest) return;
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not changed. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const blockedReason = deps.editBlockedReason?.();
@@ -294,10 +306,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   // navigator typed) on screen when it was not.
   async function onSaveRoute(name: string): Promise<boolean> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not saved. Request read and write access to continue.',
-      );
+      )
+    ) {
       return false;
     }
     const working = routeStore.working;
@@ -340,10 +353,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onDeleteRoute(id: string): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not deleted. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     invalidateRefresh();
@@ -375,14 +389,14 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onActivateRoute(id: string): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: navigation was not started. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
-    hydrateSequence += 1;
-    arrivalAdvanceSequence += 1;
+    invalidatePendingCourseIO();
     if (!(await activateRoute(origin, deps.getToken(), routeHref(id)))) {
       flagRouteError('Could not activate the route. Check the connection.');
       return;
@@ -396,10 +410,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onStopCourse(): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: navigation was not stopped. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     if (!(await stopActiveCourse())) {
@@ -408,10 +423,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   }
 
   function onSkipPoint(delta: number): void {
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the active waypoint was not changed. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     arrivalAdvanceSequence += 1;
@@ -429,10 +445,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   // If the same point is still active, writing the captured target index is idempotent and cannot
   // double-step when another station sends the same target concurrently.
   function onArrivalAdvance(snapshot: ActiveRoute): void {
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the active waypoint was not advanced. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const href = snapshot.href;
@@ -476,10 +493,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   // the navigator typed) on screen when it was not.
   async function onSaveTrackAsRoute(name: string): Promise<boolean> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not saved. Request read and write access to continue.',
-      );
+      )
+    ) {
       return false;
     }
     const points = deps.getTrackPoints();
@@ -503,10 +521,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onTrackHome(): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: navigation was not started. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const points = deps.getTrackPoints();
@@ -525,8 +544,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     routeStore.upsertRoute(route);
     await refreshRoutes();
-    hydrateSequence += 1;
-    arrivalAdvanceSequence += 1;
+    invalidatePendingCourseIO();
     if (!(await activateRoute(origin, deps.getToken(), routeHref(route.id)))) {
       flagRouteError('Could not start navigating home.');
       return;
@@ -541,10 +559,11 @@ export function createRouteController(deps: RouteControllerDeps) {
   // drawn from the chart needs a way to be named without re-entering chart edit mode.
   async function onRenameRoute(id: string, name: string): Promise<boolean> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not renamed. Request read and write access to continue.',
-      );
+      )
+    ) {
       return false;
     }
     const route = routeStore.routeById(id);
@@ -563,10 +582,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onReverseRoute(id: string): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not reversed. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const route = routeStore.routeById(id);
@@ -593,10 +613,11 @@ export function createRouteController(deps: RouteControllerDeps) {
 
   async function onImportRouteGpx(gpxText: string): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: the route was not imported. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
     const parsedResult = parseGpxRoutesDetailed(gpxText);
@@ -657,14 +678,14 @@ export function createRouteController(deps: RouteControllerDeps) {
     fallback?: DestinationTarget,
   ): Promise<void> {
     clearRouteError();
-    if (deps.writeBlocked()) {
-      flagRouteError(
+    if (
+      blockedWrite(
         'Read-only access: navigation was not started. Request read and write access to continue.',
-      );
+      )
+    ) {
       return;
     }
-    hydrateSequence += 1;
-    arrivalAdvanceSequence += 1;
+    invalidatePendingCourseIO();
     let destinationSet = await setDestination(origin, deps.getToken(), target);
     if (!destinationSet && fallback) {
       destinationSet = await setDestination(origin, deps.getToken(), fallback);

@@ -9,6 +9,7 @@ import {
   type LayerHitEvent,
   mapThemePaint,
   type OverlayContext,
+  overlayInteractive,
   type Rgba,
   removeLayersAndSources,
   type SymbolOverlay,
@@ -44,7 +45,7 @@ export function createAisOverlay(
   let opacity = 1;
   let lastSelectedId = options.selectedId?.();
   const interactionsAllowed = (): boolean =>
-    visible && opacity > 0 && (options.interactionsAllowed?.() ?? true);
+    overlayInteractive(visible, opacity, options.interactionsAllowed);
 
   function buildFeatures(): GeoJSON.FeatureCollection {
     const selectedId = options.selectedId?.();

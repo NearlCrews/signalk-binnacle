@@ -57,7 +57,7 @@ $effect(() => {
 </script>
 
 {#if measure.active}
-  <aside class="bottom-strip bottom-strip--accent measure-strip" aria-label="Measure">
+  <aside class="bottom-strip bottom-strip--accent bottom-strip--wide" aria-label="Measure">
     <div class="head">
       <span class="title">Measure</span>
       <span class="note" role="status">{instruction}</span>
@@ -190,9 +190,6 @@ $effect(() => {
 {/if}
 
 <style>
-.measure-strip {
-  inline-size: min(48rem, calc(100% - 1.5rem));
-}
 .edit-row {
   display: flex;
   flex-wrap: wrap;

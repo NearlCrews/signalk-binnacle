@@ -20,6 +20,7 @@ export {
   HISTORY_RESOLUTION_SECONDS,
   HISTORY_WINDOW_SECONDS,
   MAX_HISTORY_QUERY_PATHS,
+  positionFromHistoryRow,
 } from './history-client';
 export type { MetaZone, ZoneState } from './meta';
 export { zoneStateFor } from './meta';
@@ -47,6 +48,7 @@ export {
   authInit,
   cleanResourceId,
   cleanTruncatedText,
+  createWriteBlockGuard,
   createWriteOutcomeGate,
   deleteRefusedMessage,
   deleteResource,
@@ -65,7 +67,7 @@ export {
   writeRefusedMessage,
 } from './resource';
 export { recentSourceRefs, sourceCue } from './source-trace';
-export { SignalKStore } from './store.svelte';
+export { predatesReconnect, SignalKStore } from './store.svelte';
 export type { SkSymbol } from './symbols-client';
 export { fetchSymbols } from './symbols-client';
 export type {

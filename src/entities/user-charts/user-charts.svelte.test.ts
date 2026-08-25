@@ -56,7 +56,7 @@ describe('cleanUserChartSource', () => {
   });
 
   it('rejects drifted or malformed descriptors', () => {
-    expect(cleanUserChartSource(null)).toBe(false);
+    expect(cleanUserChartSource(null)).toBeUndefined();
     expect(cleanUserChartSource({ ...valid, id: 1 })).toBeUndefined();
     expect(cleanUserChartSource({ ...valid, kind: 'bitmap' })).toBeUndefined();
     expect(cleanUserChartSource({ ...valid, origin: { type: 'url' } })).toBeUndefined();

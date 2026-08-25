@@ -53,11 +53,14 @@
    min-inline-size: 0 on top; everything else is shared here so the two strips do not drift. */
 .bottom-strip .name {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--text-base);
   font-weight: 600;
+}
+/* The wide variant for a strip whose controls need the room (Measure's leg table and its five
+   actions): widens through the same token the base width formula reads, so the edge inset stays
+   the shared one. */
+.bottom-strip--wide {
+  --strip-max-width: 48rem;
 }
 .bottom-strip .ack {
   margin-inline-start: auto;

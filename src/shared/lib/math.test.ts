@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clamp,
   compareOptionalNumber,
   isSafeNonNegativeInteger,
   lerpAngle,
@@ -121,6 +122,26 @@ describe('nearestBySorted', () => {
 
   it('returns undefined when no sample matches the predicate', () => {
     expect(nearestBySorted(at(0, 10, 20), time, 5, () => false)).toBeUndefined();
+  });
+});
+
+describe('clamp', () => {
+  it('returns the value unchanged when inside the range', () => {
+    expect(clamp(5, 0, 10)).toBe(5);
+  });
+
+  it('rounds up to the low bound when below it', () => {
+    expect(clamp(-5, 0, 10)).toBe(0);
+  });
+
+  it('rounds down to the high bound when above it', () => {
+    expect(clamp(15, 0, 10)).toBe(10);
+  });
+
+  it('resolves to the high bound when lo exceeds hi, whatever the value', () => {
+    expect(clamp(5, 10, 0)).toBe(0);
+    expect(clamp(-5, 10, 0)).toBe(0);
+    expect(clamp(20, 10, 0)).toBe(0);
   });
 });
 

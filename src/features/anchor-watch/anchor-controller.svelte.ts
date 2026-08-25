@@ -2,6 +2,7 @@ import type { AnchorWatch } from '$entities/anchor';
 import type { OwnVessel } from '$entities/vessel';
 import type { GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
+import { createBusyGate } from '$shared/lib';
 import { shouldSoundAnchorAlarm } from './anchor-alarm';
 import { resolveAnchorTransport } from './anchor-transport';
 
@@ -87,8 +88,14 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     return 'Anchor alarm: the boat is dragging.';
   });
 
-  async function onDrop(): Promise<void> {
-    if (busy) return;
+  const withBusy = createBusyGate(
+    () => busy,
+    (next) => {
+      busy = next;
+    },
+  );
+
+  async function performDrop(): Promise<void> {
     anchorError = undefined;
     const position = vessel.position;
     if (!position || vessel.positionStale) {
@@ -105,30 +112,25 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     // The server drop doubles as detection: when the standard API or the anchoralarm plugin answers,
     // the server owns the watch (and keeps alarming with the browser closed) and the stream reflects
     // it back. Any failure degrades to the client-side watch; the panel's mode line says which.
-    busy = true;
-    try {
-      if (await anchorTransport.drop(radius)) return;
-      // A server whose standard Anchor API was feature-detected and then refused the drop has a problem
-      // the silent local fallback would hide; surface it, then still start the local watch so the boat
-      // is covered. The plugin-probe path cannot tell absent from refused, so it degrades quietly.
-      if (anchorTransport.kind === 'standard') {
-        anchorError = 'Could not drop the anchor on the server. Check the connection.';
-      }
-      anchor.dropLocal(position, radius);
-    } finally {
-      busy = false;
+    if (await anchorTransport.drop(radius)) return;
+    // A server whose standard Anchor API was feature-detected and then refused the drop has a problem
+    // the silent local fallback would hide; surface it, then still start the local watch so the boat
+    // is covered. The plugin-probe path cannot tell absent from refused, so it degrades quietly.
+    if (anchorTransport.kind === 'standard') {
+      anchorError = 'Could not drop the anchor on the server. Check the connection.';
     }
+    anchor.dropLocal(position, radius);
   }
+  const onDrop = withBusy(performDrop);
 
   // Route an anchor action by mode. In server mode the plugin call must succeed; a failure is
   // surfaced, never papered over with a local-only change that would desync from a server that is
   // still watching. Otherwise the local fallback runs.
-  async function anchorAction(
+  async function performAnchorAction(
     serverCall: () => Promise<boolean>,
     action: string,
     local: () => void,
   ): Promise<void> {
-    if (busy) return;
     anchorError = undefined;
     if (anchor.mode === 'server' && deps.writeBlocked()) {
       anchorError = `Could not ${action}. Server write access is required.`;
@@ -138,15 +140,11 @@ export function createAnchorController(deps: AnchorControllerDeps) {
       local();
       return;
     }
-    busy = true;
-    try {
-      if (!(await serverCall())) {
-        anchorError = `Could not ${action} on the server. Check the connection.`;
-      }
-    } finally {
-      busy = false;
+    if (!(await serverCall())) {
+      anchorError = `Could not ${action} on the server. Check the connection.`;
     }
   }
+  const anchorAction = withBusy(performAnchorAction);
 
   function onRaise(): Promise<void> {
     return anchorAction(

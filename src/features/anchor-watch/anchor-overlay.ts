@@ -20,6 +20,7 @@ import {
   mapThemePaint,
   type OverlayContext,
   type OverlayModule,
+  overlayInteractive,
   removeLayersAndSources,
   setLayersVisibility,
   setSourceData,
@@ -117,7 +118,7 @@ export function createAnchorOverlay(
   // then block reattach, silently disabling anchor drag.
   let detachMarkerDrag: (() => void) | undefined;
 
-  const canInteract = (): boolean => visible && opacity > 0 && interactionsAllowed();
+  const canInteract = (): boolean => overlayInteractive(visible, opacity, interactionsAllowed);
   const onPointerMove = (e: MapMouseEvent | MapTouchEvent): void => {
     if (!canInteract()) {
       cancelActiveDrag?.();

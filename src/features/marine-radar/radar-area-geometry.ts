@@ -1,4 +1,5 @@
 import type { LatLon } from '$shared/geo';
+import { clamp } from '$shared/lib';
 import { emptyFeatureCollection, featureCollection } from '$shared/map';
 import { geodesicDestination, haversineMeters, rhumbBearingRad } from '$shared/nav';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
@@ -16,10 +17,6 @@ import { radarZoneValue, validateRadarZone } from './radar-zone-model';
 
 const ARC_STEPS = 48;
 const MIN_RECT_WIDTH_METERS = 0.001;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 function localPoint(
   center: LatLon,

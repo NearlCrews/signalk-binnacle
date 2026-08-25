@@ -147,7 +147,7 @@ function cancelDraft(): void {
       </div>
     </div>
   {:else}
-    <section class="server-path" aria-label="Chart files on this server">
+    <section class="server-path card-frame" aria-label="Chart files on this server">
       <span class="caps-label">Chart files on this server</span>
       <p class="muted-note muted-note--xs">
         Put PMTiles files in your server chart provider, such as Chart Locker or
@@ -211,9 +211,6 @@ function cancelDraft(): void {
 }
 .server-path {
   padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
 }
 /* The review-and-rename step shown after an import is staged, before it is saved. */
 .review {

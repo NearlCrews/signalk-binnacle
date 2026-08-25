@@ -23,6 +23,7 @@ function fakeStyleMap(layers: Array<Record<string, unknown>>) {
   };
   return {
     getStyle: () => ({ layers }),
+    getLayer: (id: string) => layers.find((layer) => layer.id === id),
     getPaintProperty: (id: string, prop: string) => paintStore.get(`${id}|${prop}`),
     setPaintProperty: (id: string, prop: string, value: unknown) =>
       paintStore.set(`${id}|${prop}`, value),

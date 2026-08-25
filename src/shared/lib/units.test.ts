@@ -7,14 +7,21 @@ import {
   formatClockTime,
   formatDayClock,
   formatDuration,
+  formatDurationParts,
+  formatFixed,
+  formatKnots,
+  formatKnotsOr,
   formatLengthOr,
   formatMetersOrNm,
+  formatMonthDay,
   formatNm,
+  formatNmOr,
   formatPrecipRateOr,
   formatPressureOr,
   formatSignedAngleOr,
   formatTcpaMin,
   formatTemperatureOr,
+  headingDegrees,
   kelvinToCelsius,
   knotsToMetersPerSecond,
   landDistanceUnit,
@@ -22,8 +29,11 @@ import {
   metersPerSecondToKnots,
   metersToNauticalMiles,
   nauticalMilesToMeters,
+  precipRateUnit,
+  pressureUnit,
   pressureValue,
   radiansToBearing,
+  temperatureUnit,
 } from './units';
 
 describe('units', () => {
@@ -52,6 +62,70 @@ describe('units', () => {
     expect(formatNm(926)).toBe('0.50');
     expect(formatTcpaMin(600)).toBe('10');
     expect(formatTcpaMin(90, 1)).toBe('1.5');
+  });
+});
+
+describe('formatFixed', () => {
+  it('renders a value to the given digit count', () => {
+    expect(formatFixed(3.14159, 2)).toBe('3.14');
+  });
+
+  it('renders the placeholder for null, undefined, or NaN', () => {
+    expect(formatFixed(null, 2)).toBe(PLACEHOLDER);
+    expect(formatFixed(undefined, 2)).toBe(PLACEHOLDER);
+    expect(formatFixed(Number.NaN, 2)).toBe(PLACEHOLDER);
+  });
+});
+
+describe('formatKnots', () => {
+  it('converts meters per second to knots', () => {
+    expect(formatKnots(knotsToMetersPerSecond(6))).toBe('6.0');
+  });
+
+  it('reads zero rather than the placeholder for an absent value', () => {
+    expect(formatKnots(null)).toBe('0.0');
+    expect(formatKnots(undefined)).toBe('0.0');
+  });
+
+  it('honors the digits argument', () => {
+    expect(formatKnots(knotsToMetersPerSecond(6), 2)).toBe('6.00');
+  });
+});
+
+describe('formatKnotsOr', () => {
+  it('converts meters per second to knots', () => {
+    expect(formatKnotsOr(knotsToMetersPerSecond(6))).toBe('6.0');
+  });
+
+  it('renders the placeholder for an absent value, unlike formatKnots', () => {
+    expect(formatKnotsOr(null)).toBe(PLACEHOLDER);
+    expect(formatKnotsOr(undefined)).toBe(PLACEHOLDER);
+  });
+});
+
+describe('formatNmOr', () => {
+  it('converts meters to nautical miles', () => {
+    expect(formatNmOr(1852)).toBe('1.00');
+  });
+
+  it('renders the placeholder for an absent value', () => {
+    expect(formatNmOr(null)).toBe(PLACEHOLDER);
+    expect(formatNmOr(undefined)).toBe(PLACEHOLDER);
+  });
+});
+
+describe('headingDegrees', () => {
+  it('prefers heading over course over ground', () => {
+    expect(headingDegrees(degreesToRadians(90), degreesToRadians(180))).toBeCloseTo(90, 6);
+  });
+
+  it('falls back to course over ground when heading is absent', () => {
+    expect(headingDegrees(null, degreesToRadians(180))).toBeCloseTo(180, 6);
+  });
+
+  it('falls back to north when both are absent', () => {
+    expect(headingDegrees(null, null)).toBe(0);
+    expect(headingDegrees(undefined, undefined)).toBe(0);
   });
 });
 
@@ -107,6 +181,14 @@ describe('formatDayClock', () => {
     const withMinuteAndZone = formatDayClock(at, { zone: true });
     const withoutMinuteWithZone = formatDayClock(at, { zone: true, minute: false });
     expect(withoutMinuteWithZone.length).toBeLessThan(withMinuteAndZone.length);
+  });
+});
+
+describe('formatMonthDay', () => {
+  it('reads a short month and day, and is blank for NaN', () => {
+    const at = Date.UTC(2026, 5, 11, 14, 32, 5);
+    expect(formatMonthDay(at)).toMatch(/^[A-Za-z]+ \d+$/);
+    expect(formatMonthDay(Number.NaN)).toBe('');
   });
 });
 
@@ -193,6 +275,27 @@ describe('formatTemperatureOr', () => {
   });
 });
 
+describe('pressureUnit', () => {
+  it('returns hPa in metric mode and inHg in imperial', () => {
+    expect(pressureUnit('metric')).toBe('hPa');
+    expect(pressureUnit('imperial')).toBe('inHg');
+  });
+});
+
+describe('temperatureUnit', () => {
+  it('returns the Celsius symbol in metric mode and Fahrenheit in imperial', () => {
+    expect(temperatureUnit('metric')).toBe('°C');
+    expect(temperatureUnit('imperial')).toBe('°F');
+  });
+});
+
+describe('precipRateUnit', () => {
+  it('returns mm/h in metric mode and in/h in imperial', () => {
+    expect(precipRateUnit('metric')).toBe('mm/h');
+    expect(precipRateUnit('imperial')).toBe('in/h');
+  });
+});
+
 describe('formatPressureOr', () => {
   it('formats whole hectopascals in metric mode', () => {
     expect(formatPressureOr(101325, 'metric')).toBe('1013');
@@ -244,6 +347,16 @@ describe('formatDuration', () => {
     expect(formatDuration(89)).toBe('1 min');
     // 91 seconds rounds to 2 minutes
     expect(formatDuration(91)).toBe('2 min');
+  });
+});
+
+describe('formatDurationParts', () => {
+  it('splits a sub-hour duration into a bare minute value and a min unit', () => {
+    expect(formatDurationParts(60)).toEqual({ value: '1', unit: 'min' });
+  });
+
+  it('splits an hour-or-more duration into a compound value with no separate unit', () => {
+    expect(formatDurationParts(7500)).toEqual({ value: '2h 05m', unit: '' });
   });
 });
 

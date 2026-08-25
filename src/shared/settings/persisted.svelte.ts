@@ -24,6 +24,24 @@ export interface PersistedCodec<T> {
 
 export type PersistedRepairStatus = 'none' | 'migrated' | 'replaced' | 'failed';
 
+// A codec for a nullable exact-shape record: null round-trips as valid, a value that fails the
+// cleaner is invalid, and a cleanable value whose stored shape drifted from the exact expected
+// keys decodes as migrated so the store rewrites it canonically. The anchor and MOB marks both
+// persist this way.
+export function exactShapeCodec<T>(
+  clean: (value: unknown) => T | null,
+  isExactShape: (value: unknown) => boolean,
+): PersistedCodec<T | null> {
+  return {
+    decode(value) {
+      if (value === null) return { state: 'valid', value: null };
+      const cleaned = clean(value);
+      if (cleaned === null) return { state: 'invalid' };
+      return { state: isExactShape(value) ? 'valid' : 'migrated', value: cleaned };
+    },
+  };
+}
+
 export function createPersistedCodec<T>(
   validate: PersistedValidator<T>,
   migrate?: (value: unknown) => T | undefined,

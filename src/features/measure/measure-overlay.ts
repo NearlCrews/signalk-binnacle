@@ -23,7 +23,7 @@ import {
   setLayersVisibility,
   setSourceData,
 } from '$shared/map';
-import { normalizeLonDeltaDeg } from '$shared/nav';
+import { mercatorIsometricLatitude, normalizeLonDeltaDeg } from '$shared/nav';
 import { MEASURE_LAYER_IDS, MEASURE_OVERLAY_ID } from './measure-overlay-contract';
 
 const SRC = 'binnacle-measure';
@@ -35,14 +35,8 @@ const TRAILING_CLICK_WINDOW_MS = 500;
 // A rhumb line is straight in Mercator space. Averaging there, with the longitude unwrapped to the
 // short side of the world, keeps a label on its visual leg even when that leg crosses 180 degrees.
 export function rhumbDisplayMidpoint(from: LatLon, to: LatLon): LatLon {
-  const clampLatitude = (latitude: number): number =>
-    Math.max(-89.999999, Math.min(89.999999, latitude));
-  const mercatorY = (latitude: number): number => {
-    const radians = (clampLatitude(latitude) * Math.PI) / 180;
-    return Math.log(Math.tan(Math.PI / 4 + radians / 2));
-  };
-  const fromY = mercatorY(from.latitude);
-  const toY = mercatorY(to.latitude);
+  const fromY = mercatorIsometricLatitude(from.latitude);
+  const toY = mercatorIsometricLatitude(to.latitude);
   const latitude = (2 * Math.atan(Math.exp((fromY + toY) / 2)) - Math.PI / 2) * (180 / Math.PI);
   const rawDelta = normalizeLonDeltaDeg(to.longitude - from.longitude);
   return {

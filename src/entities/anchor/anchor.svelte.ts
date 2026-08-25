@@ -5,13 +5,14 @@ import { haversineMeters } from '$shared/nav';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
   boundedNumberPersistedCodec,
-  type PersistedCodec,
+  exactShapeCodec,
   PersistedValue,
   type StorageLike,
 } from '$shared/settings';
 import {
   isSoundingNotification,
   notificationState,
+  predatesReconnect,
   type SignalKStore,
   SK_PATHS,
 } from '$shared/signalk';
@@ -51,7 +52,7 @@ export interface LocalAnchor {
   dragging: boolean;
 }
 
-const MAX_ANCHOR_RADIUS_M = 1_000_000;
+export const MAX_ANCHOR_RADIUS_M = 1_000_000;
 
 function clampRadius(radiusMeters: number): number {
   return Math.min(MAX_ANCHOR_RADIUS_M, Math.max(MIN_RADIUS_M, radiusMeters));
@@ -76,18 +77,17 @@ function validLocal(value: unknown): LocalAnchor | null {
   };
 }
 
-const localAnchorCodec: PersistedCodec<LocalAnchor | null> = {
-  decode(value) {
-    if (value === null) return { state: 'valid', value: null };
-    const clean = validLocal(value);
-    if (!clean || !isRecord(value) || !isRecord(value.position)) return { state: 'invalid' };
-    const exactShape =
-      Object.keys(value).length === 3 &&
-      Object.keys(value.position).length === 2 &&
-      typeof value.dragging === 'boolean';
-    return { state: exactShape ? 'valid' : 'migrated', value: clean };
-  },
-};
+function isExactAnchorShape(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isRecord(value.position) &&
+    Object.keys(value).length === 3 &&
+    Object.keys(value.position).length === 2 &&
+    typeof value.dragging === 'boolean'
+  );
+}
+
+const localAnchorCodec = exactShapeCodec(validLocal, isExactAnchorShape);
 
 // The anchor watch state machine. Server mode is fully stream-driven: the plugin's
 // navigation.anchor.position and maxRadius cells are the source of truth, and its
@@ -167,7 +167,7 @@ export class AnchorWatch {
 
   #serverStateStale = $derived.by<boolean>(() => {
     const cell = this.#store.cell(SK_PATHS.anchorPosition);
-    return isLatLon(cell.value) && cell.epoch > 0 && cell.generation !== this.#store.generation;
+    return isLatLon(cell.value) && predatesReconnect(cell, this.#store.generation);
   });
 
   #notificationState = $derived.by<string | undefined>(() =>
@@ -401,6 +401,6 @@ export class AnchorWatch {
 
   #currentRaw(path: string): unknown {
     const cell = this.#store.cell(path);
-    return cell.epoch > 0 && cell.generation !== this.#store.generation ? undefined : cell.value;
+    return predatesReconnect(cell, this.#store.generation) ? undefined : cell.value;
   }
 }

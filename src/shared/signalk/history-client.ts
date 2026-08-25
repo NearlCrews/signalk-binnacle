@@ -1,3 +1,4 @@
+import { isLatLon, type LatLon } from '$shared/geo';
 import { fetchJsonOrUndefined, hasControlCharacters, isRecord } from '$shared/lib';
 import { fetchProviderIds, type ProviderIds, safeProviderId } from './provider-probe';
 import { authInit } from './resource';
@@ -312,4 +313,16 @@ export async function fetchHistoryValuesAcrossProviders(
     first ??= { values, provider };
   }
   return first;
+}
+
+// A history row's position column, validated: rows carry the timestamp at index 0 and each
+// requested path's value at its column index plus one. Returns undefined for an absent column or
+// a malformed position, the guard both history consumers spelled inline.
+export function positionFromHistoryRow(
+  row: readonly unknown[],
+  positionColumn: number,
+): LatLon | undefined {
+  if (positionColumn < 0) return undefined;
+  const value = row[positionColumn + 1];
+  return isLatLon(value) ? value : undefined;
 }

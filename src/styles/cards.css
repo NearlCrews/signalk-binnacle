@@ -52,9 +52,6 @@
   align-items: center;
   /* Fill the card-head row so a name (and any locate target it carries) is a full 44px tall. */
   min-block-size: var(--control-size);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   padding: 0;
   border: 0;
   background: transparent;
@@ -228,9 +225,6 @@
 }
 .nav-name {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .nav-metrics {
   display: flex;

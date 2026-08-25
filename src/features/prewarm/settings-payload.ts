@@ -2,7 +2,7 @@
  * SI (meters, seconds); the panel converts from the display unit through UnitField before calling
  * this function. */
 
-import { hasControlCharacters, isFiniteNumber, isRecord } from '$shared/lib';
+import { clampInt, hasControlCharacters, isFiniteNumber, isRecord } from '$shared/lib';
 import {
   CHART_LOCKER_MAX_DISTANCE_METERS,
   CHART_LOCKER_MAX_INTERVAL_SECONDS,
@@ -44,11 +44,12 @@ export function buildConfigPayload(settings: PositionWarmSettings): {
         CHART_LOCKER_MAX_DISTANCE_METERS,
         Math.max(0, settings.moveThresholdMeters),
       ),
-      intervalSecs: Math.min(
+      intervalSecs: clampInt(
+        settings.intervalSecs,
+        CHART_LOCKER_MIN_INTERVAL_SECONDS,
         CHART_LOCKER_MAX_INTERVAL_SECONDS,
-        Math.max(CHART_LOCKER_MIN_INTERVAL_SECONDS, Math.round(settings.intervalSecs)),
       ),
-      baseZoom: Math.min(CHART_LOCKER_MAX_WARM_ZOOM, Math.max(0, Math.round(settings.baseZoom))),
+      baseZoom: clampInt(settings.baseZoom, 0, CHART_LOCKER_MAX_WARM_ZOOM),
       sources,
     },
   };

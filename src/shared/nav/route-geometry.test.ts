@@ -3,6 +3,7 @@ import { degreesToRadians, knotsToMetersPerSecond } from '$shared/lib';
 import {
   crossTrackErrorMeters,
   etaSeconds,
+  mercatorIsometricLatitude,
   rhumbBearingRad,
   rhumbCrossTrackErrorMeters,
   rhumbDistanceMeters,
@@ -11,6 +12,29 @@ import {
 } from './route-geometry';
 
 const NM = 1852;
+
+describe('mercatorIsometricLatitude', () => {
+  it('is zero at the equator', () => {
+    expect(mercatorIsometricLatitude(0)).toBeCloseTo(0, 9);
+  });
+
+  it('is symmetric in sign across the equator', () => {
+    expect(mercatorIsometricLatitude(30)).toBeCloseTo(-mercatorIsometricLatitude(-30), 9);
+  });
+
+  it('stays finite at the poles rather than diverging to infinity', () => {
+    expect(mercatorIsometricLatitude(90)).toSatisfy(Number.isFinite);
+    expect(mercatorIsometricLatitude(-90)).toSatisfy(Number.isFinite);
+  });
+
+  it('agrees with the plain isometric-latitude formula at a mid latitude', () => {
+    const latRad = (45 * Math.PI) / 180;
+    expect(mercatorIsometricLatitude(45)).toBeCloseTo(
+      Math.log(Math.tan(Math.PI / 4 + latRad / 2)),
+      9,
+    );
+  });
+});
 
 describe('rhumbDistanceMeters', () => {
   it('measures about one nautical mile per minute of latitude due north', () => {

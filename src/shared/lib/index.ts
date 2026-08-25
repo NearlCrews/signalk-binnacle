@@ -14,6 +14,7 @@ export {
   type LatestWriterState,
 } from './latest-writer.svelte';
 export {
+  clamp,
   clampInt,
   compareOptionalNumber,
   isFiniteNumber,

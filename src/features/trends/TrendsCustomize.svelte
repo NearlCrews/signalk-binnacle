@@ -72,7 +72,7 @@ function statusText(item: TrendItem): string | undefined {
         class:drop-after={indicator.after}
       >
         <LayerToggle
-          title={item.label}
+          label={item.label}
           description={item.description}
           visible
           onToggle={() => controller.toggle(item.id)}
@@ -123,7 +123,7 @@ function statusText(item: TrendItem): string | undefined {
               : undefined}
           <li class="row-interactive" class:unavailable={!atLimit && !item.hasLiveReport}>
             <LayerToggle
-              title={item.label}
+              label={item.label}
               description={item.description}
               visible={false}
               disabled={atLimit}

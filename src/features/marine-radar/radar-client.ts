@@ -11,6 +11,7 @@ import { appendToken, authInit, sendJson } from '$shared/signalk';
 import {
   isSafeRadarGeometry,
   MAX_RADAR_CONTROLS,
+  MAX_RADAR_DISTANCE_METERS,
   MAX_RADAR_ID_LENGTH,
   MAX_RADAR_JSON_BYTES,
   MAX_RADAR_LEGEND_ENTRIES,
@@ -37,8 +38,6 @@ import type {
 const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
 const RADAR_STATUSES: ReadonlySet<string> = new Set(['off', 'standby', 'transmit', 'warming']);
-const MAX_RADAR_RANGE_METERS = 1_000_000;
-const MAX_RADAR_CONTROL_MAGNITUDE = 1_000_000;
 const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'boolean',
   'number',
@@ -136,18 +135,18 @@ export function parseRadarControls(raw: unknown): RadarControls {
     if (isRecord(entry)) {
       const value = entry.value;
       const boundedNumber = (candidate: unknown): number | undefined =>
-        isFiniteNumber(candidate) && Math.abs(candidate) <= MAX_RADAR_CONTROL_MAGNITUDE
+        isFiniteNumber(candidate) && Math.abs(candidate) <= MAX_RADAR_DISTANCE_METERS
           ? candidate
           : undefined;
       const boundedDistance = (candidate: unknown): number | undefined =>
-        isFiniteNumber(candidate) && candidate >= 0 && candidate <= MAX_RADAR_CONTROL_MAGNITUDE
+        isFiniteNumber(candidate) && candidate >= 0 && candidate <= MAX_RADAR_DISTANCE_METERS
           ? candidate
           : undefined;
       out[id] = {
         value:
           (typeof value === 'number' &&
             Number.isFinite(value) &&
-            Math.abs(value) <= MAX_RADAR_CONTROL_MAGNITUDE) ||
+            Math.abs(value) <= MAX_RADAR_DISTANCE_METERS) ||
           (typeof value === 'string' &&
             value.length <= MAX_RADAR_TEXT_LENGTH &&
             !hasControlCharacters(value)) ||
@@ -222,7 +221,7 @@ function toRadarInfo(raw: unknown): RadarInfo | undefined {
       typeof raw.range === 'number' &&
       Number.isFinite(raw.range) &&
       raw.range >= 0 &&
-      raw.range <= MAX_RADAR_RANGE_METERS
+      raw.range <= MAX_RADAR_DISTANCE_METERS
         ? raw.range
         : 0,
     controls: parseRadarControls(raw.controls),
@@ -299,7 +298,7 @@ function toControlDefinition(id: string, raw: unknown): ControlDefinition | unde
     maxDistance:
       isFiniteNumber(raw.maxDistance) &&
       raw.maxDistance > 0 &&
-      raw.maxDistance <= MAX_RADAR_CONTROL_MAGNITUDE
+      raw.maxDistance <= MAX_RADAR_DISTANCE_METERS
         ? raw.maxDistance
         : undefined,
   };

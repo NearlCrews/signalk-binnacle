@@ -1,6 +1,5 @@
-import { isLatLon } from '$shared/geo';
 import { DAY_MS, HOUR_MS, lowerBound, MINUTE_MS, nearestBySorted } from '$shared/lib';
-import { columnIndex, type HistoryValues, SK_PATHS } from '$shared/signalk';
+import { columnIndex, type HistoryValues, positionFromHistoryRow, SK_PATHS } from '$shared/signalk';
 
 export interface HistorySample {
   t: number;
@@ -51,8 +50,8 @@ export function toSamples(
       pressure: num(row, iPressure),
       sog: num(row, iSog),
     };
-    const pos = iPos >= 0 ? row[iPos + 1] : undefined;
-    if (isLatLon(pos)) {
+    const pos = positionFromHistoryRow(row, iPos);
+    if (pos) {
       sample.lon = pos.longitude;
       sample.lat = pos.latitude;
     }

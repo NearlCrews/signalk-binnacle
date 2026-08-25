@@ -121,7 +121,7 @@ const focused = $derived(controller.focusedId !== undefined);
 
     {#if !focused && controller.selected.length === 0}
       <div class="empty-state">
-        <p>No trends are selected for this profile.</p>
+        <p class="muted-note">No trends are selected for this profile.</p>
         <button type="button" class="btn btn-primary" onclick={() => (customizing = true)}>
           Customize trends
         </button>

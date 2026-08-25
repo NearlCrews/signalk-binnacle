@@ -1,11 +1,20 @@
 <script lang="ts">
 import Eye from '@lucide/svelte/icons/eye';
 import EyeOff from '@lucide/svelte/icons/eye-off';
-import type { VisibilityToggleProps } from './visibility-toggle';
+import { resolveToggleDescription, type VisibilityToggleProps } from './visibility-toggle';
 
-type Props = Pick<VisibilityToggleProps, 'visible' | 'onToggle'>;
+const {
+  visible,
+  onToggle,
+  disabled = false,
+  description,
+  describedBy,
+}: VisibilityToggleProps = $props();
 
-const { visible, onToggle }: Props = $props();
+const ownDescriptionId = $props.id();
+const described = $derived(
+  resolveToggleDescription({ description, describedBy }, ownDescriptionId),
+);
 </script>
 
 <button
@@ -13,7 +22,9 @@ const { visible, onToggle }: Props = $props();
   class="icon-btn"
   aria-pressed={visible}
   aria-label={visible ? 'Hide on chart' : 'Show on chart'}
-  title={visible ? 'Hide on chart' : 'Show on chart'}
+  aria-describedby={described.describedBy}
+  title={description ?? (visible ? 'Hide on chart' : 'Show on chart')}
+  {disabled}
   onclick={() => onToggle(!visible)}
 >
   {#if visible}
@@ -22,3 +33,6 @@ const { visible, onToggle }: Props = $props();
     <EyeOff size={18} aria-hidden="true" />
   {/if}
 </button>
+{#if described.ownText}
+  <span id={described.describedBy} class="visually-hidden">{described.ownText}</span>
+{/if}

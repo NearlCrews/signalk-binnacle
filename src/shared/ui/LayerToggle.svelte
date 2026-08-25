@@ -2,12 +2,12 @@
 import { resolveToggleDescription, type VisibilityToggleProps } from './visibility-toggle';
 
 interface Props extends VisibilityToggleProps {
-  title: string;
+  label: string;
 }
 
 // disabled: a sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled
 // without the chart it annotates. description falls back to the visible title.
-const { title, visible, onToggle, disabled = false, description, describedBy }: Props = $props();
+const { label, visible, onToggle, disabled = false, description, describedBy }: Props = $props();
 
 const ownDescriptionId = $props.id();
 const described = $derived(
@@ -25,7 +25,7 @@ const described = $derived(
     aria-describedby={described.describedBy}
     onchange={(e) => onToggle(e.currentTarget.checked)}
   >
-  <span class="title" title={description ?? title}>{title}</span>
+  <span class="title" title={description ?? label}>{label}</span>
 </label>
 <!-- Outside the label: text inside it would join the checkbox's accessible name, which must stay the
      visible title alone. -->

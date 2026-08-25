@@ -43,6 +43,10 @@ export function compareOptionalNumber(
 
 // Round v to the nearest integer within the inclusive range [lo, hi]. Shared so the numeric inputs
 // that must land on a whole value inside a bound clamp and round in one place.
+export function clamp(value: number, lo: number, hi: number): number {
+  return Math.min(Math.max(value, lo), hi);
+}
+
 export function clampInt(v: number, lo: number, hi: number): number {
   return Math.round(Math.max(lo, Math.min(v, hi)));
 }

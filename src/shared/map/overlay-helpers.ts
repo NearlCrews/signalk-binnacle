@@ -76,6 +76,9 @@ export function setPaintProp(
   property: string,
   value: unknown,
 ): void {
+  // Guarded: setPaintProperty throws on an absent layer, and one throw inside a recolor pass
+  // aborts the theme for every later overlay, so the safe form is the only form.
+  if (!map.getLayer(layerId)) return;
   map.setPaintProperty(layerId, property as keyof AllPaintProperties, value as never);
 }
 
@@ -102,4 +105,15 @@ export function removeSharedSourceIfOrphaned(
   if (siblingLayerIds.every((id) => !map.getLayer(id)) && map.getSource(sourceId)) {
     map.removeSource(sourceId);
   }
+}
+
+// The one interaction gate every optional-tap overlay spells: interactive only while visible,
+// not fully transparent, and allowed by the app-level gate (measure mode, chart edits) when the
+// overlay declares one.
+export function overlayInteractive(
+  visible: boolean,
+  opacity: number,
+  allowed?: () => boolean,
+): boolean {
+  return visible && opacity > 0 && (allowed?.() ?? true);
 }

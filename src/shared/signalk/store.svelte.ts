@@ -75,6 +75,16 @@ function samePosition(a: unknown, b: unknown): boolean {
   );
 }
 
+// True when a cell's retained value was written before the current connection: the store bumps
+// its generation on reconnect, so a cell still carrying an older generation (and a real epoch)
+// holds pre-reconnect data. Four stores spelled this inline before it was hoisted.
+export function predatesReconnect(
+  cell: { epoch: number; generation: number },
+  storeGeneration: number,
+): boolean {
+  return cell.epoch > 0 && cell.generation !== storeGeneration;
+}
+
 export class PathCell {
   value = $state<Value | undefined>(undefined);
   source = $state<PathSource | undefined>(undefined);

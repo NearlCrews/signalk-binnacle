@@ -87,8 +87,8 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
 </script>
 
 <dialog class="modal-card wp-dialog" aria-label={title} use:dialog={onCancel}>
-  <header><h2>{title}</h2></header>
-  <div class="wp-body">
+  <header class="dialog-header"><h2>{title}</h2></header>
+  <div class="wp-body dialog-body">
     <TextField
       variant="stacked"
       large
@@ -103,7 +103,7 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
       onEnter={save}
     />
     <div class="wp-field">
-      <label class="caps-label" for="wp-icon-picker">Icon</label>
+      <label for="wp-icon-picker">Icon</label>
       <IconPicker
         id="wp-icon-picker"
         bind:value={icon}
@@ -114,7 +114,7 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
       />
     </div>
   </div>
-  <footer>
+  <footer class="dialog-footer">
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
     {#if onSaveAndNavigate && !waypoint}
       <button type="button" class="btn btn-pill" onclick={saveAndNavigate} disabled={busy}>
@@ -131,29 +131,15 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
 .wp-dialog {
   inline-size: min(22rem, calc(100dvw - 2 * var(--space-4)));
 }
-.wp-dialog header {
-  padding: var(--space-3) var(--space-4);
-  border-block-end: 1px solid var(--border);
-}
-.wp-dialog h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
 .wp-body {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
   overflow: visible;
 }
 .wp-field {
   display: grid;
   gap: var(--space-1);
-}
-.wp-dialog footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-block-start: 1px solid var(--border);
+  /* The per-field label idiom: sentence case, muted, text-sm (the caps treatment is for section
+     headings only, matching the Notes editor's field labels). */
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 </style>

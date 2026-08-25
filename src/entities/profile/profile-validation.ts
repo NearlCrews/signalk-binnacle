@@ -1,3 +1,4 @@
+import { MAX_ANCHOR_RADIUS_M, MIN_RADIUS_M } from '$entities/anchor';
 import { isTrendInstrumentId, MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
 import {
   cleanBoundedText,
@@ -35,8 +36,6 @@ const MAX_PROFILE_SETTING_KEYS = 64;
 const MAX_EXTENSION_DEPTH = 8;
 const MAX_EXTENSION_NODES = 10_000;
 const MAX_EXTENSION_STRING_LENGTH = 4_096;
-const MIN_ANCHOR_RADIUS_METERS = 10;
-const MAX_ANCHOR_RADIUS_METERS = 1_000_000;
 const KNOWN_SETTING_KEYS = new Set<string>([
   ...PORTABLE_PROFILE_SETTING_KEYS,
   'layerCategories',
@@ -267,8 +266,8 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   if (
     value.anchorRadiusMeters !== undefined &&
     (!isFiniteNumber(value.anchorRadiusMeters) ||
-      value.anchorRadiusMeters < MIN_ANCHOR_RADIUS_METERS ||
-      value.anchorRadiusMeters > MAX_ANCHOR_RADIUS_METERS)
+      value.anchorRadiusMeters < MIN_RADIUS_M ||
+      value.anchorRadiusMeters > MAX_ANCHOR_RADIUS_M)
   ) {
     return false;
   }

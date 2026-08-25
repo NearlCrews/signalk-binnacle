@@ -1,9 +1,8 @@
 import { RAD_TO_DEG, type UnitsMode } from '$shared/lib';
 import { isBoundedRadarAngleRange } from './radar-angle';
 import { displayRadarDistance, siRadarDistance } from './radar-area-units';
+import { MAX_RADAR_DISTANCE_METERS } from './radar-limits';
 import type { ControlDefinition, RadarControlEntry, RadarZoneValue } from './radar-types';
-
-const MAX_ZONE_DISTANCE_METERS = 1_000_000;
 
 export interface RadarZoneDraft {
   startDegrees: number;
@@ -22,7 +21,7 @@ export function isNativeZoneDefinition(def: ControlDefinition): boolean {
     def.maxDistance !== undefined &&
     Number.isFinite(def.maxDistance) &&
     def.maxDistance > 0 &&
-    def.maxDistance <= MAX_ZONE_DISTANCE_METERS
+    def.maxDistance <= MAX_RADAR_DISTANCE_METERS
   );
 }
 

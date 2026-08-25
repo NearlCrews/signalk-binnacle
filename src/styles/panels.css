@@ -107,6 +107,24 @@
   text-align: end;
   font-variant-numeric: tabular-nums;
 }
+/* The wrapping variant for long string facts (a chart's format, its bounds): a fixed muted label
+   column, hairline row dividers, and start-aligned values that wrap, where the base list
+   end-aligns tabular numerals. The third bespoke label-value treatment collapsed into this. */
+.detail-list--wrap {
+  font-size: var(--text-sm);
+}
+.detail-list--wrap .item {
+  grid-template-columns: 5rem 1fr;
+  padding-block: 0.3rem;
+}
+.detail-list--wrap .item + .item {
+  border-block-start: 1px solid var(--border);
+}
+.detail-list--wrap .item dd {
+  text-align: start;
+  font-variant-numeric: normal;
+  overflow-wrap: anywhere;
+}
 /* A pinned footer below the scrolling body: action buttons or attribution that must always be
    visible at the bottom of the panel regardless of scroll position. */
 .panel-footer {
@@ -171,4 +189,19 @@
     inset-inline: 0;
     inline-size: auto;
   }
+}
+
+/* A quiet horizontal meter: the track is the hairline border color, the fill the accent, sized by
+   an inline style percentage. Shared by the storage gauge and the saved-area warm progress so a
+   third meter cannot re-derive the shape. */
+.progress-track {
+  block-size: var(--range-track-h);
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+.progress-fill {
+  block-size: 100%;
+  background: var(--accent);
+  transition: inline-size var(--transition-fast);
 }

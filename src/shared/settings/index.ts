@@ -22,6 +22,7 @@ export {
   createTrackSettings,
   DEFAULT_THRESHOLDS,
   enumPersistedCodec,
+  exactShapeCodec,
   isMapView,
   isThresholds,
   isTrackSettings,

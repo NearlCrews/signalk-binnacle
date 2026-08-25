@@ -121,8 +121,13 @@
 }
 
 /* Single-line truncation with a trailing ellipsis. The span still owns its width bound (a
-   max-inline-size, or min-inline-size: 0 in a flex row) or the clip never engages. */
-.truncate {
+   max-inline-size, or min-inline-size: 0 in a flex row) or the clip never engages. The saved-card,
+   nav-row, and bottom-strip name selectors join this one definition instead of re-spelling the
+   trio (this module loads before cards.css and strips.css, whose rules keep their layout lines). */
+.truncate,
+.saved .name,
+.nav-name,
+.bottom-strip .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

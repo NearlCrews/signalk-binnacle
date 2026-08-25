@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SignalKStore } from './store.svelte';
+import { predatesReconnect, SignalKStore } from './store.svelte';
 import type { SKFrame } from './types';
 import { notificationState } from './types';
 
@@ -15,6 +15,21 @@ function frame(self: Record<string, unknown>): SKFrame {
 function aisMap(record: Record<string, Record<string, unknown>>): SKFrame['ais'] {
   return new Map(Object.entries(record).map(([ctx, vals]) => [ctx, new Map(Object.entries(vals))]));
 }
+
+describe('predatesReconnect', () => {
+  it('never predates when the cell epoch is zero, the seeded-and-never-streamed state', () => {
+    expect(predatesReconnect({ epoch: 0, generation: 0 }, 5)).toBe(false);
+    expect(predatesReconnect({ epoch: 0, generation: 3 }, 5)).toBe(false);
+  });
+
+  it('is false when the cell generation matches the store generation', () => {
+    expect(predatesReconnect({ epoch: 1000, generation: 5 }, 5)).toBe(false);
+  });
+
+  it('is true when a real value carries a generation that differs from the store', () => {
+    expect(predatesReconnect({ epoch: 1000, generation: 4 }, 5)).toBe(true);
+  });
+});
 
 describe('SignalKStore', () => {
   it('exposes the latest value of a path through its cell', () => {

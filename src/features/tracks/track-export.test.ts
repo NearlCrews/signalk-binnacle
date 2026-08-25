@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackPoint } from '$entities/track';
-import { toGeoJsonString, trackGeoJsonFilename } from './track-export';
+import {
+  toGeoJsonFeature,
+  toGeoJsonFeatureFromSegments,
+  toGeoJsonString,
+  trackGeoJsonFilename,
+} from './track-export';
 
 const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   lat,
@@ -49,5 +54,29 @@ describe('toGeoJsonString', () => {
         [8, 7],
       ],
     ]);
+  });
+});
+
+describe('toGeoJsonFeatureFromSegments', () => {
+  it('matches toGeoJsonFeature over the equivalent flat, gap-marked point list', () => {
+    const flat = toGeoJsonFeature('Voyage', [p(1, 2), p(3, 4), p(5, 6, true), p(7, 8)]);
+    const segments = toGeoJsonFeatureFromSegments('Voyage', [
+      [p(1, 2), p(3, 4)],
+      [p(5, 6), p(7, 8)],
+    ]);
+    expect(segments).toEqual(flat);
+  });
+
+  it('drops single-point segments to keep valid GeoJSON', () => {
+    const feature = toGeoJsonFeatureFromSegments('x', [[p(1, 2)], [p(3, 4)], [p(5, 6), p(7, 8)]]);
+    expect(feature.geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [6, 5],
+          [8, 7],
+        ],
+      ],
+    });
   });
 });

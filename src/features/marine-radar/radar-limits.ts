@@ -1,3 +1,7 @@
+// The maximum plausible radar distance in meters, shared by range validation, structured
+// control magnitudes, zone and rect distance bounds, and spoke validation, so the bound cannot
+// drift between them.
+export const MAX_RADAR_DISTANCE_METERS = 1_000_000;
 export const MAX_RADARS = 16;
 export const MAX_RADAR_CONTROLS = 256;
 export const MAX_RADAR_LEGEND_ENTRIES = 256;

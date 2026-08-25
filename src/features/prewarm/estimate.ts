@@ -164,9 +164,9 @@ export function estimateRegionBytes(
   }
 }
 
-/** The single gate predicate shared by the panel and its test. Returns true only when a box is
- * drawn, at least one source is selected, administrator access is available, and the estimate fits
- * the regions-free budget. */
+/** The single gate predicate shared by RegionsController's gate and its own test. Returns true only
+ * when a box is drawn, at least one source is selected, administrator access is available, and the
+ * estimate fits the regions-free budget. */
 export function canDownloadRegion(opts: {
   bbox: LngLatBbox | null;
   sources: string[];

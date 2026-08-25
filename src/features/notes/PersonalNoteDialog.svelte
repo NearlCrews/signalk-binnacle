@@ -102,8 +102,8 @@ function chooseCategory(event: Event): void {
 </script>
 
 <dialog class="modal-card note-dialog" aria-label={title} use:dialog={onCancel}>
-  <header><h2>{title}</h2></header>
-  <div class="note-body">
+  <header class="dialog-header"><h2>{title}</h2></header>
+  <div class="note-body dialog-body">
     {#if auth.writeBlocked}
       <!-- Grouped into one grid cell so the note and its request button stay together in the body's
            row rhythm, matching the provider block below. -->
@@ -198,7 +198,7 @@ function chooseCategory(event: Event): void {
       />
     </section>
   </div>
-  <footer>
+  <footer class="dialog-footer">
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
     <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={saveBlocked}>
       {busy ? 'Saving…' : 'Save note'}
@@ -211,18 +211,7 @@ function chooseCategory(event: Event): void {
   inline-size: min(25rem, calc(100dvw - 2 * var(--space-4)));
   max-block-size: calc(100 * var(--dvh) - 2 * var(--space-4));
 }
-.note-dialog header {
-  padding: var(--space-3) var(--space-4);
-  border-block-end: 1px solid var(--border);
-}
-.note-dialog h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
 .note-body {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
   overflow: auto;
 }
 .note-body p {
@@ -253,12 +242,5 @@ function chooseCategory(event: Event): void {
 }
 .position-fields h3 {
   margin: 0;
-}
-.note-dialog footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-block-start: 1px solid var(--border);
 }
 </style>

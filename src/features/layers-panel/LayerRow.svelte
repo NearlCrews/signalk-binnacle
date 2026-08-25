@@ -229,7 +229,7 @@ $effect(() => {
       <div class="facet-stack">
         <div class="facet-line">
           <LayerToggle
-            title={item.title}
+            label={item.title}
             description={item.description}
             visible={item.visible}
             disabled={!item.available}
@@ -251,7 +251,7 @@ $effect(() => {
               hint={sub.available ? undefined : sub.unavailableHint}
             />
             <LayerToggle
-              title={sub.title}
+              label={sub.title}
               description={sub.description}
               visible={sub.visible}
               disabled={!item.available || !item.visible || !sub.available}
@@ -268,7 +268,7 @@ $effect(() => {
         <span class="lead">{@render dragHandle()}</span>
       {/if}
       <LayerToggle
-        title={item.title}
+        label={item.title}
         description={item.description}
         visible={item.visible}
         disabled={!item.available}

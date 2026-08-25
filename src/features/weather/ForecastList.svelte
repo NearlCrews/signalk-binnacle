@@ -38,7 +38,16 @@ function stepLabel(timeMs: number): string {
 }
 </script>
 
-<h4 class="caps-label forecast-head">Forecast · next {horizonH} h</h4>
+{#snippet waveSpan(label: string, heightM: number | undefined)}
+  {#if heightM !== undefined}
+    <span
+      >{label} <b class="num">{formatLengthOr(heightM, units.mode)}</b>
+      {lengthUnit(units.mode)}</span
+    >
+  {/if}
+{/snippet}
+
+<h3 class="caps-label forecast-head">Forecast · next {horizonH} h</h3>
 <ul class="forecast bare-list">
   {#each forecast as step, index (`${step.timeMs}:${index}`)}
     <li>
@@ -62,24 +71,9 @@ function stepLabel(timeMs: number): string {
             {pressureUnit(units.mode)}</span
           >
         {/if}
-        {#if step.waveHeightM !== undefined}
-          <span
-            >Waves <b class="num">{formatLengthOr(step.waveHeightM, units.mode)}</b>
-            {lengthUnit(units.mode)}</span
-          >
-        {/if}
-        {#if step.windWaveHeightM !== undefined}
-          <span
-            >Wind waves <b class="num">{formatLengthOr(step.windWaveHeightM, units.mode)}</b>
-            {lengthUnit(units.mode)}</span
-          >
-        {/if}
-        {#if step.swellHeightM !== undefined}
-          <span
-            >Swell <b class="num">{formatLengthOr(step.swellHeightM, units.mode)}</b>
-            {lengthUnit(units.mode)}</span
-          >
-        {/if}
+        {@render waveSpan('Waves', step.waveHeightM)}
+        {@render waveSpan('Wind waves', step.windWaveHeightM)}
+        {@render waveSpan('Swell', step.swellHeightM)}
         {#if step.currentSpeedMs !== undefined}
           <span>Current <b class="num">{formatWholeKnots(step.currentSpeedMs)}</b> kn</span>
         {/if}

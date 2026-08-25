@@ -15,7 +15,7 @@ import type {
   CoursePoint,
   SignalKStore,
 } from '$shared/signalk';
-import { SK_PATHS } from '$shared/signalk';
+import { predatesReconnect, SK_PATHS } from '$shared/signalk';
 
 export type CourseSource = 'server' | 'computed';
 
@@ -299,7 +299,7 @@ export class CourseGuidance {
 
   #currentValue(path: string, maxAgeMs?: number): unknown {
     const cell = this.#store.cell(path);
-    if (cell.epoch > 0 && cell.generation !== this.#store.generation) return undefined;
+    if (predatesReconnect(cell, this.#store.generation)) return undefined;
     if (maxAgeMs !== undefined && cell.epoch > 0 && this.#clock) {
       if (this.#clock.now - cell.epoch > maxAgeMs) return undefined;
     }

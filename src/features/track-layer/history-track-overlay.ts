@@ -1,5 +1,5 @@
 import type { LineLayerSpecification } from 'maplibre-gl';
-import { isLatLon, latLonToLonLat } from '$shared/geo';
+import { latLonToLonLat } from '$shared/geo';
 import { MINUTE_MS } from '$shared/lib';
 import {
   antimeridianLineGeometry,
@@ -19,6 +19,7 @@ import {
   HISTORY_WINDOW_SECONDS,
   type HistoryProviders,
   type HistoryValues,
+  positionFromHistoryRow,
   SK_PATHS,
 } from '$shared/signalk';
 
@@ -73,8 +74,8 @@ export function createHistoryTrackOverlay(
     let line: Array<[number, number]> = [];
     let lastSeconds: number | undefined;
     for (const row of values.rows) {
-      const position = iPos >= 0 ? row[iPos + 1] : undefined;
-      if (!isLatLon(position)) continue;
+      const position = positionFromHistoryRow(row, iPos);
+      if (!position) continue;
       const seconds = Date.parse(row[0]) / 1000;
       // A malformed timestamp yields NaN, which would poison every later gap comparison (NaN
       // compares false) and silently disable gap-splitting for the rest of the track.

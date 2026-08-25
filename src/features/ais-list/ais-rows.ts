@@ -7,7 +7,7 @@ import type {
 } from '$entities/collision';
 import type { LatLon } from '$shared/geo';
 import { compareOptionalNumber } from '$shared/lib';
-import { haversineMeters, rhumbBearingRad } from '$shared/nav';
+import { haversineMeters, rhumbBearingRad, SEARCH_COLLATOR } from '$shared/nav';
 
 export type AisSort = 'range' | 'cpa' | 'name';
 export type AisRiskFilter = 'all' | 'danger' | 'warning';
@@ -91,7 +91,7 @@ export function buildAisRows(
     rows = rows.filter((row) => row.severity === riskFilter || row.unassessedReason !== undefined);
   }
   const byIdentity = (a: AisListRow, b: AisListRow): number =>
-    a.label.localeCompare(b.label) || a.id.localeCompare(b.id);
+    SEARCH_COLLATOR.compare(a.label, b.label) || a.id.localeCompare(b.id);
   if (sort === 'name') rows.sort(byIdentity);
   else if (sort === 'cpa') {
     rows.sort((a, b) => compareOptionalNumber(a.cpaMeters, b.cpaMeters) || byIdentity(a, b));

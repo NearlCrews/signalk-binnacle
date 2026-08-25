@@ -6,7 +6,12 @@ import {
 } from '$entities/waypoint';
 import { isLatLon, type LatLon } from '$shared/geo';
 import { createBusyGate, type Toast, uuidv4 } from '$shared/lib';
-import { createWriteOutcomeGate, deleteRefusedMessage, writeRefusedMessage } from '$shared/signalk';
+import {
+  createWriteBlockGuard,
+  createWriteOutcomeGate,
+  deleteRefusedMessage,
+  writeRefusedMessage,
+} from '$shared/signalk';
 import {
   deleteWaypoint,
   fetchWaypoints,
@@ -40,6 +45,10 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     report: (message) => deps.toast.show(message),
     requestWriteAccess: () => deps.requestWriteAccess(),
   });
+
+  const blockedWrite = createWriteBlockGuard(deps.writeBlocked, (message) =>
+    deps.toast.show(message),
+  );
 
   const { origin, waypointsStore } = deps;
 
@@ -81,10 +90,11 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
 
   function onDropWaypoint(position: LatLon): void {
     if (busy || !isLatLon(position)) return;
-    if (deps.writeBlocked()) {
-      deps.toast.show(
+    if (
+      blockedWrite(
         'Read-only access: the waypoint was not added. Request read and write access to save it.',
-      );
+      )
+    ) {
       return;
     }
     addWaypointAt = position;
@@ -96,10 +106,11 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     name: string;
     icon?: string;
   }): Promise<Waypoint | undefined> {
-    if (deps.writeBlocked()) {
-      deps.toast.show(
+    if (
+      blockedWrite(
         'Read-only access: the waypoint was not added. Request read and write access to save it.',
-      );
+      )
+    ) {
       return undefined;
     }
     const position = addWaypointAt;
@@ -137,10 +148,11 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   }
 
   async function onSaveWaypointEdit(result: { name: string; icon?: string }): Promise<void> {
-    if (deps.writeBlocked()) {
-      deps.toast.show(
+    if (
+      blockedWrite(
         'Read-only access: the waypoint was not changed. Request read and write access to edit it.',
-      );
+      )
+    ) {
       return;
     }
     const existing = editingWaypoint;
@@ -170,10 +182,11 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   }
 
   async function onDeleteWaypoint(id: string): Promise<void> {
-    if (deps.writeBlocked()) {
-      deps.toast.show(
+    if (
+      blockedWrite(
         'Read-only access: the waypoint was not deleted. Request read and write access to delete it.',
-      );
+      )
+    ) {
       return;
     }
     refreshGeneration += 1;

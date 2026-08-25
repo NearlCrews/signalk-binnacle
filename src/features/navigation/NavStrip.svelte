@@ -128,7 +128,7 @@ const eta = $derived.by(() => {
             disabled={!canSkipBack}
             onclick={() => onSkip(-1)}
           >
-            <SkipBack size={15} aria-hidden="true" />
+            <SkipBack size={16} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -138,7 +138,7 @@ const eta = $derived.by(() => {
             disabled={!canSkipForward}
             onclick={() => onSkip(1)}
           >
-            <SkipForward size={15} aria-hidden="true" />
+            <SkipForward size={16} aria-hidden="true" />
           </button>
         </div>
       {/if}

@@ -3,6 +3,7 @@ import {
   adminSessionInit,
   asKeyedObject,
   authInit,
+  createWriteBlockGuard,
   SignalKResourceClient,
   sendJson,
   setWriteOutcomeListener,
@@ -102,6 +103,22 @@ describe('adminSessionInit', () => {
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
     });
+  });
+});
+
+describe('createWriteBlockGuard', () => {
+  it('returns false and never flags when unblocked', () => {
+    const flagError = vi.fn();
+    const guard = createWriteBlockGuard(() => false, flagError);
+    expect(guard('no access')).toBe(false);
+    expect(flagError).not.toHaveBeenCalled();
+  });
+
+  it('returns true and flags the exact message when blocked', () => {
+    const flagError = vi.fn();
+    const guard = createWriteBlockGuard(() => true, flagError);
+    expect(guard('no access')).toBe(true);
+    expect(flagError).toHaveBeenCalledWith('no access');
   });
 });
 

@@ -26,10 +26,10 @@ import {
 } from './contract.js';
 import { DETAIL_PRESETS, type DetailKey, presetForRange, rangeForPreset } from './detail-level.js';
 import {
+  canDownloadRegion,
   coveringSources,
   downloadGateReason,
   estimateRegionBytes,
-  exceedsRegionsFree,
   isTerminal,
   positionWarmSources,
   regionsFreeBytes,
@@ -256,15 +256,14 @@ export class RegionsController {
   estimateError = $derived(this.estimateResult.ok ? null : this.estimateResult.message);
   estimateFmt = $derived(formatBytes(this.estimateVal));
   get gate(): boolean {
-    return (
-      this.stats !== null &&
-      !this.namePrep &&
-      this.bbox !== null &&
-      this.activeSourceIds.length > 0 &&
-      this.deps.getAdminAccess() &&
-      this.estimateResult.ok &&
-      !exceedsRegionsFree(this.estimateVal, this.stats)
-    );
+    if (this.namePrep || this.stats === null) return false;
+    return canDownloadRegion({
+      bbox: this.bbox,
+      sources: this.activeSourceIds,
+      accessBlocked: !this.deps.getAdminAccess(),
+      stats: this.stats,
+      zoomRange: [this.minzoom, this.maxzoom],
+    });
   }
 
   get gateReason(): ReturnType<typeof downloadGateReason> {

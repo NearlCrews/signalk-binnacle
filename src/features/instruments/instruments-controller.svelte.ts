@@ -140,7 +140,12 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   // every getter access. A plain getter would re-run resolveTiles/resolveSelectedIds each time a
   // reactive consumer reads it (template plus effects), which is redundant for small-but-not-free work.
   const selectedIds = $derived.by<readonly string[]>(() => resolveSelectedIds());
-  const tiles = $derived.by<TileDef[]>(() => resolveTiles());
+  const tiles = $derived.by<TileDef[]>(() =>
+    selectedIds.flatMap((id) => {
+      const def = tileById(id);
+      return def ? [def] : [];
+    }),
+  );
 
   // Shared paths (two tiles using the same path) are deduplicated naturally: the desired set is a
   // union, and removal only drops paths absent from the new union.
@@ -460,6 +465,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
   const catalog = $derived.by(() => [...TILE_CATALOG, ...dynamicCatalog]);
   const trendCatalog = $derived.by(() =>
     catalog.flatMap((def) => {
+      if (!def.trend) return [];
       const descriptor = trendDescriptorFor(def, resolvedLabel(def));
       return descriptor ? [descriptor] : [];
     }),

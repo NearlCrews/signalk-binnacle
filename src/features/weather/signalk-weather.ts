@@ -1,7 +1,8 @@
 import {
   capitalize,
+  cleanBoundedText,
   HOUR_MS,
-  hasControlCharacters,
+  isFiniteNumber,
   isRecord,
   MINUTE_MS,
   nearestBy,
@@ -114,15 +115,6 @@ export type EndpointStatus = EndpointOutcome<never>['status'];
 type Fetch = typeof fetch;
 const defaultFetch: Fetch = globalThis.fetch.bind(globalThis);
 
-function boundedText(value: unknown, maxLength: number): string | undefined {
-  return typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    !hasControlCharacters(value)
-    ? value
-    : undefined;
-}
-
 function safePointQuery(providerId: string, lat: number, lon: number): boolean {
   return (
     safeProviderId(providerId) &&
@@ -141,11 +133,7 @@ function hasOnlyFiniteNumbers(
 ): boolean {
   return (
     value === undefined ||
-    fields.every(
-      (field) =>
-        value[field] === undefined ||
-        (typeof value[field] === 'number' && Number.isFinite(value[field])),
-    )
+    fields.every((field) => value[field] === undefined || isFiniteNumber(value[field]))
   );
 }
 
@@ -189,11 +177,11 @@ function validNumericRecord(value: unknown, fields: readonly string[]): boolean 
 
 export function isSignalKWeatherData(value: unknown): value is SignalKWeatherData {
   if (!isRecord(value)) return false;
-  const date = boundedText(value.date, 64);
+  const date = cleanBoundedText(value.date, 64);
   if (!date) return false;
   if (
     value.description !== undefined &&
-    boundedText(value.description, MAX_WEATHER_TEXT_LENGTH) === undefined
+    cleanBoundedText(value.description, MAX_WEATHER_TEXT_LENGTH) === undefined
   ) {
     return false;
   }
@@ -217,7 +205,7 @@ export function isSignalKWeatherData(value: unknown): value is SignalKWeatherDat
   }
   if (
     outside?.precipitationType !== undefined &&
-    boundedText(outside.precipitationType, 128) === undefined
+    cleanBoundedText(outside.precipitationType, 128) === undefined
   ) {
     return false;
   }
@@ -226,7 +214,7 @@ export function isSignalKWeatherData(value: unknown): value is SignalKWeatherDat
     if (
       !(
         (typeof tendency === 'number' && Number.isFinite(tendency)) ||
-        boundedText(tendency, 128) !== undefined
+        cleanBoundedText(tendency, 128) !== undefined
       )
     ) {
       return false;
@@ -234,23 +222,24 @@ export function isSignalKWeatherData(value: unknown): value is SignalKWeatherDat
   }
   const sun = isRecord(value.sun) ? value.sun : undefined;
   for (const field of ['sunrise', 'sunset'] as const) {
-    if (sun?.[field] !== undefined && boundedText(sun[field], 64) === undefined) return false;
+    if (sun?.[field] !== undefined && cleanBoundedText(sun[field], 64) === undefined) return false;
   }
   return true;
 }
 
 export function parseWeatherWarning(value: unknown): WeatherWarning | undefined {
   if (!isRecord(value)) return undefined;
-  const startTime = boundedText(value.startTime, 64);
-  const endTime = boundedText(value.endTime, 64);
+  const startTime = cleanBoundedText(value.startTime, 64);
+  const endTime = cleanBoundedText(value.endTime, 64);
   if (!startTime || !endTime) return undefined;
   const startMs = Date.parse(startTime);
   const endMs = Date.parse(endTime);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return undefined;
   const details =
-    boundedText(value.details, MAX_WARNING_DETAILS_LENGTH) ?? WARNING_DETAILS_FALLBACK;
-  const source = boundedText(value.source, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_SOURCE_FALLBACK;
-  const type = boundedText(value.type, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_TYPE_FALLBACK;
+    cleanBoundedText(value.details, MAX_WARNING_DETAILS_LENGTH) ?? WARNING_DETAILS_FALLBACK;
+  const source =
+    cleanBoundedText(value.source, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_SOURCE_FALLBACK;
+  const type = cleanBoundedText(value.type, MAX_PROVIDER_NAME_LENGTH) ?? WARNING_TYPE_FALLBACK;
   return { startTime, endTime, details, source, type };
 }
 
@@ -311,7 +300,7 @@ export async function fetchWeatherProviders(
     const raw = body[id];
     if (!isRecord(raw) || typeof raw.isDefault !== 'boolean') return undefined;
     const name =
-      raw.name === undefined ? undefined : boundedText(raw.name, MAX_PROVIDER_NAME_LENGTH);
+      raw.name === undefined ? undefined : cleanBoundedText(raw.name, MAX_PROVIDER_NAME_LENGTH);
     if (raw.name !== undefined && name === undefined) return undefined;
     providers[id] = { isDefault: raw.isDefault, ...(name ? { name } : {}) };
   }

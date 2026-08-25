@@ -1,6 +1,6 @@
 import { asNumber, isLatLon, type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
 import type { ReactiveClock } from '$shared/lib';
-import { type SignalKStore, SK_PATHS } from '$shared/signalk';
+import { predatesReconnect, type SignalKStore, SK_PATHS } from '$shared/signalk';
 
 // How long the own-vessel fix may go without a position update before it is treated as lost. The
 // position is subscribed near 1 Hz, so a gap this long is a real dropout, not stream jitter. Holding
@@ -243,7 +243,7 @@ export class OwnVessel {
     // A server stale declaration is a fact, not a window: it holds with no clock wired and
     // regardless of how recently the declaration itself arrived.
     if (cell.serverStale !== undefined) return true;
-    if (cell.epoch > 0 && cell.generation !== this.#store.generation) return true;
+    if (predatesReconnect(cell, this.#store.generation)) return true;
     if (!this.#clock) return false;
     const epoch = cell.epoch;
     return epoch > 0 && this.#clock.now - epoch > VESSEL_DATA_STALE_MS;

@@ -10,6 +10,8 @@ export function precipFieldRgba(
   bracket: TimeBracket,
   theme: Theme,
 ): FieldBitmap | undefined {
+  // Step precipitation reads the lower bracket only, never blended toward the next step. The same
+  // rule is enforced independently for the readout in weather-readout.ts's precipitationMm field.
   const effective =
     grid.precipitationInterpolation === 'step'
       ? { lo: bracket.lo, hi: bracket.lo, frac: 0 }

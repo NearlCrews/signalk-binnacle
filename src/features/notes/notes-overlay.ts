@@ -8,6 +8,7 @@ import {
   mapThemePaint,
   type OverlayContext,
   type OverlayModule,
+  overlayInteractive,
   type Syncable,
   setLayersVisibility,
   setSourceData,
@@ -79,9 +80,8 @@ export function createNotesOverlay(
   const externalInteractionsAllowed = options.interactionsAllowed ?? (() => true);
   let visible = true;
   let opacity = 1;
-  const hit = createNoteHitHandlers(
-    onSelect,
-    () => visible && opacity > 0 && externalInteractionsAllowed(),
+  const hit = createNoteHitHandlers(onSelect, () =>
+    overlayInteractive(visible, opacity, externalInteractionsAllowed),
   );
   const ring = createSelectRing();
   // The exact note array last handed to setData, so a redundant render is skipped and, crucially, a

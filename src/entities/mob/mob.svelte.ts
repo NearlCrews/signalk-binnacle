@@ -3,7 +3,7 @@ import { isLatLon, type LatLon } from '$shared/geo';
 import { hasControlCharacters, isFiniteNumber, isRecord, type ReactiveClock } from '$shared/lib';
 import { haversineMeters, rhumbBearingRad } from '$shared/nav';
 import { binnacleStorageKey } from '$shared/persistence';
-import { type PersistedCodec, PersistedValue, type StorageLike } from '$shared/settings';
+import { exactShapeCodec, PersistedValue, type StorageLike } from '$shared/settings';
 import { isSoundingNotification, type SignalKStore, SK_PATHS } from '$shared/signalk';
 
 const MAX_REMOTE_NOTIFICATIONS = 500;
@@ -32,21 +32,16 @@ function validMark(value: unknown): MobMark | null {
   };
 }
 
-const mobMarkCodec: PersistedCodec<MobMark | null> = {
-  decode(value) {
-    if (value === null) return { state: 'valid', value: null };
-    const clean = validMark(value);
-    if (!clean || !isRecord(value)) return { state: 'invalid' };
-    const positionExact =
-      value.position === undefined ||
-      (isRecord(value.position) && Object.keys(value.position).length === 2);
-    const expectedKeys = value.position === undefined ? 1 : 2;
-    return {
-      state: Object.keys(value).length === expectedKeys && positionExact ? 'valid' : 'migrated',
-      value: clean,
-    };
-  },
-};
+function isExactMobShape(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const positionExact =
+    value.position === undefined ||
+    (isRecord(value.position) && Object.keys(value.position).length === 2);
+  const expectedKeys = value.position === undefined ? 1 : 2;
+  return Object.keys(value).length === expectedKeys && positionExact;
+}
+
+const mobMarkCodec = exactShapeCodec(validMark, isExactMobShape);
 
 // Man-overboard state. A local trigger marks the vessel position and persists it; the stream's
 // notifications.mob is also reflected, so an MOB raised by another station (a crew phone) raises

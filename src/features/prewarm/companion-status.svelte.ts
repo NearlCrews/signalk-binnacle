@@ -4,6 +4,7 @@
  * signed out merely because Chart Locker returned 401 or 403. */
 
 import { fetchAdminSessionState } from '$shared/signalk';
+import type { AccessRecoveryState } from '$shared/ui';
 import { createRegionsClient, HttpStatusError, InvalidCacheStatsError } from './regions-client.js';
 
 export const COMPANION_POLL_MS = 30_000;
@@ -13,14 +14,9 @@ export const COMPANION_POLL_MS = 30_000;
 // is immediate on the next success.
 const COMPANION_FAIL_THRESHOLD = 2;
 
-export type CompanionState =
-  | 'checking'
-  | 'serving'
-  | 'needs-login'
-  | 'needs-admin'
-  | 'access-error'
-  | 'offline'
-  | 'error';
+// The companion state IS the access-recovery state the shared note renders; one union, so the
+// two cannot drift apart member by member.
+export type CompanionState = AccessRecoveryState;
 
 export class CompanionStatus {
   #getBase: () => string | null;

@@ -324,7 +324,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     opts.onBaseStyleFallback?.();
     mapInstance.setStyle(fallbackBaseStyle());
   }
-  void mapInstance.once('styledata', () => {
+  mapInstance.once('styledata', () => {
     styleArrived = true;
     stopStyleWatchdog();
   });
@@ -396,7 +396,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     removeCanvasListeners = contextMenu.remove;
   }
 
-  void mapInstance.once('load', () => {
+  mapInstance.once('load', () => {
     // MapLibre normally removes pending listeners with the map, but the load event can already be
     // queued when a component closes. Do not create sentinels, a manager, or widget wiring then.
     if (destroyed) return;

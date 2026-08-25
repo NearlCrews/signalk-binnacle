@@ -366,8 +366,8 @@ $effect(() => {
   {/if}
   {#if waypoints.length === MAX_WAYPOINTS}
     <p class="muted-note" role="status">
-      The panel accepts at most {MAX_WAYPOINTS.toLocaleString('en')} waypoints from the server. More
-      may exist; delete unused marks to make room.
+      The panel accepts at most {MAX_WAYPOINTS.toLocaleString('en-US')} waypoints from the server.
+      More may exist; delete unused marks to make room.
     </p>
   {/if}
 </SlideOver>

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { knotsToMetersPerSecond } from '$shared/lib';
 import { binnacleStorageKey } from '$shared/persistence';
+import { createFakeStorage } from '$shared/testing';
 import {
   booleanRecordPersistedCodec,
   createMapView,
   createPersistedCodec,
   createPlanningSpeed,
   DEFAULT_THRESHOLDS,
+  exactShapeCodec,
   isMapView,
   isThresholds,
   isTrackSettings,
@@ -15,38 +17,29 @@ import {
   stringArrayPersistedCodec,
 } from './persisted.svelte';
 
-function fakeStorage(map: Map<string, string>): Pick<Storage, 'getItem' | 'setItem'> {
-  return {
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => {
-      map.set(k, v);
-    },
-  };
-}
-
 describe('PersistedValue', () => {
   it('uses the default when storage is empty', () => {
-    const store = new Map<string, string>();
-    const p = new PersistedValue('k', { a: 1 }, fakeStorage(store));
+    const storage = createFakeStorage();
+    const p = new PersistedValue('k', { a: 1 }, storage);
     expect(p.value).toEqual({ a: 1 });
   });
 
   it('restores a persisted value', () => {
-    const store = new Map<string, string>([['k', JSON.stringify({ a: 9 })]]);
-    const p = new PersistedValue('k', { a: 1 }, fakeStorage(store));
+    const storage = createFakeStorage({ k: JSON.stringify({ a: 9 }) });
+    const p = new PersistedValue('k', { a: 1 }, storage);
     expect(p.value).toEqual({ a: 9 });
   });
 
   it('set persists and updates', () => {
-    const store = new Map<string, string>();
-    const p = new PersistedValue('k', { a: 1 }, fakeStorage(store));
+    const storage = createFakeStorage();
+    const p = new PersistedValue('k', { a: 1 }, storage);
     p.set({ a: 2 });
     expect(p.value).toEqual({ a: 2 });
-    expect(JSON.parse(store.get('k') as string)).toEqual({ a: 2 });
+    expect(JSON.parse(storage.data.get('k') as string)).toEqual({ a: 2 });
   });
 
   it('returns a detached, structured-cloneable snapshot of reactive values', () => {
-    const p = new PersistedValue('k', { nested: { value: 1 } }, fakeStorage(new Map()));
+    const p = new PersistedValue('k', { nested: { value: 1 } }, createFakeStorage());
     const snapshot = p.snapshot();
 
     expect(() => structuredClone(snapshot)).not.toThrow();
@@ -55,11 +48,11 @@ describe('PersistedValue', () => {
   });
 
   it('rejects a runtime value that its codec does not accept', () => {
-    const store = new Map<string, string>();
+    const storage = createFakeStorage();
     const p = new PersistedValue(
       'k',
       1,
-      fakeStorage(store),
+      storage,
       createPersistedCodec(
         (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value),
       ),
@@ -67,22 +60,22 @@ describe('PersistedValue', () => {
 
     expect(() => p.set(Number.NaN)).toThrow('invalid value');
     expect(p.value).toBe(1);
-    expect(store.has('k')).toBe(false);
+    expect(storage.data.has('k')).toBe(false);
   });
 
   it('canonicalizes a migrated runtime value before storing it', () => {
-    const store = new Map<string, string>();
-    const p = new PersistedValue('k', [], fakeStorage(store), stringArrayPersistedCodec());
+    const storage = createFakeStorage();
+    const p = new PersistedValue('k', [], storage, stringArrayPersistedCodec());
 
     p.set(['routes', 'routes', 'tracks']);
 
     expect(p.value).toEqual(['routes', 'tracks']);
-    expect(JSON.parse(store.get('k') as string)).toEqual(['routes', 'tracks']);
+    expect(JSON.parse(storage.data.get('k') as string)).toEqual(['routes', 'tracks']);
   });
 
   it('does not replace a deliberate null encoder result with the raw value', () => {
-    const store = new Map<string, string>();
-    const p = new PersistedValue('k', 'value', fakeStorage(store), {
+    const storage = createFakeStorage();
+    const p = new PersistedValue('k', 'value', storage, {
       decode: (value) =>
         typeof value === 'string' ? { state: 'valid', value } : { state: 'invalid' },
       encode: () => null,
@@ -90,33 +83,33 @@ describe('PersistedValue', () => {
 
     p.set('next');
 
-    expect(store.get('k')).toBe('null');
+    expect(storage.data.get('k')).toBe('null');
   });
 
   it('falls back to the default on malformed JSON', () => {
-    const store = new Map<string, string>([['k', 'not json']]);
-    const p = new PersistedValue('k', { a: 1 }, fakeStorage(store));
+    const storage = createFakeStorage({ k: 'not json' });
+    const p = new PersistedValue('k', { a: 1 }, storage);
     expect(p.value).toEqual({ a: 1 });
     expect(p.repairStatus).toBe('replaced');
-    expect(JSON.parse(store.get('k') as string)).toEqual({ a: 1 });
+    expect(JSON.parse(storage.data.get('k') as string)).toEqual({ a: 1 });
   });
 
   it('repairs a value rejected by its schema', () => {
-    const store = new Map<string, string>([['k', JSON.stringify('wrong')]]);
+    const storage = createFakeStorage({ k: JSON.stringify('wrong') });
     const p = new PersistedValue(
       'k',
       5,
-      fakeStorage(store),
+      storage,
       (value): value is number => typeof value === 'number',
     );
     expect(p.value).toBe(5);
     expect(p.fromStorage).toBe(false);
     expect(p.repairStatus).toBe('replaced');
-    expect(JSON.parse(store.get('k') as string)).toBe(5);
+    expect(JSON.parse(storage.data.get('k') as string)).toBe(5);
   });
 
   it('migrates and normalizes a known legacy shape', () => {
-    const store = new Map<string, string>([['k', JSON.stringify({ oldCount: 7 })]]);
+    const storage = createFakeStorage({ k: JSON.stringify({ oldCount: 7 }) });
     const codec = createPersistedCodec(
       (value: unknown): value is { count: number } =>
         typeof value === 'object' && value !== null && 'count' in value && value.count === 7,
@@ -125,11 +118,11 @@ describe('PersistedValue', () => {
           ? { count: 7 }
           : undefined,
     );
-    const p = new PersistedValue('k', { count: 0 }, fakeStorage(store), codec);
+    const p = new PersistedValue('k', { count: 0 }, storage, codec);
     expect(p.value).toEqual({ count: 7 });
     expect(p.fromStorage).toBe(true);
     expect(p.repairStatus).toBe('migrated');
-    expect(JSON.parse(store.get('k') as string)).toEqual({ count: 7 });
+    expect(JSON.parse(storage.data.get('k') as string)).toEqual({ count: 7 });
   });
 
   it('reports a failed repair without breaking the fallback', () => {
@@ -161,14 +154,14 @@ describe('PersistedValue', () => {
   });
 
   it('reports fromStorage by key presence, even for a primitive equal to the default', () => {
-    const store = new Map<string, string>([['k', JSON.stringify(5)]]);
-    const p = new PersistedValue('k', 5, fakeStorage(store));
+    const storage = createFakeStorage({ k: JSON.stringify(5) });
+    const p = new PersistedValue('k', 5, storage);
     expect(p.value).toBe(5);
     expect(p.fromStorage).toBe(true);
   });
 
   it('reports not fromStorage when the key is absent', () => {
-    const p = new PersistedValue('k', 5, fakeStorage(new Map()));
+    const p = new PersistedValue('k', 5, createFakeStorage());
     expect(p.fromStorage).toBe(false);
   });
 
@@ -182,6 +175,42 @@ describe('PersistedValue', () => {
     const p = new PersistedValue('k', 0, throwingStorage);
     expect(() => p.set(42)).not.toThrow();
     expect(p.value).toBe(42);
+  });
+});
+
+describe('exactShapeCodec', () => {
+  interface Mark {
+    lat: number;
+    lon: number;
+  }
+  const clean = (value: unknown): Mark | null => {
+    if (typeof value !== 'object' || value === null) return null;
+    const { lat, lon } = value as Partial<Mark>;
+    return typeof lat === 'number' && typeof lon === 'number' ? { lat, lon } : null;
+  };
+  const isExactShape = (value: unknown): boolean =>
+    typeof value === 'object' &&
+    value !== null &&
+    Object.keys(value).sort().join(',') === 'lat,lon';
+  const codec = exactShapeCodec(clean, isExactShape);
+
+  it('round-trips null as valid', () => {
+    expect(codec.decode(null)).toEqual({ state: 'valid', value: null });
+  });
+
+  it('reports invalid when the value cannot be cleaned', () => {
+    expect(codec.decode({ foo: 1 })).toEqual({ state: 'invalid' });
+  });
+
+  it('migrates a cleanable value whose stored shape carries extra keys', () => {
+    expect(codec.decode({ lat: 1, lon: 2, extra: 'stale' })).toEqual({
+      state: 'migrated',
+      value: { lat: 1, lon: 2 },
+    });
+  });
+
+  it('accepts a value already in the exact shape as valid', () => {
+    expect(codec.decode({ lat: 1, lon: 2 })).toEqual({ state: 'valid', value: { lat: 1, lon: 2 } });
   });
 });
 
@@ -223,13 +252,11 @@ describe('isMapView', () => {
   });
 
   it('uses the map-view codec at the persistence boundary', () => {
-    const store = new Map<string, string>([
-      ['view', JSON.stringify({ lat: 100, lon: 0, zoom: 5 })],
-    ]);
-    const view = createMapView('view', fakeStorage(store));
+    const storage = createFakeStorage({ view: JSON.stringify({ lat: 100, lon: 0, zoom: 5 }) });
+    const view = createMapView('view', storage);
     expect(view.value).toBeNull();
     expect(view.repairStatus).toBe('replaced');
-    expect(store.get('view')).toBe('null');
+    expect(storage.data.get('view')).toBe('null');
   });
 });
 
@@ -275,34 +302,37 @@ describe('createPlanningSpeed', () => {
   const LEGACY_KEY = binnacleStorageKey('planningSpeedKn');
 
   it('defaults to five knots in SI when nothing is stored', () => {
-    const speed = createPlanningSpeed(fakeStorage(new Map()));
+    const speed = createPlanningSpeed(createFakeStorage());
     expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
   });
 
   it('converts a legacy knots value once and writes it back in SI', () => {
-    const store = new Map([[LEGACY_KEY, '7']]);
-    const speed = createPlanningSpeed(fakeStorage(store));
+    const storage = createFakeStorage({ [LEGACY_KEY]: '7' });
+    const speed = createPlanningSpeed(storage);
     expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(7), 9);
-    expect(JSON.parse(store.get(SI_KEY) ?? 'null')).toBeCloseTo(knotsToMetersPerSecond(7), 9);
+    expect(JSON.parse(storage.data.get(SI_KEY) ?? 'null')).toBeCloseTo(
+      knotsToMetersPerSecond(7),
+      9,
+    );
   });
 
   it('prefers a stored SI value over a stale legacy one', () => {
-    const store = new Map([
-      [LEGACY_KEY, '7'],
-      [SI_KEY, String(knotsToMetersPerSecond(9))],
-    ]);
-    expect(createPlanningSpeed(fakeStorage(store)).value).toBeCloseTo(knotsToMetersPerSecond(9), 9);
+    const storage = createFakeStorage({
+      [LEGACY_KEY]: '7',
+      [SI_KEY]: String(knotsToMetersPerSecond(9)),
+    });
+    expect(createPlanningSpeed(storage).value).toBeCloseTo(knotsToMetersPerSecond(9), 9);
   });
 
   it('ignores an out-of-range or malformed legacy value and keeps the default', () => {
     for (const legacy of ['500', '-1', '"fast"', 'not json']) {
-      const speed = createPlanningSpeed(fakeStorage(new Map([[LEGACY_KEY, legacy]])));
+      const speed = createPlanningSpeed(createFakeStorage({ [LEGACY_KEY]: legacy }));
       expect(speed.value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
     }
   });
 
   it('replaces a stored SI value above the ceiling with the default', () => {
-    const store = new Map([[SI_KEY, String(MAX_PLANNING_SPEED_MPS + 1)]]);
-    expect(createPlanningSpeed(fakeStorage(store)).value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
+    const storage = createFakeStorage({ [SI_KEY]: String(MAX_PLANNING_SPEED_MPS + 1) });
+    expect(createPlanningSpeed(storage).value).toBeCloseTo(knotsToMetersPerSecond(5), 9);
   });
 });

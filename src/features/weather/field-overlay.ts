@@ -13,6 +13,7 @@ import {
 import type { Theme } from '$shared/ui';
 import type { FieldBitmap } from './field-rgba';
 import { gridTimeGate } from './grid-time-gate';
+import { becameVisible } from './overlay-visibility';
 
 type Quad = [[number, number], [number, number], [number, number], [number, number]];
 export type CanvasFactory = () => HTMLCanvasElement;
@@ -158,7 +159,8 @@ export function createFieldOverlay(
           id: layerId,
           type: 'raster',
           source: sourceId,
-          paint: { 'raster-opacity': 1, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+          // Only the non-default: opacity 1 and linear resampling are MapLibre's defaults.
+          paint: { 'raster-fade-duration': 0 },
         };
         ctx.map.addLayer(layer, ctx.beforeIdFor('weather'));
       }
@@ -193,10 +195,10 @@ export function createFieldOverlay(
     // attaches it, and MapLibre throws on a missing layer. The LayerManager re-applies both once
     // add() resolves, and sync() is separately gated on `active`.
     setVisible(ctx, value) {
-      const becameVisible = value && !visible;
+      const justBecameVisible = becameVisible(visible, value);
       visible = value;
       setLayersVisibility(ctx.map, [layerId], value);
-      if (becameVisible) {
+      if (justBecameVisible) {
         gate.reset();
         lastTheme = undefined;
         this.sync(ctx);

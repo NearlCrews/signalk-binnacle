@@ -9,6 +9,7 @@ import {
   fetchPopulatedHistoryPathsForProvider,
   MAX_HISTORY_CATALOG_PATHS,
   MAX_HISTORY_PROVIDERS,
+  positionFromHistoryRow,
 } from './history-client';
 
 const BASE = 'http://boat';
@@ -16,6 +17,28 @@ const RANGE = { from: '2026-06-11T00:00:00Z', to: '2026-06-12T00:00:00Z' };
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('positionFromHistoryRow', () => {
+  it('is undefined for a negative column', () => {
+    expect(
+      positionFromHistoryRow(['2026-06-11T00:00:00Z', { latitude: 1, longitude: 2 }], -1),
+    ).toBeUndefined();
+  });
+
+  it('is undefined for a malformed value', () => {
+    expect(positionFromHistoryRow(['2026-06-11T00:00:00Z', 'not a position'], 0)).toBeUndefined();
+  });
+
+  it('returns a valid position', () => {
+    const row = ['2026-06-11T00:00:00Z', { latitude: 1, longitude: 2 }];
+    expect(positionFromHistoryRow(row, 0)).toEqual({ latitude: 1, longitude: 2 });
+  });
+
+  it('reads the value one column after the position column, since the row leads with the timestamp', () => {
+    const row = ['2026-06-11T00:00:00Z', null, { latitude: 3, longitude: 4 }];
+    expect(positionFromHistoryRow(row, 1)).toEqual({ latitude: 3, longitude: 4 });
+  });
 });
 
 describe('fetchHistoryProviders', () => {

@@ -9,7 +9,7 @@ const checkbox = (html: string): string => tag(html, /<input type="checkbox"[^>]
 
 function renderToggle(props: Record<string, unknown> = {}): string {
   return render(LayerToggle, {
-    props: { title: 'NOAA ENC', visible: true, onToggle: () => {}, ...props },
+    props: { label: 'NOAA ENC', visible: true, onToggle: () => {}, ...props },
   }).body;
 }
 

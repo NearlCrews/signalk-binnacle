@@ -12,6 +12,13 @@ const MERCATOR_MAX_LAT_RAD = (89.999999 * Math.PI) / 180;
 const mercatorLatitudeRad = (latitude: number): number =>
   Math.max(-MERCATOR_MAX_LAT_RAD, Math.min(MERCATOR_MAX_LAT_RAD, latitude * DEG_TO_RAD));
 
+// The Mercator isometric latitude for a latitude in degrees, clamped inside the projection's
+// pole singularity. The rhumb math above and the measure overlay's label midpoint share this one
+// definition, so the clamp epsilon cannot drift between them.
+export function mercatorIsometricLatitude(latitudeDegrees: number): number {
+  return Math.log(Math.tan(Math.PI / 4 + mercatorLatitudeRad(latitudeDegrees) / 2));
+}
+
 // Rhumb-line (constant-bearing) distance: the line you actually steer over a short to medium leg.
 export function rhumbDistanceMeters(from: LatLon, to: LatLon): number {
   const dLatRad = (to.latitude - from.latitude) * DEG_TO_RAD;

@@ -17,16 +17,24 @@ interface Props {
 }
 
 const { heading, items, empty, ariaLabel, key, isActive, card }: Props = $props();
+
+// The list names itself from its own heading when the caller supplies neither an ariaLabel nor a
+// heading-less layout: no consumer passed ariaLabel, which left every shipped list's ul unnamed.
+const headingId = $props.id();
 </script>
 
 <div class="saved">
   {#if heading}
-    <span class="caps-label">{heading}</span>
+    <span class="caps-label" id={headingId}>{heading}</span>
   {/if}
   {#if items.length === 0}
     <p class="empty">{empty}</p>
   {:else}
-    <ul class="bare-list" aria-label={ariaLabel}>
+    <ul
+      class="bare-list"
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabel ? undefined : heading ? headingId : undefined}
+    >
       {#each items as item (key(item))}
         <li
           class="card-frame"
