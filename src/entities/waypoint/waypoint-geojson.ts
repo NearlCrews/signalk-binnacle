@@ -1,24 +1,13 @@
 import { isLonLat, type LonLat, latLonToLonLat, lonLatToLatLon } from '$shared/geo';
-import { hasControlCharacters, isRecord } from '$shared/lib';
-import { cleanTruncatedText, str } from '$shared/signalk';
+import { isRecord } from '$shared/lib';
+import { cleanResourceId, cleanTruncatedText } from '$shared/signalk';
 import type { Waypoint } from './waypoint-types';
 
 export const MAX_WAYPOINT_NAME_LENGTH = 256;
 const MAX_WAYPOINT_DESCRIPTION_LENGTH = 10_000;
 const MAX_WAYPOINT_ICON_LENGTH = 256;
-const MAX_WAYPOINT_ID_LENGTH = 512;
-
 export function cleanWaypointId(value: unknown): string | undefined {
-  const text = str(value);
-  if (
-    !text ||
-    text.length > MAX_WAYPOINT_ID_LENGTH ||
-    text !== text.trim() ||
-    hasControlCharacters(text)
-  ) {
-    return undefined;
-  }
-  return text;
+  return cleanResourceId(value);
 }
 
 export function cleanWaypointName(value: unknown, fallback: string): string {

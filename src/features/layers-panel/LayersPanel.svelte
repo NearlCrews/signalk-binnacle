@@ -31,7 +31,7 @@ interface Props {
   // feature; it just forwards the row id.
   onManageLayer?: (id: string) => void;
   onShowChartBounds?: (bounds: Bbox4) => void;
-  initialMode?: 'charts' | 'overlays';
+  request?: { mode: 'charts' | 'overlays' };
 }
 
 const {
@@ -45,7 +45,7 @@ const {
   onBack,
   onManageLayer,
   onShowChartBounds,
-  initialMode = 'charts',
+  request = { mode: 'charts' },
 }: Props = $props();
 
 const pinned = $derived(view.items.filter((item) => item.pinned));
@@ -102,7 +102,10 @@ function toggleCategory(id: string): void {
 
 let addOpen = $state(false);
 let detailId = $state<string | undefined>();
-let mode = $derived<'charts' | 'overlays'>(initialMode);
+// A writable derived over the request OBJECT, not its mode string: each request is a fresh
+// identity, so even a repeated same-tab request re-derives and adopts, while the navigator's tab
+// clicks override freely in between (the old string-prop derived missed same-value requests).
+let mode = $derived<'charts' | 'overlays'>(request.mode);
 const minimize = createPanelMinimize();
 const detailItem = $derived(detailId ? view.items.find((item) => item.id === detailId) : undefined);
 const detailUserSource = $derived(

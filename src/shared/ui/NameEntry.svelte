@@ -1,11 +1,16 @@
 <script lang="ts">
 import { untrack } from 'svelte';
+import { registerDismiss } from './dialog';
 import { focusSelectOnMount } from './focus';
 
 // An inline name form that replaces a native window.prompt: a labeled, themed text input with Save
 // and Cancel, so naming a route, track, or profile reads like the rest of the app instead of an
 // unstyled browser dialog. Enter saves, Escape cancels, and the seeded text starts selected so the
 // navigator can type over the default name. The caller owns the trim and the default-name fallback.
+// Escape goes through the shared dismiss stack, not a raw key handler: the enclosing panel's own
+// stack entry listens on window in the capture phase, so a raw handler here would let one
+// keystroke cancel the form AND close the whole panel. Registering while mounted puts this form
+// above the panel, so the first Escape cancels the name entry and a second closes the panel.
 interface Props {
   // The caps label above the input, doubling as the form's accessible name.
   label: string;
@@ -38,6 +43,8 @@ const {
 // explicit and keeps the compiler from flagging a missed reactive reference.
 let text = $state(untrack(() => value));
 
+$effect(() => registerDismiss(() => onCancel()));
+
 function submit(event: SubmitEvent): void {
   event.preventDefault();
   if (busy) return;
@@ -55,9 +62,6 @@ function submit(event: SubmitEvent): void {
       disabled={busy}
       bind:value={text}
       use:focusSelectOnMount
-      onkeydown={(event) => {
-        if (event.key === 'Escape') onCancel();
-      }}
     >
   </label>
   <div class="panel-controls">

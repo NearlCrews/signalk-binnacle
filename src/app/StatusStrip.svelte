@@ -193,7 +193,10 @@ const depthWatchPaused = $derived(
       </span>
     </button>
     {#if streamError}
-      <span class="readout fix-lost action-note" role="alert" aria-live="assertive">
+      <!-- Not a live region: the always-mounted conn dot above announces every connection phase
+           politely (matching the down branch below), and the one assertive channel is App's
+           annunciator, which a data-link note must not talk over. -->
+      <span class="readout fix-lost action-note">
         Data link failed
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>

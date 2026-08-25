@@ -160,12 +160,11 @@ export function createPointReadout(deps: PointReadoutDeps) {
     provider: Partial<WeatherReadout> | undefined,
     grid: WeatherReadout | undefined,
   ): { value: WeatherReadout; source: string } | undefined {
-    const id = deps.providerId?.() ?? deps.providerName();
-    const providerName = deps.providerId
-      ? (deps.providerName() ?? (id ? providerDisplayName(id) : 'Weather provider'))
-      : id
-        ? providerDisplayName(id)
-        : 'Weather provider';
+    // providerDisplayName decorates a raw provider-id slug only; a human-readable providerName
+    // passes through untouched, so a name is never mangled by the slug prettifier.
+    const rawId = deps.providerId?.();
+    const providerName =
+      deps.providerName() ?? (rawId ? providerDisplayName(rawId) : 'Weather provider');
     return mergePointReadouts(provider, grid, providerName);
   }
 

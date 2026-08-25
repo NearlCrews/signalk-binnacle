@@ -496,7 +496,10 @@ let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
 let profilesPanelAttempt = $state(0);
 let personalNoteDialogAttempt = $state(0);
 let instrumentsPanelAttempt = $state(0);
-let layersInitialMode = $state<'charts' | 'overlays'>('charts');
+// A fresh object per request, not a bare string: the Layers panel adopts the requested tab on
+// each request's new identity, so repeating the same tab still re-targets it, while the
+// navigator's own tab clicks stay untouched between requests.
+let layersOpenRequest = $state<{ mode: 'charts' | 'overlays' }>({ mode: 'charts' });
 // The hamburger's open state is owned here, not inside AppMenu, so a panel's back action can reopen
 // the menu after it closed on selection.
 let menuOpen = $state(false);
@@ -1615,7 +1618,9 @@ const menuItems = $derived<MenuItem[]>([
     disabledLabel: 'Layers and charts (chart is loading)',
     pressed: activePanel === 'layers',
     onSelect: () => {
-      layersInitialMode = 'charts';
+      // Request the Charts tab only when this tile OPENS the panel; a toggle that closes it must
+      // not reset the tab the navigator was on.
+      if (activePanel !== 'layers') layersOpenRequest = { mode: 'charts' };
       togglePanel('layers');
     },
   },
@@ -2663,7 +2668,7 @@ const plotterActions = {
   openInstalledCharts,
   backToOfflineCharts,
   openLayersPanel: (mode: 'charts' | 'overlays') => {
-    layersInitialMode = mode;
+    layersOpenRequest = { mode };
     openPanel('layers');
   },
   setLayerVisible,
@@ -2788,7 +2793,7 @@ const plotterActions = {
     {currentView}
     layerSettings={layerSettings.value}
     layerOrder={layerOrder.value}
-    {layersInitialMode}
+    {layersOpenRequest}
     weatherLayerSettings={weatherLayerSettings.value}
     {trackPersistenceDegraded}
     {activePanel}

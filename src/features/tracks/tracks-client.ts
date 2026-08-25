@@ -3,6 +3,7 @@ import { isLonLat } from '$shared/geo';
 import { isFiniteNumber } from '$shared/lib';
 import { antimeridianLineGeometry, featureCollection } from '$shared/map';
 import {
+  cleanResourceId,
   deleteResourceOutcome,
   fetchKeyedResource,
   fetchProviderIdList,
@@ -219,7 +220,9 @@ export function saveTrack(
       timespan: stats.durationSeconds,
     },
   };
-  return putResourceOutcome(`${base}${V2}/${encodeURIComponent(id)}`, token, feature);
+  const safeId = cleanResourceId(id);
+  if (!safeId) return Promise.resolve('failed');
+  return putResourceOutcome(`${base}${V2}/${encodeURIComponent(safeId)}`, token, feature);
 }
 
 export function deleteTrack(
@@ -227,5 +230,7 @@ export function deleteTrack(
   token: string | undefined,
   id: string,
 ): Promise<ResourceMutationResult> {
-  return deleteResourceOutcome(`${base}${V2}/${encodeURIComponent(id)}`, token);
+  const safeId = cleanResourceId(id);
+  if (!safeId) return Promise.resolve('failed');
+  return deleteResourceOutcome(`${base}${V2}/${encodeURIComponent(safeId)}`, token);
 }

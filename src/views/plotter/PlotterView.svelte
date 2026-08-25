@@ -148,7 +148,7 @@ interface FlatProps {
   currentView: import('$shared/settings').MapView | undefined;
   layerSettings: LayerSettings;
   layerOrder: string[];
-  layersInitialMode: 'charts' | 'overlays';
+  layersOpenRequest: { mode: 'charts' | 'overlays' };
   weatherLayerSettings: LayerSettings;
   trackSettings: import('$shared/settings').PersistedValue<
     import('$shared/settings').TrackSettings
@@ -412,7 +412,7 @@ let {
   currentView,
   layerSettings,
   layerOrder,
-  layersInitialMode,
+  layersOpenRequest,
   weatherLayerSettings,
   trackPersistenceDegraded,
   activePanel,
@@ -1058,7 +1058,7 @@ $effect(() => {
           <ErrorBoundary>
             <module.default
               view={layersView}
-              initialMode={layersInitialMode}
+              request={layersOpenRequest}
               {auth}
               chartsLoadState={serverChartsStatus}
               onRetryCharts={retryServerCharts}

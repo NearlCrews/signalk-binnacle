@@ -164,6 +164,25 @@ export function str(value: unknown): string | undefined {
 // than Binnacle displays is still the mariner's name for that mark, so it is shortened rather than
 // dropped. Built on str, so it inherits the 16,384-character pre-bound before any slicing.
 // The reject-on-oversized counterpart is cleanBoundedText in $shared/lib.
+const MAX_RESOURCE_ID_LENGTH = 512;
+
+// A Signal K resource id must round-trip byte-exact into the URL path, so reject rather than
+// repair: an id that differs from its trim, carries control characters, or exceeds the bound
+// never reaches the server. The route, waypoint, and track clients all guard writes and deletes
+// through this one definition.
+export function cleanResourceId(value: unknown): string | undefined {
+  const text = str(value);
+  if (
+    !text ||
+    text.length > MAX_RESOURCE_ID_LENGTH ||
+    text !== text.trim() ||
+    hasControlCharacters(text)
+  ) {
+    return undefined;
+  }
+  return text;
+}
+
 export function cleanTruncatedText(value: unknown, maxLength: number): string | undefined {
   const text = str(value)?.trim();
   if (!text || hasControlCharacters(text)) return undefined;

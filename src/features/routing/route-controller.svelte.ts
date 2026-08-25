@@ -665,9 +665,11 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
     hydrateSequence += 1;
     arrivalAdvanceSequence += 1;
-    let accepted = await setDestination(origin, deps.getToken(), target);
-    if (!accepted && fallback) accepted = await setDestination(origin, deps.getToken(), fallback);
-    if (!accepted) {
+    let destinationSet = await setDestination(origin, deps.getToken(), target);
+    if (!destinationSet && fallback) {
+      destinationSet = await setDestination(origin, deps.getToken(), fallback);
+    }
+    if (!destinationSet) {
       flagRouteError('Could not set the destination. Check the connection.');
       return;
     }

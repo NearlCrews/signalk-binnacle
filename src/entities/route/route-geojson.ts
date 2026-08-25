@@ -1,25 +1,15 @@
 import { isLonLat, type LonLat, latLonToLonLat, lonLatToLatLon } from '$shared/geo';
-import { hasControlCharacters, isRecord } from '$shared/lib';
+import { isRecord } from '$shared/lib';
 import { rhumbBearingRad, rhumbDistanceMeters } from '$shared/nav';
-import { cleanTruncatedText, str } from '$shared/signalk';
+import { cleanResourceId, cleanTruncatedText } from '$shared/signalk';
 import type { Route, RouteWaypoint } from './route-types';
 
 export const MAX_ROUTE_WAYPOINTS = 10_000;
-const MAX_ROUTE_ID_LENGTH = 512;
 const MAX_ROUTE_NAME_LENGTH = 256;
 const MAX_ROUTE_WAYPOINT_NAME_LENGTH = 256;
 
 export function cleanRouteId(value: unknown): string | undefined {
-  const text = str(value);
-  if (
-    !text ||
-    text.length > MAX_ROUTE_ID_LENGTH ||
-    text !== text.trim() ||
-    hasControlCharacters(text)
-  ) {
-    return undefined;
-  }
-  return text;
+  return cleanResourceId(value);
 }
 
 // The Signal K v2 route resource body: a GeoJSON Feature with a LineString, plus name and the
