@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -44,6 +44,19 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      # These caches restore files without ever invoking npm, so they honor the invariant that no
+      # npm command runs before the pinned upgrade below (setup-node's own cache would run the
+      # bundled npm to locate the cache directory, which is why check-workflows.mjs forbids it).
+      - name: Cache the npm download cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Cache the Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       # Install the supported npm outside the checkout. The bundled npm may be older than
       # devEngines permits, so it cannot safely inspect this package before the upgrade.
       - name: Install supported npm

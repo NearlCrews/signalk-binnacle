@@ -1,14 +1,5 @@
 {
+  "extends": "./tsconfig.paths.json",
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }],
-  "compilerOptions": {
-    "paths": {
-      "$app/*": ["./src/app/*"],
-      "$views/*": ["./src/views/*"],
-      "$widgets/*": ["./src/widgets/*"],
-      "$features/*": ["./src/features/*"],
-      "$entities/*": ["./src/entities/*"],
-      "$shared/*": ["./src/shared/*"]
-    }
-  }
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }

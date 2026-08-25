@@ -5,21 +5,24 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 import packageJson from './package.json' with { type: 'json' };
 import { runtimeCaching } from './src/shared/pwa/sw-caching.ts';
+import tsconfigBase from './tsconfig.base.json' with { type: 'json' };
+import tsconfigPaths from './tsconfig.paths.json' with { type: 'json' };
 
-const alias = {
-  $app: fileURLToPath(new URL('./src/app', import.meta.url)),
-  $views: fileURLToPath(new URL('./src/views', import.meta.url)),
-  $widgets: fileURLToPath(new URL('./src/widgets', import.meta.url)),
-  $features: fileURLToPath(new URL('./src/features', import.meta.url)),
-  $entities: fileURLToPath(new URL('./src/entities', import.meta.url)),
-  $shared: fileURLToPath(new URL('./src/shared', import.meta.url)),
-};
+// The tsconfig owns the path aliases; derive Vite's map from it so a new slice needs one edit.
+const alias = Object.fromEntries(
+  Object.entries(tsconfigPaths.compilerOptions.paths).map(([pattern, [target]]) => [
+    pattern.replace('/*', ''),
+    fileURLToPath(new URL(target.replace('/*', ''), import.meta.url)),
+  ]),
+);
+
+// Signal K serves the webapp at /<package-name>/.
+const base = `/${packageJson.name}/`;
 
 export default defineConfig({
-  // Signal K serves the webapp at /<package-name>/, so production assets resolve under /signalk-binnacle/.
-  base: process.env.NODE_ENV === 'production' ? '/signalk-binnacle/' : '/',
+  base: process.env.NODE_ENV === 'production' ? base : '/',
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? packageJson.version),
+    __APP_VERSION__: JSON.stringify(packageJson.version),
   },
   plugins: [
     svelte(),
@@ -46,8 +49,8 @@ export default defineConfig({
         name: 'Binnacle Chartplotter',
         short_name: 'Binnacle',
         description: 'A WebGL chartplotter for Signal K.',
-        start_url: '/signalk-binnacle/',
-        scope: '/signalk-binnacle/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         background_color: '#cfe0ec',
@@ -96,7 +99,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/signalk-binnacle/index.html',
+        navigateFallback: `${base}index.html`,
         // Do not answer file-like navigation requests (a path with an extension) from the app shell;
         // they should hit the network or 404, not the HTML. The /signalk-binnacle/ scope already
         // isolates the worker from the Signal K server API and admin paths, and a /^\/signalk/ entry
@@ -117,16 +120,17 @@ export default defineConfig({
   publicDir: 'static',
   build: {
     outDir: 'public',
-    emptyOutDir: true,
-    // Match tsconfig.app.json's target so the build output is consistent with the type-check.
-    target: 'es2023',
+    // The shared tsconfig base owns the language target so the build output always matches the
+    // type-check.
+    target: tsconfigBase.compilerOptions.target,
     // Hidden sourcemaps are not served to users but allow error monitoring tools to symbolicate
     // production stack traces. Critical for field debugging on a boat where reproducing an issue
     // is not always possible.
     sourcemap: 'hidden',
     rolldownOptions: {
-      // rolldown 1.2.5 folds side-effect-bearing modules that only lazy chunks share into the
-      // eager entry (rolldown#10645). In this single-entry app every on-demand panel is reachable
+      // rolldown 1.2.5 deliberately folds side-effect-bearing modules that only lazy chunks share
+      // into the eager entry (rolldown#10645, the intended fix for rolldown#9963; there is no
+      // upstream fix to wait for). In this single-entry app every on-demand panel is reachable
       // only through the entry, so the fold sweeps the lazy features (weather, instruments,
       // profiles) into the main chunk and blows its size budget. In the released 1.2.5 the fold
       // ships under avoidRedundantChunkLoads; disabling it restores per-dynamic-import splitting
@@ -164,7 +168,10 @@ export default defineConfig({
     testTimeout: 15_000,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov'],
+      // The gate needs only the text summary and the thresholds; the html and lcov reports are
+      // hundreds of files rebuilt on every run for occasional human browsing, so they live behind
+      // the test:coverage:report script instead.
+      reporter: ['text'],
       include: ['src/**/*.{ts,svelte}'],
       exclude: [
         'src/**/*.d.ts',
@@ -188,6 +195,9 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.{test,spec}.ts'],
           exclude: ['src/**/*.svelte.{test,spec}.ts'],
+          // Keep per-file isolation: isolate: false was measured 2026-08-25 to roughly halve the
+          // wall clock, but it produced nondeterministic cross-file failures (46 on one run, a
+          // different file on the next), so the module graph is not order-independent.
         },
       },
       {

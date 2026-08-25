@@ -7,5 +7,7 @@
     },
     "MD033": false
   },
+  // File selection lives here so the CLI gate and the VS Code extension agree on scope.
+  "globs": ["*.md", ".github/*.md", "docs/*.md"],
   "ignores": ["docs/superpowers/**", "public/**"]
 }

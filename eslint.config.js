@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+import { includeIgnoreFile } from '@eslint/compat';
 import svelte from 'eslint-plugin-svelte';
 import tseslint from 'typescript-eslint';
 
@@ -8,20 +10,9 @@ const typedRules = {
 };
 
 export default tseslint.config(
-  {
-    ignores: [
-      '.cave/**',
-      '.claude/**',
-      '.remember/**',
-      '.svelte-check/**',
-      'coverage/**',
-      'docs/superpowers/**',
-      'playwright-report/**',
-      'public/**',
-      'test-results/**',
-      'tmp/**',
-    ],
-  },
+  // .gitignore is the one ignore source; a hand-kept copy here drifted (three gitignored
+  // directories never made it in, and any lintable file in them failed as file-not-in-project).
+  includeIgnoreFile(fileURLToPath(new URL('.gitignore', import.meta.url))),
   ...svelte.configs['flat/recommended'],
   {
     files: ['**/*.svelte.ts'],

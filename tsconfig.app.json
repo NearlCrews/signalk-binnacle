@@ -1,24 +1,11 @@
 {
-  "extends": "@tsconfig/svelte/tsconfig.json",
+  "extends": ["@tsconfig/svelte/tsconfig.json", "./tsconfig.base.json", "./tsconfig.paths.json"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "target": "es2023",
-    "module": "esnext",
     "types": ["svelte", "vite/client"],
-    "noEmit": true,
     "allowJs": true,
     "checkJs": true,
-    "moduleDetection": "force",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "paths": {
-      "$app/*": ["./src/app/*"],
-      "$views/*": ["./src/views/*"],
-      "$widgets/*": ["./src/widgets/*"],
-      "$features/*": ["./src/features/*"],
-      "$entities/*": ["./src/entities/*"],
-      "$shared/*": ["./src/shared/*"]
-    }
+    "moduleDetection": "force"
   },
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
 }

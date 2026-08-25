@@ -1,14 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const PREVIEW_ORIGIN = 'http://localhost:4173/signalk-binnacle/';
+const FIXTURE_PORT = 4174;
+const FIXTURE_ORIGIN = `http://127.0.0.1:${FIXTURE_PORT}/signalk-binnacle/`;
+
 export default defineConfig({
   testDir: './e2e',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  // Serial execution: the smoke test starts the preview server and navigates to the app root.
-  // If more e2e tests are added that share server state, keep this serial; if they become truly
-  // independent (each does a fresh page.goto), parallel execution could be safe.
-  fullyParallel: false,
-  workers: 1,
+  // Two workers, file-level parallelism only (fullyParallel stays at its false default): tests
+  // within a spec file run in order in one worker, so mariner-helm's stateful fixture scenarios
+  // keep their sequence while an independent file runs in the other worker against the stateless
+  // preview origin. The gate is the dominant cost of every push, so the second worker pays for
+  // itself; drop back to 1 if contention ever makes the specs flaky.
+  workers: 2,
   // Playwright's default is 30 seconds, tuned for CI-class hardware. Several of these specs boot the
   // map, wait for a style and its overlays, and then interact, which takes about 29 seconds on the
   // Raspberry Pi 5 this project develops on: repeated runs of one spec measured 29.0, 29.1, and
@@ -19,16 +24,18 @@ export default defineConfig({
   timeout: 60_000,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173/signalk-binnacle/',
+    baseURL: PREVIEW_ORIGIN,
     serviceWorkers: 'block',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
-    video: 'retain-on-failure',
+    // Recording video for all 89 tests costs ffmpeg encoding on every green gate that then keeps
+    // nothing; locally a failure still leaves a screenshot and can be re-run with --trace on.
+    video: process.env.CI ? 'retain-on-failure' : 'off',
   },
   webServer: [
     {
       command: 'npm run preview',
-      url: 'http://localhost:4173/signalk-binnacle/',
+      url: PREVIEW_ORIGIN,
       // Never trust a process already on this port: it may be an unrelated server or a stale build.
       reuseExistingServer: false,
       timeout: 120000,
@@ -38,8 +45,9 @@ export default defineConfig({
       // which Playwright's routeWebSocket cannot intercept, so the mariner project runs against
       // this real server (static build plus /signalk/v1/stream plus an HTTP control channel).
       command: 'npm run e2e:fixture',
+      env: { SIGNALK_FIXTURE_PORT: String(FIXTURE_PORT) },
       // 127.0.0.1, not localhost: the fixture binds IPv4 only, and localhost can resolve to ::1.
-      url: 'http://127.0.0.1:4174/signalk-binnacle/',
+      url: FIXTURE_ORIGIN,
       reuseExistingServer: false,
       timeout: 30000,
     },
@@ -65,7 +73,7 @@ export default defineConfig({
       testMatch: /mariner-helm\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:4174/signalk-binnacle/',
+        baseURL: FIXTURE_ORIGIN,
       },
     },
     {

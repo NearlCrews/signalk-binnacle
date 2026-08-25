@@ -4,16 +4,8 @@
   "language": "en-US",
   "useGitignore": true,
   "enableGlobDot": true,
-  "ignorePaths": [
-    "coverage/**",
-    "docs/superpowers/**",
-    "node_modules/**",
-    "package-lock.json",
-    "playwright-report/**",
-    "public/**",
-    "screenshots/**",
-    "test-results/**"
-  ],
+  "files": ["README.md", "CHANGELOG.md", "AGENTS.md", ".github/**/*.{md,yml,yaml}", "docs/*.md"],
+  "ignorePaths": ["package-lock.json"],
   "words": [
     "Accu",
     "advected",

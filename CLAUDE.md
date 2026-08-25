@@ -88,13 +88,18 @@ not have to be corrected after the fact.
   parsing `.svg` and chokes on the XML prolog). Config uses the `linter.rules.preset` form
   (`recommended`), not the deprecated `recommended` boolean.
 - Type-check: `npm run check` runs svelte-check with `--tsgo` against `tsconfig.app.json`, then
-  `tsgo` against `tsconfig.node.json` (Vite, Playwright, Vitest setup, and E2E code; requires the
-  direct `@types/node` development dependency), then `tsgo` against `tsconfig.scripts.json`
-  (`checkJs` over `scripts/*.mjs`). `tsgo` is the `@typescript/native-preview` compiler, and it is
-  the real check engine, so the code is ALREADY validated against TypeScript 7 semantics. The
-  `typescript` dependency on 6.x is only what satisfies the peers of svelte-check and
-  typescript-eslint; nothing type-checks with it. See the version note below before trying to raise
-  it. svelte-check `--tsgo` writes transpiled Svelte files to
+  the TS7 compiler against `tsconfig.node.json` (Vite, Playwright, Vitest setup, and E2E code;
+  requires the direct `@types/node` development dependency), then against `tsconfig.scripts.json`
+  (`checkJs` over `scripts/*.mjs`). The check engine is `@typescript/native`, the svelte-check
+  documented npm alias for `typescript@^7` (stable, tracking upstream), which svelte-check
+  resolves first for `--tsgo`; the direct invocations go through
+  `node node_modules/@typescript/native/bin/tsc` because the alias's `tsc` bin name would collide
+  with typescript 6's in `.bin`. So the code is validated against stable TypeScript 7 semantics.
+  The shared strictness flags and the language target live in `tsconfig.base.json`, and the path
+  aliases live once in `tsconfig.paths.json` (vite.config.ts derives its alias map and build
+  target from those files, so a new slice or target change is one edit). The `typescript`
+  dependency on 6.x is only what satisfies the peers of svelte-check and typescript-eslint;
+  nothing type-checks with it. See the version note below before trying to raise it. svelte-check `--tsgo` writes transpiled Svelte files to
   `.svelte-check/`, which is gitignored and ESLint-ignored. A Svelte file deleted from `src/`
   leaves a stale transpiled copy there that keeps failing the check; `.svelte-check/` is a
   disposable cache, so delete it and re-run.
@@ -178,14 +183,10 @@ not have to be corrected after the fact.
   latest, peers `^5.0.0 || ^6.0.0`). Replacing typescript-eslint does NOT unblock it, so do not go
   down that road: svelte-check is the binding cap and has no substitute, since `sv` is a scaffolding
   CLI and `svelte-language-server` is an editor LSP with the same dependency. Nor is anything being
-  missed meanwhile: `@typescript/native-preview` exports the exact same shape as `typescript@7.0.2`,
-  because it IS that compiler, so `npm run check` already runs TypeScript 7. Note that
-  `@typescript/native-preview` stopped publishing on 2026-07-07 (a frozen final snapshot; TS7
-  nightlies now ship as `typescript@next`), and svelte-check's documented TS7 arrangement is the
-  alias `@typescript/native@npm:typescript@7` beside `typescript@~6`, which it resolves first. The
-  swap is not free here because `typescript@7` ships only a `tsc` bin (no `tsgo`, and it would
-  collide with typescript 6's), while the check script invokes `tsgo -p` directly, so it stays an
-  owner decision. The only prize is
+  missed meanwhile: the check engine is `@typescript/native` (the npm alias for `typescript@^7`,
+  stable), which replaced the retired `@typescript/native-preview` dev-snapshot line (it stopped
+  publishing on 2026-07-07; TS7 nightlies now ship as `typescript@next`). Do not reintroduce the
+  preview package. The only prize left is
   retiring one of the two package names once the API stabilizes. WATCH TRIGGER, and it is one
   command, not a calendar entry: re-check when `npm view svelte-check peerDependencies` admits `^7`.
   typescript-eslint waits on the new compiler API expected in TypeScript 7.1 (7.0 ships none). npm

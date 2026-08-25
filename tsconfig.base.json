@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
