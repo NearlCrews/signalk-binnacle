@@ -76,7 +76,7 @@ export function isSpecialist(id: string): boolean {
   return SPECIALIST.has(id);
 }
 
-export interface SourceGroup {
+interface SourceGroup {
   category: string;
   title: string;
   sources: ChartSource[];

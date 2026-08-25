@@ -9,9 +9,7 @@ import { openMenuItem, stubVesselsSelf } from './helpers';
 // where Playwright's routeWebSocket cannot reach. REST endpoints stay page.route stubs here,
 // matching the rest of the suite.
 //
-// Defect-demonstrating cases carry test.fail() with the task that flips them green; remove the
-// marker in that task's commit. Radar-health and route-edit scenarios join in their own tasks
-// (Tasks 2.2 and 2.6), which extend this spec.
+// Radar-health and route-edit scenarios extend this spec in their own cases.
 
 test.use({ serviceWorkers: 'block' });
 

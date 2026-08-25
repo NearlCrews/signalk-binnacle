@@ -232,9 +232,4 @@ export class TidesStore {
     this.failures = [];
     this.status = 'no-coverage';
   }
-
-  // A failed refresh keeps the last good readings on screen and only flags the status.
-  setError(): void {
-    this.status = 'error';
-  }
 }

@@ -2,7 +2,7 @@ import type { TideStation } from '$entities/tides';
 import { lowerBound } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 
-export interface RankedStation {
+interface RankedStation {
   station: TideStation;
   distanceMeters: number;
 }

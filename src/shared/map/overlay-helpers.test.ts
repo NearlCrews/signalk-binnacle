@@ -1,4 +1,4 @@
-import type { GeoJSONSourceDiff, Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
+import type { Map as MapLibreMap, SourceSpecification } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { createFakeMap } from '$shared/testing';
 import {
@@ -61,27 +61,6 @@ describe('setSourceData', () => {
   it('is a no-op on a missing source, so a sync after remove does not throw', () => {
     const map = fakeMap();
     expect(() => setSourceData(map, 'gone', point)).not.toThrow();
-  });
-
-  it('passes MapLibre property updates through its native diff contract', () => {
-    const setData = vi.fn(async () => {});
-    const updateData = vi.fn(async () => {});
-    const map = {
-      getSource: () => ({ setData, updateData }),
-    } as unknown as MapLibreMap;
-    const diff: GeoJSONSourceDiff = {
-      update: [
-        {
-          id: 'target-1',
-          addOrUpdateProperties: [{ key: 'status', value: 'active' }],
-        },
-      ],
-    };
-
-    setSourceData(map, 'src', point, diff);
-
-    expect(updateData).toHaveBeenCalledWith(diff);
-    expect(setData).not.toHaveBeenCalled();
   });
 });
 

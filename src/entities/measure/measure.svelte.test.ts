@@ -9,7 +9,7 @@ describe('MeasureStore', () => {
   it('ignores taps while not armed', () => {
     const measure = new MeasureStore();
     measure.add(A);
-    expect(measure.points).toHaveLength(0);
+    expect(measure.vertices).toHaveLength(0);
   });
 
   it('collects points and derives legs with range and bearing', () => {
@@ -40,9 +40,9 @@ describe('MeasureStore', () => {
     measure.add(A);
     measure.add(B);
     measure.undo();
-    expect(measure.points).toHaveLength(1);
+    expect(measure.vertices).toHaveLength(1);
     measure.clear();
-    expect(measure.points).toHaveLength(0);
+    expect(measure.vertices).toHaveLength(0);
     expect(measure.active).toBe(true);
   });
 
@@ -57,15 +57,15 @@ describe('MeasureStore', () => {
     const selectedId = measure.selectedId;
     expect(measure.moveSelected({ latitude: 0.0005, longitude: 0.002 })).toBe(true);
     expect(measure.selectedId).toBe(selectedId);
-    expect(measure.points[1]).toEqual({ latitude: 0.0005, longitude: 0.002 });
+    expect(measure.vertices[1].position).toEqual({ latitude: 0.0005, longitude: 0.002 });
     expect(measure.legs).toHaveLength(2);
     expect(measure.totalMeters).not.toBeCloseTo(priorTotal, 5);
 
     measure.undo();
-    expect(measure.points[1]).toEqual(B);
+    expect(measure.vertices[1].position).toEqual(B);
     expect(measure.totalMeters).toBeCloseTo(priorTotal, 5);
     measure.undo();
-    expect(measure.points).toHaveLength(2);
+    expect(measure.vertices).toHaveLength(2);
   });
 
   it('deletes and restores a middle point with the same stable id and index', () => {
@@ -77,11 +77,11 @@ describe('MeasureStore', () => {
     expect(measure.selectIndex(1)).toBe(true);
     const selectedId = measure.selectedId;
     expect(measure.deleteSelected()).toBe(true);
-    expect(measure.points).toEqual([A, C]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A, C]);
     expect(measure.legs).toHaveLength(1);
 
     measure.undo();
-    expect(measure.points).toEqual([A, B, C]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A, B, C]);
     expect(measure.vertices[1].id).toBe(selectedId);
     expect(measure.selectedIndex).toBe(1);
   });
@@ -95,12 +95,12 @@ describe('MeasureStore', () => {
     expect(measure.isEmpty).toBe(true);
     expect(measure.canUndo).toBe(true);
     measure.undo();
-    expect(measure.points).toEqual([A]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A]);
 
     measure.add(B);
     measure.selectIndex(0);
     expect(measure.deleteSelected()).toBe(true);
-    expect(measure.points).toEqual([B]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([B]);
   });
 
   it('rejects moves that are invalid or duplicate an adjacent point without adding history', () => {
@@ -113,9 +113,9 @@ describe('MeasureStore', () => {
     expect(measure.moveSelected(A)).toBe(false);
     expect(measure.moveSelected(C)).toBe(false);
     expect(measure.moveSelected({ latitude: Number.NaN, longitude: 0 })).toBe(false);
-    expect(measure.points).toEqual([A, B, C]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A, B, C]);
     measure.undo();
-    expect(measure.points).toEqual([A, B]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A, B]);
   });
 
   it('rejects deletion when it would join duplicate neighbors', () => {
@@ -127,7 +127,7 @@ describe('MeasureStore', () => {
     measure.selectIndex(1);
     expect(measure.canDeleteSelected).toBe(false);
     expect(measure.deleteSelected()).toBe(false);
-    expect(measure.points).toEqual([A, B, A]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A, B, A]);
   });
 
   it('previews and cancels a move without changing the committed measurement or history', () => {
@@ -138,12 +138,12 @@ describe('MeasureStore', () => {
     measure.selectIndex(1);
     expect(measure.armMove()).toBe(true);
     expect(measure.previewSelected({ latitude: 0.001, longitude: 0.001 })).toBe(true);
-    expect(measure.displayPoints[1]).toEqual({ latitude: 0.001, longitude: 0.001 });
-    expect(measure.points[1]).toEqual(B);
+    expect(measure.displayVertices[1].position).toEqual({ latitude: 0.001, longitude: 0.001 });
+    expect(measure.vertices[1].position).toEqual(B);
     measure.cancelMove();
-    expect(measure.displayPoints).toEqual(measure.points);
+    expect(measure.displayVertices).toBe(measure.vertices);
     measure.undo();
-    expect(measure.points).toEqual([A]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A]);
   });
 
   // The overlay reads these on every tick of the shared overlay clock and skips its repaint when
@@ -174,8 +174,8 @@ describe('MeasureStore', () => {
     const measure = new MeasureStore();
     measure.start();
     measure.add(A);
-    expect(measure.points).toHaveLength(1);
-    expect(measure.points[0]).toEqual(A);
+    expect(measure.vertices).toHaveLength(1);
+    expect(measure.vertices[0].position).toEqual(A);
   });
 
   it('re-arming mid-measurement is a deliberate destructive reset', () => {
@@ -187,8 +187,8 @@ describe('MeasureStore', () => {
     measure.add(B);
     measure.start();
     measure.add(C);
-    expect(measure.points).toHaveLength(1);
-    expect(measure.points[0]).toEqual(C);
+    expect(measure.vertices).toHaveLength(1);
+    expect(measure.vertices[0].position).toEqual(C);
   });
 
   it('does not reuse vertex ids across measurement sessions', () => {
@@ -209,9 +209,9 @@ describe('MeasureStore', () => {
     measure.add(A);
     measure.stop();
     expect(measure.active).toBe(false);
-    expect(measure.points).toHaveLength(0);
+    expect(measure.vertices).toHaveLength(0);
     measure.start();
-    expect(measure.points).toHaveLength(0);
+    expect(measure.vertices).toHaveLength(0);
     expect(measure.canUndo).toBe(false);
     expect(measure.selectedId).toBeUndefined();
     expect(measure.moveArmed).toBe(false);
@@ -224,7 +224,7 @@ describe('MeasureStore', () => {
     expect(measure.add({ latitude: 91, longitude: 0 })).toBe(false);
     expect(measure.add(A)).toBe(true);
     expect(measure.add(A)).toBe(false);
-    expect(measure.points).toEqual([A]);
+    expect(measure.vertices.map((vertex) => vertex.position)).toEqual([A]);
   });
 
   it('caps the number of points and accepts more after undo', () => {
@@ -252,13 +252,13 @@ describe('MeasureStore', () => {
     const measure = new MeasureStore();
     const point = { ...A };
     measure.start();
-    const initial = measure.points;
+    const initial = measure.vertices;
     measure.add(point);
-    const afterFirst = measure.points;
+    const afterFirst = measure.vertices;
     measure.add(B);
     expect(afterFirst).not.toBe(initial);
-    expect(measure.points).not.toBe(afterFirst);
+    expect(measure.vertices).not.toBe(afterFirst);
     point.latitude = 10;
-    expect(measure.points[0]).toEqual(A);
+    expect(measure.vertices[0].position).toEqual(A);
   });
 });

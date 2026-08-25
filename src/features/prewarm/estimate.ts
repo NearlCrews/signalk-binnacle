@@ -57,7 +57,7 @@ export function coveringSources(bbox: LngLatBbox, zoomRange: ZoomRange): ChartSo
 
 /** Whether a box covers real ground. A tap without a drag, or a drag along one axis, yields a ring
  * whose corners share a longitude or a latitude. */
-export function hasArea([west, south, east, north]: LngLatBbox): boolean {
+function hasArea([west, south, east, north]: LngLatBbox): boolean {
   return west !== east && south !== north;
 }
 
@@ -82,7 +82,7 @@ export function exceedsRegionsFree(estimate: number, stats: CacheStats): boolean
   return estimate > regionsFreeBytes(stats);
 }
 
-export type DownloadGateReason =
+type DownloadGateReason =
   | 'administrator-access'
   | 'draw-area'
   | 'storage-loading'
@@ -143,7 +143,7 @@ export function rectangleRingFromBbox(bbox: LngLatBbox): Array<[number, number]>
   ];
 }
 
-export type EstimateResult = { ok: true; bytes: number } | { ok: false; message: string };
+type EstimateResult = { ok: true; bytes: number } | { ok: false; message: string };
 
 /** Convert strict package estimate failures into a render-safe state at the panel boundary. */
 export function estimateRegionBytes(

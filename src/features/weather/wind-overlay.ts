@@ -34,7 +34,7 @@ const GL_LAYER_ID = 'binnacle-weather-wind-particles';
 // re-blit the last trail, so the field stays visible while the simulation advances at the capped rate.
 const STEP_MS = 40;
 
-export interface WindOverlay extends OverlayModule {
+interface WindOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
 

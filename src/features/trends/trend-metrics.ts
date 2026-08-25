@@ -26,7 +26,7 @@ export interface AttributedTrendSeries extends TrendSeries {
   provider?: string;
 }
 
-export interface TrendDisplay {
+interface TrendDisplay {
   convert: (si: number) => number | undefined;
   unit: string;
   digits: number;

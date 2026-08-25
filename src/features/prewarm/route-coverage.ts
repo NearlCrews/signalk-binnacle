@@ -29,7 +29,7 @@ export const DEFAULT_COVERAGE_CORRIDOR_NM = 5;
 const MAX_COVERAGE_SAMPLES = 1200;
 
 export type CoverageVerdict = 'complete' | 'partial' | 'unknown';
-export type CoverageGapKind = 'uncovered' | 'insufficient-detail';
+type CoverageGapKind = 'uncovered' | 'insufficient-detail';
 
 export interface RouteCoverageReport {
   verdict: CoverageVerdict;

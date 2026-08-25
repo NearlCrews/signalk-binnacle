@@ -23,7 +23,7 @@ const LABEL_SOURCE = 'binnacle-weather-pressure-labels';
 const LINE_LAYER = 'binnacle-weather-pressure-line';
 const LABEL_LAYER = 'binnacle-weather-pressure-label';
 
-export interface PressureOverlay extends OverlayModule {
+interface PressureOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
 

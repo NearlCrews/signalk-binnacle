@@ -20,7 +20,7 @@ const FIELD_LAYER = 'binnacle-weather-waves-field-layer';
 const ARROW_SOURCE = 'binnacle-weather-waves-arrows';
 const ARROW_LAYER = 'binnacle-weather-waves-arrow-layer';
 
-export type WavesOverlay = FieldOverlay;
+type WavesOverlay = FieldOverlay;
 
 // The waves overlay: the shared canvas height field plus a sparse direction-arrow line layer. It
 // composes createFieldOverlay for the smooth height field and manages the arrow source and layer

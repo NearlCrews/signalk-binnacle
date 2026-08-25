@@ -96,7 +96,7 @@ export interface WeatherWarning {
   type: string;
 }
 
-export interface WeatherProviderInfo {
+interface WeatherProviderInfo {
   name?: string;
   isDefault: boolean;
 }

@@ -12,8 +12,8 @@ const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 // Open-Meteo accepts many locations per request; keep batches well under its cap.
 const MAX_LOCS_PER_REQUEST = 200;
-export const MAX_FORECAST_CELLS = 600;
-export const MAX_FORECAST_DAYS = 7;
+const MAX_FORECAST_CELLS = 600;
+const MAX_FORECAST_DAYS = 7;
 export const MAX_FORECAST_HOURLY_STEPS = 24 * MAX_FORECAST_DAYS;
 const MIN_MARINE_ALIGNMENT_TOLERANCE_M = 1_000;
 const MAX_MARINE_ALIGNMENT_TOLERANCE_M = 20_000;

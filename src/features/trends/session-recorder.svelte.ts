@@ -8,7 +8,7 @@ import type { AttributedTrendSeries } from './trend-metrics';
 export const TREND_SAMPLE_MS = 30_000;
 export const MAX_TREND_SESSION_SAMPLES = 2_880;
 
-export interface TrendPathSample {
+interface TrendPathSample {
   value: unknown;
   epoch: number;
 }

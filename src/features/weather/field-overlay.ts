@@ -21,7 +21,7 @@ export interface FieldOverlay extends OverlayModule {
   sync(ctx: OverlayContext): void;
 }
 
-export interface FieldOverlayOptions {
+interface FieldOverlayOptions {
   id: string;
   title: string;
   // Plain-language gloss for the Layers-panel row tooltip, passed straight to the OverlayModule.

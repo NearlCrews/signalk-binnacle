@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { readPmtilesMeta } from '$shared/map';
 import {
   cleanUserChartSource,
-  isUserChartSource,
   shouldShareUserChart,
   type UserChartSource,
   UserCharts,
@@ -24,7 +23,7 @@ vi.mock('$shared/map', () => ({
   })),
 }));
 
-describe('isUserChartSource', () => {
+describe('cleanUserChartSource', () => {
   const valid = {
     id: 'c1',
     name: 'Chart',
@@ -33,7 +32,7 @@ describe('isUserChartSource', () => {
   } satisfies UserChartSource;
 
   it('accepts a well-formed descriptor', () => {
-    expect(isUserChartSource(valid)).toBe(true);
+    expect(cleanUserChartSource(valid)).toBeDefined();
   });
 
   it('normalizes text, URLs, layers, and unknown fields into a canonical descriptor', () => {
@@ -57,25 +56,25 @@ describe('isUserChartSource', () => {
   });
 
   it('rejects drifted or malformed descriptors', () => {
-    expect(isUserChartSource(null)).toBe(false);
-    expect(isUserChartSource({ ...valid, id: 1 })).toBe(false);
-    expect(isUserChartSource({ ...valid, kind: 'bitmap' })).toBe(false);
-    expect(isUserChartSource({ ...valid, origin: { type: 'url' } })).toBe(false);
-    expect(isUserChartSource({ ...valid, origin: { type: 'other' } })).toBe(false);
-    expect(isUserChartSource({ ...valid, bounds: [0, 0, Number.NaN, 1] })).toBe(false);
-    expect(isUserChartSource({ ...valid, name: 'bad\nname' })).toBe(false);
+    expect(cleanUserChartSource(null)).toBe(false);
+    expect(cleanUserChartSource({ ...valid, id: 1 })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, kind: 'bitmap' })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, origin: { type: 'url' } })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, origin: { type: 'other' } })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, bounds: [0, 0, Number.NaN, 1] })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, name: 'bad\nname' })).toBeUndefined();
     expect(
-      isUserChartSource({ ...valid, origin: { type: 'url', url: 'file:///chart.pmtiles' } }),
-    ).toBe(false);
-    expect(isUserChartSource({ ...valid, minzoom: 12, maxzoom: 4 })).toBe(false);
-    expect(isUserChartSource({ ...valid, layers: ['ok', 'bad\nlayer'] })).toBe(false);
-    expect(isUserChartSource({ ...valid, shareWithServer: 'yes' })).toBe(false);
+      cleanUserChartSource({ ...valid, origin: { type: 'url', url: 'file:///chart.pmtiles' } }),
+    ).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, minzoom: 12, maxzoom: 4 })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, layers: ['ok', 'bad\nlayer'] })).toBeUndefined();
+    expect(cleanUserChartSource({ ...valid, shareWithServer: 'yes' })).toBeUndefined();
     expect(
-      isUserChartSource({
+      cleanUserChartSource({
         ...valid,
         origin: { type: 'url', url: 'https://captain:secret@x/y.pmtiles' },
       }),
-    ).toBe(false);
+    ).toBeUndefined();
   });
 
   it('strips URL fragments and migrates every query-bearing URL to local-only', () => {
@@ -89,7 +88,7 @@ describe('isUserChartSource', () => {
       shareWithServer: false,
       serverCleanupRequired: true,
     });
-    expect(userChartUrlHasQuery('https://x/y.pmtiles?style=day')).toBe(true);
+    expect(userChartUrlHasQuery('https://x/y.pmtiles?style=day')).toBeDefined();
     expect(userChartUrlHasQuery('https://x/y.pmtiles')).toBe(false);
   });
 
@@ -124,7 +123,9 @@ describe('isUserChartSource', () => {
   });
 
   it('rejects the legacy file origin, so old browser-local file charts drop at load', () => {
-    expect(isUserChartSource({ ...valid, origin: { type: 'file', storeId: 's1' } })).toBe(false);
+    expect(
+      cleanUserChartSource({ ...valid, origin: { type: 'file', storeId: 's1' } }),
+    ).toBeUndefined();
   });
 
   it('drops invalid persisted descriptors on construction', () => {

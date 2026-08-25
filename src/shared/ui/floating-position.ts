@@ -18,8 +18,6 @@ interface ViewportSize {
 interface FloatingPositionOptions {
   placement?: FloatingPlacement;
   align?: FloatingAlign;
-  edge?: number;
-  gap?: number;
 }
 
 export interface FloatingPosition {
@@ -40,8 +38,8 @@ export function floatingPosition(
 ): FloatingPosition {
   const placement = options.placement ?? 'auto';
   const align = options.align ?? 'start';
-  const edge = options.edge ?? 8;
-  const gap = options.gap ?? 4;
+  const edge = 8;
+  const gap = 4;
   const roomAbove = anchor.top - gap - edge;
   const roomBelow = viewport.height - anchor.bottom - gap - edge;
   const fitsAbove = roomAbove >= surface.height;

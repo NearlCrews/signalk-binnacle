@@ -27,11 +27,8 @@ import {
   POWER_PENDING_KEY,
   type RadarAreaDraft,
   type RadarControlEntry,
-  type RadarRectValue,
-  type RadarSectorValue,
   type RadarStatus,
   type RadarStructuredValue,
-  type RadarZoneValue,
 } from './radar-types';
 import { createRadarWorkerClient, type RadarWorkerClient } from './radar-worker-client';
 
@@ -550,18 +547,6 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'structured', value });
   }
 
-  async function setZoneControl(controlId: string, value: RadarZoneValue): Promise<void> {
-    await setStructuredControl(controlId, value);
-  }
-
-  async function setSectorControl(controlId: string, value: RadarSectorValue): Promise<void> {
-    await setStructuredControl(controlId, value);
-  }
-
-  async function setRectControl(controlId: string, value: RadarRectValue): Promise<void> {
-    await setStructuredControl(controlId, value);
-  }
-
   function setAreaDraft(draft: RadarAreaDraft | undefined): void {
     if (draft && (draft.radarId !== store.selectedId || draft.controlId.length === 0)) return;
     store.setAreaDraft(draft);
@@ -683,9 +668,6 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     selectRadar,
     setControl,
     setStructuredControl,
-    setZoneControl,
-    setSectorControl,
-    setRectControl,
     setAreaDraft,
     startAreaChartEdit,
     stopAreaChartEdit,

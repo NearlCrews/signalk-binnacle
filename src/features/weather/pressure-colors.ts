@@ -1,6 +1,6 @@
 import type { Theme } from '$shared/ui';
 
-export interface IsobarColors {
+interface IsobarColors {
   line: string;
   label: string;
   halo: string;

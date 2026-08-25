@@ -74,10 +74,6 @@ export class MeasureStore {
     return this.#vertices;
   }
 
-  get points(): readonly LatLon[] {
-    return this.#vertices.map((vertex) => vertex.position);
-  }
-
   // Memoized on the identity of its inputs rather than recomputed per read. The overlay reads this
   // on every tick of the shared overlay clock and skips its repaint when the identity is unchanged,
   // so an armed move would otherwise allocate a fresh array per tick, never match the guard, and
@@ -107,10 +103,6 @@ export class MeasureStore {
     return result;
   }
 
-  get displayPoints(): readonly LatLon[] {
-    return this.displayVertices.map((vertex) => vertex.position);
-  }
-
   get selectedId(): string | undefined {
     return this.#selectedId;
   }
@@ -123,10 +115,6 @@ export class MeasureStore {
 
   get moveArmed(): boolean {
     return this.#moveArmed;
-  }
-
-  get movePreview(): LatLon | undefined {
-    return this.#movePreview;
   }
 
   get isEmpty(): boolean {
@@ -179,10 +167,6 @@ export class MeasureStore {
 
   get totalMeters(): number {
     return this.legs.reduce((total, item) => total + item.distanceMeters, 0);
-  }
-
-  get displayTotalMeters(): number {
-    return this.displayLegs.reduce((total, item) => total + item.distanceMeters, 0);
   }
 
   get canDeleteSelected(): boolean {

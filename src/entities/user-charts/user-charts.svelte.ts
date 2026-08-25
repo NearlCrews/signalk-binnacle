@@ -165,10 +165,6 @@ export function cleanUserChartSource(value: unknown): UserChartSource | undefine
   };
 }
 
-export function isUserChartSource(value: unknown): value is UserChartSource {
-  return cleanUserChartSource(value) !== undefined;
-}
-
 export function shouldShareUserChart(source: UserChartSource): boolean {
   return source.shareWithServer ?? !userChartUrlHasQuery(source.origin.url);
 }

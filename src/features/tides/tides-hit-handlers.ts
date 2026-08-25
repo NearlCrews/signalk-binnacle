@@ -15,7 +15,7 @@ export interface TideStationSelectionEvent {
   mode: 'automatic' | 'manual';
 }
 
-export type TideHitHandlers = LayerHitHandlers;
+type TideHitHandlers = LayerHitHandlers;
 
 function stationKind(value: unknown): TideStationKind | undefined {
   return value === 'tide' || value === 'current' ? value : undefined;

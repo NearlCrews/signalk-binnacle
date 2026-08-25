@@ -190,6 +190,8 @@ function renderStationFeatures(
   );
 }
 
+// Exported as a test seam only: the focused overlay tests build station features without a
+// map; production goes through sync() and the internal render path.
 export function tideStationFeatures(
   store: TidesStore,
   nowMs: number,

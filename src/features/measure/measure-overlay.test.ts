@@ -99,7 +99,9 @@ describe('measure overlay', () => {
     expect(label?.geometry.type).toBe('Point');
     if (label?.geometry.type !== 'Point') throw new Error('leg label is not a point');
     expect(Math.abs(label.geometry.coordinates[0])).toBeGreaterThan(179);
-    expect(rhumbDisplayMidpoint(measure.points[0], measure.points[1]).latitude).toBeCloseTo(11, 1);
+    expect(
+      rhumbDisplayMidpoint(measure.vertices[0].position, measure.vertices[1].position).latitude,
+    ).toBeCloseTo(11, 1);
   });
 
   it('uses a 44 pixel hit target and collision-managed labels above a bounded zoom', async () => {
@@ -142,14 +144,14 @@ describe('measure overlay', () => {
     });
     map.emit('mousemove', { lngLat: { lat: 0.0005, lng: 0.0005 } });
     overlay.sync(ctx);
-    expect(measure.displayPoints[0]).toEqual({ latitude: 0.0005, longitude: 0.0005 });
+    expect(measure.displayVertices[0].position).toEqual({ latitude: 0.0005, longitude: 0.0005 });
     map.emit('mouseup', { lngLat: { lat: 0.0005, lng: 0.0005 } });
     expect(preventDefault).toHaveBeenCalled();
-    expect(measure.points[0]).toEqual({ latitude: 0.0005, longitude: 0.0005 });
+    expect(measure.vertices[0].position).toEqual({ latitude: 0.0005, longitude: 0.0005 });
     expect(measure.moveArmed).toBe(false);
     expect(overlay.consumeTrailingClick()).toBe(true);
     measure.undo();
-    expect(measure.points[0]).toEqual({ latitude: 0, longitude: 0 });
+    expect(measure.vertices[0].position).toEqual({ latitude: 0, longitude: 0 });
   });
 
   it('ignores a rendered vertex that no longer exists in the current measurement', async () => {
@@ -241,7 +243,7 @@ describe('measure overlay', () => {
     });
     map.emit('touchmove', { lngLat: { lat: 1, lng: 1 } });
     map.emit('touchcancel', {});
-    expect(measure.points[0]).toEqual({ latitude: 0, longitude: 0 });
+    expect(measure.vertices[0].position).toEqual({ latitude: 0, longitude: 0 });
     expect(measure.moveArmed).toBe(false);
     expect(map.dragPan.disable).toHaveBeenCalledOnce();
     expect(map.dragPan.enable).toHaveBeenCalledOnce();

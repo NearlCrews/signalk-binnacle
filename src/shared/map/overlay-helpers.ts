@@ -1,7 +1,6 @@
 import type {
   AllPaintProperties,
   GeoJSONSource,
-  GeoJSONSourceDiff,
   Map as MapLibreMap,
   SourceSpecification,
 } from 'maplibre-gl';
@@ -25,22 +24,13 @@ export function ensureGeoJsonSources(map: MapLibreMap, ids: readonly string[]): 
 // Set a GeoJSON source's data, narrowing the source handle in one place: the dozen-odd overlays that
 // push fresh features otherwise re-spell the `(map.getSource(id) as GeoJSONSource | undefined)?.setData`
 // cast at each site. A no-op when the source is absent (the overlay was removed mid-flight).
-// If diff is provided, it uses MapLibre 6's highly efficient `updateData` which updates
-// only changed features (requires unique feature IDs in the source via promoteId).
 export function setSourceData(
   map: MapLibreMap,
   sourceId: string,
   data: GeoJSON.GeoJSON | string,
-  diff?: GeoJSONSourceDiff,
 ): void {
   const source = map.getSource(sourceId) as GeoJSONSource | undefined;
-  if (source) {
-    if (diff) {
-      void source.updateData(diff);
-    } else {
-      void source.setData(data);
-    }
-  }
+  void source?.setData(data);
 }
 
 // The two loops every overlay module's setVisible and remove repeat, shared so the lifecycle

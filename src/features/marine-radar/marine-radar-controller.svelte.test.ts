@@ -277,7 +277,7 @@ describe('createMarineRadarController', () => {
     const controller = makeController();
     await controller.start();
     const accepted = { ...controller.store.controlEntries.guardZone1 };
-    const write = controller.setZoneControl('guardZone1', {
+    const write = controller.setStructuredControl('guardZone1', {
       value: -0.5,
       endValue: 0.75,
       startDistance: 250,
@@ -357,12 +357,12 @@ describe('createMarineRadarController', () => {
     const controller = makeController();
     await controller.start();
 
-    await controller.setSectorControl('noTransmitSector1', {
+    await controller.setStructuredControl('noTransmitSector1', {
       value: -0.5,
       endValue: 0.75,
       enabled: true,
     });
-    await controller.setRectControl('exclusionRect1', {
+    await controller.setStructuredControl('exclusionRect1', {
       x1: -200,
       y1: 100,
       x2: 200,
@@ -391,7 +391,7 @@ describe('createMarineRadarController', () => {
       },
     ]);
 
-    await controller.setRectControl('exclusionRect1', {
+    await controller.setStructuredControl('exclusionRect1', {
       x1: -200,
       y1: 100,
       x2: 200,

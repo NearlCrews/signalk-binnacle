@@ -27,6 +27,8 @@ export interface AnchorTransport {
   setPosition(position: LatLon): Promise<boolean>;
   // Standard API only: compute the anchor position from rode length and anchor depth. The plugin
   // path has no equivalent, so consumers must feature-check before offering it.
+  // Mirrors the proposed Anchor API's reposition command (built against the current proposal per
+  // project rule); no panel action wires it yet, so it waits for the reposition feature.
   reposition?(rodeLengthMeters: number, anchorDepthMeters: number): Promise<boolean>;
 }
 
