@@ -53,8 +53,11 @@ query condition, and one used there drops the whole block.
   landscape-edge chrome must also include the appropriate `safe-area-inset-*` value.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
-- Component dimensions no scale covers live in `tokens.css` too, so every non-scale size in the UI
-  stays visible in one place: `--panel-width` 22rem (the docked slide-over), `--panel-state-min-height`
+- Component dimensions no scale covers live in `tokens.css` when the value is shared across
+  components, so a size used in more than one place stays visible in one token rather than repeated
+  as a literal at each site. A dimension only one component ever uses, such as a dialog's own
+  inline-size, can stay a scoped literal with a why comment beside it instead: `tokens.css` is for
+  what is shared, not every non-scale size in the UI. Shared so far: `--panel-width` 22rem (the docked slide-over), `--panel-state-min-height`
   8rem (a panel's loading and error block), `--strip-max-width` 28rem (the centered bottom strips),
   `--tile-min-height` 4rem (the instrument tile floor), `--btn-compact-min-width` 3rem
   (`.btn-compact`), `--scrubber-track-min-width` 4rem (the scrubber track once its narrow-container
@@ -320,6 +323,15 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   unresolved request for the rest of the session. One-shot feature registration without a recovery
   action uses the unbounded `createRetryableLazyLoader`, so a slow import can still complete.
 - Overlays, modals: `.modal-card`.
+- Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by nine strips:
+  Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Alarm, Route edit, History
+  playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
+  (a strip whose controls need the room, Measure's leg table among them) as modifiers. The trailing
+  action is one shared `.ack` pill, accent-colored by default; its `.ack--warning` caution variant
+  turns a consequence-bearing tap warning-colored (the anchor Raise, the MOB and route-edit
+  Cancels), and its `.ack--primary` variant is alarm-colored and bold for the strip's one obvious
+  next action (Steer to MOB). `.actions` clusters a strip's trailing buttons, and `.actions--safety`
+  widens the gutter between a paired safety pair so a wrong tap in a seaway is less likely.
 
 ## 6. Shared UI primitives (`$shared/ui`)
 
@@ -657,9 +669,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 ## 10. Icons
 
-- App chrome uses `@lucide/svelte` components, sized in px (`size={18}` for inline, `size={20}` for a
-  control), always `aria-hidden="true"` when a text label is present. Pick an icon that reads true:
-  AIS targets is a ship, the radar is the radar sweep glyph, an anchor is an anchor.
+- App chrome uses `@lucide/svelte` components, sized in px (`size={16}` for inline, `size={18}` for a
+  prominent control), always `aria-hidden="true"` when a text label is present. `size={20}` is
+  reserved for a handful of oversized hero controls (a panel's back arrow, the app menu trigger, the
+  MOB confirm icon), never a default. Pick an icon that reads true: AIS targets is a ship, the radar
+  is the radar sweep glyph, an anchor is an anchor.
 - Chart symbols are a separate system: they derive from the S-52 Presentation Library and OpenBridge,
   not from the UI icon set. That pipeline is a later spec.
 

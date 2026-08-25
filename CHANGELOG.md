@@ -14,6 +14,23 @@ All notable changes to Binnacle are documented here. The format follows
   survive the upgrade, the retired Workbox precache is cleaned up automatically, and the very
   first visit now starts filling the offline caches without needing a reload.
 
+### Fixed
+
+- Escape in a name form, such as renaming a route, track, or profile, now cancels only the form
+  instead of also closing the panel behind it in the same keystroke.
+- Reopening Layers and charts to a requested tab from the app menu no longer resets to Charts once
+  the panel has been closed and reopened, and asking for the same tab twice in a row now switches
+  to it instead of silently doing nothing.
+- Saving or deleting a track now rejects a malformed resource id before it reaches the server, the
+  same guard routes and waypoints already had.
+- The status strip's "Data link failed" note no longer duplicates the connection indicator's
+  screen reader announcement.
+- Saved lists across the Routes, Tracks, Waypoints, Profiles, and Saved areas panels now expose an
+  accessible name to screen readers, and the AIS target detail panel and the weather forecast list
+  no longer skip a heading level.
+- The Icon field label in the Waypoints editor now matches the sentence-case style used for field
+  labels elsewhere in the app.
+
 <a id="v0210"></a>
 
 ## [0.21.0] - 2026-08-13
