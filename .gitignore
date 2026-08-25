@@ -33,7 +33,6 @@ test-results/
 .vitest-attachments/
 
 # Tooling caches
-.eslintcache
 .cache/
 .tmp/
 .svelte-check/

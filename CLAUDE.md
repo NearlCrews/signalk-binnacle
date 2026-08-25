@@ -66,8 +66,9 @@ not have to be corrected after the fact.
   typescript-eslint is not only those three rules: `tseslint.parser` is also the TypeScript parser
   in `eslint.config.js`, both for `**/*.ts` and inside `**/*.svelte` so eslint-plugin-svelte can
   read a `lang="ts"` script block. Dropping it costs a parser too. Biome is not a substitute here:
-  as of 2.5.6 its `noFloatingPromises` and `noMisusedPromises` are Nursery, and it has no
-  `await-thenable` equivalent, since its `useAwait` is ESLint's `require-await` instead.
+  as of 2.5.10 its `noFloatingPromises`, `noMisusedPromises`, and `useAwaitThenable` (the
+  `await-thenable` equivalent, added in 2.3.9) are all still Nursery and run on Biome's own type
+  inference rather than the TypeScript compiler, and eslint-plugin-svelte has no Biome counterpart.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
@@ -178,10 +179,16 @@ not have to be corrected after the fact.
   down that road: svelte-check is the binding cap and has no substitute, since `sv` is a scaffolding
   CLI and `svelte-language-server` is an editor LSP with the same dependency. Nor is anything being
   missed meanwhile: `@typescript/native-preview` exports the exact same shape as `typescript@7.0.2`,
-  because it IS that compiler, so `npm run check` already runs TypeScript 7. The only prize is
+  because it IS that compiler, so `npm run check` already runs TypeScript 7. Note that
+  `@typescript/native-preview` stopped publishing on 2026-07-07 (a frozen final snapshot; TS7
+  nightlies now ship as `typescript@next`), and svelte-check's documented TS7 arrangement is the
+  alias `@typescript/native@npm:typescript@7` beside `typescript@~6`, which it resolves first. The
+  swap is not free here because `typescript@7` ships only a `tsc` bin (no `tsgo`, and it would
+  collide with typescript 6's), while the check script invokes `tsgo -p` directly, so it stays an
+  owner decision. The only prize is
   retiring one of the two package names once the API stabilizes. WATCH TRIGGER, and it is one
   command, not a calendar entry: re-check when `npm view svelte-check peerDependencies` admits `^7`.
-  typescript-eslint should clear near the same time, as both wait on `unstable/*`. npm
+  typescript-eslint waits on the new compiler API expected in TypeScript 7.1 (7.0 ships none). npm
   12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. Keep the Workbox
   off-main-thread override on its newest
   4.0.0-pre2 beta until Workbox adopts that line; it replaces the older EJS 3 dependency with EJS 6.

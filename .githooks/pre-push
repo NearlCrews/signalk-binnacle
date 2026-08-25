@@ -1,7 +1,7 @@
 #!/bin/sh
 # Full verification gate before any push. A red gate blocks the push, so a broken
-# tree cannot reach the remote. Commands run one at a time to respect the Pi memory
-# budget. Set BINNACLE_SKIP_PREPUSH=1 only for a deliberate, documented exception.
+# tree cannot reach the remote. Set BINNACLE_SKIP_PREPUSH=1 only for a deliberate,
+# documented exception.
 set -e
 
 if [ "$BINNACLE_SKIP_PREPUSH" = "1" ]; then
