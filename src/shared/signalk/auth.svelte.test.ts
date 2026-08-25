@@ -469,7 +469,12 @@ describe('AuthController', () => {
 
     expect(auth.status).toBe('denied');
     expect(auth.token).toBeNull();
-    expect(store.getItem('binnacle:signalk-auth')).not.toContain('bad');
+    // Assert the persisted record structurally: a substring check on the JSON can collide with
+    // the random clientId suffix (a hex clientId containing "bad" failed a run).
+    const persisted = JSON.parse(store.getItem('binnacle:signalk-auth') ?? '{}') as {
+      token: string | null;
+    };
+    expect(persisted.token).toBeNull();
   });
 
   it('allows a valid token rotation but ignores invalid direct token adoption', async () => {
