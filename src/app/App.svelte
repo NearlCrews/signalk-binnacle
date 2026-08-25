@@ -2748,7 +2748,14 @@ const plotterActions = {
         </button>
       {/if}
       {#if updateReady}
-        <button type="button" class="btn btn-primary btn-pill" onclick={() => pwa.update()}>
+        <button
+          type="button"
+          class="btn btn-primary btn-pill"
+          onclick={() => {
+            updateReady = false;
+            pwa.update();
+          }}
+        >
           Update
         </button>
       {/if}

@@ -18,6 +18,11 @@ const alias = Object.fromEntries(
 // Signal K serves the webapp at /<package-name>/.
 const base = `/${packageJson.name}/`;
 
+// One absolute build-output path shared by build.outDir and the service worker's precache glob:
+// the serwist plugin resolves globDirectory against the process cwd, not the Vite root, so a
+// relative string would silently precache nothing when built from elsewhere.
+const outDir = fileURLToPath(new URL('public', import.meta.url));
+
 export default defineConfig({
   base: process.env.NODE_ENV === 'production' ? base : '/',
   define: {
@@ -32,7 +37,7 @@ export default defineConfig({
     serwist({
       swSrc: 'src/sw.ts',
       swDest: 'sw.js',
-      globDirectory: 'public',
+      globDirectory: outDir,
       // A classic worker in an iife bundle, matching the previous registration type.
       rollupFormat: 'iife',
       type: 'classic',
@@ -42,12 +47,14 @@ export default defineConfig({
       // PNGs without sweeping public/screenshots/, and *.webmanifest keeps the manifest available
       // offline.
       globPatterns: ['**/*.{js,css,html,svg,woff2}', '*.png', '*.webmanifest'],
+      // Defense in depth beside emptyOutDir: the worker must never precache itself.
+      globIgnores: ['**/node_modules/**/*', 'sw.js', 'sw.js.map'],
     }),
   ],
   resolve: { alias },
   publicDir: 'static',
   build: {
-    outDir: 'public',
+    outDir,
     // The shared tsconfig base owns the language target so the build output always matches the
     // type-check.
     target: tsconfigBase.compilerOptions.target,

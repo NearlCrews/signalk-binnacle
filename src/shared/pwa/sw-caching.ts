@@ -43,6 +43,10 @@ const STYLE_ORIGINS = new Set(
 );
 const VOLATILE_SOURCES = CHART_SOURCES.filter((source) => source.maxAgeSeconds !== undefined);
 const VOLATILE_HOSTS = new Set(VOLATILE_SOURCES.map(hostOf));
+// WMS only, and deliberately so: it is the only catalog mode with a layer field to read (a WMTS
+// source embeds its layer in the urlTemplate path). A time-dynamic source arriving in another
+// mode cannot be family-matched here and fails the catalog routing test in sw-caching.test.ts,
+// which is the designed tripwire for extending this extractor.
 const VOLATILE_LAYER_FAMILIES = new Set(
   VOLATILE_SOURCES.flatMap((source) =>
     source.upstream.mode === 'wms' ? source.upstream.layers.split(',') : [],
@@ -96,6 +100,8 @@ export const isVolatileOverlayTile = ({ url }: MatchContext): boolean => {
     const param = name.toLowerCase();
     if (param !== 'layers' && param !== 'layer') continue;
     for (const layer of value.split(',')) {
+      // Slightly looser than the old anchored regex on purpose: a bare family name with no colon
+      // qualifier also routes volatile, which errs toward NetworkFirst for weather-shaped layers.
       const family = layer.split(':')[0];
       if (family && VOLATILE_LAYER_FAMILIES.has(family)) return true;
     }

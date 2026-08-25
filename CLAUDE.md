@@ -539,15 +539,21 @@ must not be repeatable.
   self-signed certificate (including one the signalk-ssl plugin generates, issued by a local
   "SignalK Local CA") is not trusted by default, and browsers refuse to register a service worker
   from an origin whose certificate they do not trust, even after the user clicks through the page's
-  certificate warning. The symptom is `onRegisterError` firing with a SecurityError whose message is
+  certificate warning. The symptom is the awaited `register()` rejecting with a SecurityError whose
+  message is
   "An SSL certificate error occurred when fetching the script", and offline caching staying off while
   the page itself loads. The fix is environmental, not code: install the certificate (or its CA root)
   into the browser or OS trust store and mark it trusted, then reload. register.svelte.ts detects
   this case, logs an actionable info line rather than an alarming warning, and surfaces a reactive
   status ('untrusted-certificate' among others) that the Offline charts landing page renders as a
-  notice with the install-and-trust fix. Over plain http the serviceWorker
-  API is absent so registerSW no-ops; over https with an untrusted cert the API is present so
+  notice with the install-and-trust fix. Over plain http the serviceWorker API is absent so
+  `getSerwist()` resolves undefined and registration is never attempted; over https with an
+  untrusted cert the API is present so
   registration is attempted and fails on the cert, which is a different path from the plain-http one.
+  One dev-server quirk to know before debugging a missing `public/sw.js`: @serwist/vite's dev
+  middleware answers a stray `/sw.js` request by building the worker into `public/sw.js`, reading
+  it, and then deleting the file, so an `npm run dev` session can remove the artifact a later
+  `vite preview` or the Playwright PWA spec expected; rebuild before previewing.
 - Never import `@signalk/server-api` in browser or worker code, not even as a type-only import.
   Its entry barrel re-exports `FullSignalK`, which extends Node's `EventEmitter`; bundled into the
   worker with `events` externalized, the base class is `undefined` and the worker dies at load with

@@ -1,6 +1,6 @@
 import { CHART_SOURCES, type ChartSource } from 'signalk-chart-sources';
 import { describe, expect, it } from 'vitest';
-import { BINNACLE_CACHE_NAMES } from '$shared/privacy';
+import { BINNACLE_CACHE_NAMES, EXPIRATION_DB_NAMES } from '$shared/privacy';
 import {
   isBasemapAsset,
   isBasemapStyle,
@@ -186,5 +186,14 @@ describe('service worker route matchers', () => {
     for (const entry of runtimeCaching) {
       expect(inventory).toContain(entry.options.cacheName);
     }
+  });
+
+  it('covers the expiration metadata databases whenever a route uses expiration', () => {
+    // Every expiring route leaves per-URL timestamps in the origin-shared serwist-expiration
+    // database (a history of viewed chart locations), so the erase inventory must name it, and
+    // the retired workbox generation beside it for upgraded installations.
+    expect(runtimeCaching.some((entry) => entry.options.expiration)).toBe(true);
+    expect(EXPIRATION_DB_NAMES).toContain('serwist-expiration');
+    expect(EXPIRATION_DB_NAMES).toContain('workbox-expiration');
   });
 });

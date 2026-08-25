@@ -314,6 +314,92 @@ export function createIndexedDbOwner(
   };
 }
 
+// The service worker's ExpirationPlugin records every cached URL and its timestamp in an
+// origin-shared IndexedDB database ('serwist-expiration'; the retired workbox generation used
+// 'workbox-expiration'), store 'cache-entries', with a 'cacheName' index. For the tile caches
+// that is a history of viewed chart locations, so the erase must cover it. Deletion is
+// record-level through the index, never deleteDatabase: the database is shared with any other
+// webapp on this Signal K origin, and a version-changing delete would also hang on the open
+// connection Binnacle's own worker keeps.
+export const EXPIRATION_DB_NAMES = ['serwist-expiration', 'workbox-expiration'] as const;
+const EXPIRATION_STORE = 'cache-entries';
+const EXPIRATION_INDEX = 'cacheName';
+
+interface ExpirationIdbFactory extends Pick<IDBFactory, 'open'> {
+  databases?: () => Promise<{ name?: string }[]>;
+}
+
+function clearExpirationRecords(
+  factory: ExpirationIdbFactory,
+  dbName: string,
+  cacheNames: readonly string[],
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const openRequest = factory.open(dbName);
+    openRequest.onerror = () => reject(openRequest.error ?? new Error(`Could not open ${dbName}.`));
+    openRequest.onsuccess = () => {
+      const db = openRequest.result;
+      const finish = (error?: unknown) => {
+        db.close();
+        if (error === undefined) resolve();
+        else reject(error instanceof Error ? error : new Error(String(error)));
+      };
+      // A database without the expected schema holds nothing of ours; leave it alone.
+      if (!db.objectStoreNames.contains(EXPIRATION_STORE)) {
+        finish();
+        return;
+      }
+      const transaction = db.transaction(EXPIRATION_STORE, 'readwrite');
+      const store = transaction.objectStore(EXPIRATION_STORE);
+      if (!store.indexNames.contains(EXPIRATION_INDEX)) {
+        finish();
+        return;
+      }
+      const index = store.index(EXPIRATION_INDEX);
+      for (const cacheName of cacheNames) {
+        // A plain key is a valid cursor query, so this needs no IDBKeyRange global.
+        const cursorRequest = index.openCursor(cacheName);
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+      }
+      transaction.oncomplete = () => finish();
+      transaction.onerror = () =>
+        finish(transaction.error ?? new Error(`Could not clear ${dbName}.`));
+      transaction.onabort = () =>
+        finish(transaction.error ?? new Error(`Clearing ${dbName} was aborted.`));
+    };
+  });
+}
+
+function createExpirationMetadataOwner(
+  id: string,
+  factory: ExpirationIdbFactory,
+  cacheNames: readonly string[],
+): PrivacyStorageOwner {
+  return {
+    id,
+    dataClass: 'device-data',
+    async clear() {
+      // databases() (available on every browser Binnacle supports) lets an absent database be
+      // skipped without open() creating an empty shell of it; without the API, the shell an
+      // open() may create is empty and harmless.
+      const listed = factory.databases ? await factory.databases() : undefined;
+      const present = listed
+        ? new Set(listed.map((db) => db.name).filter((name): name is string => !!name))
+        : undefined;
+      for (const dbName of EXPIRATION_DB_NAMES) {
+        if (present && !present.has(dbName)) continue;
+        await clearExpirationRecords(factory, dbName, cacheNames);
+      }
+    },
+  };
+}
+
 function createCacheStorageOwner(
   id: string,
   storage: Pick<CacheStorage, 'delete' | 'keys'>,
@@ -414,7 +500,9 @@ export const BINNACLE_CACHE_NAMES = [
 
 export interface BinnaclePrivacyRegistryOptions {
   localStorage?: LocalStorageLike;
-  indexedDB?: Pick<IDBFactory, 'deleteDatabase'>;
+  // With 'open' also present (the real IDBFactory has it), the erase additionally clears
+  // Binnacle's records from the origin-shared cache-expiration metadata databases.
+  indexedDB?: Pick<IDBFactory, 'deleteDatabase'> & Partial<ExpirationIdbFactory>;
   cacheStorage?: Pick<CacheStorage, 'delete' | 'keys'>;
   serviceWorker?: Pick<ServiceWorkerContainer, 'getRegistrations'>;
   // Deployment scope varies with the Signal K base path, so callers must provide exact scopes.
@@ -451,6 +539,19 @@ export function createBinnaclePrivacyRegistry(
     registry.register(
       createIndexedDbOwner('indexed-db', options.indexedDB, BINNACLE_INDEXED_DB_NAMES),
     );
+    const { open } = options.indexedDB;
+    if (typeof open === 'function') {
+      registry.register(
+        createExpirationMetadataOwner(
+          'cache-expiration-metadata',
+          {
+            open: open.bind(options.indexedDB),
+            databases: options.indexedDB.databases?.bind(options.indexedDB),
+          },
+          [...BINNACLE_CACHE_NAMES, ...(options.additionalCacheNames ?? [])],
+        ),
+      );
+    }
   }
   if (options.cacheStorage) {
     registry.register(

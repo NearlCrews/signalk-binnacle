@@ -147,7 +147,7 @@ const cacheOffNote = $derived.by(() => {
     return {
       why:
         "The browser's offline cache for the base map and streamed chart tiles could not " +
-        'start, so it stays off for this visit.',
+        'start, so it may stay off for this visit.',
       fix: 'Reloading usually recovers it; the browser console has the details.',
     };
   }

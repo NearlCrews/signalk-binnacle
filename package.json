@@ -142,6 +142,11 @@
       "name": "Application CSS",
       "path": "public/assets/index-*.css",
       "limit": "22 kB"
+    },
+    {
+      "name": "Service worker",
+      "path": "public/sw.js",
+      "limit": "20 kB"
     }
   ],
   "devDependencies": {

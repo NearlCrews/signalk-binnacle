@@ -271,6 +271,145 @@ describe('browser privacy owners', () => {
     ]);
   });
 
+  interface FakeCursor {
+    delete: () => void;
+    continue: () => void;
+  }
+  interface FakeRequest<T> {
+    result?: T;
+    error?: DOMException | null;
+    onsuccess?: () => void;
+    onerror?: () => void;
+  }
+
+  // A microtask-driven fake of the expiration metadata schema: db name -> cacheName -> urls. A
+  // null cacheName map models a database without the cache-entries store. Transactions complete
+  // on a macrotask, after the microtask cursor chains drain.
+  function fakeExpirationFactory(
+    dbs: Map<string, Map<string, string[]> | null>,
+    deleted: string[],
+    opened: string[],
+  ) {
+    return {
+      deleteDatabase: vi.fn(),
+      databases: async () => [...dbs.keys()].map((name) => ({ name })),
+      open: (name: string) => {
+        opened.push(name);
+        const request: FakeRequest<unknown> = {};
+        queueMicrotask(() => {
+          const data = dbs.get(name);
+          const transaction = () => {
+            const tx: {
+              objectStore?: (name: string) => unknown;
+              oncomplete?: () => void;
+              onerror?: () => void;
+              onabort?: () => void;
+              error?: DOMException | null;
+            } = {};
+            const store = {
+              indexNames: { contains: (index: string) => index === 'cacheName' },
+              index: () => ({
+                openCursor: (key: string) => {
+                  const cursorRequest: FakeRequest<FakeCursor | null> = {};
+                  queueMicrotask(() => {
+                    const urls = [...(data?.get(key) ?? [])];
+                    const step = () => {
+                      const url = urls.shift();
+                      cursorRequest.result =
+                        url === undefined
+                          ? null
+                          : {
+                              delete: () => deleted.push(`${name}|${key}|${url}`),
+                              continue: () => queueMicrotask(step),
+                            };
+                      cursorRequest.onsuccess?.();
+                    };
+                    step();
+                  });
+                  return cursorRequest;
+                },
+              }),
+            };
+            tx.objectStore = () => store;
+            setTimeout(() => tx.oncomplete?.(), 0);
+            return tx;
+          };
+          request.result = {
+            close: () => undefined,
+            objectStoreNames: {
+              contains: (store: string) => data !== null && store === 'cache-entries',
+            },
+            transaction,
+          };
+          request.onsuccess?.();
+        });
+        return request;
+      },
+    };
+  }
+
+  it('clears Binnacle records from present expiration databases, record-level only', async () => {
+    const deleted: string[] = [];
+    const opened: string[] = [];
+    const factory = fakeExpirationFactory(
+      new Map([
+        [
+          'serwist-expiration',
+          new Map([
+            [
+              'binnacle-chart-tiles',
+              ['https://boat/charts/a/1/2/3', 'https://boat/charts/a/4/5/6'],
+            ],
+            ['other-app-cache', ['https://elsewhere/1']],
+          ]),
+        ],
+      ]),
+      deleted,
+      opened,
+    );
+    const registry = createBinnaclePrivacyRegistry({ indexedDB: factory as never });
+    const owner = registry
+      .owners('device-data')
+      .find((candidate) => candidate.id === 'cache-expiration-metadata');
+    if (!owner) throw new Error('expiration owner not registered');
+
+    await owner.clear();
+
+    // The absent workbox database is skipped through databases() rather than created by open().
+    expect(opened).toEqual(['serwist-expiration']);
+    expect(deleted).toEqual([
+      'serwist-expiration|binnacle-chart-tiles|https://boat/charts/a/1/2/3',
+      'serwist-expiration|binnacle-chart-tiles|https://boat/charts/a/4/5/6',
+    ]);
+    expect(factory.deleteDatabase).not.toHaveBeenCalled();
+  });
+
+  it('leaves an expiration database without the expected schema alone', async () => {
+    const deleted: string[] = [];
+    const opened: string[] = [];
+    const factory = fakeExpirationFactory(new Map([['workbox-expiration', null]]), deleted, opened);
+    const registry = createBinnaclePrivacyRegistry({ indexedDB: factory as never });
+    const owner = registry
+      .owners('device-data')
+      .find((candidate) => candidate.id === 'cache-expiration-metadata');
+    if (!owner) throw new Error('expiration owner not registered');
+
+    await owner.clear();
+
+    expect(opened).toEqual(['workbox-expiration']);
+    expect(deleted).toEqual([]);
+  });
+
+  it('does not register the expiration owner without an open-capable factory', () => {
+    const registry = createBinnaclePrivacyRegistry({
+      indexedDB: { deleteDatabase: vi.fn() as never },
+    });
+    const owner = registry
+      .owners('device-data')
+      .find((candidate) => candidate.id === 'cache-expiration-metadata');
+    expect(owner).toBeUndefined();
+  });
+
   it('reports an existing browser cache that the Cache API fails to delete', async () => {
     const registry = createBinnaclePrivacyRegistry({
       cacheStorage: {
