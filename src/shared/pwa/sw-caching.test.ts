@@ -40,11 +40,10 @@ describe('service worker route matchers', () => {
     expect(isBasemapAsset(ctx('https://example.com/styles/liberty'))).toBe(false);
   });
 
-  // Every host below is also owned by the catalog, but the matchers must keep their own copies: the
-  // build serializes each one through Function.toString without its module scope, so a matcher that
-  // closed over an import would throw ReferenceError in the worker (see the file header). A copy is
-  // only safe while something checks it, because a catalog host move would otherwise stop matching
-  // and switch that layer's offline caching off on a green build. These two are that check.
+  // The matchers derive their host and family sets from the catalog, so these tests are the
+  // routing contract: every catalog source must land in the cache class its nature demands, and a
+  // derivation bug (a mode the extractor misses, a URL shape it cannot parse) fails here rather
+  // than silently switching a layer's offline caching off.
   it('routes every style-mode catalog source as a base style', () => {
     const styles = CHART_SOURCES.filter((source) => source.upstream.mode === 'style');
     expect(styles.length).toBeGreaterThan(0);

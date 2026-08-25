@@ -142,14 +142,17 @@ not have to be corrected after the fact.
     hardcode them. Take a direct guarded read, and place it so a shape mismatch cannot take an
     offline fallback down with it, which for the base map means reading lazily rather than at module
     scope so a bad catalog cannot leave the map with no style at all.
-  - Where a value cannot be imported at all, pin the seam with a test. `sw-caching.ts` must inline
-    its hosts, because the build serializes each matcher through `Function.toString` without its
-    module scope, so a matcher closing over an import throws `ReferenceError` in the worker. The
-    invariant: every host inlined there that the catalog also owns must be asserted against the
-    catalog, so enumerate `CHART_SOURCES` rather than pinning one matcher against one URL. The same
-    seam covers the privacy erase: every `cacheName` the worker config declares must appear in
-    `BINNACLE_CACHE_NAMES` from `$shared/privacy`, pinned by sw-caching's own test, or a new route's
-    cache survives a device-data erase that reports success.
+  - `sw-caching.ts` derives its overlay hosts, style origins, and time-dynamic families from
+    `CHART_SOURCES` directly (the worker is a real bundled module now; the old `Function.toString`
+    serialization that forced inlined copies is gone). It must import the `signalk-chart-sources`
+    package itself, never the `$shared/map` barrel: the service worker's child build has no svelte
+    plugin and the barrel's graph reaches maplibre-gl. Hosts the catalog does not own (NASA GIBS
+    from the ocean-conditions feature, RainViewer, CO-OPS) stay explicit beside the derived sets.
+    The catalog-enumerating tests in sw-caching.test.ts are the routing contract: a derivation gap
+    fails there instead of silently switching a layer's offline caching off. One seam is still
+    pinned by test rather than imported: every `cacheName` the worker config declares must appear
+    in `BINNACLE_CACHE_NAMES` from `$shared/privacy` (a deliberately explicit erase inventory), or
+    a new route's cache survives a device-data erase that reports success.
   - A source carrying `maxAgeSeconds` is time-dynamic (weather radar, NWS alerts, sea surface
     temperature). It must never be offered for offline pre-warm: a stored weather frame is wrong
     before anyone sails into it, and the companion cache refuses to store it anyway. `isVolatile`
