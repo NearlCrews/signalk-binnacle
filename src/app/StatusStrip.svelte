@@ -16,6 +16,7 @@ import {
   formatLatitude,
   formatLengthOr,
   formatLongitude,
+  formatMetersOrNm,
   formatSpeedOr,
   lengthUnit,
   type ReactiveClock,
@@ -36,6 +37,8 @@ let {
   connectionPhase,
   aisCount,
   aisUnassessed = 0,
+  aisOwnFixLost = false,
+  aisNearestUnassessed = undefined,
   navigating = false,
   anchor,
   units,
@@ -68,6 +71,10 @@ let {
   // Retained targets the lookout cannot assess (course or motion missing), the persistent
   // degraded-assessment cue a watch handoff must be able to see at a glance.
   aisUnassessed?: number;
+  // The degrade is the boat's own fix, not the targets' data; the chip names the real cause.
+  aisOwnFixLost?: boolean;
+  // The closest unassessed contact, so the chip can say how near the nearest unknown is.
+  aisNearestUnassessed?: { id: string; name?: string; rangeMeters: number };
   // Whether a course is active, which prioritizes COG in the compact readout set.
   navigating?: boolean;
   anchor: AnchorWatch;
@@ -115,11 +122,16 @@ onDestroy(() => chipNote.dispose());
 const linkDown = $derived(connectionDown || dataStalled || streamError);
 
 const connTitle = $derived(connectionTitle || connectionLabel);
-const aisTitle = $derived(
-  aisUnassessed > 0
-    ? `AIS targets being watched for collision risk; ${aisUnassessed} cannot be assessed because course or motion data is missing or stale`
-    : 'AIS targets being watched for collision risk',
-);
+const aisTitle = $derived.by(() => {
+  if (aisUnassessed === 0) return 'AIS targets being watched for collision risk';
+  const cause = aisOwnFixLost
+    ? `own GPS fix lost or stale, so ${aisUnassessed} targets cannot be assessed`
+    : `${aisUnassessed} cannot be assessed because course or motion data is missing or stale`;
+  const nearest = aisNearestUnassessed
+    ? `; nearest unknown ${formatMetersOrNm(aisNearestUnassessed.rangeMeters, units.profile)} away`
+    : '';
+  return `AIS targets being watched for collision risk; ${cause}${nearest}`;
+});
 const radarTitle = $derived.by(() => {
   if (radarHealth.state !== 'failed') {
     return 'Radar is transmitting but no fresh echo frames are arriving';

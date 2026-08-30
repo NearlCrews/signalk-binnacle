@@ -4,9 +4,10 @@ import type { AnchorWatch } from '$entities/anchor';
 import type { CollisionAssessment } from '$entities/collision';
 import type { MobStore } from '$entities/mob';
 import type { ActiveNotification, NotificationsStore } from '$entities/notifications';
-import type { CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
+import type { AlarmLogKind, CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
 import {
   CollisionNotifier,
+  isRaisedNotification,
   notificationGrade,
   notificationLabel,
   selectGenericAlarms,
@@ -43,6 +44,9 @@ interface NotificationsControllerDeps {
   // The urn-form self context from the hello frame, for matching the v2 notification list's
   // per-entry context. A getter because it lands only once the stream delivers.
   selfContext: () => string | undefined;
+  // The session alarm chronology; the controller records raise and clear edges plus every
+  // silence, acknowledge, and mute it performs. Optional so tests without a log stay valid.
+  log?: (entry: { kind: AlarmLogKind; label: string; detail?: string }) => void;
   // The one depth notification path the shallow monitor currently sounds itself, or undefined. A
   // getter because the claim moves with the winning depth path and the server's zones.
   ownedDepthNotificationPath: () => string | undefined;
@@ -74,6 +78,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
 
   function toggleCollisionMute(): void {
     deps.collisionMute.toggle();
+    if (deps.collisionMute.active) deps.log?.({ kind: 'muted', label: 'Collision alarm' });
     const alertId = collisionPublisher.alertId;
     if (!deps.collisionMute.active || !alertId) return;
     alarmActionError = undefined;
@@ -115,6 +120,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   }
 
   function onSilenceNotification(notification: ActiveNotification): void {
+    deps.log?.({ kind: 'silenced', label: notificationLabel(notification) });
     runNotificationAction(
       notification,
       silenceNotification,
@@ -124,6 +130,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   }
 
   function onAcknowledgeNotification(notification: ActiveNotification): void {
+    deps.log?.({ kind: 'acknowledged', label: notificationLabel(notification) });
     runNotificationAction(
       notification,
       acknowledgeNotification,
@@ -160,6 +167,26 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   );
   $effect(() => {
     deps.genericAlarm.update(genericNotifications);
+  });
+
+  // The chronology's raise and clear edges, keyed by path so a persistent alarm republished every
+  // delta cycle records once. Only raised states count as active; a downgrade to normal or a
+  // reconcile removal both read as cleared.
+  let loggedRaised = new Map<string, string>();
+  $effect(() => {
+    if (!deps.log) return;
+    const current = new Map<string, string>();
+    for (const notification of genericNotifications) {
+      if (!isRaisedNotification(notification)) continue;
+      current.set(notification.path, notificationLabel(notification));
+    }
+    for (const [path, label] of current) {
+      if (!loggedRaised.has(path)) deps.log({ kind: 'raised', label });
+    }
+    for (const [path, label] of loggedRaised) {
+      if (!current.has(path)) deps.log({ kind: 'cleared', label });
+    }
+    loggedRaised = current;
   });
   // A pure function of the worst generic notification, so it is a derived. It used to be an effect
   // with a hand-tracked key, which re-implemented what a derived does and could desynchronize on any

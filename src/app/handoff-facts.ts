@@ -21,9 +21,13 @@ export interface HandoffFactDeps {
     unassessed: number;
     topCpaMeters: number | undefined;
     topTcpaSeconds: number | undefined;
+    ownFixLost?: boolean;
+    nearestUnassessedMeters?: number;
   };
   depthWatch: () => 'monitoring' | 'stale' | 'no-reading' | 'no-source';
   radar: () => string;
+  // The bounded session alarm chronology as a ready fact, or undefined when nothing alarmed.
+  alarmChronology: () => HandoffFact | undefined;
   weatherFetchedAtMs: () => number | undefined;
   tides: () => string;
   routeCoverage: () => string | undefined;
@@ -96,14 +100,22 @@ export function collectHandoffFacts(deps: HandoffFactDeps): HandoffFact[] {
     collision.topCpaMeters !== undefined && collision.topTcpaSeconds !== undefined
       ? `, closest ${formatNmOr(collision.topCpaMeters)} nm in ${formatDuration(collision.topTcpaSeconds)}`
       : '';
+  const unassessedCause = collision.ownFixLost ? ' (own fix lost)' : '';
+  const nearestUnknown =
+    collision.nearestUnassessedMeters !== undefined
+      ? `, nearest ${formatNmOr(collision.nearestUnassessedMeters)} nm`
+      : '';
   const unassessed =
     collision.unassessed > 0
-      ? `, ${collision.unassessed} contact${collision.unassessed === 1 ? '' : 's'} not assessable`
+      ? `, ${collision.unassessed} contact${collision.unassessed === 1 ? '' : 's'} not assessable${unassessedCause}${nearestUnknown}`
       : '';
   facts.push({ label: 'Collision watch', value: `${collision.worst}${top}${unassessed}` });
 
   facts.push({ label: 'Depth watch', value: DEPTH_WATCH_TEXT[deps.depthWatch()] });
   facts.push({ label: 'Radar', value: deps.radar() });
+
+  const chronology = deps.alarmChronology();
+  if (chronology) facts.push(chronology);
 
   const weatherAt = deps.weatherFetchedAtMs();
   facts.push({

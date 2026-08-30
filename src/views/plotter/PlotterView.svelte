@@ -111,6 +111,7 @@ interface FlatProps {
   anchorController: AnchorController;
   mobController: MobController;
   routeController: RouteController;
+  xteMonitor: import('$features/navigation').XteMonitor;
   waypointsController: WaypointsController;
   personalNotesController: PersonalNotesController;
   trackController: TrackController;
@@ -214,6 +215,9 @@ interface FlatProps {
   genericLocallyMuted: boolean;
   shallowMonitor: ShallowMonitorSnapshot;
   arrivalMuted: import('$shared/settings').PersistedValue<boolean>;
+  alarmVolume: import('$features/lookout').AlarmVolumeSetting;
+  alarmLog: import('$features/lookout').AlarmLog;
+  wakeLock: { readonly state: import('$shared/pwa').WakeLockState };
 
   // Callbacks for state mutations
   onViewChange: (view: import('$shared/settings').MapView) => void;
@@ -307,11 +311,15 @@ type ServiceKey =
   | 'thresholds'
   | 'trackSettings'
   | 'categoriesOpen'
-  | 'arrivalMuted';
+  | 'arrivalMuted'
+  | 'alarmVolume'
+  | 'alarmLog'
+  | 'wakeLock';
 type ControllerKey =
   | 'anchorController'
   | 'mobController'
   | 'routeController'
+  | 'xteMonitor'
   | 'waypointsController'
   | 'personalNotesController'
   | 'trackController'
@@ -484,12 +492,16 @@ const {
   trackSettings,
   categoriesOpen,
   arrivalMuted,
+  alarmVolume,
+  alarmLog,
+  wakeLock,
 } = $derived(services);
 const insecureTransport = $derived(isInsecureTransportOrigin(origin));
 const {
   anchorController,
   mobController,
   routeController,
+  xteMonitor,
   waypointsController,
   personalNotesController,
   trackController,
@@ -961,6 +973,7 @@ $effect(() => {
       <NavStrip
         guidance={courseGuidance}
         units={units.profile}
+        xteAlarming={xteMonitor.alarming}
         {routeProgress}
         onStop={() => routeController.onStopCourse()}
         onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
@@ -1524,6 +1537,7 @@ $effect(() => {
               {vessel}
               error={anchorController.anchorError}
               busy={anchorController.busy}
+              batteryNote={anchorController.batteryNote}
               onDrop={() => void anchorController.onDrop()}
               onRaise={() => void anchorController.onRaise()}
               onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
@@ -1576,13 +1590,21 @@ $effect(() => {
               {collisionMuteRemainingMin}
               onToggleCollisionMute={toggleCollisionMute}
               arrivalMuted={arrivalMuted.value}
-              onToggleArrivalMute={() => arrivalMuted.set(!arrivalMuted.value)}
+              onToggleArrivalMute={() => {
+                const muted = !arrivalMuted.value;
+                arrivalMuted.set(muted);
+                if (muted) alarmLog.record({ kind: 'muted', label: 'Waypoint arrival alarm' });
+              }}
               notifications={notificationsStore}
               error={alarmActionError}
               onSilence={notificationsApi ? onSilenceNotification : undefined}
               onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
               {audioState}
               shallow={shallowMonitor}
+              {alarmVolume}
+              {alarmLog}
+              wakeLockState={wakeLock.state}
+              xte={xteMonitor}
               onClose={closePanel}
               onBack={backToMenu}
             />

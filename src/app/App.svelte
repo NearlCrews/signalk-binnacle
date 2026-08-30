@@ -68,11 +68,15 @@ import {
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
 import {
+  alarmChronologyFact,
   CollisionMute,
+  createAlarmLog,
+  createAlarmVolume,
   createShallowController,
   GenericAlarm,
   isRaisedNotification,
   LookoutAlarm,
+  SHALLOW_DEGRADE_TONE,
   worstRaisedNotification,
 } from '$features/lookout';
 import {
@@ -92,7 +96,14 @@ import {
   togglePinned,
 } from '$features/menu';
 import { createMobController, MOB_TONE, MobButton } from '$features/mob';
-import { ARRIVAL_TONE, shouldSoundArrivalAlarm } from '$features/navigation';
+import {
+  ARRIVAL_TONE,
+  createXteMonitor,
+  DEFAULT_XTE_LIMIT_METERS,
+  shouldSoundArrivalAlarm,
+  XTE_LIMIT_MAX_METERS,
+  XTE_LIMIT_MIN_METERS,
+} from '$features/navigation';
 import {
   createNoteDetailLoader,
   createPersonalNotesController,
@@ -173,10 +184,11 @@ import {
   PrivacyActivityCoordinator,
   type PrivacyReport,
 } from '$shared/privacy';
-import { OnlineStatus, registerPwa } from '$shared/pwa';
+import { createWakeLockHolder, OnlineStatus, registerPwa } from '$shared/pwa';
 import {
   booleanPersistedCodec,
   booleanRecordPersistedCodec,
+  boundedNumberPersistedCodec,
   CHART_ORIENTATION_MODES,
   type ChartOrientationMode,
   createMapView,
@@ -1339,6 +1351,19 @@ const shallowController = createShallowController({
   origin,
   getToken: () => chartsToken,
   alarm: alarmCoordinator.channel({ id: 'shallow', rank: () => 2 }),
+  // An armed watch that stands down must be heard, not only chip-noted; courtesy so the cue
+  // never preempts a real alarm, ranked above the arrival and weather courtesies.
+  degradeAlarm: new GatedAlarm(
+    SHALLOW_DEGRADE_TONE,
+    alarmCoordinator.channel({ id: 'shallow-degrade', rank: () => 4, courtesy: true }),
+  ),
+});
+// The degrade notice rides the toast rather than the annunciator: the annunciator already
+// speaks the stale and no-reading alerts, and a second spoken channel would double-announce.
+const DEGRADE_NOTICE_TOAST_MS = 12_000;
+$effect(() => {
+  const notice = shallowController.degradeNotice;
+  if (notice) toast.show(notice, DEGRADE_NOTICE_TOAST_MS);
 });
 
 // The generic server-alarm channel: any inbound alarm or emergency grade notification outside the
@@ -1346,6 +1371,22 @@ const shallowController = createShallowController({
 // badge, and the assistive channel. The controller drives it from the shared generic list. It is
 // constructed before the menu registry so the Alarms entry can carry the live count.
 const genericAlarm = new GenericAlarm(alarmCoordinator.channel({ id: 'generic', rank: () => 2 }));
+
+// The per-device alarm loudness (construction applies the stored value) and the session alarm
+// chronology, the "what alarmed while you slept" record the panel and the watch handoff read.
+const alarmVolume = createAlarmVolume();
+const alarmLog = createAlarmLog(clock);
+
+// A locked phone kills audio and visuals together, the one gap the worker-timer background design
+// does not cover: hold a screen wake lock while a watch is armed or a danger is active. Absent
+// over plain HTTP (the API needs a secure context); the Alarms panel surfaces that degrade.
+const wakeLock = createWakeLockHolder({
+  wanted: () =>
+    anchor.watching ||
+    mob.active ||
+    genericAlarm.sounding ||
+    (!collision.suppressed && collision.assessment.worst === 'danger'),
+});
 
 const notificationsController = createNotificationsController({
   origin,
@@ -1363,6 +1404,7 @@ const notificationsController = createNotificationsController({
   mob,
   genericAlarm,
   selfContext: () => store.selfContext,
+  log: (entry) => alarmLog.record(entry),
   ownedDepthNotificationPath: () => shallowController.ownedNotificationPath,
   anchorNotificationCovered: () => anchor.mode === 'server',
 });
@@ -1444,8 +1486,11 @@ const handoff = createHandoffController({
         unassessed: collision.assessment.unassessed.length,
         topCpaMeters: collision.assessment.contacts[0]?.cpaMeters,
         topTcpaSeconds: collision.assessment.contacts[0]?.tcpaSeconds,
+        ownFixLost: collision.assessment.ownFixLost,
+        nearestUnassessedMeters: collision.assessment.nearestUnassessed?.rangeMeters,
       }),
       depthWatch: () => shallowController.monitorState,
+      alarmChronology: () => alarmChronologyFact(alarmLog),
       radar: () =>
         radarHealth.state === 'quiet'
           ? 'quiet'
@@ -1492,7 +1537,7 @@ const emergencySafetyActive = $derived(
   mob.active ||
     (collision.assessment.worst === 'danger' && (!collision.suppressed || collision.escalating)) ||
     anchor.dragging ||
-    anchor.fixLostAlarm ||
+    anchor.blindAlarm ||
     genericAlarms.some(
       (notification) => notification.state === 'emergency' || notification.state === 'alarm',
     ),
@@ -1547,7 +1592,8 @@ $effect(() => {
     { id: 'collision', rank: 1, text: collisionAlert },
     { id: 'anchor', rank: 2, text: anchorController.anchorAlert },
     { id: 'shallow', rank: 3, text: shallowController.alert },
-    { id: 'notification', rank: 4, text: genericNotificationAlert },
+    { id: 'xte', rank: 4, text: xteMonitor.alert },
+    { id: 'notification', rank: 5, text: genericNotificationAlert },
   ]);
 });
 
@@ -1995,6 +2041,42 @@ const routeController = createRouteController({
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
   getTrackPoints: () => recorder.points,
   toast,
+});
+
+// The off-course alarm: the CDI pegging must sound, not only draw. Server ownership stands the
+// client down when a plugin raises the same concern; the limit is a profile setting and the mute
+// is per-device safety state, both mirroring the arrival alarm's persistence split.
+const xteLimit = new PersistedValue<number>(
+  binnacleStorageKey('xteLimit'),
+  DEFAULT_XTE_LIMIT_METERS,
+  undefined,
+  boundedNumberPersistedCodec(XTE_LIMIT_MIN_METERS, XTE_LIMIT_MAX_METERS),
+);
+const xteMuted = new PersistedValue<boolean>(
+  binnacleStorageKey('xteMuted'),
+  false,
+  undefined,
+  booleanPersistedCodec,
+);
+const xteMonitor = createXteMonitor({
+  courseActive: () => routeController.courseActive,
+  xteMeters: () => courseGuidance.crossTrackErrorMeters,
+  // CourseGuidance already folds the provider TTL and the fresh-fix gate into an undefined
+  // reading; the hook exists for any stricter staleness signal.
+  xteStale: () => false,
+  legKey: () => {
+    const route = courseGuidance.activeRouteSnapshot;
+    if (route) return `${route.href}:${route.pointIndex}`;
+    const next = courseGuidance.nextPosition;
+    return next ? `${next.latitude},${next.longitude}` : undefined;
+  },
+  limit: xteLimit,
+  muted: xteMuted,
+  notifications: () => notificationsStore.list(),
+  clock,
+  // Rank 3: below shallow and generic, above the courtesy arrival; a safety alarm that
+  // interleaves rather than yields.
+  alarm: alarmCoordinator.channel({ id: 'xte', rank: () => 3 }),
 });
 
 // Waypoints controller: owns waypoints CRUD.
@@ -2600,8 +2682,10 @@ onDestroy(() => {
   mobAlarm.stop();
   shallowController.stop();
   arrivalAlarm.stop();
+  xteMonitor.stop();
   genericAlarm.stop();
   weatherWarnings.dispose();
+  wakeLock.dispose();
   alarmCoordinator.dispose();
   safetyAnnunciator.dispose();
   setWriteOutcomeListener(undefined);
@@ -2635,12 +2719,16 @@ const plotterServices = {
   trackSettings,
   categoriesOpen: layerCategoriesOpen,
   arrivalMuted,
+  alarmVolume,
+  alarmLog,
+  wakeLock,
 };
 
 const plotterControllers = {
   anchorController,
   mobController,
   routeController,
+  xteMonitor,
   waypointsController,
   personalNotesController,
   trackController,
@@ -3040,6 +3128,8 @@ const plotterActions = {
     connectionPhase={store.connection.phase}
     {aisCount}
     aisUnassessed={collision.assessment.unassessed.length}
+    aisOwnFixLost={collision.assessment.ownFixLost === true}
+    aisNearestUnassessed={collision.assessment.nearestUnassessed}
     navigating={courseGuidance.active}
     {anchor}
     {units}
