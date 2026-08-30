@@ -339,9 +339,13 @@ test('menu prioritizes safety and customizes toolbar order without shifting bloc
     .toEqual(['Menu', 'Follow', 'Center', 'AIS']);
 
   await menu.getByRole('button', { name: 'Done' }).click();
+  // Scroll the blocked tile into view BEFORE measuring: the launcher scrolls now that it holds
+  // more tiles, and the click's own auto-scroll would otherwise read as a layout shift.
+  const radarTile = menu.getByRole('button', { name: /Radar/ });
+  await radarTile.scrollIntoViewIfNeeded();
   const chartBefore = await menu.getByRole('group', { name: 'Chart' }).boundingBox();
   if (!chartBefore) throw new Error('chart group did not lay out');
-  await menu.getByRole('button', { name: /Radar/ }).click({ force: true });
+  await radarTile.click({ force: true });
   await expect(menu.locator('.transient-note')).toBeVisible();
   const chartAfter = await menu.getByRole('group', { name: 'Chart' }).boundingBox();
   if (!chartAfter) throw new Error('chart group moved out of layout');
