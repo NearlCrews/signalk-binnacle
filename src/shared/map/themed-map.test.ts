@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mapThemePaint } from './map-theme';
 import { createThemedMap, type ThemedMapApi } from './themed-map';
 
 vi.mock('./maplibre-worker', () => ({}));
@@ -850,5 +851,45 @@ describe('createThemedMap style watchdog', () => {
     vi.advanceTimersByTime(1);
     expect(map.styles).toHaveLength(2);
     expect(map.styles[1]).toMatchObject({ name: 'binnacle-offline-fallback' });
+  });
+});
+
+describe('createThemedMap recolor', () => {
+  it('recolors the base for the day sun variant and restores the source style for standard day', async () => {
+    let api: ThemedMapApi | undefined;
+    createThemedMap({
+      container,
+      onLoad: (loaded) => {
+        api = loaded;
+      },
+    });
+    const map = await lastMap();
+    const layers = [
+      { id: 'bg', type: 'background' },
+      { id: 'place-labels', type: 'symbol' },
+    ];
+    const painted: Array<[string, string, unknown]> = [];
+    Object.assign(map, {
+      getStyle: () => ({ layers }),
+      getLayer: (id: string) => layers.find((layer) => layer.id === id),
+      setPaintProperty: (id: string, property: string, value: unknown) => {
+        painted.push([id, property, value]);
+      },
+    });
+    map.fire('load');
+    if (!api) throw new Error('onLoad did not run');
+
+    const sun = mapThemePaint('day', 'sun');
+    api.recolor('day', 'sun');
+    expect(painted).toContainEqual(['bg', 'background-color', sun.background]);
+    expect(painted).toContainEqual(['place-labels', 'text-color', sun.label]);
+    expect(painted).toContainEqual(['place-labels', 'text-halo-color', sun.background]);
+
+    // Standard day restores the paint captured at load (undefined in this fake), never the
+    // palette, so the real source style comes back when the sun variant is switched off.
+    painted.length = 0;
+    api.recolor('day');
+    expect(painted).toContainEqual(['bg', 'background-color', undefined]);
+    expect(painted).not.toContainEqual(['bg', 'background-color', sun.background]);
   });
 });

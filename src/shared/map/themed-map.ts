@@ -13,7 +13,7 @@ import {
 import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
 import { createMapTapRecognizer } from './map-tap';
-import { mapThemePaint } from './map-theme';
+import { type MapPaintVariant, mapThemePaint } from './map-theme';
 import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
 import { beforeIdFor, installSentinels } from './sentinels';
 import type { OverlayContext } from './types';
@@ -26,9 +26,11 @@ export interface ThemedMapApi {
   map: maplibregl.Map;
   ctx: OverlayContext;
   manager: LayerManager;
-  // Recolor the base map and every overlay for a theme: day restores the source style's real colors,
-  // dusk and night-red recolor the base, and the manager recolors each overlay's own layers.
-  recolor: (theme: Theme) => void;
+  // Recolor the base map and every overlay for a theme: standard day restores the source style's
+  // real colors, dusk, night-red, and the day-sun variant recolor the base, and the manager
+  // recolors each overlay's own layers. The optional variant defaults to standard, so existing
+  // callers are unchanged; a bright-sun toggle passes 'sun' alongside 'day'.
+  recolor: (theme: Theme, variant?: MapPaintVariant) => void;
   // Whether the widget has been destroyed, for bailing out of async overlay registration.
   isDestroyed: () => boolean;
   // Start syncing the overlays: on every MapLibre 'render' (so pan and zoom repaints update them)
@@ -421,12 +423,15 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     // Snapshot the source style's own colors before any recolor, so the day theme can restore the
     // real map rather than approximate it.
     const baseColors = captureBaseTheme(mapInstance, mapThemePaint('day'));
-    const recolor = (theme: Theme) => {
-      const paint = mapThemePaint(theme);
+    const recolor = (theme: Theme, variant: MapPaintVariant = 'standard') => {
+      const paint = mapThemePaint(theme, variant);
       // Both base passes filter the style to the same themable layers; compute that list once and
       // pass it to both rather than refiltering twice per recolor.
       const layers = themableBaseLayers(mapInstance);
-      if (theme === 'day') restoreBaseTheme(mapInstance, baseColors);
+      // Standard day restores the source style's real colors. The sun variant recolors the base
+      // like the dark themes instead: the source style's own paint is the washed-out look the
+      // variant exists to replace.
+      if (theme === 'day' && variant !== 'sun') restoreBaseTheme(mapInstance, baseColors);
       else applyBaseTheme(mapInstance, paint, layers);
       applyBaseIconVisibility(mapInstance, paint, layers);
       applyBaseRasterVisibility(mapInstance, paint, layers);

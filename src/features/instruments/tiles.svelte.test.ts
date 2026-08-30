@@ -1,6 +1,8 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { ZoneState } from '$shared/signalk';
+import INSTRUMENTS_CSS from '../../styles/instruments.css?raw';
+import TOKENS_CSS from '../../styles/tokens.css?raw';
 import NumericTile from './NumericTile.svelte';
 import type { TileReading } from './tile-catalog';
 import WindTile from './WindTile.svelte';
@@ -224,5 +226,37 @@ describe('WindTile', () => {
     const speedOnly: TileReading = { state: 'live', value: '10.0', unit: 'kn', siValue: 5.1 };
     const html = windBody({ label: 'AWS', reading: speedOnly, zone: normal, sensorGloss: GLOSS });
     expect(html).not.toContain('class="needle"');
+  });
+});
+
+// The hero sizing contract lives in the global .tile vocabulary, not the components, so these
+// assert the stylesheet text the same way map-theme.test.ts cross-checks tokens.css. The
+// computed-growth behavior is covered in the browser project (tile-scaling.client.svelte.test.ts).
+describe('tile hero container scaling (styles/instruments.css contract)', () => {
+  it('makes the tile the hero query container', () => {
+    const tileBlock = INSTRUMENTS_CSS.match(/\.tile \{([^}]*)\}/)?.[1] ?? '';
+    expect(tileBlock).toContain('container-type: inline-size');
+  });
+
+  it('clamps the hero between the fixed readout floor and 4rem, scaled by tile width', () => {
+    const heroSize = INSTRUMENTS_CSS.match(/--hero-size: clamp\(([^)]*)\)/)?.[1] ?? '';
+    const [floor, scale, cap] = heroSize.split(',').map((part) => part.trim());
+    // The floor is the former fixed hero size, so the narrowest dock tile reads unchanged.
+    const readoutLg = TOKENS_CSS.match(/--text-readout-lg:\s*([^;]+);/)?.[1]?.trim();
+    expect(floor).toBe(readoutLg);
+    expect(scale).toMatch(/^\d+(\.\d+)?cqi$/);
+    expect(cap).toBe('4rem');
+  });
+
+  it('sizes the hero numeral and reserves the value slot from the same clamp', () => {
+    const numBlock = INSTRUMENTS_CSS.match(/\.tile \.num \{([^}]*)\}/)?.[1] ?? '';
+    expect(numBlock).toContain('font-size: var(--hero-size)');
+    const valueBlock = INSTRUMENTS_CSS.match(/\.tile \.value \{([^}]*)\}/)?.[1] ?? '';
+    expect(valueBlock).toContain('min-block-size: calc(var(--hero-leading) * var(--hero-size))');
+  });
+
+  it('holds the full-row position tile at the secondary readout size, reserve included', () => {
+    const positionBlock = INSTRUMENTS_CSS.match(/^\.tile--position \{([^}]*)\}/m)?.[1] ?? '';
+    expect(positionBlock).toContain('--hero-size: var(--text-readout)');
   });
 });

@@ -36,7 +36,7 @@ export {
   createMapTapRecognizer,
   type MapTapEvent,
 } from './map-tap';
-export type { MapThemePaint } from './map-theme';
+export type { MapPaintVariant, MapThemePaint } from './map-theme';
 export { applyRasterTheme, colorProperty, DAY_PAINT, mapThemePaint } from './map-theme';
 export {
   iconOffsetExpression,

@@ -167,7 +167,45 @@ const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
   },
 };
 
-export function mapThemePaint(theme: Theme): MapThemePaint {
+// The day palette's bright-sun variant, for direct sunlight washing out the helm display: a
+// lighter ground with every stroke, label, and marker hue pushed darker and more saturated, so
+// the luminance spread survives the washout. Scoped to day on purpose: dusk and night-red have
+// no sun problem, so the variant resolves to the standard palette there. paint.theme stays
+// 'day', so every overlay's per-theme colormap keeps working unchanged. Deliberately kept the
+// same as day: danger and select (the tokens.css lockstep mirrors; the app chrome around the
+// chart still shows day's tokens), markerGlyph (white on now-deeper discs gains contrast on its
+// own), and the raster treatment (the weather legend swatches hand-approximate its output, so a
+// variant-specific raster curve would make the legend lie about the tiles).
+export type MapPaintVariant = 'standard' | 'sun';
+
+const SUN_PAINT: Omit<MapThemePaint, 'theme'> = {
+  ...PAINT.day,
+  background: '#faf7ef',
+  water: '#8fbcdc',
+  land: '#f0ece2',
+  landcover: '#c8dfb2',
+  road: '#a89f8e',
+  boundary: '#8a7a58',
+  label: '#16222b',
+  warning: '#b57e0a',
+  note: '#5e2b80',
+  tide: '#086b78',
+  waypoint: '#144f85',
+  routeHighlight: '#e66300',
+  navStarboard: '#b81f14',
+  navPort: '#0f7c3c',
+  navLight: '#a312b8',
+  trackSlow: '#102c47',
+  trackMid: '#20597f',
+  trackFast: '#5ea6d9',
+  trackSolid: '#155a94',
+  scrubMarker: '#e05f00',
+  ownVessel: { r: 0x14, g: 0x54, b: 0x92, a: 0xff },
+  aisTarget: { r: 0xb0, g: 0x76, b: 0x00, a: 0xff },
+};
+
+export function mapThemePaint(theme: Theme, variant: MapPaintVariant = 'standard'): MapThemePaint {
+  if (theme === 'day' && variant === 'sun') return { ...SUN_PAINT, theme };
   return { ...PAINT[theme], theme };
 }
 

@@ -5,6 +5,12 @@
    keeps alarm and warning distinguishable by brightness. */
 .tile {
   --hero-leading: 1.1;
+  /* The tile is the hero's query container: the clamp floor is the former fixed
+     --text-readout-lg, so a dock or phone half tile keeps that size while a wide tablet tile
+     grows the readout toward glance range. The value slot reserves with the same clamp so a
+     late-arriving reading cannot jump the layout. */
+  --hero-size: clamp(1.75rem, 17cqi, 4rem);
+  container-type: inline-size;
   appearance: none;
   color: inherit;
   font: inherit;
@@ -22,7 +28,7 @@
   cursor: pointer;
 }
 .tile .num {
-  font-size: var(--text-readout-lg);
+  font-size: var(--hero-size);
   line-height: var(--hero-leading);
   white-space: pre-line;
 }
@@ -30,7 +36,7 @@
    keeps the tile the same height as its value siblings. Baseline keeps the unit suffix on the
    numeral's baseline; the empty state centers its gloss in the reserved slot instead. */
 .tile .value {
-  min-block-size: calc(var(--hero-leading) * var(--text-readout-lg));
+  min-block-size: calc(var(--hero-leading) * var(--hero-size));
   display: inline-flex;
   align-items: baseline;
 }
@@ -99,12 +105,12 @@
   grid-column: auto;
 }
 /* The position tile spans the row for its two coordinate lines, at the secondary-readout size
-   because hero-size lines would double the tile. */
+   because hero-size lines would double the tile. Overriding the hero variable also keeps the
+   value slot's reserve at that size, so the full-row tile does not reserve a scaled hero line
+   its two smaller lines already exceed. */
 .tile--position {
   grid-column: 1 / -1;
-}
-.tile--position .num {
-  font-size: var(--text-readout);
+  --hero-size: var(--text-readout);
 }
 /* The abbreviation is the tile's loud name: a mariner scans for SOG, HDG, or AWS, so it leads the
    label line at body contrast and weight while the long name stays the quiet gloss. The
