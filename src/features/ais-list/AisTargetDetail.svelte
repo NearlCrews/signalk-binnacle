@@ -104,7 +104,12 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
         <dd>{formatNm(row.cpaMeters)} nm</dd>
       </div>
     {/if}
-    {#if row.tcpaSeconds !== undefined}
+    {#if row.receding}
+      <div class="item">
+        <dt>Time to closest (TCPA)</dt>
+        <dd>past closest approach</dd>
+      </div>
+    {:else if row.tcpaSeconds !== undefined}
       <div class="item">
         <dt>Time to closest (TCPA)</dt>
         <dd>{formatTcpaMin(row.tcpaSeconds, 1)} min</dd>
@@ -115,7 +120,9 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
     <p class="alert-note" role="status">
       {row.unassessedReason === 'course-unavailable'
         ? 'CPA is unavailable because the target course is missing or stale. This vessel may be moving and cannot be assessed for collision; assessment resumes automatically when its course returns.'
-        : 'CPA is unavailable because no fresh motion data has arrived from this target. It cannot be assessed for collision; assessment resumes automatically when motion data returns.'}
+        : row.unassessedReason === 'own-fix-lost'
+          ? 'CPA is unavailable because this boat has no fresh GPS fix, so no target can be assessed for collision. Assessment resumes automatically when the fix returns.'
+          : 'CPA is unavailable because no fresh motion data has arrived from this target. It cannot be assessed for collision; assessment resumes automatically when motion data returns.'}
     </p>
   {/if}
 </section>

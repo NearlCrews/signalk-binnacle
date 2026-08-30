@@ -263,7 +263,13 @@ $effect(() => {
                     >CPA <b class="num">{formatNm(row.cpaMeters)}</b> nm</span
                   >
                 {/if}
-                {#if row.tcpaSeconds !== undefined}
+                {#if row.receding}
+                  <span
+                    class="nav-metric"
+                    title="This vessel has passed its closest point and is opening"
+                    >past CPA</span
+                  >
+                {:else if row.tcpaSeconds !== undefined}
                   <span class="nav-metric" title="Time to closest point of approach"
                     >TCPA <b class="num">{formatTcpaMin(row.tcpaSeconds, 1)}</b> min</span
                   >

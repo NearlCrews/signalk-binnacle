@@ -1,6 +1,7 @@
 export type {
   Assessment,
   DangerContact,
+  NearestUnassessed,
   Severity,
   UnassessedContact,
   UnassessedReason,

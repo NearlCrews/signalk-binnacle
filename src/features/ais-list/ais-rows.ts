@@ -32,6 +32,9 @@ export interface AisListRow {
   navigationState?: string;
   // The lookout's grading for this contact, when it considers it a risk.
   severity?: Severity;
+  // The contact passed its closest approach and is held briefly at its grade; displays must say
+  // so instead of formatting its zero-or-negative TCPA as time to go.
+  receding?: boolean;
   // Set when the lookout cannot assess this target (moving with no fresh course, or no fresh
   // motion data at all), so a degraded contact never reads as clear.
   unassessedReason?: UnassessedReason;
@@ -76,6 +79,7 @@ export function buildAisRows(
       tcpaSeconds: target.tcpaSeconds ?? risk?.tcpaSeconds,
       navigationState: target.navigationState,
       severity: risk?.severity,
+      receding: risk?.receding,
       unassessedReason: unassessedById.get(target.id),
     };
   });

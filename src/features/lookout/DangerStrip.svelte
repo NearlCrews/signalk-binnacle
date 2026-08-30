@@ -91,9 +91,16 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
           <span class="metric" title="Closest point of approach: how near this vessel will pass">
             CPA <b>{formatNm(contact.cpaMeters)}</b> nm
           </span>
-          <span class="metric" title="Time to the closest point of approach">
-            TCPA <b>{formatTcpaMin(contact.tcpaSeconds, 1)}</b> min
-          </span>
+          {#if contact.receding}
+            <!-- A held contact past its closest approach: a countdown would read as still closing. -->
+            <span class="metric" title="This vessel has passed its closest point and is opening">
+              past closest approach
+            </span>
+          {:else}
+            <span class="metric" title="Time to the closest point of approach">
+              TCPA <b>{formatTcpaMin(contact.tcpaSeconds, 1)}</b> min
+            </span>
+          {/if}
         </li>
       {/each}
     </ul>
