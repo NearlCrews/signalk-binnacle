@@ -537,6 +537,8 @@ export interface PointConditions {
   currentSpeedMs?: number;
   currentDirectionRad?: number;
   visibilityM?: number;
+  // WMO weather interpretation code, carried by the free grid; a Signal K provider never sets it.
+  weatherCode?: number;
   waterTempK?: number;
   precipitationMm?: number;
   precipitationType?: string;

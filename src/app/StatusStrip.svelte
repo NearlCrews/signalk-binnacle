@@ -13,12 +13,13 @@ import {
   createMediaQuery,
   formatBearingOr,
   formatClockTime,
-  formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
+  formatSpeedOr,
   lengthUnit,
   type ReactiveClock,
+  speedUnit,
   Toast,
 } from '$shared/lib';
 import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
@@ -42,6 +43,7 @@ let {
   shallowAlarming,
   shallowState = 'monitoring',
   radarHealth = { state: 'quiet' },
+  weatherWarning = undefined,
   orientation = undefined,
   onResetOrientation = undefined,
   pinnedActions,
@@ -77,6 +79,9 @@ let {
   shallowState?: import('$features/lookout').ShallowMonitorState;
   // Helm-visible radar health: failure and staleness stay visible with Radar Controls closed.
   radarHealth?: import('$features/marine-radar').RadarHelmHealth;
+  // The worst active provider weather warning (for example "Gale Warning"), the closed-panel cue;
+  // a tap explains and points at the weather panel. Absent when no warning is in effect.
+  weatherWarning?: string;
   // The chart orientation while a rotating mode is chosen: its live label (including a fallback to
   // north when the reference is stale) stays visible, and one tap returns to north-up. Absent in
   // the default north-up mode, where an unrotated chart speaks for itself.
@@ -100,6 +105,7 @@ const connectionDown = $derived(isConnectionDown(connectionPhase));
 // Explanations for the degraded chips live in title attributes, and titles are dead on touch:
 // tapping an explanatory chip shows the same text as a transient note above the strip.
 const chipNote = new Toast();
+const CHIP_NOTE_MS = 5_000;
 onDestroy(() => chipNote.dispose());
 
 // While the Signal K link itself is down or silent, the per-sensor consequences (No GPS fix,
@@ -185,7 +191,7 @@ const depthWatchPaused = $derived(
       class="conn chip-btn"
       class:conn--down={connectionDown || dataStalled}
       title={connTitle}
-      onclick={() => chipNote.show(connTitle)}
+      onclick={() => chipNote.show(connTitle, CHIP_NOTE_MS)}
     >
       <span class="conn-live" role="status" aria-live="polite">
         <span class="status-dot" aria-hidden="true"></span>
@@ -196,7 +202,7 @@ const depthWatchPaused = $derived(
       <!-- Not a live region: the always-mounted conn dot above announces every connection phase
            politely (matching the down branch below), and the one assertive channel is App's
            annunciator, which a data-link note must not talk over. -->
-      <span class="readout fix-lost action-note">
+      <span class="readout fix-lost action-note action-note--wrap connection-action">
         Data link failed
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Retry</button>
       </span>
@@ -205,7 +211,10 @@ const depthWatchPaused = $derived(
            never name; connectionLabel already says which). Not a live region: the always-mounted
            conn dot above announces every phase, and a second region carrying the same label
            announced the drop twice. This is the sighted half. -->
-      <span class="readout fix-lost action-note" title="Readouts pause until data returns">
+      <span
+        class="readout fix-lost action-note action-note--wrap connection-action"
+        title="Readouts pause until data returns"
+      >
         {connectionLabel}
         <button type="button" class="btn btn-compact" onclick={onReconnect}>Reconnect</button>
       </span>
@@ -250,12 +259,23 @@ const depthWatchPaused = $derived(
         type="button"
         class="readout lookout chip-btn"
         title={aisTitle}
-        onclick={() => chipNote.show(aisTitle)}
+        onclick={() => chipNote.show(aisTitle, CHIP_NOTE_MS)}
       >
         AIS <b class="num">{aisCount}</b>
         {#if aisUnassessed > 0}
           <span class="sev-warning">{aisUnassessed} unassessed</span>
         {/if}
+      </button>
+    {/if}
+    {#if weatherWarning}
+      <button
+        type="button"
+        class="readout chip-btn"
+        title={`Weather warning: ${weatherWarning}. Open Weather for details.`}
+        onclick={() =>
+          chipNote.show(`Weather warning: ${weatherWarning}. Open Weather for details.`, CHIP_NOTE_MS)}
+      >
+        <span class="sev-warning">{weatherWarning}</span>
       </button>
     {/if}
     {#if anchor.watching}
@@ -287,8 +307,10 @@ const depthWatchPaused = $derived(
       class:subordinate={linkDown}
       title="Speed over ground"
       >SOG
-      <b class="num">{formatKnotsOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps)}</b>
-      kn</span
+      <b class="num"
+        >{formatSpeedOr(fixStale || vessel.sogStale ? undefined : vessel.sogMps, units.profile)}</b
+      >
+      {speedUnit(units.profile)}</span
     >
     {#if showCog}
       <span class="readout cog-readout" class:subordinate={linkDown} title="Course over ground"
@@ -320,7 +342,7 @@ const depthWatchPaused = $derived(
       class:fix-lost={depth.stale || shallowState !== 'monitoring'}
       class:subordinate={linkDown && !shallowAlarming}
       title={depthTitle(depth, shallowAlarming)}
-      onclick={() => chipNote.show(depthTitle(depth, shallowAlarming))}
+      onclick={() => chipNote.show(depthTitle(depth, shallowAlarming), CHIP_NOTE_MS)}
     >
       {depthLabel}
       {#if !depthWatchPaused}
@@ -340,7 +362,7 @@ const depthWatchPaused = $derived(
         class:sev-danger={radarHealth.state === 'failed'}
         class:sev-warning={radarHealth.state === 'stale'}
         title={radarTitle}
-        onclick={() => chipNote.show(radarTitle)}
+        onclick={() => chipNote.show(radarTitle, CHIP_NOTE_MS)}
       >
         <span role="status" aria-live="polite">
           {radarHealth.state === 'stale'
@@ -516,11 +538,10 @@ const depthWatchPaused = $derived(
   display: inline-flex;
   align-items: center;
 }
-/* Subordinated consequence chips while the link itself is the failure: dimmed, never hidden or
-   recolored, so the strip presents one failure with one action and the alarm-versus-warning
-   brightness ladder stays intact at night-red. */
-.subordinate {
-  opacity: 0.55;
+.connection-action {
+  justify-content: center;
+  max-inline-size: 100%;
+  white-space: normal;
 }
 /* The chip-tap note floats above the strip, lifted over any safety rail by the shared clearance
    variable and layered below the safety strips so it can never cover a safety card. */
@@ -578,5 +599,12 @@ const depthWatchPaused = $derived(
    --text-md matches the base strip font, so labels and values share a size too. */
 .readout b {
   color: var(--text);
+}
+/* Subordinated consequence chips while the link itself is the failure remain readable. This sits
+   after the warning and value rules so color, rather than opacity, preserves contrast for both the
+   label and its bold numeric value. */
+.readout.subordinate,
+.readout.subordinate b {
+  color: var(--text-subordinate);
 }
 </style>

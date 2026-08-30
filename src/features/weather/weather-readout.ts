@@ -1,19 +1,26 @@
-import { bilinearAt, type TimeBracket, timeBracket, type WeatherGrid } from '$entities/weather';
 import {
-  formatKnotsOr,
+  bilinearAt,
+  nearestAt,
+  type TimeBracket,
+  timeBracket,
+  type WeatherGrid,
+} from '$entities/weather';
+import {
+  formatSpeedOr,
   HOUR_MS,
   lerp,
   lerpAngle,
   precipRateUnit,
-  type UnitsMode,
+  resolveUnits,
+  type UnitsSelection,
 } from '$shared/lib';
 import { GRID_SOURCE_LABEL } from './fills';
 import type { PointConditions } from './signalk-weather';
 
-// Wind speed in whole knots (no decimals), the shared readout format for the conditions block and
-// the forecast rows.
-export function formatWholeKnots(speedMs: number | undefined): string {
-  return formatKnotsOr(speedMs, 0);
+// Wind speed as a whole number in the preference's speed unit (no decimals), the shared readout
+// format for the conditions block and the forecast rows.
+export function formatWholeSpeed(speedMs: number | undefined, units: UnitsSelection): string {
+  return formatSpeedOr(speedMs, units, 0);
 }
 
 // The tooltip on every true-bearing readout (wind and wave direction), defined once so the conditions
@@ -28,9 +35,9 @@ export const RAIN_VISIBLE_MM_H = 0.1;
 // The unit label beside a precipitation value: the rate unit for the free grid's mm/h, the bare
 // amount unit for a provider's accumulation volume. Defined once so the tap readout and the
 // conditions panel cannot label the same value differently.
-export function precipUnitLabel(isRate: boolean | undefined, mode: UnitsMode): string {
-  if (isRate) return precipRateUnit(mode);
-  return mode === 'imperial' ? 'in' : 'mm';
+export function precipUnitLabel(isRate: boolean | undefined, units: UnitsSelection): string {
+  if (isRate) return precipRateUnit(units);
+  return resolveUnits(units).precip === 'in/h' ? 'in' : 'mm';
 }
 
 // The source name for a conditions row. 'provider' and 'mixed' are internal tokens and must never
@@ -67,6 +74,8 @@ export interface WeatherReadout {
   // provider), carried in the data so every display labels it the same way.
   precipIsRate?: boolean;
   cloudCoverFraction?: number; // 0..1, present only when the grid carries cloud cover
+  visibilityM?: number; // present only when the grid carries visibility
+  weatherCode?: number; // WMO weather interpretation code, categorical, nearest-cell sampled
 }
 
 // One readout-to-conditions mapper shared by the current block and the forecast rows, so a field
@@ -93,6 +102,8 @@ export function conditionsFromReadout(r: WeatherReadout, timeMs: number): PointC
     waterTempK: r.waterTempK,
     precipitationMm: r.precipitationMm,
     precipIsRate: r.precipIsRate,
+    visibilityM: r.visibilityM,
+    weatherCode: r.weatherCode,
   };
 }
 
@@ -166,6 +177,12 @@ export function readoutAtBracket(
         : scalar(grid.precipitation),
     precipIsRate: true,
     cloudCoverFraction: scalar(grid.cloudCover),
+    visibilityM: scalar(grid.visibility),
+    // Categorical: nearest cell at the lower step, since blending codes across cells or steps
+    // would manufacture a forecast nobody issued.
+    weatherCode: nanToUndef(
+      grid.weatherCode?.[lo]?.length ? nearestAt(grid, grid.weatherCode[lo], lon, lat) : undefined,
+    ),
   };
 }
 

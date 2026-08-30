@@ -45,6 +45,8 @@ interface OmLoc {
     pressure_msl?: Array<number | null>;
     precipitation?: Array<number | null>;
     cloud_cover?: Array<number | null>;
+    visibility?: Array<number | null>;
+    weather_code?: Array<number | null>;
   };
 }
 
@@ -225,8 +227,10 @@ export async function fetchForecast(
   const result = await fetchGridLocations<OmLoc>(
     FORECAST_URL,
     // Gusts ride along: gust versus sustained is the reefing decision, so the free grid must carry
-    // it for the readouts even when no provider is configured.
-    'wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,cloud_cover',
+    // it for the readouts even when no provider is configured. Visibility and the WMO weather code
+    // ride along too: the dense-fog risk cue keys on them, and without them a stock server (no
+    // weather provider) could never warn of fog.
+    'wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,cloud_cover,visibility,weather_code',
     { wind_speed_unit: 'ms' },
     bbox,
     opts,
@@ -249,6 +253,8 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
   const pressureMsl = grid2d(steps, cells);
   const precipitation = grid2d(steps, cells);
   const cloudCover = grid2d(steps, cells);
+  const visibility = grid2d(steps, cells);
+  const weatherCode = grid2d(steps, cells);
   for (let c = 0; c < cells; c += 1) {
     const h = locs[c]?.hourly;
     const spd = h?.wind_speed_10m ?? [];
@@ -257,6 +263,8 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
     const pres = h?.pressure_msl ?? [];
     const precip = h?.precipitation ?? [];
     const cloud = h?.cloud_cover ?? [];
+    const vis = h?.visibility ?? [];
+    const code = h?.weather_code ?? [];
     for (let t = 0; t < steps; t += 1) {
       const s = finite(spd[t]);
       const direction = finite(dir[t]);
@@ -273,6 +281,10 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
       if (mm !== undefined) precipitation[t][c] = mm;
       const cc = finite(cloud[t]);
       if (cc !== undefined) cloudCover[t][c] = cc / 100;
+      const v = finite(vis[t]);
+      if (v !== undefined) visibility[t][c] = v;
+      const w = finite(code[t]);
+      if (w !== undefined) weatherCode[t][c] = w;
     }
   }
   return {
@@ -287,6 +299,8 @@ function parse(locs: OmLoc[], lats: number[], lons: number[]): WeatherGrid | und
     precipitationInterval: 'preceding-hour',
     precipitationInterpolation: 'step',
     cloudCover,
+    visibility,
+    weatherCode,
     atmosphericSource: sourceMetadata(locs, times),
   };
 }

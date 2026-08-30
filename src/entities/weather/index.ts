@@ -10,6 +10,7 @@ export {
   bboxContains,
   bilinearAt,
   boundsToBbox,
+  nearestAt,
   normalizeBbox,
   sampleGrid,
   timeBracket,

@@ -7,7 +7,7 @@ import {
   nearestBySorted,
   PA_PER_HPA,
   pressureUnit,
-  type UnitsMode,
+  type UnitsSelection,
 } from '$shared/lib';
 import type { PointConditions } from './signalk-weather';
 import {
@@ -24,6 +24,10 @@ const PRESSURE_TREND_WINDOW_H = PRESSURE_TREND_WINDOW_MS / HOUR_MS;
 const GALE_MS = knotsToMetersPerSecond(34);
 const STORM_MS = knotsToMetersPerSecond(48);
 const DENSE_FOG_VISIBILITY_M = 1000;
+// WMO weather interpretation codes for fog and depositing rime fog. The code catches fog the
+// visibility number misses (a coarse grid cell can average above the threshold while the point
+// forecast still says fog).
+const FOG_WEATHER_CODES = new Set([45, 48]);
 const RAPID_PRESSURE_FALL_PA_3H = -600;
 const ROUGH_SEA_HEIGHT_M = 2.5;
 const STRONG_CURRENT_MS = 1.5;
@@ -110,7 +114,10 @@ export function forecastRiskCues(rows: PointConditions[]): PointConditions[] {
     const strongestWind = Math.max(row.windMs ?? 0, row.gustMs ?? 0);
     if (strongestWind >= STORM_MS) cues.push('Storm-force wind');
     else if (strongestWind >= GALE_MS) cues.push('Gale-force wind');
-    if (row.visibilityM !== undefined && row.visibilityM <= DENSE_FOG_VISIBILITY_M) {
+    if (
+      (row.visibilityM !== undefined && row.visibilityM <= DENSE_FOG_VISIBILITY_M) ||
+      (row.weatherCode !== undefined && FOG_WEATHER_CODES.has(row.weatherCode))
+    ) {
       cues.push('Dense fog');
     }
     if (row.waveHeightM !== undefined && row.waveHeightM >= ROUGH_SEA_HEIGHT_M) {
@@ -182,7 +189,7 @@ export function tendencyText(
   grid: WeatherGrid | undefined,
   parsedPos: [number, number] | undefined,
   targetMs: number,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): string | undefined {
   if (!parsedPos || !grid) return undefined;
   const [lat, lon] = parsedPos;
@@ -191,9 +198,13 @@ export function tendencyText(
   const deltaHpa = deltaPa / PA_PER_HPA;
   if (Math.abs(deltaHpa) < 0.5) return 'steady';
   const word = deltaHpa > 0 ? 'rising' : 'falling';
+  // A tendency delta needs finer precision than a spot reading, so the hectopascal-family units
+  // take one decimal here where formatPressureOr would round to whole; inHg and psi already carry
+  // decimals at their conventional precision.
+  const unit = pressureUnit(units);
   const value =
-    mode === 'imperial'
-      ? formatPressureOr(Math.abs(deltaPa), 'imperial')
-      : formatFixed(Math.abs(deltaHpa), 1);
-  return `${word} ${value} ${pressureUnit(mode)}/${PRESSURE_TREND_WINDOW_H} h`;
+    unit === 'hPa' || unit === 'mbar'
+      ? formatFixed(Math.abs(deltaHpa), 1)
+      : formatPressureOr(Math.abs(deltaPa), units);
+  return `${word} ${value} ${unit}/${PRESSURE_TREND_WINDOW_H} h`;
 }

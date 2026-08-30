@@ -25,6 +25,7 @@ export {
 } from './signalk-weather';
 export { advancePlay, clampTime, stepTime, type TimeRange } from './time-scrub';
 export { default as WeatherConditions } from './WeatherConditions.svelte';
+export { createWeatherWarningsWatch, WEATHER_WARNING_TONE } from './warnings-watch.svelte';
 export { createWavesOverlay } from './waves-overlay';
 export { createWeatherLoader, type WeatherLoader } from './weather-loader';
 export { precipUnitLabel, RAIN_VISIBLE_MM_H } from './weather-readout';

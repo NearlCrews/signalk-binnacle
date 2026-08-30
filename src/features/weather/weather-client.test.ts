@@ -29,6 +29,8 @@ function loc(
       pressure_msl: [1013, 1012],
       precipitation: [0, 0.2],
       cloud_cover: [10, 50],
+      visibility: [800, 20000],
+      weather_code: [45, 3],
     },
   };
 }
@@ -65,6 +67,15 @@ describe('fetchForecast', () => {
     // cloud_cover is percent on the wire; the grid stores a 0..1 fraction.
     expect(grid?.cloudCover?.[0]?.[0]).toBeCloseTo(0.1, 4);
     expect(grid?.cloudCover?.[1]?.[0]).toBeCloseTo(0.5, 4);
+    // Visibility stays meters; the weather code stays the categorical WMO integer.
+    expect(grid?.visibility?.[0]?.[0]).toBe(800);
+    expect(grid?.visibility?.[1]?.[0]).toBe(20000);
+    expect(grid?.weatherCode?.[0]?.[0]).toBe(45);
+    expect(grid?.weatherCode?.[1]?.[0]).toBe(3);
+    // The request itself must carry the fog fields, or a stock server can never warn of fog.
+    const requested = String(fetchFn.mock.calls[0]?.[0]);
+    expect(requested).toContain('visibility');
+    expect(requested).toContain('weather_code');
   });
 
   it('does not fabricate calm wind when speed or direction is missing', async () => {

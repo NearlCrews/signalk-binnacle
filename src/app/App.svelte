@@ -130,9 +130,11 @@ import { createWaypointsController, WaypointDialog } from '$features/waypoints';
 import {
   createPointConditionsLoader,
   createWeatherLoader,
+  createWeatherWarningsWatch,
   defaultProvider,
   fetchWeatherProviders,
   WEATHER_LAYER_IDS,
+  WEATHER_WARNING_TONE,
   type WeatherProvider,
 } from '$features/weather';
 import {
@@ -1360,6 +1362,7 @@ const notificationsController = createNotificationsController({
   timeTravel,
   mob,
   genericAlarm,
+  selfContext: () => store.selfContext,
   ownedDepthNotificationPath: () => shallowController.ownedNotificationPath,
   anchorNotificationCovered: () => anchor.mode === 'server',
 });
@@ -1498,17 +1501,6 @@ $effect(() => {
   if (!emergencySafetyActive || !instrumentsFullScreen) return;
   if (untrack(() => instruments.open)) untrack(() => instruments.setOpen(false));
 });
-
-// The first-run welcome: a compact top banner once the shell is usable, never a panel forced open
-// over the chart (a helm display rebooting mid-passage must come back to the chart). It yields to
-// any active safety event, hides while Help is open, and Dismiss or the panel's own dismissal
-// persists on the device.
-const showHelpWelcome = $derived(
-  !helpOrientationSeen.value &&
-    mapInstance !== undefined &&
-    !emergencySafetyActive &&
-    activePanel !== 'help',
-);
 
 // The region-aware chart offer: in US waters the app already holds everything needed to turn a
 // reference-map view into a real chart, and nothing points at it. One dismissible banner, once per
@@ -1893,6 +1885,7 @@ const menuItems = $derived<MenuItem[]>([
     id: 'menu',
     label: 'Menu',
     icon: Menu,
+    group: 'Settings',
     barOnly: true,
     pressed: menuOpen,
     onSelect: () => (menuOpen = !menuOpen),
@@ -1957,6 +1950,27 @@ const anchorController = createAnchorController({
 // closing, unlike each controller's own panel-local error state.
 const toast = new Toast();
 
+// Provider weather warnings watched from the shell, so a gale that activates while the weather
+// panel is closed still reaches the helm: a courtesy tone that never preempts a safety alarm, a
+// transient toast, and a status-strip chip. Stands down to a chip-only surface while a plugin's
+// own weather notification is active, so one gale never alerts twice.
+const weatherWarningAlarm = new GatedAlarm(
+  WEATHER_WARNING_TONE,
+  alarmCoordinator.channel({ id: 'weather-warning', rank: () => 6, courtesy: true }),
+);
+const weatherWarnings = createWeatherWarningsWatch({
+  origin,
+  token: () => chartsToken,
+  provider: () => weatherProvider,
+  position: () => (vessel.positionStale ? undefined : vessel.position),
+  loader: pointConditionsLoader,
+  clock,
+  alarm: weatherWarningAlarm,
+  pluginAlertActive: () =>
+    notificationsStore.list().some((notification) => notification.path.includes('weather')),
+  announce: (message, ms) => toast.show(message, ms),
+});
+
 // Route controller: owns route CRUD, activation, editing, GPX import/export, track-to-route.
 const routeController = createRouteController({
   origin,
@@ -2005,6 +2019,24 @@ const personalNotesController = createPersonalNotesController({
   onSelect: (selection) => selectNote(selection),
   invalidateDetail: (id) => noteLoader?.invalidate(id),
 });
+
+// The first-run welcome is a compact invitation, never a panel forced over the chart. It yields to
+// every open surface and active safety event so it cannot cover a header, close control, or dialog
+// on a narrow helm display. Dismiss, or the Help panel's own dismissal, persists on the device.
+const showHelpWelcome = $derived(
+  !helpOrientationSeen.value &&
+    mapInstance !== undefined &&
+    !emergencySafetyActive &&
+    activePanel === null &&
+    !menuOpen &&
+    !weatherPanelOpen &&
+    !radarControlsOpen &&
+    !instruments.open &&
+    selectedNote === undefined &&
+    waypointsController.addWaypointAt === undefined &&
+    waypointsController.editingWaypoint === undefined &&
+    personalNotesController.editor === undefined,
+);
 
 // Track controller: owns saved tracks CRUD and display.
 const trackController = createTrackController({
@@ -2569,6 +2601,7 @@ onDestroy(() => {
   shallowController.stop();
   arrivalAlarm.stop();
   genericAlarm.stop();
+  weatherWarnings.dispose();
   alarmCoordinator.dispose();
   safetyAnnunciator.dispose();
   setWriteOutcomeListener(undefined);
@@ -2715,7 +2748,7 @@ const plotterActions = {
     companion={companionAnnounce}
   />
   <header class="topbar">
-    <span class="topbar-start">
+    <div class="topbar-start">
       <AppMenu
         items={menuItems}
         showTrigger={!pinnedActions.value.includes('menu')}
@@ -2728,59 +2761,65 @@ const plotterActions = {
         {onReorderPinned}
         {onResetPinned}
       />
-      <span class="brand"
-        >Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></span
-      >
-    </span>
+      <h1 class="brand">Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></h1>
+    </div>
     <MobButton
       {mob}
       onTrigger={mobController.onTrigger}
       onLocate={flyToPosition}
       writeBlocked={auth.writeBlocked}
     />
-    <span class="topbar-actions">
+    <div class="topbar-actions">
       {#if collisionMute.active}
-        <button
-          type="button"
-          class="btn btn-warning btn-pill"
-          aria-pressed="true"
-          aria-label="Collision alarm muted, {muteRemainingMin} minutes left, tap to unmute"
-          title="Collision alarm muted, {muteRemainingMin} min left, tap to unmute"
-          onclick={() => collisionMute.unmute()}
-        >
-          <VolumeX size={16} aria-hidden="true" />
-          Muted {muteRemainingMin}min
-        </button>
+        <span class="topbar-action topbar-action--collision">
+          <button
+            type="button"
+            class="btn btn-warning btn-pill"
+            aria-pressed="true"
+            aria-label="Collision alarm muted, {muteRemainingMin} minutes left, tap to unmute"
+            title="Collision alarm muted, {muteRemainingMin} min left, tap to unmute"
+            onclick={() => collisionMute.unmute()}
+          >
+            <VolumeX size={16} aria-hidden="true" />
+            <span class="collision-label">Muted {muteRemainingMin}min</span>
+          </button>
+        </span>
       {/if}
       {#if updateReady}
-        <button
-          type="button"
-          class="btn btn-primary btn-pill"
-          onclick={() => {
-            updateReady = false;
-            pwa.update();
-          }}
-        >
-          Update
-        </button>
+        <span class="topbar-action topbar-action--update">
+          <button
+            type="button"
+            class="btn btn-primary btn-pill"
+            onclick={() => {
+              updateReady = false;
+              pwa.update();
+            }}
+          >
+            Update
+          </button>
+        </span>
       {/if}
-      <ChartLockerStatus
-        present={companionStatus.present}
-        state={companionStatus.state}
-        cacheBytes={companionStatus.cacheBytes}
-        accessUrl={chartLockerAccessUrl}
-        onOpen={() => openPanel('regions')}
-        onRetry={() => void companionStatus.refresh()}
-      />
-      <ProfileSwitcher
-        active={profileStore.active}
-        profiles={profileStore.profiles}
-        hasUpdate={profileStore.remoteUpdateAvailable}
-        onSelect={onApplyProfile}
-        onManage={() => openPanel('profiles')}
-      />
-      <ThemeToggle controller={theme} />
-    </span>
+      <span class="topbar-action topbar-action--companion">
+        <ChartLockerStatus
+          present={companionStatus.present}
+          state={companionStatus.state}
+          cacheBytes={companionStatus.cacheBytes}
+          accessUrl={chartLockerAccessUrl}
+          onOpen={() => openPanel('regions')}
+          onRetry={() => void companionStatus.refresh()}
+        />
+      </span>
+      <span class="topbar-action topbar-action--profile">
+        <ProfileSwitcher
+          active={profileStore.active}
+          profiles={profileStore.profiles}
+          hasUpdate={profileStore.remoteUpdateAvailable}
+          onSelect={onApplyProfile}
+          onManage={() => openPanel('profiles')}
+        />
+      </span>
+      <span class="topbar-action topbar-action--theme"><ThemeToggle controller={theme} /></span>
+    </div>
   </header>
   <PlotterView
     services={plotterServices}
@@ -2821,6 +2860,7 @@ const plotterActions = {
     pwaStatus={pwa.status}
     {arrivalBanner}
     toastMessage={toast.message}
+    onDismissToast={() => toast.clear()}
     bind:hoveredPoi
     {poiInView}
     {poiViewState}
@@ -2912,10 +2952,10 @@ const plotterActions = {
   {/if}
 
   {#snippet instrumentsState(message: string, onRetry?: () => void)}
-    <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
-    <aside
+    <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is always complementary or dialog, and aria-modal is present only for dialog. -->
+    <div
       class="instruments"
-      role={instrumentsFullScreen ? 'dialog' : undefined}
+      role={instrumentsFullScreen ? 'dialog' : 'complementary'}
       aria-label="Instruments"
       aria-modal={instrumentsFullScreen ? 'true' : undefined}
       tabindex="-1"
@@ -2929,7 +2969,10 @@ const plotterActions = {
           : 'Close instruments dock'}
         onClose={() => instruments.setOpen(false)}
       />
-      <div class="panel-body panel-body--flex">
+      <!-- Safari requires an independently scrollable region to be keyboard focusable. -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Safari requires this scroll region in the tab order. -->
+      <div class="panel-body panel-body--flex" tabindex="0">
         <div
           class:panel-loading={!onRetry}
           class:panel-load-error={onRetry !== undefined}
@@ -2941,7 +2984,7 @@ const plotterActions = {
           {/if}
         </div>
       </div>
-    </aside>
+    </div>
   {/snippet}
 
   {#snippet instrumentsMobAction()}
@@ -3004,6 +3047,7 @@ const plotterActions = {
     shallowAlarming={shallowController.alarming}
     shallowState={shallowController.monitorState}
     {radarHealth}
+    weatherWarning={weatherWarnings.headline}
     orientation={chartOrientation.value !== 'north'
       ? { label: orientation.label, active: orientation.active }
       : undefined}
@@ -3147,7 +3191,7 @@ const plotterActions = {
   grid-row: 1;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
 
@@ -3183,7 +3227,12 @@ const plotterActions = {
   gap: var(--space-2);
   min-inline-size: 0;
 }
+.topbar-action {
+  display: contents;
+}
 .brand {
+  margin: 0;
+  font-size: var(--text-lg);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3195,29 +3244,40 @@ const plotterActions = {
   font-weight: 400;
   color: var(--text-muted);
 }
-/* On a phone the brand yields its version string so the muted badge and the Update pill keep room.
-   Phone override after the base rule: a media block before a same-specificity base is silently
-   defeated by source order. It works here only because the base sets no display. */
+/* On a phone the brand leaves the visual layout while remaining as the page heading for assistive
+   technology, so safety and status controls keep enough room. */
 @media (max-width: 600px) {
   .topbar {
     gap: var(--space-1);
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) 0;
     padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
-    padding-inline-start: max(var(--space-2), env(titlebar-area-x, 0px));
-    padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--space-2));
+    padding-inline-start: env(safe-area-inset-left, 0px);
+    padding-inline-end: env(safe-area-inset-right, 0px);
   }
   .topbar-actions {
     gap: var(--space-1);
   }
   .brand {
-    display: none;
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    border: 0;
   }
   .version {
     display: none;
   }
-}
-@media (max-width: 360px) {
-  .topbar-actions :global(.cl-status) {
+  .topbar-action--companion,
+  .topbar-action--profile {
+    display: none;
+  }
+  .topbar-actions:has(.topbar-action--collision) .topbar-action--update,
+  .topbar-actions:has(.topbar-action--collision) .topbar-action--theme,
+  .topbar-actions:has(.topbar-action--update) .topbar-action--theme,
+  .collision-label {
     display: none;
   }
 }

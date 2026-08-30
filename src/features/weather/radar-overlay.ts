@@ -1,4 +1,8 @@
-import type { RasterLayerSpecification, RasterSourceSpecification } from 'maplibre-gl';
+import type {
+  RasterLayerSpecification,
+  RasterSourceSpecification,
+  RasterTileSource,
+} from 'maplibre-gl';
 import type { WeatherStore } from '$entities/weather';
 import { HOUR_MS, prefersReducedMotion } from '$shared/lib';
 import {
@@ -102,7 +106,7 @@ export function createRadarOverlay(
     // Surface the painted frame's valid time so the legend can say which moment the loop shows.
     onFrameTime?.(frame.time);
 
-    const source = ctx.map.getSource(SOURCE_ID) as { setTiles(t: string[]): void } | undefined;
+    const source = ctx.map.getSource(SOURCE_ID) as RasterTileSource | undefined;
     if (source) {
       source.setTiles([url]);
     } else {

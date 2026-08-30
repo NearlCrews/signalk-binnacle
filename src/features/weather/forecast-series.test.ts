@@ -136,8 +136,18 @@ describe('forecastRiskCues', () => {
         visibilityM: 1001,
         waveHeightM: 2.49,
         currentSpeedMs: 1.49,
+        weatherCode: 3,
       },
     ]);
     expect(rows.every((row) => row.riskCues === undefined)).toBe(true);
+  });
+
+  it('flags fog from the WMO code even when the cell-averaged visibility sits above the floor', () => {
+    const rows = forecastRiskCues([
+      { timeMs: 0, visibilityM: 4000, weatherCode: 45 },
+      { timeMs: HOUR, visibilityM: 4000, weatherCode: 48 },
+    ]);
+    expect(rows[0].riskCues).toEqual(['Dense fog']);
+    expect(rows[1].riskCues).toEqual(['Dense fog']);
   });
 });

@@ -65,6 +65,8 @@ export interface WeatherGrid {
   oceanCurrentSpeed?: number[][]; // m/s
   oceanCurrentDirection?: number[][]; // radians, direction the current flows toward
   seaSurfaceTemperature?: number[][]; // K
+  visibility?: number[][]; // m
+  weatherCode?: number[][]; // WMO weather interpretation code; categorical, never interpolate
 }
 
 export interface RadarFrame {
@@ -162,6 +164,23 @@ export function bilinearAt(
   const top = lerp(v00, v10, cx.f);
   const bot = lerp(v01, v11, cx.f);
   return lerp(top, bot, cy.f);
+}
+
+// Sample one variable at the grid cell nearest a lon/lat, for categorical fields (a WMO weather
+// code) where blending neighboring codes would manufacture a code nobody forecast. Returns
+// undefined outside the grid, like bilinearAt.
+export function nearestAt(
+  grid: WeatherGrid,
+  values: number[],
+  lon: number,
+  lat: number,
+): number | undefined {
+  const cx = frac(grid.lons, lon);
+  const cy = frac(grid.lats, lat);
+  if (!cx || !cy) return undefined;
+  const col = cx.f < 0.5 ? cx.i : cx.i + 1;
+  const row = cy.f < 0.5 ? cy.i : cy.i + 1;
+  return values[row * grid.lons.length + col];
 }
 
 // Find the interval [axis[i], axis[i+1]] bracketing v and the blend fraction within it. Assumes
