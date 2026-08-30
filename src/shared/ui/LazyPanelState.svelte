@@ -25,7 +25,10 @@ const { title, closeLabel, state, message, onClose, onBack, backLabel, onRetry }
   use:dialog={onClose}
 >
   <PanelHeader {title} {closeLabel} {onClose} {onBack} {backLabel} />
-  <div class="panel-body panel-body--flex">
+  <!-- Safari requires an independently scrollable region to be keyboard focusable. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Safari requires this scroll region in the tab order. -->
+  <div class="panel-body panel-body--flex" tabindex="0">
     {#if state === 'loading'}
       <div class="panel-loading" role="status">{message}</div>
     {:else}

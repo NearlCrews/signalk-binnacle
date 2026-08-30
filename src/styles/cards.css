@@ -68,8 +68,10 @@
   cursor: pointer;
   transition: color var(--transition-fast);
 }
-.saved button.name:hover {
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .saved button.name:hover {
+    color: var(--accent);
+  }
 }
 /* The at-a-glance stats line. Mono, tabular numerals echo the NavStrip readouts so a saved card and
    the active-route strip read as one instrument family. */
@@ -215,8 +217,10 @@
   cursor: pointer;
   transition: border-color var(--transition-fast);
 }
-.nav-row:hover {
-  border-color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .nav-row:hover {
+    border-color: var(--accent);
+  }
 }
 .nav-row[aria-current="true"] {
   border-color: var(--accent);

@@ -116,9 +116,11 @@ dialog.modal-card {
   font-weight: 600;
   cursor: pointer;
 }
-.menu-item:hover {
-  background: var(--accent-tint);
-  color: var(--accent);
+@media (hover: hover) and (pointer: fine) {
+  .menu-item:hover {
+    background: var(--accent-tint);
+    color: var(--accent);
+  }
 }
 
 /* The shared interactive-row primitive: a full-width, control-height, transparent control that tints to
@@ -142,11 +144,13 @@ dialog.modal-card {
   cursor: pointer;
   transition: background-color var(--transition-fast);
 }
-.row-interactive:hover {
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .row-interactive:hover {
+    background: var(--accent-tint);
+  }
 }
 .row-interactive.is-on {
-  color: var(--accent);
+  color: var(--accent-tint-text);
   border-color: var(--accent);
   background: var(--accent-tint);
 }

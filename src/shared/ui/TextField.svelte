@@ -108,6 +108,6 @@ function commit(event: Event): void {
 }
 /* One step above the global .input font, for a single field typed gloved on a pitching deck. */
 .text-field.large .input {
-  font-size: var(--text-md);
+  font-size: var(--text-input-large);
 }
 </style>

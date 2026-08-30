@@ -59,7 +59,7 @@ describe('PinnedActions count badge', () => {
   // The overflow rows only exist while the More menu is open, which server rendering never is, so
   // the second surface is asserted on the source: both bar surfaces render the same count component.
   it('renders the chip on the overflow rows too', () => {
-    expect(PINNED_ACTIONS.match(/<MenuItemCount item=\{action\} \/>/g)).toHaveLength(2);
+    expect(PINNED_ACTIONS.match(/<MenuItemCount item=\{action\}[^>]*\/>/g)).toHaveLength(2);
   });
 
   // The chip rule moved to the shared button vocabulary when the menu items became its second

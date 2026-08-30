@@ -54,9 +54,11 @@
     background-color var(--transition-fast),
     filter var(--transition-fast);
 }
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
 }
 .btn:active:not(:disabled) {
   filter: brightness(var(--brightness-press));
@@ -72,11 +74,13 @@
   font-weight: 600;
   box-shadow: var(--shadow-overlay);
 }
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-fill);
-  border-color: var(--accent-fill);
-  color: var(--accent-contrast);
-  filter: brightness(1.08);
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-fill);
+    border-color: var(--accent-fill);
+    color: var(--accent-contrast);
+    filter: brightness(1.08);
+  }
 }
 .btn-primary:active:not(:disabled) {
   filter: brightness(0.96);
@@ -86,9 +90,11 @@
 }
 /* A danger button tints with the alarm token on hover, not the accent, so a destructive control does
    not flash an accent (blue by day) fill under its red text. */
-.btn-danger:hover:not(:disabled) {
-  border-color: var(--alarm);
-  background: var(--alarm-tint);
+@media (hover: hover) and (pointer: fine) {
+  .btn-danger:hover:not(:disabled) {
+    border-color: var(--alarm);
+    background: var(--alarm-tint);
+  }
 }
 /* A ghost variant of .btn: transparent over the surface with accent text, for secondary actions
    (reset, retry, add by URL) that should read lighter than a filled primary while keeping the
@@ -103,8 +109,10 @@
   color: var(--warning);
   border-color: var(--warning);
 }
-.btn-warning:hover:not(:disabled) {
-  background: var(--warning-tint);
+@media (hover: hover) and (pointer: fine) {
+  .btn-warning:hover:not(:disabled) {
+    background: var(--warning-tint);
+  }
 }
 /* A fully rounded variant for the chrome toggles (Update, Forecast) that read as pills. */
 .btn-pill {
@@ -132,7 +140,9 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
-.btn-compact:hover:not(:disabled):not(.is-on) {
-  background: var(--surface-raised);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .btn-compact:hover:not(:disabled):not(.is-on) {
+    background: var(--surface-raised);
+    color: var(--text);
+  }
 }

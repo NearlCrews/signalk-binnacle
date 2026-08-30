@@ -34,6 +34,10 @@
   --text-xl: 1.15rem;
   --text-readout: 1.25rem;
   --text-readout-lg: 1.75rem;
+  /* Text-entry controls use adaptive semantic aliases. On small or coarse-pointer displays they
+     rise to 1rem so iOS does not zoom the viewport when a field receives focus. */
+  --text-input: var(--text-sm);
+  --text-input-large: var(--text-md);
   /* One percent of the viewport height, dynamic where the browser supports it (so expanding mobile
      browser chrome cannot push a sheet past the visible viewport) and static everywhere else. Every
      viewport-height size multiplies this, calc(60 * var(--dvh)), instead of writing its own
@@ -97,6 +101,8 @@
   --border: #aac3d6;
   --text: #0b2233;
   --text-muted: #3f586b;
+  /* Degraded readouts stay secondary by color, not opacity, so they retain measured contrast. */
+  --text-subordinate: var(--text-muted);
   /* A deep navy-teal, more confident and instrument-like than a default mid-blue, kept dark enough
      to carry white --accent-contrast on a filled button and to pass text contrast on the surfaces. */
   --accent: #0d5a86;
@@ -144,6 +150,21 @@
   /* The modal scrim: light by day so the chart stays readable behind an emergency dialog, darker
      in the dark themes where removing light helps rather than hurts. */
   --scrim: rgb(11 34 51 / 0.3);
+}
+
+@media (max-width: 600px), (pointer: coarse) {
+  :root {
+    --text-input: var(--text-lg);
+    --text-input-large: var(--text-lg);
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    /* A gloved fingertip needs a larger slider grab than a mouse does. The track keeps its height:
+       forms.css centers the thumb from the tokens, so only the target grows. */
+    --range-thumb-size: 28px;
+  }
 }
 
 @media (display-mode: standalone) and (pointer: coarse) {
@@ -194,6 +215,12 @@
 
 :root[data-theme="night-red"] {
   color-scheme: dark;
+
+  /* Dim red on true black resolves fine detail worse than the day and dusk palettes at equal
+     size, so the two smallest type steps rise a notch at night. The scale keeps its order:
+     --text-sm meets --text-base rather than passing it. */
+  --text-xs: 0.8rem;
+  --text-sm: 0.85rem;
 
   /* Every night-red token carries a ZERO blue channel: blue is what bleaches dark adaptation
      fastest, and no app-owned pixel may emit it at night. The green each token keeps is the
@@ -251,4 +278,29 @@
   --warning-tint: color-mix(in srgb, var(--warning) 18%, var(--surface-raised));
   /* At night the scrim only removes light from the chart behind the dialog. */
   --scrim: rgb(0 0 0 / 0.6);
+}
+
+/* A bright-sunlight / low-vision preference: pull each theme's deliberately quiet tokens toward
+   full contrast. The structural half of the preference (thicker borders) lives in a11y.css. These
+   blocks sit after the main palettes so they win the cascade at equal specificity, and night-red
+   keeps its physical contract: zero blue, raises confined to the red band. */
+@media (prefers-contrast: more) {
+  :root {
+    --text-muted: #253d4f;
+    --border: #5c7d94;
+    /* Disabled controls stay visibly disabled, just no longer near-invisible. */
+    --disabled-opacity: 0.6;
+  }
+
+  :root[data-theme="dusk"] {
+    --text-muted: #a3bcd1;
+    --border: #3a5670;
+  }
+
+  :root[data-theme="night-red"] {
+    /* Muted and body red already share brightness at night and differ only by hue, so the honest
+       raise is collapsing the muted tier into body text rather than inventing a brighter red. */
+    --text-muted: var(--text);
+    --border: #7a2200;
+  }
 }

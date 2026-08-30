@@ -4,6 +4,22 @@ import { describe, expect, it } from 'vitest';
 import SlideOver from './SlideOver.svelte';
 
 describe('SlideOver', () => {
+  it('uses valid complementary and modal dialog semantics without changing its element type', () => {
+    const children = createRawSnippet(() => ({ render: () => '<p>Panel body</p>' }));
+    const complementary = render(SlideOver, {
+      props: { title: 'Layers', onClose: () => {}, children },
+    }).body;
+    const modal = render(SlideOver, {
+      props: { title: 'Layers', onClose: () => {}, focusTrap: true, children },
+    }).body;
+
+    expect(complementary).toContain('role="complementary"');
+    expect(complementary).not.toContain('<aside');
+    expect(modal).toContain('role="dialog"');
+    expect(modal).toContain('aria-modal="true"');
+    expect(modal).not.toContain('<aside');
+  });
+
   it('keeps a pinned workflow footer rendered while the phone body is collapsed', () => {
     const { body } = render(SlideOver, {
       props: {

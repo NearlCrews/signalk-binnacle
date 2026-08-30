@@ -408,6 +408,7 @@ onMount(async () => {
   // createThemedMap defaults to the world view ([0, 30], zoom 2) when no saved view is passed.
   mapHandle = createThemedMap({
     container,
+    accessibleName: 'Navigation chart',
     companionBase,
     getToken: () => chartsToken,
     view: initialView,
@@ -874,8 +875,8 @@ onMount(async () => {
   const map = mapHandle.map;
   cursorMapRef = map;
   if (map && onGoToHere) {
-    // MapLibre's own aria-label names the canvas, so this only adds the shortcut: the label itself
-    // is left alone because the chart host section already carries the "Chart" region name.
+    // The shared bootstrap names this canvas "Navigation chart"; this adds the shortcut and the
+    // visible hover title without changing that accessible name.
     const canvas = map.getCanvas();
     canvas.setAttribute('aria-keyshortcuts', CONTEXT_MENU_KEYSHORTCUTS);
     canvas.title = CHART_ACTIONS_TITLE;

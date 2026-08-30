@@ -1,6 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { FIXTURE_SERVER, openMenuItem, stubVesselsSelf } from './helpers';
+import {
+  contrastRatio,
+  expectNoHorizontalOverflow,
+  FIXTURE_SERVER,
+  openMenuItem,
+  stubVesselsSelf,
+} from './helpers';
 
 // The mariner helm scenarios: emergency reachability, alarm pileups, and staleness honesty under
 // phone-sized, landscape, large-text, and safe-area conditions. This project runs against the
@@ -188,6 +194,32 @@ test('stream fixture feeds the worker: subscriptions arrive and deltas render', 
   expect(body.received.some((message) => Array.isArray(message.subscribe))).toBe(true);
 });
 
+test('disconnected readouts retain AA contrast in day, dusk, and night-red', async ({ page }) => {
+  await openApp(page);
+  await sendDelta(page, OWN_FIX);
+  await fixturePost(page, 'close-streams');
+
+  const sog = page.locator('.status-strip .sog-readout.subordinate');
+  const depth = page.locator('.status-strip .depth-readout.subordinate');
+  await expect(sog).toBeVisible({ timeout: 20_000 });
+  await expect(depth).toBeVisible();
+
+  for (const theme of ['day', 'dusk', 'night-red']) {
+    await page.locator('html').evaluate((element, nextTheme) => {
+      element.setAttribute('data-theme', nextTheme);
+    }, theme);
+    for (const readout of [sog, depth]) {
+      await expect(readout).toHaveCSS('opacity', '1');
+      expect(await contrastRatio(readout)).toBeGreaterThanOrEqual(4.5);
+    }
+    const results = await new AxeBuilder({ page })
+      .include('.status-strip')
+      .withRules(['color-contrast'])
+      .analyze();
+    expect(results.violations, `Status-strip contrast violations in ${theme}`).toEqual([]);
+  }
+});
+
 test('P0: MOB actions stay reachable with Forecast open at 320x568', async ({ page }) => {
   // SAF-01: the emergency rail must never be displaced by the Forecast panel; it stacks above it
   // at the viewport bottom instead.
@@ -257,20 +289,39 @@ test('MOB actions stay reachable in landscape 568x320', async ({ page }) => {
   await expectMobActionsReachable(strip);
 });
 
-test('MOB actions stay reachable at 200-percent text', async ({ page }) => {
-  // ACCESS-01 gate case, held behavior: rem-based layout doubles with the root font size, so this
-  // simulates browser large-text faithfully, and a lone MOB strip stays reachable. Task 1.1 must
-  // not regress it.
-  await page.setViewportSize({ width: 360, height: 800 });
-  await page.addInitScript(() => {
-    document.addEventListener('DOMContentLoaded', () => {
-      document.documentElement.style.fontSize = '200%';
+for (const width of [320, 360]) {
+  test(`MOB initiation and response stay reachable at 200-percent text and ${width}px`, async ({
+    page,
+  }) => {
+    // ACCESS-01: exercise the initiating control itself before raising the fixture alarm. The
+    // earlier check began with an active MOB and could not catch a profile control overlapping the
+    // topbar trigger at large text.
+    await page.setViewportSize({ width, height: 800 });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement.style.fontSize = '200%';
+      });
     });
+    await openApp(page);
+
+    const trigger = page.locator('header').getByRole('button', { name: 'Mark man overboard here' });
+    await expectActionReachable(trigger);
+    for (const control of await page.locator('header button:visible').all()) {
+      await expectActionReachable(control);
+    }
+    await expectNoHorizontalOverflow(page.locator('body'));
+
+    await trigger.click();
+    const confirm = page.getByRole('alertdialog', { name: 'Man overboard' });
+    await expect(confirm).toBeVisible();
+    await expectActionReachable(confirm.getByRole('button', { name: /^Cancel/ }));
+    await confirm.getByRole('button', { name: /^Cancel/ }).click();
+
+    const strip = await raiseMob(page);
+    await expectMobActionsReachable(strip);
+    await expectNoHorizontalOverflow(page.locator('body'));
   });
-  await openApp(page);
-  const strip = await raiseMob(page);
-  await expectMobActionsReachable(strip);
-});
+}
 
 test('full-screen Instruments keeps MOB initiation and response reachable', async ({ page }) => {
   // SAF-02: the full-screen dock carries an in-dialog MOB trigger, and an alarm-grade safety
@@ -461,6 +512,21 @@ test('the first-run orientation is offered once, opens Help, and never nags agai
     timeout: 20_000,
   });
   await expect(page.getByText('First time with Binnacle?')).toBeHidden();
+});
+
+test('the first-run welcome yields to an opened panel at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await openApp(page);
+  const banner = page.getByText('First time with Binnacle?');
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+
+  await openMenuItem(page, 'Find places');
+  await expect(banner).toBeHidden();
+  const panel = page.getByRole('complementary', { name: 'Find places' });
+  const close = panel.getByRole('button', { name: 'Close find places' });
+  await expectActionReachable(close);
+  await close.click();
+  await expect(panel).toBeHidden();
 });
 
 test('emergency layout passes axe and the MOB actions are keyboard reachable', async ({ page }) => {

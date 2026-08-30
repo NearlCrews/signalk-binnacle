@@ -77,9 +77,11 @@
     border-color var(--transition-fast),
     background-color var(--transition-fast);
 }
-.bottom-strip .ack:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .bottom-strip .ack:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
 }
 .bottom-strip .ack:active:not(:disabled) {
   filter: brightness(var(--brightness-press));
@@ -110,8 +112,10 @@
   border-color: var(--alarm);
   font-weight: 600;
 }
-.bottom-strip .ack--primary:hover:not(:disabled) {
-  background: var(--alarm-tint);
+@media (hover: hover) and (pointer: fine) {
+  .bottom-strip .ack--primary:hover:not(:disabled) {
+    background: var(--alarm-tint);
+  }
 }
 /* The trailing action cluster shared by the alarm and tool strips. The shared .ack pill carries its
    own auto margin for single-action strips, so the cluster neutralizes it and owns the push; the

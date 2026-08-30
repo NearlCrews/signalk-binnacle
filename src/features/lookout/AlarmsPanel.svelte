@@ -18,6 +18,7 @@ import {
   metersToFeet,
   metersToNauticalMiles,
   nauticalMilesToMeters,
+  vibrate,
 } from '$shared/lib';
 import {
   DEFAULT_THRESHOLDS,
@@ -147,6 +148,9 @@ const maxShallowDepth = $derived(
 
 function runAction(kind: 'silence' | 'acknowledge', notification: ActiveNotification): void {
   if (auth.writeBlocked || pendingAction) return;
+  // Tactile registration for a gloved tap: the audible state change lands only after the server
+  // round-trip, so the buzz is the immediate sign the press took.
+  vibrate(30);
   pendingAction = `${kind}:${notification.path}`;
   if (kind === 'silence') onSilence?.(notification);
   else onAcknowledge?.(notification);
@@ -490,7 +494,7 @@ $effect(() => {
   letter-spacing: 0.06em;
 }
 .mute-row.is-on .mute-state {
-  color: var(--accent);
+  color: var(--accent-tint-text);
 }
 /* Each severity block is its own bordered card on the shared .card-frame surface, so Danger and
    Warning read as two groups at a glance instead of one four-field stack; only the column layout

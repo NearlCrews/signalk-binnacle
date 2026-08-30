@@ -6,13 +6,11 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-/* Night-red dims the ring: --accent is the brightest red in the palette, and a bright 2px outline
-   appearing as you tab through controls in the dark hurts dark adaptation. A thinner, dimmer red
-   (--text) still marks focus while keeping the brightest pixel low. 1.5px rather than 1px so the
-   ring stays perceptible on a wet, glare-lit screen. */
+/* Night-red dims the ring color while retaining the full 2px geometry needed on a wet,
+   glare-lit screen. */
 :root[data-theme="night-red"]
 :where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline-width: 1.5px;
+  outline-width: 2px;
   outline-color: var(--text);
 }
 

@@ -1,8 +1,35 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
-import { expectInsideViewport, expectNoHorizontalOverflow, openMenuItem } from './helpers';
+import { expect, type Page, test } from '@playwright/test';
+import {
+  contrastRatio,
+  expectInsideViewport,
+  expectNoHorizontalOverflow,
+  openMenuItem,
+} from './helpers';
 
 test.use({ serviceWorkers: 'block' });
+
+async function expectRelevantAxeClean(page: Page, state: string): Promise<void> {
+  // Svelte's short fly transition changes effective foreground and background colors while the
+  // surface is entering. Audit the settled state, not a deliberately translucent animation frame.
+  await page.waitForTimeout(250);
+  const results = await new AxeBuilder({ page }).analyze();
+  const watchedRules = new Set([
+    'aria-allowed-role',
+    'aria-prohibited-attr',
+    'color-contrast',
+    'landmark-unique',
+  ]);
+  expect(
+    results.violations.filter(
+      (violation) =>
+        violation.impact === 'serious' ||
+        violation.impact === 'critical' ||
+        watchedRules.has(violation.id),
+    ),
+    `Accessibility violations in ${state}`,
+  ).toEqual([]);
+}
 
 test('restores night-red before interaction and updates browser chrome', async ({ page }) => {
   await page.addInitScript(() => {
@@ -13,7 +40,13 @@ test('restores night-red before interaction and updates browser chrome', async (
 
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#000000');
+  await expect(
+    page.getByRole('heading', { level: 1, name: /Binnacle Chartplotter/ }),
+  ).toBeAttached();
   await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+  const themeToggle = page.getByRole('button', { name: /Switch theme/ });
+  await themeToggle.focus();
+  await expect(themeToggle).toHaveCSS('outline-width', '2px');
 });
 
 test('keeps primary phone controls touch-sized without horizontal overflow', async ({ page }) => {
@@ -28,6 +61,64 @@ test('keeps primary phone controls touch-sized without horizontal overflow', asy
     expect(box.width).toBeGreaterThanOrEqual(44);
   }
   await expectNoHorizontalOverflow(page.locator('body'));
+});
+
+test('keeps the MOB key and active controls contrast-safe in the marine palettes', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:theme', 'night-red');
+  });
+  await page.reload();
+
+  const mob = page.locator('header').getByRole('button', { name: 'Mark man overboard here' });
+  await expect(mob).toBeVisible({ timeout: 20_000 });
+  expect(await contrastRatio(mob)).toBeGreaterThanOrEqual(4.5);
+
+  await page.evaluate(() => localStorage.setItem('binnacle:theme', 'dusk'));
+  await page.reload();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Customize toolbar' }).click();
+  const activeTile = page.locator('#app-menu-launcher .menu-tile.is-on').first();
+  await expect(activeTile).toBeVisible();
+  expect(await contrastRatio(activeTile)).toBeGreaterThanOrEqual(4.5);
+});
+
+test('keeps text-entry controls at 16px on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+
+  await openMenuItem(page, 'Find places');
+  const search = page.getByRole('searchbox', {
+    name: 'Search places by name, category, or source',
+  });
+  await expect(search).toHaveCSS('font-size', '16px');
+  await page.getByRole('button', { name: 'Close find places' }).click();
+
+  await openMenuItem(page, 'Watch handoff');
+  await expect(page.getByPlaceholder('Sea state, traffic, engine, anything to watch')).toHaveCSS(
+    'font-size',
+    '16px',
+  );
+  await page.getByRole('button', { name: 'Close watch handoff' }).click();
+
+  await openMenuItem(page, 'Alarms');
+  const numberInputs = page.getByRole('spinbutton');
+  await expect(numberInputs.first()).toBeVisible();
+  for (const input of await numberInputs.all()) await expect(input).toHaveCSS('font-size', '16px');
+});
+
+test('gives simultaneous navigation and forecast maps unique names', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+  await expect(page.locator('canvas[aria-label="Navigation chart"]')).toHaveCount(1);
+
+  await openMenuItem(page, 'Forecast');
+  await expect(page.locator('canvas[aria-label="Weather forecast map"]')).toHaveCount(1);
+  await expect(page.locator('canvas[aria-label="Map"]')).toHaveCount(0);
 });
 
 test('keeps a status-strip action chip on one control row', async ({ page }) => {
@@ -255,4 +346,53 @@ test('has no serious or critical automated accessibility violations', async ({ p
       (violation) => violation.impact === 'serious' || violation.impact === 'critical',
     ),
   ).toEqual([]);
+});
+
+test('keeps major overlay states accessibility-clean', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'the cross-engine smoke stays in the focused UI tests');
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+
+  for (const theme of ['day', 'dusk', 'night-red']) {
+    await page.evaluate((nextTheme) => localStorage.setItem('binnacle:theme', nextTheme), theme);
+    await page.reload();
+    await expect(page.locator('canvas[aria-label="Navigation chart"]')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expectRelevantAxeClean(page, `settled ${theme}`);
+  }
+
+  await page.evaluate(() => localStorage.setItem('binnacle:theme', 'dusk'));
+  await page.reload();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Customize toolbar' }).click();
+  await expectRelevantAxeClean(page, 'toolbar customization');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#app-menu-launcher')).toBeHidden();
+
+  await openMenuItem(page, 'Forecast');
+  await expect(page.locator('canvas[aria-label="Weather forecast map"]')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expectRelevantAxeClean(page, 'Forecast with two maps');
+  await page.getByRole('button', { name: 'Close weather' }).click();
+
+  await openMenuItem(page, 'Instrument dock');
+  const instruments = page.getByRole('dialog', { name: 'Instruments' });
+  await expect(instruments).toBeVisible();
+  await expectRelevantAxeClean(page, 'full-screen Instruments');
+  await instruments.getByRole('button', { name: 'Close instruments, return to chart' }).click();
+
+  await openMenuItem(page, 'Data trends');
+  const trends = page.getByRole('dialog', { name: 'Data trends' });
+  await expect(trends).toBeVisible();
+  await expectRelevantAxeClean(page, 'full-screen Data trends');
+  await trends.getByRole('button', { name: 'Close trends, return to chart' }).click();
+
+  await page.locator('header').getByRole('button', { name: 'Mark man overboard here' }).click();
+  const mobDialog = page.getByRole('alertdialog', { name: 'Man overboard' });
+  await expect(mobDialog).toBeVisible();
+  await expectRelevantAxeClean(page, 'MOB confirmation dialog');
 });

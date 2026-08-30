@@ -12,7 +12,7 @@
   background: var(--surface-raised);
   color: var(--text);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-input);
 }
 .input::placeholder {
   color: var(--text-muted);

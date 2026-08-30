@@ -120,7 +120,7 @@ level. Inside, in this order:
    stable `SlideOver`. Do not branch into duplicate panel shells because that discards scroll, focus,
    and child-local state.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
-   role="alert">{error}</p>`, and and a write-gate teach note through the shared
+   role="alert">{error}</p>`, and a write-gate teach note through the shared
    `WriteAccessNote` when `auth.writeBlocked`, whose message names what is blocked in the panel's
    own words. The vocabulary is fixed: read and write access, approved by the boat's Signal K
    admin, never "token".
@@ -310,7 +310,7 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 
 | Need | Reach for | Never |
 | --- | --- | --- |
-| Top-level slide-in panel | `SlideOver` | a bespoke `<aside>` shell |
+| Top-level slide-in panel | `SlideOver` | a bespoke panel shell |
 | In-panel sub-view back header | `SubViewHeader` | a second panel-level back |
 | A list of saved items | `SavedList` (with `empty` and a `card` snippet) | a hand-rolled `<ul>` of cards |
 | A labeled text field | `TextField` | a raw `<input type="text">` |

@@ -85,7 +85,7 @@ function commit(event: Event): void {
 .field input {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-md);
+  font-size: var(--text-input-large);
 }
 .unit {
   color: var(--text-muted);

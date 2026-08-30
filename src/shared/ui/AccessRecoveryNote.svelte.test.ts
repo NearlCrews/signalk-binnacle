@@ -19,7 +19,7 @@ function body(state: AccessRecoveryState): string {
 
 describe('AccessRecoveryNote', () => {
   it('offers same-window sign-in only when the Signal K session needs it', () => {
-    expect(body('needs-login')).toContain(`href="${accessUrl}"`);
+    expect(body('needs-login')).toContain(`class="btn btn-ghost" href="${accessUrl}"`);
     expect(body('needs-admin')).toContain('Sign in as an administrator');
     expect(body('needs-login')).not.toContain('target="_blank"');
   });

@@ -1,7 +1,7 @@
 <script lang="ts">
 import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy } from 'svelte';
-import { Toast } from '$shared/lib';
+import { Toast, vibrate } from '$shared/lib';
 import {
   AnchoredMenu,
   CustomizeToggle,
@@ -58,9 +58,9 @@ let card = $state<HTMLElement>();
 
 // A tap or click on a blocked tile explains itself via Toast's timed-message primitive instead of
 // silently doing nothing, since the title tooltip it also carries is mouse-hover-only. Sized
-// generously (Toast's 8s default) since this is unfamiliar explanatory text, not a short
-// confirmation.
+// generously since this is unfamiliar explanatory text, not a short confirmation.
 const blockedNote = new Toast();
+const BLOCKED_NOTE_MS = 8_000;
 onDestroy(() => blockedNote.dispose());
 
 // The items split into contiguous groups by their group label, so each renders as a tile section
@@ -97,12 +97,12 @@ function select(item: MenuItem): void {
     return;
   }
   if (itemBlocked(item)) {
-    blockedNote.show(blockedReason(item) ?? item.label);
+    blockedNote.show(blockedReason(item) ?? item.label, BLOCKED_NOTE_MS);
     return;
   }
   // A tactile confirmation for a tap on a bouncing boat with wet or gloved hands, where the
   // brightness-press CSS feedback can be hard to see; a no-op where the device lacks vibration.
-  if ('vibrate' in navigator) navigator.vibrate(10);
+  vibrate(10);
   item.onSelect();
   closeMenu(true);
 }
@@ -396,11 +396,15 @@ function onCardFocusOut(event: FocusEvent): void {
   color: var(--text-muted);
   transition: color var(--transition-fast);
 }
-.menu-tile:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .menu-tile:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: var(--accent-tint);
+  }
+  .menu-tile:hover:not(:disabled):not([aria-disabled="true"])
+    :global(svg:not(.menu-item-icon__badge)) {
+    color: var(--accent);
+  }
 }
-.menu-tile:hover:not(:disabled):not([aria-disabled="true"])
-  :global(svg:not(.menu-item-icon__badge)),
 .menu-tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
@@ -412,7 +416,7 @@ function onCardFocusOut(event: FocusEvent): void {
    here instead. The tile also recolors its svg icon to the accent so the shape cue complements the
    color cue under night-red. */
 .menu-tile.is-on {
-  color: var(--accent);
+  color: var(--accent-tint-text);
   border-color: var(--accent);
   background: var(--accent-tint);
 }

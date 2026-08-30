@@ -61,12 +61,15 @@ const {
 // Two panels can be open at once (a note detail beside a docked panel), so the body id is generated
 // per instance rather than fixed, and the header's minimize control points aria-controls at it.
 const bodyId = $props.id();
+const bodyClass = $derived(
+  `panel-body${bodyFlex ? ' panel-body--flex' : ''}${minimize?.collapsed ? ' panel-body--collapsed' : ''}`,
+);
 </script>
 
-<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
-<aside
+<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is always complementary or dialog, and aria-modal is present only for dialog. -->
+<div
   class="slide-over slide-over--dock-{dock}"
-  role={focusTrap ? 'dialog' : undefined}
+  role={focusTrap ? 'dialog' : 'complementary'}
   aria-label={ariaLabel ?? title}
   aria-modal={focusTrap ? 'true' : undefined}
   tabindex="-1"
@@ -89,12 +92,10 @@ const bodyId = $props.id();
     {minimize}
     {bodyId}
   />
-  <div
-    id={bodyId}
-    class="panel-body"
-    class:panel-body--flex={bodyFlex}
-    class:panel-body--collapsed={minimize?.collapsed}
-  >
+  <!-- Safari requires an independently scrollable region to be keyboard focusable. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Safari requires this scroll region in the tab order. -->
+  <div id={bodyId} class={bodyClass} tabindex="0">
     {@render children()}
   </div>
   {#if footer}
@@ -102,4 +103,4 @@ const bodyId = $props.id();
       {@render footer()}
     </footer>
   {/if}
-</aside>
+</div>

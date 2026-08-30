@@ -34,7 +34,7 @@ const canRetry = $derived(state === 'access-error' || state === 'offline' || sta
 <div class="muted-note access-note" role="status">
   <span>{message}</span>
   {#if canSignIn}
-    <a href={accessUrl}>{accessLabel}</a>
+    <a class="btn btn-ghost" href={accessUrl}>{accessLabel}</a>
   {:else if canRetry}
     <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry access</button>
   {/if}

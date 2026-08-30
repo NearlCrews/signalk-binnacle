@@ -278,7 +278,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
 
   await expectNoHorizontalOverflow(page.locator('body'));
   const accessibility = await new AxeBuilder({ page })
-    .include('aside[aria-label="Tides and currents"]')
+    .include('.slide-over[aria-label="Tides and currents"]')
     .analyze();
   expect(accessibility.violations).toEqual([]);
 });

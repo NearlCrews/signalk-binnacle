@@ -26,11 +26,13 @@
     background-color var(--transition-fast),
     color var(--transition-fast);
 }
-.icon-btn:hover:not(:disabled),
-.panel-close:hover:not(:disabled),
-.panel-minimize:hover:not(:disabled) {
-  background: var(--surface);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover:not(:disabled),
+  .panel-close:hover:not(:disabled),
+  .panel-minimize:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--text);
+  }
 }
 .icon-btn:active:not(:disabled) {
   filter: brightness(var(--brightness-press));
@@ -45,8 +47,10 @@
 .icon-btn--accent {
   color: var(--accent);
 }
-.icon-btn--danger:hover:not(:disabled) {
-  color: var(--alarm);
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn--danger:hover:not(:disabled) {
+    color: var(--alarm);
+  }
 }
 /* Minimizing collapses the bottom sheet to its header, which only frees space on a phone, so the
    control is hidden by default and the slide-over media query in panels.css shows it. Placed after the
@@ -77,9 +81,11 @@
     background-color var(--transition-fast),
     color var(--transition-fast);
 }
-.icon-pill:hover {
-  border-color: var(--accent);
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .icon-pill:hover {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
 }
 .icon-pill:active:not(:disabled) {
   filter: brightness(var(--brightness-press));
@@ -91,7 +97,7 @@
    .btn-compact, and .icon-pill bases so it wins the same-specificity tie and the lit state takes
    effect; night-red keeps it red-on-near-black through the per-theme accent tokens. */
 .is-on {
-  color: var(--accent);
+  color: var(--accent-tint-text);
   border-color: var(--accent);
   background: var(--accent-tint);
 }

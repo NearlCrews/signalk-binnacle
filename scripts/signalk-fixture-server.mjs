@@ -39,6 +39,7 @@ const streamClients = new Set();
 /** @type {unknown[]} */
 const receivedMessages = [];
 let helloSelf = DEFAULT_SELF;
+let streamsEnabled = true;
 
 /**
  * @param {import('node:http').ServerResponse} response
@@ -123,6 +124,7 @@ async function handleControl(request, response, pathname) {
         return;
       }
       case 'close-streams': {
+        streamsEnabled = false;
         for (const client of streamClients) client.terminate();
         sendJson(response, 200, { closed: true });
         return;
@@ -130,6 +132,7 @@ async function handleControl(request, response, pathname) {
       case 'reset': {
         receivedMessages.length = 0;
         helloSelf = DEFAULT_SELF;
+        streamsEnabled = true;
         sendJson(response, 200, { reset: true });
         return;
       }
@@ -207,7 +210,7 @@ streams.on('connection', (socket) => {
 
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url ?? '/', `http://localhost:${PORT}`).pathname;
-  if (pathname !== STREAM_PATH) {
+  if (pathname !== STREAM_PATH || !streamsEnabled) {
     socket.destroy();
     return;
   }

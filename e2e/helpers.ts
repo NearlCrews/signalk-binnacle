@@ -58,3 +58,31 @@ export async function expectInsideViewport(surface: Locator, page: Page): Promis
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 }
+
+// Measure rendered text contrast against the first opaque ancestor surface. This is intentionally
+// browser-side so color-mix(), theme variables, and the real cascade are all resolved before the
+// WCAG relative-luminance calculation runs.
+export async function contrastRatio(target: Locator): Promise<number> {
+  return target.evaluate((element) => {
+    const rgba = (value: string): [number, number, number, number] => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return [channels[0] ?? 0, channels[1] ?? 0, channels[2] ?? 0, channels[3] ?? 1];
+    };
+    const luminance = ([r, g, b]: [number, number, number, number]) => {
+      const linear = [r, g, b].map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    };
+    const foreground = rgba(getComputedStyle(element).color);
+    let background: [number, number, number, number] = [0, 0, 0, 0];
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      background = rgba(getComputedStyle(node).backgroundColor);
+      if (background[3] >= 0.99) break;
+    }
+    const light = Math.max(luminance(foreground), luminance(background));
+    const dark = Math.min(luminance(foreground), luminance(background));
+    return (light + 0.05) / (dark + 0.05);
+  });
+}

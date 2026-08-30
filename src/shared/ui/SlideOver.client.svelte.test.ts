@@ -25,16 +25,17 @@ afterEach(() => {
 describe('SlideOver focus trap updates', () => {
   it('preserves the panel shell and child-local state when the focus trap changes', () => {
     const target = mountHarness();
-    const panel = target.querySelector('aside');
+    const panel = target.querySelector('.slide-over');
     const input = target.querySelector<HTMLInputElement>('input[aria-label="Panel-local value"]');
     const toggle = target.querySelector<HTMLButtonElement>('button');
     if (!panel || !input || !toggle) throw new Error('missing SlideOver test controls');
+    expect(panel.getAttribute('role')).toBe('complementary');
     input.value = 'Retained value';
 
     toggle.click();
     flushSync();
 
-    expect(target.querySelector('aside')).toBe(panel);
+    expect(target.querySelector('.slide-over')).toBe(panel);
     expect(target.querySelector('input')).toBe(input);
     expect(input.value).toBe('Retained value');
     expect(panel.getAttribute('role')).toBe('dialog');

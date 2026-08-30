@@ -1,5 +1,6 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
+import { METRIC_UNITS } from '$shared/lib';
 import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import InstrumentsPanel from './InstrumentsPanel.svelte';
@@ -60,7 +61,7 @@ function makeDeps(epochFor?: (path: string) => number): TileDeps {
   return {
     store: makeStore(epochFor) as unknown as TileDeps['store'],
     vessel: {} as TileDeps['vessel'],
-    units: {} as TileDeps['units'],
+    units: { mode: 'metric', profile: METRIC_UNITS } as TileDeps['units'],
     clock: {} as TileDeps['clock'],
     course: { active: false } as unknown as TileDeps['course'],
   };

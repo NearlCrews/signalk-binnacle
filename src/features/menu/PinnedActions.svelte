@@ -1,12 +1,17 @@
 <script lang="ts">
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
-import { onDestroy } from 'svelte';
+import { onDestroy, onMount } from 'svelte';
 import { createMediaQuery, Toast } from '$shared/lib';
 import { AnchoredMenu, createMenuFocusMachine, TransientNote, UnavailableHint } from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
-import { MAX_BAR_PILLS, MAX_COMPACT_BAR_PILLS, splitBarActions } from './pinned-actions';
+import {
+  barCapacity,
+  MAX_BAR_PILLS,
+  MAX_COMPACT_BAR_PILLS,
+  splitBarActions,
+} from './pinned-actions';
 
 interface Props {
   actions: MenuItem[];
@@ -21,6 +26,9 @@ const iconOnlyPills = createMediaQuery('(max-width: 480px)');
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
+let bar = $state<HTMLElement>();
+let measuredCapacity = $state<number>();
+let largeText = $state(false);
 
 // The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the open-focus and
 // close-focus protocol live in $shared/ui menu-focus, identical to OverflowActions. The extra
@@ -33,14 +41,34 @@ const machine = createMenuFocusMachine({
   },
   focusFrames: 2,
 });
-const split = $derived(
-  splitBarActions(actions, compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS),
-);
+const responsiveMaximum = $derived(compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS);
+const capacity = $derived(Math.min(responsiveMaximum, measuredCapacity ?? responsiveMaximum));
+const iconOnly = $derived(iconOnlyPills.matches || largeText);
+const split = $derived(splitBarActions(actions, capacity));
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
 const NOTE_MS = 5_000;
 
 onDestroy(() => blockedNote.dispose());
+
+onMount(() => {
+  const element = bar;
+  if (!element) return;
+  const measure = () => {
+    const rootStyle = getComputedStyle(document.documentElement);
+    const barStyle = getComputedStyle(element);
+    const rootSize = Number.parseFloat(rootStyle.fontSize) || 16;
+    const controlSize = Number.parseFloat(rootStyle.getPropertyValue('--control-size')) * rootSize;
+    const gap = Number.parseFloat(barStyle.columnGap || barStyle.gap) || 0;
+    largeText = rootSize >= 24;
+    measuredCapacity = barCapacity(element.clientWidth, controlSize, gap, responsiveMaximum);
+  };
+  const observer = new ResizeObserver(measure);
+  observer.observe(element);
+  observer.observe(document.documentElement);
+  measure();
+  return () => observer.disconnect();
+});
 
 function run(action: MenuItem, after?: () => void): void {
   if (itemBlocked(action)) {
@@ -57,12 +85,13 @@ function run(action: MenuItem, after?: () => void): void {
 $effect(() => machine.syncOpen(moreOpen));
 </script>
 
-<div class="pinned-actions strip-center">
+<div class="pinned-actions strip-center" bind:this={bar}>
   <TransientNote message={blockedNote.message} noteClass="blocked-pill-note" />
   {#each split.visible as action (action.id)}
     <button
       type="button"
       class="btn btn-pill"
+      class:icon-only={iconOnly}
       class:is-on={action.pressed === true}
       aria-pressed={action.pressed === undefined ? undefined : action.pressed}
       disabled={action.disabled === true}
@@ -72,8 +101,8 @@ $effect(() => machine.syncOpen(moreOpen));
     >
       <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
       <MenuItemIcon item={action} size={16} />
-      <span class:visually-hidden={iconOnlyPills.matches}>{action.shortLabel ?? action.label}</span>
-      <MenuItemCount item={action} />
+      <span class:visually-hidden={iconOnly}>{action.shortLabel ?? action.label}</span>
+      <MenuItemCount item={action} hideBadge={iconOnly} />
     </button>
   {/each}
   {#if split.overflow.length > 0}
@@ -81,6 +110,7 @@ $effect(() => machine.syncOpen(moreOpen));
       <button
         type="button"
         class="btn btn-pill"
+        class:icon-only={iconOnly}
         bind:this={moreTrigger}
         class:is-on={moreActive || moreOpen}
         aria-haspopup="menu"
@@ -91,8 +121,8 @@ $effect(() => machine.syncOpen(moreOpen));
         onclick={() => (moreOpen = !moreOpen)}
       >
         <Ellipsis size={16} aria-hidden="true" />
-        <span class:visually-hidden={iconOnlyPills.matches}>More</span>
-        {#if split.overflow.length > 1}
+        <span class:visually-hidden={iconOnly}>More</span>
+        {#if split.overflow.length > 1 && !iconOnly}
           <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
         {/if}
       </button>
@@ -144,18 +174,28 @@ $effect(() => machine.syncOpen(moreOpen));
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-2);
+  max-inline-size: calc(
+    100vw -
+    2 *
+    var(--space-2) -
+    env(safe-area-inset-left, 0px) -
+    env(safe-area-inset-right, 0px)
+  );
+  min-inline-size: 0;
 }
 .btn-pill[aria-disabled="true"],
 .menu-item[aria-disabled="true"] {
   opacity: var(--disabled-opacity);
   cursor: default;
 }
-.btn-pill[aria-disabled="true"]:hover {
-  border-color: var(--border);
-  background: var(--surface-raised);
-}
-.menu-item[aria-disabled="true"]:hover {
-  background: transparent;
+@media (hover: hover) and (pointer: fine) {
+  .btn-pill[aria-disabled="true"]:hover {
+    border-color: var(--border);
+    background: var(--surface-raised);
+  }
+  .menu-item[aria-disabled="true"]:hover {
+    background: transparent;
+  }
 }
 .more-wrap {
   position: relative;
@@ -183,5 +223,9 @@ $effect(() => machine.syncOpen(moreOpen));
     min-inline-size: var(--control-size);
     justify-content: center;
   }
+}
+.btn-pill.icon-only {
+  min-inline-size: var(--control-size);
+  justify-content: center;
 }
 </style>

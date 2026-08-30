@@ -1,4 +1,5 @@
 import type * as maplibregl from 'maplibre-gl';
+import { vibrate } from '$shared/lib';
 
 // A touch long-press that holds still this long, and within this pixel slop, stands in for the
 // contextmenu event that touch browsers do not reliably fire. The slop is sized for a gloved
@@ -67,9 +68,7 @@ export function installContextMenu(
       const at = map.unproject([x, y]);
       // Recognition feedback for a gloved hand that cannot feel the screen; the menu that follows
       // remains the visual confirmation.
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate(RECOGNITION_VIBRATION_MS);
-      }
+      vibrate(RECOGNITION_VIBRATION_MS);
       emit({ lng: at.lng, lat: at.lat, x, y });
     }, LONG_PRESS_MS);
   };

@@ -67,6 +67,24 @@ describe('AppMenu group order', () => {
     expect(APP_MENU_SOURCE).not.toContain('data-group');
     expect(APP_MENU_SOURCE).not.toMatch(/\border:\s*\d/);
   });
+
+  it('keeps toolbar customization actions in one named Settings group', () => {
+    const body = render(AppMenu, {
+      props: {
+        items: [
+          item('profiles', { group: 'Settings' }),
+          item('menu', { group: 'Settings', barOnly: true }),
+          item('help', { group: 'Settings' }),
+        ],
+        open: true,
+        onOpenChange: () => {},
+        editing: true,
+      },
+    }).body;
+
+    expect(body.match(/role="group" aria-label="Settings"/g)).toHaveLength(1);
+    expect(body).not.toContain('role="group"><');
+  });
 });
 
 describe('AppMenu bar-only actions', () => {

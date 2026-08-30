@@ -97,14 +97,29 @@ function onTimeout(): void {
   background: var(--alarm);
   box-shadow: inset 0 0 0 2px var(--alarm-contrast);
 }
+@media (hover: hover) and (pointer: fine) {
+  .mob-btn:hover:not(:disabled) {
+    border-color: var(--alarm);
+    background: var(--alarm);
+    color: var(--alarm-contrast);
+    filter: brightness(1.04);
+  }
+}
 /* Night brightness discipline: with no mark active the resting key drops to the tinted plane with
    warning-brightness text, a brightness borrow inside the red band, not a semantic reuse; the full
    alarm fill is reserved for an active mark, so the brightest pixel at night is only ever a live
    emergency. */
 :global(:root[data-theme="night-red"]) .mob-btn {
   border-color: var(--warning);
-  background: var(--alarm-tint-strong);
+  background: var(--surface);
   color: var(--warning);
+}
+@media (hover: hover) and (pointer: fine) {
+  :global(:root[data-theme="night-red"]) .mob-btn:hover:not(:disabled):not(.is-on) {
+    border-color: var(--warning);
+    background: var(--surface);
+    color: var(--warning);
+  }
 }
 :global(:root[data-theme="night-red"]) .mob-btn.is-on {
   border-color: var(--alarm);

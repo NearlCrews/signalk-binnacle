@@ -33,6 +33,28 @@ export const MAX_BAR_PILLS = 6;
 // most likely to be at a helm.
 export const MAX_COMPACT_BAR_PILLS = 4;
 
+// How many control-size pills fit in a measured toolbar. The toolbar uses this in addition to the
+// responsive caps because browser zoom and a larger root font can turn a CSS-pixel-wide phone into
+// a much narrower control grid without changing the media-query width.
+export function barCapacity(
+  available: number,
+  controlSize: number,
+  gap: number,
+  maximum: number,
+): number {
+  if (
+    !Number.isFinite(available) ||
+    !Number.isFinite(controlSize) ||
+    !Number.isFinite(gap) ||
+    available <= 0 ||
+    controlSize <= 0 ||
+    maximum <= 0
+  ) {
+    return Math.max(1, maximum);
+  }
+  return Math.max(1, Math.min(maximum, Math.floor((available + gap) / (controlSize + gap))));
+}
+
 export function splitBarActions(
   actions: MenuItem[],
   max: number,

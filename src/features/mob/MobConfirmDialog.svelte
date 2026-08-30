@@ -2,7 +2,7 @@
 import LifeBuoy from '@lucide/svelte/icons/life-buoy';
 import { onMount } from 'svelte';
 import type { MobMark } from '$entities/mob';
-import { formatClockTime, formatLatitude, formatLongitude } from '$shared/lib';
+import { formatClockTime, formatLatitude, formatLongitude, vibrate } from '$shared/lib';
 import { dialog, focusOnMount } from '$shared/ui';
 
 interface Props {
@@ -47,7 +47,7 @@ onMount(() => {
 
 function confirm(): void {
   // Registration cue for a numb or gloved finger; the alarm tone follows from the trigger.
-  navigator.vibrate?.(200);
+  vibrate(200);
   onConfirm();
 }
 </script>
@@ -173,7 +173,9 @@ function confirm(): void {
   background: var(--alarm-tint-strong);
   font-weight: 700;
 }
-.confirm:hover:not(:disabled) {
-  filter: brightness(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .confirm:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
 }
 </style>

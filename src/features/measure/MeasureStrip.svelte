@@ -221,8 +221,10 @@ $effect(() => {
   color: var(--alarm);
   border-color: var(--alarm);
 }
-.point-actions .ack--danger:hover:not(:disabled) {
-  background: var(--alarm-tint);
+@media (hover: hover) and (pointer: fine) {
+  .point-actions .ack--danger:hover:not(:disabled) {
+    background: var(--alarm-tint);
+  }
 }
 .selected-readout {
   border-block-start: 1px solid var(--border);

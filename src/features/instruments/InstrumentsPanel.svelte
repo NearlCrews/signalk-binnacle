@@ -68,10 +68,10 @@ $effect(() => {
 });
 </script>
 
-<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is dialog exactly when aria-modal is defined. -->
-<aside
+<!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is always complementary or dialog, and aria-modal is present only for dialog. -->
+<div
   class="instruments"
-  role={fullscreen ? 'dialog' : undefined}
+  role={fullscreen ? 'dialog' : 'complementary'}
   aria-label="Instruments"
   aria-modal={fullscreen ? 'true' : undefined}
   tabindex="-1"
@@ -158,7 +158,7 @@ $effect(() => {
       {/each}
     </div>
   {/if}
-</aside>
+</div>
 
 <style>
 .tiles {

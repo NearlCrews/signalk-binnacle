@@ -702,8 +702,9 @@ test('offline area review shows a planning estimate and catalog chart defaults',
   await expect(offline).toBeEnabled({ timeout: 10_000 });
   await offline.click();
 
-  const panel = page.locator('aside.slide-over');
-  await panel.getByRole('button', { name: 'Save a chart area' }).click();
+  const offlinePanel = page.getByRole('complementary', { name: 'Offline charts' });
+  await offlinePanel.getByRole('button', { name: 'Save a chart area' }).click();
+  const panel = page.getByRole('complementary', { name: 'Save a chart area' });
   await panel.getByRole('button', { name: 'Draw on the chart' }).click();
 
   const canvas = page.locator('.maplibregl-canvas');
@@ -753,7 +754,7 @@ test('offline areas explain removed chart sources before re-download', async ({ 
   });
   await openMenuItem(page, 'Offline charts');
 
-  const panel = page.locator('aside.slide-over');
+  const panel = page.getByRole('complementary', { name: 'Offline charts' });
   await expect(
     panel.getByText('One included chart is no longer available from Chart Locker.'),
   ).toBeVisible();
@@ -992,7 +993,7 @@ test('instrument dock opens beside a still-present chart and closes from its hea
   const dock = page.getByRole('complementary', { name: 'Instruments' });
   await expect(dock).toBeVisible();
   // The chart host stays in the layout beside the dock (true split, not an overlay).
-  await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Chart', exact: true })).toBeVisible();
   // Default tiles render their plain labels.
   await expect(dock.getByText('Speed', { exact: false }).first()).toBeVisible();
   await dock.getByRole('button', { name: /Speed.*Open details/ }).click();
@@ -1256,7 +1257,7 @@ test('focused trends return to instrument detail without changing the saved over
   trends = page.locator('.slide-over[aria-label="Data trends"]');
   await trends.getByRole('button', { name: 'Close trends, return to chart' }).click();
   await expect(trends).not.toBeVisible();
-  await expect(page.getByRole('region', { name: 'Chart' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Chart', exact: true })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Instruments' })).not.toBeVisible();
 
   await openMenuItem(page, 'Data trends');
@@ -1419,7 +1420,7 @@ test('full-screen instruments and chart panels yield ownership to each other', a
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto('/');
   await openMenuItem(page, 'Instrument dock');
-  const instruments = page.locator('aside.instruments');
+  const instruments = page.locator('.instruments[aria-label="Instruments"]');
   await expect(instruments).toBeVisible();
 
   await openMenuItem(page, 'Tracks');

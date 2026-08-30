@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MenuItem } from './menu-item';
 import {
+  barCapacity,
   DEFAULT_PINNED,
   MAX_BAR_PILLS,
   MAX_COMPACT_BAR_PILLS,
@@ -95,6 +96,21 @@ describe('splitBarActions', () => {
 
   it('MAX_COMPACT_BAR_PILLS covers the whole default set', () => {
     expect(MAX_COMPACT_BAR_PILLS).toBe(DEFAULT_PINNED.length);
+  });
+});
+
+describe('barCapacity', () => {
+  it('accounts for root-font-scaled controls and gaps at narrow helm widths', () => {
+    expect(barCapacity(320, 88, 8, MAX_COMPACT_BAR_PILLS)).toBe(3);
+    expect(barCapacity(360, 88, 8, MAX_COMPACT_BAR_PILLS)).toBe(3);
+  });
+
+  it('retains the responsive cap when every slot fits', () => {
+    expect(barCapacity(600, 44, 8, MAX_BAR_PILLS)).toBe(MAX_BAR_PILLS);
+  });
+
+  it('always leaves room for the More control at an extreme width', () => {
+    expect(barCapacity(20, 88, 8, MAX_COMPACT_BAR_PILLS)).toBe(1);
   });
 });
 

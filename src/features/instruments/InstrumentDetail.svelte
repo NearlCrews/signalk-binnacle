@@ -212,7 +212,7 @@ const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Wa
   margin: 0;
 }
 .trend-action {
-  min-block-size: 44px;
+  min-block-size: var(--control-size);
   inline-size: 100%;
 }
 .path-list,

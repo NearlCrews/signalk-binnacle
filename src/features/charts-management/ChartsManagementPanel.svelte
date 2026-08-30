@@ -148,6 +148,10 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
           <p class="chart-file">{chart.fileName}</p>
           <Disclosure label="Chart details">
             <dl class="stat-grid">
+              <dt>File</dt>
+              <dd class="chart-file-detail">
+                <span class="num">{chart.fileName}</span><span class="unit"></span>
+              </dd>
               <dt>Format</dt>
               <dd>
                 <span class="num">{chart.format.toUpperCase()}</span><span class="unit"></span>
@@ -199,7 +203,7 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
       <h3 class="caps-label">Invalid files</h3>
       {#each data.invalid as item (item.fileName)}
         <div class="card-frame invalid-card">
-          <p class="chart-file">{item.fileName}</p>
+          <p class="chart-file chart-file--full">{item.fileName}</p>
           <p class="alert-note" role="alert">{item.error}</p>
           <p class="muted-note">
             Replace or remove this file in the Chart Locker chart folder on the Signal K server,
@@ -263,6 +267,14 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.chart-file--full,
+.chart-file-detail .num {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.chart-file-detail .num {
+  min-inline-size: 0;
 }
 
 /* Bounds are coordinate pairs: mono and tabular so the digits line up at a glance. */

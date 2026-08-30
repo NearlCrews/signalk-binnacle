@@ -36,10 +36,13 @@ query condition, and one used there drops the whole block.
 - Spacing (4px-based): `--space-1` 0.25rem, `--space-2` 0.5rem, `--space-3` 0.75rem, `--space-4` 1rem,
   `--space-5` 1.5rem, `--space-6` 2rem.
 - Type scale: `--text-xs` 0.72, `--text-sm` 0.8, `--text-base` 0.85, `--text-md` 0.9, `--text-lg` 1,
-  `--text-xl` 1.15, `--text-readout` 1.25, `--text-readout-lg` 1.75 (rem). Fonts: `--font-ui` (Inter)
+  `--text-xl` 1.15, `--text-readout` 1.25, `--text-readout-lg` 1.75 (rem). Night-red floors the two
+  smallest at 0.8 and 0.85: dim red on black needs larger glyphs. Fonts: `--font-ui` (Inter)
   for chrome, `--font-mono` (JetBrains Mono) for numeric readouts. Every size pairs with a role in the
   type-role table below; a new size or a new token-role pairing is a design-system change, never a
-  per-component decision.
+  per-component decision. Text-entry controls use the adaptive aliases `--text-input` and
+  `--text-input-large`; both resolve to at least 1rem on phone-width or coarse-pointer displays to
+  prevent focus zoom on iOS.
 - Targets: `--control-size` 2.75rem is the action tap target (buttons, pills, icon buttons);
   `--row-size` is the list-row height (menu items, layer toggles) and is defined as
   `var(--control-size)`, so the two are the same 2.75rem. WCAG 2.5.5 sets 44px as the
@@ -80,9 +83,11 @@ Pick the token by role, never by eye:
 | Token | rem | Roles |
 | --- | --- | --- |
 | `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
-| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, the form-control baseline (`.input`), the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
+| `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), stepped-up form-control text (`UnitField` numerals, `.text-field.large`), toggle-row and picker labels, all status-strip readouts (`.readout`: one size, no hierarchy) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts (`.readout`: one size, no hierarchy) |
+| `--text-input` | adaptive | ordinary text-entry controls: `--text-sm` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
+| `--text-input-large` | adaptive | stepped-up text-entry controls such as `UnitField` numerals and `.text-field.large`: `--text-md` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
 | `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg` with its grade word at `--text-base` weight 700, since the top alert's decision numbers outrank an ordinary numeral |
@@ -171,6 +176,9 @@ night-red on any MapLibre upgrade):
   on the chart host and mirrored onto the app shell root. It resolves to `0px` while no alerts are
   up, so consumers apply it unconditionally, and lifted chrome stays below the strips in z: a
   safety card may never be painted over, and may never half-cover the chrome underneath it either.
+  At extreme text zoom, the rail caps itself to the chart viewport and scrolls with the emergency
+  response actions first. A container query removes decorative card inset and tightens the action
+  gutter before any action label can cross the rail edge.
 
 ## 5. Global utility classes (the shared vocabulary)
 
@@ -345,8 +353,10 @@ Shared behavior lives here. Compose these; do not re-implement them.
   chart gesture: collapse before enabling the gesture, then restore the panel when it finishes or is
   canceled. The body is hidden while collapsed, but the pinned `footer` remains visible. Put the
   active step and Stop action in that footer when a multi-step chart gesture must remain understandable
-  and cancelable on a phone. `focusTrap` changes dialog semantics and focus behavior on the existing
-  shell. A breakpoint change must not replace the `aside` or remount its child snippet because scroll,
+  and cancelable on a phone. The independently scrolling panel body is keyboard-focusable so Safari
+  users can scroll it even when its current content contains no control. `focusTrap` changes dialog
+  semantics and focus behavior on the existing
+  shell. A breakpoint change must not replace the stable panel container or remount its child snippet because scroll,
   focus, and child-local state belong to that stable panel instance. Offline area drawing and
   radar-area placement are the canonical minimize examples. Every left-docked panel is a SlideOver.
 - `PanelHeader`: the header triad, a back arrow, the title and subtitle heading with an optional
@@ -655,11 +665,13 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.
 - A live status uses `role="status"` and `aria-live="polite"`; the one assertive collision channel is
   owned by `App` and never duplicated.
-- The lit state is `.is-on` (accent color, accent border, accent-tint fill). Hover tints to
-  `--accent-tint`. Both come from the shared classes; do not invent a per-component lit style (the MOB
+- The lit state is `.is-on` (`--accent-tint-text` text, accent border, accent-tint fill, and accent
+  icons). Hover tints to `--accent-tint` only inside
+  `@media (hover: hover) and (pointer: fine)`, so touch cannot retain a false hover state. Both come
+  from the shared classes; do not invent a per-component lit style (the MOB
   key's solid `--alarm` fill with `--alarm-contrast` text, the one control allowed a solid alarm
   fill because a red MOB key is the hardware convention and solid alarm appears nowhere else,
-  dimming to `--alarm-tint-strong` at rest under night-red so the brightest night pixel is only
+  falling back to the black surface with warning text at rest under night-red so the brightest night pixel is only
   ever a live emergency, and the instrument tile's zone tint, `.tile--warning` and `.tile--alarm`
   from the global `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised
   notifications, are the two sanctioned exceptions).

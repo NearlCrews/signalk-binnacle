@@ -37,7 +37,11 @@
   touch-action: none;
   transition: opacity var(--transition-fast);
 }
-.reorder-row:hover .handle,
 .reorder-row:focus-within .handle {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .reorder-row:hover .handle {
+    opacity: 1;
+  }
 }
