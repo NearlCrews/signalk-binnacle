@@ -45,6 +45,16 @@ describe('SetupChecklist', () => {
     expect(renderChecklist({ gpsSeen: true, soundEnabled: true })).toContain('Get set up');
   });
 
+  it('surfaces the HTTPS row and keeps the checklist visible over plain HTTP', () => {
+    const durableDone = { chartOn: true, writeAllowed: true, savedDataProvisioned: true };
+    const insecure = renderChecklist({ ...durableDone, secureContext: false });
+    expect(insecure).toContain('Get set up');
+    expect(insecure).toContain('Serve over HTTPS for offline charts');
+    expect(insecure).toContain('the browser disables offline caching');
+    const secure = renderChecklist({ secureContext: true });
+    expect(secure).toContain('Serve over HTTPS for offline charts (done)');
+  });
+
   it('keeps the storage row neutral while the provider probe has not answered', () => {
     expect(renderChecklist()).toContain('Checking whether this server stores routes');
     expect(renderChecklist({ savedDataProvisioned: false })).toContain(

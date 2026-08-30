@@ -3,6 +3,7 @@ import { expectBearerAuth, stubFetch } from '$shared/testing';
 import {
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
+  fetchRaisedNotificationsById,
   postMobNotification,
   postNotification,
   resolveNotification,
@@ -190,6 +191,71 @@ describe('fetchRaisedNotificationPaths', () => {
     await expect(fetchRaisedNotificationPaths(BASE, undefined)).resolves.toEqual(
       new Set(['notifications.good']),
     );
+  });
+});
+
+describe('fetchRaisedNotificationsById', () => {
+  const SELF = 'vessels.urn:mrn:signalk:uuid:aaaa';
+
+  it('reshapes the id-keyed list to mirror paths with the id injected into each value', async () => {
+    const mock = stubFetch({
+      ok: true,
+      body: {
+        [ID]: {
+          context: '',
+          path: 'notifications.navigation.anchor',
+          value: { state: 'alarm', message: 'Dragging', status: { silenced: true } },
+        },
+        'other-id': {
+          context: SELF,
+          path: 'notifications.mob',
+          value: { state: 'emergency', message: 'MOB' },
+        },
+      },
+    });
+    const entries = await fetchRaisedNotificationsById(BASE, 'tok', SELF);
+    expect(entries?.get('notifications.navigation.anchor')).toEqual({
+      state: 'alarm',
+      message: 'Dragging',
+      status: { silenced: true },
+      id: ID,
+    });
+    expect(entries?.get('notifications.mob')).toEqual({
+      state: 'emergency',
+      message: 'MOB',
+      id: 'other-id',
+    });
+    const [url, init] = mock.mock.calls[0];
+    expect(url).toBe(API);
+    expectBearerAuth(init, 'tok');
+  });
+
+  it('drops other vessels, cleared states, and paths that could not name a mirror entry', async () => {
+    stubFetch({
+      ok: true,
+      body: {
+        a: {
+          context: 'vessels.urn:mrn:imo:mmsi:255805923',
+          path: 'notifications.x',
+          value: { state: 'alarm' },
+        },
+        b: { context: '', path: 'notifications.cleared', value: { state: 'normal' } },
+        c: { context: '', path: 'unprefixed.path', value: { state: 'alarm' } },
+        d: { context: '', path: 'notifications.bad\u0000segment', value: { state: 'alarm' } },
+        e: { context: 'vessels.self', path: 'notifications.kept', value: { state: 'warn' } },
+      },
+    });
+    const entries = await fetchRaisedNotificationsById(BASE, undefined, SELF);
+    expect(entries && [...entries.keys()]).toEqual(['notifications.kept']);
+  });
+
+  it('reads a missing v2 API and failures as unavailable, so the caller can fall back', async () => {
+    stubFetch({ ok: false, status: 404 });
+    await expect(fetchRaisedNotificationsById(BASE, undefined, SELF)).resolves.toBeUndefined();
+    stubFetch('reject');
+    await expect(fetchRaisedNotificationsById(BASE, undefined, SELF)).resolves.toBeUndefined();
+    stubFetch({ ok: true, body: [] });
+    await expect(fetchRaisedNotificationsById(BASE, undefined, SELF)).resolves.toBeUndefined();
   });
 });
 

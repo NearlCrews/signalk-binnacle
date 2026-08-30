@@ -107,6 +107,19 @@ export class NotificationsStore {
     this.#store.reconcileNotifications(paths, snapshotEpoch);
   }
 
+  // The richer reconcile for a v2 id-keyed snapshot: the deletion pass first, then each snapshot
+  // value restored or repaired in place, so an alarm raised, silenced, or acknowledged during the
+  // outage comes back actionable (with its id) instead of as a bare path.
+  reconcileWithValues(
+    entries: ReadonlyMap<string, Record<string, unknown>>,
+    snapshotEpoch: number,
+  ): void {
+    this.#store.reconcileNotifications(new Set(entries.keys()), snapshotEpoch);
+    for (const [path, value] of entries) {
+      this.#store.upsertReconciledNotification(path, value, snapshotEpoch);
+    }
+  }
+
   list(): ActiveNotification[] {
     const version = this.#store.notificationsVersion;
     if (this.#cache && this.#cacheVersion === version) return this.#cache;

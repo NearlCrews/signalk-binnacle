@@ -31,13 +31,20 @@ export type {
 export {
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
+  fetchRaisedNotificationsById,
   postMobNotification,
   postNotification,
   resolveNotification,
   silenceNotification,
   updateNotification,
 } from './notifications-client';
-export { appendToken, isInsecureTransportOrigin, serverOrigin, streamUrl } from './origin';
+export {
+  appendToken,
+  discoverStreamUrl,
+  isInsecureTransportOrigin,
+  serverOrigin,
+  streamUrl,
+} from './origin';
 export { createPathMetaCache, RETRY_DELAY_MS } from './path-meta-cache.svelte';
 export { SK_PATHS } from './paths';
 export { resourcesProviderNote } from './provider-note';

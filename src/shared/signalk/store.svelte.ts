@@ -489,6 +489,20 @@ export class SignalKStore {
   // set of currently raised paths and the epoch it requested the snapshot at; a failed snapshot
   // fetch must not reach here at all, so the fail-safe direction (keep alarms on doubt) stays
   // with the caller.
+  // Restore or repair one mirrored notification from the same reconnect snapshot: a raise or a
+  // status change (a silence, an acknowledgment, the v2 id) that happened while the socket was
+  // down sends no delta on the new connection when the producer is transition-only. The same
+  // freshness rule as the deletion pass applies: a streamed value at or after the snapshot
+  // outranks it. Cells are not created here; the notification family is unbounded and only the
+  // path-keyed mirror carries it, but an existing cell (the anchor drag grade reads one) gets
+  // the restored value, mirroring how the deletion pass writes the clearing null.
+  upsertReconciledNotification(path: string, value: Value, snapshotEpoch: number): void {
+    const cell = this.#cells.get(path);
+    if (cell?.streamed && cell.epoch >= snapshotEpoch) return;
+    this.#mirrorNotification(path, value);
+    if (cell !== undefined) cell.value = value;
+  }
+
   reconcileNotifications(paths: ReadonlySet<string>, snapshotEpoch: number): void {
     let changed = false;
     for (const path of this.#notifications.keys()) {

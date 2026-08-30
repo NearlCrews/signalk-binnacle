@@ -1,5 +1,30 @@
+import { fetchJsonOrUndefined, isRecord } from '$shared/lib';
+
 export function serverOrigin(): string {
   return `${location.protocol}//${location.host}`;
+}
+
+// The discovery document's advertised v1 stream endpoint (GET /signalk). A server mounted behind
+// a reverse proxy or on a nonstandard port advertises where the stream actually lives, so the
+// client asks first and derives from location only when discovery fails (a proxy that does not
+// forward /signalk, a flaky link at connect time). The advertised scheme is normalized to ws or
+// wss; a plain ws endpoint under an https page is upgraded to wss, since the browser would block
+// the insecure socket anyway and a TLS-terminating proxy answers on wss.
+export async function discoverStreamUrl(fetchFn?: typeof fetch): Promise<string | undefined> {
+  const doc = await fetchJsonOrUndefined<unknown>(`${serverOrigin()}/signalk`, undefined, fetchFn);
+  if (!isRecord(doc) || !isRecord(doc.endpoints)) return undefined;
+  const v1 = doc.endpoints.v1;
+  const advertised = isRecord(v1) ? v1['signalk-ws'] : undefined;
+  if (typeof advertised !== 'string' || !advertised) return undefined;
+  try {
+    const url = new URL(advertised, serverOrigin());
+    const scheme = { 'ws:': 'ws:', 'wss:': 'wss:', 'http:': 'ws:', 'https:': 'wss:' }[url.protocol];
+    if (!scheme) return undefined;
+    url.protocol = location.protocol === 'https:' && scheme === 'ws:' ? 'wss:' : scheme;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 export function isInsecureTransportOrigin(origin: string): boolean {

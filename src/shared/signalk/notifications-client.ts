@@ -1,5 +1,11 @@
 import { isRecord, isUnsafeProviderKey } from '$shared/lib';
-import { deleteResource, fetchAuthedJsonOutcome, jsonOr, sendJson } from './resource';
+import {
+  asKeyedObject,
+  deleteResource,
+  fetchAuthedJsonOutcome,
+  jsonOr,
+  sendJson,
+} from './resource';
 import { isRaisedNotificationValue, NOTIFICATIONS_PREFIX, type NotificationState } from './types';
 
 // Thin client for the server's v2 Notifications API (signalk-server src/api/notifications).
@@ -157,6 +163,46 @@ function collectRaisedPaths(node: unknown, prefix: string, out: Set<string>, dep
     if (isUnsafeProviderKey(key) || key.includes('.')) continue;
     collectRaisedPaths(child, prefix.length > 0 ? `${prefix}.${key}` : key, out, depth + 1);
   }
+}
+
+// The v2 id-keyed active-notification list (GET /signalk/v2/api/notifications), reshaped to the
+// mirror's path-keyed form with each list key injected as the value's id: the silence,
+// acknowledge, and clear routes address that id, and the entry's value omits it, so a reconcile
+// fed from this list is what keeps a restored alarm actionable. Only self entries are taken (an
+// API-raised alarm carries an empty context; a delta-parsed one carries the full vessel urn),
+// since another vessel's alarm must never enter the self mirror. Undefined means the fetch
+// failed or the server predates the v2 API, and the caller falls back to the v1 tree.
+export async function fetchRaisedNotificationsById(
+  base: string,
+  token: string | undefined,
+  selfContext: string | undefined,
+): Promise<ReadonlyMap<string, Record<string, unknown>> | undefined> {
+  const outcome = await fetchAuthedJsonOutcome<unknown>(`${base}${NOTIFICATIONS_API}`, token);
+  if (outcome.state !== 'ok') return undefined;
+  const keyed = asKeyedObject(outcome.value);
+  if (!keyed) return undefined;
+  const entries = new Map<string, Record<string, unknown>>();
+  for (const [id, entry] of Object.entries(keyed)) {
+    if (!isRecord(entry)) continue;
+    const context = entry.context;
+    const selfOwned =
+      context === '' ||
+      context === undefined ||
+      context === 'vessels.self' ||
+      (selfContext !== undefined && context === selfContext);
+    if (!selfOwned) continue;
+    const path = entry.path;
+    if (typeof path !== 'string' || !path.startsWith(NOTIFICATIONS_PREFIX)) continue;
+    // The same hygiene the v1 walk applies per segment, plus the entity's whole-path bound.
+    if (path.length > 512 || path.split('.').some((segment) => isUnsafeProviderKey(segment)))
+      continue;
+    if (!isRecord(entry.value) || !isRaisedNotificationValue(entry.value)) continue;
+    entries.set(path, { ...entry.value, id });
+  }
+  // A list at the collection cap is not provably the full raised set, and reconciling deletions
+  // against a partial set could drop live alarms, so it reads as a failed fetch instead.
+  if (entries.size >= MAX_SNAPSHOT_PATHS) return undefined;
+  return entries;
 }
 
 // The server's MOB convenience route: raises an emergency at notifications.mob.{id} with

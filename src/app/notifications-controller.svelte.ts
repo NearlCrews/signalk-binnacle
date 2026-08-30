@@ -19,6 +19,7 @@ import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
 import {
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
+  fetchRaisedNotificationsById,
   SELF_CONTEXT,
   silenceNotification,
 } from '$shared/signalk';
@@ -39,6 +40,9 @@ interface NotificationsControllerDeps {
   timeTravel: TimeTravelController;
   mob: MobStore;
   genericAlarm: GenericAlarm;
+  // The urn-form self context from the hello frame, for matching the v2 notification list's
+  // per-entry context. A getter because it lands only once the stream delivers.
+  selfContext: () => string | undefined;
   // The one depth notification path the shallow monitor currently sounds itself, or undefined. A
   // getter because the claim moves with the winning depth path and the server's zones.
   ownedDepthNotificationPath: () => string | undefined;
@@ -208,11 +212,21 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
 
   // Repair the notifications mirror after a stream reopen: alarms cleared or reaped server-side
   // during the outage sent no clearing delta on the new socket, so the mirror is reconciled
-  // against a REST snapshot. An undefined snapshot means the fetch failed; the mirror stays
-  // untouched then, keeping the fail-safe direction. The returned promise settles after the
-  // reconcile, so a caller can order replay decisions that read the mirror behind it.
+  // against a REST snapshot. The v2 id-keyed list is the preferred source because it carries each
+  // alarm's id and status, so a reconciled alarm keeps its Silence and Acknowledge actions; the
+  // v1 tree walk recovers only bare paths and remains the pre-2.28 fallback. An undefined
+  // snapshot from both means the fetch failed; the mirror stays untouched then, keeping the
+  // fail-safe direction. The returned promise settles after the reconcile, so a caller can order
+  // replay decisions that read the mirror behind it.
   async function reconcileAfterReconnect(token: string | undefined): Promise<void> {
     const snapshotEpoch = Date.now();
+    if (deps.notificationsApi()) {
+      const byId = await fetchRaisedNotificationsById(deps.origin, token, deps.selfContext());
+      if (byId) {
+        deps.notificationsStore.reconcileWithValues(byId, snapshotEpoch);
+        return;
+      }
+    }
     const paths = await fetchRaisedNotificationPaths(deps.origin, token);
     if (paths) deps.notificationsStore.reconcile(paths, snapshotEpoch);
   }

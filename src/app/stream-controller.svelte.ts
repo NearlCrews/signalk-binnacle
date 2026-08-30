@@ -2,7 +2,9 @@ import { withPromiseTimeout } from '$shared/lib';
 import type { OnlineStatus } from '$shared/pwa';
 import {
   ALL_VESSELS_CONTEXT,
+  appendToken,
   type ConnectionPhase,
+  discoverStreamUrl,
   isConnectionDown,
   type Path,
   type SignalKClient,
@@ -126,6 +128,15 @@ export function createStreamController(deps: StreamControllerDeps) {
   // changes down. Seeded from the current value: connect() reads the live getter itself, so the
   // effect owes nothing until the token actually changes.
   let streamToken = deps.token();
+  // The discovery document's advertised stream endpoint, cached on the first successful lookup so
+  // reconnects and token pushes reuse it. While unresolved (older proxy, flaky link), the
+  // location-derived streamUrl stands in, which is exactly the pre-discovery behavior.
+  let discoveredStream: string | undefined;
+
+  function streamUrlFor(token: string | undefined): string {
+    if (!discoveredStream) return streamUrl(token);
+    return token ? appendToken(discoveredStream, token) : discoveredStream;
+  }
 
   async function connect(restartWorker = false): Promise<void> {
     if (connecting || disposed || !deps.accessResolved()) return;
@@ -136,11 +147,16 @@ export function createStreamController(deps: StreamControllerDeps) {
       deps.client.restart();
       deps.onWorkerRestart?.();
     }
+    discoveredStream ??= await discoverStreamUrl();
+    if (disposed || currentAttempt !== attempt) {
+      if (currentAttempt === attempt) connecting = false;
+      return;
+    }
     const token = deps.token();
     streamToken = token;
     deps.onToken(token);
     try {
-      await boundedWorkerCall(deps.client.connect(streamUrl(token), deps.onFrame));
+      await boundedWorkerCall(deps.client.connect(streamUrlFor(token), deps.onFrame));
       await boundedWorkerCall(deps.client.raw.subscribe(SUBSCRIPTIONS));
       if (disposed || currentAttempt !== attempt) return;
       connected = true;
@@ -215,7 +231,7 @@ export function createStreamController(deps: StreamControllerDeps) {
     if (disposed || token === streamToken) return;
     streamToken = token;
     deps.onToken(token);
-    void boundedWorkerCall(deps.client.raw.setUrl(streamUrl(token))).catch((cause) => {
+    void boundedWorkerCall(deps.client.raw.setUrl(streamUrlFor(token))).catch((cause) => {
       // The push is lost against a dying worker; onWorkerFailure's restart rebuilds the URL from
       // the live getter, so this only needs to be observable, not retried.
       console.warn('Signal K worker did not accept the new stream URL', cause);

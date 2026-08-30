@@ -14,7 +14,19 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup(options: { accessResolved?: boolean; token?: string } = {}) {
+function setup(options: { accessResolved?: boolean; token?: string; discoveryDoc?: unknown } = {}) {
+  // connect() asks the discovery document for the stream endpoint before opening the socket;
+  // answer it deterministically so no test touches the network.
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        options.discoveryDoc === undefined
+          ? new Response(null, { status: 404 })
+          : new Response(JSON.stringify(options.discoveryDoc), { status: 200 }),
+      ),
+  );
   const access = $state({
     resolved: options.accessResolved ?? false,
     token: options.token as string | undefined,
@@ -61,7 +73,7 @@ function setup(options: { accessResolved?: boolean; token?: string } = {}) {
 
 const mountedCleanups: Array<() => void> = [];
 
-function mount(options: { accessResolved?: boolean; token?: string } = {}) {
+function mount(options: { accessResolved?: boolean; token?: string; discoveryDoc?: unknown } = {}) {
   let test!: ReturnType<typeof setup>;
   let disposeRoot!: () => void;
   flushSync(() => {
@@ -83,6 +95,7 @@ function mount(options: { accessResolved?: boolean; token?: string } = {}) {
 afterEach(() => {
   for (const cleanup of mountedCleanups.splice(0).reverse()) cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('createStreamController', () => {
@@ -130,6 +143,33 @@ describe('createStreamController', () => {
       test.subscribe.mock.invocationCallOrder[0],
     );
     expect(test.controller.error).toBe(false);
+  });
+
+  it('connects to the advertised discovery endpoint and appends the token to it', async () => {
+    const test = mount({
+      token: 'tok',
+      discoveryDoc: {
+        endpoints: { v1: { 'signalk-ws': 'wss://boat.example:3443/signalk/v1/stream' } },
+      },
+    });
+
+    test.access.resolved = true;
+    flushSync();
+    await vi.waitFor(() => expect(test.subscribe).toHaveBeenCalledOnce());
+
+    expect(test.client.connect).toHaveBeenCalledWith(
+      'wss://boat.example:3443/signalk/v1/stream?token=tok',
+      test.onFrame,
+    );
+
+    // A token change pushes the advertised endpoint, not the location-derived one.
+    test.access.token = 'tok2';
+    flushSync();
+    await vi.waitFor(() =>
+      expect(test.setUrl).toHaveBeenCalledWith(
+        'wss://boat.example:3443/signalk/v1/stream?token=tok2',
+      ),
+    );
   });
 
   it('surfaces an initial failure and retries with a fresh worker', async () => {

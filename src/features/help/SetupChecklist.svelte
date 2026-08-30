@@ -14,6 +14,9 @@ interface Props {
   // Whether the server can store saved data at all: undefined while the probe has not answered,
   // which renders as neither done nor a dead end.
   savedDataProvisioned?: boolean;
+  // Offline chart caching exists only in a secure context (HTTPS or localhost). Defaulted from
+  // the live page; the guard keeps the Node SSR test render working, where the global is absent.
+  secureContext?: boolean;
   onOpenLayers: () => void;
   onRequestWrite: () => void;
   onEnableSound: () => void;
@@ -25,6 +28,7 @@ const {
   writeAllowed,
   soundEnabled,
   savedDataProvisioned,
+  secureContext = typeof isSecureContext === 'boolean' ? isSecureContext : true,
   onOpenLayers,
   onRequestWrite,
   onEnableSound,
@@ -34,7 +38,9 @@ const {
 // priming resets on every load, and a fix arrives seconds in), so gating on them would render the
 // checklist at the top of Help on every visit of a fully set-up boat and then have it vanish
 // mid-read. They still render, with live checks.
-const durableDone = $derived(chartOn && writeAllowed && savedDataProvisioned !== false);
+const durableDone = $derived(
+  chartOn && writeAllowed && savedDataProvisioned !== false && secureContext,
+);
 const rows = $derived([
   {
     id: 'chart',
@@ -77,6 +83,15 @@ const rows = $derived([
     done: savedDataProvisioned === true,
     label: 'Enable saved data on the server',
     detail: savedDataDetail(savedDataProvisioned),
+    action: undefined,
+  },
+  {
+    id: 'https',
+    done: secureContext,
+    label: 'Serve over HTTPS for offline charts',
+    detail: secureContext
+      ? 'This connection is secure, so the browser can cache charts and tiles for offline use.'
+      : 'Over plain HTTP the browser disables offline caching, so charts need a live connection. An administrator can enable SSL in the Signal K admin UI under Server, then Settings, and reopen Binnacle over https.',
     action: undefined,
   },
 ]);

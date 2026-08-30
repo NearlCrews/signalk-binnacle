@@ -63,6 +63,7 @@ function setup(
     token: () => 'token',
     notificationsApi: () => options.apiAvailable ?? true,
     writeBlocked: () => options.writeBlocked ?? false,
+    selfContext: () => undefined,
     client: client as never,
     collision: {
       assessment,
