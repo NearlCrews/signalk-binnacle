@@ -2,6 +2,7 @@ import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UnitsStore } from '$entities/units';
 import type { DepthReading } from '$entities/vessel';
+import { GatedAlarm } from '$shared/audio';
 import type { UnitsMode } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, PersistedValue, type Thresholds } from '$shared/settings';
 import { RETRY_DELAY_MS } from '$shared/signalk';
@@ -11,6 +12,7 @@ import {
   expectBearerAuth,
   jsonResponse,
 } from '$shared/testing';
+import { SHALLOW_DEGRADE_TONE } from './shallow-alarm';
 import { createShallowController } from './shallow-monitor.svelte';
 
 const KEEL_PATH = 'environment.depth.belowKeel';
@@ -33,11 +35,15 @@ interface Options {
   mode?: UnitsMode;
   zones?: unknown;
   status?: number;
+  // Inject the stand-down cue channel; left off, the harness exercises the optional-absent path
+  // every pre-existing case ran with.
+  degrade?: boolean;
 }
 
 function harness(options: Options) {
   let depth = $state(options.depth ?? reading());
   const { control, events } = createFakeAlarmControl();
+  const degrade = options.degrade ? createFakeAlarmControl() : undefined;
   const thresholds = new PersistedValue<Thresholds>(
     'binnacle:thresholds-test',
     { ...DEFAULT_THRESHOLDS },
@@ -57,10 +63,12 @@ function harness(options: Options) {
     origin: 'http://sk',
     getToken: () => options.token,
     alarm: control,
+    degradeAlarm: degrade ? new GatedAlarm(SHALLOW_DEGRADE_TONE, degrade.control) : undefined,
   });
   return {
     controller,
     events,
+    degradeEvents: degrade?.events ?? [],
     thresholds,
     setDepth(next: DepthReading) {
       depth = next;
@@ -336,5 +344,74 @@ describe('createShallowController', () => {
     expect(test.events).toEqual(['start']);
     test.controller.stop();
     expect(test.events).toEqual(['start', 'stop']);
+  });
+
+  it('chirps briefly and posts a transient notice when an armed watch stands down', async () => {
+    vi.useFakeTimers();
+    try {
+      const test = mount({ degrade: true });
+      await vi.advanceTimersByTimeAsync(0);
+      flushSync();
+      expect(test.controller.monitorState).toBe('monitoring');
+      expect(test.degradeEvents).toEqual([]);
+      expect(test.controller.degradeNotice).toBe('');
+
+      test.setDepth(reading({ meters: 5, stale: true }));
+      expect(test.degradeEvents).toEqual(['start']);
+      expect(test.controller.degradeNotice).toBe('Shallow water watch paused: depth data lost.');
+
+      // Bounded: two couplet periods, then silence, while the notice lingers a little longer for
+      // the live region before clearing on its own.
+      await vi.advanceTimersByTimeAsync(2 * SHALLOW_DEGRADE_TONE.periodMs);
+      expect(test.degradeEvents).toEqual(['start', 'stop']);
+      expect(test.controller.degradeNotice).not.toBe('');
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(test.controller.degradeNotice).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the stand-down cue the moment monitoring resumes', async () => {
+    vi.useFakeTimers();
+    try {
+      const test = mount({ degrade: true });
+      await vi.advanceTimersByTimeAsync(0);
+      flushSync();
+      test.setDepth(reading({ meters: undefined }));
+      expect(test.degradeEvents).toEqual(['start']);
+      expect(test.controller.degradeNotice).toBe(
+        'Shallow water watch paused: no usable depth reading.',
+      );
+
+      test.setDepth(reading({ meters: 5 }));
+      expect(test.degradeEvents).toEqual(['start', 'stop']);
+      expect(test.controller.degradeNotice).toBe('');
+      // The cleared timers stay cleared: nothing fires later to contradict the live watch.
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(test.degradeEvents).toEqual(['start', 'stop']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never chirps for a watch that was not monitoring in the first place', async () => {
+    vi.useFakeTimers();
+    try {
+      const test = mount({
+        degrade: true,
+        depth: reading({ meters: undefined, source: undefined }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      flushSync();
+      expect(test.controller.monitorState).toBe('no-source');
+
+      // Paused to paused is not a stand-down: the session never had a live watch to lose.
+      test.setDepth(reading({ meters: 5, stale: true }));
+      expect(test.degradeEvents).toEqual([]);
+      expect(test.controller.degradeNotice).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

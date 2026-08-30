@@ -9,7 +9,7 @@ import {
   NOTIFICATIONS_PREFIX,
   zoneStateFor,
 } from '$shared/signalk';
-import { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
+import { isShallowAlarmActive, SHALLOW_DEGRADE_TONE, SHALLOW_TONE } from './shallow-alarm';
 
 // Whether the shallow alarm is actually watching the water. A tone that cannot fire is worth saying
 // out loud: a boat with no sounder, one whose sounder just dropped out, and one whose sounder is
@@ -30,7 +30,23 @@ interface ShallowControllerDeps {
   origin: string;
   getToken: () => string | undefined;
   alarm?: AlarmControl;
+  // A GatedAlarm on the coordinator's courtesy channel, sounding the bounded stand-down cue when
+  // an armed watch stops monitoring. Optional: without it the edge is visual and spoken only,
+  // which is what every caller had before the cue existed.
+  degradeAlarm?: GatedAlarm;
 }
+
+// The stand-down cue is bounded: two couplets, then silence. The paused state itself stays on the
+// chip and panel; the sound only marks the edge, like the weather warning chirp.
+const DEGRADE_CHIRP_MS = 2 * SHALLOW_DEGRADE_TONE.periodMs;
+// How long the transient stand-down announcement stays up for the live region.
+const DEGRADE_NOTICE_MS = 12_000;
+
+const DEGRADE_NOTICES: Record<Exclude<ShallowMonitorState, 'monitoring'>, string> = {
+  stale: 'Shallow water watch paused: depth data lost.',
+  'no-reading': 'Shallow water watch paused: no usable depth reading.',
+  'no-source': 'Shallow water watch paused: the depth source stopped publishing.',
+};
 
 // The deepest reading the server still calls an alarm, which is what the panel shows as the bound.
 // An alarm zone open at the top has no such depth, so it reports none rather than a wrong number.
@@ -131,6 +147,43 @@ export function createShallowController(deps: ShallowControllerDeps) {
     return `Shallow water: depth ${shown} ${unit}, under the ${formatLengthOr(effectiveLimitMeters, deps.units.mode)} ${unit} alarm threshold.`;
   });
 
+  // The stand-down cue. Not seeded: a session that opens with no sounder never had a watch to
+  // lose, so only a live watch pausing is the event. The chip alone is easy to miss on a dark
+  // helm; the bounded chirp and the transient notice mark the edge, then the chip carries on.
+  let degradeNotice = $state('');
+  let wasMonitoring = false;
+  let chirpTimer: ReturnType<typeof setTimeout> | undefined;
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearDegradeCue(): void {
+    clearTimeout(chirpTimer);
+    clearTimeout(noticeTimer);
+    deps.degradeAlarm?.update(false);
+    degradeNotice = '';
+  }
+
+  $effect(() => {
+    const state = monitorState;
+    if (state === 'monitoring') {
+      wasMonitoring = true;
+      // Watching again: a lingering paused cue would contradict the chip.
+      clearDegradeCue();
+      return;
+    }
+    if (!wasMonitoring) return;
+    wasMonitoring = false;
+    degradeNotice = DEGRADE_NOTICES[state];
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => (degradeNotice = ''), DEGRADE_NOTICE_MS);
+    const cue = deps.degradeAlarm;
+    if (cue) {
+      // Always a rising edge: resuming monitoring is the only way back here, and it clears the cue.
+      cue.update(true);
+      clearTimeout(chirpTimer);
+      chirpTimer = setTimeout(() => cue.update(false), DEGRADE_CHIRP_MS);
+    }
+  });
+
   // Keyed on the path, the cache version, and (through the cache's token read) the auth token, so
   // a failed fetch re-enters when its paced retry window reopens while a 1 Hz depth sample never
   // does. The cache's per-path attempt cap bounds the resulting retries.
@@ -144,9 +197,14 @@ export function createShallowController(deps: ShallowControllerDeps) {
   });
 
   return {
-    // Silence the tone outright (teardown). There is no prime here: the app resumes one shared
+    // Silence the tones outright (teardown). There is no prime here: the app resumes one shared
     // audio context through primeAlarmAudio(), so a per-alarm prime would be dead weight.
-    stop: () => alarm.stop(),
+    stop: () => {
+      alarm.stop();
+      clearTimeout(chirpTimer);
+      clearTimeout(noticeTimer);
+      deps.degradeAlarm?.stop();
+    },
     // Drop cached depth-path meta so a server-side zone edit reaches the watch. Called on the
     // stream open edge, where a restarted or reconfigured server is exactly what may have changed.
     refreshMeta: () => metaCache.refresh(),
@@ -170,6 +228,11 @@ export function createShallowController(deps: ShallowControllerDeps) {
     },
     get monitorState() {
       return monitorState;
+    },
+    // The transient stand-down announcement, up briefly after an armed watch pauses, empty
+    // otherwise. Distinct from `alert`, which holds for as long as the state does.
+    get degradeNotice() {
+      return degradeNotice;
     },
     get ownedNotificationPath() {
       return ownedNotificationPath;

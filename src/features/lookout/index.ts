@@ -1,6 +1,9 @@
 import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export { default as AlarmStrip } from './AlarmStrip.svelte';
+export type { AlarmLog, AlarmLogEntry, AlarmLogKind } from './alarm-log.svelte';
+export { alarmChronologyFact, alarmLogTail, createAlarmLog } from './alarm-log.svelte';
+export { type AlarmVolumeSetting, createAlarmVolume } from './alarm-volume';
 export { CollisionMute } from './collision-mute.svelte';
 export type { SkNotification } from './collision-notification';
 export { CollisionNotifier, NOTIFICATION_PATH } from './collision-notification';
@@ -14,7 +17,7 @@ export {
   notificationLabel,
   worstRaisedNotification,
 } from './notification-actions';
-export { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
+export { isShallowAlarmActive, SHALLOW_DEGRADE_TONE, SHALLOW_TONE } from './shallow-alarm';
 export type {
   ShallowMonitorSnapshot,
   ShallowMonitorState,

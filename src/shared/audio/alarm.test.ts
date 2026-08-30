@@ -14,11 +14,13 @@ const TONE: AlarmTone = {
   volume: 0.1,
 };
 
-function fakeGain() {
+function fakeGain(ramps: number[]) {
   return {
     gain: {
       setValueAtTime: () => undefined,
-      linearRampToValueAtTime: () => undefined,
+      linearRampToValueAtTime: (value: number) => {
+        ramps.push(value);
+      },
     },
     connect: (node: unknown) => node,
   };
@@ -41,6 +43,8 @@ function createAudioStub({ resumeRejects = false } = {}) {
   const contexts: FakeAudioContext[] = [];
   // Every beep's scheduled start time, so a test can count what a burst actually queued.
   const starts: number[] = [];
+  // Every gain ramp target, so a test can read the peak a beep was actually scheduled at.
+  const ramps: number[] = [];
   // Mutable so a test can grant the gesture partway through, the way a returning navigator does.
   const gesture = { refused: resumeRejects };
   class FakeAudioContext {
@@ -59,10 +63,10 @@ function createAudioStub({ resumeRejects = false } = {}) {
       return fakeOscillator(starts);
     }
     createGain() {
-      return fakeGain();
+      return fakeGain(ramps);
     }
   }
-  return { contexts, starts, gesture, AudioContext: FakeAudioContext };
+  return { contexts, starts, ramps, gesture, AudioContext: FakeAudioContext };
 }
 
 async function loadAudio(audio?: { AudioContext: unknown }) {
@@ -146,5 +150,60 @@ describe('shared alarm audio context', () => {
     const { alarmAudioPrimed, primeAlarmAudio } = await loadAudio();
     expect(() => primeAlarmAudio()).not.toThrow();
     expect(alarmAudioPrimed()).toBe(false);
+  });
+});
+
+describe('alarm master volume', () => {
+  it('scales every scheduled gain peak by the set volume', async () => {
+    const stub = createAudioStub();
+    const { Alarm, primeAlarmAudio, setAlarmVolume } = await loadAudio(stub);
+    primeAlarmAudio();
+    setAlarmVolume(0.5);
+    const alarm = new Alarm();
+    alarm.start(TONE);
+    // Each beep ramps up to the peak and back to zero; the peak carries the multiplier.
+    expect(Math.max(...stub.ramps)).toBeCloseTo(TONE.volume * 0.5);
+    alarm.stop();
+  });
+
+  it('clamps into its bounds and ignores a non-finite fraction', async () => {
+    const { alarmVolume, MAX_ALARM_VOLUME, MIN_ALARM_VOLUME, setAlarmVolume } = await loadAudio();
+    expect(alarmVolume()).toBe(MAX_ALARM_VOLUME);
+    // Zero would be a silent boat-wide mute; the floor keeps a bottomed slider audible.
+    setAlarmVolume(0);
+    expect(alarmVolume()).toBe(MIN_ALARM_VOLUME);
+    setAlarmVolume(2);
+    expect(alarmVolume()).toBe(MAX_ALARM_VOLUME);
+    setAlarmVolume(0.7);
+    setAlarmVolume(Number.NaN);
+    expect(alarmVolume()).toBe(0.7);
+  });
+});
+
+describe('playTestTone', () => {
+  it('plays one bounded burst through the shared path at the master volume, then stops', async () => {
+    vi.useFakeTimers();
+    const stub = createAudioStub();
+    const { ALARM_TEST_TONE, playTestTone, setAlarmVolume } = await loadAudio(stub);
+    setAlarmVolume(0.5);
+    // The tap primes and plays in one call: one shared context, one burst of beeps.
+    playTestTone();
+    expect(stub.contexts).toHaveLength(1);
+    expect(stub.starts).toHaveLength(ALARM_TEST_TONE.beeps);
+    expect(Math.max(...stub.ramps)).toBeCloseTo(ALARM_TEST_TONE.volume * 0.5);
+    // Bounded: the repeat interval is cut before its second burst, so nothing more queues.
+    vi.advanceTimersByTime(ALARM_TEST_TONE.periodMs * 3);
+    expect(stub.starts).toHaveLength(ALARM_TEST_TONE.beeps);
+  });
+
+  it('is safe to tap repeatedly, re-articulating a fresh burst each time', async () => {
+    vi.useFakeTimers();
+    const stub = createAudioStub();
+    const { ALARM_TEST_TONE, playTestTone } = await loadAudio(stub);
+    playTestTone();
+    playTestTone();
+    expect(stub.starts).toHaveLength(2 * ALARM_TEST_TONE.beeps);
+    vi.advanceTimersByTime(ALARM_TEST_TONE.periodMs * 3);
+    expect(stub.starts).toHaveLength(2 * ALARM_TEST_TONE.beeps);
   });
 });

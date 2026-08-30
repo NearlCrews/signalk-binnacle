@@ -3,10 +3,12 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { NotificationsStore } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
+import { ALARM_AUDIO_BLOCKED_NOTE } from '$shared/audio';
 import { formatClockTime } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import AlarmsPanel from './AlarmsPanel.svelte';
+import { type AlarmLog, type AlarmLogKind, createAlarmLog } from './alarm-log.svelte';
 import { ACTION_BUTTON } from './test-helpers';
 
 type ShallowProps = ComponentProps<typeof AlarmsPanel>['shallow'];
@@ -20,6 +22,7 @@ function renderPanel(
   },
   shallow?: ShallowProps,
   mute: { collisionMuted?: boolean; collisionMuteRemainingMin?: number } = {},
+  extra: Partial<ComponentProps<typeof AlarmsPanel>> = {},
 ): string {
   const notifications = {
     list: () => [
@@ -54,6 +57,7 @@ function renderPanel(
         arrivalMuted: false,
         onToggleArrivalMute: () => {},
         onClose: () => {},
+        ...extra,
       },
     })
       .body // Source line wrapping survives into the rendered text, so copy is asserted against a
@@ -201,5 +205,129 @@ describe('AlarmsPanel mutes', () => {
       collisionMuteRemainingMin: 12,
     });
     expect(body).toMatch(/role="status">Turns back on in 12 min/);
+  });
+});
+
+describe('AlarmsPanel alarm sound section', () => {
+  it('offers the self-test, and the volume slider when the setting is wired', () => {
+    const body = renderPanel({}, undefined, {}, { alarmVolume: { value: 0.6, set: () => {} } });
+    expect(body).toMatch(ACTION_BUTTON('Test alarm sound'));
+    expect(body).toContain('Volume on this display');
+    expect(body).toContain('60%');
+  });
+
+  it('keeps the blocked-audio note beside the test button and only there', () => {
+    const body = renderPanel({}, undefined, {}, { audioState: 'blocked' });
+    const section = body.indexOf('aria-label="Alarm sound"');
+    const note = body.indexOf(ALARM_AUDIO_BLOCKED_NOTE);
+    expect(section).toBeGreaterThan(-1);
+    expect(note).toBeGreaterThan(section);
+    expect(body.indexOf(ALARM_AUDIO_BLOCKED_NOTE, note + 1)).toBe(-1);
+  });
+
+  it('disables the test where no Web Audio exists, with the terminal note', () => {
+    const body = renderPanel({}, undefined, {}, { audioState: 'unsupported' });
+    expect(body).toMatch(/title="Play a short test burst at the set volume"[^>]*disabled/);
+    expect(body).toContain('Audible alarms are unavailable on this display.');
+  });
+
+  it('hides the slider for a caller without the setting', () => {
+    const body = renderPanel({});
+    expect(body).toMatch(ACTION_BUTTON('Test alarm sound'));
+    expect(body).not.toContain('Volume on this display');
+  });
+});
+
+describe('AlarmsPanel session chronology', () => {
+  const logWith = (entries: Array<{ at: number; kind: AlarmLogKind; label: string }>): AlarmLog => {
+    const clock = { now: 0 };
+    const log = createAlarmLog(clock);
+    for (const entry of entries) {
+      clock.now = entry.at;
+      log.record({ kind: entry.kind, label: entry.label });
+    }
+    return log;
+  };
+
+  it('is absent entirely for a caller without a log', () => {
+    expect(renderPanel({})).not.toContain('Session chronology');
+  });
+
+  it('shows the empty state for a quiet session', () => {
+    const body = renderPanel({}, undefined, {}, { alarmLog: logWith([]) });
+    expect(body).toContain('Session chronology');
+    expect(body).toContain('No alarm events this session yet.');
+  });
+
+  it('lists entries newest first with clock times', () => {
+    const earlier = Date.parse('2026-08-28T21:00:00');
+    const later = Date.parse('2026-08-28T23:30:00');
+    const body = renderPanel(
+      {},
+      undefined,
+      {},
+      {
+        alarmLog: logWith([
+          { at: earlier, kind: 'raised', label: 'Shallow water' },
+          { at: later, kind: 'silenced', label: 'Shallow water' },
+        ]),
+      },
+    );
+    // The clock time is normalized the same way the body is: some ICU builds put a narrow
+    // no-break space before the day period, and the body normalization already flattened it.
+    const clockTime = (ms: number): string => formatClockTime(ms).replace(/\s+/g, ' ');
+    const newest = body.indexOf('Silenced: Shallow water');
+    const oldest = body.indexOf('Raised: Shallow water');
+    expect(newest).toBeGreaterThan(-1);
+    expect(oldest).toBeGreaterThan(newest);
+    expect(body).toContain(`${clockTime(later)}</span>`);
+    expect(body).toContain(`${clockTime(earlier)}</span>`);
+  });
+});
+
+describe('AlarmsPanel wake lock note', () => {
+  it('explains an unsupported wake lock and a refused one, and stays quiet otherwise', () => {
+    expect(renderPanel({}, undefined, {}, { wakeLockState: 'unsupported' })).toContain(
+      'Serve Signal K over HTTPS to enable screen wake.',
+    );
+    expect(renderPanel({}, undefined, {}, { wakeLockState: 'failed' })).toContain(
+      'The browser refused the screen wake lock, often battery saver.',
+    );
+    for (const state of ['idle', 'held'] as const) {
+      const body = renderPanel({}, undefined, {}, { wakeLockState: state });
+      expect(body).not.toContain('screen wake');
+      expect(body).not.toContain('wake lock');
+    }
+  });
+});
+
+describe('AlarmsPanel off-course alarm section', () => {
+  const xteControls = (
+    overrides: Partial<NonNullable<ComponentProps<typeof AlarmsPanel>['xte']>> = {},
+  ) => ({
+    muted: false,
+    setMuted: () => {},
+    limitMeters: 150,
+    setLimitMeters: () => {},
+    standing: 'client' as const,
+    alarming: false,
+    ...overrides,
+  });
+
+  it('is absent entirely without the controls', () => {
+    expect(renderPanel({})).not.toContain('Off-course alarm');
+  });
+
+  it('renders the mute toggle and the meters limit field', () => {
+    const body = renderPanel({}, undefined, {}, { xte: xteControls() });
+    expect(body).toContain('Mute off-course alarm');
+    expect(body).toContain('Off-course limit');
+    expect(body).toContain('150');
+    expect(body).not.toContain('A server plugin raises the off-course alarm');
+  });
+
+  it('notes server standing when a plugin owns the alarm', () => {
+    const body = renderPanel({}, undefined, {}, { xte: xteControls({ standing: 'server' }) });
+    expect(body).toContain('A server plugin raises the off-course alarm; this display follows it.');
   });
 });

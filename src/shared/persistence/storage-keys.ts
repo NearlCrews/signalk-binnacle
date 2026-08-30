@@ -21,6 +21,11 @@ const BINNACLE_STORAGE_KEYS = {
   lookoutThresholds: { key: 'binnacle:lookout-thresholds', scope: 'profile' },
   units: { key: 'binnacle:units', scope: 'profile' },
   arrivalMuted: { key: 'binnacle:arrival-muted', scope: 'safety' },
+  xteLimit: { key: 'binnacle:xte-limit', scope: 'profile' },
+  xteMuted: { key: 'binnacle:xte-muted', scope: 'safety' },
+  // Per-device alarm loudness: a cockpit tablet and a berth display need different levels, so this
+  // never joins a profile bundle.
+  alarmVolume: { key: 'binnacle:alarm-volume', scope: 'device' },
   planningSpeedMps: { key: 'binnacle:planning-speed-mps', scope: 'profile' },
   // Legacy: the same setting in knots, read once to seed the SI key above and never written again.
   // It stays in the inventory so the privacy erasure still clears it from an upgraded device.

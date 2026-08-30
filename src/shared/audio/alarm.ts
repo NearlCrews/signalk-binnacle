@@ -26,6 +26,25 @@ export const DANGER_TONE: AlarmTone = {
   volume: 0.18,
 };
 
+// The bounds of the per-device master volume. The floor is deliberately above zero: turning the
+// slider down must never become a silent boat-wide mute, because mutes are per-alarm decisions a
+// navigator arms on purpose, not a slider someone left at the bottom last week.
+export const MIN_ALARM_VOLUME = 0.2;
+export const MAX_ALARM_VOLUME = 1;
+
+// One multiplier over every tone's own peak gain, applied where the gain node is scheduled, so
+// each display can be set to its cabin: quiet enough at the nav station, full over an engine.
+let masterVolume = 1;
+
+export function setAlarmVolume(fraction: number): void {
+  if (!Number.isFinite(fraction)) return;
+  masterVolume = Math.min(MAX_ALARM_VOLUME, Math.max(MIN_ALARM_VOLUME, fraction));
+}
+
+export function alarmVolume(): number {
+  return masterVolume;
+}
+
 // The surface a consumer drives; the real Alarm implements it and tests can fake it. Gesture
 // priming is not part of it: the app resumes the one shared context through primeAlarmAudio().
 export interface AlarmControl {
@@ -160,10 +179,13 @@ export class Alarm implements AlarmControl {
     osc.type = 'square';
     osc.frequency.value = tone.frequency;
     const duration = tone.beepMs / 1000;
+    // The device master volume scales every tone at the one place gain is scheduled, so the test
+    // tone and a real alarm can never disagree about loudness.
+    const peak = tone.volume * masterVolume;
     // A short attack and release so the beep does not click.
     gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(tone.volume, start + 0.012);
-    gain.gain.setValueAtTime(tone.volume, start + duration - 0.02);
+    gain.gain.linearRampToValueAtTime(peak, start + 0.012);
+    gain.gain.setValueAtTime(peak, start + duration - 0.02);
     gain.gain.linearRampToValueAtTime(0, start + duration);
     osc.connect(gain).connect(ctx.destination);
     this.#active.add(osc);
@@ -171,4 +193,34 @@ export class Alarm implements AlarmControl {
     osc.start(start);
     osc.stop(start + duration);
   }
+}
+
+// A rapid three-blip pattern faster than any alarm cadence, so a self-test is heard as a check,
+// never mistaken for a live alarm on the ladder (MOB 950, danger 880, shallow 750, anchor 660,
+// arrival 520, weather 440 Hz).
+export const ALARM_TEST_TONE: AlarmTone = {
+  frequency: 620,
+  beepMs: 90,
+  gapMs: 70,
+  beeps: 3,
+  periodMs: 1500,
+  volume: 0.18,
+};
+
+const TEST_BURST_MS = ALARM_TEST_TONE.beeps * (ALARM_TEST_TONE.beepMs + ALARM_TEST_TONE.gapMs);
+
+const testAlarm = new Alarm();
+let testTimer: ReturnType<typeof setTimeout> | undefined;
+
+// One short bounded burst through the exact output path a real alarm takes (the shared context,
+// the gain schedule, the master volume), so hearing it proves an alarm would be heard: the
+// pre-sleep check. Called from the Test button's tap, a gesture, so priming here makes the first
+// test press both enable audio and prove it in one go. Safe to call repeatedly: each call cuts any
+// burst still sounding and re-articulates.
+export function playTestTone(): void {
+  primeAlarmAudio();
+  testAlarm.stop();
+  testAlarm.start(ALARM_TEST_TONE);
+  clearTimeout(testTimer);
+  testTimer = setTimeout(() => testAlarm.stop(), TEST_BURST_MS);
 }

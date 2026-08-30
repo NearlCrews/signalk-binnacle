@@ -24,3 +24,16 @@ export const SHALLOW_TONE: AlarmTone = {
   periodMs: 1400,
   volume: 0.18,
 };
+
+// The stand-down cue for a shallow watch that stops monitoring: a sparse low couplet between the
+// arrival (520 Hz) and anchor (660 Hz) pitches, quieter and slower than the shallow alarm itself,
+// so losing the watch is audible without sounding like water under the keel. The monitor chirps it
+// briefly on the monitoring-to-paused edge through a courtesy channel, then goes silent.
+export const SHALLOW_DEGRADE_TONE: AlarmTone = {
+  frequency: 590,
+  beepMs: 150,
+  gapMs: 120,
+  beeps: 2,
+  periodMs: 2600,
+  volume: 0.14,
+};

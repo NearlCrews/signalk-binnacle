@@ -90,8 +90,8 @@ const rows = $derived([
     done: secureContext,
     label: 'Serve over HTTPS for offline charts',
     detail: secureContext
-      ? 'This connection is secure, so the browser can cache charts and tiles for offline use.'
-      : 'Over plain HTTP the browser disables offline caching, so charts need a live connection. An administrator can enable SSL in the Signal K admin UI under Server, then Settings, and reopen Binnacle over https.',
+      ? 'This connection is secure, so the browser can cache charts for offline use and keep the screen awake during an armed watch.'
+      : 'Over plain HTTP the browser disables offline caching and screen wake, so charts need a live connection and an armed watch can go dark when the display locks. An administrator can enable SSL in the Signal K admin UI under Server, then Settings, and reopen Binnacle over https.',
     action: undefined,
   },
 ]);

@@ -9,7 +9,13 @@ import {
   type NotificationsStore,
 } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
-import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
+import {
+  type AlarmAudioState,
+  alarmAudioNote,
+  MAX_ALARM_VOLUME,
+  MIN_ALARM_VOLUME,
+  playTestTone,
+} from '$shared/audio';
 import {
   feetToMeters,
   formatClockTime,
@@ -20,6 +26,7 @@ import {
   nauticalMilesToMeters,
   vibrate,
 } from '$shared/lib';
+import type { WakeLockState } from '$shared/pwa';
 import {
   DEFAULT_THRESHOLDS,
   MAX_COLLISION_CPA_METERS,
@@ -30,6 +37,8 @@ import {
 } from '$shared/settings';
 import { type AuthController, type ConnectionPhase, isConnectionDown } from '$shared/signalk';
 import { Disclosure, InlineConfirm, SlideOver, UnitField, WriteAccessNote } from '$shared/ui';
+import { ALARM_LOG_KIND_LABELS, type AlarmLog } from './alarm-log.svelte';
+import type { AlarmVolumeSetting } from './alarm-volume';
 import {
   canAcknowledgeNotification,
   canSilenceNotification,
@@ -60,6 +69,23 @@ interface Props {
   onAcknowledge?: (n: ActiveNotification) => void;
   thresholds: PersistedValue<Thresholds>;
   units: UnitsStore;
+  // The per-device alarm loudness. Absent (an older caller, or SSR) hides the volume slider while
+  // the test button still proves the output path at whatever the device is set to.
+  alarmVolume?: AlarmVolumeSetting;
+  // The session alarm chronology. Absent hides the section entirely.
+  alarmLog?: AlarmLog;
+  // The screen wake lock the app holds while a watch is armed. Only the degraded grades get a
+  // note; 'idle' and 'held' need no explanation.
+  wakeLockState?: WakeLockState;
+  // The off-course (XTE) alarm controls. Absent hides the section entirely.
+  xte?: {
+    muted: boolean;
+    setMuted: (v: boolean) => void;
+    limitMeters: number;
+    setLimitMeters: (m: number) => void;
+    standing: 'server' | 'client';
+    alarming: boolean;
+  };
   // The shallow monitor's live state. Absent (an older caller, or SSR) leaves the section on the
   // locally configured threshold, which is what it did before the monitor existed.
   shallow?: ShallowMonitorSnapshot;
@@ -82,6 +108,10 @@ const {
   onAcknowledge,
   thresholds,
   units,
+  alarmVolume,
+  alarmLog,
+  wakeLockState,
+  xte,
   shallow,
   collisionMuted,
   collisionMuteRemainingMin,
@@ -138,6 +168,9 @@ function setShallowDepth(value: number): void {
 const serverShallowBound = $derived(shallow?.serverLimitMeters);
 
 const caution = $derived(thresholdsCaution(t));
+const volumePercent = $derived(Math.round((alarmVolume?.value ?? 1) * 100));
+// Newest first for the chronology list: the last squall's events are what the reader came for.
+const logEntries = $derived(alarmLog ? alarmLog.entries.toReversed() : []);
 const maxCpaNm = cpaNm(MAX_COLLISION_CPA_METERS);
 const maxTcpaMin = MAX_COLLISION_TCPA_SECONDS / 60;
 const maxShallowDepth = $derived(
@@ -193,10 +226,6 @@ $effect(() => {
     <p class="alert-note" role="alert">
       Signal K is disconnected. Active alarm status may be stale until the stream reconnects.
     </p>
-  {/if}
-  {#if alarmAudioNote(audioState)}
-    <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
-    <p class="alert-note">{alarmAudioNote(audioState)}</p>
   {/if}
   <p class="muted-note">
     Active alarms show here. Silence stops the sound, acknowledge clears it. Tune the collision
@@ -260,6 +289,55 @@ $effect(() => {
     {/if}
     {#if pendingAction}
       <p class="muted-note" role="status">Updating alarm status…</p>
+    {/if}
+  </section>
+  <section class="panel-section" aria-label="Alarm sound">
+    <h3 class="caps-label">Alarm sound</h3>
+    {#if alarmAudioNote(audioState)}
+      <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
+      <p class="alert-note">{alarmAudioNote(audioState)}</p>
+    {/if}
+    <p class="muted-note">
+      Play the test to prove this display can sound an alarm before you rely on it.
+    </p>
+    <button
+      type="button"
+      class="btn sound-test"
+      title="Play a short test burst at the set volume"
+      onclick={() => playTestTone()}
+      disabled={audioState === 'unsupported'}
+    >
+      Test alarm sound
+    </button>
+    {#if alarmVolume}
+      <div class="volume-field">
+        <div class="volume-head">
+          <label class="volume-name" for="alarm-volume">Volume on this display</label>
+          <span class="num">{volumePercent}%</span>
+        </div>
+        <input
+          id="alarm-volume"
+          class="range"
+          type="range"
+          min={MIN_ALARM_VOLUME}
+          max={MAX_ALARM_VOLUME}
+          step="0.05"
+          value={alarmVolume.value}
+          aria-valuetext={`${volumePercent}%`}
+          oninput={(e) => alarmVolume?.set(Number(e.currentTarget.value))}
+        >
+      </div>
+    {/if}
+    {#if wakeLockState === 'unsupported'}
+      <p class="muted-note">
+        Over plain HTTP the browser cannot keep the screen awake, so an armed watch may go dark when
+        the display locks. Serve Signal K over HTTPS to enable screen wake.
+      </p>
+    {:else if wakeLockState === 'failed'}
+      <p class="muted-note">
+        The browser refused the screen wake lock, often battery saver. The screen may sleep during
+        an armed watch.
+      </p>
     {/if}
   </section>
   <section class="panel-section" aria-label="Mutes">
@@ -377,6 +455,44 @@ $effect(() => {
       {/if}
     </Disclosure>
   </section>
+  {#if xte}
+    <section class="panel-section" aria-label="Off-course alarm">
+      <h3 class="caps-label">Off-course alarm</h3>
+      <p class="muted-note">
+        Warn me when the boat strays farther than this from the active route leg.
+      </p>
+      {#if xte.standing === 'server'}
+        <p class="muted-note">
+          A server plugin raises the off-course alarm; this display follows it.
+        </p>
+      {/if}
+      <button
+        type="button"
+        class="btn mute-row"
+        class:is-on={xte.muted}
+        aria-pressed={xte.muted}
+        onclick={() => xte?.setMuted(!xte.muted)}
+      >
+        {#if xte.muted}
+          <BellOff size={18} aria-hidden="true" />
+        {:else}
+          <Bell size={18} aria-hidden="true" />
+        {/if}
+        <span>Mute off-course alarm</span>
+        <span class="mute-state" aria-hidden="true">{xte.muted ? 'On' : 'Off'}</span>
+      </button>
+      <UnitField
+        label="Off-course limit"
+        unit="m"
+        min={20}
+        max={2000}
+        step={10}
+        ariaLabel="Off-course alarm limit"
+        value={xte.limitMeters}
+        onCommit={(m) => xte?.setLimitMeters(m)}
+      />
+    </section>
+  {/if}
   <section class="panel-section" aria-label="Shallow water threshold">
     <h3 class="caps-label">Shallow water alarm</h3>
     <p class="muted-note">
@@ -424,6 +540,31 @@ $effect(() => {
       onCommit={setShallowDepth}
     />
   </section>
+  {#if alarmLog}
+    <section class="panel-section" aria-label="Session chronology">
+      <h3 class="caps-label">Session chronology</h3>
+      {#if logEntries.length === 0}
+        <p class="muted-note">
+          No alarm events this session yet. What raises, clears, and gets silenced or muted will
+          list here.
+        </p>
+      {:else}
+        <ol class="bare-list log-list" reversed>
+          {#each logEntries as entry (entry)}
+            <li class="log-row muted-note">
+              <span class="num log-time">{formatClockTime(entry.timeMs)}</span>
+              <span class="log-text">
+                {ALARM_LOG_KIND_LABELS[entry.kind]}: {entry.label}
+                {entry.detail
+                  ? `, ${entry.detail}`
+                  : ''}
+              </span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </section>
+  {/if}
 </SlideOver>
 
 <style>
@@ -515,5 +656,42 @@ $effect(() => {
 .reset {
   align-self: flex-start;
   margin-block-start: 0.1rem;
+}
+.sound-test {
+  align-self: flex-start;
+}
+/* The mixed-controls field layout: label row with the live value, full-width slider beneath. */
+.volume-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.volume-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.volume-name {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+/* Newest entries on top; past a screenful the rest scroll here instead of stretching the panel. */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-block-size: 13rem;
+  overflow-y: auto;
+}
+.log-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.log-time {
+  flex-shrink: 0;
+}
+.log-text {
+  overflow-wrap: anywhere;
 }
 </style>
