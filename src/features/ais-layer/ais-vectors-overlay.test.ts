@@ -5,15 +5,13 @@ import type { Assessment, Severity } from '$entities/collision';
 import { mapThemePaint } from '$shared/map';
 import { geodesicDestination } from '$shared/nav';
 import { SignalKStore } from '$shared/signalk';
-import { createFakeMap, fakeOverlayContext } from '$shared/testing';
+import { createFakeMap, declaredSource, fakeOverlayContext } from '$shared/testing';
 import { buildFeatures, createAisVectorsOverlay } from './ais-vectors-overlay';
 
 const LAYER_ID = 'binnacle-ais-vectors-line';
 const SOURCE_ID = 'binnacle-ais-vectors';
 
-function noSeverity(): Map<string, Severity> {
-  return new Map();
-}
+const noSeverity = (): Severity => 'clear';
 
 // A stable reference, like the production collision.assessment getter (a $derived that returns the
 // same object between recomputes, and a frozen singleton when clear); the overlay's dirty check is
@@ -49,11 +47,13 @@ describe('geodesicDestination', () => {
 });
 
 describe('buildFeatures', () => {
-  it('produces one LineString for a moving target', () => {
+  it('produces one LineString for a moving target, keyed by its context id', () => {
     const target = movingTarget({ cogRad: 0, sogMps: 5 });
-    const features = buildFeatures([target], noSeverity());
+    const features = buildFeatures([target], noSeverity);
     expect(features).toHaveLength(1);
     expect(features[0].geometry.type).toBe('LineString');
+    // The promoted id keying feature-state severity to the target.
+    expect(features[0].properties?.id).toBe('target-1');
   });
 
   it('first coordinate matches the target position in GeoJSON order', () => {
@@ -62,7 +62,7 @@ describe('buildFeatures', () => {
       cogRad: 0,
       sogMps: 5,
     });
-    const features = buildFeatures([target], noSeverity());
+    const features = buildFeatures([target], noSeverity);
     const coords = (features[0].geometry as GeoJSON.LineString).coordinates;
     expect(coords[0]).toEqual([20, 10]);
   });
@@ -73,7 +73,7 @@ describe('buildFeatures', () => {
       cogRad: 0,
       sogMps: 5,
     });
-    const features = buildFeatures([target], noSeverity());
+    const features = buildFeatures([target], noSeverity);
     const coords = (features[0].geometry as GeoJSON.LineString).coordinates;
     expect(coords[1][1]).toBeGreaterThan(coords[0][1]);
     expect(coords[1][0]).toBeCloseTo(20, 3);
@@ -81,36 +81,35 @@ describe('buildFeatures', () => {
 
   it('omits targets whose sogMps is below MIN_SOG_MPS', () => {
     const target = movingTarget({ sogMps: 0.1 });
-    expect(buildFeatures([target], noSeverity())).toHaveLength(0);
+    expect(buildFeatures([target], noSeverity)).toHaveLength(0);
   });
 
   it('omits targets with undefined sogMps', () => {
     const target = movingTarget({ sogMps: undefined });
-    expect(buildFeatures([target], noSeverity())).toHaveLength(0);
+    expect(buildFeatures([target], noSeverity)).toHaveLength(0);
   });
 
   it('omits targets with undefined cogRad', () => {
     const target = movingTarget({ cogRad: undefined });
-    expect(buildFeatures([target], noSeverity())).toHaveLength(0);
+    expect(buildFeatures([target], noSeverity)).toHaveLength(0);
   });
 
-  it('assigns severity from the map when present', () => {
+  it('writes the graded severity as the fallback data property', () => {
     const target = movingTarget({ id: 'vessel-danger', cogRad: 0, sogMps: 5 });
-    const severity = new Map<string, Severity>([['vessel-danger', 'danger']]);
-    const features = buildFeatures([target], severity);
+    const features = buildFeatures([target], (id) => (id === 'vessel-danger' ? 'danger' : 'clear'));
     expect(features[0].properties?.severity).toBe('danger');
   });
 
-  it('defaults severity to clear when the target is not in the severity map', () => {
+  it('defaults severity to clear for an ungraded target', () => {
     const target = movingTarget({ id: 'vessel-ok', cogRad: 0, sogMps: 5 });
-    const features = buildFeatures([target], noSeverity());
+    const features = buildFeatures([target], noSeverity);
     expect(features[0].properties?.severity).toBe('clear');
   });
 
   it('handles multiple targets, mixing moving and stationary', () => {
     const moving = movingTarget({ id: 'mv', cogRad: 0, sogMps: 3 });
     const still = movingTarget({ id: 'st', cogRad: 0, sogMps: 0 });
-    const features = buildFeatures([moving, still], noSeverity());
+    const features = buildFeatures([moving, still], noSeverity);
     expect(features).toHaveLength(1);
   });
 
@@ -120,7 +119,7 @@ describe('buildFeatures', () => {
       cogRad: Math.PI / 2,
       sogMps: 20,
     });
-    const [feature] = buildFeatures([target], noSeverity());
+    const [feature] = buildFeatures([target], noSeverity);
 
     expect(feature.geometry.type).toBe('MultiLineString');
     const lines = (feature.geometry as GeoJSON.MultiLineString).coordinates;
@@ -137,6 +136,8 @@ describe('createAisVectorsOverlay', () => {
       list: () => list,
       // The refresh gate reads the full chart-visible set; this fake carries vessels only.
       all: () => list,
+      // The feature-state sweep asks whether a stated id still exists.
+      find: (id: string) => list.find((target) => target.id === id),
       get version() {
         return version;
       },
@@ -172,6 +173,15 @@ describe('createAisVectorsOverlay', () => {
     expect(overlay.supportsOpacity).toBe(true);
     expect(map.layers.has(LAYER_ID)).toBe(true);
     expect(map.sources.has(SOURCE_ID)).toBe(true);
+    // Stable ids for feature-state severity, promoted from the id property.
+    expect(declaredSource(map, SOURCE_ID).promoteId).toBe('id');
+    // The line color reads the feature-state grade first, the built property as fallback.
+    expect(map.layers.get(LAYER_ID)?.paint).toMatchObject({
+      'line-color': expect.arrayContaining([
+        'match',
+        ['coalesce', ['feature-state', 'severity'], ['get', 'severity']],
+      ]),
+    });
   });
 
   it('sync populates features for moving targets on the first call', async () => {
@@ -268,7 +278,7 @@ describe('createAisVectorsOverlay', () => {
     expect((source.data as GeoJSON.FeatureCollection).features).toHaveLength(0);
   });
 
-  it('repaints immediately when a contact severity changes', async () => {
+  it('recolors a severity flip through feature-state without rebuilding the source', async () => {
     let t = 0;
     const target = movingTarget();
     const targets = makeTargets([target]);
@@ -286,12 +296,59 @@ describe('createAisVectorsOverlay', () => {
     if (!source) throw new Error(`${SOURCE_ID} not added`);
     const spy = vi.spyOn(source, 'setData');
 
+    // Inside the throttle window and with no AIS churn: the grade still lands on this pass.
     assessment = { contacts: [dangerContact(target)], worst: 'danger', unassessed: [] };
     t = 100;
     overlay.sync(ctx);
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).not.toHaveBeenCalled();
+    expect(map.getFeatureState({ source: SOURCE_ID, id: target.id })).toEqual({
+      severity: 'danger',
+    });
+
+    // The next throttled rebuild writes the same grade into the fallback property.
+    targets.bump();
+    t = 1_100;
+    overlay.sync(ctx);
     const fc = source.data as GeoJSON.FeatureCollection;
     expect(fc.features[0].properties?.severity).toBe('danger');
+  });
+
+  it('grades a departed contact back to clear and sweeps state for pruned targets', async () => {
+    let t = 0;
+    const target = movingTarget();
+    const targets = makeTargets([target]);
+    let assessment: Assessment = {
+      contacts: [dangerContact(target)],
+      worst: 'danger',
+      unassessed: [],
+    };
+    const overlay = createAisVectorsOverlay(
+      targets as never,
+      () => assessment,
+      () => t,
+    );
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    expect(map.getFeatureState({ source: SOURCE_ID, id: target.id })).toEqual({
+      severity: 'danger',
+    });
+
+    // Leaving the assessment writes clear rather than removing the state, so the color cannot
+    // fall back to the stale danger property on a quiet bus.
+    assessment = EMPTY_ASSESSMENT;
+    t = 100;
+    overlay.sync(ctx);
+    expect(map.getFeatureState({ source: SOURCE_ID, id: target.id })).toEqual({
+      severity: 'clear',
+    });
+
+    // Only the target's disappearance removes its state entry, on the next rebuild.
+    targets.set([]);
+    t = 1_200;
+    overlay.sync(ctx);
+    expect(map.featureStates.get(SOURCE_ID)?.size ?? 0).toBe(0);
   });
 
   it('does not treat an identical severity set with a fresh identity as a change', async () => {
@@ -315,14 +372,17 @@ describe('createAisVectorsOverlay', () => {
     const source = map.sources.get(SOURCE_ID);
     if (!source) throw new Error(`${SOURCE_ID} not added`);
     const spy = vi.spyOn(source, 'setData');
+    const stateWrites = map.featureStates.get(SOURCE_ID)?.size ?? 0;
 
     // The busy-anchorage steady state: each assessment recompute returns a fresh contacts array
-    // carrying the same id-to-severity mapping, and that alone must not bypass the throttle.
+    // carrying the same id-to-severity mapping, and that alone must not bypass the throttle or
+    // re-write any feature-state.
     assessment = { contacts: [dangerContact(target)], worst: 'danger', unassessed: [] };
     targets.bump();
     t = 250;
     overlay.sync(ctx);
     expect(spy).not.toHaveBeenCalled();
+    expect(map.featureStates.get(SOURCE_ID)?.size ?? 0).toBe(stateWrites);
 
     t = 1_000;
     overlay.sync(ctx);

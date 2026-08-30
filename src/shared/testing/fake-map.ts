@@ -1,3 +1,4 @@
+import type { GeoJSONSourceDiff } from 'maplibre-gl';
 import { vi } from 'vitest';
 import type { OverlayContext } from '$shared/map';
 
@@ -7,6 +8,7 @@ type FakeSource = {
   setData?: (data: unknown) => void;
   setCoordinates?: (coordinates: unknown) => void;
   setTiles?: (tiles: unknown) => void;
+  updateData?: (diff: GeoJSONSourceDiff) => void;
   data: unknown;
   maxzoom?: number;
   tiles?: unknown;
@@ -23,7 +25,46 @@ type SourceSpec = {
   minzoom?: number;
   maxzoom?: number;
   bounds?: unknown;
+  promoteId?: string;
 };
+
+// What setFeatureState addresses: real MapLibre also takes sourceLayer, which no overlay uses.
+type FeatureStateTarget = { source: string; id?: string | number };
+
+// Applies a GeoJSONSourceDiff to a fake geojson source's FeatureCollection, in the real order
+// (removeAll, remove, add, update) with add replacing a same-id feature, so a test asserting the
+// resulting features exercises the same end state a browser would render.
+function applyGeoJsonDiff(
+  data: GeoJSON.FeatureCollection,
+  diff: GeoJSONSourceDiff,
+  promoteId: string | undefined,
+): GeoJSON.FeatureCollection {
+  const idOf = (feature: GeoJSON.Feature): unknown =>
+    promoteId ? feature.properties?.[promoteId] : feature.id;
+  let features = diff.removeAll ? [] : data.features;
+  if (diff.remove?.length || diff.add?.length) {
+    const gone = new Set<unknown>(diff.remove ?? []);
+    for (const feature of diff.add ?? []) gone.add(idOf(feature));
+    features = features.filter((feature) => !gone.has(idOf(feature)));
+    if (diff.add) features = features.concat(diff.add);
+  }
+  if (diff.update?.length) {
+    const updates = new Map(diff.update.map((update) => [update.id as unknown, update]));
+    features = features.map((feature) => {
+      const update = updates.get(idOf(feature));
+      if (!update) return feature;
+      const properties = update.removeAllProperties ? {} : { ...(feature.properties ?? {}) };
+      for (const key of update.removeProperties ?? []) delete properties[key];
+      for (const { key, value } of update.addOrUpdateProperties ?? []) properties[key] = value;
+      return {
+        ...feature,
+        geometry: update.newGeometry ?? feature.geometry,
+        properties,
+      };
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
 
 export function createFakeMap() {
   const sources = new Map<string, FakeSource>();
@@ -52,12 +93,41 @@ export function createFakeMap() {
   };
   const handlerKey = (type: string, layers?: readonly string[]) =>
     layers ? `${type}:${JSON.stringify(layers)}` : type;
+  // Per-source feature-state records, keyed source id then feature id, with the real merge
+  // semantics: setFeatureState merges keys, removeFeatureState drops one key, one feature, or a
+  // whole source's state. Exposed for assertions that stale state was actually cleared.
+  const featureStates = new Map<string, Map<string | number, Record<string, unknown>>>();
   return {
     sources,
     layers,
     images,
     updatedImages,
     renderedFeatures,
+    featureStates,
+    setFeatureState: ({ source, id }: FeatureStateTarget, state: Record<string, unknown>) => {
+      if (id === undefined) return;
+      const forSource = featureStates.get(source) ?? new Map();
+      featureStates.set(source, forSource);
+      forSource.set(id, { ...(forSource.get(id) ?? {}), ...state });
+    },
+    removeFeatureState: ({ source, id }: FeatureStateTarget, key?: string) => {
+      const forSource = featureStates.get(source);
+      if (!forSource) return;
+      if (id === undefined) {
+        featureStates.delete(source);
+        return;
+      }
+      if (key === undefined) {
+        forSource.delete(id);
+        return;
+      }
+      const state = forSource.get(id);
+      if (!state) return;
+      delete state[key];
+      if (Object.keys(state).length === 0) forSource.delete(id);
+    },
+    getFeatureState: ({ source, id }: FeatureStateTarget) =>
+      (id === undefined ? undefined : featureStates.get(source)?.get(id)) ?? {},
     hasImage: (id: string) => images.has(id),
     addImage: (id: string) => images.add(id),
     removeImage: (id: string) => images.delete(id),
@@ -84,6 +154,13 @@ export function createFakeMap() {
         source.setData = (data: unknown) => {
           source.data = data;
         };
+        source.updateData = (diff: GeoJSONSourceDiff) => {
+          source.data = applyGeoJsonDiff(
+            source.data as GeoJSON.FeatureCollection,
+            diff,
+            spec.promoteId,
+          );
+        };
       } else if (spec.type === 'canvas' || spec.type === 'image') {
         source.setCoordinates = vi.fn();
       } else if (isTileSource) {
@@ -100,6 +177,8 @@ export function createFakeMap() {
     moveLayer: vi.fn(),
     removeSource: (id: string) => {
       declaredSources.delete(id);
+      // Feature state lives with the source in real MapLibre, so it leaves with it here too.
+      featureStates.delete(id);
       return sources.delete(id);
     },
     setLayerZoomRange: vi.fn(),
