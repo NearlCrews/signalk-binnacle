@@ -50,10 +50,10 @@ const {
 const tide = $derived(store.tide);
 const current = $derived(store.current);
 const stationDistanceText = $derived(
-  tide ? formatStationDistance(tide.distanceMeters, units.mode) : '',
+  tide ? formatStationDistance(tide.distanceMeters, units.profile) : '',
 );
 const currentStationDistanceText = $derived(
-  current ? formatStationDistance(current.distanceMeters, units.mode) : '',
+  current ? formatStationDistance(current.distanceMeters, units.profile) : '',
 );
 // A live clock so "next" events and the now-marker stay current while the panel is open, not frozen
 // at the last refresh (a stationary boat may not trigger a reload for hours).
@@ -88,7 +88,7 @@ const currentRate = $derived.by(() => {
     nextCurrent.directionRad !== undefined
       ? `, ${formatBearingOr(nextCurrent.directionRad, 0)}°`
       : '';
-  return `${formatCurrentRate(nextCurrent.velocityMps)}${dirSuffix}`;
+  return `${formatCurrentRate(nextCurrent.velocityMps, units.profile)}${dirSuffix}`;
 });
 
 const CURVE_W = 240;
@@ -221,7 +221,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
         >
           <span class="nav-name">{candidate.station.name}</span>
           <span class="nav-metrics">
-            {formatStationDistance(candidate.distanceMeters, units.mode)}
+            {formatStationDistance(candidate.distanceMeters, units.profile)}
             straight-line
           </span>
         </button>
@@ -251,7 +251,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
         >
           <span class="nav-name">{candidate.station.name}</span>
           <span class="nav-metrics">
-            {formatStationDistance(candidate.distanceMeters, units.mode)}
+            {formatStationDistance(candidate.distanceMeters, units.profile)}
             straight-line
           </span>
         </button>
@@ -287,11 +287,11 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
                 >{formatClockTime(nextHigh.timeMs)},
                 {formatTideHeight(
                   nextHigh.heightMeters,
-                  units.mode,
+                  units.profile,
                 )}</span
               >
               <span class="unit">
-                {formatTideHeightSecondary(nextHigh.heightMeters, units.mode)}
+                {formatTideHeightSecondary(nextHigh.heightMeters, units.profile)}
               </span>
             {:else}
               <span class="num">--</span><span class="unit"></span>
@@ -304,11 +304,11 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
                 >{formatClockTime(nextLow.timeMs)},
                 {formatTideHeight(
                   nextLow.heightMeters,
-                  units.mode,
+                  units.profile,
                 )}</span
               >
               <span class="unit">
-                {formatTideHeightSecondary(nextLow.heightMeters, units.mode)}
+                {formatTideHeightSecondary(nextLow.heightMeters, units.profile)}
               </span>
             {:else}
               <span class="num">--</span><span class="unit"></span>
@@ -360,6 +360,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
                   >{formatClockTime(followingFlow.timeMs)},
                   {formatCurrentRate(
                     followingFlow.velocityMps,
+                    units.profile,
                   )}{followingFlow.directionRad !== undefined
                     ? `, ${formatBearingOr(followingFlow.directionRad, 0)}°`
                     : ''}</span

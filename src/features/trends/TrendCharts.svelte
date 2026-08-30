@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
-import { Clock, formatClockTime, formatFixed, MINUTE_MS, type UnitsMode } from '$shared/lib';
+import { Clock, formatClockTime, formatFixed, MINUTE_MS, type UnitsSelection } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import TrendChart from './TrendChart.svelte';
 import {
@@ -14,11 +14,11 @@ import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
 interface Props {
   controller: TrendsController;
-  mode: UnitsMode;
+  units: UnitsSelection;
   theme: Theme;
 }
 
-const { controller, mode, theme }: Props = $props();
+const { controller, units, theme }: Props = $props();
 
 // A coarse minute tick so the last-sample age and staleness marks keep tracking the wall clock
 // during a long open, the WeatherMap idiom.
@@ -57,7 +57,7 @@ const sections = $derived(
     let source: 'history' | 'session' | 'none' = 'none';
     if (historyAvailable) source = 'history';
     else if (hasTrendSamples(session)) source = 'session';
-    const display = trendDisplayFor(descriptor, mode);
+    const display = trendDisplayFor(descriptor, units);
     return {
       item,
       source,
@@ -286,7 +286,7 @@ function valueText(section: Section, index: number): string {
   gap: var(--space-1);
 }
 .timeline input {
-  min-block-size: 44px;
+  min-block-size: var(--control-size);
   inline-size: 100%;
   margin: 0;
   touch-action: pan-y;

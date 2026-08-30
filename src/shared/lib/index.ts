@@ -7,8 +7,10 @@ export { ErrorState } from './error-state.svelte';
 export { fetchJsonOrUndefined } from './fetch-json';
 export { withTimeout } from './fetch-timeout';
 export { portableFilename } from './filename';
+export { vibrate } from './haptics';
 export { HeldFlag } from './held-flag.svelte';
 export { uuidv4 } from './id';
+export { type IdlePrefetchOptions, idlePrefetch } from './idle-prefetch';
 export {
   createLatestWriter,
   type LatestWriterState,
@@ -64,10 +66,12 @@ export {
   formatPrecipRateOr,
   formatPressureOr,
   formatSignedAngleOr,
+  formatSpeedOr,
   formatTcpaMin,
   formatTemperatureOr,
   HOUR_MS,
   headingDegrees,
+  IMPERIAL_UNITS,
   JOULES_PER_KWH,
   knotsToMetersPerSecond,
   landDistanceUnit,
@@ -75,6 +79,7 @@ export {
   METERS_PER_FOOT,
   METERS_PER_MILE,
   METERS_PER_NAUTICAL_MILE,
+  METRIC_UNITS,
   MINUTE_MS,
   metersPerSecondToKnots,
   metersToFeet,
@@ -86,6 +91,11 @@ export {
   pressureValue,
   RAD_TO_DEG,
   radiansToBearing,
+  resolveUnits,
+  speedUnit,
+  speedValue,
   temperatureUnit,
   type UnitsMode,
+  type UnitsProfile,
+  type UnitsSelection,
 } from './units';

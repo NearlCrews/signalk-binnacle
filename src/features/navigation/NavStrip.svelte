@@ -7,10 +7,12 @@ import {
   formatBearingOr,
   formatClockTime,
   formatDuration,
-  formatKnotsOr,
   formatNmOr,
+  formatSpeedOr,
   nauticalMilesToMeters,
   PLACEHOLDER,
+  speedUnit,
+  type UnitsSelection,
 } from '$shared/lib';
 import { steerSide } from '$shared/nav';
 import { ConfirmArm } from '$shared/ui';
@@ -18,6 +20,9 @@ import type { RouteProgress } from './route-progress';
 
 interface Props {
   guidance: CourseGuidance;
+  // The per-category display profile (or the coarse mode); only the VMG readout is
+  // preference-dependent, so the strip takes the resolved selection rather than the store.
+  units: UnitsSelection;
   // Whole-route distance and time to go across the legs still ahead, shown as a passage arrival
   // readout when a multi-leg route is active. Undefined for a single leg, where the per-leg numbers
   // already say it.
@@ -27,7 +32,7 @@ interface Props {
   onSkip?: (delta: number) => void;
 }
 
-const { guidance, routeProgress, onStop, onSkip }: Props = $props();
+const { guidance, units, routeProgress, onStop, onSkip }: Props = $props();
 
 // Stop ends navigation for the whole boat, and it sits beside the waypoint-skip pair, so it arms a
 // confirm step instead of firing on a single tap; the arm times out back to plain Stop on its own.
@@ -73,7 +78,7 @@ const xte = $derived(
 const canSkipBack = $derived(guidance.canRetreatRoute);
 const canSkipForward = $derived(guidance.canAdvanceRoute);
 
-const vmg = $derived(formatKnotsOr(guidance.velocityMadeGoodMps));
+const vmg = $derived(formatSpeedOr(guidance.velocityMadeGoodMps, units));
 // Per-field provenance for the hover and accessible titles: a partial server course supplies some
 // fields while Binnacle computes the rest, and each readout must say which it is.
 function sourceSuffix(field: keyof typeof guidance.fieldSources): string {
@@ -177,7 +182,7 @@ const eta = $derived.by(() => {
         nm
       </span>
       <span class="metric" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}"
-        >VMG <b>{vmg}</b> kn</span
+        >VMG <b>{vmg}</b> {speedUnit(units)}</span
       >
       <span
         class="metric"
@@ -268,8 +273,10 @@ const eta = $derived.by(() => {
   border: 1px solid var(--border);
   transition: border-color var(--transition-fast);
 }
-.skip:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-tint);
+@media (hover: hover) and (pointer: fine) {
+  .skip:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
 }
 </style>

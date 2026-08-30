@@ -9,10 +9,11 @@ import type { ReactiveClock } from '$shared/lib';
 import {
   capitalize,
   formatBearingOr,
-  formatKnotsOr,
   formatMetersOrNm,
   formatNm,
+  formatSpeedOr,
   formatTcpaMin,
+  speedUnit,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
 import { SearchInput, SlideOver } from '$shared/ui';
@@ -249,7 +250,8 @@ $effect(() => {
                   >Bearing <b class="num">{formatBearingOr(row.bearingRad)}</b>&deg;T</span
                 >
                 <span class="nav-metric" title="Speed over ground"
-                  >Speed <b class="num">{formatKnotsOr(row.sogMps)}</b> kn</span
+                  >Speed <b class="num">{formatSpeedOr(row.sogMps, units.profile)}</b>
+                  {speedUnit(units.profile)}</span
                 >
                 {#if row.headingRad !== undefined}
                   <span class="nav-metric" title="Heading, true"

@@ -12,12 +12,13 @@ import {
   formatTemperatureOr,
   lengthUnit,
   pressureUnit,
+  speedUnit,
   temperatureUnit,
 } from '$shared/lib';
 import type { PointConditions } from './signalk-weather';
 import {
   DEGREES_TRUE_TITLE,
-  formatWholeKnots,
+  formatWholeSpeed,
   precipUnitLabel,
   RAIN_VISIBLE_MM_H,
 } from './weather-readout';
@@ -42,10 +43,11 @@ const {
   units,
 }: Props = $props();
 
-const pressure = (v: number | undefined) => formatPressureOr(v, units.mode);
-const temp = (v: number | undefined) => formatTemperatureOr(v, units.mode);
-const height = (v: number | undefined) => formatLengthOr(v, units.mode);
-const precip = (v: number | undefined) => formatPrecipRateOr(v, units.mode);
+const pressure = (v: number | undefined) => formatPressureOr(v, units.profile);
+const temp = (v: number | undefined) => formatTemperatureOr(v, units.profile);
+const height = (v: number | undefined) => formatLengthOr(v, units.profile);
+const precip = (v: number | undefined) => formatPrecipRateOr(v, units.profile);
+const speed = (v: number | undefined) => formatWholeSpeed(v, units.profile);
 
 // The current block's valid time carries the zone (the formatDayClock rationale).
 const validLabel = (timeMs: number): string => formatDayClock(timeMs, { zone: true });
@@ -78,8 +80,8 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     <div>
       <dt>Wind</dt>
       <dd>
-        <b class="num">{formatWholeKnots(current.windMs)}</b>
-        kn
+        <b class="num">{speed(current.windMs)}</b>
+        {speedUnit(units.profile)}
         {#if current.fromRad !== undefined}
           from <span title={DEGREES_TRUE_TITLE}>{formatBearingOr(current.fromRad)}&deg;T</span>
         {/if}
@@ -89,7 +91,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   {#if current.gustMs !== undefined}
     <div>
       <dt>Gust</dt>
-      <dd><b class="num">{formatWholeKnots(current.gustMs)}</b> kn</dd>
+      <dd><b class="num">{speed(current.gustMs)}</b> {speedUnit(units.profile)}</dd>
     </div>
   {/if}
   {#if current.pressurePa !== undefined}
@@ -97,7 +99,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
       <dt>Pressure</dt>
       <dd>
         <b class="num">{pressure(current.pressurePa)}</b>
-        {pressureUnit(units.mode)}
+        {pressureUnit(units.profile)}
         {#if tendencyText}
           <span class="trend">{tendencyText}</span>
         {:else}
@@ -109,19 +111,19 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   {#if current.airTempK !== undefined}
     <div>
       <dt>Air</dt>
-      <dd><b class="num">{temp(current.airTempK)}</b>{temperatureUnit(units.mode)}</dd>
+      <dd><b class="num">{temp(current.airTempK)}</b>{temperatureUnit(units.profile)}</dd>
     </div>
   {/if}
   {#if current.feelsLikeK !== undefined}
     <div>
       <dt>Feels like</dt>
-      <dd><b class="num">{temp(current.feelsLikeK)}</b>{temperatureUnit(units.mode)}</dd>
+      <dd><b class="num">{temp(current.feelsLikeK)}</b>{temperatureUnit(units.profile)}</dd>
     </div>
   {/if}
   {#if current.dewPointK !== undefined}
     <div>
       <dt>Dew point</dt>
-      <dd><b class="num">{temp(current.dewPointK)}</b>{temperatureUnit(units.mode)}</dd>
+      <dd><b class="num">{temp(current.dewPointK)}</b>{temperatureUnit(units.profile)}</dd>
     </div>
   {/if}
   {#if current.humidityFraction !== undefined}
@@ -133,13 +135,13 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   {#if current.waterTempK !== undefined}
     <div>
       <dt>Water</dt>
-      <dd><b class="num">{temp(current.waterTempK)}</b>{temperatureUnit(units.mode)}</dd>
+      <dd><b class="num">{temp(current.waterTempK)}</b>{temperatureUnit(units.profile)}</dd>
     </div>
   {/if}
   {#if current.visibilityM !== undefined}
     <div>
       <dt>Visibility</dt>
-      <dd><b class="num">{formatMetersOrNm(current.visibilityM, units.mode)}</b></dd>
+      <dd><b class="num">{formatMetersOrNm(current.visibilityM, units.profile)}</b></dd>
     </div>
   {/if}
   {#if current.cloudFraction !== undefined}
@@ -153,7 +155,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
       <dt>{label}</dt>
       <dd>
         <b class="num">{height(heightM)}</b>
-        {lengthUnit(units.mode)}
+        {lengthUnit(units.profile)}
         {#if periodS !== undefined}
           /
           <span title="Wave period: seconds between crests"
@@ -181,8 +183,8 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     <div>
       <dt>Current</dt>
       <dd>
-        <b class="num">{formatWholeKnots(current.currentSpeedMs)}</b>
-        kn
+        <b class="num">{speed(current.currentSpeedMs)}</b>
+        {speedUnit(units.profile)}
         {#if current.currentDirectionRad !== undefined}
           toward
           <span title={DEGREES_TRUE_TITLE}
@@ -197,7 +199,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
       <dt>{current.precipitationType ?? 'Precipitation'}</dt>
       <dd>
         <b class="num">{precip(current.precipitationMm)}</b>
-        {precipUnitLabel(current.precipIsRate, units.mode)}
+        {precipUnitLabel(current.precipIsRate, units.profile)}
       </dd>
     </div>
   {/if}

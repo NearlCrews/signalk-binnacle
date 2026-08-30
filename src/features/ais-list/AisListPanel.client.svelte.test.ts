@@ -4,6 +4,7 @@ import { AisTargets } from '$entities/ais';
 import type { CollisionAssessment, DangerContact } from '$entities/collision';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
+import { METRIC_UNITS } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
 import { SignalKStore, type SKFrame } from '$shared/signalk';
 import { fakeVesselFix } from '$shared/testing';
@@ -51,7 +52,7 @@ function mountPanel(options: {
         collision: {
           assessment: { contacts: options.contacts ?? [], worst: 'clear', unassessed: [] },
         } as unknown as CollisionAssessment,
-        units: { mode: 'metric' } as UnitsStore,
+        units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
         connectionPhase: options.connectionPhase ?? 'open',
         selectedId: options.selectedId,
         onSelect,

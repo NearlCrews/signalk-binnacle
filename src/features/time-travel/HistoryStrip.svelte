@@ -6,12 +6,13 @@ import Play from '@lucide/svelte/icons/play';
 import type { UnitsStore } from '$entities/units';
 import {
   DAY_MS,
-  formatKnotsOr,
   formatLengthOr,
   formatPressureOr,
+  formatSpeedOr,
   HOUR_MS,
   lengthUnit,
   pressureUnit,
+  speedUnit,
 } from '$shared/lib';
 import type { TimeTravelController } from './time-travel-controller.svelte';
 import {
@@ -42,8 +43,9 @@ const MOTION_NOTE_ID = 'time-travel-motion-note';
 const current = $derived(controller.current);
 const acceptedPreset = $derived(controller.accepted?.preset);
 const selectedRangeId = $derived(controller.requestedRangeId ?? controller.rangeId);
-const depthUnit = $derived(lengthUnit(units.mode));
-const baroUnit = $derived(pressureUnit(units.mode));
+const depthUnit = $derived(lengthUnit(units.profile));
+const baroUnit = $derived(pressureUnit(units.profile));
+const speedUnitLabel = $derived(speedUnit(units.profile));
 const timestamp = $derived(formatTimeTravelTimestamp(controller.scrubMs));
 const relative = $derived(relativeTimeText(controller.to, controller.scrubMs));
 const valueText = $derived(
@@ -280,13 +282,19 @@ const liveMessage = $derived.by(() => {
         {/if}
         <div class="row">
           <span class="metric"
-            >Depth <b>{formatLengthOr(current.depth ?? null, units.mode)}</b> {depthUnit}</span
+            >Depth <b>{formatLengthOr(current.depth ?? null, units.profile)}</b> {depthUnit}</span
           >
-          <span class="metric">Wind <b>{formatKnotsOr(current.windApparent ?? null)}</b> kn</span>
           <span class="metric"
-            >Baro <b>{formatPressureOr(current.pressure ?? null, units.mode)}</b> {baroUnit}</span
+            >Wind <b>{formatSpeedOr(current.windApparent ?? null, units.profile)}</b>
+            {speedUnitLabel}</span
           >
-          <span class="metric">SOG <b>{formatKnotsOr(current.sog ?? null)}</b> kn</span>
+          <span class="metric"
+            >Baro <b>{formatPressureOr(current.pressure ?? null, units.profile)}</b>
+            {baroUnit}</span
+          >
+          <span class="metric"
+            >SOG <b>{formatSpeedOr(current.sog ?? null, units.profile)}</b> {speedUnitLabel}</span
+          >
         </div>
       {/if}
     {/if}

@@ -1,6 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { UnitsStore } from '$entities/units';
+import { METRIC_UNITS } from '$shared/lib';
 import HistoryStrip from './HistoryStrip.svelte';
 import type { loadTimeTravelHistory, TimeTravelData } from './time-travel-client';
 import { createTimeTravelController } from './time-travel-controller.svelte';
@@ -49,7 +50,7 @@ function strip(controller: ReturnType<typeof createTimeTravelController>): strin
   return render(HistoryStrip, {
     props: {
       controller,
-      units: { mode: 'metric' } as UnitsStore,
+      units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
       onExit: vi.fn(),
     },
   }).body.replaceAll(/\s+/g, ' ');

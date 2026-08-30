@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnitsStore } from '$entities/units';
+import { METRIC_UNITS } from '$shared/lib';
 import ForecastList from './ForecastList.svelte';
 
 const mounted: Array<() => void> = [];
@@ -16,7 +17,12 @@ function renderList(props: Record<string, unknown>): HTMLElement {
   flushSync(() => {
     component = mount(ForecastList, {
       target,
-      props: { horizonH: 1, units: { mode: 'metric' } as UnitsStore, forecast: [], ...props },
+      props: {
+        horizonH: 1,
+        units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
+        forecast: [],
+        ...props,
+      },
     });
   });
   mounted.push(() => {

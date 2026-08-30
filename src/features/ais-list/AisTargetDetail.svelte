@@ -6,12 +6,13 @@ import type { LatLon } from '$shared/geo';
 import {
   capitalize,
   formatBearingOr,
-  formatKnotsOr,
   formatLatitude,
   formatLongitude,
   formatMetersOrNm,
   formatNm,
+  formatSpeedOr,
   formatTcpaMin,
+  speedUnit,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
@@ -77,7 +78,7 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
     </div>
     <div class="item">
       <dt>Speed</dt>
-      <dd>{formatKnotsOr(row.sogMps)} kn</dd>
+      <dd>{formatSpeedOr(row.sogMps, units.profile)} {speedUnit(units.profile)}</dd>
     </div>
     {#if row.cogRad !== undefined}
       <div class="item">

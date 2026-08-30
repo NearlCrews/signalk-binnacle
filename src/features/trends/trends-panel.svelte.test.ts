@@ -78,7 +78,7 @@ describe('Trends UI', () => {
       props: {
         controller: ctrl,
         onRetryProvider: () => {},
-        mode: 'metric',
+        units: 'metric',
         theme: 'day',
         onClose: () => {},
       },
@@ -143,7 +143,7 @@ describe('Trends UI', () => {
       }),
     });
     const body = render(TrendCharts, {
-      props: { controller: ctrl, mode: 'metric', theme: 'night-red' },
+      props: { controller: ctrl, units: 'metric', theme: 'night-red' },
     }).body;
     expect(body).toContain('type="range"');
     expect(body).toContain('aria-valuetext=');
@@ -168,7 +168,7 @@ describe('Trends UI', () => {
           charts: [depthItem],
           sessionSeries: () => ({ times: [1, 2, 3], values: [4, 2, 6], path: 'path.depth' }),
         }),
-        mode: 'metric',
+        units: 'metric',
         theme: 'day',
       },
     }).body;
@@ -208,7 +208,7 @@ describe('Trends UI', () => {
           focusedId: 'depth',
           focusedTransient: true,
         }),
-        mode: 'metric',
+        units: 'metric',
         theme: 'day',
       },
     }).body;
@@ -239,7 +239,7 @@ describe('Trends UI', () => {
           },
         }),
         onRetryProvider: () => {},
-        mode: 'metric',
+        units: 'metric',
         theme: 'day',
         onClose: () => {},
       },

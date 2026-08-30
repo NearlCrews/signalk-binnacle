@@ -23,6 +23,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
     props: {
       auth: { writeBlocked: false } as AuthController,
       recorder,
+      units: 'metric',
       positionStale: false,
       hasPosition: true,
       clock: { now: 1_000_000 },

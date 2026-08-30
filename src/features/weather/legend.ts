@@ -1,12 +1,13 @@
 import {
-  formatKnotsOr,
   formatLengthOr,
   formatPercent,
   formatPrecipRateOr,
+  formatSpeedOr,
   knotsToMetersPerSecond,
   lengthUnit,
   precipRateUnit,
-  type UnitsMode,
+  speedUnit,
+  type UnitsSelection,
 } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import { cloudColor } from './cloud-colormap';
@@ -72,22 +73,21 @@ function rampLegend(
 }
 
 // The legend for a weather layer: a continuous ramp for the field and arrow layers, or discrete
-// swatches for the isobars and the radar. Wind stays in knots regardless of the unit preference
-// (nautical units are unconditional at sea); the wave and rain legends follow the mode. Returns
-// undefined for an unknown layer id.
+// swatches for the isobars and the radar. The wind, wave, and rain legends follow the preference's
+// per-category units. Returns undefined for an unknown layer id.
 export function weatherLegend(
   layerId: string,
   theme: Theme,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): WeatherLegend | undefined {
   switch (layerId) {
     case WEATHER_LAYER_IDS.wind:
       return rampLegend(
         layerId,
-        'Wind (kn)',
+        `Wind (${speedUnit(units)})`,
         WIND_STOPS,
         (s) => windColor(s, theme),
-        (s) => formatKnotsOr(s, 0),
+        (s) => formatSpeedOr(s, units, 0),
       );
     case WEATHER_LAYER_IDS.pressure:
       // Isobars are conventionally hectopascals on every chart, so the isobar legend and the
@@ -102,19 +102,19 @@ export function weatherLegend(
     case WEATHER_LAYER_IDS.waves:
       return rampLegend(
         layerId,
-        `Waves (${lengthUnit(mode)})`,
+        `Waves (${lengthUnit(units)})`,
         WAVE_STOPS,
         (h) => waveColor(h, theme),
         // Whole feet: a tenth of a foot on model waves is false precision.
-        (h) => formatLengthOr(h, mode, mode === 'imperial' ? 0 : 1),
+        (h) => formatLengthOr(h, units, lengthUnit(units) === 'ft' ? 0 : 1),
       );
     case WEATHER_LAYER_IDS.precip:
       return rampLegend(
         layerId,
-        `Rain (${precipRateUnit(mode)})`,
+        `Rain (${precipRateUnit(units)})`,
         PRECIP_STOPS,
         (p) => precipColor(p, theme),
-        (p) => formatPrecipRateOr(p, mode),
+        (p) => formatPrecipRateOr(p, units),
       );
     case WEATHER_LAYER_IDS.cloud:
       return rampLegend(

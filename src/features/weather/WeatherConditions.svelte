@@ -278,7 +278,7 @@ const sourceLabel = $derived(provenanceLabel(current?.provenance, providerLabel)
 // string wins when present; otherwise the trailing 3-hour delta computed from the free grid.
 const tendencyText = $derived(
   providerCurrent?.cond.pressureTendency ||
-    tendencyTextFor(store.grid, parsedPos, targetMs, units.mode),
+    tendencyTextFor(store.grid, parsedPos, targetMs, units.profile),
 );
 
 // Parsed once per fetch, so scrubbing (700 ms ticks during playback) filters a stable array

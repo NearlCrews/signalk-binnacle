@@ -1,10 +1,11 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { UnitsStore } from '$entities/units';
+import { METRIC_UNITS } from '$shared/lib';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
 
-const units = { mode: 'metric' } as UnitsStore;
+const units = { mode: 'metric', profile: METRIC_UNITS } as UnitsStore;
 
 describe('ConditionsBlock', () => {
   it('shows observation age, stale wording, and high-value provider fields', () => {

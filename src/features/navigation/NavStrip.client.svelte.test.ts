@@ -28,7 +28,10 @@ function mountStrip() {
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
-    component = mount(NavStrip, { target, props: { guidance: activeGuidance(), onStop } });
+    component = mount(NavStrip, {
+      target,
+      props: { guidance: activeGuidance(), units: 'metric', onStop },
+    });
   });
   let removed = false;
   const remove = (): void => {

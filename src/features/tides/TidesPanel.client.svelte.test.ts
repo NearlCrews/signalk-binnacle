@@ -2,6 +2,7 @@ import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type NearbyTideStation, TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
+import { METRIC_UNITS } from '$shared/lib';
 import TidesPanel from './TidesPanel.svelte';
 import type { TidesController } from './tides-controller.svelte';
 
@@ -37,7 +38,7 @@ function mountPanel(
       props: {
         store,
         controller,
-        units: { mode: 'metric' } as UnitsStore,
+        units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
         onClose: vi.fn(),
       },
     });

@@ -9,11 +9,12 @@ import {
   formatPressureOr,
   lengthUnit,
   pressureUnit,
+  speedUnit,
 } from '$shared/lib';
 import type { PointConditions } from './signalk-weather';
 import {
   DEGREES_TRUE_TITLE,
-  formatWholeKnots,
+  formatWholeSpeed,
   precipUnitLabel,
   provenanceLabel,
   RAIN_VISIBLE_MM_H,
@@ -30,7 +31,8 @@ interface Props {
 
 const { forecast, horizonH, units, providerLabel }: Props = $props();
 
-const precip = (v: number | undefined) => formatPrecipRateOr(v, units.mode);
+const precip = (v: number | undefined) => formatPrecipRateOr(v, units.profile);
+const speed = (v: number | undefined) => formatWholeSpeed(v, units.profile);
 const hasRiskCues = $derived(forecast.some((step) => (step.riskCues?.length ?? 0) > 0));
 
 function stepLabel(timeMs: number): string {
@@ -41,8 +43,8 @@ function stepLabel(timeMs: number): string {
 {#snippet waveSpan(label: string, heightM: number | undefined)}
   {#if heightM !== undefined}
     <span
-      >{label} <b class="num">{formatLengthOr(heightM, units.mode)}</b>
-      {lengthUnit(units.mode)}</span
+      >{label} <b class="num">{formatLengthOr(heightM, units.profile)}</b>
+      {lengthUnit(units.profile)}</span
     >
   {/if}
 {/snippet}
@@ -55,38 +57,41 @@ function stepLabel(timeMs: number): string {
       <span class="f-details">
         {#if step.windMs !== undefined}
           <span class="f-wind">
-            <b class="num">{formatWholeKnots(step.windMs)}</b>
-            kn
+            <b class="num">{speed(step.windMs)}</b>
+            {speedUnit(units.profile)}
             {#if step.fromRad !== undefined}
               from <span title={DEGREES_TRUE_TITLE}>{formatBearingOr(step.fromRad)}&deg;T</span>
             {/if}
             {#if step.gustMs !== undefined}
-              · gust <b class="num">{formatWholeKnots(step.gustMs)}</b> kn
+              · gust <b class="num">{speed(step.gustMs)}</b> {speedUnit(units.profile)}
             {/if}
           </span>
         {/if}
         {#if step.pressurePa !== undefined}
           <span
-            ><b class="num">{formatPressureOr(step.pressurePa, units.mode)}</b>
-            {pressureUnit(units.mode)}</span
+            ><b class="num">{formatPressureOr(step.pressurePa, units.profile)}</b>
+            {pressureUnit(units.profile)}</span
           >
         {/if}
         {@render waveSpan('Waves', step.waveHeightM)}
         {@render waveSpan('Wind waves', step.windWaveHeightM)}
         {@render waveSpan('Swell', step.swellHeightM)}
         {#if step.currentSpeedMs !== undefined}
-          <span>Current <b class="num">{formatWholeKnots(step.currentSpeedMs)}</b> kn</span>
+          <span
+            >Current <b class="num">{speed(step.currentSpeedMs)}</b>
+            {speedUnit(units.profile)}</span
+          >
         {/if}
         {#if step.visibilityM !== undefined}
           <span
-            >Visibility <b class="num">{formatMetersOrNm(step.visibilityM, units.mode)}</b></span
+            >Visibility <b class="num">{formatMetersOrNm(step.visibilityM, units.profile)}</b></span
           >
         {/if}
         {#if step.precipitationMm !== undefined && step.precipitationMm >= RAIN_VISIBLE_MM_H}
           <span>
             {step.precipitationType ?? 'Precipitation'}
             <b class="num">{precip(step.precipitationMm)}</b>
-            {precipUnitLabel(step.precipIsRate, units.mode)}
+            {precipUnitLabel(step.precipIsRate, units.profile)}
           </span>
         {/if}
         {#if step.riskCues}

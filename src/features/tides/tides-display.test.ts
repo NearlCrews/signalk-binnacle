@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CurrentEvent, TideEvent } from '$entities/tides';
+import { METRIC_UNITS } from '$shared/lib';
 import {
   formatCurrentRate,
   formatStationDistance,
@@ -33,8 +34,10 @@ describe('tides-display', () => {
     expect(formatStationDistance(12_400, 'imperial')).toBe('8 mi');
   });
 
-  it('formats a current rate in knots from SI m/s', () => {
-    expect(formatCurrentRate(0.5144)).toBe('1.0 kn');
+  it('formats a current rate in the preference speed unit from SI m/s', () => {
+    expect(formatCurrentRate(0.5144, 'metric')).toBe('1.0 kn');
+    expect(formatCurrentRate(0.5144, 'imperial')).toBe('1.0 kn');
+    expect(formatCurrentRate(0.5144, { ...METRIC_UNITS, speed: 'km/h' })).toBe('1.9 km/h');
   });
 
   it('returns only upcoming events, soonest first', () => {

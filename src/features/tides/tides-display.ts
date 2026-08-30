@@ -1,15 +1,17 @@
 import type { CurrentEvent, TideEvent, TideStationSelection, TidesSource } from '$entities/tides';
 import {
   formatFixed,
-  formatKnots,
+  formatSpeedOr,
   landDistanceUnit,
+  lengthUnit,
   METERS_PER_MILE,
   metersToFeet,
-  type UnitsMode,
+  speedUnit,
+  type UnitsSelection,
 } from '$shared/lib';
 
 // The display edge: SI in, formatted strings out. Tide heights are shown in both meters and feet,
-// with the preferred unit first, current rates in knots, the conventional units a mariner reads.
+// with the preferred unit first, current rates in the preference's speed unit.
 
 function heightMeters(meters: number): string {
   return `${formatFixed(meters, 2)} m`;
@@ -19,24 +21,24 @@ function heightFeet(meters: number): string {
   return `${formatFixed(metersToFeet(meters) ?? 0, 1)} ft`;
 }
 
-export function formatTideHeight(meters: number, mode: UnitsMode): string {
-  return mode === 'imperial' ? heightFeet(meters) : heightMeters(meters);
+export function formatTideHeight(meters: number, units: UnitsSelection): string {
+  return lengthUnit(units) === 'ft' ? heightFeet(meters) : heightMeters(meters);
 }
 
 // The other unit, shown in parentheses beside the primary height.
-export function formatTideHeightSecondary(meters: number, mode: UnitsMode): string {
-  return mode === 'imperial' ? heightMeters(meters) : heightFeet(meters);
+export function formatTideHeightSecondary(meters: number, units: UnitsSelection): string {
+  return lengthUnit(units) === 'ft' ? heightMeters(meters) : heightFeet(meters);
 }
 
-export function formatCurrentRate(mps: number): string {
-  return `${formatKnots(mps)} kn`;
+export function formatCurrentRate(mps: number, units: UnitsSelection): string {
+  return `${formatSpeedOr(mps, units)} ${speedUnit(units)}`;
 }
 
 // The distance to the nearest station for the proximity readout: whole kilometers or statute
 // miles, with a "<1" floor.
-export function formatStationDistance(meters: number, mode: UnitsMode): string {
-  const value = mode === 'imperial' ? meters / METERS_PER_MILE : meters / 1000;
-  const unit = landDistanceUnit(mode);
+export function formatStationDistance(meters: number, units: UnitsSelection): string {
+  const unit = landDistanceUnit(units);
+  const value = unit === 'mi' ? meters / METERS_PER_MILE : meters / 1000;
   return value < 1 ? `<1 ${unit}` : `${Math.round(value)} ${unit}`;
 }
 

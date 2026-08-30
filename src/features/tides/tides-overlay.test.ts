@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
-import type { UnitsMode } from '$shared/lib';
+import { IMPERIAL_UNITS, METRIC_UNITS, type UnitsProfile } from '$shared/lib';
 import { mapThemePaint } from '$shared/map';
 import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
 import { createTidesOverlay, tideStationFeatures } from './tides-overlay';
 
-function unitsStub(mode: UnitsMode = 'metric'): { mode: UnitsMode } {
-  return { mode };
+function unitsStub(profile: UnitsProfile = METRIC_UNITS): { profile: UnitsProfile } {
+  return { profile };
 }
 
 const station = { id: 'T1', name: 'Tide', latitude: 27.7, longitude: -82.7 };
@@ -45,7 +45,7 @@ describe('tides overlay', () => {
     const before = map.sources.get('binnacle-tides')?.data;
     overlay.sync(ctx); // same minute, same readings, same units: no rebuild
     expect(map.sources.get('binnacle-tides')?.data).toBe(before);
-    units.mode = 'imperial'; // a preference flip refreshes the labels within the minute
+    units.profile = IMPERIAL_UNITS; // a preference flip refreshes the labels within the minute
     overlay.sync(ctx);
     expect(label()).toContain('ft');
     vi.setSystemTime(t0 + 60_000); // the next minute, with the high now in the past

@@ -42,15 +42,16 @@ import {
   formatClockTime,
   formatDayClock,
   formatFixed,
-  formatKnotsOr,
   formatLengthOr,
   formatPrecipRateOr,
   formatPressureOr,
+  formatSpeedOr,
   HOUR_MS,
   lengthUnit,
   MINUTE_MS,
   prefersReducedMotion,
   pressureUnit,
+  speedUnit,
 } from '$shared/lib';
 import { createThemedMap, type LayerSettings, type ThemedMapHandle } from '$shared/map';
 import type { MapView } from '$shared/settings';
@@ -255,11 +256,11 @@ const radarNote = $derived.by<string>(() => {
     ? `nowcast +${minutes} min · regional resolution`
     : `observed ${minutes === 0 ? 'now' : `${minutes} min ago`} · regional resolution`;
 });
-// Keyed on items, theme, and the unit mode only: the live radar note is substituted at render
+// Keyed on items, theme, and the unit profile only: the live radar note is substituted at render
 // time, so the 600 ms frame beat updates one text node instead of rebuilding every legend gradient.
 const legends = $derived<WeatherLegend[]>(
   visibleItems
-    .map((i) => weatherLegend(i.id, theme, units.mode))
+    .map((i) => weatherLegend(i.id, theme, units.profile))
     .filter((l): l is WeatherLegend => l !== undefined),
 );
 
@@ -358,6 +359,7 @@ $effect(() => {
 onMount(() => {
   mapHandle = createThemedMap({
     container,
+    accessibleName: 'Weather forecast map',
     cannotStartNotice:
       'The weather map cannot start on this device. The usual cause is a browser without WebGL2 support.',
     // The panel opens centered on the nav chart's current view, so the forecast is for the area you
@@ -534,18 +536,21 @@ onDestroy(() => {
       >
         {#if readout}
           <span class="readout-line">
-            Wind <b class="num">{formatKnotsOr(readout.speedMs, 0)}</b> kn from
+            Wind <b class="num">{formatSpeedOr(readout.speedMs, units.profile, 0)}</b>
+            {speedUnit(units.profile)}
+            from
             <b class="num">{formatBearingOr(readout.fromRad)}</b>&deg;T
             {#if readout.gustMs !== undefined}
-              gust <b class="num">{formatKnotsOr(readout.gustMs, 0)}</b> kn
+              gust <b class="num">{formatSpeedOr(readout.gustMs, units.profile, 0)}</b>
+              {speedUnit(units.profile)}
             {/if}
             {#if showField(WEATHER_LAYER_IDS.pressure) && readout.pressurePa !== undefined}
-              &middot; <b class="num">{formatPressureOr(readout.pressurePa, units.mode)}</b>
-              {pressureUnit(units.mode)}
+              &middot; <b class="num">{formatPressureOr(readout.pressurePa, units.profile)}</b>
+              {pressureUnit(units.profile)}
             {/if}
             {#if showField(WEATHER_LAYER_IDS.waves) && readout.waveHeightM !== undefined}
-              &middot; waves <b class="num">{formatLengthOr(readout.waveHeightM, units.mode)}</b>
-              {lengthUnit(units.mode)}
+              &middot; waves <b class="num">{formatLengthOr(readout.waveHeightM, units.profile)}</b>
+              {lengthUnit(units.profile)}
               {#if readout.wavePeriodS !== undefined}
                 / <b class="num">{formatFixed(readout.wavePeriodS, 1)}</b> s
               {/if}
@@ -555,8 +560,8 @@ onDestroy(() => {
             {/if}
             {#if showPrecipOrRadar && readout.precipitationMm !== undefined && readout.precipitationMm >= RAIN_VISIBLE_MM_H}
               &middot; rain
-              <b class="num">{formatPrecipRateOr(readout.precipitationMm, units.mode)}</b>
-              {precipUnitLabel(readout.precipIsRate, units.mode)}
+              <b class="num">{formatPrecipRateOr(readout.precipitationMm, units.profile)}</b>
+              {precipUnitLabel(readout.precipIsRate, units.profile)}
             {/if}
           </span>
           {#if readoutSource}

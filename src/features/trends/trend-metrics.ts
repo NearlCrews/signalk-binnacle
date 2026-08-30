@@ -5,13 +5,16 @@ import type {
 import {
   CUBIC_METERS_TO_US_GALLONS,
   lengthUnit,
-  metersPerSecondToKnots,
   metersToFeet,
   pressureUnit,
   pressureValue,
   RAD_TO_DEG,
+  resolveUnits,
+  speedUnit,
+  speedValue,
   temperatureUnit,
-  type UnitsMode,
+  type UnitsProfile,
+  type UnitsSelection,
 } from '$shared/lib';
 
 // One series in epoch seconds and Signal K SI values. Null marks a gap.
@@ -34,16 +37,16 @@ interface TrendDisplay {
 
 const identity = (value: number): number => value;
 
-function displayUnit(kind: InstrumentTrendDisplayKind, mode: UnitsMode): string {
+function displayUnit(kind: InstrumentTrendDisplayKind, units: UnitsProfile): string {
   switch (kind) {
     case 'speed':
-      return 'kn';
+      return speedUnit(units);
     case 'depth':
-      return lengthUnit(mode);
+      return lengthUnit(units);
     case 'pressure':
-      return pressureUnit(mode);
+      return pressureUnit(units);
     case 'temperature':
-      return temperatureUnit(mode);
+      return temperatureUnit(units);
     case 'ratio':
       return '%';
     case 'rpm':
@@ -57,7 +60,9 @@ function displayUnit(kind: InstrumentTrendDisplayKind, mode: UnitsMode): string 
     case 'current':
       return 'A';
     case 'volume':
-      return mode === 'imperial' ? 'gal' : 'L';
+      // The profile carries no volume category; the length family is the coarse imperial signal,
+      // the same read UnitsStore derives its mode from.
+      return units.length === 'ft' ? 'gal' : 'L';
     case 'power':
       return 'W';
     case 'count':
@@ -67,19 +72,19 @@ function displayUnit(kind: InstrumentTrendDisplayKind, mode: UnitsMode): string 
 
 function converter(
   kind: InstrumentTrendDisplayKind,
-  mode: UnitsMode,
+  units: UnitsProfile,
 ): (si: number) => number | undefined {
   switch (kind) {
     case 'speed':
-      return metersPerSecondToKnots;
+      return (value) => speedValue(value, units);
     case 'depth':
-      return mode === 'imperial' ? metersToFeet : identity;
+      return units.length === 'ft' ? metersToFeet : identity;
     case 'pressure':
-      return (value) => pressureValue(value, mode);
+      return (value) => pressureValue(value, units);
     case 'temperature':
       return (value) => {
         const celsius = value - 273.15;
-        return mode === 'imperial' ? celsius * (9 / 5) + 32 : celsius;
+        return units.temperature === 'F' ? celsius * (9 / 5) + 32 : celsius;
       };
     case 'ratio':
       return (value) => value * 100;
@@ -90,7 +95,8 @@ function converter(
     case 'rate-of-turn':
       return (value) => value * RAD_TO_DEG * 60;
     case 'volume':
-      return mode === 'imperial'
+      // Length family as the coarse imperial signal; see displayUnit's volume case.
+      return units.length === 'ft'
         ? (value) => value * CUBIC_METERS_TO_US_GALLONS
         : (value) => value * 1000;
     case 'voltage':
@@ -101,14 +107,35 @@ function converter(
   }
 }
 
+// Whether a kind's imperial precision applies: decided by that kind's own resolved category unit,
+// so a mixed preset (feet with millibars) gets whole millibars, not inHg hundredths. Volume has no
+// category and follows the length family.
+function usesImperialPrecision(kind: InstrumentTrendDisplayKind, units: UnitsProfile): boolean {
+  switch (kind) {
+    case 'depth':
+      return units.length === 'ft';
+    case 'pressure':
+      return units.pressure === 'inHg' || units.pressure === 'psi';
+    case 'temperature':
+      return units.temperature === 'F';
+    case 'volume':
+      return units.length === 'ft';
+    default:
+      return false;
+  }
+}
+
 export function trendDisplayFor(
   descriptor: InstrumentTrendDescriptor,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): TrendDisplay {
+  const profile = resolveUnits(units);
   return {
-    convert: converter(descriptor.display, mode),
-    unit: displayUnit(descriptor.display, mode),
-    digits: mode === 'imperial' ? descriptor.imperialPrecision : descriptor.metricPrecision,
+    convert: converter(descriptor.display, profile),
+    unit: displayUnit(descriptor.display, profile),
+    digits: usesImperialPrecision(descriptor.display, profile)
+      ? descriptor.imperialPrecision
+      : descriptor.metricPrecision,
   };
 }
 

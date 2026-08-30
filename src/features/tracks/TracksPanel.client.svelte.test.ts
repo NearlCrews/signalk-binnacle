@@ -30,6 +30,7 @@ function mountPanel(
   const props: ComponentProps<typeof TracksPanel> = {
     auth: auth as unknown as AuthController,
     recorder,
+    units: 'metric',
     positionStale: false,
     hasPosition: true,
     clock: { now: Date.now() },

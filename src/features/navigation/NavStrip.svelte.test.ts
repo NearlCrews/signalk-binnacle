@@ -22,7 +22,7 @@ function activeGuidance(): CourseGuidance {
 
 function renderStrip(): string {
   return render(NavStrip, {
-    props: { guidance: activeGuidance(), onStop: vi.fn() },
+    props: { guidance: activeGuidance(), units: 'metric', onStop: vi.fn() },
   }).body;
 }
 

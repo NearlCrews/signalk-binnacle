@@ -8,13 +8,12 @@ import type {
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, type OwnVessel } from '$entities/vessel';
 import { asNumber, isLatLon } from '$shared/geo';
-import type { ReactiveClock, UnitsMode } from '$shared/lib';
+import type { ReactiveClock, UnitsSelection } from '$shared/lib';
 import {
   CUBIC_METERS_TO_US_GALLONS,
   formatBearingOr,
   formatDuration,
   formatFixed,
-  formatKnotsOr,
   formatLatitude,
   formatLengthOr,
   formatLongitude,
@@ -22,12 +21,14 @@ import {
   formatNmOr,
   formatPercent,
   formatPressureOr,
+  formatSpeedOr,
   formatTemperatureOr,
   JOULES_PER_KWH,
   lengthUnit,
   PLACEHOLDER,
   pressureUnit,
   RAD_TO_DEG,
+  speedUnit,
   temperatureUnit,
 } from '$shared/lib';
 import type { MetaZone, SignalKStore } from '$shared/signalk';
@@ -203,21 +204,18 @@ function grade(cell: PathCell, clock: ReactiveClock): TileValueState {
 
 // Per-source sample formatters for the detail's source rows: each renders one raw SI sample with
 // its unit the way the tile formats its own reading.
-function sampleKnots(value: unknown): string {
-  return `${formatKnotsOr(asNumber(value))} kn`;
-}
-
 function sampleBearing(value: unknown): string {
   return `${formatBearingOr(asNumber(value))}°`;
 }
 
 const unitSample =
   (
-    format: (value: number | undefined, mode: UnitsMode) => string,
-    unit: (mode: UnitsMode) => string,
+    format: (value: number | undefined, units: UnitsSelection) => string,
+    unit: (units: UnitsSelection) => string,
   ) =>
   (value: unknown, { units }: TileDeps): string =>
-    `${format(asNumber(value), units.mode)} ${unit(units.mode)}`;
+    `${format(asNumber(value), units.profile)} ${unit(units.profile)}`;
+const sampleSpeed = unitSample(formatSpeedOr, speedUnit);
 const sampleDepth = unitSample(formatLengthOr, lengthUnit);
 const samplePressure = unitSample(formatPressureOr, pressureUnit);
 const sampleTemperature = unitSample(formatTemperatureOr, temperatureUnit);
@@ -285,12 +283,13 @@ const SOG_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedOverGround)], 1),
-  formatSample: sampleKnots,
-  read({ vessel, store, clock }) {
+  formatSample: sampleSpeed,
+  read({ vessel, store, clock, units }) {
     const cell = store.cell(SK_PATHS.speedOverGround);
     const state = grade(cell, clock);
     const mps = vessel.sogMps;
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps };
+    const profile = units.profile;
+    return { state, value: formatSpeedOr(mps, profile), unit: speedUnit(profile), siValue: mps };
   },
 };
 
@@ -378,11 +377,11 @@ const DEPTH_DEF: TileDef = {
   read({ vessel, store, clock, units }) {
     const reading = vessel.safetyDepth;
     const state = grade(store.cell(reading.path), clock);
-    const mode = units.mode;
+    const profile = units.profile;
     return {
       state,
-      value: formatLengthOr(reading.meters, mode),
-      unit: lengthUnit(mode),
+      value: formatLengthOr(reading.meters, profile),
+      unit: lengthUnit(profile),
       siValue: reading.meters,
       referenceLabel: reading.source ? DEPTH_SOURCE_LABELS[reading.source] : undefined,
       activePath: reading.path,
@@ -423,8 +422,8 @@ const WIND_APPARENT_DEF: TileDef = {
     ),
     description: 'Wind speed history, preferring apparent wind and falling back to ground wind.',
   },
-  formatSample: sampleKnots,
-  read({ vessel, store, clock }) {
+  formatSample: sampleSpeed,
+  read({ vessel, store, clock, units }) {
     const apparentSpeedCell = store.cell(SK_PATHS.windSpeedApparent);
     const groundSpeedCell = store.cell(SK_PATHS.windSpeedOverGround);
 
@@ -476,10 +475,11 @@ const WIND_APPARENT_DEF: TileDef = {
     }
 
     const state = grade(gradingCell, clock);
+    const profile = units.profile;
     return {
       state,
-      value: formatKnotsOr(mps),
-      unit: 'kn',
+      value: formatSpeedOr(mps, profile),
+      unit: speedUnit(profile),
       siValue: mps,
       angleRad,
       angleState,
@@ -502,15 +502,16 @@ const STW_DEF: TileDef = {
   kind: 'numeric',
   viz: 'spark',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.speedThroughWater)], 1),
-  formatSample: sampleKnots,
-  read({ store, clock }) {
+  formatSample: sampleSpeed,
+  read({ store, clock, units }) {
     const cell = store.cell(SK_PATHS.speedThroughWater);
     const state = grade(cell, clock);
     // Reads the cell at call time: "stale retains the last value" holds because the store never
     // clears cell.value on staleness. If that store contract ever changes, cache here like the
     // OwnVessel getters do.
     const mps = asNumber(cell.value);
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps };
+    const profile = units.profile;
+    return { state, value: formatSpeedOr(mps, profile), unit: speedUnit(profile), siValue: mps };
   },
 };
 
@@ -525,15 +526,23 @@ const WIND_TRUE_DEF: TileDef = {
   category: 'wind',
   kind: 'wind',
   trend: trendMetadata('speed', [trendCandidate(SK_PATHS.windSpeedTrue, 'True')], 1, 1, 'max'),
-  formatSample: sampleKnots,
-  read({ store, clock }) {
+  formatSample: sampleSpeed,
+  read({ store, clock, units }) {
     const cell = store.cell(SK_PATHS.windSpeedTrue);
     const state = grade(cell, clock);
     const mps = asNumber(cell.value);
     const angleCell = store.cell(SK_PATHS.windAngleTrueWater);
     const angleRad = grade(angleCell, clock) === 'live' ? asNumber(angleCell.value) : undefined;
     const angleState = angleFreshness(angleCell, clock, angleRad);
-    return { state, value: formatKnotsOr(mps), unit: 'kn', siValue: mps, angleRad, angleState };
+    const profile = units.profile;
+    return {
+      state,
+      value: formatSpeedOr(mps, profile),
+      unit: speedUnit(profile),
+      siValue: mps,
+      angleRad,
+      angleState,
+    };
   },
 };
 
@@ -554,11 +563,11 @@ const PRESSURE_DEF: TileDef = {
     const cell = store.cell(SK_PATHS.outsidePressure);
     const state = grade(cell, clock);
     const pa = vessel.outsidePressurePa;
-    const mode = units.mode;
+    const profile = units.profile;
     return {
       state,
-      value: formatPressureOr(pa, mode),
-      unit: pressureUnit(mode),
+      value: formatPressureOr(pa, profile),
+      unit: pressureUnit(profile),
       siValue: pa,
     };
   },
@@ -627,12 +636,13 @@ const COURSE_VMG_DEF: TileDef = {
   category: 'navigation',
   kind: 'numeric',
   viz: 'spark',
-  read({ course }) {
+  read({ course, units }) {
     if (!course.active) return { state: 'never', value: PLACEHOLDER, unit: '' };
+    const profile = units.profile;
     return {
       state: 'live',
-      value: formatKnotsOr(course.velocityMadeGoodMps),
-      unit: 'kn',
+      value: formatSpeedOr(course.velocityMadeGoodMps, profile),
+      unit: speedUnit(profile),
       siValue: course.velocityMadeGoodMps,
       referenceLabel: course.source === 'server' ? undefined : 'Calc',
     };
@@ -657,7 +667,7 @@ const COURSE_XTE_DEF: TileDef = {
         course.crossTrackErrorMeters === undefined
           ? undefined
           : Math.abs(course.crossTrackErrorMeters),
-        units.mode,
+        units.profile,
       ),
       unit: '',
       siValue: course.crossTrackErrorMeters,
@@ -701,11 +711,11 @@ function temperatureRead(path: string): TileDef['read'] {
     const cell = store.cell(path);
     const state = grade(cell, clock);
     const kelvin = asNumber(cell.value);
-    const mode = units.mode;
+    const profile = units.profile;
     return {
       state,
-      value: formatTemperatureOr(kelvin, mode),
-      unit: temperatureUnit(mode),
+      value: formatTemperatureOr(kelvin, profile),
+      unit: temperatureUnit(profile),
       siValue: kelvin,
     };
   };
@@ -1054,8 +1064,8 @@ function propulsionOilPressureTileDef(instanceId: string): TileDef {
       const pa = asNumber(cell.value);
       return {
         state,
-        value: formatPressureOr(pa, units.mode),
-        unit: pressureUnit(units.mode),
+        value: formatPressureOr(pa, units.profile),
+        unit: pressureUnit(units.profile),
         siValue: pa,
       };
     },
@@ -1279,8 +1289,8 @@ function insidePressureTileDef(instanceId: string): TileDef {
       const pa = asNumber(cell.value);
       return {
         state,
-        value: formatPressureOr(pa, units.mode),
-        unit: pressureUnit(units.mode),
+        value: formatPressureOr(pa, units.profile),
+        unit: pressureUnit(units.profile),
         siValue: pa,
       };
     },

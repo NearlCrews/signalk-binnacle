@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IMPERIAL_UNITS, METRIC_UNITS } from '$shared/lib';
 import { PersistedValue } from '$shared/settings';
 import { createFakeStorage } from '$shared/testing';
-import { modeFromPreset, UnitsStore } from './units.svelte';
+import { modeFromPreset, profileFromPreset, UnitsStore } from './units.svelte';
 
 const imperialPreset = { categories: { length: { targetUnit: 'foot' } } };
 const metricPreset = { categories: { length: { targetUnit: 'm' } } };
@@ -33,6 +34,45 @@ describe('modeFromPreset', () => {
     expect(modeFromPreset({ categories: { temperature: { targetUnit: 'F' } } })).toBe('imperial');
     expect(modeFromPreset({ categories: {} })).toBeUndefined();
     expect(modeFromPreset(undefined)).toBeUndefined();
+  });
+});
+
+describe('profileFromPreset', () => {
+  it('honors a mixed preset per category (nautical-imperial-uk: feet, Celsius, millibars)', () => {
+    const profile = profileFromPreset({
+      categories: {
+        length: { targetUnit: 'foot' },
+        temperature: { targetUnit: 'C' },
+        pressure: { targetUnit: 'mbar' },
+      },
+    });
+    expect(profile).toEqual({ ...IMPERIAL_UNITS, temperature: 'C', pressure: 'mbar' });
+  });
+
+  it('resolves an imperial preset declaring psi pressure', () => {
+    const profile = profileFromPreset({
+      categories: { length: { targetUnit: 'foot' }, pressure: { targetUnit: 'psi' } },
+    });
+    expect(profile?.pressure).toBe('psi');
+    expect(profile?.length).toBe('ft');
+  });
+
+  it('resolves a metric preset declaring km/h speed', () => {
+    const profile = profileFromPreset({
+      categories: { length: { targetUnit: 'm' }, speed: { targetUnit: 'km/h' } },
+    });
+    expect(profile?.speed).toBe('km/h');
+    expect(profile?.temperature).toBe('C');
+  });
+
+  it('fills every undeclared category from the coarse family', () => {
+    expect(profileFromPreset({ categories: { length: { targetUnit: 'm' } } })).toEqual(
+      METRIC_UNITS,
+    );
+    expect(profileFromPreset({ categories: { length: { targetUnit: 'foot' } } })).toEqual(
+      IMPERIAL_UNITS,
+    );
+    expect(profileFromPreset({ categories: {} })).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { createMediaQuery, createRetryableLazyUiLoader, type UnitsMode } from '$shared/lib';
+import { createMediaQuery, createRetryableLazyUiLoader, type UnitsSelection } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
 import TrendsCustomize from './TrendsCustomize.svelte';
@@ -8,13 +8,13 @@ import type { TrendsController } from './trends-controller.svelte';
 interface Props {
   controller: TrendsController;
   onRetryProvider: () => void;
-  mode: UnitsMode;
+  units: UnitsSelection;
   theme: Theme;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const { controller, onRetryProvider, mode, theme, onClose, onBack }: Props = $props();
+const { controller, onRetryProvider, units, theme, onClose, onBack }: Props = $props();
 let customizing = $state(false);
 const loadTrendCharts = createRetryableLazyUiLoader(() => import('./TrendCharts.svelte'));
 let chartsAttempt = $state(0);
@@ -131,7 +131,7 @@ const focused = $derived(controller.focusedId !== undefined);
         <p class="muted-note" role="status">Loading trend charts…</p>
       {:then charts}
         <ErrorBoundary>
-          <charts.default {controller} {mode} {theme} />
+          <charts.default {controller} {units} {theme} />
 
           {#snippet fallback(_error, reset)}
             <div class="chart-error" role="alert">

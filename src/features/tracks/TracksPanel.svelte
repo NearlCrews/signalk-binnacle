@@ -15,10 +15,12 @@ import {
 } from '$entities/track';
 import {
   formatDuration,
-  formatKnots,
   formatNm,
+  formatSpeedOr,
   PLACEHOLDER,
   type ReactiveClock,
+  speedUnit,
+  type UnitsSelection,
 } from '$shared/lib';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
 import { type AuthController, resourcesProviderNote } from '$shared/signalk';
@@ -40,6 +42,9 @@ import type { SavedTrack } from './tracks-client';
 interface Props {
   auth: AuthController;
   recorder: TrackRecorder;
+  // The per-category display profile (or the coarse mode); only the two speed stats are
+  // preference-dependent, so the panel takes the resolved selection rather than the store.
+  units: UnitsSelection;
   // Whether the shell is currently feeding the recorder: stale or missing GPS keeps every fix out
   // of consider(), so an armed recorder is waiting, not recording.
   positionStale: boolean;
@@ -71,6 +76,7 @@ interface Props {
 const {
   auth,
   recorder,
+  units,
   positionStale,
   hasPosition,
   clock,
@@ -376,13 +382,13 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       </dd>
       <dt>Avg speed</dt>
       <dd>
-        <span class="num">{hasTrack ? formatKnots(stats.avgSog) : PLACEHOLDER}</span>
-        <span class="unit">kn</span>
+        <span class="num">{hasTrack ? formatSpeedOr(stats.avgSog, units) : PLACEHOLDER}</span>
+        <span class="unit">{speedUnit(units)}</span>
       </dd>
       <dt>Top speed</dt>
       <dd>
-        <span class="num">{hasTrack ? formatKnots(stats.maxSog) : PLACEHOLDER}</span>
-        <span class="unit">kn</span>
+        <span class="num">{hasTrack ? formatSpeedOr(stats.maxSog, units) : PLACEHOLDER}</span>
+        <span class="unit">{speedUnit(units)}</span>
       </dd>
     </dl>
   </section>

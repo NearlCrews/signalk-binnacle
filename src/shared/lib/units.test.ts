@@ -19,13 +19,16 @@ import {
   formatPrecipRateOr,
   formatPressureOr,
   formatSignedAngleOr,
+  formatSpeedOr,
   formatTcpaMin,
   formatTemperatureOr,
   headingDegrees,
+  IMPERIAL_UNITS,
   kelvinToCelsius,
   knotsToMetersPerSecond,
   landDistanceUnit,
   lengthUnit,
+  METRIC_UNITS,
   metersPerSecondToKnots,
   metersToNauticalMiles,
   nauticalMilesToMeters,
@@ -33,6 +36,7 @@ import {
   pressureUnit,
   pressureValue,
   radiansToBearing,
+  speedUnit,
   temperatureUnit,
 } from './units';
 
@@ -67,7 +71,7 @@ describe('units', () => {
 
 describe('formatFixed', () => {
   it('renders a value to the given digit count', () => {
-    expect(formatFixed(3.14159, 2)).toBe('3.14');
+    expect(formatFixed(Math.PI, 2)).toBe('3.14');
   });
 
   it('renders the placeholder for null, undefined, or NaN', () => {
@@ -309,6 +313,38 @@ describe('formatPressureOr', () => {
   it('returns the placeholder for null or undefined', () => {
     expect(formatPressureOr(null, 'metric')).toBe('--');
     expect(formatPressureOr(undefined, 'imperial')).toBe('--');
+  });
+
+  it('honors a profile pressure category: whole millibars, psi to one decimal', () => {
+    expect(formatPressureOr(101325, { ...METRIC_UNITS, pressure: 'mbar' })).toBe('1013');
+    expect(pressureUnit({ ...METRIC_UNITS, pressure: 'mbar' })).toBe('mbar');
+    // 101325 / 6894.757 = ~14.7 psi
+    expect(formatPressureOr(101325, { ...IMPERIAL_UNITS, pressure: 'psi' })).toBe('14.7');
+    expect(pressureUnit({ ...IMPERIAL_UNITS, pressure: 'psi' })).toBe('psi');
+  });
+});
+
+describe('formatSpeedOr and speedUnit', () => {
+  it('formats knots for both coarse modes (every shipped preset keeps knots)', () => {
+    // 5 m/s = ~9.7 kn
+    expect(formatSpeedOr(5, 'metric')).toBe('9.7');
+    expect(formatSpeedOr(5, 'imperial')).toBe('9.7');
+    expect(speedUnit('metric')).toBe('kn');
+    expect(speedUnit('imperial')).toBe('kn');
+  });
+
+  it('honors a profile speed category: km/h, mph, and m/s', () => {
+    expect(formatSpeedOr(5, { ...METRIC_UNITS, speed: 'km/h' })).toBe('18.0');
+    expect(speedUnit({ ...METRIC_UNITS, speed: 'km/h' })).toBe('km/h');
+    // 5 / 0.44704 = ~11.2 mph
+    expect(formatSpeedOr(5, { ...IMPERIAL_UNITS, speed: 'mph' })).toBe('11.2');
+    expect(formatSpeedOr(5, { ...METRIC_UNITS, speed: 'm/s' })).toBe('5.0');
+  });
+
+  it('returns the placeholder for null or undefined and honors digits', () => {
+    expect(formatSpeedOr(null, 'metric')).toBe('--');
+    expect(formatSpeedOr(undefined, { ...METRIC_UNITS, speed: 'km/h' })).toBe('--');
+    expect(formatSpeedOr(5, 'metric', 0)).toBe('10');
   });
 });
 

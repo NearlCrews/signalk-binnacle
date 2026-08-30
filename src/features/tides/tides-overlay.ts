@@ -14,7 +14,7 @@ import type {
 } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import { latLonToLonLat } from '$shared/geo';
-import { formatClockTime, MINUTE_MS, type UnitsMode } from '$shared/lib';
+import { formatClockTime, MINUTE_MS, type UnitsProfile, type UnitsSelection } from '$shared/lib';
 import {
   ensureGeoJsonSource,
   featureCollection,
@@ -78,18 +78,18 @@ interface TideFeatureProperties {
 }
 
 // The marker label: the station name, then the next high or low with its height and time.
-function tideLabel(reading: TideReading, nowMs: number, mode: UnitsMode): string {
+function tideLabel(reading: TideReading, nowMs: number, units: UnitsSelection): string {
   const next = nextTideEvent(reading.events, nowMs);
   if (!next) return reading.station.name;
   const tag = next.kind === 'high' ? 'High' : 'Low';
-  return `${reading.station.name}\n${tag} ${formatTideHeight(next.heightMeters, mode)} ${formatClockTime(next.timeMs)}`;
+  return `${reading.station.name}\n${tag} ${formatTideHeight(next.heightMeters, units)} ${formatClockTime(next.timeMs)}`;
 }
 
-function currentLabel(reading: CurrentReading, nowMs: number): string {
+function currentLabel(reading: CurrentReading, nowMs: number, units: UnitsSelection): string {
   const next = nextCurrentEvent(reading.events, nowMs);
   if (!next) return reading.station.name;
   const tag = next.kind === 'flood' ? 'Flood' : next.kind === 'ebb' ? 'Ebb' : 'Slack';
-  return `${reading.station.name}\n${tag} ${formatCurrentRate(next.velocityMps)} ${formatClockTime(next.timeMs)}`;
+  return `${reading.station.name}\n${tag} ${formatCurrentRate(next.velocityMps, units)} ${formatClockTime(next.timeMs)}`;
 }
 
 function addCandidate(
@@ -149,7 +149,7 @@ function renderStationFeatures(
   store: TidesStore,
   stations: Map<string, RenderStation>,
   nowMs: number,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): GeoJSON.FeatureCollection {
   return featureCollection(
     [...stations.values()].map((candidate) => {
@@ -157,8 +157,8 @@ function renderStationFeatures(
       if (candidate.reading) {
         label =
           candidate.kind === 'tide'
-            ? tideLabel(candidate.reading as TideReading, nowMs, mode)
-            : currentLabel(candidate.reading as CurrentReading, nowMs);
+            ? tideLabel(candidate.reading as TideReading, nowMs, units)
+            : currentLabel(candidate.reading as CurrentReading, nowMs, units);
       }
       return {
         type: 'Feature' as const,
@@ -197,9 +197,9 @@ function renderStationFeatures(
 export function tideStationFeatures(
   store: TidesStore,
   nowMs: number,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): GeoJSON.FeatureCollection {
-  return renderStationFeatures(store, collectRenderStations(store), nowMs, mode);
+  return renderStationFeatures(store, collectRenderStations(store), nowMs, units);
 }
 
 // Render the bounded nearby NOAA catalog plus any selected or loaded station that has moved outside
@@ -223,7 +223,9 @@ export function createTidesOverlay(
   let visible = true;
   let opacity = 1;
   let lastLabelMinute = -1;
-  let lastMode: UnitsMode | undefined;
+  // The profile object's identity covers every category, mode flips included: a change swaps the
+  // store's resolved profile reference, so labels refresh within the minute on any unit change.
+  let lastProfile: UnitsProfile | undefined;
   const hit = createTideHitHandlers(store, onSelect, () =>
     overlayInteractive(visible, opacity, interactionsAllowed),
   );
@@ -257,7 +259,7 @@ export function createTidesOverlay(
       lastTide = undefined;
       lastCurrent = undefined;
       lastLabelMinute = -1;
-      lastMode = undefined;
+      lastProfile = undefined;
     },
     add(ctx) {
       const paint = mapThemePaint(theme);
@@ -377,7 +379,7 @@ export function createTidesOverlay(
       const requestedCurrent = store.requestedCurrent;
       const tide = store.tide;
       const current = store.current;
-      const mode = units.mode;
+      const profile = units.profile;
       const nowMs = now();
       const minute = Math.floor(nowMs / MINUTE_MS);
       if (
@@ -389,7 +391,7 @@ export function createTidesOverlay(
         tide === lastTide &&
         current === lastCurrent &&
         minute === lastLabelMinute &&
-        mode === lastMode
+        profile === lastProfile
       ) {
         return;
       }
@@ -401,9 +403,13 @@ export function createTidesOverlay(
       lastTide = tide;
       lastCurrent = current;
       lastLabelMinute = minute;
-      lastMode = mode;
+      lastProfile = profile;
       const stations = collectRenderStations(store);
-      setSourceData(ctx.map, TIDES_SOURCE_ID, renderStationFeatures(store, stations, nowMs, mode));
+      setSourceData(
+        ctx.map,
+        TIDES_SOURCE_ID,
+        renderStationFeatures(store, stations, nowMs, profile),
+      );
     },
     setVisible(ctx, isVisible) {
       visible = isVisible;

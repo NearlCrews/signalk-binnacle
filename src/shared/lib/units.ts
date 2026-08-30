@@ -124,12 +124,51 @@ export function formatNmOr(meters: number | null | undefined, digits = 2): strin
 }
 
 // ----- Unit-preference-aware display -----
-// Nautical units (knots, nautical miles, degrees) are unconditional at sea; the imperial-versus-
-// metric preference affects only the categories below: short lengths and depths (meters or feet),
-// temperature, pressure, precipitation rate, and land-scale distance. The mode comes from the
-// server's unit preferences (the entities/units store), and every affected readout takes it as an
-// argument so the formatters stay pure.
+// Nautical bearings and nautical-mile navigation distances are unconditional at sea; the unit
+// preference affects the categories below: short lengths and depths, boat speed, temperature,
+// pressure, precipitation rate, and land-scale distance. The preference comes from the server's
+// unit preferences (the entities/units store) PER CATEGORY: a preset may mix feet with Celsius
+// and millibars (the shipped nautical-imperial-uk does exactly that), so the formatters take
+// either a full per-category profile or, for length-domain callers and tests, the coarse
+// metric-or-imperial mode, which resolves to the matching canonical profile.
 export type UnitsMode = 'metric' | 'imperial';
+
+export interface UnitsProfile {
+  length: 'm' | 'ft';
+  speed: 'kn' | 'km/h' | 'mph' | 'm/s';
+  temperature: 'C' | 'F';
+  pressure: 'hPa' | 'mbar' | 'inHg' | 'psi';
+  precip: 'mm/h' | 'in/h';
+  landDistance: 'km' | 'mi';
+}
+
+export const METRIC_UNITS: UnitsProfile = {
+  length: 'm',
+  speed: 'kn',
+  temperature: 'C',
+  pressure: 'hPa',
+  precip: 'mm/h',
+  landDistance: 'km',
+};
+
+export const IMPERIAL_UNITS: UnitsProfile = {
+  length: 'ft',
+  speed: 'kn',
+  temperature: 'F',
+  pressure: 'inHg',
+  precip: 'in/h',
+  landDistance: 'mi',
+};
+
+// What every preference-aware formatter accepts: the resolved per-category profile, or the coarse
+// mode as its canonical profile.
+export type UnitsSelection = UnitsMode | UnitsProfile;
+
+export function resolveUnits(selection: UnitsSelection): UnitsProfile {
+  if (selection === 'metric') return METRIC_UNITS;
+  if (selection === 'imperial') return IMPERIAL_UNITS;
+  return selection;
+}
 
 export const METERS_PER_FOOT = 0.3048;
 const MM_PER_INCH = 25.4;
@@ -148,23 +187,23 @@ export function feetToMeters(value: number): number {
 // switch point); metric ones at one nautical mile, where whole meters stop reading well.
 const IMPERIAL_NM_FLOOR_METERS = feetToMeters(1000);
 
-// The unit label for a mode-dependent length (depth, wave and tide height, anchor distance).
-export function lengthUnit(mode: UnitsMode): 'm' | 'ft' {
-  return mode === 'imperial' ? 'ft' : 'm';
+// The unit label for a preference-dependent length (depth, wave and tide height, anchor distance).
+export function lengthUnit(units: UnitsSelection): 'm' | 'ft' {
+  return resolveUnits(units).length;
 }
 
-// A mode-aware length reading (value only; the caller renders lengthUnit beside it).
+// A preference-aware length reading (value only; the caller renders lengthUnit beside it).
 export function formatLengthOr(
   meters: number | null | undefined,
-  mode: UnitsMode,
+  units: UnitsSelection,
   digits = 1,
 ): string {
-  const value = mode === 'imperial' ? metersToFeet(meters) : meters;
+  const value = resolveUnits(units).length === 'ft' ? metersToFeet(meters) : meters;
   return formatFixed(value, digits);
 }
 
-export function temperatureUnit(mode: UnitsMode): string {
-  return mode === 'imperial' ? '°F' : '°C';
+export function temperatureUnit(units: UnitsSelection): string {
+  return resolveUnits(units).temperature === 'F' ? '°F' : '°C';
 }
 
 // Internal to the temperature formatter below; not part of the lib public surface.
@@ -175,47 +214,102 @@ function kelvinToFahrenheit(value: number | null | undefined): number | undefine
 
 export function formatTemperatureOr(
   kelvin: number | null | undefined,
-  mode: UnitsMode,
+  units: UnitsSelection,
   digits = 0,
 ): string {
-  const value = mode === 'imperial' ? kelvinToFahrenheit(kelvin) : kelvinToCelsius(kelvin);
+  const value =
+    resolveUnits(units).temperature === 'F' ? kelvinToFahrenheit(kelvin) : kelvinToCelsius(kelvin);
   return formatFixed(value, digits);
 }
 
-export function pressureUnit(mode: UnitsMode): 'hPa' | 'inHg' {
-  return mode === 'imperial' ? 'inHg' : 'hPa';
+const PA_PER_PSI = 6894.757;
+
+export function pressureUnit(units: UnitsSelection): 'hPa' | 'mbar' | 'inHg' | 'psi' {
+  return resolveUnits(units).pressure;
 }
 
-// The numeric pressure in the mode's display unit (hPa or inHg), for charts and inputs that
-// need the value rather than a formatted string.
+// The numeric pressure in the preference's display unit, for charts and inputs that need the
+// value rather than a formatted string. A millibar is a hectopascal under another symbol.
 export function pressureValue(
   pascals: number | null | undefined,
-  mode: UnitsMode,
+  units: UnitsSelection,
 ): number | undefined {
   if (pascals == null) return undefined;
-  return mode === 'imperial' ? pascals / PA_PER_INHG : pascals / PA_PER_HPA;
+  switch (resolveUnits(units).pressure) {
+    case 'inHg':
+      return pascals / PA_PER_INHG;
+    case 'psi':
+      return pascals / PA_PER_PSI;
+    default:
+      return pascals / PA_PER_HPA;
+  }
 }
 
-// Pressure to the conventional precision per unit: whole hectopascals, hundredths of inHg.
-export function formatPressureOr(pascals: number | null | undefined, mode: UnitsMode): string {
-  return formatFixed(pressureValue(pascals, mode), mode === 'imperial' ? 2 : 0);
+// Pressure to the conventional precision per unit: whole hectopascals or millibars, hundredths of
+// inHg, and psi to one decimal (a weather range spans roughly 14.1 to 15.2 psi).
+export function formatPressureOr(
+  pascals: number | null | undefined,
+  units: UnitsSelection,
+): string {
+  const pressure = resolveUnits(units).pressure;
+  const digits = pressure === 'inHg' ? 2 : pressure === 'psi' ? 1 : 0;
+  return formatFixed(pressureValue(pascals, units), digits);
 }
 
-export function precipRateUnit(mode: UnitsMode): 'mm/h' | 'in/h' {
-  return mode === 'imperial' ? 'in/h' : 'mm/h';
+export function precipRateUnit(units: UnitsSelection): 'mm/h' | 'in/h' {
+  return resolveUnits(units).precip;
 }
 
 // Precipitation rate from the store's mm per hour: tenths of a millimeter, hundredths of an inch.
-export function formatPrecipRateOr(mmPerHour: number | null | undefined, mode: UnitsMode): string {
-  if (mode === 'imperial') {
+export function formatPrecipRateOr(
+  mmPerHour: number | null | undefined,
+  units: UnitsSelection,
+): string {
+  if (resolveUnits(units).precip === 'in/h') {
     return formatFixed(mmPerHour == null ? undefined : mmPerHour / MM_PER_INCH, 2);
   }
   return formatFixed(mmPerHour, 1);
 }
 
 // Land-scale distance (a tide station's range from the boat): kilometers or statute miles.
-export function landDistanceUnit(mode: UnitsMode): 'km' | 'mi' {
-  return mode === 'imperial' ? 'mi' : 'km';
+export function landDistanceUnit(units: UnitsSelection): 'km' | 'mi' {
+  return resolveUnits(units).landDistance;
+}
+
+const MPS_PER_KNOT = 0.514444;
+const MPS_PER_KMH = 1 / 3.6;
+const MPS_PER_MPH = 0.44704;
+
+export function speedUnit(units: UnitsSelection): 'kn' | 'km/h' | 'mph' | 'm/s' {
+  return resolveUnits(units).speed;
+}
+
+// Boat speed in the preference's display unit. Every shipped preset keeps knots, but the metric
+// preset's speed category may declare km/h and a custom preset mph or m/s; honoring it here is
+// what makes the preference real rather than a knots-only label.
+export function speedValue(
+  metersPerSecond: number | null | undefined,
+  units: UnitsSelection,
+): number | undefined {
+  if (metersPerSecond == null) return undefined;
+  switch (resolveUnits(units).speed) {
+    case 'km/h':
+      return metersPerSecond / MPS_PER_KMH;
+    case 'mph':
+      return metersPerSecond / MPS_PER_MPH;
+    case 'm/s':
+      return metersPerSecond;
+    default:
+      return metersPerSecond / MPS_PER_KNOT;
+  }
+}
+
+export function formatSpeedOr(
+  metersPerSecond: number | null | undefined,
+  units: UnitsSelection,
+  digits = 1,
+): string {
+  return formatFixed(speedValue(metersPerSecond, units), digits);
 }
 
 // A short-range distance with its unit built in: whole meters (or feet) below the hand-off, then
@@ -223,10 +317,10 @@ export function landDistanceUnit(mode: UnitsMode): 'km' | 'mi' {
 // reads worse than "93 m", and the unit switches so the caller cannot label it statically.
 export function formatMetersOrNm(
   meters: number | null | undefined,
-  mode: UnitsMode = 'metric',
+  units: UnitsSelection = 'metric',
 ): string {
   if (meters == null) return PLACEHOLDER;
-  if (mode === 'imperial') {
+  if (resolveUnits(units).length === 'ft') {
     if (meters < IMPERIAL_NM_FLOOR_METERS) return `${Math.round(meters / METERS_PER_FOOT)} ft`;
     return `${formatNm(meters)} nm`;
   }
