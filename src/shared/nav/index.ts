@@ -31,3 +31,4 @@ export {
   steerSide,
   vmgMps,
 } from './route-geometry';
+export { isAfterDark } from './solar';

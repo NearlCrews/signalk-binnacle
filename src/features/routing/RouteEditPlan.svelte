@@ -1,5 +1,6 @@
 <script lang="ts">
 import { litLegIndices, type Route, type RouteHighlight, routeLegs } from '$entities/route';
+import type { WeatherGrid } from '$entities/weather';
 import {
   formatBearingOr,
   formatClockTime,
@@ -10,10 +11,12 @@ import {
   knotsToMetersPerSecond,
   metersPerSecondToKnots,
   PLACEHOLDER,
+  type UnitsSelection,
 } from '$shared/lib';
-import { crossesLocalMidnight, etaSeconds, plannedArrivalMs } from '$shared/nav';
+import { crossesLocalMidnight, etaSeconds, isAfterDark, plannedArrivalMs } from '$shared/nav';
 import { MAX_PLANNING_SPEED_KN, type PersistedValue } from '$shared/settings';
 import { UnitField } from '$shared/ui';
+import { routeWindAt, windLineText } from './route-weather';
 
 interface Props {
   // The route currently under edit on the chart.
@@ -26,9 +29,22 @@ interface Props {
   // The planning speed in m/s, persisted, that turns leg distances into per-waypoint passage times.
   // SI in storage like every other measure; this panel is the only place it becomes knots.
   planningSpeed: PersistedValue<number>;
+  // The loaded forecast grid, when the weather layer has ever fetched one. Absent (weather never
+  // opened, or offline with no cache) leaves the plan exactly as it was without wind lines.
+  weatherGrid?: WeatherGrid | undefined;
+  // The per-category display units, for the wind line's speed. Defaults to the metric profile,
+  // whose speed category is knots.
+  units?: UnitsSelection;
 }
 
-const { working, highlight, onHighlightLeg, planningSpeed }: Props = $props();
+const {
+  working,
+  highlight,
+  onHighlightLeg,
+  planningSpeed,
+  weatherGrid = undefined,
+  units = 'metric',
+}: Props = $props();
 
 // The persisted value is already bounded by its codec on both read and write, so this only guards
 // against a non-finite reaching the arithmetic below.
@@ -92,6 +108,33 @@ function arrivalText(cumulativeMeters: number): string {
 function endpointName(fromIndex: number): string {
   return working.waypoints[fromIndex + 1]?.name ?? `Point ${fromIndex + 2}`;
 }
+
+// Per-leg planning cues at the leg's end waypoint: the after-dark flag from local solar math
+// (offline, no provider), and the forecast wind at the planned arrival when the grid covers that
+// place and time. Derived once per (geometry, departure, planning speed, grid identity, units)
+// rather than recomputed inside each row's render.
+interface LegForecast {
+  afterDark: boolean;
+  windLine: string | undefined;
+}
+const legForecasts: LegForecast[] = $derived.by(() =>
+  workingLegs.map((leg) => {
+    const wpt = working.waypoints[leg.fromIndex + 1];
+    const at =
+      departureMs === undefined
+        ? undefined
+        : plannedArrivalMs(departureMs, leg.cumulativeMeters, planSpeedMps);
+    if (wpt === undefined || at === undefined) return { afterDark: false, windLine: undefined };
+    const { latitude, longitude } = wpt.position;
+    const wind =
+      weatherGrid === undefined ? undefined : routeWindAt(weatherGrid, latitude, longitude, at);
+    return {
+      afterDark: isAfterDark(at, latitude, longitude),
+      windLine: wind === undefined ? undefined : windLineText(wind, units),
+    };
+  }),
+);
+const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefined));
 </script>
 
 <dl class="stat-grid">
@@ -139,6 +182,7 @@ function endpointName(fromIndex: number): string {
 </label>
 {#snippet legBody(leg: (typeof workingLegs)[number])}
   {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
+  {@const forecast = legForecasts[leg.fromIndex]}
   <span class="leg-line">
     <span class="leg-no num">{leg.fromIndex + 1}</span>
     <span class="leg-name">{endpointName(leg.fromIndex)}</span>
@@ -155,6 +199,22 @@ function endpointName(fromIndex: number): string {
       Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
     </span>
   </span>
+  {#if forecast !== undefined && (forecast.afterDark || forecast.windLine !== undefined)}
+    <span class="leg-line leg-line--metrics">
+      {#if forecast.afterDark}
+        <span
+          class="caps-label sev-warning"
+          title="The planned arrival at this point is after dark: past evening or before morning civil twilight"
+          >After dark</span
+        >
+      {/if}
+      {#if forecast.windLine !== undefined}
+        <span class="num" title="Forecast wind at this point's planned arrival time, degrees true"
+          >{forecast.windLine}&deg;T</span
+        >
+      {/if}
+    </span>
+  {/if}
 {/snippet}
 {#if workingLegs.length > 0}
   <ol class="legs bare-list" aria-label="Legs">
@@ -179,6 +239,11 @@ function endpointName(fromIndex: number): string {
       </li>
     {/each}
   </ol>
+  {#if hasWindLines}
+    <p class="muted-note muted-note--xs">
+      Wind lines are the forecast at each planned arrival time, advisory only.
+    </p>
+  {/if}
 {/if}
 
 <style>

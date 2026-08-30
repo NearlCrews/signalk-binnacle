@@ -11,7 +11,8 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import Upload from '@lucide/svelte/icons/upload';
 import X from '@lucide/svelte/icons/x';
 import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
-import { createMediaQuery, formatNm } from '$shared/lib';
+import type { WeatherGrid } from '$entities/weather';
+import { createMediaQuery, formatNm, type UnitsSelection } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
@@ -82,6 +83,11 @@ interface Props {
   onImportGpx: (gpxText: string) => void;
   // The planning speed (knots), persisted, that turns leg distances into per-waypoint passage times.
   planningSpeed: PersistedValue<number>;
+  // The loaded forecast grid, for the plan's per-arrival wind lines; absent when the weather layer
+  // has never fetched one, which leaves the plan unchanged.
+  weatherGrid?: WeatherGrid | undefined;
+  // The per-category display units for those wind lines.
+  units?: UnitsSelection;
   onDelete: (id: string) => void;
   onClose: () => void;
   onBack?: () => void;
@@ -117,6 +123,8 @@ const {
   onExportGpx,
   onImportGpx,
   planningSpeed,
+  weatherGrid = undefined,
+  units = 'metric',
   onDelete,
   onClose,
   onBack,
@@ -388,7 +396,7 @@ const emptyMessage = $derived(emptyReason());
       {#if working.waypoints.length < 2}
         <p class="muted-note">Add at least two points to save this route.</p>
       {/if}
-      <RouteEditPlan {working} {highlight} {onHighlightLeg} {planningSpeed} />
+      <RouteEditPlan {working} {highlight} {onHighlightLeg} {planningSpeed} {weatherGrid} {units} />
       <p class="muted-note">
         Tap the chart to add waypoints. Drag a point to move it, tap a midpoint to insert one.
       </p>
@@ -602,7 +610,13 @@ const emptyMessage = $derived(emptyReason());
         <!-- The same plan the edit session shows, read-only: the leg table, planned arrivals, and
              the live speed and departure fields, with no way to move a point. -->
         <div class="saved-plan" role="group" aria-label={`Passage plan for ${route.name}`}>
-          <RouteEditPlan working={route} highlight={undefined} {planningSpeed} />
+          <RouteEditPlan
+            working={route}
+            highlight={undefined}
+            {planningSpeed}
+            {weatherGrid}
+            {units}
+          />
           {#if onOpenOfflineCharts}
             <button type="button" class="btn btn-ghost" onclick={onOpenOfflineCharts}>
               Check offline chart coverage

@@ -70,6 +70,22 @@ describe('RoutesPanel', () => {
     expect(renderPanel()).toContain('No routes yet.');
   });
 
+  it('threads the weather grid through to the plan wind lines', () => {
+    // An obviously synthetic grid pinned around now, since the plan seeds its departure to now.
+    const HOUR = 3_600_000;
+    const times = Array.from({ length: 49 }, (_, i) => Date.now() - HOUR + i * HOUR);
+    const fill = (value: number) => times.map(() => new Array(4).fill(value));
+    const weatherGrid = {
+      lats: [41, 44],
+      lons: [-84, -81],
+      times,
+      windU: fill(0),
+      windV: fill(-5),
+    };
+    expect(renderPanel({ working: route, weatherGrid })).toContain('Wind 9.7 kn from 000');
+    expect(renderPanel({ working: route })).not.toContain('Wind 9.7');
+  });
+
   it('disables conflicting route mutations while an operation is in flight', () => {
     const body = renderPanel({ routes: [route], busy: true });
     expect(body).toMatch(/<button[^>]*disabled[^>]*>[^<]*<svg[^>]*>[\s\S]*?New route/);
