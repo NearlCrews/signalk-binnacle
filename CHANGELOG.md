@@ -6,6 +6,56 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The autopilot arrives: a status chip showing engaged or standby with the mode and target, and a
+  panel with armed engage, disengage, tack, and gybe plus direct heading nudges while engaged,
+  consuming the Signal K v2 Autopilot API with honest absent, access, and unreachable states.
+- The safety chain closes its gaps: a server-mode anchor watch alarms when the link dies, an
+  off-course (XTE) alarm with server ownership and a configurable limit, an alarm self-test button
+  and per-device volume, a screen wake lock while a watch is armed, a bounded chirp when an armed
+  depth watch stands down, a low-battery warning for a client anchor watch, a session alarm
+  chronology in the Alarms panel and the watch handoff, and bulk Silence all and Acknowledge all.
+- The collision lookout stands down loudly on a lost GPS fix, holds a contact past its closest
+  approach as "past closest approach" instead of dropping it at peak danger, names the nearest
+  unassessed contact's range, and now grades radar ARPA targets from the v2 radar targets endpoint
+  beside AIS.
+- Weather grows depth: provider gale and storm warnings alert app-wide with a courtesy tone,
+  toast, and status chip even with the weather panel closed; a free api.weather.gov point-alert
+  fallback covers US waters without a provider; the boat's own barometer feeds a measured
+  three-hour tendency with fall-rate cautions; squall, steep-seas, and wind-against-current risk
+  cues join the forecast; a collapsed Coming days outlook summarizes the rest of the seven-day
+  grid; and the radar legend states its land-based coverage bound.
+- The passage plan shows the forecast wind at each waypoint's planned arrival and flags arrivals
+  after dark from offline solar math; the same math powers an opt-in automatic day and night theme
+  and a one-time sunset offer to switch.
+- A Display panel gathers the night-watch environment: a true-black screen dim below the backlight
+  floor with alarms always distinguishable, the automatic theme, a bright-sun chart palette for
+  direct sunlight, and an interface text size up to 130 percent, all carried by profiles. A Lock
+  screen action shields a wet helm while the MOB key and alarm acknowledgments stay live.
+- The ship's logbook integrates through signalk-logbook: recent entries and a composer, with
+  prefilled factual suggestions offered at watch handoff, navigation start and stop, and anchor
+  drop and raise, never logged without a tap.
+- The AI advisor panel surfaces signalk-openrouter-companion analyzer reports with per-analyzer
+  Run now triggers and verbatim budget acknowledgments, quotes the latest headline as a watch
+  handoff fact, and ships with a written set of AI guardrails.
+- AIS deepens: transponder class, dimensions, destination, and reported ETA on the wire now show
+  in the target detail and list; navigation aids and search-and-rescue targets render with their
+  own symbols and labels; name labels ride the map's collision engine with severity priority at
+  low zoom; and the own ship gains a COG predictor vector and dead-reckoned motion between fixes
+  with an eased follow camera.
+- Course control from the helm: the arrival radius, a target arrival time, and an armed course
+  restart write through the v2 Course API so every station converges.
+- Saved tracks persist per-point times, show their recorded span, and can play that span back
+  through history Playback; route editing snaps vertices to saved waypoints; the Anchor panel
+  gains a rode-aware radius helper and the nearest tide station's next high and low; and the
+  place card offers Navigate here and Save as waypoint.
+- Signal K region resources (exclusion and no-anchor zones) render as a chart layer, and the
+  shallow alarm limit can be published as boat-wide meta zones every station honors.
+- The boat's declared draft now defaults the shallow alarm to draft plus an under-keel margin,
+  and per-category server unit preferences (speed, temperature, pressure, and more) are honored
+  at every display edge instead of collapsing to a single metric-or-imperial guess.
+
 ### Changed
 
 - MapLibre GL moves to 6.6.0 and the toolchain to its current releases across the board.
@@ -13,9 +63,21 @@ All notable changes to Binnacle are documented here. The format follows
   cache names, and the prompt-before-reload update flow are unchanged, cached charts and tiles
   survive the upgrade, the retired Workbox precache is cleaned up automatically, and the very
   first visit now starts filling the offline caches without needing a reload.
+- The AIS chart source ships only what moved per update, selection repaints without data churn,
+  the stream connects to the discovery document's advertised endpoint so reverse proxies work,
+  and reconnect reconciliation uses the v2 id-keyed alarm list so a restored alarm keeps its
+  Silence and Acknowledge actions.
+- The README leads with a first-run quickstart and hero image, the docs gain an index, an AI
+  guardrails guide, and refreshed menu and radar references, and the setup checklist explains
+  what HTTPS unlocks.
 
 ### Fixed
 
+- The nautical-imperial-uk unit preset no longer renders Fahrenheit and inches of mercury, and
+  psi and kilometers per hour are now expressible.
+- The dense-fog risk cue can actually fire on a stock server: the free forecast now requests
+  visibility and the weather code.
+- Gale warnings arriving with the weather panel closed are no longer invisible.
 - Escape in a name form, such as renaming a route, track, or profile, now cancels only the form
   instead of also closing the panel behind it in the same keystroke.
 - Reopening Layers and charts to a requested tab from the app menu no longer resets to Charts once
