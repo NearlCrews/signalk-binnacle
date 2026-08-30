@@ -1,7 +1,7 @@
 {
   "name": "signalk-binnacle",
   "version": "0.21.0",
-  "description": "WebGL chartplotter for Signal K",
+  "description": "WebGL chartplotter for Signal K with night-watch themes, offline chart caching, and boat-wide alarms",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Nearl Crews <23341701+NearlCrews@users.noreply.github.com>",
@@ -26,7 +26,13 @@
     "ais",
     "weather",
     "anchor-watch",
-    "pwa"
+    "pwa",
+    "offline",
+    "charts",
+    "radar",
+    "tides",
+    "routing",
+    "mob"
   ],
   "engines": {
     "node": ">=22.18"
@@ -58,7 +64,10 @@
       "signalk-chart-locker",
       "signalk-crows-nest",
       "signalk-virtual-weather-sensors",
-      "signalk-ssl"
+      "signalk-ssl",
+      "signalk-anchoralarm-plugin",
+      "signalk-tides",
+      "signalk-symbol-manager"
     ]
   },
   "files": [

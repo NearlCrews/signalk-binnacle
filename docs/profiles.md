@@ -17,6 +17,7 @@ A profile contains:
 
 - theme;
 - chart layers, visibility, opacity, and order;
+- chart orientation (north-up, course-up, or heading-up);
 - weather layers;
 - collision and shallow-depth thresholds;
 - track recording and display settings;
