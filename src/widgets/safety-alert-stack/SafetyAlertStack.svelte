@@ -102,9 +102,9 @@ const conditions = $derived<ChipCondition[]>([
   },
   {
     id: 'anchor',
-    active: anchor.dragging || anchor.degradedCause === 'fix-lost',
+    active: anchor.dragging || anchor.blindCause !== undefined,
     rank: 2,
-    acknowledged: anchor.dragging ? anchor.acknowledged : anchor.fixLostAcknowledged,
+    acknowledged: anchor.dragging ? anchor.acknowledged : anchor.blindAcknowledged,
     label: 'Anchor',
     chipAria: 'Anchor alarm',
     grade: 'alarm',

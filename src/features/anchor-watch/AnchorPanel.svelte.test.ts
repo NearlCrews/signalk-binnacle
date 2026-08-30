@@ -19,11 +19,16 @@ function renderPanel(
   anchorDepth: DepthReading = NO_DEPTH,
   safetyDepth: DepthReading = NO_DEPTH,
   auth: AuthController = { writeBlocked: false } as AuthController,
-  extras: { anchor?: Record<string, unknown>; audioState?: AlarmAudioState } = {},
+  extras: {
+    anchor?: Record<string, unknown>;
+    audioState?: AlarmAudioState;
+    batteryNote?: string;
+  } = {},
 ): string {
   return render(AnchorPanel, {
     props: {
       auth,
+      batteryNote: extras.batteryNote,
       anchor: {
         watching: false,
         fixLost: false,
@@ -124,6 +129,25 @@ describe('AnchorPanel', () => {
     });
     expect(stale).toContain('Anchor watch state is stale: reconnecting to the server.');
     expect(stale).toContain('status--alarm');
+
+    // A down stream on a server watch is named as the link, never a GPS loss, and it is worded
+    // from the ungraced immediate cause too.
+    const linkLost = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: { watching: true, mode: 'server', immediateDegradedCause: 'link-lost' },
+    });
+    expect(linkLost).toContain(
+      'Warning: server connection lost. The server watch cannot alert this display.',
+    );
+    expect(linkLost).toContain('status--alarm');
+  });
+
+  it('shows the battery warning while this browser carries the watch', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: { watching: true, mode: 'client' },
+      batteryNote: 'Battery low (18%). This browser carries the anchor watch.',
+    });
+    expect(body).toContain('Battery low (18%)');
+    expect(renderPanel('metric')).not.toContain('Battery low');
   });
 
   it('keeps the reconnect blip (degraded without a cause yet) off the status line', () => {

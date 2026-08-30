@@ -5,6 +5,7 @@ import type { LatLon } from '$shared/geo';
 import { createBusyGate } from '$shared/lib';
 import { shouldSoundAnchorAlarm } from './anchor-alarm';
 import { resolveAnchorTransport } from './anchor-transport';
+import { createBatteryWatch, navigatorGetBattery } from './battery-watch.svelte';
 
 export interface AnchorControllerDeps {
   // The Signal K server origin, captured once for the page lifetime.
@@ -22,14 +23,18 @@ export interface AnchorControllerDeps {
   // from server feature discovery, and the transport is reselected as it changes.
   serverHasAnchorApi: () => boolean;
   writeBlocked: () => boolean;
+  // navigator.getBattery where the browser offers it (Chromium only); injectable for tests. The
+  // key being present with undefined means "no Battery Status API", so tests can force the
+  // silent no-op path.
+  getBattery?: () => Promise<unknown>;
 }
 
 // The anchor watch orchestration: server-driven when the standard Anchor API or the anchoralarm plugin
 // answers, client-side otherwise. Owns the anchor error shown until the next action, the resolved
-// transport, the action chain, the anchor live-region string, and the two anchor effects (the
-// position-fix update and the drag alarm). The host wires onDrop, onRaise, onSetRadius, and
-// onAnchorMoved to the panel and chart, reads anchorError into the panel, and reads anchorAlert into
-// LiveRegions.
+// transport, the action chain, the anchor live-region string, the anchor effects (the
+// position-fix update and the drag alarm), and the device battery watch behind a client-mode
+// watch. The host wires onDrop, onRaise, onSetRadius, and onAnchorMoved to the panel and chart,
+// reads anchorError and batteryNote into the panel, and reads anchorAlert into LiveRegions.
 export function createAnchorController(deps: AnchorControllerDeps) {
   const { anchor, vessel, anchorAlarm } = deps;
 
@@ -57,35 +62,47 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     anchor.updateFix();
   });
 
-  // Sound the anchor alarm: a drag, or a client watch whose fix has been lost long enough that
-  // drag detection is genuinely dead. The acknowledge semantics live in the watch: client mode
-  // clears the drag latch outright, server mode silences the current grade until it changes or
-  // clears, and a fix-lost acknowledge holds until the fix returns.
+  // Sound the anchor alarm: a drag, or a watch that has been blind long enough (a client watch
+  // without fixes, a server watch without its stream) that its protection here is genuinely
+  // dead. The acknowledge semantics live in the watch: client mode clears the drag latch
+  // outright, server mode silences the current grade until it changes or clears, and a blind
+  // acknowledge holds until protection returns.
   $effect(() => {
     anchorAlarm.update(
       shouldSoundAnchorAlarm(
         anchor.dragging,
         anchor.acknowledged,
-        anchor.fixLostAlarm,
-        anchor.fixLostAcknowledged,
+        anchor.blindAlarm,
+        anchor.blindAcknowledged,
       ),
     );
   });
 
   // The anchor channel of the assertive live region, separate from the collision channel so a drag
-  // alarm is announced even while a collision alert holds the other region. The two degraded causes
-  // are worded apart: a reconnect's stale window is not a GPS loss, and calling it one on every
-  // reconnect would train the crew to ignore this channel.
+  // alarm is announced even while a collision alert holds the other region. The degraded causes
+  // are worded apart: a down link and a reconnect's stale window are not GPS losses, and calling
+  // either one on every reconnect would train the crew to ignore this channel.
   const anchorAlert = $derived.by(() => {
     const cause = anchor.degradedCause;
     if (cause === 'fix-lost') {
       return 'Anchor watch degraded: no GPS fix, so drag detection has stopped.';
+    }
+    if (cause === 'link-lost') {
+      return 'Anchor watch degraded: connection to the server lost, so its drag alarm cannot reach this display.';
     }
     if (cause === 'server-stale') {
       return 'Anchor watch state is stale: reconnecting to the server.';
     }
     if (!anchor.dragging || anchor.acknowledged) return '';
     return 'Anchor alarm: the boat is dragging.';
+  });
+
+  // A client watch dies with this device's battery, and it dies silently: warn while the watch
+  // is armed and the device is discharging low. A server watch is unaffected; the server keeps
+  // alarming aboard without this display.
+  const battery = createBatteryWatch({
+    active: () => anchor.mode === 'client',
+    getBattery: 'getBattery' in deps ? deps.getBattery : navigatorGetBattery(),
   });
 
   const withBusy = createBusyGate(
@@ -181,6 +198,12 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     },
     get anchorAlert() {
       return anchorAlert;
+    },
+    get batteryWarning() {
+      return battery.warning;
+    },
+    get batteryNote() {
+      return battery.note;
     },
     get busy() {
       return busy;

@@ -69,22 +69,22 @@ describe('AnchorWatch (client mode)', () => {
     anchor.dropLocal(ANCHOR, 50);
     anchor.updateFix();
     expect(anchor.degradedCause).toBeUndefined();
-    expect(anchor.fixLostAlarm).toBe(false);
+    expect(anchor.blindAlarm).toBe(false);
 
     // The fix dropout passes the staleness window: the cause reports at once, the tone waits.
     clock.now += 60_000;
     anchor.updateFix();
     expect(anchor.degradedCause).toBe('fix-lost');
-    expect(anchor.fixLostAlarm).toBe(false);
+    expect(anchor.blindAlarm).toBe(false);
     clock.now += 30_000;
-    expect(anchor.fixLostAlarm).toBe(true);
-    expect(anchor.fixLostAcknowledged).toBe(false);
+    expect(anchor.blindAlarm).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(false);
 
     // Acknowledge silences the episode for as long as the loss continues.
     anchor.acknowledge();
-    expect(anchor.fixLostAcknowledged).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(true);
     clock.now += 60_000;
-    expect(anchor.fixLostAcknowledged).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(true);
 
     // A single returning fix does not end the episode: the next dropout is the struggling
     // receiver this alarm exists for, so the tone re-arms immediately instead of waiting out a
@@ -92,12 +92,12 @@ describe('AnchorWatch (client mode)', () => {
     store.applyFrame(createFrameFactory(clock.now - 1_000)({ 'navigation.position': INSIDE }));
     anchor.updateFix();
     expect(anchor.degradedCause).toBeUndefined();
-    expect(anchor.fixLostAcknowledged).toBe(false);
+    expect(anchor.blindAcknowledged).toBe(false);
     clock.now += 60_000;
     anchor.updateFix();
     expect(anchor.degradedCause).toBe('fix-lost');
-    expect(anchor.fixLostAlarm).toBe(true);
-    expect(anchor.fixLostAcknowledged).toBe(true);
+    expect(anchor.blindAlarm).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(true);
 
     // A recovery that holds past the recovery window truly ends the episode: the acknowledge
     // re-arms and the next loss waits out the full grace again.
@@ -110,10 +110,10 @@ describe('AnchorWatch (client mode)', () => {
     clock.now += 60_000;
     anchor.updateFix();
     expect(anchor.degradedCause).toBe('fix-lost');
-    expect(anchor.fixLostAlarm).toBe(false);
+    expect(anchor.blindAlarm).toBe(false);
     clock.now += 30_000;
-    expect(anchor.fixLostAlarm).toBe(true);
-    expect(anchor.fixLostAcknowledged).toBe(false);
+    expect(anchor.blindAlarm).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(false);
   });
 
   it('ignores an acknowledge tapped before the fix-lost tone has armed', () => {
@@ -130,16 +130,16 @@ describe('AnchorWatch (client mode)', () => {
     clock.now += 60_000;
     anchor.updateFix();
     expect(anchor.degradedCause).toBe('fix-lost');
-    expect(anchor.fixLostAlarm).toBe(false);
+    expect(anchor.blindAlarm).toBe(false);
     anchor.acknowledge();
-    expect(anchor.fixLostAcknowledged).toBe(false);
+    expect(anchor.blindAcknowledged).toBe(false);
     clock.now += 30_000;
-    expect(anchor.fixLostAlarm).toBe(true);
-    expect(anchor.fixLostAcknowledged).toBe(false);
+    expect(anchor.blindAlarm).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(false);
 
     // Once sounding, the acknowledge lands.
     anchor.acknowledge();
-    expect(anchor.fixLostAcknowledged).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(true);
   });
 
   it('latches dragging after three consecutive fixes outside the radius', () => {
@@ -394,6 +394,99 @@ describe('AnchorWatch (server mode)', () => {
     fix(INSIDE);
     store.applyFrame(frame({ 'navigation.anchor.position': null }));
     expect(anchor.mode).toBe('off');
+  });
+
+  it('reports link-lost for a server watch whose stream stays down, and alarms after the grace', () => {
+    const store = new SignalKStore();
+    const clock = $state({ now: 100_000 });
+    const vessel = new OwnVessel(store, clock);
+    const anchor = new AnchorWatch(store, vessel, clock, createFakeStorage());
+    store.applyFrame(createFrameFactory(99_000)({ 'navigation.anchor.position': ANCHOR }));
+    anchor.updateFix();
+    expect(anchor.mode).toBe('server');
+    expect(anchor.degradedCause).toBeUndefined();
+
+    // The stream drops. The panel words it at once; the live region and strip wait out the
+    // routine-blip grace, and the tone waits its own alarm grace on top of that.
+    store.connection = { phase: 'reconnecting', attempt: 1 };
+    anchor.updateFix();
+    expect(anchor.degraded).toBe(true);
+    expect(anchor.immediateDegradedCause).toBe('link-lost');
+    expect(anchor.degradedCause).toBeUndefined();
+    clock.now += 6_000;
+    anchor.updateFix();
+    expect(anchor.degradedCause).toBe('link-lost');
+    expect(anchor.blindCause).toBe('link-lost');
+    expect(anchor.blindAlarm).toBe(false);
+    clock.now += 30_000;
+    expect(anchor.blindAlarm).toBe(true);
+    anchor.acknowledge();
+    expect(anchor.blindAcknowledged).toBe(true);
+
+    // A reconnect clears the cause and silences the tone at once.
+    store.connection = { phase: 'open', attempt: 0 };
+    anchor.updateFix();
+    expect(anchor.degradedCause).toBeUndefined();
+    expect(anchor.blindAlarm).toBe(false);
+
+    // A flapping stream must not reset the alarm grace on every reconnect: within the recovery
+    // hold the episode resumes, so the tone re-arms immediately and the acknowledge given for
+    // this episode keeps being honored.
+    clock.now += 5_000;
+    anchor.updateFix();
+    store.connection = { phase: 'closed', attempt: 0 };
+    clock.now += 1_000;
+    anchor.updateFix();
+    clock.now += 6_000;
+    anchor.updateFix();
+    expect(anchor.degradedCause).toBe('link-lost');
+    expect(anchor.blindAlarm).toBe(true);
+    expect(anchor.blindAcknowledged).toBe(true);
+
+    // A recovery that holds past the recovery window truly ends the episode: the acknowledge
+    // re-arms and the next outage waits out the full graces again.
+    store.connection = { phase: 'open', attempt: 0 };
+    for (let i = 0; i < 4; i += 1) {
+      clock.now += 10_000;
+      anchor.updateFix();
+    }
+    expect(anchor.degradedCause).toBeUndefined();
+    store.connection = { phase: 'reconnecting', attempt: 1 };
+    anchor.updateFix();
+    clock.now += 6_000;
+    anchor.updateFix();
+    expect(anchor.degradedCause).toBe('link-lost');
+    expect(anchor.blindAlarm).toBe(false);
+    expect(anchor.blindAcknowledged).toBe(false);
+  });
+
+  it('reports link-lost immediately without a clock, holding the tone off', () => {
+    const { store, anchor } = setup();
+    store.applyFrame(frame({ 'navigation.anchor.position': ANCHOR }));
+    store.connection = { phase: 'closed', attempt: 0 };
+    expect(anchor.degradedCause).toBe('link-lost');
+    expect(anchor.immediateDegradedCause).toBe('link-lost');
+    // Without a clock the tone cannot count its grace; the visual cause still reports.
+    expect(anchor.blindAlarm).toBe(false);
+  });
+
+  it('never calls a down stream link-lost for a client watch, which works offline', () => {
+    const { store, anchor, fix } = setup();
+    anchor.dropLocal(ANCHOR, 50);
+    fix(INSIDE);
+    store.connection = { phase: 'closed', attempt: 0 };
+    expect(anchor.mode).toBe('client');
+    expect(anchor.degradedCause).toBeUndefined();
+    expect(anchor.blindCause).toBeUndefined();
+  });
+
+  it('ranks a down link above the stale window when both hold', () => {
+    const { store, anchor } = setup();
+    store.applyFrame({ ...frame({ 'navigation.anchor.position': ANCHOR }), generation: 1 });
+    store.applyFrame({ ...frame({}), generation: 2 });
+    store.connection = { phase: 'reconnecting', attempt: 1 };
+    // Without a clock both causes report immediately; the one that alarms outranks.
+    expect(anchor.degradedCause).toBe('link-lost');
   });
 
   it('re-arms acknowledge when the server escalates to a more severe grade', () => {

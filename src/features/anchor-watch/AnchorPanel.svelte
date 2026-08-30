@@ -32,6 +32,9 @@ interface Props {
   busy?: boolean;
   // Alarm audio cannot sound (no priming gesture since load), so an armed watch is visual-only.
   audioState?: AlarmAudioState;
+  // A low-battery warning from the controller's battery watch, while this browser carries the
+  // watch; undefined when healthy, charging, server-mode, or on a browser without the API.
+  batteryNote?: string;
   onDrop: () => void;
   onRaise: () => void;
   onSetRadius: (meters: number) => void;
@@ -47,6 +50,7 @@ const {
   error,
   busy = false,
   audioState = 'ready',
+  batteryNote,
   onDrop,
   onRaise,
   onSetRadius,
@@ -81,16 +85,20 @@ const MODE_STATUS: Record<AnchorMode, string> = {
   client: 'Watching in this browser only. Keep Binnacle open for the alarm.',
   off: 'No anchor down.',
 };
-// The two degraded causes are worded apart: a held reconnect-stale window is not a GPS loss.
-// The panel words from the ungraced immediateDegradedCause (a panel is not a live region, so a
-// routine sub-second reconnect blip cannot spam anyone, and the reassuring mode text must not
-// stand in for geometry that cannot currently be trusted); the live region and strip keep
-// waiting out the grace through degradedCause. One branch per state, so priority reads top down.
+// The degraded causes are worded apart: a down link and a held reconnect-stale window are not
+// GPS losses. The panel words from the ungraced immediateDegradedCause (a panel is not a live
+// region, so a routine sub-second reconnect blip cannot spam anyone, and the reassuring mode
+// text must not stand in for a watch that cannot currently protect); the live region and strip
+// keep waiting out the graces through degradedCause. One branch per state, so priority reads
+// top down.
 const immediateCause = $derived(anchor.immediateDegradedCause);
 const statusAlarm = $derived(anchor.dragging || immediateCause !== undefined);
 const statusLine = $derived.by(() => {
   if (immediateCause === 'fix-lost') {
     return 'Warning: GPS fix lost. Browser drag detection has stopped.';
+  }
+  if (immediateCause === 'link-lost') {
+    return 'Warning: server connection lost. The server watch cannot alert this display.';
   }
   if (immediateCause === 'server-stale') {
     return 'Anchor watch state is stale: reconnecting to the server.';
@@ -150,6 +158,11 @@ function captureFromDistance(): void {
   {#if alarmAudioNote(audioState)}
     <!-- No role: the status-strip chip is the polite announcement surface for this condition. -->
     <p class="alert-note">{alarmAudioNote(audioState)}</p>
+  {/if}
+  {#if batteryNote}
+    <!-- role=alert: a dying device ends this watch, and the note appears at most twice per
+         episode (low, then the critical escalation), so announcing it here cannot spam. -->
+    <p class="alert-note" role="alert">{batteryNote}</p>
   {/if}
   <p
     class="muted-note status"

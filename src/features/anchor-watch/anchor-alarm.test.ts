@@ -35,11 +35,11 @@ describe('anchor alarm', () => {
     expect(events).toEqual(['start', 'stop', 'start']);
   });
 
-  it('sounds a held fix-lost episode until its own acknowledge, independent of dragging', () => {
+  it('sounds a held blind episode until its own acknowledge, independent of dragging', () => {
     expect(shouldSoundAnchorAlarm(false, false, true, false)).toBe(true);
     expect(shouldSoundAnchorAlarm(false, false, true, true)).toBe(false);
     expect(shouldSoundAnchorAlarm(false, false, false, false)).toBe(false);
-    // A drag acknowledge does not silence the fix-lost episode, nor the other way around.
+    // A drag acknowledge does not silence the blind episode, nor the other way around.
     expect(shouldSoundAnchorAlarm(true, true, true, false)).toBe(true);
     expect(shouldSoundAnchorAlarm(true, false, true, true)).toBe(true);
   });

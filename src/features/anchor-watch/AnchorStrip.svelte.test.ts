@@ -10,8 +10,9 @@ function renderStrip(overrides: Record<string, unknown>): string {
       anchor: {
         dragging: false,
         acknowledged: false,
-        degradedCause: undefined,
-        fixLostAcknowledged: false,
+        blindCause: undefined,
+        blindAlarm: false,
+        blindAcknowledged: false,
         distanceMeters: undefined,
         radiusMeters: 50,
         ...overrides,
@@ -35,20 +36,28 @@ describe('AnchorStrip', () => {
   });
 
   it('shows a first-class strip for a client fix loss', () => {
-    const body = renderStrip({ degradedCause: 'fix-lost' });
+    const body = renderStrip({ blindCause: 'fix-lost' });
     expect(body).toContain('Anchor watch: no GPS');
     expect(body).toContain('Acknowledge');
     expect(body).toContain('Raise anchor');
   });
 
-  it('reflects the per-episode fix-lost acknowledge', () => {
-    const body = renderStrip({ degradedCause: 'fix-lost', fixLostAcknowledged: true });
+  it('titles a server watch with a down stream as the link, never GPS', () => {
+    const body = renderStrip({ blindCause: 'link-lost' });
+    expect(body).toContain('Anchor watch: link down');
+    expect(body).toContain('Acknowledge');
+    expect(body).toContain('Raise anchor');
+  });
+
+  it('reflects the per-episode blind acknowledge', () => {
+    const body = renderStrip({ blindCause: 'fix-lost', blindAcknowledged: true });
     expect(body).toContain('Anchor watch: no GPS');
     expect(body).toContain('Acknowledged');
     expect(body).not.toContain('>Acknowledge<');
   });
 
-  it('lets a drag outrank the fix loss for the title', () => {
-    expect(renderStrip({ dragging: true, degradedCause: 'fix-lost' })).toContain('Anchor dragging');
+  it('lets a drag outrank the blind causes for the title', () => {
+    expect(renderStrip({ dragging: true, blindCause: 'fix-lost' })).toContain('Anchor dragging');
+    expect(renderStrip({ dragging: true, blindCause: 'link-lost' })).toContain('Anchor dragging');
   });
 });

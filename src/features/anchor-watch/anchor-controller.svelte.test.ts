@@ -8,8 +8,8 @@ interface AnchorFake {
   degradedCause: AnchorDegradedCause | undefined;
   dragging: boolean;
   acknowledged: boolean;
-  fixLostAlarm: boolean;
-  fixLostAcknowledged: boolean;
+  blindAlarm: boolean;
+  blindAcknowledged: boolean;
 }
 
 function controllerWith(overrides: Partial<AnchorFake>) {
@@ -17,8 +17,8 @@ function controllerWith(overrides: Partial<AnchorFake>) {
     degradedCause: undefined,
     dragging: false,
     acknowledged: false,
-    fixLostAlarm: false,
-    fixLostAcknowledged: false,
+    blindAlarm: false,
+    blindAcknowledged: false,
     mode: 'client',
     updateFix: vi.fn(),
     ...overrides,
@@ -31,6 +31,7 @@ function controllerWith(overrides: Partial<AnchorFake>) {
     anchorAlarm: { update: vi.fn() } as unknown as GatedAlarm,
     serverHasAnchorApi: () => false,
     writeBlocked: () => false,
+    getBattery: undefined,
   });
 }
 
@@ -45,6 +46,18 @@ describe('createAnchorController', () => {
     expect(controllerWith({ degradedCause: 'server-stale' }).anchorAlert).toBe(
       'Anchor watch state is stale: reconnecting to the server.',
     );
+  });
+
+  it('words a lost server link as the link being down, never a GPS loss', () => {
+    expect(controllerWith({ degradedCause: 'link-lost' }).anchorAlert).toBe(
+      'Anchor watch degraded: connection to the server lost, so its drag alarm cannot reach this display.',
+    );
+  });
+
+  it('exposes no battery warning without a Battery Status API', () => {
+    const controller = controllerWith({});
+    expect(controller.batteryWarning).toBeUndefined();
+    expect(controller.batteryNote).toBeUndefined();
   });
 
   it('announces a drag only while unacknowledged, and stays quiet otherwise', () => {
