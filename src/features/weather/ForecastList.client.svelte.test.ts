@@ -1,7 +1,8 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnitsStore } from '$entities/units';
-import { METRIC_UNITS } from '$shared/lib';
+import type { WeatherGrid } from '$entities/weather';
+import { HOUR_MS, METRIC_UNITS } from '$shared/lib';
 import ForecastList from './ForecastList.svelte';
 
 const mounted: Array<() => void> = [];
@@ -60,5 +61,45 @@ describe('ForecastList identities', () => {
     });
 
     expect(target.textContent).toContain('Wind waves');
+  });
+});
+
+describe('ForecastList coming days outlook', () => {
+  // Local-time constructions keep the day grouping true in any zone the suite runs in.
+  const day0 = new Date(2026, 5, 10).getTime();
+  const grid: WeatherGrid = {
+    lats: [0, 1],
+    lons: [0, 1],
+    times: [day0 + 20 * HOUR_MS, day0 + 30 * HOUR_MS, day0 + 36 * HOUR_MS, day0 + 50 * HOUR_MS],
+    windU: Array.from({ length: 4 }, () => [-10, -10, -10, -10]),
+    windV: Array.from({ length: 4 }, () => [0, 0, 0, 0]),
+  };
+  const forecast = [
+    { timeMs: day0 + 12 * HOUR_MS, windMs: 5 },
+    { timeMs: day0 + 20 * HOUR_MS, windMs: 6 },
+  ];
+
+  it('stays hourly-only without the grid and position', () => {
+    const target = renderList({ forecast });
+    expect(target.querySelector('button[aria-expanded]')).toBeNull();
+  });
+
+  it('collapses one summary row per remaining grid day under a disclosure', () => {
+    const target = renderList({ forecast, grid, gridPosition: [0.5, 0.5] });
+
+    const toggle = target.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    if (!toggle) throw new Error('expected the Coming days toggle');
+    expect(toggle.textContent).toContain('Coming days');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    const body = target.querySelector('.disclosure-body');
+    if (!body) throw new Error('expected the disclosure body');
+    expect(body.hasAttribute('hidden')).toBe(true);
+    expect(body.querySelectorAll('li')).toHaveLength(2);
+    expect(body.textContent).toContain('°T');
+
+    flushSync(() => toggle.click());
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.hasAttribute('hidden')).toBe(false);
   });
 });

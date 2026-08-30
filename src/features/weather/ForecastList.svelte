@@ -1,16 +1,26 @@
 <script lang="ts">
 import type { UnitsStore } from '$entities/units';
+import type { WeatherGrid } from '$entities/weather';
 import {
   formatBearingOr,
   formatDayClock,
   formatLengthOr,
   formatMetersOrNm,
+  formatMonthDay,
   formatPrecipRateOr,
   formatPressureOr,
   lengthUnit,
   pressureUnit,
   speedUnit,
 } from '$shared/lib';
+import { Disclosure } from '$shared/ui';
+import {
+  type DayOutlook,
+  dailyOutlook,
+  gridOutlookSamples,
+  outlookDayName,
+  startOfLocalDay,
+} from './daily-outlook';
 import type { PointConditions } from './signalk-weather';
 import {
   DEGREES_TRUE_TITLE,
@@ -27,16 +37,42 @@ interface Props {
   // The weather provider's display name, when one is configured, so a row's source reads as the
   // provider rather than the internal provenance token.
   providerLabel?: string;
+  // The full-horizon grid and the vessel position ([lat, lon], the panel's parsed fix) feed the
+  // day-grouped "Coming days" outlook past the hourly rows; without them the list stays
+  // hourly-only.
+  grid?: WeatherGrid;
+  gridPosition?: [number, number];
 }
 
-const { forecast, horizonH, units, providerLabel }: Props = $props();
+const { forecast, horizonH, units, providerLabel, grid, gridPosition }: Props = $props();
 
 const precip = (v: number | undefined) => formatPrecipRateOr(v, units.profile);
 const speed = (v: number | undefined) => formatWholeSpeed(v, units.profile);
-const hasRiskCues = $derived(forecast.some((step) => (step.riskCues?.length ?? 0) > 0));
+const isDangerCue = (cue: string) => cue === 'Storm-force wind';
+
+// The local day the hourly rows end on, kept as a number so scrubbing within a day never
+// re-samples the grid for the outlook below.
+const afterDayMs = $derived(
+  forecast.length > 0 ? startOfLocalDay(forecast[forecast.length - 1].timeMs) : undefined,
+);
+const outlook = $derived.by<DayOutlook[]>(() =>
+  grid && gridPosition && afterDayMs !== undefined
+    ? dailyOutlook(gridOutlookSamples(grid, gridPosition, afterDayMs), afterDayMs)
+    : [],
+);
+const hasRiskCues = $derived(
+  forecast.some((step) => (step.riskCues?.length ?? 0) > 0) ||
+    outlook.some((day) => day.worstRiskCue !== undefined),
+);
 
 function stepLabel(timeMs: number): string {
   return formatDayClock(timeMs, { minute: false });
+}
+
+function windRangeText(day: DayOutlook): string {
+  const low = speed(day.windMinMs);
+  const high = speed(day.windMaxMs);
+  return low === high ? high : `${low}-${high}`;
 }
 </script>
 
@@ -96,9 +132,7 @@ function stepLabel(timeMs: number): string {
         {/if}
         {#if step.riskCues}
           {#each step.riskCues as cue (cue)}
-            <span
-              class:sev-danger={cue === 'Storm-force wind'}
-              class:sev-warning={cue !== 'Storm-force wind'}
+            <span class:sev-danger={isDangerCue(cue)} class:sev-warning={!isDangerCue(cue)}
               >{cue}</span
             >
           {/each}
@@ -110,6 +144,49 @@ function stepLabel(timeMs: number): string {
     </li>
   {/each}
 </ul>
+{#if outlook.length > 0}
+  <Disclosure label="Coming days">
+    <ul class="forecast bare-list">
+      {#each outlook as day (day.dayStartMs)}
+        <li>
+          <span class="f-time"
+            >{outlookDayName(day.dayStartMs)} {formatMonthDay(day.dayStartMs)}</span
+          >
+          <span class="f-details">
+            {#if day.windMaxMs !== undefined}
+              <span class="f-wind">
+                <b class="num">{windRangeText(day)}</b>
+                {speedUnit(units.profile)}
+                {#if day.dominantFromRad !== undefined}
+                  from
+                  <span title={DEGREES_TRUE_TITLE}
+                    >{formatBearingOr(day.dominantFromRad)}&deg;T</span
+                  >
+                {/if}
+                {#if day.gustMaxMs !== undefined}
+                  · gust <b class="num">{speed(day.gustMaxMs)}</b> {speedUnit(units.profile)}
+                {/if}
+              </span>
+            {/if}
+            {#if day.precipTotalMm !== undefined && day.precipTotalMm >= RAIN_VISIBLE_MM_H}
+              <span
+                >Precipitation <b class="num">{precip(day.precipTotalMm)}</b>
+                {precipUnitLabel(false, units.profile)}</span
+              >
+            {/if}
+            {#if day.worstRiskCue}
+              <span
+                class:sev-danger={isDangerCue(day.worstRiskCue)}
+                class:sev-warning={!isDangerCue(day.worstRiskCue)}
+                >{day.worstRiskCue}</span
+              >
+            {/if}
+          </span>
+        </li>
+      {/each}
+    </ul>
+  </Disclosure>
+{/if}
 {#if hasRiskCues}
   <p class="muted-note risk-note">Model risk cues are guidance, not official warnings.</p>
 {/if}

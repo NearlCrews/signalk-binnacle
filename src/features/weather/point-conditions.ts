@@ -1,5 +1,6 @@
 import { HOUR_MS, isRecord } from '$shared/lib';
 import { createExpiringStore, type ExpiringStore } from '$shared/storage';
+import { fetchNwsAlertsResult } from './nws-alerts';
 import {
   type EndpointOutcome,
   type EndpointStatus,
@@ -48,6 +49,7 @@ interface LoaderDeps {
   observations: typeof fetchObservationsResult;
   forecasts: typeof fetchPointForecastsResult;
   warnings: typeof fetchWeatherWarningsResult;
+  nwsAlerts: typeof fetchNwsAlertsResult;
   now: () => number;
   persist: ExpiringStore<ProviderPoint>;
 }
@@ -60,9 +62,11 @@ export interface PointConditionsLoader {
     lon: number,
     token?: string,
   ): Promise<ProviderPoint>;
+  // With no provider id, warnings come from the free NWS point-alert fallback (US coverage);
+  // with one, the provider answers first and NWS covers only an unsupported warnings endpoint.
   loadWarnings(
     origin: string,
-    providerId: string,
+    providerId: string | undefined,
     lat: number,
     lon: number,
     token?: string,
@@ -81,8 +85,15 @@ const ENDPOINT_STATUSES: ReadonlySet<string> = new Set([
 ]);
 const WARNING_AVAILABILITIES: ReadonlySet<string> = new Set(['fresh', 'stale', 'unavailable']);
 
-export function pointConditionsKey(providerId: string, lat: number, lon: number): string {
-  return `${providerId}:${lat.toFixed(CACHE_DECIMALS)},${lon.toFixed(CACHE_DECIMALS)}`;
+// The providerless (NWS fallback) key carries no colon while every provider key embeds one, so
+// the two namespaces can never collide whatever a provider names itself.
+export function pointConditionsKey(
+  providerId: string | undefined,
+  lat: number,
+  lon: number,
+): string {
+  const at = `${lat.toFixed(CACHE_DECIMALS)},${lon.toFixed(CACHE_DECIMALS)}`;
+  return providerId === undefined ? `nws@${at}` : `${providerId}:${at}`;
 }
 
 function isCachedWeatherData(value: unknown): value is SignalKWeatherData {
@@ -157,6 +168,7 @@ const realDeps: LoaderDeps = {
   observations: fetchObservationsResult,
   forecasts: fetchPointForecastsResult,
   warnings: fetchWeatherWarningsResult,
+  nwsAlerts: fetchNwsAlertsResult,
   now: () => Date.now(),
   persist: createExpiringStore<ProviderPoint>('binnacle-weather-point', {
     maxEntries: MAX_POINT_ENTRIES,
@@ -199,6 +211,39 @@ function warningsAvailability(
   return 'fresh';
 }
 
+// The provider's warnings endpoint answers first; the free NWS point-alert feed covers only the
+// providerless case and a provider whose warnings endpoint is unsupported. A provider failure
+// keeps the provider grammar so its cached warnings replay as stale rather than switching sources.
+async function warningsOutcomeFor(
+  deps: LoaderDeps,
+  origin: string,
+  providerId: string | undefined,
+  lat: number,
+  lon: number,
+  token?: string,
+): Promise<EndpointOutcome<WeatherWarning[]>> {
+  if (providerId === undefined) return deps.nwsAlerts(lat, lon);
+  const outcome = await deps.warnings(origin, providerId, lat, lon, token);
+  return outcome.status === 'unsupported' ? deps.nwsAlerts(lat, lon) : outcome;
+}
+
+// A warnings-only cache entry for a spot never loaded in full (the providerless NWS path, and the
+// app-level watch polling while the panel is closed): the conditions endpoints read as unsupported
+// so the cached-point validator accepts the shape and a later full load starts clean.
+function emptyWarningHost(requestKey: string, nowMs: number): ProviderPoint {
+  const state = (): EndpointState => ({ status: 'unsupported', fetchedAt: nowMs, stale: false });
+  return {
+    requestKey,
+    fetchedAt: nowMs,
+    observationsState: state(),
+    forecastsState: state(),
+    warningsState: state(),
+    observationStatus: 'unsupported',
+    forecastStatus: 'unsupported',
+    warningAvailability: 'unavailable',
+  };
+}
+
 function warningPoint(
   requestKey: string,
   warnings: { data: WeatherWarning[] | undefined; state: EndpointState },
@@ -235,7 +280,7 @@ export function createPointConditionsLoader(
     const [obsOutcome, forecastOutcome, warningsOutcome] = await Promise.all([
       deps.observations(origin, providerId, lat, lon, token),
       deps.forecasts(origin, providerId, lat, lon, FORECAST_COUNT, token),
-      deps.warnings(origin, providerId, lat, lon, token),
+      warningsOutcomeFor(deps, origin, providerId, lat, lon, token),
     ]);
     const observations = resolveEndpoint(obsOutcome, cached?.obs, cached?.observationsState, nowMs);
     const forecasts = resolveEndpoint(
@@ -276,7 +321,7 @@ export function createPointConditionsLoader(
 
   async function loadWarningPoint(
     origin: string,
-    providerId: string,
+    providerId: string | undefined,
     lat: number,
     lon: number,
     token?: string,
@@ -288,11 +333,11 @@ export function createPointConditionsLoader(
       stored && stored.expires > nowMs
         ? normalizedCachedPoint(stored.value as unknown, requestKey)
         : undefined;
-    const outcome = await deps.warnings(origin, providerId, lat, lon, token);
+    const outcome = await warningsOutcomeFor(deps, origin, providerId, lat, lon, token);
     const warnings = resolveEndpoint(outcome, cached?.warnings, cached?.warningsState, nowMs, []);
-    if (cached && outcome.status !== 'failure') {
+    if (outcome.status !== 'failure') {
       const updated: ProviderPoint = {
-        ...cached,
+        ...(cached ?? emptyWarningHost(requestKey, nowMs)),
         warnings: warnings.data,
         warningsState: warnings.state,
         warningAvailability: warningsAvailability(warnings.state, warnings.data),

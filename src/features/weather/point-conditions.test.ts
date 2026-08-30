@@ -22,6 +22,14 @@ const WARNING: WeatherWarning = {
   type: 'Gale',
 };
 
+const NWS_WARNING: WeatherWarning = {
+  startTime: '2026-06-11T00:00:00Z',
+  endTime: '2026-06-12T00:00:00Z',
+  details: 'Gale Warning issued for coastal waters',
+  source: 'NWS',
+  type: 'Gale Warning',
+};
+
 const success = <T>(value: T): EndpointOutcome<T> => ({ status: 'success', value });
 
 function makeDeps(nowRef: { ms: number }) {
@@ -29,6 +37,8 @@ function makeDeps(nowRef: { ms: number }) {
     observations: vi.fn(async () => success(OBS)),
     forecasts: vi.fn(async () => success(SERIES)),
     warnings: vi.fn(async () => success([WARNING])),
+    // Out of NWS coverage by default, so the fallback stays inert unless a test arms it.
+    nwsAlerts: vi.fn(async () => ({ status: 'unsupported' }) as const),
     now: () => nowRef.ms,
     persist: createExpiringStore<ProviderPoint>('test', { factory: undefined }),
   };
@@ -301,5 +311,97 @@ describe('createPointConditionsLoader', () => {
     const warningPoint = await loader.loadWarnings('http://pi', 'provider-id', 1, 2);
     expect(warningPoint.warnings).toEqual([]);
     expect(warningPoint.warningAvailability).toBe('unavailable');
+  });
+});
+
+describe('NWS point-alert fallback', () => {
+  it('keys the providerless cache apart from every provider key', () => {
+    expect(pointConditionsKey(undefined, 1, 2)).toBe('nws@1.000,2.000');
+    expect(pointConditionsKey(undefined, 1, 2)).not.toBe(pointConditionsKey('nws', 1, 2));
+  });
+
+  it('serves providerless warnings from NWS without touching the provider endpoint', async () => {
+    const deps = {
+      ...makeDeps({ ms: 1_000 }),
+      nwsAlerts: vi.fn(async () => success([NWS_WARNING])),
+    };
+    const loader = createPointConditionsLoader(deps);
+
+    const point = await loader.loadWarnings('http://pi', undefined, 27.7, -82.7, 'token');
+
+    expect(point).toMatchObject({
+      requestKey: 'nws@27.700,-82.700',
+      warnings: [NWS_WARNING],
+      warningAvailability: 'fresh',
+      warningsFetchedAt: 1_000,
+    });
+    expect(deps.nwsAlerts).toHaveBeenCalledWith(27.7, -82.7);
+    expect(deps.warnings).not.toHaveBeenCalled();
+  });
+
+  it('replays persisted providerless warnings as stale when the next NWS fetch fails', async () => {
+    const nowRef = { ms: 0 };
+    const persist = createExpiringStore<ProviderPoint>('nws', { factory: undefined });
+    const seeded = {
+      ...makeDeps(nowRef),
+      nwsAlerts: vi.fn(async () => success([NWS_WARNING])),
+      persist,
+    };
+    await createPointConditionsLoader(seeded).loadWarnings('http://pi', undefined, 1, 2);
+    nowRef.ms = 30 * 60_000;
+
+    const failing = {
+      ...makeDeps(nowRef),
+      nwsAlerts: vi.fn(async () => ({ status: 'failure' }) as const),
+      persist,
+    };
+    const point = await createPointConditionsLoader(failing).loadWarnings(
+      'http://pi',
+      undefined,
+      1,
+      2,
+    );
+
+    expect(point).toMatchObject({
+      warnings: [NWS_WARNING],
+      warningAvailability: 'stale',
+      warningsFetchedAt: 0,
+    });
+  });
+
+  it('falls back to NWS on a full load when the provider warnings endpoint is unsupported', async () => {
+    const deps = {
+      ...makeDeps({ ms: 0 }),
+      warnings: vi.fn(async () => ({ status: 'unsupported' }) as const),
+      nwsAlerts: vi.fn(async () => success([NWS_WARNING])),
+    };
+    const point = await createPointConditionsLoader(deps).load('http://pi', 'provider-id', 1, 2);
+
+    expect(point.warnings).toEqual([NWS_WARNING]);
+    expect(point.warningAvailability).toBe('fresh');
+    expect(point.obs).toEqual(OBS);
+  });
+
+  it('reports an out-of-coverage providerless point as unavailable, never as an all-clear', async () => {
+    const deps = makeDeps({ ms: 0 });
+    const point = await createPointConditionsLoader(deps).loadWarnings(
+      'http://pi',
+      undefined,
+      48.85,
+      2.35,
+    );
+
+    expect(point.warnings).toBeUndefined();
+    expect(point.warningAvailability).toBe('unavailable');
+  });
+
+  it('does not consult NWS when the provider answers its own warnings', async () => {
+    const deps = makeDeps({ ms: 0 });
+    const loader = createPointConditionsLoader(deps);
+    await loader.load('http://pi', 'provider-id', 1, 2);
+    deps.warnings.mockResolvedValueOnce({ status: 'failure' });
+    await loader.loadWarnings('http://pi', 'provider-id', 1, 2);
+
+    expect(deps.nwsAlerts).not.toHaveBeenCalled();
   });
 });
