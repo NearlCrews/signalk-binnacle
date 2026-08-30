@@ -6,9 +6,14 @@ import TrendChart from './TrendChart.svelte';
 import {
   type AttributedTrendSeries,
   hasTrendSamples,
+  type TrendAnnotation,
   type TrendCoverage,
+  type TrendDangerSide,
+  trendAnnotation,
   trendCoverage,
+  trendDangerSide,
   trendDisplayFor,
+  trendNoiseFloor,
 } from './trend-metrics';
 import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
@@ -33,6 +38,8 @@ interface Section {
   digits: number;
   times: readonly number[];
   values: ReadonlyArray<number | null>;
+  annotation: TrendAnnotation | undefined;
+  dangerSide: TrendDangerSide;
 }
 
 const sections = $derived(
@@ -47,6 +54,8 @@ const sections = $derived(
         digits: 0,
         times: [],
         values: [],
+        annotation: undefined,
+        dangerSide: 'both',
       };
     }
     const history = controller.history?.series.get(item.id);
@@ -68,6 +77,8 @@ const sections = $derived(
       values: sourceSeries.values.map((value) =>
         value == null ? null : (display.convert(value) ?? null),
       ),
+      annotation: trendAnnotation(sourceSeries, trendNoiseFloor(descriptor.display)),
+      dangerSide: trendDangerSide(descriptor.display),
     };
   }),
 );
@@ -114,6 +125,36 @@ function summary(section: Section): string {
     `start ${valueAt(section, first)}${unitSuffix(section)}`,
     `end ${valueAt(section, last)}${unitSuffix(section)}`,
   ].join(', ');
+}
+
+// The deterministic annotation line under each chart: the verdict from the first-to-last change
+// against the kind's noise floor, the extreme on the kind's danger side (both when neither
+// dominates), and the net change. All values are converted at this display edge; the net change is
+// a difference of two converted values so an offset conversion cannot distort it.
+function annotationText(section: Section): string | undefined {
+  const annotation = section.annotation;
+  if (!annotation) return undefined;
+  const verdict = annotation.verdict.charAt(0).toUpperCase() + annotation.verdict.slice(1);
+  const parts = [verdict];
+  const low = section.values[annotation.minIndex];
+  const high = section.values[annotation.maxIndex];
+  if (section.dangerSide !== 'max' && low != null) {
+    parts.push(`low ${formatFixed(low, section.digits)}${unitSuffix(section)}`);
+  }
+  if (section.dangerSide !== 'min' && high != null) {
+    parts.push(`high ${formatFixed(high, section.digits)}${unitSuffix(section)}`);
+  }
+  const first = section.values[annotation.firstIndex];
+  const last = section.values[annotation.lastIndex];
+  if (first != null && last != null) {
+    const net = last - first;
+    let netText = formatFixed(net, section.digits);
+    // A change that rounds to zero drops its sign, so a hair under steady never reads "-0.0".
+    if (Number.parseFloat(netText) === 0) netText = formatFixed(Math.abs(net), section.digits);
+    else if (net > 0) netText = `+${netText}`;
+    parts.push(`net ${netText}${unitSuffix(section)}`);
+  }
+  return parts.join(' · ');
 }
 
 // The honesty line under each chart: coverage, longest hole, and the newest sample's age, with
@@ -180,6 +221,7 @@ function valueText(section: Section, index: number): string {
     {@const index = inspectIndex(section)}
     {@const hasData = section.values.some((value) => value != null)}
     {@const coverage = trendCoverage(section.sourceSeries, clock.now / 1000)}
+    {@const annotationLine = annotationText(section)}
     {@const scrubberId = scrubberInputId(section.item.id)}
     <section class="panel-section trend-section" aria-label="{section.item.label} trend">
       <div class="head">
@@ -218,6 +260,9 @@ function valueText(section: Section, index: number): string {
           >
           <output for={scrubberId}>{valueText(section, index)}</output>
         </div>
+        {#if annotationLine}
+          <p class="annotation">{annotationLine}</p>
+        {/if}
         <p class="summary">{summary(section)}</p>
         {#if coverage}
           <p class="summary" class:coverage-flagged={coverage.partial || coverage.stale}>
@@ -269,11 +314,16 @@ function valueText(section: Section, index: number): string {
   font-size: var(--text-xs);
 }
 .source-note,
-.summary {
+.summary,
+.annotation {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--text-xs);
   overflow-wrap: anywhere;
+}
+/* The annotation's numbers stay column-steady while samples update. */
+.annotation {
+  font-variant-numeric: tabular-nums;
 }
 /* A flagged coverage line lifts to the warning tone; the Partial and Stale words carry the meaning
    without the color. */

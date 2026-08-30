@@ -196,6 +196,63 @@ describe('Trends UI', () => {
     expect(body).toContain(`aria-labelledby="${headingId}"`);
   });
 
+  it('annotates a chart with the verdict, both extremes, and the net change', () => {
+    const depthItem = item(descriptor('depth', 'Depth'));
+    const body = render(TrendCharts, {
+      props: {
+        controller: controller({
+          selectedIds: ['depth'],
+          selected: [depthItem],
+          charts: [depthItem],
+          // The count kind calls out both extremes; net +2 clears its noise floor of 1.
+          sessionSeries: () => ({ times: [1, 2, 3], values: [4, 2, 6], path: 'path.depth' }),
+        }),
+        units: 'metric',
+        theme: 'day',
+      },
+    }).body;
+    expect(body).toContain('Rising · low 2 · high 6 · net +2');
+  });
+
+  it('annotates a min-danger kind with only its low extreme, in display units', () => {
+    const depthItem = item({
+      ...descriptor('depth', 'Depth'),
+      display: 'depth',
+      metricPrecision: 1,
+    });
+    const body = render(TrendCharts, {
+      props: {
+        controller: controller({
+          selectedIds: ['depth'],
+          selected: [depthItem],
+          charts: [depthItem],
+          sessionSeries: () => ({ times: [1, 2, 3], values: [4, 2, 6], path: 'path.depth' }),
+        }),
+        units: 'metric',
+        theme: 'day',
+      },
+    }).body;
+    expect(body).toContain('Rising · low 2.0 m · net +2.0 m');
+    expect(body).not.toContain('high 6.0 m');
+  });
+
+  it('reads a change inside the noise floor as steady with an unsigned zero net', () => {
+    const depthItem = item(descriptor('depth', 'Depth'));
+    const body = render(TrendCharts, {
+      props: {
+        controller: controller({
+          selectedIds: ['depth'],
+          selected: [depthItem],
+          charts: [depthItem],
+          sessionSeries: () => ({ times: [1, 2, 3], values: [4, 2, 4.2], path: 'path.depth' }),
+        }),
+        units: 'metric',
+        theme: 'day',
+      },
+    }).body;
+    expect(body).toContain('Steady · low 2 · high 4 · net 0');
+  });
+
   it('states when an unselected focused trend starts its shorter session window', () => {
     const depth = descriptor('depth', 'Depth');
     const depthItem = item(depth);

@@ -14,7 +14,9 @@ import {
   type TrackRecorder,
 } from '$entities/track';
 import {
+  formatClockTime,
   formatDuration,
+  formatMonthDay,
   formatNm,
   formatSpeedOr,
   PLACEHOLDER,
@@ -22,11 +24,13 @@ import {
   speedUnit,
   type UnitsSelection,
 } from '$shared/lib';
+import { crossesLocalMidnight } from '$shared/nav';
 import type { PersistedValue, TrackSettings } from '$shared/settings';
 import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
   ArmedRow,
   createPanelMinimize,
+  Disclosure,
   defaultSaveName,
   InlineConfirm,
   NameEntry,
@@ -36,6 +40,12 @@ import {
   VisibilityToggle,
   WriteAccessNote,
 } from '$shared/ui';
+import {
+  computePassageDebrief,
+  DEBRIEF_MIN_DISTANCE_METERS,
+  DEBRIEF_MIN_DURATION_SECONDS,
+  debriefReady,
+} from './debrief';
 import type { TrackLoadState, TracksProvisioning } from './track-controller.svelte';
 import type { SavedTrack } from './tracks-client';
 
@@ -123,6 +133,19 @@ const resumedNewSegment = $derived.by(() => {
   return false;
 });
 const canSaveTrack = $derived(hasDrawableTrack(recorder.points));
+const debrief = $derived(computePassageDebrief(recorder.points));
+// Built from the same constants the gate reads, so the copy cannot drift from the threshold.
+const debriefThresholdNote =
+  `The debrief appears once the current track covers at least ` +
+  `${formatDuration(DEBRIEF_MIN_DURATION_SECONDS)} and ${formatNm(DEBRIEF_MIN_DISTANCE_METERS)} nm: ` +
+  `time underway versus stopped, distance, speeds while underway, and the longest continuous leg.`;
+// The end time already reads as a clock time; only a passage that crossed local midnight needs the
+// day named beside it.
+const debriefEndDay = $derived(
+  debrief && crossesLocalMidnight(debrief.startMs, debrief.endMs)
+    ? formatMonthDay(debrief.endMs)
+    : '',
+);
 const canMakeRoute = $derived(latestTrackSegment(recorder.points).length >= 2);
 const trackHasGaps = $derived(hasTrackGaps(recorder.points));
 const storageMissing = $derived(provisioning === 'unprovisioned');
@@ -392,6 +415,64 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       </dd>
     </dl>
   </section>
+
+  <Disclosure label="Passage debrief">
+    {#if debrief && debriefReady(debrief)}
+      <dl class="stat-grid">
+        <dt>Start</dt>
+        <dd>
+          <span class="num">{formatClockTime(debrief.startMs)}</span>
+          <span class="unit"></span>
+        </dd>
+        <dt>End</dt>
+        <dd>
+          <span class="num">{formatClockTime(debrief.endMs)}</span>
+          <span class="unit">{debriefEndDay}</span>
+        </dd>
+        <dt>Underway</dt>
+        <dd>
+          <span class="num">{formatDuration(debrief.underwaySeconds)}</span>
+          <span class="unit"></span>
+        </dd>
+        <dt>Stopped</dt>
+        <dd>
+          <span class="num">{formatDuration(debrief.stoppedSeconds)}</span>
+          <span class="unit"></span>
+        </dd>
+        <dt>Distance</dt>
+        <dd>
+          <span class="num">{formatNm(debrief.distanceMeters)}</span>
+          <span class="unit">nm</span>
+        </dd>
+        <dt>Avg underway</dt>
+        <dd>
+          <span class="num">{formatSpeedOr(debrief.avgUnderwaySog, units)}</span>
+          <span class="unit">{speedUnit(units)}</span>
+        </dd>
+        <dt>Top underway</dt>
+        <dd>
+          <span class="num">{formatSpeedOr(debrief.maxUnderwaySog, units)}</span>
+          <span class="unit">{speedUnit(units)}</span>
+        </dd>
+        <dt>Longest leg</dt>
+        <dd>
+          <span class="num">
+            {debrief.longestLeg ? formatNm(debrief.longestLeg.distanceMeters) : PLACEHOLDER}
+          </span>
+          <span class="unit">nm</span>
+        </dd>
+        <dt>Leg time</dt>
+        <dd>
+          <span class="num">
+            {debrief.longestLeg ? formatDuration(debrief.longestLeg.durationSeconds) : PLACEHOLDER}
+          </span>
+          <span class="unit"></span>
+        </dd>
+      </dl>
+    {:else}
+      <p class="muted-note">{debriefThresholdNote}</p>
+    {/if}
+  </Disclosure>
 
   {#if loadState === 'error'}
     <p class="alert-note" role="alert">

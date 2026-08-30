@@ -4,6 +4,7 @@ import type {
 } from '$entities/instrument-trend';
 import {
   CUBIC_METERS_TO_US_GALLONS,
+  DEG_TO_RAD,
   lengthUnit,
   metersToFeet,
   pressureUnit,
@@ -162,6 +163,124 @@ const TREND_PARTIAL_BELOW = 0.9;
 // A newest sample older than this, or than three median sample intervals when that is longer, is
 // marked stale: the chart still shows history, but its right edge is not the present.
 export const TREND_STALE_AFTER_SEC = 600;
+
+export type TrendVerdict = 'steady' | 'rising' | 'falling';
+export type TrendDangerSide = 'min' | 'max' | 'both';
+
+// Which end of a charted series carries the risk, so the annotation line calls out the extreme a
+// watchkeeper actually cares about: shoaling depth, a falling barometer, a draining battery, and
+// sagging voltage on the low side; building speed, engine revolutions, current draw, and load on
+// the high side. Kinds where neither end dominates (a cabin can be too hot or too cold, a tank
+// matters both full and empty) report both.
+export function trendDangerSide(kind: InstrumentTrendDisplayKind): TrendDangerSide {
+  switch (kind) {
+    case 'depth':
+    case 'pressure':
+    case 'ratio':
+    case 'voltage':
+      return 'min';
+    case 'speed':
+    case 'rpm':
+    case 'current':
+    case 'power':
+      return 'max';
+    case 'temperature':
+    case 'volume':
+    case 'duration':
+    case 'rate-of-turn':
+    case 'count':
+      return 'both';
+  }
+}
+
+// The per-kind noise floor in SI units: a first-to-last change at or under it reads as steady
+// rather than a trend. Sized to ordinary sensor jitter over a chart window (a quarter meter per
+// second is about half a knot, 100 Pa is one hectopascal, 0.02 is two percentage points).
+export function trendNoiseFloor(kind: InstrumentTrendDisplayKind): number {
+  switch (kind) {
+    case 'speed':
+      return 0.25;
+    case 'depth':
+      return 0.5;
+    case 'pressure':
+      return 100;
+    case 'temperature':
+      return 0.5;
+    case 'ratio':
+      return 0.02;
+    case 'rpm':
+      // 50 rpm, in the store's hertz.
+      return 50 / 60;
+    case 'duration':
+      // 0.1 hours, in seconds.
+      return 360;
+    case 'rate-of-turn':
+      // One degree per minute, in radians per second.
+      return DEG_TO_RAD / 60;
+    case 'voltage':
+      return 0.2;
+    case 'current':
+      return 1;
+    case 'volume':
+      // 10 liters, in cubic meters.
+      return 0.01;
+    case 'power':
+      return 25;
+    case 'count':
+      return 1;
+  }
+}
+
+// The deterministic annotation under one chart, computed over the SI series. Indices point back
+// into the series so the caller can read the matching converted display values.
+export interface TrendAnnotation {
+  firstIndex: number;
+  lastIndex: number;
+  minIndex: number;
+  maxIndex: number;
+  // Last sample minus first, SI. A display-edge delta must subtract two converted values instead
+  // of converting this one: an offset conversion (Kelvin to Fahrenheit) would distort it.
+  netChange: number;
+  verdict: TrendVerdict;
+}
+
+export function trendAnnotation(
+  series: TrendSeries,
+  noiseFloor: number,
+): TrendAnnotation | undefined {
+  let firstIndex = -1;
+  let lastIndex = -1;
+  let minIndex = -1;
+  let maxIndex = -1;
+  let firstValue = 0;
+  let lastValue = 0;
+  let minValue = Number.POSITIVE_INFINITY;
+  let maxValue = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < series.values.length; index += 1) {
+    const value = series.values[index];
+    if (value == null || !Number.isFinite(value)) continue;
+    if (firstIndex < 0) {
+      firstIndex = index;
+      firstValue = value;
+    }
+    lastIndex = index;
+    lastValue = value;
+    if (value < minValue) {
+      minValue = value;
+      minIndex = index;
+    }
+    if (value > maxValue) {
+      maxValue = value;
+      maxIndex = index;
+    }
+  }
+  // A single sample has no direction; the latest-value readout already covers it.
+  if (firstIndex < 0 || lastIndex === firstIndex) return undefined;
+  const netChange = lastValue - firstValue;
+  let verdict: TrendVerdict = 'steady';
+  if (Math.abs(netChange) > noiseFloor) verdict = netChange > 0 ? 'rising' : 'falling';
+  return { firstIndex, lastIndex, minIndex, maxIndex, netChange, verdict };
+}
 
 export function trendCoverage(series: TrendSeries, nowSec: number): TrendCoverage | undefined {
   const sampleTimes: number[] = [];

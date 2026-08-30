@@ -178,6 +178,37 @@ describe('TracksPanel', () => {
     );
   });
 
+  it('reveals the passage debrief once the recording clears the time and distance floors', () => {
+    const recorder = {
+      points: [
+        { lat: 0, lon: 0, t: 0, sog: 2 },
+        { lat: 0.01, lon: 0, t: 600_000, sog: 3 },
+      ],
+      paused: false,
+      stats: { distanceMeters: 1112, durationSeconds: 600, avgSog: 1.85, maxSog: 3 },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as TrackRecorder;
+    const body = renderPanel({ recorder });
+    expect(body).toContain('Passage debrief');
+    expect(body).toContain('Underway');
+    expect(body).toContain('Stopped');
+    expect(body).toContain('Avg underway');
+    expect(body).toContain('Top underway');
+    expect(body).toContain('Longest leg');
+    expect(body).not.toContain('The debrief appears once the current track covers');
+  });
+
+  it('states the debrief thresholds while the recording is still short', () => {
+    const body = renderPanel();
+    expect(body).toContain('Passage debrief');
+    expect(body).toContain(
+      'The debrief appears once the current track covers at least 10 min and 0.25 nm',
+    );
+    expect(body).not.toContain('Longest leg');
+  });
+
   it('explains memory-only persistence and gap-safe route conversion', () => {
     const recorder = {
       points: [...connectedPoints, { lat: 2, lon: 2, t: 20_000, sog: 1, gap: true }],
