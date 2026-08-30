@@ -71,7 +71,10 @@ test('find places enables its layer, searches provider metadata, and keeps selec
   await expect(placesToggle).toHaveAttribute('aria-pressed', 'false');
   await placesToggle.click();
   await expect.poll(() => listRequests, { timeout: 15_000 }).toBeGreaterThan(0);
-  await expect(panel.getByText('Harbor Marina')).toBeVisible({ timeout: 15_000 });
+  // 30 s, not the suite's 15: the first notes paint sits behind the fetch, the merge, and a map
+  // idle on a Pi that may be running the whole gate; this step is the suite's one recurring
+  // load-flake and the generous bound only slows a genuinely broken run.
+  await expect(panel.getByText('Harbor Marina')).toBeVisible({ timeout: 30_000 });
   await expect(panel.getByText("Marina · Crow's Nest")).toBeVisible();
   await expect(panel.getByText('Distance and bearing need a fresh GPS fix.')).toBeVisible();
 
