@@ -58,6 +58,7 @@ const SUBSCRIPTIONS = [
   { path: SK_PATHS.designAirHeight, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.designLength, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.designBeam, policy: 'instant' as const, minPeriod: 5000 },
+  { path: SK_PATHS.environmentMode, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.anchorPosition, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.anchorMaxRadius, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.allNotifications, policy: 'instant' as const, minPeriod: 1000 },

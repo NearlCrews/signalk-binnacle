@@ -22,6 +22,7 @@ import { loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
 import { loadCompanionAiPanel } from '$features/companion-ai';
+import { DisplayPanel } from '$features/display';
 import { loadHandoffPanel } from '$features/handoff';
 import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
@@ -120,6 +121,7 @@ interface FlatProps {
   tidesController: TidesController;
   handoff: import('$features/handoff').HandoffController;
   companionAi: import('$features/companion-ai').CompanionAiController;
+  display: import('$features/display').DisplaySettingsController;
 
   // Entity stores
   anchor: AnchorWatch;
@@ -332,7 +334,8 @@ type ControllerKey =
   | 'marineRadar'
   | 'tidesController'
   | 'handoff'
-  | 'companionAi';
+  | 'companionAi'
+  | 'display';
 type EntityKey =
   | 'anchor'
   | 'mob'
@@ -519,6 +522,7 @@ const {
   tidesController,
   handoff,
   companionAi,
+  display,
 } = $derived(controllers);
 const {
   anchor,
@@ -1441,6 +1445,8 @@ $effect(() => {
             onRetry={retryLazyPanel}
           />
         {/await}
+      {:else if activePanel === 'display'}
+        <DisplayPanel controller={display} onClose={closePanel} onBack={backToMenu} />
       {:else if activePanel === 'companion-ai'}
         {#await forAttempt(loadCompanionAiPanel)}
           <LazyPanelState
@@ -1981,6 +1987,7 @@ $effect(() => {
           positionStale={vessel.positionStale}
           pointLoader={pointConditionsLoader}
           measuredTendency={barometer.tendency}
+          paintVariant={display.sunMode && theme.theme === 'day' ? 'sun' : 'standard'}
           online={net.online}
           onClose={closeWeatherPanel}
           onBack={backFromWeatherPanel}

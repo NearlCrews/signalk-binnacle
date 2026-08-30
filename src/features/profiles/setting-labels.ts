@@ -17,6 +17,10 @@ const PROFILE_SETTING_LABELS: Record<PortableProfileSettingKey, string> = {
   instrumentTiles: 'Instrument dock',
   trendInstrumentIds: 'Data trends',
   anchorRadiusMeters: 'Anchor radius',
+  displayDim: 'Screen dim',
+  displayAutoTheme: 'Automatic theme',
+  displayTextScale: 'Text size',
+  displaySunMode: 'Bright sun chart',
 };
 
 const LIST_FORMAT = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' });

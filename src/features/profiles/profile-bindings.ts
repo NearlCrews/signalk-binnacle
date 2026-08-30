@@ -37,6 +37,19 @@ export interface ProfileBindingDeps {
   };
   // The chart orientation mode (north-up, course-up, heading-up).
   chartOrientation: PersistedValue<ChartOrientationMode>;
+  // The display cluster, bound through the controller's clamping setters so a corrupt profile
+  // value cannot escape the bounds. Structural on purpose: the display slice is a feature, and a
+  // sibling feature may not import its types.
+  display: {
+    readonly dim: number;
+    setDim(value: number): void;
+    readonly autoTheme: boolean;
+    setAutoTheme(on: boolean): void;
+    readonly textScale: number;
+    setTextScale(value: number): void;
+    readonly sunMode: boolean;
+    setSunMode(on: boolean): void;
+  };
 }
 
 export interface ProfileBindings {
@@ -135,6 +148,32 @@ export function createProfileBindings(deps: ProfileBindingDeps): ProfileBindings
       // rather than inheriting the previously active profile's rotation.
       write: (s) => deps.chartOrientation.set(s.chartOrientation ?? 'north'),
       track: () => void deps.chartOrientation.value,
+    },
+    displayDim: {
+      read: () => ({ displayDim: deps.display.dim }),
+      // A legacy profile resets to undimmed rather than inheriting the prior profile's dim.
+      write: (s) => deps.display.setDim(s.displayDim ?? 0),
+      track: () => void deps.display.dim,
+    },
+    displayAutoTheme: {
+      read: () => ({ displayAutoTheme: deps.display.autoTheme }),
+      write: (s) => deps.display.setAutoTheme(s.displayAutoTheme ?? false),
+      track: () => void deps.display.autoTheme,
+    },
+    displayTextScale: {
+      read: () => ({ displayTextScale: deps.display.textScale }),
+      // Snapped to the setting's 10-percent steps so an off-step value from an older or foreign
+      // document still applies instead of silently leaving the prior profile's scale in place.
+      write: (s) => {
+        const scale = Math.round((s.displayTextScale ?? 100) / 10) * 10;
+        deps.display.setTextScale(Math.min(130, Math.max(100, scale)));
+      },
+      track: () => void deps.display.textScale,
+    },
+    displaySunMode: {
+      read: () => ({ displaySunMode: deps.display.sunMode }),
+      write: (s) => deps.display.setSunMode(s.displaySunMode ?? false),
+      track: () => void deps.display.sunMode,
     },
     units: {
       read: () => ({ units: deps.unitsLocal.snapshot() }),

@@ -44,6 +44,24 @@ function makeDeps(): ProfileBindingDeps {
       },
     },
     chartOrientation: pv('north'),
+    display: {
+      dim: 0,
+      setDim(value: number) {
+        this.dim = value;
+      },
+      autoTheme: false,
+      setAutoTheme(on: boolean) {
+        this.autoTheme = on;
+      },
+      textScale: 100,
+      setTextScale(value: number) {
+        this.textScale = value;
+      },
+      sunMode: false,
+      setSunMode(on: boolean) {
+        this.sunMode = on;
+      },
+    },
   } as unknown as ProfileBindingDeps;
 }
 

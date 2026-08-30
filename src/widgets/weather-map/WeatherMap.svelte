@@ -53,7 +53,12 @@ import {
   pressureUnit,
   speedUnit,
 } from '$shared/lib';
-import { createThemedMap, type LayerSettings, type ThemedMapHandle } from '$shared/map';
+import {
+  createThemedMap,
+  type LayerSettings,
+  type MapPaintVariant,
+  type ThemedMapHandle,
+} from '$shared/map';
 import type { MapView } from '$shared/settings';
 import { dialog, PANEL_TRANSITION_MS, PanelHeader, type Theme } from '$shared/ui';
 import { createForecastPlayback } from './playback.svelte';
@@ -93,6 +98,8 @@ interface Props {
   pointLoader?: PointConditionsLoader;
   // The boat's own barometer tendency, measured aboard; passed through to the conditions block.
   measuredTendency?: import('$features/weather').BarometerTendency;
+  // The bright-sun day paint variant; the dark themes ignore it inside the paint module.
+  paintVariant?: MapPaintVariant;
   // Connectivity, so cached radar is labeled rather than passing as live.
   online?: boolean;
   // When supplied, a leading back button returns to the menu, matching the slide-over convention.
@@ -117,6 +124,7 @@ const {
   positionStale = false,
   pointLoader,
   measuredTendency = undefined,
+  paintVariant = 'standard',
   online = true,
   onBack,
   onClose,
@@ -151,7 +159,7 @@ let destroyed = false;
 // an AbortController removes any ambiguity about the listener outliving the component.
 const mapKeyListeners = new AbortController();
 let getBounds: (() => Bbox) | undefined;
-let recolor: ((next: Theme) => void) | undefined;
+let recolor: ((next: Theme, variant?: MapPaintVariant) => void) | undefined;
 let layersView = $state<LayersView | undefined>();
 
 let conditionsOpen = $state(false);
@@ -354,9 +362,10 @@ $effect(() => {
   if (activeCount > 0 && !store.grid) scheduleFetch();
 });
 
-// Recolor when the theme prop changes; the initial recolor runs inline once the map loads.
+// Recolor when the theme prop or the paint variant changes; the initial recolor runs inline once
+// the map loads.
 $effect(() => {
-  recolor?.(theme);
+  recolor?.(theme, paintVariant);
 });
 
 onMount(() => {
@@ -414,7 +423,7 @@ onMount(() => {
       if (isDestroyed()) return;
 
       recolor = recolorFn;
-      recolor(theme);
+      recolor(theme, paintVariant);
 
       getBounds = () => boundsToBbox(map.getBounds());
       map.on('moveend', scheduleFetch);

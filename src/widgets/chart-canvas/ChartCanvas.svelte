@@ -56,6 +56,7 @@ import {
   detectCompanion,
   type LayerManager,
   type LayerSettings,
+  type MapPaintVariant,
   type MapTapEvent,
   proxiedSources,
   type ThemedMapHandle,
@@ -130,7 +131,7 @@ interface Props {
   savedOrder?: string[];
   onOrderChange?: (order: string[]) => void;
   onReady?: (view: LayersView) => void;
-  onMapReady?: (recolor: (theme: Theme) => void) => void;
+  onMapReady?: (recolor: (theme: Theme, variant?: MapPaintVariant) => void) => void;
   onCommandsReady?: (commands: MapCommands) => void;
   onUserChartsReady?: (registrar: UserChartRegistrar) => void;
   onServerChartsReady?: (retry: () => void) => void;

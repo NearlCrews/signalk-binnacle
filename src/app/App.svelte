@@ -13,6 +13,7 @@ import Gauge from '@lucide/svelte/icons/gauge';
 import History from '@lucide/svelte/icons/history';
 import Layers from '@lucide/svelte/icons/layers';
 import LocateFixed from '@lucide/svelte/icons/locate-fixed';
+import Lock from '@lucide/svelte/icons/lock';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import Menu from '@lucide/svelte/icons/menu';
 import Navigation from '@lucide/svelte/icons/navigation';
@@ -22,6 +23,7 @@ import Ruler from '@lucide/svelte/icons/ruler';
 import Search from '@lucide/svelte/icons/search';
 import Ship from '@lucide/svelte/icons/ship';
 import Spline from '@lucide/svelte/icons/spline';
+import SunMoon from '@lucide/svelte/icons/sun-moon';
 import UserCog from '@lucide/svelte/icons/user-cog';
 import VolumeX from '@lucide/svelte/icons/volume-x';
 import Waves from '@lucide/svelte/icons/waves';
@@ -60,6 +62,7 @@ import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
 import { createCompanionAiController, latestCompanionHeadline } from '$features/companion-ai';
 import { NOAA_ENC_SOURCE_ID, shouldOfferNoaaEnc } from '$features/depth-charts';
+import { createDisplaySettingsController, DimOverlay } from '$features/display';
 import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
   createInstrumentsController,
@@ -137,6 +140,7 @@ import {
   type TideStationSelectionEvent,
 } from '$features/tides';
 import { createTimeTravelController } from '$features/time-travel';
+import { createTouchLock, TouchLockOverlay } from '$features/touch-lock';
 import { createTrackController } from '$features/tracks';
 import { createTrendsController } from '$features/trends';
 import { createWaypointsController, WaypointDialog } from '$features/waypoints';
@@ -175,7 +179,7 @@ import {
   isRecord,
   Toast,
 } from '$shared/lib';
-import type { CompanionProbeResult, LayerSettings } from '$shared/map';
+import type { CompanionProbeResult, LayerSettings, MapPaintVariant } from '$shared/map';
 import { DEFAULT_OVERLAY_STATE, probeCompanion } from '$shared/map';
 import { binnacleStorageKey } from '$shared/persistence';
 import {
@@ -628,7 +632,7 @@ function toggleInstrumentsPanel(): void {
   }
   finishOpeningInstrumentsPanel();
 }
-let recolorMap: ((theme: Theme) => void) | undefined;
+let recolorMap: ((theme: Theme, variant?: MapPaintVariant) => void) | undefined;
 let chartsToken = $state<string | undefined>();
 
 // The selected POI and a cache-owning detail loader, both set once auth resolves.
@@ -675,7 +679,35 @@ let hoveredPoi = $state<Poi | undefined>();
 let updateReady = $state(false);
 const pwa = registerPwa(() => (updateReady = true));
 
-const theme = createThemeController((next) => recolorMap?.(next));
+const theme = createThemeController((next) => recolorMap?.(next, chartPaintVariant));
+
+// The display cluster: the true-black dim layer, the opt-in automatic day and night theme (from
+// environment.mode with a solar fallback), and the interface text scale. The controller drives the
+// theme and the root font size itself.
+store.ensureCells([SK_PATHS.environmentMode]);
+const display = createDisplaySettingsController({
+  getEnvironmentMode: () => store.cell(SK_PATHS.environmentMode).value,
+  getPosition: () => vessel.position,
+  clock,
+  getTheme: () => theme.theme,
+  setTheme: (next) => theme.set(next),
+});
+
+// The wet-screen lock: session-only, engaged from the Safety menu; its shield tiles around the
+// MOB key and the safety rail so alarm acknowledgments stay live while everything else is inert.
+const touchLock = createTouchLock();
+
+// The bright-sun paint variant applies only while the day theme is active; dusk and night-red
+// ignore it inside mapThemePaint anyway, so this gate only avoids pointless recolors.
+const chartPaintVariant = $derived<MapPaintVariant>(
+  display.sunMode && theme.theme === 'day' ? 'sun' : 'standard',
+);
+// A variant flip re-paints the live chart; theme changes already recolor through the controller
+// callback, so this effect keys on the variant alone.
+$effect(() => {
+  const variant = chartPaintVariant;
+  untrack(() => recolorMap?.(theme.theme, variant));
+});
 
 // Profile state restored across visits: the last map view and the layer settings.
 const mapViewStore = createMapView();
@@ -999,6 +1031,7 @@ const profileBindings = createProfileBindings({
     set: (radiusMeters) => anchor.rememberRadius(radiusMeters),
   },
   chartOrientation,
+  display,
 });
 
 // Push a profile's persisted layer snapshots to the live maps after the bindings update their stores.
@@ -1864,6 +1897,14 @@ const menuItems = $derived<MenuItem[]>([
     onSelect: () => togglePanel('handoff'),
   },
   {
+    id: 'touch-lock',
+    label: 'Lock screen',
+    shortLabel: 'Lock',
+    icon: Lock,
+    group: 'Safety',
+    onSelect: () => touchLock.lock(),
+  },
+  {
     id: 'forecast',
     label: 'Forecast',
     icon: CloudSun,
@@ -1946,6 +1987,15 @@ const menuItems = $derived<MenuItem[]>([
       const opened = window.open(KIP_URL, '_blank', 'noopener,noreferrer');
       if (!opened) toast.show('The browser blocked the KIP window. Allow pop-ups, then try again.');
     },
+  },
+  {
+    id: 'display',
+    label: 'Display',
+    sublabel: 'Dim, auto theme, text size',
+    icon: SunMoon,
+    group: 'Settings',
+    pressed: activePanel === 'display',
+    onSelect: () => togglePanel('display'),
   },
   {
     id: 'profiles',
@@ -2172,7 +2222,7 @@ const userChartsController = createUserChartsController({
     (auth.status === 'unsecured' || auth.status === 'authenticated') && !auth.writeBlocked,
   onSyncError: (message) => toast.show(message),
   userCharts,
-  recolorMap: (t) => recolorMap?.(t),
+  recolorMap: (t) => recolorMap?.(t, chartPaintVariant),
   getTheme: () => theme.theme,
 });
 userCharts.setReplaceHandler(userChartsController.replaceUserChartOverlay);
@@ -2771,6 +2821,7 @@ const plotterControllers = {
   tidesController,
   handoff,
   companionAi,
+  display,
 };
 
 const plotterEntities = {
@@ -2797,9 +2848,9 @@ const plotterActions = {
   onOrderChange: (order: string[]) => layerOrder.set(order),
   onWeatherLayersChange: (settings: LayerSettings) => weatherLayerSettings.set(settings),
   onLayersReady: (view: LayersView) => (layersView = view),
-  onMapReady: (recolor: (theme: Theme) => void) => {
+  onMapReady: (recolor: (theme: Theme, variant?: MapPaintVariant) => void) => {
     recolorMap = recolor;
-    recolor(theme.theme);
+    recolor(theme.theme, chartPaintVariant);
   },
   onCommandsReady: captureMapCommands,
   onUserChartsReady: userChartsController.onUserChartsReady,
@@ -3193,6 +3244,7 @@ const plotterActions = {
       streamController.reconnect();
     }}
   />
+  <TouchLockOverlay lock={touchLock} />
 </main>
 
 {#if waypointsController.addWaypointAt}
@@ -3288,6 +3340,10 @@ const plotterActions = {
     {/await}
   {/key}
 {/if}
+
+<!-- Last child on purpose: the simulated-backlight dim must sit above every piece of chrome. It is
+     pointer-transparent, so stacking it here costs nothing. -->
+<DimOverlay controller={display} />
 
 <style>
 .lazy-note-dialog {

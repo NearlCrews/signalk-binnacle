@@ -36,6 +36,13 @@ export interface ProfileSettings {
   // Chart orientation mode. Optional so profiles saved before orientation existed stay valid;
   // absent reads as north-up.
   chartOrientation?: 'north' | 'course' | 'heading';
+  // The display cluster: screen dim (0 to 0.85), the opt-in automatic theme, and the interface
+  // text scale percent. Optional for older profiles; absent applies each default at the read edge
+  // so a legacy profile cannot inherit the prior profile's dim or scale.
+  displayDim?: number;
+  displayAutoTheme?: boolean;
+  displayTextScale?: number;
+  displaySunMode?: boolean;
   // Legacy device and safety fields remain optional so older exports validate and round-trip, but the
   // current bindings never capture or apply them.
   layerCategories?: Record<string, boolean>;
@@ -58,6 +65,10 @@ export const PORTABLE_PROFILE_SETTING_KEYS = [
   'instrumentTiles',
   'trendInstrumentIds',
   'anchorRadiusMeters',
+  'displayDim',
+  'displayAutoTheme',
+  'displayTextScale',
+  'displaySunMode',
 ] as const satisfies readonly (keyof ProfileSettings)[];
 
 export type PortableProfileSettingKey = (typeof PORTABLE_PROFILE_SETTING_KEYS)[number];

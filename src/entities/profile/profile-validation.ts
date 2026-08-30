@@ -271,6 +271,26 @@ export function isProfileSettings(value: unknown): value is ProfileSettings {
   ) {
     return false;
   }
+  if (
+    value.displayDim !== undefined &&
+    (!isFiniteNumber(value.displayDim) || value.displayDim < 0 || value.displayDim > 0.85)
+  ) {
+    return false;
+  }
+  if (value.displayAutoTheme !== undefined && typeof value.displayAutoTheme !== 'boolean') {
+    return false;
+  }
+  if (value.displaySunMode !== undefined && typeof value.displaySunMode !== 'boolean') {
+    return false;
+  }
+  if (
+    value.displayTextScale !== undefined &&
+    (!isFiniteNumber(value.displayTextScale) ||
+      value.displayTextScale < 100 ||
+      value.displayTextScale > 130)
+  ) {
+    return false;
+  }
   if (value.mode !== undefined && cleanBoundedText(value.mode, 64) !== value.mode) return false;
   const extensionBudget = { remaining: MAX_EXTENSION_NODES };
   for (const [key, extension] of Object.entries(value)) {

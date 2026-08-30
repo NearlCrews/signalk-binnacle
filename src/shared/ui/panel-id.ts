@@ -13,6 +13,7 @@ export type PanelId =
   | 'alarms'
   | 'poi-search'
   | 'companion-ai'
+  | 'display'
   | 'profiles'
   | 'regions'
   | 'charts-management'
