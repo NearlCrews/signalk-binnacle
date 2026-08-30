@@ -35,7 +35,7 @@ beforeEach(() => vi.stubGlobal('ImageData', FakeImageData));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('ais overlay', () => {
-  it('adds an image, a source, a symbol, a selection ring, and a 44 px hit layer', async () => {
+  it('adds an image, a source, a symbol, a selection ring, a name label, and a 44 px hit layer', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
@@ -44,7 +44,7 @@ describe('ais overlay', () => {
     expect(overlay.band).toBe('traffic');
     expect(map.images.size).toBe(1);
     expect(map.sources.size).toBe(1);
-    expect(map.layers.size).toBe(3);
+    expect(map.layers.size).toBe(4);
     expect(addLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'binnacle-ais-selected' }),
       'binnacle-ais-symbol',
@@ -52,6 +52,21 @@ describe('ais overlay', () => {
     expect(map.layers.get('binnacle-ais-hit')?.paint).toMatchObject({
       'circle-radius': 22,
     });
+    expect(overlay.layerIds).toContain('binnacle-ais-label');
+    expect(map.layers.get('binnacle-ais-label')).toMatchObject({
+      type: 'symbol',
+      // Unnamed targets carry name '' and must produce no label.
+      filter: ['!=', ['get', 'name'], ''],
+      layout: expect.objectContaining({
+        'text-field': ['get', 'name'],
+        'text-size': 11,
+      }),
+    });
+    // Collision placement stays on: no overlap or ignore-placement escape hatches.
+    expect(map.layers.get('binnacle-ais-label')?.layout).not.toHaveProperty('text-allow-overlap');
+    expect(map.layers.get('binnacle-ais-label')?.layout).not.toHaveProperty(
+      'text-ignore-placement',
+    );
   });
 
   it('syncs one feature per positioned target', async () => {
@@ -264,13 +279,24 @@ describe('ais overlay', () => {
     );
   });
 
-  it('applyTheme recolors the icon image', async () => {
+  it('applyTheme recolors the icon image and the name labels', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
     const map = createFakeMap();
+    const paint = mapThemePaint('night-red');
     await overlay.add(fakeOverlayContext(map));
-    overlay.applyTheme?.(fakeOverlayContext(map), mapThemePaint('night-red'));
+    overlay.applyTheme?.(fakeOverlayContext(map), paint);
     expect(map.updatedImages).toContain('binnacle-ais-icon');
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-ais-label',
+      'text-color',
+      paint.label,
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      'binnacle-ais-label',
+      'text-halo-color',
+      paint.background,
+    );
   });
 
   it('dispatches only current target ids and tears down hit handlers idempotently', async () => {
@@ -324,6 +350,7 @@ describe('ais overlay', () => {
     overlay.remove(ctx);
     expect(map.handlerCount('click', 'binnacle-ais-hit')).toBe(0);
     expect(map.getCanvas().style.cursor).toBe('');
+    expect(map.layers.has('binnacle-ais-label')).toBe(false);
   });
 
   it('preserves the chart-tool cursor and blocks selection while interactions are owned', async () => {
@@ -370,6 +397,33 @@ describe('ais overlay', () => {
     overlay.sync(ctx);
 
     expect(sourceFeatures(map, 'binnacle-ais')[0]?.properties?.selected).toBe(true);
+  });
+
+  it('hides and reshows the name labels with the overlay', async () => {
+    const overlay = createAisOverlay(new AisTargets(new SignalKStore()));
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+
+    overlay.setVisible?.(ctx, false);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-ais-label', 'visibility', 'none');
+
+    overlay.setVisible?.(ctx, true);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith(
+      'binnacle-ais-label',
+      'visibility',
+      'visible',
+    );
+  });
+
+  it('fades the name labels with overlay opacity', async () => {
+    const overlay = createAisOverlay(new AisTargets(new SignalKStore()));
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+
+    overlay.setOpacity?.(ctx, 0.4);
+    expect(map.setPaintProperty).toHaveBeenCalledWith('binnacle-ais-label', 'text-opacity', 0.4);
   });
 
   it('disables the hit surface when the overlay is hidden or fully transparent', async () => {

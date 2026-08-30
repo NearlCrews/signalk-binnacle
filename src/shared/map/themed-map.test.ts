@@ -17,6 +17,10 @@ vi.mock('maplibre-gl', () => {
     clientWidth = 800;
     clientHeight = 600;
     listeners = new Map<string, Set<(e: unknown) => void>>();
+    attributes = new Map<string, string>();
+    setAttribute(name: string, value: string): void {
+      this.attributes.set(name, value);
+    }
     addEventListener(type: string, fn: (e: unknown) => void): void {
       const set = this.listeners.get(type) ?? new Set();
       set.add(fn);
@@ -142,6 +146,7 @@ interface FakeMapInstance {
   handlers: Map<string, Set<(e?: unknown) => void>>;
   canvas: {
     dispatch(type: string, e: unknown): void;
+    attributes: Map<string, string>;
   };
   fire(event: string, e?: unknown): void;
   options: Record<string, unknown>;
@@ -213,6 +218,16 @@ describe('createThemedMap attribution', () => {
 });
 
 describe('createThemedMap onLoad', () => {
+  it('gives each map canvas the supplied accessible name', async () => {
+    createThemedMap({
+      container,
+      accessibleName: 'Weather forecast map',
+      onLoad: () => {},
+    });
+
+    expect((await lastMap()).canvas.attributes.get('aria-label')).toBe('Weather forecast map');
+  });
+
   it('exposes the initialized map before the style loads', async () => {
     const onLoad = vi.fn();
     const handle = createThemedMap({ container, onLoad });
@@ -287,6 +302,20 @@ describe('createThemedMap onLoad', () => {
 
   it('passes an explicit pixel ratio to MapLibre', async () => {
     createThemedMap({ container, pixelRatio: 1.5, onLoad: () => {} });
+
+    expect((await lastMap()).options.pixelRatio).toBe(1.5);
+  });
+
+  it('caps the default pixel ratio at 2 on a high-DPI display', async () => {
+    vi.stubGlobal('window', { devicePixelRatio: 3 });
+    createThemedMap({ container, onLoad: () => {} });
+
+    expect((await lastMap()).options.pixelRatio).toBe(2);
+  });
+
+  it('keeps a device pixel ratio under the cap unchanged', async () => {
+    vi.stubGlobal('window', { devicePixelRatio: 1.5 });
+    createThemedMap({ container, onLoad: () => {} });
 
     expect((await lastMap()).options.pixelRatio).toBe(1.5);
   });

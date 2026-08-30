@@ -41,6 +41,8 @@ export interface ThemedMapApi {
 
 export interface ThemedMapOptions {
   container: HTMLElement;
+  // Distinguishes this interactive canvas from any other map surface in the same view.
+  accessibleName?: string;
   // The Chart Locker plugin base when installed, so the basemap style is proxied and cached, or
   // null or undefined for the direct openfreemap style.
   companionBase?: string | null;
@@ -59,7 +61,7 @@ export interface ThemedMapOptions {
   minZoom?: number;
   maxZoom?: number;
   // Override the canvas pixel ratio for secondary or resource-constrained map surfaces. Omitted
-  // maps retain MapLibre's device-pixel-ratio default.
+  // maps take the device pixel ratio capped at 2 (see defaultPixelRatio).
   pixelRatio?: number;
   managerOptions?: LayerManagerOptions;
   // Coalesced to one emit per animation frame, for the live position readout and view persistence.
@@ -99,6 +101,15 @@ const MAP_CONTEXT_ATTRIBUTES = {
   stencil: true,
 } satisfies WebGLContextAttributes;
 const mapContextSupport = new WeakMap<Document, boolean>();
+
+// The default canvas ratio is the device pixel ratio capped at 2: past 2x a high-DPI helm display
+// roughly quadruples the fragment work over 1x for no chart detail the eye can use, and holding
+// frame rate on Pi-class helms matters more. An explicit pixelRatio option still wins, and an
+// environment without a window keeps MapLibre's own default.
+function defaultPixelRatio(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return Math.min(window.devicePixelRatio || 1, 2);
+}
 
 function canCreateMapContext(): boolean {
   // MapLibre 6 registers global request-throttling state and DOM listeners before it discovers
@@ -178,7 +189,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
       zoom: Math.min(wanted, opts.maxZoom ?? Number.POSITIVE_INFINITY),
       minZoom: opts.minZoom,
       maxZoom: opts.maxZoom,
-      pixelRatio: opts.pixelRatio,
+      pixelRatio: opts.pixelRatio ?? defaultPixelRatio(),
       canvasContextAttributes: MAP_CONTEXT_ATTRIBUTES,
       // MapLibre 6 defaults to 4. Undefined preserves v5 vector rendering and query behavior.
       zoomLevelsToOverscale: undefined,
@@ -238,6 +249,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
   // Keep pinch zoom, arrow-key pan, and keyboard zoom available while disabling only rotation.
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
+  map.getCanvas().setAttribute('aria-label', opts.accessibleName ?? 'Map');
 
   // MapLibre's compact attribution control auto-expands itself: AttributionControl's
   // _updateAttributions calls _updateCompact on every 'styledata' | 'sourcedata' | 'terrain'

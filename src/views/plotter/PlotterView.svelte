@@ -49,6 +49,7 @@ import { loadTrendsPanel } from '$features/trends';
 import { loadWaypointsPanel } from '$features/waypoints';
 import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
+import { idlePrefetch } from '$shared/lib';
 import { hasVisibleNavigationChart, type LayerSettings } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
 import type { OnlineStatus, PwaStatus } from '$shared/pwa';
@@ -187,6 +188,7 @@ interface FlatProps {
   pwaStatus: PwaStatus;
   arrivalBanner: string | undefined;
   toastMessage: string | undefined;
+  onDismissToast: () => void;
   hoveredPoi: Poi | undefined;
   poiInView: Poi[];
   poiViewState: PoiViewState;
@@ -440,6 +442,7 @@ let {
   pwaStatus,
   arrivalBanner,
   toastMessage,
+  onDismissToast,
   hoveredPoi = $bindable(),
   poiInView,
   poiViewState,
@@ -605,6 +608,21 @@ const railClearance = $derived(railHeight > 0 ? `calc(${railHeight}px + var(--sp
 $effect(() => {
   safetyRailClearance = railClearance;
 });
+
+// Warm the common lazy panel chunks once the page settles, so the first tap on Layers or Alarms
+// opens without a chunk fetch on a slow boat link. Failures stay silent here; each panel's own
+// open path surfaces its loading error. The effect cleanup cancels not-yet-started loads.
+$effect(() =>
+  idlePrefetch([
+    loadLayersPanel,
+    loadAlarmsPanel,
+    loadAisListPanel,
+    loadRoutesPanel,
+    loadWaypointsPanel,
+    loadTracksPanel,
+    loadHelpPanel,
+  ]),
+);
 
 function closeWeatherPanel(): void {
   weatherPanelOpen = false;
@@ -894,7 +912,13 @@ $effect(() => {
     <!-- The toast channel carries failures and refusals only (see Toast), so it announces as an
       alert, matching the alarm styling it already wears. -->
     {#if toastMessage}
-      <div class="alert-note alert-note--filled toast-banner" role="alert">{toastMessage}</div>
+      <div
+        class="alert-note alert-note--filled toast-banner action-note action-note--wrap"
+        role="alert"
+      >
+        <span>{toastMessage}</span>
+        <button type="button" class="btn btn-ghost" onclick={onDismissToast}>Dismiss</button>
+      </div>
     {/if}
   </div>
   <div class="bottom-stack" class:above-weather={weatherPanelOpen}>
@@ -936,6 +960,7 @@ $effect(() => {
       {/if}
       <NavStrip
         guidance={courseGuidance}
+        units={units.profile}
         {routeProgress}
         onStop={() => routeController.onStopCourse()}
         onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
@@ -1183,6 +1208,7 @@ $effect(() => {
             <module.default
               {auth}
               {recorder}
+              units={units.profile}
               positionStale={vessel.positionStale}
               hasPosition={vessel.position !== undefined}
               {clock}
@@ -1346,7 +1372,7 @@ $effect(() => {
             <module.default
               controller={trends}
               onRetryProvider={onRetryHistoryProviders}
-              mode={units.mode}
+              units={units.profile}
               theme={theme.theme}
               onClose={closeTrendsPanel}
               onBack={backFromTrendsPanel}
@@ -1997,11 +2023,14 @@ $effect(() => {
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
 }
-/* The emergency rail: viewport-fixed at the reachable bottom edge, deliberately without a height
-   cap or overflow clipping, and NOT lifted while Forecast is open; it stacks above the Forecast
-   panel instead, so safety chrome is never displaced off-screen. The status strip below the chart
-   host absorbs the bottom safe-area inset, and the inline insets absorb the side ones. */
+/* The emergency rail stays at the reachable bottom edge and is NOT lifted while Forecast is open;
+   it stacks above the Forecast panel instead. Its only height cap is the chart viewport itself: at
+   200-percent text on a narrow phone, the rail becomes its own scroller with the response actions
+   first, so no part of the safety surface can be positioned outside the viewport. The status strip
+   below the chart host absorbs the bottom safe-area inset, and the inline insets absorb the side
+   ones. */
 .safety-rail {
+  container: safety-rail / inline-size;
   position: absolute;
   inset-block-end: var(--space-3);
   inset-inline: calc(var(--space-3) + env(safe-area-inset-left, 0px))
@@ -2015,7 +2044,31 @@ $effect(() => {
     env(safe-area-inset-right, 0px)
   );
   margin-inline: auto;
+  max-block-size: calc(100% - 2 * var(--space-3));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
   pointer-events: auto;
   z-index: var(--z-safety-strips);
+}
+/* Browser text zoom can leave a phone-width rail with less than twelve root-font units of usable
+   width even though the viewport media query is unchanged. In that container, spend the decorative
+   card inset and wide action gutter on keeping every emergency label inside the scroller. */
+@container safety-rail (max-width: 12rem) {
+  .safety-rail :global(.bottom-strip) {
+    inline-size: 100%;
+    padding-inline: var(--space-2);
+  }
+  .safety-rail :global(.bottom-strip .actions--safety) {
+    gap: var(--space-1);
+  }
+}
+.safety-rail::-webkit-scrollbar {
+  inline-size: 6px;
+}
+.safety-rail::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-sm);
 }
 </style>

@@ -1,4 +1,4 @@
-import type { CircleLayerSpecification } from 'maplibre-gl';
+import type { CircleLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl';
 import type { AisTargets } from '$entities/ais';
 import { latLonToLonLat } from '$shared/geo';
 import { headingDegrees } from '$shared/lib';
@@ -21,6 +21,7 @@ import { createAisRefreshGate } from './ais-refresh';
 const SOURCE_ID = 'binnacle-ais';
 const LAYER_ID = 'binnacle-ais-symbol';
 const SELECTED_LAYER_ID = 'binnacle-ais-selected';
+const LABEL_LAYER_ID = 'binnacle-ais-label';
 const HIT_LAYER_ID = 'binnacle-ais-hit';
 // The transient color shown for the single frame before the first recolor; taken from the day theme
 // so there is one source for the day AIS color rather than a literal that could drift.
@@ -106,14 +107,14 @@ export function createAisOverlay(
   });
 
   const syncVisibility = (ctx: OverlayContext): void => {
-    setLayersVisibility(ctx.map, [SELECTED_LAYER_ID], visible);
+    setLayersVisibility(ctx.map, [SELECTED_LAYER_ID, LABEL_LAYER_ID], visible);
     setLayersVisibility(ctx.map, [HIT_LAYER_ID], visible && opacity > 0);
     hit.refreshInteractionState();
   };
 
   return {
     ...base,
-    layerIds: [SELECTED_LAYER_ID, LAYER_ID, HIT_LAYER_ID],
+    layerIds: [SELECTED_LAYER_ID, LAYER_ID, LABEL_LAYER_ID, HIT_LAYER_ID],
     async add(ctx) {
       await base.add(ctx);
       const before = ctx.beforeIdFor('traffic');
@@ -131,6 +132,32 @@ export function createAisOverlay(
           },
         };
         ctx.map.addLayer(selectedLayer, LAYER_ID);
+      }
+      if (!ctx.map.getLayer(LABEL_LAYER_ID)) {
+        const dayPaint = mapThemePaint('day');
+        const labelLayer: SymbolLayerSpecification = {
+          id: LABEL_LAYER_ID,
+          type: 'symbol',
+          source: SOURCE_ID,
+          // An unnamed target gets no label rather than an empty collision box.
+          filter: ['!=', ['get', 'name'], ''],
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['Noto Sans Regular'],
+            'text-size': 11,
+            'text-offset': [0, 1.2],
+            'text-anchor': 'top',
+            'text-max-width': 12,
+            // Overlap stays off on purpose: in a crowded anchorage the placement engine hides
+            // colliding names instead of smearing them over each other and the icons.
+          },
+          paint: {
+            'text-color': dayPaint.label,
+            'text-halo-color': dayPaint.background,
+            'text-halo-width': 1.5,
+          },
+        };
+        ctx.map.addLayer(labelLayer, before);
       }
       if (!ctx.map.getLayer(HIT_LAYER_ID)) {
         const hitLayer: CircleLayerSpecification = {
@@ -152,6 +179,10 @@ export function createAisOverlay(
       if (ctx.map.getLayer(SELECTED_LAYER_ID)) {
         ctx.map.setPaintProperty(SELECTED_LAYER_ID, 'circle-stroke-color', paint.select);
       }
+      if (ctx.map.getLayer(LABEL_LAYER_ID)) {
+        ctx.map.setPaintProperty(LABEL_LAYER_ID, 'text-color', paint.label);
+        ctx.map.setPaintProperty(LABEL_LAYER_ID, 'text-halo-color', paint.background);
+      }
     },
     setVisible(ctx, nextVisible) {
       visible = nextVisible;
@@ -164,11 +195,14 @@ export function createAisOverlay(
       if (ctx.map.getLayer(SELECTED_LAYER_ID)) {
         ctx.map.setPaintProperty(SELECTED_LAYER_ID, 'circle-stroke-opacity', nextOpacity);
       }
+      if (ctx.map.getLayer(LABEL_LAYER_ID)) {
+        ctx.map.setPaintProperty(LABEL_LAYER_ID, 'text-opacity', nextOpacity);
+      }
       syncVisibility(ctx);
     },
     remove(ctx) {
       hit.detach(ctx);
-      removeLayersAndSources(ctx.map, [HIT_LAYER_ID, SELECTED_LAYER_ID], []);
+      removeLayersAndSources(ctx.map, [HIT_LAYER_ID, LABEL_LAYER_ID, SELECTED_LAYER_ID], []);
       base.remove(ctx);
     },
   };
