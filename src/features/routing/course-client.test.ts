@@ -6,8 +6,11 @@ import {
   clearCourse,
   hydrateCourse,
   refreshActiveRoute,
+  restartCourse,
   setActiveRoutePointIndex,
+  setArrivalCircle,
   setDestination,
+  setTargetArrivalTime,
 } from './course-client';
 
 afterEach(() => vi.restoreAllMocks());
@@ -96,6 +99,69 @@ it('refreshActiveRoute PUTs to the Course API refresh endpoint', async () => {
   expect(await refreshActiveRoute('http://pi', 'tok')).toBe(true);
   expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/activeRoute/refresh`);
   expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({});
+});
+
+it('setArrivalCircle PUTs the radius as a value body', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setArrivalCircle('http://pi', 'tok', 250)).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/arrivalCircle`);
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('PUT');
+  expect(JSON.parse(init.body as string)).toEqual({ value: 250 });
+});
+
+it('setArrivalCircle rejects negative and non-finite radii without a request', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setArrivalCircle('http://pi', 'tok', -5)).toBe(false);
+  expect(await setArrivalCircle('http://pi', 'tok', Number.NaN)).toBe(false);
+  expect(f).not.toHaveBeenCalled();
+});
+
+it('setArrivalCircle reports false on a transport failure instead of throwing', async () => {
+  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+  expect(await setArrivalCircle('http://pi', 'tok', 250)).toBe(false);
+});
+
+it('restartCourse PUTs to the Course API restart endpoint', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await restartCourse('http://pi', 'tok')).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/restart`);
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('PUT');
+  expect(JSON.parse(init.body as string)).toEqual({});
+});
+
+it('restartCourse reports false when the server refuses (no destination or fix)', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: false,
+    status: 400,
+    json: async () => ({}),
+  } as Response);
+  expect(await restartCourse('http://pi', 'tok')).toBe(false);
+});
+
+it('setTargetArrivalTime PUTs the UTC instant, never a local-offset ISO form', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  const when = new Date('2026-09-01T15:30:00-04:00');
+  expect(await setTargetArrivalTime('http://pi', 'tok', when)).toBe(true);
+  expect(f.mock.calls[0][0]).toBe(`http://pi${COURSE}/targetArrivalTime`);
+  const init = f.mock.calls[0][1] as RequestInit;
+  expect(init.method).toBe('PUT');
+  // The server's ISO validator accepts only the "Z" form or a negative numeric offset, so the
+  // client always sends toISOString.
+  expect(JSON.parse(init.body as string)).toEqual({ value: '2026-09-01T19:30:00.000Z' });
+});
+
+it('setTargetArrivalTime PUTs null to clear the target', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setTargetArrivalTime('http://pi', 'tok', null)).toBe(true);
+  expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string)).toEqual({ value: null });
+});
+
+it('setTargetArrivalTime rejects an invalid date without a request', async () => {
+  const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok);
+  expect(await setTargetArrivalTime('http://pi', 'tok', new Date('garbage'))).toBe(false);
+  expect(f).not.toHaveBeenCalled();
 });
 
 it('clearCourse DELETEs the course', async () => {

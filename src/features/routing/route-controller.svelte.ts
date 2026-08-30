@@ -1,10 +1,14 @@
-import type { CourseGuidance } from '$entities/course';
+import {
+  ARRIVAL_CIRCLE_MAX_METERS,
+  ARRIVAL_CIRCLE_MIN_METERS,
+  type CourseGuidance,
+} from '$entities/course';
 import type { Route, RouteStore } from '$entities/route';
 import { reverseRoute } from '$entities/route';
 import { type TrackPoint, trackToRoute } from '$entities/track';
 import { type Waypoint, waypointHref } from '$entities/waypoint';
 import { boundsOfPoints, type LatLon } from '$shared/geo';
-import { createBusyGate, ErrorState, type Toast, uuidv4 } from '$shared/lib';
+import { clamp, createBusyGate, ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import {
   type ActiveRoute,
   type CourseInfo,
@@ -22,8 +26,11 @@ import {
   type DestinationTarget,
   hydrateCourse,
   refreshActiveRoute,
+  restartCourse,
   setActiveRoutePointIndex,
+  setArrivalCircle,
   setDestination,
+  setTargetArrivalTime,
 } from './course-client';
 import { parseGpxRoutesDetailed } from './gpx-import';
 import { downloadRouteGpx } from './route-gpx';
@@ -422,6 +429,60 @@ export function createRouteController(deps: RouteControllerDeps) {
     }
   }
 
+  // The three course-setting writes below rehydrate after an accepted write the way activate does,
+  // so the strip's readouts reflect the server's accepted value rather than the local intent.
+  async function onSetArrivalCircle(meters: number): Promise<void> {
+    clearRouteError();
+    if (
+      blockedWrite(
+        'Read-only access: the arrival radius was not changed. Request read and write access to continue.',
+      )
+    ) {
+      return;
+    }
+    if (!Number.isFinite(meters)) return;
+    const bounded = clamp(meters, ARRIVAL_CIRCLE_MIN_METERS, ARRIVAL_CIRCLE_MAX_METERS);
+    if (!(await setArrivalCircle(origin, deps.getToken(), bounded))) {
+      flagRouteError('Could not set the arrival radius. Check the connection.');
+      return;
+    }
+    await hydrateAndSeedCourse();
+  }
+
+  async function onRestartCourse(): Promise<void> {
+    clearRouteError();
+    if (
+      blockedWrite(
+        'Read-only access: the course was not restarted. Request read and write access to continue.',
+      )
+    ) {
+      return;
+    }
+    // The server also refuses (400) without an active destination or a current position fix, so
+    // the failure copy names the fix alongside the transport.
+    if (!(await restartCourse(origin, deps.getToken()))) {
+      flagRouteError('Could not restart the course. Check the connection and the position fix.');
+      return;
+    }
+    await hydrateAndSeedCourse();
+  }
+
+  async function onSetTargetArrivalTime(when: Date | undefined): Promise<void> {
+    clearRouteError();
+    if (
+      blockedWrite(
+        'Read-only access: the target arrival time was not changed. Request read and write access to continue.',
+      )
+    ) {
+      return;
+    }
+    if (!(await setTargetArrivalTime(origin, deps.getToken(), when ?? null))) {
+      flagRouteError('Could not set the target arrival time. Check the connection.');
+      return;
+    }
+    await hydrateAndSeedCourse();
+  }
+
   function onSkipPoint(delta: number): void {
     if (
       blockedWrite(
@@ -723,6 +784,9 @@ export function createRouteController(deps: RouteControllerDeps) {
     onDeleteRoute: withBusy(onDeleteRoute),
     onActivateRoute: withBusy(onActivateRoute),
     onStopCourse: withBusy(onStopCourse),
+    onSetArrivalCircle: withBusy(onSetArrivalCircle),
+    onRestartCourse: withBusy(onRestartCourse),
+    onSetTargetArrivalTime: withBusy(onSetTargetArrivalTime),
     onSkipPoint,
     onArrivalAdvance,
     onSaveTrackAsRoute: withBusy(onSaveTrackAsRoute, false),

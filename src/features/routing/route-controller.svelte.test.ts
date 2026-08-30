@@ -14,8 +14,11 @@ vi.mock('./course-client', () => ({
   clearCourse: vi.fn(),
   hydrateCourse: vi.fn(async () => ({})),
   refreshActiveRoute: vi.fn(),
+  restartCourse: vi.fn(),
   setActiveRoutePointIndex: vi.fn(),
+  setArrivalCircle: vi.fn(),
   setDestination: vi.fn(),
+  setTargetArrivalTime: vi.fn(),
 }));
 
 vi.mock('./routes-client', () => ({
@@ -509,6 +512,116 @@ describe('createRouteController', () => {
       expect(toast.show).toHaveBeenCalledWith(
         'Read-only access: navigation was not started. Request read and write access to continue.',
       );
+    });
+  });
+
+  describe('course settings', () => {
+    beforeEach(() => {
+      vi.mocked(courseClient.setArrivalCircle).mockResolvedValue(true);
+      vi.mocked(courseClient.restartCourse).mockResolvedValue(true);
+      vi.mocked(courseClient.setTargetArrivalTime).mockResolvedValue(true);
+    });
+
+    it('writes a clamped arrival radius and rehydrates the course', async () => {
+      const { controller, guidance } = makeController();
+      await controller.onSetArrivalCircle(250);
+      expect(courseClient.setArrivalCircle).toHaveBeenCalledWith('http://sk', 'token', 250);
+      expect(guidance.seed).toHaveBeenCalled();
+
+      await controller.onSetArrivalCircle(2);
+      await controller.onSetArrivalCircle(1_000_000);
+      expect(
+        vi
+          .mocked(courseClient.setArrivalCircle)
+          .mock.calls.slice(1)
+          .map((call) => call[2]),
+      ).toEqual([10, 5000]);
+    });
+
+    it('drops a non-finite arrival radius without a write', async () => {
+      const { controller } = makeController();
+      await controller.onSetArrivalCircle(Number.NaN);
+      expect(courseClient.setArrivalCircle).not.toHaveBeenCalled();
+    });
+
+    it('flags the arrival radius failure and skips the rehydrate', async () => {
+      const { controller, toast, guidance } = makeController();
+      vi.mocked(courseClient.setArrivalCircle).mockResolvedValue(false);
+      await controller.onSetArrivalCircle(250);
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not set the arrival radius. Check the connection.',
+      );
+      expect(guidance.seed).not.toHaveBeenCalled();
+    });
+
+    it('blocks the arrival radius write without write access', async () => {
+      const { controller, toast } = makeController(true);
+      await controller.onSetArrivalCircle(250);
+      expect(courseClient.setArrivalCircle).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith(
+        'Read-only access: the arrival radius was not changed. Request read and write access to continue.',
+      );
+    });
+
+    it('restarts the course and rehydrates', async () => {
+      const { controller, guidance } = makeController();
+      await controller.onRestartCourse();
+      expect(courseClient.restartCourse).toHaveBeenCalledWith('http://sk', 'token');
+      expect(guidance.seed).toHaveBeenCalled();
+    });
+
+    it('names the position fix in the restart failure, which the server also refuses on', async () => {
+      const { controller, toast } = makeController();
+      vi.mocked(courseClient.restartCourse).mockResolvedValue(false);
+      await controller.onRestartCourse();
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not restart the course. Check the connection and the position fix.',
+      );
+    });
+
+    it('blocks the restart without write access', async () => {
+      const { controller, toast } = makeController(true);
+      await controller.onRestartCourse();
+      expect(courseClient.restartCourse).not.toHaveBeenCalled();
+      expect(toast.show).toHaveBeenCalledWith(
+        'Read-only access: the course was not restarted. Request read and write access to continue.',
+      );
+    });
+
+    it('writes the target arrival Date and null for a clear', async () => {
+      const { controller, guidance } = makeController();
+      const when = new Date('2026-09-01T19:30:00.000Z');
+      await controller.onSetTargetArrivalTime(when);
+      expect(courseClient.setTargetArrivalTime).toHaveBeenCalledWith('http://sk', 'token', when);
+      await controller.onSetTargetArrivalTime(undefined);
+      expect(courseClient.setTargetArrivalTime).toHaveBeenLastCalledWith(
+        'http://sk',
+        'token',
+        null,
+      );
+      expect(guidance.seed).toHaveBeenCalledTimes(2);
+    });
+
+    it('flags the target arrival failure', async () => {
+      const { controller, toast } = makeController();
+      vi.mocked(courseClient.setTargetArrivalTime).mockResolvedValue(false);
+      await controller.onSetTargetArrivalTime(new Date());
+      expect(toast.show).toHaveBeenCalledWith(
+        'Could not set the target arrival time. Check the connection.',
+      );
+    });
+
+    it('busy-gates the course settings against each other', async () => {
+      const { controller } = makeController();
+      const pending = deferred<boolean>();
+      vi.mocked(courseClient.restartCourse).mockReturnValue(pending.promise);
+      const restart = controller.onRestartCourse();
+      await controller.onSetArrivalCircle(250);
+      expect(courseClient.setArrivalCircle).not.toHaveBeenCalled();
+      pending.resolve(true);
+      await restart;
+      await controller.onSetArrivalCircle(250);
+      expect(courseClient.setArrivalCircle).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -165,6 +165,7 @@ describe('CourseGuidance', () => {
         previousPoint: { position: { latitude: 0, longitude: 0 } },
         activeRoute: { href: '/resources/routes/r', pointIndex: 0, pointTotal: 2 },
         arrivalCircle: 50,
+        targetArrivalTime: '2026-09-01T19:30:00.000Z',
       },
       { crossTrackError: 7, distance: 1852 },
     );
@@ -172,10 +173,61 @@ describe('CourseGuidance', () => {
     expect(g.source).toBe('server');
     expect(g.nextPointName).toBe('B');
     expect(g.distanceToNextMeters).toBe(1852);
+    expect(g.arrivalCircleMeters).toBe(50);
+    expect(g.targetArrivalTimeIso).toBe('2026-09-01T19:30:00.000Z');
     g.clear();
     expect(g.active).toBe(false);
     expect(g.source).toBe('computed');
     expect(g.isLastPoint).toBe(false);
+    expect(g.arrivalCircleMeters).toBeUndefined();
+    expect(g.targetArrivalTimeIso).toBeUndefined();
+  });
+
+  it('validates the arrival circle and falls back to the local default when unset', () => {
+    const declared = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+      'navigation.course.arrivalCircle': 250,
+    });
+    const withCircle = new CourseGuidance(declared, new OwnVessel(declared));
+    expect(withCircle.arrivalCircleMeters).toBe(250);
+    expect(withCircle.arrivalCircleEffectiveMeters).toBe(250);
+
+    // A fresh course starts at 0 on the server, which means "not set", never a zero-radius circle.
+    const unset = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+      'navigation.course.arrivalCircle': 0,
+    });
+    const defaulted = new CourseGuidance(unset, new OwnVessel(unset));
+    expect(defaulted.arrivalCircleMeters).toBeUndefined();
+    expect(defaulted.arrivalCircleEffectiveMeters).toBe(100);
+  });
+
+  it('treats a null or unparseable target arrival time as unset', () => {
+    const cleared = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.targetArrivalTime': null,
+    });
+    expect(
+      new CourseGuidance(cleared, new OwnVessel(cleared)).targetArrivalTimeIso,
+    ).toBeUndefined();
+
+    const garbage = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.targetArrivalTime': 'soonish',
+    });
+    expect(
+      new CourseGuidance(garbage, new OwnVessel(garbage)).targetArrivalTimeIso,
+    ).toBeUndefined();
+
+    const streamed = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.targetArrivalTime': '2026-09-01T19:30:00.000Z',
+    });
+    expect(new CourseGuidance(streamed, new OwnVessel(streamed)).targetArrivalTimeIso).toBe(
+      '2026-09-01T19:30:00.000Z',
+    );
   });
 
   it('deactivates when the server streams an external course clear', () => {

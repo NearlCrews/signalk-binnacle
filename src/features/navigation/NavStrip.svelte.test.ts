@@ -44,6 +44,23 @@ describe('NavStrip', () => {
     expect(alarming).toContain('past the off-course alarm limit');
   });
 
+  it('offers the course-settings popover only when a settings write is wired', () => {
+    expect(renderStrip()).not.toContain('Course settings');
+    const withSettings = render(NavStrip, {
+      props: {
+        guidance: activeGuidance(),
+        units: 'metric' as const,
+        onStop: vi.fn(),
+        onSetArrivalCircle: vi.fn(),
+        onRestartCourse: vi.fn(),
+        onSetTargetArrivalTime: vi.fn(),
+      },
+    }).body;
+    expect(withSettings).toContain('aria-label="Course settings"');
+    // Closed until tapped: the popover content mounts on open, so the strip stays light.
+    expect(withSettings).not.toContain('Arrival radius');
+  });
+
   it('glosses every acronym it shows, for a navigator who does not know them', () => {
     const html = renderStrip();
     for (const gloss of [

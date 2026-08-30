@@ -22,6 +22,16 @@ export type CourseSource = 'server' | 'computed';
 // Arrival radius used when the server reports no arrivalCircle for the active leg.
 const DEFAULT_ARRIVAL_CIRCLE_METERS = 100;
 
+// Binnacle's bounds for a helm-entered arrival radius. The server accepts any non-negative number,
+// but below about 10 m GPS scatter fires arrival at anchor-swing distances, and above 5,000 m the
+// circle stops meaning "arrived". Shared by the strip's field and the controller's clamp.
+export const ARRIVAL_CIRCLE_MIN_METERS = 10;
+export const ARRIVAL_CIRCLE_MAX_METERS = 5000;
+
+// The v2 Course API's targetArrivalTime is not in SK_PATHS yet; this is its one definition, used by
+// the guidance cell, the REST seed, and the stream subscription so the three cannot drift.
+export const COURSE_TARGET_ARRIVAL_TIME_PATH = 'navigation.course.targetArrivalTime';
+
 // Arrival latches with hysteresis: once inside the circle, the boat must move out past
 // circle * this factor (or the active point must change) before arrived clears, so GPS jitter at
 // the boundary cannot re-fire the arrival alarm and banner.
@@ -58,6 +68,7 @@ const COURSE_CELL_PATHS: readonly string[] = [
   SK_PATHS.coursePreviousPoint,
   SK_PATHS.courseActiveRoute,
   SK_PATHS.courseArrivalCircle,
+  COURSE_TARGET_ARRIVAL_TIME_PATH,
   ...CALC_VALUE_FIELDS.map(calcLeafPath),
 ];
 
@@ -108,6 +119,7 @@ export class CourseGuidance {
       seedCell(SK_PATHS.coursePreviousPoint, info.previousPoint);
       seedCell(SK_PATHS.courseActiveRoute, info.activeRoute);
       seedCell(SK_PATHS.courseArrivalCircle, info.arrivalCircle);
+      seedCell(COURSE_TARGET_ARRIVAL_TIME_PATH, info.targetArrivalTime);
     }
     if (calc) {
       // calcValues streams as leaf deltas, so the snapshot is decomposed into the same per-field
@@ -252,6 +264,27 @@ export class CourseGuidance {
   get nextPointName(): string | undefined {
     const name = this.#info.nextPoint?.name;
     return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+  }
+
+  // The server-declared arrival radius for the active leg, validated; undefined when the server has
+  // none (a fresh course starts at 0, which is "not set", not a zero-radius circle).
+  get arrivalCircleMeters(): number | undefined {
+    const value = this.#info.arrivalCircle;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+
+  // The radius the arrival latch and the helm field actually use: the server's value when declared,
+  // else the local default. Committing the field writes it to the server, so a station showing the
+  // default converges the whole boat onto one radius.
+  get arrivalCircleEffectiveMeters(): number {
+    return this.arrivalCircleMeters ?? DEFAULT_ARRIVAL_CIRCLE_METERS;
+  }
+
+  // The boat-wide planned arrival instant (the v2 Course API's targetArrivalTime), or undefined when
+  // none is set: the server clears it with null, and an unparseable string is treated as unset.
+  get targetArrivalTimeIso(): string | undefined {
+    const value = this.#currentValue(COURSE_TARGET_ARRIVAL_TIME_PATH);
+    return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
   }
 
   // The active destination position (the next point of the course or single-mark "go to"), for the
@@ -430,13 +463,7 @@ export class CourseGuidance {
       this.#arrivedLatched = false;
       return false;
     }
-    const configuredCircle = this.#info.arrivalCircle;
-    const circle =
-      typeof configuredCircle === 'number' &&
-      Number.isFinite(configuredCircle) &&
-      configuredCircle > 0
-        ? configuredCircle
-        : DEFAULT_ARRIVAL_CIRCLE_METERS;
+    const circle = this.arrivalCircleEffectiveMeters;
     if (this.#arrivedLatched) {
       // Latched: only a clear move past the exit margin releases it, so jitter at the circle
       // boundary cannot re-fire the arrival alarm.

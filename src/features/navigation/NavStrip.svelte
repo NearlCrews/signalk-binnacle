@@ -1,8 +1,15 @@
 <script lang="ts">
+import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+import Settings2 from '@lucide/svelte/icons/settings-2';
 import SkipBack from '@lucide/svelte/icons/skip-back';
 import SkipForward from '@lucide/svelte/icons/skip-forward';
-import { onDestroy } from 'svelte';
-import type { CourseGuidance } from '$entities/course';
+import X from '@lucide/svelte/icons/x';
+import { onDestroy, tick } from 'svelte';
+import {
+  ARRIVAL_CIRCLE_MAX_METERS,
+  ARRIVAL_CIRCLE_MIN_METERS,
+  type CourseGuidance,
+} from '$entities/course';
 import {
   formatBearingOr,
   formatClockTime,
@@ -15,7 +22,7 @@ import {
   type UnitsSelection,
 } from '$shared/lib';
 import { steerSide } from '$shared/nav';
-import { ConfirmArm } from '$shared/ui';
+import { AnchoredMenu, ConfirmArm, UnitField } from '$shared/ui';
 import type { RouteProgress } from './route-progress';
 
 interface Props {
@@ -33,9 +40,26 @@ interface Props {
   onStop: () => void;
   // Skip the active waypoint forward (1) or back (-1) along the route.
   onSkip?: (delta: number) => void;
+  // The course-settings writes, boat-wide through the v2 Course API so every station reads the
+  // same values back off the stream. Absent handlers hide their controls (and the popover when
+  // none is wired).
+  onSetArrivalCircle?: (meters: number) => void;
+  onRestartCourse?: () => void;
+  // Undefined clears the target, so a helm can withdraw a planned arrival as well as set one.
+  onSetTargetArrivalTime?: (when: Date | undefined) => void;
 }
 
-const { guidance, units, routeProgress, xteAlarming = false, onStop, onSkip }: Props = $props();
+const {
+  guidance,
+  units,
+  routeProgress,
+  xteAlarming = false,
+  onStop,
+  onSkip,
+  onSetArrivalCircle,
+  onRestartCourse,
+  onSetTargetArrivalTime,
+}: Props = $props();
 
 // Stop ends navigation for the whole boat, and it sits beside the waypoint-skip pair, so it arms a
 // confirm step instead of firing on a single tap; the arm times out back to plain Stop on its own.
@@ -44,6 +68,65 @@ onDestroy(() => stopArm.disarm());
 
 function tapStop(): void {
   if (stopArm.tap()) onStop();
+}
+
+const hasCourseSettings = $derived(
+  onSetArrivalCircle !== undefined ||
+    onRestartCourse !== undefined ||
+    onSetTargetArrivalTime !== undefined,
+);
+let settingsOpen = $state(false);
+let settingsTrigger = $state<HTMLElement | undefined>();
+
+// Restart moves the leg origin to the boat and zeroes cross-track error for every station, so it
+// arms like Stop rather than firing on a single tap. The arm clears with the popover, so a stale
+// "Restart from here?" cannot wait behind a closed menu.
+const restartArm = new ConfirmArm();
+onDestroy(() => restartArm.disarm());
+
+function closeSettings(): void {
+  restartArm.disarm();
+  settingsOpen = false;
+}
+
+function toggleSettings(): void {
+  if (settingsOpen) closeSettings();
+  else settingsOpen = true;
+}
+
+function tapRestart(): void {
+  if (restartArm.tap()) {
+    onRestartCourse?.();
+    closeSettings();
+  }
+}
+
+// The streamed target arrival instant rendered in the field's own local-time vocabulary; empty when
+// none is set. datetime-local carries no zone, so the ISO instant is spelled in this display's zone.
+const targetArrivalLocal = $derived.by(() => {
+  const iso = guidance.targetArrivalTimeIso;
+  if (!iso) return '';
+  const at = new Date(iso);
+  const pad = (part: number): string => String(part).padStart(2, '0');
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+});
+
+function commitTargetArrival(event: Event): void {
+  const input = event.currentTarget as HTMLInputElement;
+  const entered = input.value;
+  if (!entered) {
+    onSetTargetArrivalTime?.(undefined);
+  } else {
+    // A bare datetime-local string parses in the display's local zone, which is the time the
+    // navigator meant; the client converts it to the UTC instant the server stores.
+    const when = new Date(entered);
+    if (!Number.isNaN(when.getTime())) onSetTargetArrivalTime?.(when);
+  }
+  // Snap back to the effective value after the caller has its say, the UnitField contract, so a
+  // refused write never leaves the field desynced from what the boat is actually using.
+  void tick().then(() => {
+    input.value = targetArrivalLocal;
+  });
 }
 
 // The side to steer toward to return to the track. The cross-track sign convention lives in
@@ -125,6 +208,91 @@ const eta = $derived.by(() => {
       <span class="name" aria-live="polite">{guidance.nextPointName ?? PLACEHOLDER}</span>
       {#if guidance.source === 'computed'}
         <span class="note">computing locally</span>
+      {/if}
+      {#if hasCourseSettings}
+        <div class="tools-anchor">
+          <button
+            type="button"
+            class="icon-btn icon-btn--accent skip"
+            bind:this={settingsTrigger}
+            aria-label="Course settings"
+            title="Course settings: arrival radius, target arrival time, restart"
+            aria-expanded={settingsOpen}
+            onclick={toggleSettings}
+          >
+            <Settings2 size={16} aria-hidden="true" />
+          </button>
+          <AnchoredMenu
+            open={settingsOpen}
+            onClose={closeSettings}
+            backdropLabel="Close course settings"
+            ariaLabel="Course settings"
+            surfaceClass="popover-card course-pop"
+            anchor={settingsTrigger}
+            preferredPlacement="above"
+            anchorAlign="end"
+            onFocusLeft={closeSettings}
+          >
+            <div class="course-body">
+              <span class="caps-label">Course settings</span>
+              {#if onSetArrivalCircle}
+                <UnitField
+                  label="Arrival radius"
+                  unit="m"
+                  value={Math.round(guidance.arrivalCircleEffectiveMeters)}
+                  min={ARRIVAL_CIRCLE_MIN_METERS}
+                  max={ARRIVAL_CIRCLE_MAX_METERS}
+                  step={1}
+                  ariaDescribedBy="nav-arrival-radius-note"
+                  onCommit={(meters) => onSetArrivalCircle(meters)}
+                />
+                <p class="muted-note" id="nav-arrival-radius-note">
+                  Arrival fires inside this radius of the waypoint, on every station.
+                </p>
+              {/if}
+              {#if onSetTargetArrivalTime}
+                <div class="target-field">
+                  <div class="target-head">
+                    <span
+                      class="field-name"
+                      title="The planned arrival instant shared with every station and the course provider"
+                    >
+                      Target arrival
+                    </span>
+                    {#if guidance.targetArrivalTimeIso}
+                      <button
+                        type="button"
+                        class="icon-btn"
+                        aria-label="Clear the target arrival time"
+                        onclick={() => onSetTargetArrivalTime(undefined)}
+                      >
+                        <X size={16} aria-hidden="true" />
+                      </button>
+                    {/if}
+                  </div>
+                  <input
+                    class="input"
+                    type="datetime-local"
+                    value={targetArrivalLocal}
+                    aria-label="Target arrival time"
+                    onchange={commitTargetArrival}
+                  >
+                </div>
+              {/if}
+              {#if onRestartCourse}
+                <button
+                  type="button"
+                  class="btn"
+                  title="Restart the current leg from the boat's position, zeroing cross-track error"
+                  onclick={tapRestart}
+                >
+                  <RotateCcw size={16} aria-hidden="true" />
+                  {restartArm.armed ? 'Restart from here?' : 'Restart course'}
+                </button>
+              {/if}
+            </div>
+          </AnchoredMenu>
+        </div>
       {/if}
       {#if onSkip}
         <div class="skip-group">
@@ -288,5 +456,44 @@ const eta = $derived.by(() => {
     border-color: var(--accent);
     background: var(--accent-tint);
   }
+}
+.tools-anchor {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+/* The course-settings popover, anchored over its trigger in the strip head. The floating-card frame
+   comes from the shared .popover-card; this only positions and sizes it. */
+.tools-anchor :global(.course-pop) {
+  z-index: var(--z-menu);
+  inline-size: 17rem;
+  max-inline-size: calc(100vw - 1rem);
+  padding: var(--space-2);
+  transform-origin: right var(--anchored-origin-y, bottom);
+}
+.course-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* The per-field label idiom (the UnitField .name style), for the field whose control needs its own
+   line. */
+.field-name {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.target-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+/* Label on its own line above a full-width control, the wide-control field layout: a datetime
+   value does not fit beside its label at the popover's width. */
+.target-field input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 </style>

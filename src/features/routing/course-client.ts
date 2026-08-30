@@ -70,6 +70,37 @@ export function refreshActiveRoute(base: string, token: string | undefined): Pro
   return putResource(`${base}${COURSE}/activeRoute/refresh`, token, {});
 }
 
+// Set the boat-wide arrival radius. The server accepts any non-negative number and every station's
+// arrival latch reads it back off the stream, which is what lets the helm and a tablet below agree.
+export function setArrivalCircle(
+  base: string,
+  token: string | undefined,
+  meters: number,
+): Promise<boolean> {
+  if (!Number.isFinite(meters) || meters < 0) return Promise.resolve(false);
+  return putResource(`${base}${COURSE}/arrivalCircle`, token, { value: meters });
+}
+
+// Restart the active leg from the boat's position: the server moves previousPoint to the current
+// fix, zeroing cross-track error. Rejected (400) without an active destination or a position fix.
+export function restartCourse(base: string, token: string | undefined): Promise<boolean> {
+  return putResource(`${base}${COURSE}/restart`, token, {});
+}
+
+// Set or clear (null) the boat-wide planned arrival instant. Takes a Date rather than an ISO string
+// because the server's validator only accepts the UTC "Z" form or a negative numeric offset, so a
+// caller's local "+02:00" ISO string would be refused; sending toISOString sidesteps the trap.
+export function setTargetArrivalTime(
+  base: string,
+  token: string | undefined,
+  when: Date | null,
+): Promise<boolean> {
+  if (when !== null && !Number.isFinite(when.getTime())) return Promise.resolve(false);
+  return putResource(`${base}${COURSE}/targetArrivalTime`, token, {
+    value: when === null ? null : when.toISOString(),
+  });
+}
+
 export function clearCourse(base: string, token: string | undefined): Promise<boolean> {
   return deleteResource(`${base}${COURSE}`, token);
 }
