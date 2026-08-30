@@ -67,6 +67,8 @@ export interface RouteControllerDeps {
   getTrackPoints: () => TrackPoint[];
   wait?: (ms: number) => Promise<void>;
   arrivalAdvanceDelayMs?: number;
+  // Fires after navigation starts or stops; the composition root offers a logbook entry from it.
+  onCourseLogMoment?: (kind: 'started' | 'stopped', destinationName?: string) => void;
 }
 
 export type RouteLoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -178,6 +180,9 @@ export function createRouteController(deps: RouteControllerDeps) {
   async function stopActiveCourse(): Promise<boolean> {
     invalidatePendingCourseIO();
     if (!(await clearCourse(origin, deps.getToken()))) return false;
+    // The one funnel every stop takes (the strip's Stop and an active route's deletion both land
+    // here), so the log moment fires exactly once per stop.
+    deps.onCourseLogMoment?.('stopped');
     routeStore.setActive(undefined);
     gotoActive = false;
     courseGuidance.clear();
@@ -413,6 +418,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     routeStore.toggleShown(id, true);
     flyToRouteStart(id);
     await hydrateAndSeedCourse();
+    deps.onCourseLogMoment?.('started', routeStore.routes.find((route) => route.id === id)?.name);
   }
 
   async function onStopCourse(): Promise<void> {
@@ -758,6 +764,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     routeStore.setActive(undefined);
     gotoActive = true;
     await hydrateAndSeedCourse();
+    deps.onCourseLogMoment?.('started');
   }
 
   function onGoToHere(position: LatLon): Promise<void> {

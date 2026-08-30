@@ -24,6 +24,8 @@ export interface HandoffDeps {
   // reconnect edge: an App effect calls syncDrafts when the browser comes back online.
   drafts: PersistedValue<HandoffSnapshot[]>;
   now?: () => number;
+  // Fires after a snapshot is taken; the composition root offers a logbook entry from it.
+  onCreated?: () => void;
 }
 
 export interface HandoffController {
@@ -99,6 +101,7 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
     const queue = [...deps.drafts.value, snapshot];
     deps.drafts.set(queue.length > MAX_DRAFTS ? queue.slice(queue.length - MAX_DRAFTS) : queue);
     void syncDrafts();
+    deps.onCreated?.();
   }
 
   return {

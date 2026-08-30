@@ -22,6 +22,8 @@ export interface AnchorControllerDeps {
   // Whether the server exposes the standard Anchor API. A getter because it resolves asynchronously
   // from server feature discovery, and the transport is reselected as it changes.
   serverHasAnchorApi: () => boolean;
+  // Fires after a drop or raise succeeds; the composition root offers a logbook entry from it.
+  onAnchorLogMoment?: (kind: 'dropped' | 'raised', radiusMeters?: number) => void;
   writeBlocked: () => boolean;
   // navigator.getBattery where the browser offers it (Chromium only); injectable for tests. The
   // key being present with undefined means "no Battery Status API", so tests can force the
@@ -124,12 +126,16 @@ export function createAnchorController(deps: AnchorControllerDeps) {
       anchor.dropLocal(position, radius);
       anchorError =
         'Server write access is unavailable. Anchor watch is running in this browser only.';
+      deps.onAnchorLogMoment?.('dropped', radius);
       return;
     }
     // The server drop doubles as detection: when the standard API or the anchoralarm plugin answers,
     // the server owns the watch (and keeps alarming with the browser closed) and the stream reflects
     // it back. Any failure degrades to the client-side watch; the panel's mode line says which.
-    if (await anchorTransport.drop(radius)) return;
+    if (await anchorTransport.drop(radius)) {
+      deps.onAnchorLogMoment?.('dropped', radius);
+      return;
+    }
     // A server whose standard Anchor API was feature-detected and then refused the drop has a problem
     // the silent local fallback would hide; surface it, then still start the local watch so the boat
     // is covered. The plugin-probe path cannot tell absent from refused, so it degrades quietly.
@@ -137,6 +143,7 @@ export function createAnchorController(deps: AnchorControllerDeps) {
       anchorError = 'Could not drop the anchor on the server. Check the connection.';
     }
     anchor.dropLocal(position, radius);
+    deps.onAnchorLogMoment?.('dropped', radius);
   }
   const onDrop = withBusy(performDrop);
 
@@ -163,12 +170,15 @@ export function createAnchorController(deps: AnchorControllerDeps) {
   }
   const anchorAction = withBusy(performAnchorAction);
 
-  function onRaise(): Promise<void> {
-    return anchorAction(
+  async function onRaise(): Promise<void> {
+    const wasWatching = anchor.watching;
+    await anchorAction(
       () => anchorTransport.raise(),
       'raise the anchor',
       () => anchor.raiseLocal(),
     );
+    // Only a raise that actually ended a watch is worth a log line.
+    if (wasWatching && !anchor.watching) deps.onAnchorLogMoment?.('raised');
   }
 
   function onSetRadius(meters: number): Promise<void> {
