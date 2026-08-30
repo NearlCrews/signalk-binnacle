@@ -243,6 +243,75 @@ describe('AlarmsPanel shallow water section', () => {
     expect(body).not.toContain("The server's depth zones");
   });
 
+  const PUBLISH_BUTTON_TITLE = `title="Write the current shallow limit to the server's depth zones"`;
+  const publishGroup = (
+    overrides: Partial<NonNullable<NonNullable<ShallowProps>['publish']>> = {},
+  ) => ({
+    winningPath: 'environment.depth.belowKeel',
+    effectiveLimitMeters: 3,
+    busy: false,
+    outcome: 'idle' as const,
+    publish: async () => {},
+    ...overrides,
+  });
+  const withPublish = (
+    overrides: Partial<NonNullable<NonNullable<ShallowProps>['publish']>> = {},
+  ): ShallowProps => ({
+    monitorState: 'monitoring',
+    serverLimitMeters: undefined,
+    serverZonesActive: false,
+    publish: publishGroup(overrides),
+  });
+
+  it('offers the publish action with the honesty note when the action group is wired', () => {
+    const body = renderPanel({}, withPublish());
+    expect(body).toContain('Publish to the boat');
+    expect(body).toContain('every station and app on the boat alarms on it');
+    expect(body).toContain('a server administrator can edit or remove it');
+    expect(body).toContain("this display's fallback when no server zone exists");
+    expect(body).not.toMatch(new RegExp(`${PUBLISH_BUTTON_TITLE}[^>]*disabled`));
+  });
+
+  it('hides the publish action when the group is absent, as before publishing existed', () => {
+    const body = renderPanel(
+      {},
+      { monitorState: 'monitoring', serverLimitMeters: undefined, serverZonesActive: false },
+    );
+    expect(body).not.toContain('Publish to the boat');
+  });
+
+  it('holds the publish button while write-blocked, busy, or without a winning path', () => {
+    const blocked = renderPanel(
+      {},
+      withPublish(),
+      {},
+      {
+        auth: { writeBlocked: true } as ComponentProps<typeof AlarmsPanel>['auth'],
+      },
+    );
+    expect(blocked).toMatch(new RegExp(`${PUBLISH_BUTTON_TITLE}[^>]*disabled`));
+    const busy = renderPanel({}, withPublish({ busy: true }));
+    expect(busy).toMatch(new RegExp(`${PUBLISH_BUTTON_TITLE}[^>]*disabled`));
+    expect(busy).toContain('Publishing the depth zone to the server…');
+    const pathless = renderPanel({}, withPublish({ winningPath: undefined }));
+    expect(pathless).toMatch(new RegExp(`${PUBLISH_BUTTON_TITLE}[^>]*disabled`));
+  });
+
+  it('renders each publish outcome, naming the manual path when the server lacks the route', () => {
+    expect(renderPanel({}, withPublish({ outcome: 'published' }))).toContain(
+      "The server's depth zone now arms every station",
+    );
+    const unsupported = renderPanel({}, withPublish({ outcome: 'unsupported' }));
+    expect(unsupported).toContain('did not accept the zone write');
+    expect(unsupported).toContain('Data Browser meta editor (the Data Fiddler)');
+    expect(renderPanel({}, withPublish({ outcome: 'refused' }))).toContain(
+      'Signal K refused the write. Request read and write access above, then publish again.',
+    );
+    expect(renderPanel({}, withPublish({ outcome: 'failed' }))).toContain(
+      'Publishing failed. Check the connection and try again.',
+    );
+  });
+
   it('says so when no depth source has ever published', () => {
     const body = renderPanel(
       {},

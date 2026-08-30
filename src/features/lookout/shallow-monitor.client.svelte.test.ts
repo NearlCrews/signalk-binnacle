@@ -440,4 +440,78 @@ describe('createShallowController', () => {
       vi.useRealTimers();
     }
   });
+
+  it('publishes the effective limit to the winning path and reads the zone back as the authority', async () => {
+    const test = mount({ token: 'tok-1' });
+    await flushPromises();
+    flushSync();
+    test.thresholds.set({ ...test.thresholds.value, shallowDepthMeters: 5 });
+    flushSync();
+    expect(test.controller.zonePublish.winningPath).toBe(KEEL_PATH);
+    expect(test.controller.zonePublish.effectiveLimitMeters).toBe(5);
+
+    // A stateful server fake: the PUT stores the zones and later meta GETs serve them, which is
+    // what the live server does (it applies the meta in memory before answering 202).
+    let stored: unknown;
+    const server = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT' && url.endsWith('/meta/zones')) {
+        stored = (JSON.parse(String(init.body)) as { value: unknown }).value;
+        return jsonResponse(202, { state: 'PENDING', statusCode: 202 });
+      }
+      return stored !== undefined && url.includes('belowKeel/meta')
+        ? jsonResponse(200, { zones: stored })
+        : jsonResponse(404, {});
+    });
+    vi.stubGlobal('fetch', server);
+
+    await test.controller.zonePublish.publish();
+    flushSync();
+    expect(test.controller.zonePublish.outcome).toBe('published');
+    const putCall = server.mock.calls.find((call) => (call[1] as RequestInit)?.method === 'PUT');
+    expect(String(putCall?.[0])).toBe(
+      'http://sk/signalk/v1/api/vessels/self/environment/depth/belowKeel/meta/zones',
+    );
+    expectBearerAuth(putCall?.[1] as RequestInit, 'tok-1');
+
+    // The accepted publish drops the cached meta, and the refetch reads Binnacle's own zone back
+    // as the server bound, so the server is immediately the authority.
+    await flushPromises();
+    flushSync();
+    expect(test.controller.serverLimitMeters).toBe(5);
+    expect(test.controller.thresholdSource).toBe('server');
+
+    // Boat-wide now means server-governed: lowering the local setting cannot loosen the alarm,
+    // and 4 m still fires through the published zone.
+    test.thresholds.set({ ...test.thresholds.value, shallowDepthMeters: 3 });
+    flushSync();
+    expect(test.controller.effectiveLimitMeters).toBe(5);
+    test.setDepth(reading({ meters: 4 }));
+    expect(test.controller.alarming).toBe(true);
+  });
+
+  it('reports unsupported without refetching when the server has no meta write route', async () => {
+    const test = mount({ token: 'tok-1' });
+    await flushPromises();
+    flushSync();
+    const callsBefore = test.fetchMock.mock.calls.length;
+
+    // The harness mock answers 404 to the PUT, the shape of a server without the route.
+    await test.controller.zonePublish.publish();
+    await flushPromises();
+    flushSync();
+    expect(test.controller.zonePublish.outcome).toBe('unsupported');
+    expect(test.fetchMock.mock.calls.length).toBe(callsBefore + 1);
+  });
+
+  it('publishes nothing when no depth source has ever published', async () => {
+    const test = mount({
+      token: 'tok-1',
+      depth: reading({ meters: undefined, source: undefined, path: TRANSDUCER_PATH }),
+    });
+    await flushPromises();
+    const callsBefore = test.fetchMock.mock.calls.length;
+    await test.controller.zonePublish.publish();
+    expect(test.controller.zonePublish.outcome).toBe('idle');
+    expect(test.fetchMock.mock.calls.length).toBe(callsBefore);
+  });
 });

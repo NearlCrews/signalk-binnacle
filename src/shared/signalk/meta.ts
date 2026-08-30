@@ -1,5 +1,5 @@
 import { isFiniteNumber, isRecord } from '$shared/lib';
-import { fetchAuthedJson } from './resource';
+import { fetchAuthedJson, putResourceOutcome, type ResourceMutationResult } from './resource';
 
 // The display states a tile renders. alert and warn collapse to warning; alarm and emergency to
 // alarm; normal, nominal, unknown states, and no zones are normal (per spec, any part of the range
@@ -68,6 +68,25 @@ export function zoneStateFor(
     if (STATE_RANK[state] > STATE_RANK[worst]) worst = state;
   }
   return worst;
+}
+
+// Write one path's meta.zones over v1 REST, the only client meta write route the server offers
+// (verified against signalk-server 2.27.0 put.js: a v1 API PUT whose path ends `meta/<prop>`
+// merges that one property into the stored meta, preserving units and displayName an admin set,
+// and answers 202 with the write already applied in memory, so an immediate meta read sees it).
+// The body is the request envelope `{ value: zones }`. A server without the route answers 404 or
+// 405, which maps to 'unavailable' so a caller can detect-and-degrade. An empty zones array is
+// refused locally: the server coerces [] to null, which DELETES the path's zones, and no caller
+// publishing zones means that.
+export async function putPathMetaZones(
+  base: string,
+  token: string | undefined,
+  path: string,
+  zones: readonly MetaZone[],
+): Promise<ResourceMutationResult> {
+  if (zones.length === 0) return 'failed';
+  const url = `${base}/signalk/v1/api/vessels/self/${path.replaceAll('.', '/')}/meta/zones`;
+  return putResourceOutcome(url, token, { value: zones });
 }
 
 // Per-path metadata over v1 REST. Meta is REST-only by design: the worker drops update.meta deltas.

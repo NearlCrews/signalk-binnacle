@@ -2,7 +2,7 @@
 import Bell from '@lucide/svelte/icons/bell';
 import BellOff from '@lucide/svelte/icons/bell-off';
 import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import {
   type ActiveNotification,
   MAX_ACTIVE_NOTIFICATIONS,
@@ -36,7 +36,14 @@ import {
   type Thresholds,
 } from '$shared/settings';
 import { type AuthController, type ConnectionPhase, isConnectionDown } from '$shared/signalk';
-import { Disclosure, InlineConfirm, SlideOver, UnitField, WriteAccessNote } from '$shared/ui';
+import {
+  ConfirmArm,
+  Disclosure,
+  InlineConfirm,
+  SlideOver,
+  UnitField,
+  WriteAccessNote,
+} from '$shared/ui';
 import { ALARM_LOG_KIND_LABELS, type AlarmLog } from './alarm-log.svelte';
 import type { AlarmVolumeSetting } from './alarm-volume';
 import {
@@ -47,6 +54,7 @@ import {
 import { defaultShallowLimitMeters } from './shallow-alarm';
 import type { ShallowMonitorSnapshot } from './shallow-monitor.svelte';
 import { thresholdsCaution } from './thresholds-caution';
+import type { ShallowPublishOutcome } from './zone-publish';
 
 // Humanize the raw Signal K alert state so a novice does not read truncated words like "WARN".
 const STATE_LABELS: Record<string, string> = {
@@ -177,6 +185,25 @@ function setShallowDepth(value: number): void {
 // The server's depth zones merge conservatively with the local threshold: the deeper bound fires
 // the alarm, so the editor always stays and a note names the server's bound when one exists.
 const serverShallowBound = $derived(shallow?.serverLimitMeters);
+
+// Publishing changes what every station on the boat alarms on, so it takes the armed second tap
+// every other boat-wide action takes; the armed label names the boat-wide effect and the number.
+const publishArm = new ConfirmArm();
+onDestroy(() => publishArm.disarm());
+
+function tapPublish(): void {
+  if (publishArm.tap()) void shallow?.publish?.publish();
+}
+
+const PUBLISH_OUTCOME_NOTES: Record<ShallowPublishOutcome, string> = {
+  published:
+    "Published. The server's depth zone now arms every station; the note above names its bound.",
+  unsupported:
+    'This Signal K server did not accept the zone write. Set the depth zones by hand in the ' +
+    "server admin UI's Data Browser meta editor (the Data Fiddler) or the server's defaults.",
+  refused: 'Signal K refused the write. Request read and write access above, then publish again.',
+  failed: 'Publishing failed. Check the connection and try again.',
+};
 
 const caution = $derived(thresholdsCaution(t));
 const volumePercent = $derived(Math.round((alarmVolume?.value ?? 1) * 100));
@@ -599,6 +626,33 @@ $effect(() => {
       value={shallowDepthDisplay}
       onCommit={setShallowDepth}
     />
+    {#if shallow?.publish}
+      {@const zonePublish = shallow.publish}
+      <p class="muted-note">
+        Publish writes the limit in force to the server as a depth alarm zone, so every station and
+        app on the boat alarms on it. The published zone becomes the server's, and a server
+        administrator can edit or remove it; the setting above stays as this display's fallback when
+        no server zone exists.
+      </p>
+      <button
+        type="button"
+        class="btn btn-ghost publish"
+        title="Write the current shallow limit to the server's depth zones"
+        onclick={tapPublish}
+        disabled={auth.writeBlocked || zonePublish.busy || zonePublish.winningPath === undefined}
+      >
+        {publishArm.armed
+          ? `Alarm every station under ${formatLengthOr(zonePublish.effectiveLimitMeters, units.mode)} ${lengthUnit(units.mode)}?`
+          : 'Publish to the boat'}
+      </button>
+      {#if zonePublish.busy}
+        <p class="muted-note" role="status">Publishing the depth zone to the server…</p>
+      {:else if zonePublish.outcome !== 'idle'}
+        <p class="muted-note" class:sev-warning={zonePublish.outcome !== 'published'} role="status">
+          {PUBLISH_OUTCOME_NOTES[zonePublish.outcome]}
+        </p>
+      {/if}
+    {/if}
   </section>
   {#if alarmLog}
     <section class="panel-section" aria-label="Session chronology">
@@ -724,7 +778,8 @@ $effect(() => {
   align-self: flex-start;
   margin-block-start: 0.1rem;
 }
-.sound-test {
+.sound-test,
+.publish {
   align-self: flex-start;
 }
 /* The mixed-controls field layout: label row with the live value, full-width slider beneath. */

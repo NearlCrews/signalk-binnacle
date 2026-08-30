@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse } from '$shared/testing';
-import { fetchPathMeta, type MetaZone, staleWindowMsFromTimeout, zoneStateFor } from './meta';
+import {
+  fetchPathMeta,
+  type MetaZone,
+  putPathMetaZones,
+  staleWindowMsFromTimeout,
+  zoneStateFor,
+} from './meta';
 
 const ZONES: MetaZone[] = [
   { upper: 3, state: 'alarm', message: 'Shallow' },
@@ -101,6 +107,45 @@ describe('fetchPathMeta', () => {
       const meta = await fetchPathMeta('http://pi', undefined, 'a.b');
       expect(meta?.timeout).toBe(parsed);
     }
+  });
+});
+
+describe('putPathMetaZones', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ZONE: MetaZone[] = [{ upper: 3, state: 'alarm', message: 'Shallow water' }];
+
+  it('PUTs the value envelope to the meta/zones route with the bearer header', async () => {
+    // The live server answers 202 PENDING (the write persists asynchronously), which counts as
+    // accepted; response.ok covers it.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(202, { state: 'PENDING', statusCode: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const outcome = await putPathMetaZones('http://pi', 'tok', 'environment.depth.belowKeel', ZONE);
+    expect(outcome).toBe('ok');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      'http://pi/signalk/v1/api/vessels/self/environment/depth/belowKeel/meta/zones',
+    );
+    expect((init as RequestInit).method).toBe('PUT');
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer tok' });
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ value: ZONE });
+  });
+
+  it('maps a refusal, a missing route, and a network failure to their outcomes', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(403, {})));
+    expect(await putPathMetaZones('http://pi', 'tok', 'a.b', ZONE)).toBe('access-denied');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(405, {})));
+    expect(await putPathMetaZones('http://pi', 'tok', 'a.b', ZONE)).toBe('unavailable');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')));
+    expect(await putPathMetaZones('http://pi', 'tok', 'a.b', ZONE)).toBe('failed');
+  });
+
+  it('refuses an empty zones array locally, because the server would delete the zones', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await putPathMetaZones('http://pi', 'tok', 'a.b', [])).toBe('failed');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

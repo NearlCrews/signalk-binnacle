@@ -107,3 +107,30 @@ describe('AlarmsPanel threshold reset', () => {
     expect(panel.target.textContent).not.toContain('Reset all thresholds?');
   });
 });
+
+describe('AlarmsPanel zone publish', () => {
+  it('arms on the first tap, names the boat-wide effect, and publishes on the second', () => {
+    const publish = vi.fn(async () => {});
+    const panel = mountPanel({
+      shallow: {
+        monitorState: 'monitoring',
+        serverLimitMeters: undefined,
+        serverZonesActive: false,
+        publish: {
+          winningPath: 'environment.depth.belowKeel',
+          effectiveLimitMeters: 3,
+          busy: false,
+          outcome: 'idle',
+          publish,
+        },
+      },
+    });
+
+    panel.click('Publish to the boat');
+    expect(publish).not.toHaveBeenCalled();
+
+    // The armed label names what the second tap commits the whole boat to.
+    panel.click('Alarm every station under 3.0 m?');
+    expect(publish).toHaveBeenCalledOnce();
+  });
+});

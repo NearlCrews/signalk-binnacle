@@ -1,7 +1,7 @@
 import type { UnitsStore } from '$entities/units';
 import type { DepthReading } from '$entities/vessel';
 import { type AlarmControl, GatedAlarm } from '$shared/audio';
-import { formatLengthOr, lengthUnit } from '$shared/lib';
+import { createBusyGate, formatLengthOr, lengthUnit } from '$shared/lib';
 import type { PersistedValue, Thresholds } from '$shared/settings';
 import {
   createPathMetaCache,
@@ -15,6 +15,7 @@ import {
   SHALLOW_DEGRADE_TONE,
   SHALLOW_TONE,
 } from './shallow-alarm';
+import { publishShallowZones, type ShallowPublishOutcome } from './zone-publish';
 
 // Whether the shallow alarm is actually watching the water. A tone that cannot fire is worth saying
 // out loud: a boat with no sounder, one whose sounder just dropped out, and one whose sounder is
@@ -193,6 +194,29 @@ export function createShallowController(deps: ShallowControllerDeps) {
     }
   });
 
+  // Publishing writes the CURRENT effective limit, not the local one: the effective limit is what
+  // this station actually alarms at, and making that boat-wide is what the action promises. Since
+  // the effective bound never sits under an existing server bound, a station can tighten the
+  // boat-wide zone but never quietly loosen it; loosening is the server administrator's edit, which
+  // the panel's honesty note names.
+  let publishBusy = $state(false);
+  let publishOutcome = $state<'idle' | ShallowPublishOutcome>('idle');
+  const withPublishBusy = createBusyGate(
+    () => publishBusy,
+    (busy) => (publishBusy = busy),
+  );
+
+  const publishZones = withPublishBusy(async () => {
+    const path = winningPath;
+    const limit = effectiveLimitMeters;
+    if (path === undefined || !Number.isFinite(limit) || limit <= 0) return;
+    publishOutcome = 'idle';
+    publishOutcome = await publishShallowZones(deps.origin, deps.getToken(), path, limit);
+    // Read the zone straight back so the monitor immediately treats the server as the authority:
+    // the server applies the meta in memory before answering, so the refetch cannot race it.
+    if (publishOutcome === 'published') metaCache.refresh();
+  });
+
   // Keyed on the path, the cache version, and (through the cache's token read) the auth token, so
   // a failed fetch re-enters when its paced retry window reopens while a 1 Hz depth sample never
   // does. The cache's per-path attempt cap bounds the resulting retries.
@@ -246,7 +270,28 @@ export function createShallowController(deps: ShallowControllerDeps) {
     get ownedNotificationPath() {
       return ownedNotificationPath;
     },
+    // The publish action group the panel renders, built fresh per read so a template read tracks
+    // the deriveds and state inside it.
+    get zonePublish(): ShallowZonePublish {
+      return {
+        winningPath,
+        effectiveLimitMeters,
+        busy: publishBusy,
+        outcome: publishOutcome,
+        publish: publishZones,
+      };
+    },
   };
+}
+
+// The publish-to-the-boat action and the facts its control needs: the winning depth path the zone
+// lands on, the effective limit it writes, and the write's lifecycle.
+export interface ShallowZonePublish {
+  winningPath: string | undefined;
+  effectiveLimitMeters: number;
+  busy: boolean;
+  outcome: 'idle' | ShallowPublishOutcome;
+  publish: () => Promise<void>;
 }
 
 // The slice of the controller the panel actually renders, grouped so one prop carries it across
@@ -257,4 +302,7 @@ export interface ShallowMonitorSnapshot {
   monitorState: ShallowMonitorState;
   serverLimitMeters: number | undefined;
   serverZonesActive: boolean;
+  // The zone-publish action group. Absent (an older caller, or SSR without the controller) hides
+  // the publish control, leaving the section as it was before publishing existed.
+  publish?: ShallowZonePublish;
 }
