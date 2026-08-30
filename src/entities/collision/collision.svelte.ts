@@ -1,9 +1,25 @@
-import type { AisTargets, AisTargetView } from '$entities/ais';
+import type { AisTargets } from '$entities/ais';
 import type { OwnVessel } from '$entities/vessel';
 import type { LatLon } from '$shared/geo';
 import { isFiniteNumber, knotsToMetersPerSecond } from '$shared/lib';
 import { computeCpa, haversineMeters } from '$shared/nav';
 import type { PersistedValue, Thresholds } from '$shared/settings';
+
+// The contact fields the assessment reads. AisTargetView satisfies it structurally, and a secondary
+// source (radar ARPA targets) supplies exactly this shape without the assessment depending on the
+// AIS entity's view type. A secondary source must namespace its ids (the radar one prefixes
+// 'radar:') so they can never collide with an AIS context id, and should set name to what displays
+// render, since the danger strip prefers a contact's name over its id.
+export interface CollisionContact {
+  id: string;
+  name?: string;
+  position: LatLon;
+  sogMps?: number;
+  cogRad?: number;
+  cpaMeters?: number;
+  tcpaSeconds?: number;
+  navigationState?: string;
+}
 
 export type Severity = 'danger' | 'warning' | 'clear';
 // A contact only enters the danger list once it is past 'clear', so its severity is always one of
@@ -70,6 +86,9 @@ interface OwnFix {
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { danger: 0, warning: 1, clear: 2 };
+
+// The default secondary source: identity-stable so the no-radar default never dirties the derived.
+const NO_SECONDARY_CONTACTS: readonly CollisionContact[] = [];
 
 // A hard inner ring. A danger contact closer than this, and closing within this time, is an
 // emergency that overrides both mute and acknowledge so the alarm sounds regardless. These are fixed
@@ -185,7 +204,7 @@ function holdSeverity(
 
 export function assessContacts(
   own: OwnFix | undefined,
-  targets: AisTargetView[],
+  targets: readonly CollisionContact[],
   thresholds: Thresholds,
   options: AssessOptions = {},
 ): Assessment {
@@ -380,6 +399,12 @@ export class CollisionAssessment {
   // keeps this entity from importing a sibling and lets the composition root wire the dependency.
   #anchored: () => boolean;
 
+  // A secondary contact source (radar ARPA targets), merged into the same pass so its contacts
+  // grade through the identical thresholds, hysteresis, receding hold, and acknowledge lifecycle
+  // as AIS traffic. A getter read inside the derived recompute, so a reactive source re-runs the
+  // assessment and a value captured at construction cannot go stale.
+  #radarContacts: () => readonly CollisionContact[];
+
   // The worst-contact signature (id and severity) that was acknowledged. The alert is
   // suppressed only while the current worst contact still matches it, so a new or more
   // severe contact re-arms the alert automatically. Held as fields rather than a joined
@@ -431,7 +456,14 @@ export class CollisionAssessment {
       !this.#vessel.cogStale
         ? { position: freshPosition, sogMps, cogRad }
         : undefined;
-    const next = assessContacts(own, this.#targets.list(), this.#thresholds.value, {
+    // Radar contacts ride along only when present, so the everyday no-radar pass hands the AIS
+    // list through without an allocation.
+    const radarContacts = this.#radarContacts();
+    const targets =
+      radarContacts.length === 0
+        ? this.#targets.list()
+        : [...this.#targets.list(), ...radarContacts];
+    const next = assessContacts(own, targets, this.#thresholds.value, {
       previous: this.#lastSeverities,
       anchored: this.#anchored(),
       ownPosition: freshPosition,
@@ -455,12 +487,14 @@ export class CollisionAssessment {
     thresholds: PersistedValue<Thresholds>,
     anchored: () => boolean = () => false,
     now: () => number = Date.now,
+    radarContacts: () => readonly CollisionContact[] = () => NO_SECONDARY_CONTACTS,
   ) {
     this.#vessel = vessel;
     this.#targets = targets;
     this.#thresholds = thresholds;
     this.#anchored = anchored;
     this.#now = now;
+    this.#radarContacts = radarContacts;
   }
 
   get assessment(): Assessment {

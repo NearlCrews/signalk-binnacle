@@ -18,6 +18,13 @@ Binnacle uses the Signal K v2 Radar API:
   every discovered radar, not only the selected one, so switching radars seeds current values.
 - `RadarInfo.streamUrl`, or the built-in per-radar stream fallback, carries protobuf spokes over a
   WebSocket.
+- `GET /signalk/v2/api/vessels/self/radars/{id}/targets` returns the provider's tracked ARPA
+  targets: id, status, a position (bearing and distance, plus latitude and longitude when the
+  provider has own-ship navigation data), optional motion (course and speed), and an optional
+  danger block carrying CPA in meters and TCPA in seconds. While the selected radar transmits,
+  Binnacle polls this every five seconds and feeds georeferenced tracking targets into the same
+  collision assessment AIS uses, labeled as radar contacts. A provider without target tracking
+  answers with an error status and the poll stays dormant until the radar or provider changes.
 
 Mayara is the reference provider. Binnacle does not require Mayara specifically and does not implement
 the older Radar SK transport. A stock Signal K server without a Radar API provider remains fully usable;

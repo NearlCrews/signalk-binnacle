@@ -1,4 +1,6 @@
+import type { CollisionContact } from '$entities/collision';
 import { normalizeControlDefinitions, normalizeRadarIdentities } from './radar-client';
+import { toCollisionContacts } from './radar-targets';
 import {
   type ControlDefinition,
   POWER_CONTROL_IDS,
@@ -8,6 +10,7 @@ import {
   type RadarControlEntry,
   type RadarInfo,
   type RadarStatus,
+  type RadarTarget,
 } from './radar-types';
 
 // The stream connection state, distinct from the radar's own operational status (off/standby/transmit).
@@ -20,6 +23,9 @@ export type RadarConnectionStatus =
   | 'stale'
   | 'error';
 export type RadarRendererStatus = 'idle' | 'ready' | 'blocked' | 'context-lost' | 'error';
+
+// Identity-stable so the everyday no-radar read never dirties the collision assessment's derived.
+const NO_COLLISION_CONTACTS: CollisionContact[] = [];
 
 // Seed the displayed control values from a radar's reported controls so the panel shows real values
 // immediately, before any capability fetch or stream delta.
@@ -74,8 +80,18 @@ export class MarineRadarStore {
   // editor, while the chart can update the same SI snapshot through deliberate point placement.
   areaDraft = $state<RadarAreaDraft | undefined>(undefined);
   areaVersion = $state(0);
+  // Tracked ARPA targets from the controller's targets poll, kept with the radar id they belong to
+  // so a selection change can never relabel another radar's contacts during the handover. Cleared
+  // whenever the poll stops, so a stale contact can never keep grading in the collision assessment.
+  arpaTargets = $state<{ radarId: string; targets: RadarTarget[] } | undefined>(undefined);
 
   selected = $derived(this.radars.find((r) => r.id === this.selectedId));
+  // The ARPA targets in the collision entity's contact shape, for the composition root to inject
+  // into the collision assessment as its secondary source.
+  collisionContacts = $derived.by<CollisionContact[]>(() => {
+    const arpa = this.arpaTargets;
+    return arpa ? toCollisionContacts(arpa.radarId, arpa.targets) : NO_COLLISION_CONTACTS;
+  });
   // A radar is detected once discovery returns at least one. Shared by the layer row's availability
   // gate and the menu tile so the two cannot drift on what "has a radar" means.
   hasRadar = $derived(this.radars.length > 0);
@@ -119,6 +135,7 @@ export class MarineRadarStore {
       this.operationalStatus = first?.status;
       this.areaDraft = undefined;
       this.areaVersion += 1;
+      this.arpaTargets = undefined;
     }
   }
 
@@ -140,11 +157,20 @@ export class MarineRadarStore {
       this.operationalStatus = radar.status;
       this.areaDraft = undefined;
       this.areaVersion += 1;
+      this.arpaTargets = undefined;
     }
   }
 
   setOperationalStatus(status: RadarStatus): void {
     this.operationalStatus = status;
+  }
+
+  setArpaTargets(radarId: string, targets: RadarTarget[]): void {
+    this.arpaTargets = { radarId, targets };
+  }
+
+  clearArpaTargets(): void {
+    if (this.arpaTargets) this.arpaTargets = undefined;
   }
 
   // Reconcile live control values from the standard controls endpoint or Signal K stream. Skip pending

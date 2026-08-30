@@ -3,6 +3,8 @@
 // EventEmitter via FullSignalK), so the few wire types live here. The server serves these at
 // `/signalk/v2/api/vessels/self/radars`; a Radar API provider, such as Mayara, populates them.
 
+import type { LatLon } from '$shared/geo';
+
 export type RadarStatus = 'off' | 'standby' | 'transmit' | 'warming';
 export type RadarAvailability =
   | 'idle'
@@ -147,4 +149,19 @@ export interface ControlDefinition {
 // The subset of GET /radars/{id}/capabilities Binnacle reads.
 export interface RadarCapabilities {
   controls: ControlDefinition[];
+}
+
+// A tracked ARPA or MARPA target from GET /radars/{id}/targets, reduced to what Binnacle consumes.
+// Verified against signalk-server 2.27.0's radar API route and the Mayara 3.7.0 tracker source:
+// motion is omitted until the tracker's motion estimate converges, danger (cpa and tcpa) is omitted
+// when the relative motion is undefined, and a negative tcpa means the closest approach has already
+// passed. Targets reported 'lost' are dropped at the parse, so this status never carries it.
+export interface RadarTarget {
+  id: number;
+  status: 'tracking' | 'acquiring';
+  position: LatLon;
+  courseRad?: number;
+  speedMps?: number;
+  cpaMeters?: number;
+  tcpaSeconds?: number;
 }

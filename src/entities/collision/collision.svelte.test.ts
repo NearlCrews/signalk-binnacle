@@ -4,7 +4,7 @@ import { OwnVessel } from '$entities/vessel';
 import { degreesToRadians, knotsToMetersPerSecond } from '$shared/lib';
 import { createThresholds, DEFAULT_THRESHOLDS } from '$shared/settings';
 import { SignalKStore } from '$shared/signalk';
-import { assessContacts, CollisionAssessment } from './collision.svelte';
+import { assessContacts, CollisionAssessment, type CollisionContact } from './collision.svelte';
 
 const ownStationary = { position: { latitude: 0, longitude: 0 }, sogMps: 0, cogRad: 0 };
 
@@ -727,5 +727,96 @@ describe('CollisionAssessment own-vessel freshness', () => {
     expect(collision.assessment.nearestUnassessed?.id).toBe('vessels.closing');
     expect(collision.assessment.nearestUnassessed?.rangeMeters).toBeGreaterThan(1840);
     expect(collision.assessment.nearestUnassessed?.rangeMeters).toBeLessThan(1860);
+  });
+});
+
+describe('CollisionAssessment radar contacts', () => {
+  const radarContact = (partial: Partial<CollisionContact> = {}): CollisionContact => ({
+    id: 'radar:r1:7',
+    name: 'Radar 7',
+    position: { latitude: 0.008, longitude: 0 },
+    ...partial,
+  });
+
+  it('merges radar contacts with AIS through the same thresholds, ids namespaced apart', () => {
+    const store = dangerStore('vessels.a');
+    const collision = new CollisionAssessment(
+      new OwnVessel(store),
+      new AisTargets(store),
+      createThresholds(),
+      () => false,
+      () => 0,
+      () => [radarContact({ cpaMeters: 100, tcpaSeconds: 90 })],
+    );
+    const contacts = collision.assessment.contacts;
+    expect(contacts.map((c) => c.id)).toEqual(['vessels.a', 'radar:r1:7']);
+    const radar = contacts[1];
+    expect(radar?.name).toBe('Radar 7');
+    expect(radar?.severity).toBe('danger');
+    expect(radar?.source).toBe('provider');
+  });
+
+  it('grades a radar contact with motion but no provider cpa through the computed branch', () => {
+    // About 1113 m due north of the stationary own vessel, running due south at 5 m/s: CPA near
+    // zero, TCPA about 222 s, danger under the defaults.
+    const contact = radarContact({
+      position: { latitude: 0.01, longitude: 0 },
+      sogMps: 5,
+      cogRad: Math.PI,
+    });
+    const r = assessContacts(ownStationary, [contact], DEFAULT_THRESHOLDS);
+    expect(r.contacts[0]?.id).toBe('radar:r1:7');
+    expect(r.contacts[0]?.severity).toBe('danger');
+    expect(r.contacts[0]?.source).toBe('computed');
+  });
+
+  it('grades a radar contact without motion as unassessed, never clear', () => {
+    // An acquiring ARPA target whose motion estimate has not converged carries no course or speed.
+    const r = assessContacts(ownStationary, [radarContact()], DEFAULT_THRESHOLDS);
+    expect(r.contacts).toHaveLength(0);
+    expect(r.unassessed).toEqual([
+      {
+        id: 'radar:r1:7',
+        name: 'Radar 7',
+        position: { latitude: 0.008, longitude: 0 },
+        reason: 'motion-unknown',
+      },
+    ]);
+  });
+
+  it('applies the receding hold to a radar contact whose approach passes', () => {
+    let now = 0;
+    let contact = radarContact({ cpaMeters: 100, tcpaSeconds: 60 });
+    const store = new SignalKStore();
+    const collision = new CollisionAssessment(
+      new OwnVessel(store),
+      new AisTargets(store),
+      createThresholds(),
+      () => false,
+      () => now,
+      () => [contact],
+    );
+    expect(collision.assessment.contacts[0]?.severity).toBe('danger');
+    expect(collision.assessment.contacts[0]?.receding).toBe(false);
+
+    // The approach passes: the contact holds at its prior grade instead of vanishing at CPA.
+    contact = radarContact({ cpaMeters: 100, tcpaSeconds: -5 });
+    expect(collision.assessment.contacts[0]?.severity).toBe('danger');
+    expect(collision.assessment.contacts[0]?.receding).toBe(true);
+
+    // Past the hold window the opening contact drops.
+    now += 61_000;
+    expect(collision.assessment.contacts).toHaveLength(0);
+  });
+
+  it('reads all-clear when the radar source is empty and no AIS traffic exists', () => {
+    const store = new SignalKStore();
+    const collision = new CollisionAssessment(
+      new OwnVessel(store),
+      new AisTargets(store),
+      createThresholds(),
+    );
+    expect(collision.assessment.contacts).toHaveLength(0);
+    expect(collision.assessment.worst).toBe('clear');
   });
 });

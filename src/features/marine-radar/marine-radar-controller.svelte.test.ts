@@ -749,3 +749,224 @@ describe('createMarineRadarController', () => {
     await controller.dispose();
   });
 });
+
+// One wire target as the targets endpoint serves it, georeferenced with a provider assessment.
+const wireArpaTarget = {
+  id: 7,
+  status: 'tracking',
+  position: { bearing: 1.2, distance: 1400, latitude: 59.1, longitude: 10.5 },
+  motion: { course: 0.5, speed: 3.2 },
+  danger: { cpa: 200, tcpa: 120 },
+};
+
+// Adds a targets route to stubRadarFetch, above the rest fallback the base helper answers with.
+function stubArpaFetch(
+  targets: RadarFetchHandler,
+  handlers: Parameters<typeof stubRadarFetch>[0] = {},
+) {
+  const { rest, ...others } = handlers;
+  return stubRadarFetch({
+    ...others,
+    rest: (url, init) => {
+      if (url.endsWith('/targets')) return targets(url, init);
+      return rest ? rest(url, init) : jsonResponse({});
+    },
+  });
+}
+
+describe('ARPA targets polling', () => {
+  it('polls targets on a 5 s cadence while transmitting and maps collision contacts', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    stubArpaFetch(
+      () => {
+        polls += 1;
+        return jsonResponse([wireArpaTarget]);
+      },
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(polls).toBe(1);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+      expect(controller.store.collisionContacts).toEqual([
+        {
+          id: 'radar:a:7',
+          name: 'Radar 7',
+          position: { latitude: 59.1, longitude: 10.5 },
+          sogMps: 3.2,
+          cogRad: 0.5,
+          cpaMeters: 200,
+          tcpaSeconds: 120,
+        },
+      ]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(polls).toBe(2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(polls).toBe(3);
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not poll targets while the radar is on standby', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    stubArpaFetch(
+      () => {
+        polls += 1;
+        return jsonResponse([wireArpaTarget]);
+      },
+      { radars: [fakeRadar] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(polls).toBe(0);
+      expect(controller.store.arpaTargets).toBeUndefined();
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling and clears contacts when a delta reconciles the radar to standby', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    stubArpaFetch(
+      () => {
+        polls += 1;
+        return jsonResponse([wireArpaTarget]);
+      },
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+
+      controller.applyControlDelta('radars.a.controls.status', 'standby');
+      expect(controller.store.arpaTargets).toBeUndefined();
+      expect(controller.store.collisionContacts).toEqual([]);
+      const pollsAtStandby = polls;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(polls).toBe(pollsAtStandby);
+
+      // Transmit reopens the poll, like the spoke stream.
+      controller.applyControlDelta('radars.a.controls.status', 'transmit');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('discards a late targets response that lands after standby cleared the picture', async () => {
+    vi.useFakeTimers();
+    let release: ((response: Response) => void) | undefined;
+    stubArpaFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      controller.applyControlDelta('radars.a.controls.status', 'standby');
+      release?.(jsonResponse([wireArpaTarget]));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.store.arpaTargets).toBeUndefined();
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('goes dormant once the endpoint reports no ARPA support, and re-probes on refresh', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    let supported = false;
+    stubArpaFetch(
+      () => {
+        polls += 1;
+        return supported ? jsonResponse([wireArpaTarget]) : new Response('', { status: 501 });
+      },
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(polls).toBe(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(polls).toBe(1);
+
+      supported = true;
+      await controller.refresh();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds contacts through a transient poll failure, then clears past the hold window', async () => {
+    vi.useFakeTimers();
+    let failing = false;
+    stubArpaFetch(
+      () => (failing ? new Response('', { status: 500 }) : jsonResponse([wireArpaTarget])),
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+
+      failing = true;
+      // Two failed polls inside the 15 s hold keep the last picture.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.store.arpaTargets?.targets).toHaveLength(1);
+      // The next failed poll is past the hold and clears it.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.store.arpaTargets).toBeUndefined();
+    } finally {
+      await controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops targets polling on dispose', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    stubArpaFetch(
+      () => {
+        polls += 1;
+        return jsonResponse([wireArpaTarget]);
+      },
+      { radars: [{ ...fakeRadar, status: 'transmit' }] },
+    );
+    const controller = makeController();
+    try {
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await controller.dispose();
+      const pollsAtDispose = polls;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(polls).toBe(pollsAtDispose);
+      expect(controller.store.arpaTargets).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

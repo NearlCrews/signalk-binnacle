@@ -35,7 +35,7 @@ import type {
 // Note: the server's published OpenAPI doc models this as an id-keyed map, but the implementation and
 // the @signalk/server-api RadarInfo type return an array, which is what is verified against here. Do
 // not "correct" this to a map from the OpenAPI doc.
-const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
+export const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
 const RADAR_STATUSES: ReadonlySet<string> = new Set(['off', 'standby', 'transmit', 'warming']);
 const CONTROL_TYPES: ReadonlySet<string> = new Set([

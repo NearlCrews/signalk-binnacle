@@ -23,6 +23,7 @@ import {
 } from './radar-controls-model';
 import type { RadarFrame } from './radar-frame-core';
 import { radarFlushHz } from './radar-limits';
+import { fetchRadarTargets } from './radar-targets';
 import {
   POWER_PENDING_KEY,
   type RadarAreaDraft,
@@ -46,6 +47,11 @@ export interface MarineRadarDeps {
 const REOPEN_BASE_MS = 1000;
 const REOPEN_MAX_MS = 30_000;
 const CONTROL_POLL_MS = 15_000;
+const ARPA_POLL_MS = 5000;
+// One transient targets-poll failure must not drop a live danger contact, and with it the receding
+// hold and acknowledge state its id anchors; past this quiet window the picture is honestly
+// unknown and the contacts clear.
+const ARPA_HOLD_MS = 15_000;
 const ECHO_GRACE_MS = 3000;
 const STALE_MS = 5000;
 // A half-open socket (dead upstream with no close event, routine on boat WiFi) never reaches the
@@ -101,6 +107,13 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   let reopenTimer: ReturnType<typeof setTimeout> | undefined;
   let reopenAttempt = 0;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let arpaTimer: ReturnType<typeof setInterval> | undefined;
+  let arpaGeneration = 0;
+  let arpaLastOkAt = 0;
+  // Set when the endpoint answered that it will never serve targets for this radar (a provider
+  // without an ARPA tracker), so the poll goes dormant instead of retrying every cadence. A
+  // rediscovery or radar switch re-probes.
+  let arpaUnsupported = false;
   let staleTimer: ReturnType<typeof setInterval> | undefined;
   let liveFrame: RadarFrame | undefined;
   let discoveryGeneration = 0;
@@ -207,6 +220,50 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     }
   }
 
+  // Unlike the spoke stream, ARPA targets polling is not gated on overlay or document visibility:
+  // the targets feed the collision assessment, and alarms keep flowing in a backgrounded tab.
+  function shouldPollArpa(): boolean {
+    return (
+      !disposed &&
+      !arpaUnsupported &&
+      store.operationalStatus === 'transmit' &&
+      store.selected !== undefined &&
+      deps.radarAvailable()
+    );
+  }
+
+  async function pollArpaTargets(): Promise<void> {
+    const radar = store.selected;
+    if (!radar || !shouldPollArpa()) return;
+    const generation = ++arpaGeneration;
+    const outcome = await fetchRadarTargets(deps.origin, deps.getToken(), radar.id);
+    if (disposed || generation !== arpaGeneration || store.selectedId !== radar.id) return;
+    if (outcome.kind === 'ok') {
+      arpaLastOkAt = Date.now();
+      store.setArpaTargets(radar.id, outcome.targets);
+    } else if (outcome.kind === 'unsupported') {
+      arpaUnsupported = true;
+      syncArpaPolling();
+    } else if (Date.now() - arpaLastOkAt > ARPA_HOLD_MS) {
+      store.clearArpaTargets();
+    }
+  }
+
+  function syncArpaPolling(): void {
+    if (shouldPollArpa()) {
+      if (arpaTimer) return;
+      arpaTimer = setInterval(() => void pollArpaTargets(), ARPA_POLL_MS);
+      void pollArpaTargets();
+      return;
+    }
+    if (arpaTimer) clearInterval(arpaTimer);
+    arpaTimer = undefined;
+    // Invalidate any in-flight poll: a late response landing after standby or a radar switch must
+    // not restore contacts the stop just cleared.
+    arpaGeneration += 1;
+    store.clearArpaTargets();
+  }
+
   function startFreshnessWatch(): void {
     if (staleTimer) return;
     staleTimer = setInterval(() => {
@@ -296,6 +353,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   }
 
   async function syncStreamLifecycle(): Promise<void> {
+    // Every lifecycle-relevant change funnels through here (selection, discovery, power, overlay,
+    // and visibility), so the targets poll follows the same transitions without its own wiring.
+    // It is synchronous and independent of the stream's close-open serialization below.
+    syncArpaPolling();
     // Serialize close and open transitions. A slow worker.close must finish before a visibility or
     // control change can reopen the same worker, or its late continuation can close the new socket.
     streamLifecycle = streamLifecycle
@@ -326,6 +387,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   async function refresh(): Promise<void> {
     if (disposed) return;
     const generation = ++discoveryGeneration;
+    // A rediscovery re-probes the targets endpoint: a provider restarted with its tracker enabled
+    // should start feeding contacts without a radar switch.
+    arpaUnsupported = false;
     if (!deps.radarAvailable()) {
       if (store.selectedId !== undefined) selectionEpoch += 1;
       store.setAvailability('absent');
@@ -353,6 +417,8 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     if (id === store.selectedId) return;
     selectionEpoch += 1;
     retireReopenBackoff();
+    arpaUnsupported = false;
+    arpaLastOkAt = 0;
     store.select(id);
     layer.clearFrame();
     void loadSelected();

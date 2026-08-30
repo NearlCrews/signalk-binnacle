@@ -1,5 +1,6 @@
 export type {
   Assessment,
+  CollisionContact,
   DangerContact,
   NearestUnassessed,
   Severity,
