@@ -1,6 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AnchorWatch } from '$entities/anchor';
+import type { TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import type { DepthReading, OwnVessel } from '$entities/vessel';
 import type { AlarmAudioState } from '$shared/audio';
@@ -23,12 +24,15 @@ function renderPanel(
     anchor?: Record<string, unknown>;
     audioState?: AlarmAudioState;
     batteryNote?: string;
+    vessel?: Record<string, unknown>;
+    tides?: Record<string, unknown>;
   } = {},
 ): string {
   return render(AnchorPanel, {
     props: {
       auth,
       batteryNote: extras.batteryNote,
+      tides: extras.tides as unknown as TidesStore | undefined,
       anchor: {
         watching: false,
         fixLost: false,
@@ -45,7 +49,9 @@ function renderPanel(
         positionStale: false,
         anchorDepth,
         safetyDepth,
-      } as OwnVessel,
+        lengthMeters: undefined,
+        ...extras.vessel,
+      } as unknown as OwnVessel,
       units: { mode } as UnitsStore,
       audioState: extras.audioState ?? 'ready',
       onDrop: vi.fn(),
@@ -185,5 +191,101 @@ describe('AnchorPanel', () => {
     const body = renderPanel('metric', NO_DEPTH, keelOnly);
     expect(body).not.toContain('Depth (');
     expect(body).toContain('The sounder publishes keel depth only');
+  });
+
+  it('offers the rode helper with unit-resolved accessible names', () => {
+    const metric = renderPanel('metric');
+    expect(metric).toContain('Suggest a radius from the rode');
+    expect(metric).toContain('aria-label="Rode paid out in meters"');
+    expect(renderPanel('imperial')).toContain('aria-label="Rode paid out in feet"');
+    expect(metric).toContain('Enter the values above to get a suggested radius.');
+  });
+
+  it('asks for the boat length only when the vessel does not declare one', () => {
+    expect(renderPanel('metric')).toContain('Boat length');
+    expect(
+      renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, { vessel: { lengthMeters: 12.8 } }),
+    ).not.toContain('Boat length');
+  });
+
+  it('names the depth source feeding the rode math and that depth follows the tide', () => {
+    const live = renderPanel('metric', {
+      meters: 9,
+      source: 'surface',
+      path: 'environment.depth.belowSurface',
+      stale: false,
+    });
+    expect(live).toContain('from the Surface sounding');
+    expect(live).toContain('Depth changes with the tide');
+    expect(live).not.toContain('Depth at the anchor in');
+  });
+
+  it('falls back to a manual depth field when no usable sounding exists', () => {
+    const manual = renderPanel('metric');
+    expect(manual).toContain('aria-label="Depth at the anchor in meters"');
+    expect(manual).toContain('No usable depth sounding, so enter the depth by hand.');
+  });
+
+  it('holds a stale sounding out of the rode math and asks for a manual depth', () => {
+    const stale = renderPanel('metric', {
+      meters: 9,
+      source: 'surface',
+      path: 'environment.depth.belowSurface',
+      stale: true,
+    });
+    expect(stale).toContain('aria-label="Depth at the anchor in meters"');
+    expect(stale).not.toContain('from the Surface sounding');
+  });
+
+  it('omits the tide section until the host wires the tides store', () => {
+    expect(renderPanel('metric')).not.toContain('Nearby tide prediction');
+  });
+
+  it('summarizes the nearest station prediction with its distance honesty line', () => {
+    const now = Date.now();
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: {
+        status: 'ready',
+        tide: {
+          station: { id: '8654321', name: 'Point Lookout', latitude: 42, longitude: -83 },
+          distanceMeters: 850,
+          events: [
+            { timeMs: now + 3_600_000, heightMeters: 2.1, kind: 'high' },
+            { timeMs: now + 7_200_000, heightMeters: 0.4, kind: 'low' },
+          ],
+        },
+      },
+    });
+    expect(body).toContain('Nearby tide prediction');
+    expect(body).toContain('Point Lookout');
+    expect(body).toContain('850 m away');
+    expect(body).toContain('Next high');
+    expect(body).toContain('2.1');
+    expect(body).toContain('Next low');
+    expect(body).toContain('0.4');
+    expect(body).toContain('Predictions come from Point Lookout');
+    expect(body).toContain('The tide here can differ');
+  });
+
+  it('states coverage honestly when no station is near', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: { status: 'no-coverage', tide: undefined },
+    });
+    expect(body).toContain('No tide station nearby. NOAA tide predictions cover US waters only.');
+  });
+
+  it('words the loading, error, and idle tide states apart', () => {
+    const loading = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: { status: 'loading', tide: undefined },
+    });
+    expect(loading).toContain('Loading tide predictions…');
+    const failed = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: { status: 'error', tide: undefined },
+    });
+    expect(failed).toContain('Tide predictions did not load.');
+    const idle = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: { status: 'idle', tide: undefined },
+    });
+    expect(idle).toContain('Tide predictions have not loaded for this view yet.');
   });
 });
