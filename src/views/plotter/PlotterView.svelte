@@ -220,6 +220,7 @@ interface FlatProps {
   alarmVolume: import('$features/lookout').AlarmVolumeSetting;
   alarmLog: import('$features/lookout').AlarmLog;
   wakeLock: { readonly state: import('$shared/pwa').WakeLockState };
+  barometer: { readonly tendency: import('$features/weather').BarometerTendency | undefined };
 
   // Callbacks for state mutations
   onViewChange: (view: import('$shared/settings').MapView) => void;
@@ -318,7 +319,8 @@ type ServiceKey =
   | 'arrivalMuted'
   | 'alarmVolume'
   | 'alarmLog'
-  | 'wakeLock';
+  | 'wakeLock'
+  | 'barometer';
 type ControllerKey =
   | 'anchorController'
   | 'mobController'
@@ -502,6 +504,7 @@ const {
   alarmVolume,
   alarmLog,
   wakeLock,
+  barometer,
 } = $derived(services);
 const insecureTransport = $derived(isInsecureTransportOrigin(origin));
 const {
@@ -1168,6 +1171,8 @@ $effect(() => {
               {auth}
               routes={routeStore.routes}
               shownIds={routeStore.shownIds}
+              weatherGrid={weather.grid}
+              units={units.profile}
               working={routeStore.working}
               activeId={routeStore.activeId}
               refreshing={routeController.refreshing}
@@ -1975,6 +1980,7 @@ $effect(() => {
           position={vessel.position}
           positionStale={vessel.positionStale}
           pointLoader={pointConditionsLoader}
+          measuredTendency={barometer.tendency}
           online={net.online}
           onClose={closeWeatherPanel}
           onBack={backFromWeatherPanel}

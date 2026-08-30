@@ -38,6 +38,10 @@ const { legends, radarNote }: Props = $props();
           {legend.id === WEATHER_LAYER_IDS.radar ? radarNote : legend.note}
         </span>
       {/if}
+      {#if legend.coverageNote}
+        <!-- The coverage bound stays beside the live note: offshore silence is not no rain. -->
+        <span class="legend-note">{legend.coverageNote}</span>
+      {/if}
     </div>
   {/each}
 </div>

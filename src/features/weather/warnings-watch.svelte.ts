@@ -72,7 +72,7 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
     chirpTimer = setTimeout(() => deps.alarm.update(false), CHIRP_MS);
   }
 
-  async function refresh(provider: string, pos: LatLon, mine: number): Promise<void> {
+  async function refresh(provider: string | undefined, pos: LatLon, mine: number): Promise<void> {
     try {
       const point = await deps.loader.loadWarnings(
         deps.origin,
@@ -114,13 +114,15 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
     const now = deps.clock.now;
     const provider = deps.provider();
     const pos = deps.position();
-    if (!provider || !pos) return;
-    const key = `${provider.id} ${quantizeLatLonKey(pos, WATCH_CELL_DECIMALS)}`;
+    // No provider still watches: the loader falls back to the free point-alert source, so a US
+    // boat on a stock server hears about a gale too. A provider appearing or vanishing refetches.
+    if (!pos) return;
+    const key = `${provider?.id ?? 'nws'} ${quantizeLatLonKey(pos, WATCH_CELL_DECIMALS)}`;
     const cadence = sessionPrimed ? WARNING_REFRESH_MS : UNPRIMED_RETRY_MS;
     if (key === lastKey && now - lastAttemptMs < cadence) return;
     lastKey = key;
     lastAttemptMs = now;
-    void refresh(provider.id, pos, ++generation);
+    void refresh(provider?.id, pos, ++generation);
   });
 
   return {

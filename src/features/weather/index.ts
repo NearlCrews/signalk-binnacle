@@ -1,3 +1,8 @@
+export {
+  type BarometerGrade,
+  type BarometerTendency,
+  createBarometerTrend,
+} from './barometer-trend.svelte';
 export { createCloudOverlay } from './cloud-overlay';
 export {
   GRID_SOURCE_LABEL,

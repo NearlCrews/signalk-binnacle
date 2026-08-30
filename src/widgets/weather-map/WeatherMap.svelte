@@ -91,6 +91,8 @@ interface Props {
   positionStale?: boolean;
   // The shared point-conditions loader, constructed in App so the panel reuses one cache connection.
   pointLoader?: PointConditionsLoader;
+  // The boat's own barometer tendency, measured aboard; passed through to the conditions block.
+  measuredTendency?: import('$features/weather').BarometerTendency;
   // Connectivity, so cached radar is labeled rather than passing as live.
   online?: boolean;
   // When supplied, a leading back button returns to the menu, matching the slide-over convention.
@@ -114,6 +116,7 @@ const {
   position,
   positionStale = false,
   pointLoader,
+  measuredTendency = undefined,
   online = true,
   onBack,
   onClose,
@@ -622,6 +625,7 @@ onDestroy(() => {
           {store}
           {units}
           {pointLoader}
+          {measuredTendency}
         />
       </div>
     {/if}

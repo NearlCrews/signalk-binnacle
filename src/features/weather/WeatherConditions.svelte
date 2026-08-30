@@ -5,6 +5,7 @@ import type { UnitsStore } from '$entities/units';
 import type { WeatherStore } from '$entities/weather';
 import { quantizeLatLonKey } from '$shared/geo';
 import { Clock, formatDayClock, MINUTE_MS } from '$shared/lib';
+import type { BarometerTendency } from './barometer-trend.svelte';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
 import { mergeConditions, pickForecast, tendencyText as tendencyTextFor } from './forecast-series';
@@ -45,6 +46,8 @@ interface Props {
   // persisted-cache connection instead of opening a fresh one per mount. Falls back to a local
   // instance when a host does not supply it (tests, standalone use).
   pointLoader?: PointConditionsLoader;
+  // The boat's own barometer tendency, measured aboard, independent of the forecast slider.
+  measuredTendency?: BarometerTendency;
 }
 
 const {
@@ -57,6 +60,7 @@ const {
   store,
   units,
   pointLoader: pointLoaderProp,
+  measuredTendency = undefined,
 }: Props = $props();
 
 // A coarse minute tick so the "is the target near now" check and the now-fallback target both stay
@@ -121,9 +125,9 @@ const parsedPos = $derived<[number, number] | undefined>(
 $effect(() => {
   const pos = parsedPos;
   const provider = effectiveProviderId;
-  // Without a position or a provider there is no provider data to show: clear any stale answers
-  // (a provider that disappears at runtime must not keep its warnings on screen).
-  if (!pos || !provider) {
+  // Without a position there is nothing to ask for: clear any stale answers (a provider that
+  // disappears at runtime must not keep its warnings on screen).
+  if (!pos) {
     clear();
     return;
   }
@@ -132,7 +136,10 @@ $effect(() => {
   if (requestKey === loadKey) return;
   loadKey = requestKey;
   clearForRequest(requestKey);
-  void loadProvider(provider, lat, lon);
+  // No provider still gets the free point-alert fallback: warnings alone ride the providerless
+  // request while conditions stay with the grid.
+  if (provider) void loadProvider(provider, lat, lon);
+  else void refreshWarnings(undefined, lat, lon, requestKey);
 });
 
 function clearForRequest(requestKey: string): void {
@@ -207,7 +214,7 @@ $effect(() => {
   const now = clock.now;
   const pos = parsedPos;
   const provider = effectiveProviderId;
-  if (!pos || !provider || !activeRequestKey || warningsFetchedAt === undefined) return;
+  if (!pos || !activeRequestKey || warningsFetchedAt === undefined) return;
   if (now - Math.max(warningsFetchedAt, warningsAttemptedAt) < WARNING_REFRESH_MS) return;
   const [lat, lon] = pos;
   warningsAttemptedAt = now;
@@ -215,7 +222,7 @@ $effect(() => {
 });
 
 async function refreshWarnings(
-  provider: string,
+  provider: string | undefined,
   lat: number,
   lon: number,
   requestKey: string,
@@ -347,8 +354,16 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
       {/if}
     {:else if !effectiveProviderId}
       <!-- Silence must be labeled: an empty list would read as "no warnings active" when the free
-           sources simply carry none. -->
-      <p class="muted-note" role="status">Warnings unavailable without a weather provider.</p>
+           point-alert source simply has no coverage here. -->
+      {#if warningAvailability === 'fresh'}
+        <p class="muted-note" role="status">No active warnings for this position.</p>
+      {:else if warningAvailability === 'stale'}
+        <p class="muted-note" role="status">Cached warnings may be stale; refresh failed.</p>
+      {:else}
+        <p class="muted-note" role="status">
+          No warnings coverage here without a weather provider.
+        </p>
+      {/if}
     {:else if warningAvailability === 'unavailable'}
       <p class="muted-note">Warnings unavailable from this provider.</p>
     {:else if warningAvailability === 'stale'}
@@ -369,6 +384,7 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
         cached={currentCached}
         {observationAgeMs}
         {tendencyText}
+        {measuredTendency}
         {units}
       />
     {:else if loading}
@@ -380,7 +396,14 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
     {/if}
 
     {#if forecast.length > 0}
-      <ForecastList {forecast} horizonH={forecastHorizonH} {units} {providerLabel} />
+      <ForecastList
+        {forecast}
+        horizonH={forecastHorizonH}
+        {units}
+        {providerLabel}
+        grid={store.grid}
+        gridPosition={parsedPos}
+      />
     {/if}
   {/if}
 </section>

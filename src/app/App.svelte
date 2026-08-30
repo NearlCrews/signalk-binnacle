@@ -141,6 +141,7 @@ import { createTrackController } from '$features/tracks';
 import { createTrendsController } from '$features/trends';
 import { createWaypointsController, WaypointDialog } from '$features/waypoints';
 import {
+  createBarometerTrend,
   createPointConditionsLoader,
   createWeatherLoader,
   createWeatherWarningsWatch,
@@ -1385,6 +1386,15 @@ const alarmLog = createAlarmLog(clock);
 const companionAi = createCompanionAiController({
   origin: () => origin,
   token: () => authToken,
+});
+
+// The boat's own barometer history, session-long so a tendency exists when the weather panel
+// opens hours in; the forecast slider can never reach it (its inputs are the sensor and the wall
+// clock alone).
+const barometer = createBarometerTrend({
+  clock,
+  pressurePa: () => vessel.outsidePressurePa,
+  stale: () => vessel.pressureStale,
 });
 
 // A locked phone kills audio and visuals together, the one gap the worker-timer background design
@@ -2746,6 +2756,7 @@ const plotterServices = {
   alarmVolume,
   alarmLog,
   wakeLock,
+  barometer,
 };
 
 const plotterControllers = {

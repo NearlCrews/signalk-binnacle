@@ -115,17 +115,27 @@ describe('createWeatherWarningsWatch', () => {
     expect(test.alarm.update).not.toHaveBeenCalled();
   });
 
-  it('ignores expired warnings and polls nothing without a provider', async () => {
+  it('ignores expired warnings', async () => {
     const expired = setup({ warnings: [warning('Gale Warning', -10, 2)] });
     await vi.waitFor(() => expect(expired.loadWarnings).toHaveBeenCalledOnce());
     expect(expired.watch.headline).toBeUndefined();
     expect(expired.announce).not.toHaveBeenCalled();
+  });
 
+  it('keeps watching without a provider through the providerless fallback', async () => {
     const absent = setup();
     absent.state.provider = undefined;
     flushSync();
+    // The provider vanishing changes the poll key, so the loader is asked again immediately with
+    // an undefined provider and the free point-alert fallback answers.
+    await vi.waitFor(() => expect(absent.loadWarnings).toHaveBeenCalledTimes(2));
+    expect(absent.loadWarnings.mock.calls[1][1]).toBeUndefined();
+
+    // No position stops the watch entirely.
+    absent.state.position = undefined;
+    flushSync();
     absent.state.now += WARNING_REFRESH_MS;
     flushSync();
-    expect(absent.loadWarnings).toHaveBeenCalledTimes(1);
+    expect(absent.loadWarnings).toHaveBeenCalledTimes(2);
   });
 });
