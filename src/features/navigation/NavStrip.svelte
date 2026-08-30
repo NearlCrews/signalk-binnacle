@@ -27,12 +27,15 @@ interface Props {
   // readout when a multi-leg route is active. Undefined for a single leg, where the per-leg numbers
   // already say it.
   routeProgress?: RouteProgress;
+  // The off-course monitor's held judgment; true puts the cross-track readout in the alarm
+  // treatment. The tone, mute, and announcement stay with the monitor, so the strip only shows.
+  xteAlarming?: boolean;
   onStop: () => void;
   // Skip the active waypoint forward (1) or back (-1) along the route.
   onSkip?: (delta: number) => void;
 }
 
-const { guidance, units, routeProgress, onStop, onSkip }: Props = $props();
+const { guidance, units, routeProgress, xteAlarming = false, onStop, onSkip }: Props = $props();
 
 // Stop ends navigation for the whole boat, and it sits beside the waypoint-skip pair, so it arms a
 // confirm step instead of firing on a single tap; the arm times out back to plain Stop on its own.
@@ -162,7 +165,9 @@ const eta = $derived.by(() => {
       >
       <span
         class="metric"
-        title="Cross-track error: how far off the leg you are{sourceSuffix('crossTrack')}"
+        title="Cross-track error: how far off the leg you are{xteAlarming
+          ? ', past the off-course alarm limit'
+          : ''}{sourceSuffix('crossTrack')}"
       >
         XTE
         {#if cdi}
@@ -171,14 +176,15 @@ const eta = $derived.by(() => {
             <span
               class="cdi-needle"
               class:pegged={cdi.pegged}
+              class:alarming={xteAlarming}
               style="inset-inline-start: calc(50% + {cdi.pos * 45}%)"
             ></span>
           </span>
         {/if}
         {#if steer}
-          <span class="steer">{steer}</span>
+          <span class="steer" class:sev-danger={xteAlarming}>{steer}</span>
         {/if}
-        <b>{xte}</b>
+        <b class:sev-danger={xteAlarming}>{xte}</b>
         nm
       </span>
       <span class="metric" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}"
@@ -255,6 +261,10 @@ const eta = $derived.by(() => {
 }
 .cdi-needle.pegged {
   background: var(--warning);
+}
+/* After .pegged at the same specificity, so a held off-course alarm outranks the pegged caution. */
+.cdi-needle.alarming {
+  background: var(--alarm);
 }
 /* The waypoint-skip pair keeps a guaranteed gutter before the Stop control, so the destructive Stop
    does not sit flush against the skip buttons where a mis-tap on a rolling deck could end navigation

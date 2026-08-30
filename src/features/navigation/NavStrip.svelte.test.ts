@@ -20,9 +20,9 @@ function activeGuidance(): CourseGuidance {
   return new CourseGuidance(store, new OwnVessel(store));
 }
 
-function renderStrip(): string {
+function renderStrip(xteAlarming = false): string {
   return render(NavStrip, {
-    props: { guidance: activeGuidance(), units: 'metric', onStop: vi.fn() },
+    props: { guidance: activeGuidance(), units: 'metric', xteAlarming, onStop: vi.fn() },
   }).body;
 }
 
@@ -34,6 +34,14 @@ describe('NavStrip', () => {
     // A fixed aria-label would keep saying "Stop navigation" while the visible text reads
     // "Confirm stop?", which contradicts the label-in-name rule.
     expect(body).not.toContain('aria-label="Stop navigation"');
+  });
+
+  it('gives the cross-track readout the alarm treatment only while the monitor alarms', () => {
+    expect(renderStrip()).not.toContain('sev-danger');
+    const alarming = renderStrip(true);
+    expect(alarming).toContain('sev-danger');
+    // The hover gloss says why the readout turned, not just that it did.
+    expect(alarming).toContain('past the off-course alarm limit');
   });
 
   it('glosses every acronym it shows, for a navigator who does not know them', () => {
