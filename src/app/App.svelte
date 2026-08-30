@@ -286,7 +286,16 @@ const net = new OnlineStatus();
 const thresholds = createThresholds();
 // Anchored own vessel treats moored and swinging boats as non-hazards, silencing the busy-anchorage
 // nuisance; the callback reads anchor (constructed below) lazily, only from inside the assessment.
-const collision = new CollisionAssessment(vessel, aisTargets, thresholds, () => anchor.watching);
+// The sixth argument feeds radar ARPA contacts beside AIS; like the anchor getter it is read
+// lazily from inside the assessment, after marineRadar (declared below) exists.
+const collision = new CollisionAssessment(
+  vessel,
+  aisTargets,
+  thresholds,
+  () => anchor.watching,
+  undefined,
+  () => marineRadar.store.collisionContacts,
+);
 // Every Binnacle-owned tone routes through one coordinator, so simultaneous alarms cannot sum at
 // the speaker and priority is deterministic: MOB and an escalating close-quarters collision are
 // co-equal and interleave; emergency outranks alarm; arrival is a courtesy that never preempts a

@@ -131,6 +131,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
       onSelect: onAisSelect,
       selectedId: selectedAisId,
       interactionsAllowed,
+      assessment: () => collision.assessment,
     }),
     createCollisionOverlay(collision),
     createMobOverlay(mob, vessel),

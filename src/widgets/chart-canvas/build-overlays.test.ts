@@ -196,6 +196,7 @@ describe('buildDynamicOverlays', () => {
       onSelect: deps.onAisSelect,
       selectedId: deps.selectedAisId,
       interactionsAllowed: deps.interactionsAllowed,
+      assessment: expect.any(Function),
     });
     expect(factories.createHistoryTrackOverlay).toHaveBeenCalledWith(
       deps.origin,
@@ -238,6 +239,7 @@ describe('buildDynamicOverlays', () => {
       onSelect: deps.onAisSelect,
       selectedId: deps.selectedAisId,
       interactionsAllowed,
+      assessment: expect.any(Function),
     });
   });
 });
