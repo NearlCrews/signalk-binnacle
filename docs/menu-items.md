@@ -105,6 +105,11 @@ source, and surrounding traffic before relying on it.
   startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
   panel names the one-time Resources Provider step with a Check again action. See
   [Tracks](tracks.md).
+- **Logbook** reads and writes the ship's log through the signalk-logbook plugin. The panel shows
+  the most recent logged days and a composer; taking a watch handoff, starting or stopping
+  navigation, and dropping or raising the anchor each offer a prefilled factual entry, and nothing
+  is ever logged without a tap. Absent-plugin, access, and failure states are distinct, and the
+  landing state explains installing the plugin from the Signal K App Store.
 - **Playback** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
   history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
   scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
@@ -112,11 +117,10 @@ source, and surrounding traffic before relying on it.
   motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
   correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
   loaded sample without another network query. Tracks records the boat's own
-  breadcrumb trail; Playback reviews the server's recorded history. The two do not cross-link to a
-  specific moment: a saved track resource carries its geometry, distance, and timespan, but not the
-  clock time of its points (they are reconstructed with a zero timestamp), so there is nothing to
-  seek Playback to. Reviewing a saved passage at its own time would first require persisting point
-  times in the track resource.
+  breadcrumb trail; Playback reviews the server's recorded history. They cross-link: a saved track
+  carries per-point times when the recording had them, its card shows the recorded span, and a
+  Play back this span action enters Playback at the track's start, widened to the smallest range
+  that covers it. Tracks older than the seven-day history window say so instead of failing.
 - **Find places** searches chart notes and places, including cached offline results. The layer
   row for the same data is named Places, so one noun covers the panel, the pill, the toolbar
   action, and the overlay.
@@ -193,6 +197,11 @@ source, and surrounding traffic before relying on it.
   only. Facts are rendered at snapshot time so stale inputs read as stale, taking a snapshot
   mutates nothing (no acknowledgments, no navigation changes), and the surface reviews status; it
   never declares it safe to take watch.
+
+- **Lock screen** shields a wet helm from rain and spray taps. The man-overboard key and the
+  safety alert rail stay genuinely tappable through openings in the shield, alarm dialogs work
+  above it, and slide-to-unlock (or holding Enter on the handle) releases it. The lock is
+  session-only: a reload always comes up unlocked.
 
 ## Weather
 
@@ -271,9 +280,20 @@ source, and surrounding traffic before relying on it.
   line names both the acronym and the new tab. Transport or access failures keep its
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
+- **AI advisor** shows the signalk-openrouter-companion plugin's analyzer reports: advisory prose,
+  timestamped, refreshed while the panel is open, with a Run now action per analyzer that fires
+  the plugin's own trigger and shows its acknowledgment verbatim, budget refusals included. The
+  reports never enter an alarm path, and the absent-plugin landing explains what the companion is.
 
 ## Settings
 
+- **Display** groups the helm display environment: a true-black screen dim that stays pointer
+  transparent and never exceeds the alarm-distinguishable floor, the opt-in automatic day and
+  night theme (from the boat's day and night signal with a solar fallback, paused by a manual
+  choice until the next boundary), the bright-sun chart contrast for direct sunlight, and the
+  interface text size from 100 to 130 percent with touch targets that only grow. All four travel
+  with the active profile. With auto theme off, sunset raises a one-time offer to switch to the
+  night theme.
 - **Profiles** (tile subtitle: units, sync, and privacy) saves portable chart, weather, threshold,
   toolbar, instrument, Data trends, track,
   unit-fallback, planning, chart-orientation, and preferred anchor-radius settings. The active profile saves

@@ -61,6 +61,11 @@ export interface DisplaySettingsController {
   // recolor reads it; it never changes the app chrome or the dark themes.
   readonly sunMode: boolean;
   setSunMode(on: boolean): void;
+  // The offer-and-confirm sunset prompt, raised once per dark edge while auto theme is off and
+  // the day theme shows. Accepting switches to night-red; dismissing waits for the next evening.
+  readonly sunsetOffer: boolean;
+  acceptSunsetOffer(): void;
+  dismissSunsetOffer(): void;
   // The persisted values themselves, for the profile binding table.
   readonly dimSetting: PersistedValue<number>;
   readonly autoThemeSetting: PersistedValue<boolean>;
@@ -113,18 +118,43 @@ export function createDisplaySettingsController(
     };
   });
 
-  // What auto would show right now. The server's declared environment.mode wins; without one, the
-  // sun's position at the vessel's fix decides; with neither, auto stays silent. Auto is two-state
-  // on purpose: dusk is a manual taste, and flashing dark-adapted eyes through dusk's brighter
-  // palette on the way to night-red is exactly what the direct jump avoids.
-  const recommendation = $derived.by<Theme | undefined>(() => {
-    if (!autoTheme.value) return undefined;
+  // Whether it is dark right now. The server's declared environment.mode wins; without one, the
+  // sun's position at the vessel's fix decides; with neither, undefined keeps both the auto theme
+  // and the sunset offer silent.
+  const darkNow = $derived.by<boolean | undefined>(() => {
     const mode = deps.getEnvironmentMode();
-    if (mode === 'night') return 'night-red';
-    if (mode === 'day') return 'day';
+    if (mode === 'night') return true;
+    if (mode === 'day') return false;
     const position = deps.getPosition();
     if (position === undefined) return undefined;
-    return isAfterDark(deps.clock.now, position.latitude, position.longitude) ? 'night-red' : 'day';
+    return isAfterDark(deps.clock.now, position.latitude, position.longitude);
+  });
+
+  // What auto would show right now. Auto is two-state on purpose: dusk is a manual taste, and
+  // flashing dark-adapted eyes through dusk's brighter palette on the way to night-red is exactly
+  // what the direct jump avoids.
+  const recommendation = $derived.by<Theme | undefined>(() => {
+    if (!autoTheme.value || darkNow === undefined) return undefined;
+    return darkNow ? 'night-red' : 'day';
+  });
+
+  // The sunset offer: with auto theme off, crossing into dark while the day theme shows raises a
+  // one-shot offer to switch. Offer-and-confirm only, once per dark edge; daylight clears it, so
+  // every sunset gets exactly one ask and a dismissal holds until the next evening.
+  let sunsetOfferOpen = $state(false);
+  let wasDark: boolean | undefined;
+  $effect(() => {
+    const dark = darkNow;
+    if (dark === undefined) return;
+    const crossedIntoDark = dark && wasDark === false;
+    wasDark = dark;
+    if (!dark) {
+      if (untrack(() => sunsetOfferOpen)) sunsetOfferOpen = false;
+      return;
+    }
+    if (!crossedIntoDark || autoTheme.value) return;
+    if (deps.getTheme() !== 'day') return;
+    sunsetOfferOpen = true;
   });
 
   let suspended = $state(false);
@@ -183,6 +213,17 @@ export function createDisplaySettingsController(
     },
     setSunMode(on: boolean): void {
       sunMode.set(on);
+    },
+    get sunsetOffer(): boolean {
+      return sunsetOfferOpen;
+    },
+    acceptSunsetOffer(): void {
+      if (!sunsetOfferOpen) return;
+      sunsetOfferOpen = false;
+      deps.setTheme('night-red');
+    },
+    dismissSunsetOffer(): void {
+      sunsetOfferOpen = false;
     },
     dimSetting: dim,
     autoThemeSetting: autoTheme,

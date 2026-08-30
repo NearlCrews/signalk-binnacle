@@ -10,3 +10,4 @@ export {
   type TextScale,
   type TextScaleRoot,
 } from './display-settings.svelte';
+export { default as SunsetOffer } from './SunsetOffer.svelte';

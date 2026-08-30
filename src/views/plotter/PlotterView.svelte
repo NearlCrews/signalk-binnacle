@@ -26,6 +26,7 @@ import { DisplayPanel } from '$features/display';
 import { loadHandoffPanel } from '$features/handoff';
 import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
+import { loadLogbookPanel } from '$features/logbook';
 import type { ShallowMonitorSnapshot } from '$features/lookout';
 import { loadAlarmsPanel } from '$features/lookout';
 import {
@@ -45,7 +46,11 @@ import {
   type TideStationSelectionEvent,
   type TidesController,
 } from '$features/tides';
-import { loadHistoryStrip, type TimeTravelController } from '$features/time-travel';
+import {
+  loadHistoryStrip,
+  TIME_TRAVEL_PRESETS,
+  type TimeTravelController,
+} from '$features/time-travel';
 import { loadTracksPanel } from '$features/tracks';
 import { loadTrendsPanel } from '$features/trends';
 import { loadWaypointsPanel } from '$features/waypoints';
@@ -122,6 +127,7 @@ interface FlatProps {
   handoff: import('$features/handoff').HandoffController;
   companionAi: import('$features/companion-ai').CompanionAiController;
   display: import('$features/display').DisplaySettingsController;
+  logbook: import('$features/logbook').LogbookController;
 
   // Entity stores
   anchor: AnchorWatch;
@@ -335,7 +341,8 @@ type ControllerKey =
   | 'tidesController'
   | 'handoff'
   | 'companionAi'
-  | 'display';
+  | 'display'
+  | 'logbook';
 type EntityKey =
   | 'anchor'
   | 'mob'
@@ -523,6 +530,7 @@ const {
   handoff,
   companionAi,
   display,
+  logbook,
 } = $derived(controllers);
 const {
   anchor,
@@ -655,6 +663,19 @@ $effect(() =>
 
 function closeWeatherPanel(): void {
   weatherPanelOpen = false;
+}
+
+// Play back a saved track's recorded span: enter history playback, widen the window to the
+// smallest preset covering the span's start, and scrub there. Ranges anchor at now, so a start
+// slightly past the window clamps to its edge rather than failing.
+async function playBackSpan(startMs: number): Promise<void> {
+  if (!timeTravel.active) await timeTravel.enter();
+  const ageSeconds = (Date.now() - startMs) / 1000;
+  const preset =
+    TIME_TRAVEL_PRESETS.find((candidate) => candidate.durationSeconds >= ageSeconds) ??
+    TIME_TRAVEL_PRESETS[TIME_TRAVEL_PRESETS.length - 1];
+  if (preset.id !== timeTravel.rangeId) await timeTravel.setRange(preset.id);
+  timeTravel.setScrub(startMs);
 }
 
 function backFromWeatherPanel(): void {
@@ -1265,6 +1286,8 @@ $effect(() => {
               onDelete={trackController.onDeleteSavedTrack}
               onToggleSaved={trackController.onToggleSaved}
               onExport={trackController.onExportSavedTrack}
+              playbackAvailable={(historyProviders?.ids.length ?? 0) > 0}
+              onPlayback={(_track, startMs) => void playBackSpan(startMs)}
               onClose={closeTracksPanel}
               onBack={backFromTracksPanel}
             />
@@ -1445,6 +1468,43 @@ $effect(() => {
             onRetry={retryLazyPanel}
           />
         {/await}
+      {:else if activePanel === 'logbook'}
+        {#await forAttempt(loadLogbookPanel)}
+          <LazyPanelState
+            title="Logbook"
+            closeLabel="Close logbook panel"
+            state="loading"
+            message="Loading the logbook…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default controller={logbook} {auth} onClose={closePanel} onBack={backToMenu} />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Logbook"
+                closeLabel="Close logbook panel"
+                state="error"
+                message="The logbook stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Logbook"
+            closeLabel="Close logbook panel"
+            state="error"
+            message="The logbook could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'display'}
         <DisplayPanel controller={display} onClose={closePanel} onBack={backToMenu} />
       {:else if activePanel === 'companion-ai'}
@@ -1604,6 +1664,7 @@ $effect(() => {
               {units}
               {anchor}
               {vessel}
+              tides={tidesStore}
               error={anchorController.anchorError}
               busy={anchorController.busy}
               batteryNote={anchorController.batteryNote}

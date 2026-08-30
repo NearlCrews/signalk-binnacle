@@ -210,3 +210,50 @@ describe('createDisplaySettingsController: automatic theme', () => {
     expect(state.theme).toBe('day');
   });
 });
+
+describe('createDisplaySettingsController: sunset offer', () => {
+  it('offers once at the dark edge with auto off, and accepting switches to night-red', () => {
+    const { state, controller, setTheme } = setup({ position: EQUATOR, now: NOON_UTC });
+    expect(controller.sunsetOffer).toBe(false);
+
+    state.now = MIDNIGHT_UTC + 24 * 3_600_000;
+    flushSync();
+    expect(controller.sunsetOffer).toBe(true);
+    controller.acceptSunsetOffer();
+    expect(setTheme).toHaveBeenLastCalledWith('night-red');
+    expect(controller.sunsetOffer).toBe(false);
+  });
+
+  it('a dismissal holds through the night and the next sunset asks again', () => {
+    const { state, controller } = setup({ position: EQUATOR, now: NOON_UTC });
+    state.now = MIDNIGHT_UTC + 24 * 3_600_000;
+    flushSync();
+    expect(controller.sunsetOffer).toBe(true);
+    controller.dismissSunsetOffer();
+    state.now += 3_600_000;
+    flushSync();
+    expect(controller.sunsetOffer).toBe(false);
+
+    // Daylight clears the edge memory; the following sunset offers again.
+    state.now += 12 * 3_600_000;
+    flushSync();
+    expect(controller.sunsetOffer).toBe(false);
+    state.now += 12 * 3_600_000;
+    flushSync();
+    expect(controller.sunsetOffer).toBe(true);
+  });
+
+  it('never offers while auto theme is on or from a non-day theme', () => {
+    const auto = setup({ position: EQUATOR, now: NOON_UTC });
+    auto.controller.setAutoTheme(true);
+    flushSync();
+    auto.state.now = MIDNIGHT_UTC + 24 * 3_600_000;
+    flushSync();
+    expect(auto.controller.sunsetOffer).toBe(false);
+
+    const dusk = setup({ position: EQUATOR, now: NOON_UTC, theme: 'dusk' });
+    dusk.state.now = MIDNIGHT_UTC + 24 * 3_600_000;
+    flushSync();
+    expect(dusk.controller.sunsetOffer).toBe(false);
+  });
+});

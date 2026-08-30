@@ -14,3 +14,4 @@ export {
   createTimeTravelOverlay,
   createTimeTravelTrackOverlay,
 } from './time-travel-overlay';
+export { TIME_TRAVEL_PRESETS, type TimeTravelRangeId } from './time-travel-presets';

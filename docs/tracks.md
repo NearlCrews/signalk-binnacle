@@ -69,8 +69,10 @@ Save writes a GeoJSON `MultiLineString` Feature to:
 
 `/signalk/v2/api/resources/tracks/{id}`
 
-The Feature properties include the name, `source: "binnacle"`, distance in meters, and timespan in
-seconds. Successful writes update the panel and overlay immediately before the follow-up server refresh.
+The Feature properties include the name, `source: "binnacle"`, distance in meters, timespan in
+seconds, and `coordTimes`: per-point RFC 3339 timestamps mirroring the MultiLineString structure,
+present when every kept point carried a real time. The panel shows a timed track's recorded span
+and, when a history provider is available, offers to play that span back. Successful writes update the panel and overlay immediately before the follow-up server refresh.
 A failed refresh therefore does not hide a track that the server already accepted. Fixes captured while
 the save request is in flight remain in a new active recording. Reads try the v2 collection first and
 fall back to the v1 collection for compatibility.
@@ -79,9 +81,10 @@ Incoming resources are bounded to 500 tracks and 100,000 valid points per track.
 to the resource id, negative metadata is ignored, and malformed geometry is dropped. Downloads use
 portable, bounded `.geojson` filenames.
 
-The server resource preserves segment geometry, the track name, source, distance, and timespan. The
-download preserves the geometry, name, and source. Neither form preserves every point timestamp or
-speed sample. Use the GeoJSON as a portable trail, not as a raw navigation-data archive.
+The server resource and the download both preserve segment geometry, the track name, source,
+distance, timespan, and per-point timestamps via `coordTimes` when the recording carried them.
+Neither form preserves speed samples. Use the GeoJSON as a portable trail, not as a raw
+navigation-data archive.
 
 ### Server provisioning
 

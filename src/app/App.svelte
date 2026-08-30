@@ -17,6 +17,7 @@ import Lock from '@lucide/svelte/icons/lock';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import Menu from '@lucide/svelte/icons/menu';
 import Navigation from '@lucide/svelte/icons/navigation';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Radar from '@lucide/svelte/icons/radar';
 import Route from '@lucide/svelte/icons/route';
 import Ruler from '@lucide/svelte/icons/ruler';
@@ -62,7 +63,7 @@ import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
 import { createCompanionAiController, latestCompanionHeadline } from '$features/companion-ai';
 import { NOAA_ENC_SOURCE_ID, shouldOfferNoaaEnc } from '$features/depth-charts';
-import { createDisplaySettingsController, DimOverlay } from '$features/display';
+import { createDisplaySettingsController, DimOverlay, SunsetOffer } from '$features/display';
 import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
   createInstrumentsController,
@@ -72,6 +73,12 @@ import {
   loadInstrumentsPanel,
 } from '$features/instruments';
 import type { LayersView } from '$features/layers-panel';
+import {
+  createLogbookController,
+  logbookAnchorSuggestion,
+  logbookCourseSuggestion,
+  logbookHandoffSuggestion,
+} from '$features/logbook';
 import {
   alarmChronologyFact,
   CollisionMute,
@@ -1175,7 +1182,10 @@ const userCharts = new UserCharts(
 // panel. With both off (the default) a pan must not issue NOAA station and prediction fetches that
 // nothing renders.
 const tidesWanted = $derived(
-  (layerSettings.value[TIDES_OVERLAY_ID]?.visible ?? false) || activePanel === 'tides',
+  (layerSettings.value[TIDES_OVERLAY_ID]?.visible ?? false) ||
+    activePanel === 'tides' ||
+    // The anchor panel shows the nearest station's prediction beside the watch.
+    activePanel === 'anchor',
 );
 
 // The view changes once per animation frame while panning; persist only after it
@@ -1519,9 +1529,29 @@ function onRouteCoverageReport(report: RouteCoverageReport | null): void {
   const verdict = report.verdict === 'complete' ? 'Complete' : 'Partial';
   routeCoverageFact = `${verdict} for a ${report.corridorNm} nm corridor, checked ${formatClockTime(Date.now())}`;
 }
+// The ship's logbook: reads and offers entries through the signalk-logbook plugin when present.
+// Offers only; nothing is logged without a tap in the panel.
+const logbook = createLogbookController({
+  origin: () => origin,
+  getToken: () => chartsToken,
+  writeBlocked: () => auth.writeBlocked,
+  requestWriteAccess: () => auth.requestWriteAccess(),
+});
+logbook.start();
+
 const handoff = createHandoffController({
   client: () => handoffClient,
   drafts: handoffDrafts,
+  // The snapshot just taken sits at the tail of the draft queue (records lag the async sync).
+  onCreated: () =>
+    logbook.offerEntry(
+      logbookHandoffSuggestion(
+        handoffDrafts.value
+          .at(-1)
+          ?.facts.map((fact) => `${fact.label}: ${fact.value}`)
+          .join('; ') ?? '',
+      ),
+    ),
   collectFacts: () =>
     collectHandoffFacts({
       now: Date.now,
@@ -1782,6 +1812,16 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Navigate',
     pressed: activePanel === 'tracks',
     onSelect: () => togglePanel('tracks'),
+  },
+  {
+    id: 'logbook',
+    label: 'Logbook',
+    icon: NotebookPen,
+    group: 'Navigate',
+    pressed: activePanel === 'logbook',
+    // Always listed: the panel carries the discoverable-while-unavailable landing that explains
+    // the signalk-logbook plugin when it is absent.
+    onSelect: () => togglePanel('logbook'),
   },
   // Playback is not a LeftPanel; it has its own active flag and enter and exit API. It grays like
   // the radar tile when no history provider is known, rather than opening to an empty mode. It
@@ -2082,6 +2122,8 @@ const anchorController = createAnchorController({
   anchorAlarm,
   serverHasAnchorApi: () => serverFeatures?.apis.has('anchor') ?? false,
   writeBlocked: () => auth.writeBlocked,
+  onAnchorLogMoment: (kind, radiusMeters) =>
+    logbook.offerEntry(logbookAnchorSuggestion(kind, radiusMeters)),
 });
 
 // A transient action failure (a failed save, activate, delete, and similar) from the route,
@@ -2134,6 +2176,7 @@ const routeController = createRouteController({
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
   getTrackPoints: () => recorder.points,
   toast,
+  onCourseLogMoment: (kind, name) => logbook.offerEntry(logbookCourseSuggestion(kind, name)),
 });
 
 // The off-course alarm: the CDI pegging must sound, not only draw. Server ownership stands the
@@ -2831,6 +2874,7 @@ const plotterControllers = {
   handoff,
   companionAi,
   display,
+  logbook,
 };
 
 const plotterEntities = {
@@ -3349,6 +3393,8 @@ const plotterActions = {
     {/await}
   {/key}
 {/if}
+
+<SunsetOffer controller={display} />
 
 <!-- Last child on purpose: the simulated-backlight dim must sit above every piece of chrome. It is
      pointer-transparent, so stacking it here costs nothing. -->
