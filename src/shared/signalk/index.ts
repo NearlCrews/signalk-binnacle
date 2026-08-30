@@ -23,7 +23,7 @@ export {
   positionFromHistoryRow,
 } from './history-client';
 export type { MetaZone, ZoneState } from './meta';
-export { zoneStateFor } from './meta';
+export { putPathMetaZones, zoneStateFor } from './meta';
 export type {
   NotificationActionResult,
   UpdateNotificationResult,
@@ -76,7 +76,7 @@ export {
   writeRefusedMessage,
 } from './resource';
 export { recentSourceRefs, sourceCue } from './source-trace';
-export { predatesReconnect, SignalKStore } from './store.svelte';
+export { PathCell, predatesReconnect, SignalKStore } from './store.svelte';
 export type { SkSymbol } from './symbols-client';
 export { fetchSymbols } from './symbols-client';
 export type {

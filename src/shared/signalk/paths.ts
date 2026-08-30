@@ -63,4 +63,7 @@ export const SK_PATHS = {
   windAngleTrueWater: 'environment.wind.angleTrueWater',
   windSpeedOverGround: 'environment.wind.speedOverGround',
   windDirectionTrue: 'environment.wind.directionTrue',
+  // The v2 Autopilot API's live channel: state, mode, target, engaged, availableActions, and
+  // defaultPilot all stream as leaves under this family, keyed by device via $source.
+  autopilotAll: 'steering.autopilot.*',
 } as const satisfies Record<string, Path>;
