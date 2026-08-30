@@ -1,4 +1,4 @@
-import { type AisTargetView, shortVesselId, vesselLabel } from '$entities/ais';
+import { type AisTargetKind, type AisTargetView, shortVesselId, vesselLabel } from '$entities/ais';
 import type {
   DangerContact,
   Severity,
@@ -13,11 +13,19 @@ export type AisSort = 'range' | 'cpa' | 'name';
 export type AisRiskFilter = 'all' | 'danger' | 'warning';
 export const MAX_AIS_LIST_ROWS = 500;
 
+// The tag copy for a non-vessel target, spelled once for the row badge and the detail view.
+export function aisKindLabel(kind: AisTargetKind): string | undefined {
+  if (kind === 'aton') return 'Navigation aid';
+  if (kind === 'sar') return 'SAR';
+  return undefined;
+}
+
 export interface AisListRow {
   id: string;
   identifier: string;
   // The display name: the vessel's reported name, or its MMSI from the context id.
   label: string;
+  kind: AisTargetKind;
   position: LatLon;
   rangeMeters?: number;
   bearingRad?: number;
@@ -27,6 +35,17 @@ export interface AisListRow {
   shipTypeId?: number;
   cpaMeters?: number;
   tcpaSeconds?: number;
+  // Static and voyage data, straight off the entity view: transponder class, declared overall
+  // dimensions in meters, and the reported destination with its arrival estimate.
+  aisClass?: 'A' | 'B';
+  lengthMeters?: number;
+  beamMeters?: number;
+  destination?: string;
+  destinationEtaMs?: number;
+  // AtoN detail: the aid type's name, and whether it is virtual or off its charted position.
+  atonType?: string;
+  virtual?: boolean;
+  offPosition?: boolean;
   // Signal K's navigation.state enum (underway, anchored, moored, and similar); undefined when the
   // target has never reported it.
   navigationState?: string;
@@ -61,6 +80,7 @@ export function buildAisRows(
       id: target.id,
       identifier: shortVesselId(target.id),
       label: vesselLabel(target.name, target.id),
+      kind: target.kind,
       position: target.position,
       rangeMeters: own
         ? haversineMeters(
@@ -77,6 +97,14 @@ export function buildAisRows(
       shipTypeId: target.shipTypeId,
       cpaMeters: target.cpaMeters ?? risk?.cpaMeters,
       tcpaSeconds: target.tcpaSeconds ?? risk?.tcpaSeconds,
+      aisClass: target.aisClass,
+      lengthMeters: target.lengthMeters,
+      beamMeters: target.beamMeters,
+      destination: target.destination,
+      destinationEtaMs: target.destinationEtaMs,
+      atonType: target.atonType,
+      virtual: target.virtual,
+      offPosition: target.offPosition,
       navigationState: target.navigationState,
       severity: risk?.severity,
       receding: risk?.receding,

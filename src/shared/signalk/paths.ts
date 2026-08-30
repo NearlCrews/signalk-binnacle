@@ -29,6 +29,20 @@ export const SK_PATHS = {
   mmsi: 'mmsi',
   callsignVhf: 'communication.callsignVhf',
   aisShipType: 'design.aisShipType',
+  // The declared hull dimensions (near-static, readable without auth). Draft defaults the shallow
+  // alarm, air height serves bridge clearance, length and beam serve display and future routing.
+  designDraft: 'design.draft',
+  designAirHeight: 'design.airHeight',
+  designLength: 'design.length',
+  designBeam: 'design.beam',
+  aisClass: 'sensors.ais.class',
+  destinationCommonName: 'navigation.destination.commonName',
+  destinationEta: 'navigation.destination.eta',
+  // AtoN-context paths (AIS message 21, PGN 129041): the aid's type, whether it is a virtual aid
+  // with no physical structure, and whether a floating aid is off its charted position.
+  atonType: 'atonType',
+  atonVirtual: 'virtual',
+  atonOffPosition: 'offPosition',
   navigationState: 'navigation.state',
   courseNextPoint: 'navigation.course.nextPoint',
   coursePreviousPoint: 'navigation.course.previousPoint',

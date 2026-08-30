@@ -84,6 +84,39 @@ describe('WorkerCore', () => {
     expect(frame?.ais?.get('vessels.self-urn')).toBeUndefined();
   });
 
+  // The store keys targets by full context, so the navigation-aid and SAR context families ride
+  // the same AIS channel as vessels; a worker-side context filter would silently drop them.
+  it('routes atons and sar contexts into the ais channel beside vessels', () => {
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (f) => frames.push(f));
+    const ws = FakeWebSocket.instances[0];
+    ws.onopen?.();
+    ws.onmessage?.({
+      data: JSON.stringify({
+        context: 'atons.urn:mrn:imo:mmsi:993672085',
+        updates: [
+          { values: [{ path: 'navigation.position', value: { latitude: 1, longitude: 2 } }] },
+        ],
+      }),
+    });
+    ws.onmessage?.({
+      data: JSON.stringify({
+        context: 'sar.urn:mrn:imo:mmsi:111234567',
+        updates: [{ values: [{ path: 'navigation.speedOverGround', value: 51 }] }],
+      }),
+    });
+    vi.runAllTimers();
+    const frame = frames.at(-1);
+    expect(frame?.ais?.get('atons.urn:mrn:imo:mmsi:993672085')?.get('navigation.position')).toEqual(
+      { latitude: 1, longitude: 2 },
+    );
+    expect(
+      frame?.ais?.get('sar.urn:mrn:imo:mmsi:111234567')?.get('navigation.speedOverGround'),
+    ).toBe(51);
+    expect(frame?.self.size).toBe(0);
+  });
+
   it('delivers a connection-only frame on each phase change, even without data', () => {
     const frames: SKFrame[] = [];
     const core = new WorkerCore();

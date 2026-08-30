@@ -252,6 +252,32 @@ describe('AisListPanel interactions', () => {
     expect(panel.target.textContent).toContain('Signal K is disconnected.');
   });
 
+  it('tags navigation aids and SAR targets and shows a vessel destination metric', () => {
+    const panel = mountPanel({
+      targets: {
+        'vessels.urn:mrn:imo:mmsi:111111111': {
+          name: 'BOUND OUT',
+          'navigation.position': { latitude: 42.01, longitude: -83 },
+          'navigation.destination.commonName': 'ROTTERDAM',
+        },
+        'atons.urn:mrn:imo:mmsi:993672085': {
+          name: 'PT MONTARA LIGHT',
+          'navigation.position': { latitude: 42.02, longitude: -83 },
+        },
+        'sar.urn:mrn:imo:mmsi:111234567': {
+          'navigation.position': { latitude: 42.03, longitude: -83 },
+        },
+      },
+    });
+
+    const text = panel.target.textContent ?? '';
+    expect(text).toContain('PT MONTARA LIGHT');
+    expect(text).toContain('Navigation aid');
+    expect(text).toContain('SAR');
+    expect(text).toContain('ROTTERDAM');
+    expect(text).toContain('3 targets');
+  });
+
   it('clears a selected target when the live entity expires it', () => {
     const id = 'vessels.urn:mrn:imo:mmsi:444444444';
     const panel = mountPanel({

@@ -1,6 +1,11 @@
 import { asNumber, isLatLon, type LatLon } from '$shared/geo';
-import { isFiniteNumber, isRecord } from '$shared/lib';
-import { type SignalKStore, SK_PATHS } from '$shared/signalk';
+import { cleanBoundedText, isFiniteNumber, isRecord } from '$shared/lib';
+import {
+  ATONS_CONTEXT_PREFIX,
+  SAR_CONTEXT_PREFIX,
+  type SignalKStore,
+  SK_PATHS,
+} from '$shared/signalk';
 import {
   AIS_APPROACH_STALE_TTL_MS,
   AIS_MOTION_STALE_TTL_MS,
@@ -39,10 +44,31 @@ export function parseIso8601DurationSeconds(value: unknown): number | undefined 
   return sign === '-' ? -total : total;
 }
 
+// Which AIS context family a target came from: another vessel, a navigation aid (AIS message 21),
+// or a search-and-rescue aircraft (message 9). Derived from the context id prefix, the same
+// spelling the subscription wildcards use.
+export type AisTargetKind = 'vessel' | 'aton' | 'sar';
+
+export function aisTargetKind(id: string): AisTargetKind {
+  if (id.startsWith(ATONS_CONTEXT_PREFIX)) return 'aton';
+  if (id.startsWith(SAR_CONTEXT_PREFIX)) return 'sar';
+  return 'vessel';
+}
+
+// Provider text surfaced on a view is short on the AIS wire (20 six-bit characters for a
+// destination, 34 for a name); anything past this bound is a provider bug and is rejected.
+const MAX_PROVIDER_TEXT = 64;
+
+// Declared dimensions beyond these are provider garbage, not ships: the longest vessels afloat run
+// about 460 m by 70 m, and an AtoN's length or diameter is far smaller still.
+const MAX_LENGTH_METERS = 2_000;
+const MAX_BEAM_METERS = 500;
+
 // All angular and speed fields are SI (radians, m/s), like the rest of the store. Consumers
 // convert to a compass bearing or knots at their own display edge.
 export interface AisTargetView {
   id: string;
+  kind: AisTargetKind;
   name?: string;
   position: LatLon;
   cogRad?: number;
@@ -54,6 +80,22 @@ export interface AisTargetView {
   // Signal K's enum: underway, anchored, moored, not under command, aground, and similar. Undefined
   // when the target has never reported it, which most Class B AIS transponders do not.
   navigationState?: string;
+  // The transponder class from sensors.ais.class, only when it is the vessel grade 'A' or 'B';
+  // the converters also stamp 'ATON' and 'SAR' there, which `kind` already carries.
+  aisClass?: 'A' | 'B';
+  // Declared overall length and beam in meters (design.length value.overall and design.beam).
+  lengthMeters?: number;
+  beamMeters?: number;
+  // The reported voyage destination and its estimated arrival, epoch ms. Free-form provider text
+  // and a notoriously hand-entered field; triage data, never navigation truth.
+  destination?: string;
+  destinationEtaMs?: number;
+  // AtoN fields: the aid type's human name ("Beacon, Cardinal N"), whether the aid is virtual
+  // (broadcast only, no physical structure), and whether a floating aid is off its charted
+  // position. Only booleans that arrived as true are surfaced.
+  atonType?: string;
+  virtual?: boolean;
+  offPosition?: boolean;
 }
 
 // One memoized view plus what it was derived from, so an unchanged vessel keeps its object
@@ -74,7 +116,11 @@ interface CachedView {
 
 export class AisTargets {
   #store: SignalKStore;
-  #cache: AisTargetView[] | undefined;
+  #cacheAll: AisTargetView[] | undefined;
+  // The vessels-only projection of #cacheAll, the same array object when no non-vessel target is
+  // present (the common case at sea). Collision assessment and the course vectors read this, so a
+  // navigation aid or SAR aircraft can never enter own-motion contact math.
+  #cacheVessels: AisTargetView[] = [];
   #cacheVersion = -1;
   #cacheExpiresAt = 0;
   // Long-lived and mutated in place: rebuilding it per pass allocated a whole Map, plus one set
@@ -114,17 +160,31 @@ export class AisTargets {
     return this.#store.aisVersion;
   }
 
+  // Every chart-visible target: vessels, navigation aids, and SAR aircraft. The overlay and the
+  // AIS list read this; motion-contact consumers read list().
+  all(): AisTargetView[] {
+    return this.#rebuild();
+  }
+
+  // Vessels only, the pre-existing contract: collision assessment and the course vectors consume
+  // this, and a non-vessel target must never be graded as an own-motion contact.
   list(): AisTargetView[] {
+    this.#rebuild();
+    return this.#cacheVessels;
+  }
+
+  #rebuild(): AisTargetView[] {
     // Rebuild only when AIS data changed. With aisVersion bumped only on real AIS
     // updates, own-vessel motion no longer forces a full list rebuild on consumers.
     const version = this.#store.aisVersion;
     const now = this.#now();
-    if (this.#cache && this.#cacheVersion === version && now < this.#cacheExpiresAt) {
-      return this.#cache;
+    if (this.#cacheAll && this.#cacheVersion === version && now < this.#cacheExpiresAt) {
+      return this.#cacheAll;
     }
     const out: AisTargetView[] = [];
     this.#index.clear();
     let expiresAt = Number.POSITIVE_INFINITY;
+    let nonVesselCount = 0;
     for (const [id, target] of this.#store.aisTargets) {
       // A vessel nobody heard from since its view was built, still inside every freshness window,
       // renders exactly the same. Reuse the object rather than minting an equal one.
@@ -136,6 +196,7 @@ export class AisTargets {
         now < cached.expiresAt
       ) {
         out.push(cached.view);
+        if (cached.view.kind !== 'vessel') nonVesselCount += 1;
         this.#index.set(id, cached.view);
         expiresAt = Math.min(expiresAt, cached.expiresAt);
         continue;
@@ -174,8 +235,12 @@ export class AisTargets {
         vesselExpiresAt = Math.min(vesselExpiresAt, approachEpoch + AIS_APPROACH_STALE_TTL_MS + 1);
       }
       const navState = current(SK_PATHS.navigationState);
+      const kind = aisTargetKind(id);
+      const isVessel = kind === 'vessel';
+      const atonTypeRaw = kind === 'aton' ? current(SK_PATHS.atonType) : undefined;
       const view: AisTargetView = {
         id,
+        kind,
         name: typeof name === 'string' ? name : undefined,
         position,
         cogRad: asNumber(current(SK_PATHS.courseOverGroundTrue, AIS_MOTION_STALE_TTL_MS)),
@@ -185,8 +250,25 @@ export class AisTargets {
         cpaMeters: approach?.cpa,
         tcpaSeconds: approach?.tcpa,
         navigationState: typeof navState === 'string' ? navState : undefined,
+        aisClass: isVessel ? vesselAisClass(current(SK_PATHS.aisClass)) : undefined,
+        lengthMeters: boundedMeters(
+          this.#numField(current(SK_PATHS.designLength), 'overall'),
+          MAX_LENGTH_METERS,
+        ),
+        beamMeters: boundedMeters(asNumber(current(SK_PATHS.designBeam)), MAX_BEAM_METERS),
+        destination: isVessel
+          ? cleanBoundedText(current(SK_PATHS.destinationCommonName), MAX_PROVIDER_TEXT)
+          : undefined,
+        destinationEtaMs: isVessel ? etaEpochMs(current(SK_PATHS.destinationEta)) : undefined,
+        atonType: isRecord(atonTypeRaw)
+          ? cleanBoundedText(atonTypeRaw.name, MAX_PROVIDER_TEXT)
+          : undefined,
+        virtual: kind === 'aton' && current(SK_PATHS.atonVirtual) === true ? true : undefined,
+        offPosition:
+          kind === 'aton' && current(SK_PATHS.atonOffPosition) === true ? true : undefined,
       };
       out.push(view);
+      if (kind !== 'vessel') nonVesselCount += 1;
       this.#index.set(id, view);
       this.#views.set(id, {
         view,
@@ -203,16 +285,18 @@ export class AisTargets {
         if (!this.#store.aisTargets.has(id)) this.#views.delete(id);
       }
     }
-    this.#cache = out;
+    this.#cacheAll = out;
+    // Reuse the whole array when nothing needs filtering out, which at sea is every rebuild.
+    this.#cacheVessels = nonVesselCount === 0 ? out : out.filter((view) => view.kind === 'vessel');
     this.#cacheVersion = version;
     this.#cacheExpiresAt = expiresAt;
     return out;
   }
 
-  // list() keeps the index current, so a selected target looked up on every version bump costs
-  // one hash instead of a scan of the whole fleet.
+  // The rebuild keeps the index current over every kind, so a selected target looked up on every
+  // version bump costs one hash instead of a scan of the whole fleet.
   find(id: string): AisTargetView | undefined {
-    this.list();
+    this.#rebuild();
     return this.#index.get(id);
   }
 
@@ -223,4 +307,22 @@ export class AisTargets {
   #timeToSeconds(approach: unknown): number | undefined {
     return isRecord(approach) ? parseIso8601DurationSeconds(approach.timeTo) : undefined;
   }
+}
+
+// Only the vessel transponder grades pass; the converters also stamp 'ATON' and 'SAR' on the
+// non-vessel contexts, which the view's kind already carries.
+function vesselAisClass(value: unknown): 'A' | 'B' | undefined {
+  return value === 'A' || value === 'B' ? value : undefined;
+}
+
+// A declared dimension: positive and inside its plausibility bound, anything else absent.
+function boundedMeters(value: number | undefined, maximum: number): number | undefined {
+  return value !== undefined && value > 0 && value <= maximum ? value : undefined;
+}
+
+// navigation.destination.eta is an RFC 3339 timestamp string; epoch ms, absent when malformed.
+function etaEpochMs(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

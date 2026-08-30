@@ -17,16 +17,13 @@ import {
   setSourceData,
   severityMatchExpression,
 } from '$shared/map';
-import { geodesicDestination } from '$shared/nav';
+import { COURSE_VECTOR_SECONDS, geodesicDestination } from '$shared/nav';
 import { createAisRefreshGate } from './ais-refresh';
 
 const SOURCE_ID = 'binnacle-ais-vectors';
 const LAYER_ID = 'binnacle-ais-vectors-line';
 const BAND = 'traffic';
 
-// Project each target 10 minutes along its COG at its SOG.
-const VECTOR_MINUTES = 10;
-const VECTOR_SECONDS = VECTOR_MINUTES * 60;
 // GPS scatter on a stationary vessel can produce a small apparent SOG. Targets below this
 // threshold (about 0.5 kt) are treated as stationary and show no vector.
 const MIN_SOG_MPS = 0.25;
@@ -47,7 +44,7 @@ export function buildFeatures(
     if (target.cogRad === undefined) continue;
     const sog = target.sogMps ?? 0;
     if (sog < MIN_SOG_MPS) continue;
-    const distanceMeters = sog * VECTOR_SECONDS;
+    const distanceMeters = sog * COURSE_VECTOR_SECONDS;
     const origin: [number, number] = latLonToLonLat(target.position);
     const tip = geodesicDestination(
       target.position.latitude,

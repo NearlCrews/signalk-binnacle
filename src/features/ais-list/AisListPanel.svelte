@@ -19,7 +19,13 @@ import type { ConnectionPhase } from '$shared/signalk';
 import { SearchInput, SlideOver } from '$shared/ui';
 import AisStreamNote from './AisStreamNote.svelte';
 import AisTargetDetail from './AisTargetDetail.svelte';
-import { type AisRiskFilter, type AisSort, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
+import {
+  type AisRiskFilter,
+  type AisSort,
+  aisKindLabel,
+  buildAisRows,
+  MAX_AIS_LIST_ROWS,
+} from './ais-rows';
 
 interface Props {
   aisTargets: AisTargets;
@@ -75,7 +81,8 @@ const parsedOwn = $derived(vessel.coarsePosition);
 // live, since one open detail row is cheap and should be current.
 const targets = $derived.by(() => {
   void clock.now;
-  return untrack(() => aisTargets.list());
+  // The full chart-visible set: vessels plus navigation aids and SAR targets, tagged per row.
+  return untrack(() => aisTargets.all());
 });
 const targetCount = $derived(targets.length);
 const matchingRows = $derived(
@@ -224,6 +231,9 @@ $effect(() => {
                 >
                   {row.label}
                 </span>
+                {#if row.kind !== 'vessel'}
+                  <span class="caps-label">{aisKindLabel(row.kind)}</span>
+                {/if}
                 {#if row.severity === 'danger'}
                   <span class="caps-label sev-danger">Collision risk</span>
                 {:else if row.severity === 'warning'}
@@ -249,13 +259,20 @@ $effect(() => {
                 <span class="nav-metric" title="Bearing in degrees true"
                   >Bearing <b class="num">{formatBearingOr(row.bearingRad)}</b>&deg;T</span
                 >
-                <span class="nav-metric" title="Speed over ground"
-                  >Speed <b class="num">{formatSpeedOr(row.sogMps, units.profile)}</b>
-                  {speedUnit(units.profile)}</span
-                >
+                {#if row.kind !== 'aton'}
+                  <span class="nav-metric" title="Speed over ground"
+                    >Speed <b class="num">{formatSpeedOr(row.sogMps, units.profile)}</b>
+                    {speedUnit(units.profile)}</span
+                  >
+                {/if}
                 {#if row.headingRad !== undefined}
                   <span class="nav-metric" title="Heading, true"
                     >HDG <b class="num">{formatBearingOr(row.headingRad)}</b>&deg;T</span
+                  >
+                {/if}
+                {#if row.destination}
+                  <span class="nav-metric" title="Reported voyage destination"
+                    >Dest <b class="num">{row.destination}</b></span
                   >
                 {/if}
                 {#if row.cpaMeters !== undefined}

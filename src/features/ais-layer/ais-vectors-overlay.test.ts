@@ -26,6 +26,7 @@ function emptyAssessment(): Assessment {
 function movingTarget(overrides: Partial<AisTargetView> = {}): AisTargetView {
   return {
     id: 'target-1',
+    kind: 'vessel',
     position: { latitude: 10, longitude: 20 },
     cogRad: 0,
     sogMps: 5,
@@ -134,6 +135,8 @@ describe('createAisVectorsOverlay', () => {
     let version = 1;
     return {
       list: () => list,
+      // The refresh gate reads the full chart-visible set; this fake carries vessels only.
+      all: () => list,
       get version() {
         return version;
       },

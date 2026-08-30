@@ -6,18 +6,22 @@ import type { LatLon } from '$shared/geo';
 import {
   capitalize,
   formatBearingOr,
+  formatClockTime,
   formatLatitude,
+  formatLengthOr,
   formatLongitude,
   formatMetersOrNm,
+  formatMonthDay,
   formatNm,
   formatSpeedOr,
   formatTcpaMin,
+  lengthUnit,
   speedUnit,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
 import { SubViewHeader } from '$shared/ui';
 import AisStreamNote from './AisStreamNote.svelte';
-import type { AisListRow } from './ais-rows';
+import { type AisListRow, aisKindLabel } from './ais-rows';
 
 interface Props {
   // The row is recomputed live as the target moves, so the panel reads current data for as long
@@ -30,12 +34,29 @@ interface Props {
 }
 
 const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
+
+const kindTag = $derived(aisKindLabel(row.kind));
 </script>
 
 <SubViewHeader title={row.label} backLabel="Back to nearby vessels" {onBack} />
 <AisStreamNote {connectionPhase} />
+{#if kindTag}
+  <p class="caps-label">{kindTag}{row.virtual ? ' (virtual)' : ''}</p>
+{/if}
 {#if row.navigationState}
   <p class="caps-label">{capitalize(row.navigationState)}</p>
+{/if}
+{#if row.offPosition}
+  <!-- A floating aid reporting itself off station is a hazard cue, announced with the same urgency
+    as the collision banners below. -->
+  <p class="alert-note" role="alert">
+    Off position. This floating aid reports it is off its charted position, so do not rely on it
+    marking the charted spot.
+  </p>
+{:else if row.virtual}
+  <p class="muted-note">
+    Virtual aid: broadcast only, with no physical structure at this position.
+  </p>
 {/if}
 <!-- Safety state the server raised, not a response to anything the navigator did here, so it is
   announced as an alert to match the alarm styling a sighted navigator sees. -->
@@ -61,6 +82,18 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
       <dt>Identifier</dt>
       <dd>{row.identifier}</dd>
     </div>
+    {#if row.aisClass}
+      <div class="item">
+        <dt>AIS class</dt>
+        <dd>{row.aisClass}</dd>
+      </div>
+    {/if}
+    {#if row.atonType}
+      <div class="item">
+        <dt>Aid type</dt>
+        <dd>{row.atonType}</dd>
+      </div>
+    {/if}
     <div class="item">
       <dt>Position</dt>
       <dd>
@@ -76,10 +109,12 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
       <dt>Bearing</dt>
       <dd>{formatBearingOr(row.bearingRad)}&deg;T</dd>
     </div>
-    <div class="item">
-      <dt>Speed</dt>
-      <dd>{formatSpeedOr(row.sogMps, units.profile)} {speedUnit(units.profile)}</dd>
-    </div>
+    {#if row.kind !== 'aton'}
+      <div class="item">
+        <dt>Speed</dt>
+        <dd>{formatSpeedOr(row.sogMps, units.profile)} {speedUnit(units.profile)}</dd>
+      </div>
+    {/if}
     {#if row.cogRad !== undefined}
       <div class="item">
         <dt>Course</dt>
@@ -96,6 +131,30 @@ const { row, units, connectionPhase, onBack, onLocate }: Props = $props();
       <div class="item">
         <dt>Ship type</dt>
         <dd>{aisShipTypeLabel(row.shipTypeId)} ({row.shipTypeId})</dd>
+      </div>
+    {/if}
+    {#if row.lengthMeters !== undefined}
+      <div class="item">
+        <dt>Size</dt>
+        <dd>
+          {formatLengthOr(row.lengthMeters, units.profile, 0)}
+          {#if row.beamMeters !== undefined}
+            by {formatLengthOr(row.beamMeters, units.profile, 0)}
+          {/if}
+          {lengthUnit(units.profile)}
+        </dd>
+      </div>
+    {/if}
+    {#if row.destination}
+      <div class="item">
+        <dt>Destination</dt>
+        <dd>{row.destination}</dd>
+      </div>
+    {/if}
+    {#if row.destinationEtaMs !== undefined}
+      <div class="item">
+        <dt>Reported ETA</dt>
+        <dd>{formatMonthDay(row.destinationEtaMs)}, {formatClockTime(row.destinationEtaMs)}</dd>
       </div>
     {/if}
     {#if row.cpaMeters !== undefined}

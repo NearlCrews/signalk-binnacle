@@ -1,5 +1,5 @@
 import type { CircleLayerSpecification, SymbolLayerSpecification } from 'maplibre-gl';
-import type { AisTargets } from '$entities/ais';
+import type { AisTargets, AisTargetView } from '$entities/ais';
 import { latLonToLonLat } from '$shared/geo';
 import { headingDegrees } from '$shared/lib';
 import {
@@ -14,8 +14,18 @@ import {
   removeLayersAndSources,
   type SymbolOverlay,
   setLayersVisibility,
+  setMapImage,
 } from '$shared/map';
-import { AIS_ICON_ID, aisIconImage } from './ais-icon';
+import {
+  AIS_ICON_ID,
+  ATON_ICON_ID,
+  ATON_VIRTUAL_ICON_ID,
+  aisIconImage,
+  atonIconImage,
+  atonVirtualIconImage,
+  SAR_ICON_ID,
+  sarIconImage,
+} from './ais-icon';
 import { createAisRefreshGate } from './ais-refresh';
 
 const SOURCE_ID = 'binnacle-ais';
@@ -26,6 +36,22 @@ const HIT_LAYER_ID = 'binnacle-ais-hit';
 // The transient color shown for the single frame before the first recolor; taken from the day theme
 // so there is one source for the day AIS color rather than a literal that could drift.
 const DEFAULT_COLOR: Rgba = mapThemePaint('day').aisTarget;
+
+// The kind-specific images beyond the vessel triangle the base overlay owns. Registered and
+// recolored beside it, and matched per feature through the icon property below.
+const EXTRA_ICONS: readonly { id: string; image: (color: Rgba) => ImageData }[] = [
+  { id: ATON_ICON_ID, image: atonIconImage },
+  { id: ATON_VIRTUAL_ICON_ID, image: atonVirtualIconImage },
+  { id: SAR_ICON_ID, image: sarIconImage },
+];
+
+// Which registered image a target renders with: the triangle for vessels, a diamond for a
+// navigation aid (hollow when the aid is virtual), and a cross for a SAR aircraft.
+export function iconIdFor(target: AisTargetView): string {
+  if (target.kind === 'aton') return target.virtual ? ATON_VIRTUAL_ICON_ID : ATON_ICON_ID;
+  if (target.kind === 'sar') return SAR_ICON_ID;
+  return AIS_ICON_ID;
+}
 
 // Stale-target expiry lives on an app-level timer (store.pruneAis with the entities/ais TTL), never
 // in this render path, which pauses in a hidden tab while the collision math keeps consuming the
@@ -51,7 +77,7 @@ export function createAisOverlay(
   function buildFeatures(): GeoJSON.FeatureCollection {
     const selectedId = options.selectedId?.();
     return featureCollection(
-      targets.list().map((target) => ({
+      targets.all().map((target) => ({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -61,6 +87,7 @@ export function createAisOverlay(
           id: target.id,
           name: target.name ?? '',
           heading: headingDegrees(target.headingRad, target.cogRad),
+          icon: iconIdFor(target),
           selected: target.id === selectedId,
         },
       })),
@@ -87,7 +114,7 @@ export function createAisOverlay(
   const base = createSymbolOverlay({
     id: 'ais',
     title: 'AIS targets',
-    description: 'Other vessels broadcasting their position over AIS.',
+    description: 'Vessels, navigation aids, and search-and-rescue aircraft broadcasting over AIS.',
     band: 'traffic',
     sourceId: SOURCE_ID,
     layerId: LAYER_ID,
@@ -117,6 +144,9 @@ export function createAisOverlay(
     layerIds: [SELECTED_LAYER_ID, LAYER_ID, LABEL_LAYER_ID, HIT_LAYER_ID],
     async add(ctx) {
       await base.add(ctx);
+      for (const { id, image } of EXTRA_ICONS) setMapImage(ctx.map, id, image(DEFAULT_COLOR));
+      // The base overlay lays out a single image; each feature names its kind's icon instead.
+      ctx.map.setLayoutProperty(LAYER_ID, 'icon-image', ['get', 'icon']);
       const before = ctx.beforeIdFor('traffic');
       if (!ctx.map.getLayer(SELECTED_LAYER_ID)) {
         const selectedLayer: CircleLayerSpecification = {
@@ -176,6 +206,7 @@ export function createAisOverlay(
     },
     applyTheme(ctx, paint) {
       base.applyTheme?.(ctx, paint);
+      for (const { id, image } of EXTRA_ICONS) setMapImage(ctx.map, id, image(paint.aisTarget));
       if (ctx.map.getLayer(SELECTED_LAYER_ID)) {
         ctx.map.setPaintProperty(SELECTED_LAYER_ID, 'circle-stroke-color', paint.select);
       }
@@ -203,6 +234,9 @@ export function createAisOverlay(
     remove(ctx) {
       hit.detach(ctx);
       removeLayersAndSources(ctx.map, [HIT_LAYER_ID, LABEL_LAYER_ID, SELECTED_LAYER_ID], []);
+      for (const { id } of EXTRA_ICONS) {
+        if (ctx.map.hasImage(id)) ctx.map.removeImage(id);
+      }
       base.remove(ctx);
     },
   };

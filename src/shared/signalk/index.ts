@@ -29,12 +29,14 @@ export type {
   UpdateNotificationResult,
 } from './notifications-client';
 export {
+  acknowledgeAllNotifications,
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
   fetchRaisedNotificationsById,
   postMobNotification,
   postNotification,
   resolveNotification,
+  silenceAllNotifications,
   silenceNotification,
   updateNotification,
 } from './notifications-client';
@@ -89,13 +91,17 @@ export type {
   SubscribeEntry,
 } from './types';
 export {
+  ALL_ATONS_CONTEXT,
+  ALL_SAR_CONTEXT,
   ALL_VESSELS_CONTEXT,
+  ATONS_CONTEXT_PREFIX,
   isConnectionDown,
   isConnectionOpen,
   isSoundingNotification,
   NOTIFICATION_SEVERITY_RANK,
   NOTIFICATIONS_PREFIX,
   notificationState,
+  SAR_CONTEXT_PREFIX,
   SELF_CONTEXT,
 } from './types';
 export { UPGRADE_OUTCOME_COPY } from './upgrade-outcome';

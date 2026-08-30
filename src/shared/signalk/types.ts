@@ -15,6 +15,14 @@ export const SELF_CONTEXT = 'vessels.self';
 // SELF_CONTEXT; subscriptions filter self out of this stream.
 export const ALL_VESSELS_CONTEXT: Context = 'vessels.*';
 
+// The non-vessel AIS context families the stock converters emit: navigation aids (AIS message 21)
+// and search-and-rescue aircraft (message 9). The prefixes are the one place the context spelling
+// lives, so the subscription wildcards and the entity's kind derivation cannot drift apart.
+export const ATONS_CONTEXT_PREFIX = 'atons.';
+export const SAR_CONTEXT_PREFIX = 'sar.';
+export const ALL_ATONS_CONTEXT: Context = `${ATONS_CONTEXT_PREFIX}*`;
+export const ALL_SAR_CONTEXT: Context = `${SAR_CONTEXT_PREFIX}*`;
+
 // The path prefix every raised notification shares. The store mirrors a cell when its path starts
 // with this, and SK_PATHS.allNotifications is the wildcard subscription built from it.
 export const NOTIFICATIONS_PREFIX = 'notifications.';

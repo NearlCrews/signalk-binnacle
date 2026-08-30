@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { AisTargetView } from '$entities/ais';
 import type { DangerContact } from '$entities/collision';
-import { buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
+import { aisKindLabel, buildAisRows, MAX_AIS_LIST_ROWS } from './ais-rows';
 
 const OWN = { latitude: 0, longitude: 0 };
 
 function target(partial: Partial<AisTargetView> & { id: string }): AisTargetView {
-  return { position: { latitude: 0.001, longitude: 0 }, ...partial };
+  return { kind: 'vessel', position: { latitude: 0.001, longitude: 0 }, ...partial };
 }
 
 describe('buildAisRows', () => {
@@ -141,6 +141,51 @@ describe('buildAisRows', () => {
     ).toEqual(['warning']);
   });
 
+  it('carries the static and voyage fields through to the row', () => {
+    const [row] = buildAisRows(
+      [
+        target({
+          id: 'a',
+          aisClass: 'B',
+          lengthMeters: 12,
+          beamMeters: 4,
+          destination: 'ROTTERDAM',
+          destinationEtaMs: 1_756_800_000_000,
+        }),
+      ],
+      OWN,
+      [],
+      'range',
+    );
+    expect(row.kind).toBe('vessel');
+    expect(row.aisClass).toBe('B');
+    expect(row.lengthMeters).toBe(12);
+    expect(row.beamMeters).toBe(4);
+    expect(row.destination).toBe('ROTTERDAM');
+    expect(row.destinationEtaMs).toBe(1_756_800_000_000);
+  });
+
+  it('carries the aton kind and detail fields through to the row', () => {
+    const [row] = buildAisRows(
+      [
+        target({
+          id: 'atons.x',
+          kind: 'aton',
+          atonType: 'Beacon, Cardinal N',
+          virtual: true,
+          offPosition: true,
+        }),
+      ],
+      OWN,
+      [],
+      'range',
+    );
+    expect(row.kind).toBe('aton');
+    expect(row.atonType).toBe('Beacon, Cardinal N');
+    expect(row.virtual).toBe(true);
+    expect(row.offPosition).toBe(true);
+  });
+
   it('uses target identity as a deterministic tie-breaker', () => {
     const rows = buildAisRows(
       [target({ id: 'vessels.b', name: 'SAME' }), target({ id: 'vessels.a', name: 'SAME' })],
@@ -150,5 +195,13 @@ describe('buildAisRows', () => {
     );
 
     expect(rows.map((row) => row.id)).toEqual(['vessels.a', 'vessels.b']);
+  });
+});
+
+describe('aisKindLabel', () => {
+  it('tags only the non-vessel kinds', () => {
+    expect(aisKindLabel('vessel')).toBeUndefined();
+    expect(aisKindLabel('aton')).toBe('Navigation aid');
+    expect(aisKindLabel('sar')).toBe('SAR');
   });
 });

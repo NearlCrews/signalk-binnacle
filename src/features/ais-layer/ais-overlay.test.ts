@@ -42,9 +42,15 @@ describe('ais overlay', () => {
     const addLayer = vi.spyOn(map, 'addLayer');
     await overlay.add(fakeOverlayContext(map));
     expect(overlay.band).toBe('traffic');
-    expect(map.images.size).toBe(1);
+    // The vessel triangle plus the aton diamond, its virtual variant, and the SAR cross.
+    expect(map.images.size).toBe(4);
     expect(map.sources.size).toBe(1);
     expect(map.layers.size).toBe(4);
+    // Each feature names its kind's icon rather than the base layer's single image.
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('binnacle-ais-symbol', 'icon-image', [
+      'get',
+      'icon',
+    ]);
     expect(addLayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'binnacle-ais-selected' }),
       'binnacle-ais-symbol',
@@ -279,6 +285,39 @@ describe('ais overlay', () => {
     );
   });
 
+  it('marks each kind with its own icon: triangle, diamond, hollow diamond, and cross', async () => {
+    const store = new SignalKStore();
+    const overlay = createAisOverlay(new AisTargets(store));
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map<string, Map<string, unknown>>([
+        ['vessels.a', new Map([['navigation.position', { latitude: 1, longitude: 2 }]])],
+        ['atons.solid', new Map([['navigation.position', { latitude: 2, longitude: 2 }]])],
+        [
+          'atons.ghost',
+          new Map<string, unknown>([
+            ['navigation.position', { latitude: 3, longitude: 2 }],
+            ['virtual', true],
+          ]),
+        ],
+        ['sar.plane', new Map([['navigation.position', { latitude: 4, longitude: 2 }]])],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: Date.now(),
+    });
+    overlay.sync(ctx);
+    const iconById = new Map(
+      sourceFeatures(map, 'binnacle-ais').map((f) => [f.properties?.id, f.properties?.icon]),
+    );
+    expect(iconById.get('vessels.a')).toBe('binnacle-ais-icon');
+    expect(iconById.get('atons.solid')).toBe('binnacle-ais-aton-icon');
+    expect(iconById.get('atons.ghost')).toBe('binnacle-ais-aton-virtual-icon');
+    expect(iconById.get('sar.plane')).toBe('binnacle-ais-sar-icon');
+  });
+
   it('applyTheme recolors the icon image and the name labels', async () => {
     const store = new SignalKStore();
     const overlay = createAisOverlay(new AisTargets(store));
@@ -287,6 +326,9 @@ describe('ais overlay', () => {
     await overlay.add(fakeOverlayContext(map));
     overlay.applyTheme?.(fakeOverlayContext(map), paint);
     expect(map.updatedImages).toContain('binnacle-ais-icon');
+    expect(map.updatedImages).toContain('binnacle-ais-aton-icon');
+    expect(map.updatedImages).toContain('binnacle-ais-aton-virtual-icon');
+    expect(map.updatedImages).toContain('binnacle-ais-sar-icon');
     expect(map.setPaintProperty).toHaveBeenCalledWith(
       'binnacle-ais-label',
       'text-color',
@@ -351,6 +393,8 @@ describe('ais overlay', () => {
     expect(map.handlerCount('click', 'binnacle-ais-hit')).toBe(0);
     expect(map.getCanvas().style.cursor).toBe('');
     expect(map.layers.has('binnacle-ais-label')).toBe(false);
+    // The kind icons leave with the overlay, not only the base vessel triangle.
+    expect(map.images.size).toBe(0);
   });
 
   it('preserves the chart-tool cursor and blocks selection while interactions are owned', async () => {

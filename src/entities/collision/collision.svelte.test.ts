@@ -9,7 +9,7 @@ import { assessContacts, CollisionAssessment } from './collision.svelte';
 const ownStationary = { position: { latitude: 0, longitude: 0 }, sogMps: 0, cogRad: 0 };
 
 function target(partial: Partial<AisTargetView>): AisTargetView {
-  return { id: 't', position: { latitude: 0, longitude: 0 }, ...partial };
+  return { id: 't', kind: 'vessel', position: { latitude: 0, longitude: 0 }, ...partial };
 }
 
 function dangerStore(targetId: string): SignalKStore {

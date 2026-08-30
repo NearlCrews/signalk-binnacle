@@ -203,6 +203,136 @@ describe('AisTargets', () => {
   });
 });
 
+describe('AisTargets static and voyage data', () => {
+  it('surfaces class, dimensions, destination, and a parsed ETA', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'vessels.urn:mrn:imo:mmsi:123': {
+          'navigation.position': { latitude: 36, longitude: -121 },
+          'sensors.ais.class': 'A',
+          'design.length': { overall: 294 },
+          'design.beam': 32.2,
+          'navigation.destination.commonName': 'ROTTERDAM',
+          'navigation.destination.eta': '2026-09-02T06:00:00.000Z',
+        },
+      }),
+    );
+    const target = ais.list()[0];
+    expect(target.kind).toBe('vessel');
+    expect(target.aisClass).toBe('A');
+    expect(target.lengthMeters).toBe(294);
+    expect(target.beamMeters).toBe(32.2);
+    expect(target.destination).toBe('ROTTERDAM');
+    expect(target.destinationEtaMs).toBe(Date.parse('2026-09-02T06:00:00.000Z'));
+  });
+
+  it('rejects malformed static fields rather than surfacing them', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'vessels.bad': {
+          'navigation.position': { latitude: 0, longitude: 0 },
+          // 'C' is not a transponder grade, a bare number is not the length shape, a negative
+          // beam is garbage, the destination is oversized, and the ETA is unparseable.
+          'sensors.ais.class': 'C',
+          'design.length': 294,
+          'design.beam': -3,
+          'navigation.destination.commonName': 'X'.repeat(65),
+          'navigation.destination.eta': 'tomorrow-ish',
+        },
+      }),
+    );
+    const target = ais.list()[0];
+    expect(target.aisClass).toBeUndefined();
+    expect(target.lengthMeters).toBeUndefined();
+    expect(target.beamMeters).toBeUndefined();
+    expect(target.destination).toBeUndefined();
+    expect(target.destinationEtaMs).toBeUndefined();
+  });
+});
+
+describe('AisTargets non-vessel kinds', () => {
+  it('tags atons and sar by context and keeps list() vessels only', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'vessels.a': { 'navigation.position': { latitude: 0, longitude: 0 } },
+        'atons.urn:mrn:imo:mmsi:993672085': {
+          'navigation.position': { latitude: 1, longitude: 1 },
+          name: 'PT MONTARA LIGHT',
+        },
+        'sar.urn:mrn:imo:mmsi:111234567': {
+          'navigation.position': { latitude: 2, longitude: 2 },
+          'navigation.speedOverGround': 51,
+        },
+      }),
+    );
+    const all = ais.all();
+    expect(all).toHaveLength(3);
+    expect(all.map((t) => t.kind).sort()).toEqual(['aton', 'sar', 'vessel']);
+    // The vessels-only view feeds collision assessment: an aid or aircraft must never be graded
+    // as an own-motion contact.
+    const vessels = ais.list();
+    expect(vessels).toHaveLength(1);
+    expect(vessels[0].kind).toBe('vessel');
+    expect(ais.find('atons.urn:mrn:imo:mmsi:993672085')?.name).toBe('PT MONTARA LIGHT');
+  });
+
+  it('hands list() the very same array as all() when only vessels exist', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({ 'vessels.a': { 'navigation.position': { latitude: 0, longitude: 0 } } }),
+    );
+    expect(ais.list()).toBe(ais.all());
+  });
+
+  it('reads the aton type name, virtual flag, and off-position flag', () => {
+    const store = new SignalKStore();
+    const ais = new AisTargets(store);
+    store.applyFrame(
+      frame({
+        'atons.virtual': {
+          'navigation.position': { latitude: 1, longitude: 1 },
+          atonType: { id: 28, name: 'Floating AtoN: isolated danger' },
+          virtual: true,
+          offPosition: false,
+          'design.length': { overall: 5 },
+        },
+        'atons.adrift': {
+          'navigation.position': { latitude: 2, longitude: 2 },
+          offPosition: true,
+        },
+      }),
+    );
+    const virtual = ais.find('atons.virtual');
+    expect(virtual?.kind).toBe('aton');
+    expect(virtual?.atonType).toBe('Floating AtoN: isolated danger');
+    expect(virtual?.virtual).toBe(true);
+    expect(virtual?.offPosition).toBeUndefined();
+    expect(virtual?.lengthMeters).toBe(5);
+    expect(ais.find('atons.adrift')?.offPosition).toBe(true);
+    expect(ais.find('atons.adrift')?.virtual).toBeUndefined();
+  });
+
+  it('prunes a silent aton through the shared whole-target TTL', () => {
+    let now = 1_000;
+    const store = new SignalKStore();
+    const ais = new AisTargets(store, () => now);
+    store.applyFrame(
+      frame({ 'atons.gone': { 'navigation.position': { latitude: 1, longitude: 1 } } }, now),
+    );
+    expect(ais.all()).toHaveLength(1);
+    now += 60_000;
+    store.pruneAis(now, 30_000);
+    expect(ais.all()).toHaveLength(0);
+  });
+});
+
 describe('parseIso8601DurationSeconds', () => {
   it('parses ISO-8601 durations to signed seconds', () => {
     expect(parseIso8601DurationSeconds('PT1M30S')).toBe(90);

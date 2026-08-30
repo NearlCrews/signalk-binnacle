@@ -12,7 +12,7 @@ interface AisRefreshGate {
 export function createAisRefreshGate(targets: AisTargets, now: () => number): AisRefreshGate {
   let lastVersion = -1;
   let lastCount = -1;
-  let lastList: ReturnType<AisTargets['list']> | undefined;
+  let lastList: ReturnType<AisTargets['all']> | undefined;
   let lastRefreshAt = Number.NEGATIVE_INFINITY;
   return {
     reset() {
@@ -23,7 +23,9 @@ export function createAisRefreshGate(targets: AisTargets, now: () => number): Ai
     },
     shouldRefresh(force = false) {
       const version = targets.version;
-      const list = targets.list();
+      // The full chart-visible set, so a first navigation aid or SAR target paints immediately
+      // rather than waiting out the throttle window behind an unchanged vessel count.
+      const list = targets.all();
       // AisTargets retains a stable cached array until either the store version changes or one of
       // its clock-based freshness boundaries passes. A fresh array at the same version therefore
       // means a position, approach, or motion field expired and the rendered source must catch up.

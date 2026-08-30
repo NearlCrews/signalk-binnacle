@@ -26,3 +26,47 @@ export function aisIconImage(color: Rgba): ImageData {
     return onSideHalo || onBaseHalo ? HALO : null;
   });
 }
+
+// Map image ids for the non-vessel AIS kinds, distinct from the source and vessel-icon ids.
+export const ATON_ICON_ID = 'binnacle-ais-aton-icon';
+export const ATON_VIRTUAL_ICON_ID = 'binnacle-ais-aton-virtual-icon';
+export const SAR_ICON_ID = 'binnacle-ais-sar-icon';
+
+// The diamond's Manhattan radius in pixels: small on purpose, a mark on the chart rather than a
+// moving contact.
+const DIAMOND_RADIUS = 8;
+
+// A small filled diamond for a physical navigation aid (AIS message 21).
+export function atonIconImage(color: Rgba): ImageData {
+  return rasterIconColored(SIZE, (x, y, center) => {
+    const d = Math.abs(x - center) + Math.abs(y - center);
+    if (d <= DIAMOND_RADIUS) return color;
+    return d <= DIAMOND_RADIUS + 1.5 ? HALO : null;
+  });
+}
+
+// The hollow variant for a virtual aid: broadcast only, nothing physically on the water.
+export function atonVirtualIconImage(color: Rgba): ImageData {
+  return rasterIconColored(SIZE, (x, y, center) => {
+    const d = Math.abs(x - center) + Math.abs(y - center);
+    if (Math.abs(d - DIAMOND_RADIUS) <= 1.4) return color;
+    return Math.abs(d - DIAMOND_RADIUS) <= 2.4 ? HALO : null;
+  });
+}
+
+// The cross half-length and half-thickness for the SAR marker below.
+const CROSS_ARM = 10;
+const CROSS_BAR = 2;
+
+// A bold cross for a search-and-rescue aircraft, unmistakable for a vessel triangle or an aid.
+export function sarIconImage(color: Rgba): ImageData {
+  return rasterIconColored(SIZE, (x, y, center) => {
+    const dx = Math.abs(x - center);
+    const dy = Math.abs(y - center);
+    const onBars = (dx <= CROSS_BAR && dy <= CROSS_ARM) || (dy <= CROSS_BAR && dx <= CROSS_ARM);
+    if (onBars) return color;
+    const onHalo =
+      (dx <= CROSS_BAR + 1 && dy <= CROSS_ARM + 1) || (dy <= CROSS_BAR + 1 && dx <= CROSS_ARM + 1);
+    return onHalo ? HALO : null;
+  });
+}
