@@ -120,6 +120,24 @@ export async function acknowledgeNotification(
   return notificationActionResult(response);
 }
 
+// The bulk routes: one POST acts on every notification the server manages, so an alarm flood is
+// one tap instead of a round-trip per alarm. Same outcome grammar as the per-id actions.
+export async function silenceAllNotifications(
+  base: string,
+  token: string | undefined,
+): Promise<NotificationActionResult> {
+  const response = await postJson(`${base}${NOTIFICATIONS_API}/silenceAll`, token);
+  return notificationActionResult(response);
+}
+
+export async function acknowledgeAllNotifications(
+  base: string,
+  token: string | undefined,
+): Promise<NotificationActionResult> {
+  const response = await postJson(`${base}${NOTIFICATIONS_API}/acknowledgeAll`, token);
+  return notificationActionResult(response);
+}
+
 // The v1 REST snapshot of the self notifications tree, for reconciling the store's mirror after a
 // reconnect. Bounds on the walk keep a hostile or broken tree from recursing or collecting without
 // limit; both sit comfortably above any well-formed server.

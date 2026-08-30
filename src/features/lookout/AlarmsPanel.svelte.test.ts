@@ -73,6 +73,26 @@ const renderAlert = (capabilities: {
   canAcknowledge?: boolean;
 }): string => renderPanel(capabilities);
 
+// A store of `count` alarms sharing one capability shape, with optional overrides on the last so a
+// mixed list (one alert refusing an action) is one call.
+const multiAlertStore = (
+  count: number,
+  capabilities: { canSilence?: boolean; canAcknowledge?: boolean },
+  lastOverrides: { canSilence?: boolean; canAcknowledge?: boolean } = {},
+): NotificationsStore =>
+  ({
+    list: () =>
+      Array.from({ length: count }, (_, index) => ({
+        path: `notifications.test.${index}`,
+        state: 'alarm' as const,
+        message: `Alert ${index}`,
+        method: ['visual' as const, 'sound' as const],
+        id: `id-${index}`,
+        ...capabilities,
+        ...(index === count - 1 ? lastOverrides : {}),
+      })),
+  }) as unknown as NotificationsStore;
+
 const THRESHOLD_FIELD = 'Shallow water depth threshold';
 
 describe('AlarmsPanel notification actions', () => {
@@ -92,6 +112,73 @@ describe('AlarmsPanel notification actions', () => {
     const acknowledgedAt = '2026-08-12T07:05:00Z';
     const body = renderAlert({ acknowledged: true, acknowledgedAt });
     expect(body).toContain(`Acknowledged ${formatClockTime(Date.parse(acknowledgedAt))}`);
+  });
+});
+
+describe('AlarmsPanel bulk actions', () => {
+  const wired = { onSilenceAll: () => {}, onAcknowledgeAll: () => {} };
+  const bothActionable = { canSilence: true, canAcknowledge: true };
+
+  it('offers both bulk actions when wired and two or more alerts can take them', () => {
+    const body = renderPanel(
+      {},
+      undefined,
+      {},
+      {
+        ...wired,
+        notifications: multiAlertStore(2, bothActionable),
+      },
+    );
+    expect(body).toMatch(ACTION_BUTTON('Silence all'));
+    expect(body).toMatch(ACTION_BUTTON('Acknowledge all'));
+  });
+
+  it('keeps bulk actions hidden when the callbacks are not wired', () => {
+    const body = renderPanel(
+      {},
+      undefined,
+      {},
+      {
+        notifications: multiAlertStore(2, bothActionable),
+      },
+    );
+    expect(body).not.toContain('Silence all');
+    expect(body).not.toContain('Acknowledge all');
+  });
+
+  it('hides a bulk action while only one alert can take it', () => {
+    const body = renderPanel(
+      {},
+      undefined,
+      {},
+      {
+        ...wired,
+        notifications: multiAlertStore(2, bothActionable, { canAcknowledge: false }),
+      },
+    );
+    expect(body).toMatch(ACTION_BUTTON('Silence all'));
+    expect(body).not.toContain('Acknowledge all');
+  });
+
+  it('hides bulk actions beside a single alert, whose own button is the same tap', () => {
+    const body = renderPanel(bothActionable, undefined, {}, wired);
+    expect(body).not.toContain('Silence all');
+    expect(body).not.toContain('Acknowledge all');
+  });
+
+  it('disables bulk actions without write access', () => {
+    const body = renderPanel(
+      {},
+      undefined,
+      {},
+      {
+        ...wired,
+        auth: { writeBlocked: true } as AuthController,
+        notifications: multiAlertStore(2, bothActionable),
+      },
+    );
+    expect(body).toMatch(/title="Stop the sound of every alert at once"[^>]*disabled/);
+    expect(body).toMatch(/title="Mark every alert as seen and clear them at once"[^>]*disabled/);
   });
 });
 

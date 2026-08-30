@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from 'svelte';
+import { type ComponentProps, flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NotificationsStore } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
@@ -8,7 +8,7 @@ import AlarmsPanel from './AlarmsPanel.svelte';
 
 const mounted: Array<() => void> = [];
 
-function mountPanel() {
+function mountPanel(overrides: Partial<ComponentProps<typeof AlarmsPanel>> = {}) {
   const set = vi.fn();
   const target = document.createElement('div');
   document.body.append(target);
@@ -31,6 +31,7 @@ function mountPanel() {
         arrivalMuted: false,
         onToggleArrivalMute: () => {},
         onClose: () => {},
+        ...overrides,
       },
     });
   });
@@ -56,6 +57,36 @@ function mountPanel() {
 
 afterEach(() => {
   for (const dispose of mounted.splice(0).reverse()) dispose();
+});
+
+describe('AlarmsPanel bulk actions', () => {
+  it('fires a wired bulk action once and holds both buttons while it lands', () => {
+    const onSilenceAll = vi.fn();
+    const onAcknowledgeAll = vi.fn();
+    const alerts = [0, 1].map((index) => ({
+      path: `notifications.test.${index}`,
+      state: 'alarm' as const,
+      message: `Alert ${index}`,
+      method: ['visual' as const, 'sound' as const],
+      id: `id-${index}`,
+      canSilence: true,
+      canAcknowledge: true,
+    }));
+    const panel = mountPanel({
+      notifications: { list: () => alerts } as unknown as NotificationsStore,
+      onSilenceAll,
+      onAcknowledgeAll,
+    });
+
+    panel.click('Silence all');
+    expect(onSilenceAll).toHaveBeenCalledOnce();
+    expect(panel.target.textContent).toContain('Updating alarm status…');
+    expect(panel.button('Silence all').disabled).toBe(true);
+    expect(panel.button('Acknowledge all').disabled).toBe(true);
+
+    panel.click('Acknowledge all');
+    expect(onAcknowledgeAll).not.toHaveBeenCalled();
+  });
 });
 
 describe('AlarmsPanel threshold reset', () => {

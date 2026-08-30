@@ -44,6 +44,7 @@ import {
   canSilenceNotification,
   notificationLabel,
 } from './notification-actions';
+import { defaultShallowLimitMeters } from './shallow-alarm';
 import type { ShallowMonitorSnapshot } from './shallow-monitor.svelte';
 import { thresholdsCaution } from './thresholds-caution';
 
@@ -67,6 +68,10 @@ interface Props {
   error?: string;
   onSilence?: (n: ActiveNotification) => void;
   onAcknowledge?: (n: ActiveNotification) => void;
+  // The one-tap flood relief over the server's bulk routes. Each renders only when wired and at
+  // least two listed alerts can take that action; a single alert keeps its own button.
+  onSilenceAll?: () => void;
+  onAcknowledgeAll?: () => void;
   thresholds: PersistedValue<Thresholds>;
   units: UnitsStore;
   // The per-device alarm loudness. Absent (an older caller, or SSR) hides the volume slider while
@@ -77,6 +82,9 @@ interface Props {
   // The screen wake lock the app holds while a watch is armed. Only the degraded grades get a
   // note; 'idle' and 'held' need no explanation.
   wakeLockState?: WakeLockState;
+  // The boat's declared draft, so the shallow field's default reads as the effective
+  // draft-plus-margin limit rather than the fixed fallback.
+  draftMeters?: number;
   // The off-course (XTE) alarm controls. Absent hides the section entirely.
   xte?: {
     muted: boolean;
@@ -106,11 +114,14 @@ const {
   error,
   onSilence,
   onAcknowledge,
+  onSilenceAll,
+  onAcknowledgeAll,
   thresholds,
   units,
   alarmVolume,
   alarmLog,
   wakeLockState,
+  draftMeters = undefined,
   xte,
   shallow,
   collisionMuted,
@@ -152,7 +163,7 @@ const tcpaMin = (seconds: number): number => seconds / 60;
 
 // The shallow-water threshold follows the server unit preference (meters or feet), unlike CPA and
 // TCPA above, which always read as nautical miles and minutes regardless of that preference.
-const shallowDepthMeters = $derived(t.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters);
+const shallowDepthMeters = $derived(t.shallowDepthMeters ?? defaultShallowLimitMeters(draftMeters));
 const shallowDepthDisplay = $derived(
   units.mode === 'imperial' ? (metersToFeet(shallowDepthMeters) ?? 0) : (shallowDepthMeters ?? 0),
 );
@@ -179,6 +190,11 @@ const maxShallowDepth = $derived(
     : MAX_SHALLOW_DEPTH_METERS,
 );
 
+// A bulk action offers itself only past one actionable alert: below that the per-alert button is
+// the same single tap, and "all" over one row reads as a broader promise than it keeps.
+const silenceableCount = $derived(alerts.filter(canSilenceNotification).length);
+const acknowledgeableCount = $derived(alerts.filter(canAcknowledgeNotification).length);
+
 function runAction(kind: 'silence' | 'acknowledge', notification: ActiveNotification): void {
   if (auth.writeBlocked || pendingAction) return;
   // Tactile registration for a gloved tap: the audible state change lands only after the server
@@ -189,24 +205,42 @@ function runAction(kind: 'silence' | 'acknowledge', notification: ActiveNotifica
   else onAcknowledge?.(notification);
 }
 
+// The bulk pending keys carry no colon, so they can never collide with a per-alert
+// `kind:notifications.…` key.
+function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): void {
+  if (auth.writeBlocked || pendingAction) return;
+  vibrate(30);
+  pendingAction = kind;
+  if (kind === 'silence-all') onSilenceAll?.();
+  else onAcknowledgeAll?.();
+}
+
 $effect(() => {
   const pending = pendingAction;
   const currentError = error;
   const currentAlerts = alerts;
   if (!pending) return;
-  const separator = pending.indexOf(':');
-  const kind = pending.slice(0, separator);
-  const path = pending.slice(separator + 1);
-  const notification = currentAlerts.find((candidate) => candidate.path === path);
-  if (
-    currentError ||
-    !notification ||
-    (kind === 'silence'
-      ? !canSilenceNotification(notification)
-      : !canAcknowledgeNotification(notification))
-  ) {
+  if (currentError) {
     untrack(() => (pendingAction = undefined));
+    return;
   }
+  let settled: boolean;
+  if (pending === 'silence-all') {
+    settled = !currentAlerts.some(canSilenceNotification);
+  } else if (pending === 'acknowledge-all') {
+    settled = !currentAlerts.some(canAcknowledgeNotification);
+  } else {
+    const separator = pending.indexOf(':');
+    const kind = pending.slice(0, separator);
+    const path = pending.slice(separator + 1);
+    const notification = currentAlerts.find((candidate) => candidate.path === path);
+    settled =
+      !notification ||
+      (kind === 'silence'
+        ? !canSilenceNotification(notification)
+        : !canAcknowledgeNotification(notification));
+  }
+  if (settled) untrack(() => (pendingAction = undefined));
 });
 </script>
 
@@ -233,6 +267,32 @@ $effect(() => {
   </p>
   <section class="panel-section" aria-label="Active alerts">
     <h3 class="caps-label">Active alerts</h3>
+    {#if (onSilenceAll && silenceableCount > 1) || (onAcknowledgeAll && acknowledgeableCount > 1)}
+      <div class="bulk-actions">
+        {#if onSilenceAll && silenceableCount > 1}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            title="Stop the sound of every alert at once"
+            onclick={() => runBulkAction('silence-all')}
+            disabled={auth.writeBlocked || pendingAction !== undefined}
+          >
+            Silence all
+          </button>
+        {/if}
+        {#if onAcknowledgeAll && acknowledgeableCount > 1}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            title="Mark every alert as seen and clear them at once"
+            onclick={() => runBulkAction('acknowledge-all')}
+            disabled={auth.writeBlocked || pendingAction !== undefined}
+          >
+            Acknowledge all
+          </button>
+        {/if}
+      </div>
+    {/if}
     {#each alerts as n (n.path)}
       {@const time = localTime(n.timestamp)}
       {@const acknowledgedTime = localTime(n.acknowledgedAt)}
@@ -569,6 +629,13 @@ $effect(() => {
 
 <style>
 /* The titled sections use the shared .panel-section class in panels.css. */
+/* The bulk pair sits above the list so a flood is answerable without scrolling past it. */
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-self: flex-start;
+}
 /* The border, radius, and raised fill come from the shared .card-frame; only the row layout is here. */
 .alert-row {
   display: flex;

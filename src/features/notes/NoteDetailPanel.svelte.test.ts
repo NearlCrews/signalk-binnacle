@@ -54,6 +54,26 @@ describe('NoteDetailPanel', () => {
     expect(renderPanel({ writeBlocked: true })).not.toContain('Request read and write access');
   });
 
+  it('offers Navigate here and Save as waypoint only when wired', () => {
+    const bare = renderPanel();
+    expect(bare).not.toContain('Navigate here');
+    expect(bare).not.toContain('Save as waypoint');
+
+    const wired = renderPanel({ onNavigateHere: vi.fn(), onSaveWaypoint: vi.fn() });
+    expect(wired).toMatch(/Navigate here\s*<\/button>/);
+    expect(wired).toMatch(/Save as waypoint\s*<\/button>/);
+  });
+
+  it('disables the navigation actions without write access', () => {
+    const blocked = renderPanel({
+      onNavigateHere: vi.fn(),
+      onSaveWaypoint: vi.fn(),
+      writeBlocked: true,
+    });
+    expect(blocked).toMatch(/title="Start navigating to this place"[^>]*disabled/);
+    expect(blocked).toMatch(/title="Save this place as a waypoint"[^>]*disabled/);
+  });
+
   it('offers a dismiss control on a mutation error', () => {
     const dismissible = renderPanel({
       mutationError: 'Could not delete the note.',

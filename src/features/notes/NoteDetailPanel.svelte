@@ -1,6 +1,8 @@
 <script lang="ts">
 import Crosshair from '@lucide/svelte/icons/crosshair';
 import ExternalLink from '@lucide/svelte/icons/external-link';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import Navigation from '@lucide/svelte/icons/navigation';
 import SquarePen from '@lucide/svelte/icons/square-pen';
 import Star from '@lucide/svelte/icons/star';
 import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -20,6 +22,11 @@ interface Props {
   onBack?: () => void;
   // Pan the chart to this place; the action renders only when the host wires it.
   onLocate?: () => void;
+  // Start Course API navigation to this place. Renders only when the host wires it, and fires only
+  // through the inline confirmation that names the place, like every other goto.
+  onNavigateHere?: () => void;
+  // Save this place as a waypoint; the host prefills the editor with the place name and position.
+  onSaveWaypoint?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   writeBlocked?: boolean;
@@ -42,6 +49,8 @@ const {
   onClose,
   onBack,
   onLocate,
+  onNavigateHere,
+  onSaveWaypoint,
   onEdit,
   onDelete,
   writeBlocked = false,
@@ -58,6 +67,34 @@ let loading = $state(true);
 let failed = $state(false);
 let attempt = $state(0);
 let confirmingDelete = $state(false);
+let confirmingNavigate = $state(false);
+
+// One armed confirm at a time: arming either disarms the other, so a stale question can never sit
+// behind the one on screen.
+function armNavigate(): void {
+  confirmingDelete = false;
+  confirmingNavigate = true;
+}
+
+function armDelete(): void {
+  confirmingNavigate = false;
+  confirmingDelete = true;
+}
+
+// The guard covers access revoked while the confirm stood armed; the arming button is already
+// disabled without write access.
+function confirmNavigate(): void {
+  confirmingNavigate = false;
+  if (writeBlocked) return;
+  onNavigateHere?.();
+}
+
+// A confirm armed for one place must not stand for the next: a new selection disarms both.
+$effect(() => {
+  void selection.id;
+  confirmingNavigate = false;
+  confirmingDelete = false;
+});
 
 // A new selection or a retry re-runs the load; the object identity changes either way.
 const request = $derived({ id: selection.id, attempt });
@@ -119,6 +156,30 @@ function measure(item: NormalizedItem): string {
         Show on chart
       </button>
     {/if}
+    {#if onNavigateHere && !confirmingNavigate}
+      <button
+        type="button"
+        class="btn btn-ghost"
+        title="Start navigating to this place"
+        onclick={armNavigate}
+        disabled={writeBlocked}
+      >
+        <Navigation size={16} aria-hidden="true" />
+        Navigate here
+      </button>
+    {/if}
+    {#if onSaveWaypoint}
+      <button
+        type="button"
+        class="btn btn-ghost"
+        title="Save this place as a waypoint"
+        onclick={onSaveWaypoint}
+        disabled={writeBlocked}
+      >
+        <MapPin size={16} aria-hidden="true" />
+        Save as waypoint
+      </button>
+    {/if}
     {#if selection.ownedByBinnacle && onEdit}
       <button type="button" class="btn btn-ghost" onclick={onEdit} disabled={busy || writeBlocked}>
         <SquarePen size={16} aria-hidden="true" />
@@ -129,7 +190,7 @@ function measure(item: NormalizedItem): string {
       <button
         type="button"
         class="btn btn-danger"
-        onclick={() => (confirmingDelete = true)}
+        onclick={armDelete}
         disabled={busy || writeBlocked}
       >
         <Trash2 size={16} aria-hidden="true" />
@@ -143,6 +204,14 @@ function measure(item: NormalizedItem): string {
       requesting={requestingWriteAccess}
       onRequest={onRequestWriteAccess}
       outcome={writeOutcome}
+    />
+  {/if}
+  {#if confirmingNavigate && onNavigateHere}
+    <InlineConfirm
+      question={`Start navigation to ${selection.name}? Check the destination before relying on it.`}
+      confirmLabel="Start navigation"
+      onConfirm={confirmNavigate}
+      onCancel={() => (confirmingNavigate = false)}
     />
   {/if}
   {#if confirmingDelete && onDelete}

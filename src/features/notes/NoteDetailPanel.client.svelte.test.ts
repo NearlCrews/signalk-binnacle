@@ -51,6 +51,73 @@ describe('NoteDetailPanel identity', () => {
   });
 });
 
+describe('NoteDetailPanel navigation actions', () => {
+  function mountCard() {
+    const onNavigateHere = vi.fn();
+    const onSaveWaypoint = vi.fn();
+    const target = document.createElement('div');
+    document.body.append(target);
+    let component!: ReturnType<typeof mount>;
+    flushSync(() => {
+      component = mount(NoteDetailPanel, {
+        target,
+        props: {
+          selection: {
+            id: 'note-1',
+            name: 'Quiet cove',
+            category: 'anchorage',
+            position: { latitude: 44, longitude: -86 },
+          },
+          load: vi.fn().mockResolvedValue(undefined),
+          onClose: vi.fn(),
+          onNavigateHere,
+          onSaveWaypoint,
+        },
+      });
+    });
+    mounted.push(() => {
+      void unmount(component);
+      target.remove();
+    });
+    const button = (text: string): HTMLButtonElement => {
+      const found = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidate) => candidate.textContent?.replaceAll(/\s+/g, ' ').trim() === text,
+      );
+      if (!found) throw new Error(`no button labeled ${text}`);
+      return found;
+    };
+    const click = (text: string): void => {
+      button(text).click();
+      flushSync();
+    };
+    return { onNavigateHere, onSaveWaypoint, target, click };
+  }
+
+  it('starts navigation only through the confirm that names the place', () => {
+    const card = mountCard();
+    const question = 'Start navigation to Quiet cove? Check the destination before relying on it.';
+
+    card.click('Navigate here');
+    expect(card.target.textContent).toContain(question);
+    expect(card.onNavigateHere).not.toHaveBeenCalled();
+
+    card.click('Cancel');
+    expect(card.target.textContent).not.toContain(question);
+    expect(card.onNavigateHere).not.toHaveBeenCalled();
+
+    card.click('Navigate here');
+    card.click('Start navigation');
+    expect(card.onNavigateHere).toHaveBeenCalledOnce();
+    expect(card.target.textContent).not.toContain(question);
+  });
+
+  it('saves as waypoint on a single tap', () => {
+    const card = mountCard();
+    card.click('Save as waypoint');
+    expect(card.onSaveWaypoint).toHaveBeenCalledOnce();
+  });
+});
+
 describe('NoteDetailPanel recovery', () => {
   it('dismisses a mutation error and names what a failed load retries', async () => {
     const onDismissMutationError = vi.fn();

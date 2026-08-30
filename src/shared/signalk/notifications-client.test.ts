@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectBearerAuth, stubFetch } from '$shared/testing';
 import {
+  acknowledgeAllNotifications,
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
   fetchRaisedNotificationsById,
   postMobNotification,
   postNotification,
   resolveNotification,
+  silenceAllNotifications,
   silenceNotification,
   updateNotification,
 } from './notifications-client';
@@ -144,6 +146,36 @@ describe('silence and acknowledge', () => {
     stubFetch({ ok: false, status: 501 });
     await expect(silenceNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
     await expect(acknowledgeNotification(BASE, 'tok', ID)).resolves.toBe('unsupported');
+  });
+});
+
+describe('silence all and acknowledge all', () => {
+  it('posts to the bulk action routes', async () => {
+    const mock = stubFetch({ ok: true });
+    await expect(silenceAllNotifications(BASE, 'tok')).resolves.toBe('completed');
+    await expect(acknowledgeAllNotifications(BASE, 'tok')).resolves.toBe('completed');
+    const urls = mock.mock.calls.map((call) => call[0]);
+    expect(urls).toEqual([`${API}/silenceAll`, `${API}/acknowledgeAll`]);
+    expect(mock.mock.calls.every((call) => call[1]?.method === 'POST')).toBe(true);
+    expectBearerAuth(mock.mock.calls[0][1], 'tok');
+  });
+
+  it('reports a transport failure instead of throwing', async () => {
+    stubFetch('reject');
+    await expect(silenceAllNotifications(BASE, undefined)).resolves.toBe('failed');
+    await expect(acknowledgeAllNotifications(BASE, undefined)).resolves.toBe('failed');
+  });
+
+  it('reports an access refusal as a failure', async () => {
+    stubFetch({ ok: false, status: 403 });
+    await expect(silenceAllNotifications(BASE, 'tok')).resolves.toBe('failed');
+    await expect(acknowledgeAllNotifications(BASE, 'tok')).resolves.toBe('failed');
+  });
+
+  it('reports disabled server-side notification management as unsupported', async () => {
+    stubFetch({ ok: false, status: 501 });
+    await expect(silenceAllNotifications(BASE, 'tok')).resolves.toBe('unsupported');
+    await expect(acknowledgeAllNotifications(BASE, 'tok')).resolves.toBe('unsupported');
   });
 });
 

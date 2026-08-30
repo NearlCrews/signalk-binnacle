@@ -53,6 +53,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   const { origin, waypointsStore } = deps;
 
   let addWaypointAt = $state<LatLon | undefined>();
+  // A caller-suggested default name for the pending add (a place card saving a named POI); the
+  // dialog still lets the navigator overwrite it.
+  let addWaypointName = $state<string | undefined>();
   let editingWaypoint = $state<Waypoint | undefined>();
   let loadState = $state<WaypointLoadState>('idle');
   let provisioning = $state<WaypointsProvisioning>('unknown');
@@ -88,7 +91,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     loadState = 'error';
   }
 
-  function onDropWaypoint(position: LatLon): void {
+  function onDropWaypoint(position: LatLon, suggestedName?: string): void {
     if (busy || !isLatLon(position)) return;
     if (
       blockedWrite(
@@ -98,6 +101,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
       return;
     }
     addWaypointAt = position;
+    addWaypointName = suggestedName;
   }
 
   // Resolves to the saved waypoint so a caller can chain an action on the new mark (save and
@@ -138,6 +142,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     // A write the server accepted is direct proof a waypoints provider is registered.
     provisioning = 'provisioned';
     addWaypointAt = undefined;
+    addWaypointName = undefined;
     await refreshWaypoints();
     return waypoint;
   }
@@ -210,6 +215,7 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
   function cancelAddWaypoint(): void {
     if (busy) return;
     addWaypointAt = undefined;
+    addWaypointName = undefined;
   }
 
   function cancelEditWaypoint(): void {
@@ -228,6 +234,9 @@ export function createWaypointsController(deps: WaypointControllerDeps) {
     onDeleteWaypoint: withBusy(onDeleteWaypoint),
     get addWaypointAt() {
       return addWaypointAt;
+    },
+    get addWaypointName() {
+      return addWaypointName;
     },
     get editingWaypoint() {
       return editingWaypoint;
