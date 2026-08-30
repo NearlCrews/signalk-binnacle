@@ -17,6 +17,8 @@ export const SK_PATHS = {
   outsidePressure: 'environment.outside.pressure',
   waterTemperature: 'environment.water.temperature',
   outsideTemperature: 'environment.outside.temperature',
+  // The vessel's declared day or night state, which drives the opt-in automatic theme.
+  environmentMode: 'environment.mode',
   gnssSatellites: 'navigation.gnss.satellites',
   rateOfTurn: 'navigation.rateOfTurn',
   anchorPosition: 'navigation.anchor.position',

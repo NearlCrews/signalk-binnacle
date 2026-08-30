@@ -56,6 +56,12 @@ const BINNACLE_STORAGE_KEYS = {
   // Watch-handoff snapshots taken while the shared server store was unreachable, queued to sync.
   handoffDrafts: { key: 'binnacle:handoff-drafts', scope: 'draft' },
   chartOrientation: { key: 'binnacle:chart-orientation', scope: 'profile' },
+  // The display cluster: the true-black dim layer's opacity, the opt-in automatic day and night
+  // theme, and the interface text scale. Helm preferences that follow a named setup like the theme.
+  displayDim: { key: 'binnacle:display-dim', scope: 'profile' },
+  displayAutoTheme: { key: 'binnacle:display-auto-theme', scope: 'profile' },
+  displayTextScale: { key: 'binnacle:display-text-scale', scope: 'profile' },
+  displaySunMode: { key: 'binnacle:display-sun-mode', scope: 'profile' },
 } as const satisfies Record<string, StorageKeyDefinition>;
 
 type BinnacleStorageKeyId = keyof typeof BINNACLE_STORAGE_KEYS;
