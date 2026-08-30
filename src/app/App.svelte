@@ -1346,6 +1346,7 @@ function onSetRadarPower(status: RadarStatus): void {
 // strip-chip-plus-live-region pairing.
 const shallowController = createShallowController({
   getSafetyDepth: () => vessel.safetyDepth,
+  getDraftMeters: () => vessel.draftMeters,
   thresholds,
   units,
   origin,
@@ -1418,6 +1419,8 @@ const alarmActionError = $derived(notificationsController.alarmActionError);
 const toggleCollisionMute = notificationsController.toggleCollisionMute;
 const onSilenceNotification = notificationsController.onSilenceNotification;
 const onAcknowledgeNotification = notificationsController.onAcknowledgeNotification;
+const onSilenceAllNotifications = notificationsController.onSilenceAllNotifications;
+const onAcknowledgeAllNotifications = notificationsController.onAcknowledgeAllNotifications;
 const muteGenericHere = notificationsController.muteGenericHere;
 
 // Helm radar health, shared by the status strip chip and the watch-handoff facts so the two can
@@ -2779,6 +2782,8 @@ const plotterActions = {
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => (applyWeatherLayers = apply),
   onSilenceNotification,
   onAcknowledgeNotification,
+  onSilenceAllNotifications,
+  onAcknowledgeAllNotifications,
   muteGenericHere,
   onRouteCoverageReport,
   openAlarmsPanel: () => openPanel('alarms'),
@@ -3159,7 +3164,7 @@ const plotterActions = {
 
 {#if waypointsController.addWaypointAt}
   <WaypointDialog
-    defaultName={defaultSaveName('Waypoint')}
+    defaultName={waypointsController.addWaypointName ?? defaultSaveName('Waypoint')}
     symbols={symbolsStore}
     busy={waypointsController.busy}
     onSave={(result) => void confirmDroppedWaypoint(result)}

@@ -18,10 +18,12 @@ import type { TimeTravelController } from '$features/time-travel';
 import { MINUTE_MS } from '$shared/lib';
 import type { NotificationActionResult, SignalKClient } from '$shared/signalk';
 import {
+  acknowledgeAllNotifications,
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
   fetchRaisedNotificationsById,
   SELF_CONTEXT,
+  silenceAllNotifications,
   silenceNotification,
 } from '$shared/signalk';
 import { createCollisionNotificationPublisher } from './collision-notification-publisher';
@@ -117,6 +119,45 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
       if (result === 'unsupported') alarmActionError = unsupportedMessage;
       else if (result === 'failed') alarmActionError = failMessage;
     });
+  }
+
+  // An alarm flood is one tap: the server's bulk routes apply to every active alarm at once. The
+  // same write gate and error grammar as the per-id actions, logged once as a bulk entry.
+  function runBulkNotificationAction(
+    action: (base: string, token: string | undefined) => Promise<NotificationActionResult>,
+    logKind: 'silenced' | 'acknowledged',
+    failMessage: string,
+  ): void {
+    alarmActionError = undefined;
+    if (deps.writeBlocked()) {
+      alarmActionError = 'Server write access is needed for this alarm action.';
+      return;
+    }
+    deps.log?.({ kind: logKind, label: 'All active alarms' });
+    void action(deps.origin, deps.token()).then((result) => {
+      if (result === 'unsupported') {
+        alarmActionError =
+          'This server delegates notification management, so bulk actions are unavailable.';
+      } else if (result === 'failed') {
+        alarmActionError = failMessage;
+      }
+    });
+  }
+
+  function onSilenceAllNotifications(): void {
+    runBulkNotificationAction(
+      silenceAllNotifications,
+      'silenced',
+      'Could not silence every alert. Check the connection and access.',
+    );
+  }
+
+  function onAcknowledgeAllNotifications(): void {
+    runBulkNotificationAction(
+      acknowledgeAllNotifications,
+      'acknowledged',
+      'Could not acknowledge every alert. Check the connection and access.',
+    );
   }
 
   function onSilenceNotification(notification: ActiveNotification): void {
@@ -262,6 +303,8 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     toggleCollisionMute,
     onSilenceNotification,
     onAcknowledgeNotification,
+    onSilenceAllNotifications,
+    onAcknowledgeAllNotifications,
     muteGenericHere,
     reconcileAfterReconnect,
     dispose: collisionPublisher.dispose,

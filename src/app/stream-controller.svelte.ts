@@ -1,6 +1,9 @@
+import { COURSE_TARGET_ARRIVAL_TIME_PATH } from '$entities/course';
 import { withPromiseTimeout } from '$shared/lib';
 import type { OnlineStatus } from '$shared/pwa';
 import {
+  ALL_ATONS_CONTEXT,
+  ALL_SAR_CONTEXT,
   ALL_VESSELS_CONTEXT,
   appendToken,
   type ConnectionPhase,
@@ -41,6 +44,7 @@ const SUBSCRIPTIONS = [
   { path: SK_PATHS.coursePreviousPoint, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.courseActiveRoute, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.courseArrivalCircle, policy: 'instant' as const, minPeriod: 1000 },
+  { path: COURSE_TARGET_ARRIVAL_TIME_PATH as Path, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.courseCalcValuesAll, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.depthBelowTransducer, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.depthBelowKeel, policy: 'instant' as const, minPeriod: 1000 },
@@ -50,6 +54,10 @@ const SUBSCRIPTIONS = [
   { path: SK_PATHS.name, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.mmsi, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.callsignVhf, policy: 'instant' as const, minPeriod: 5000 },
+  { path: SK_PATHS.designDraft, policy: 'instant' as const, minPeriod: 5000 },
+  { path: SK_PATHS.designAirHeight, policy: 'instant' as const, minPeriod: 5000 },
+  { path: SK_PATHS.designLength, policy: 'instant' as const, minPeriod: 5000 },
+  { path: SK_PATHS.designBeam, policy: 'instant' as const, minPeriod: 5000 },
   { path: SK_PATHS.anchorPosition, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.anchorMaxRadius, policy: 'instant' as const, minPeriod: 1000 },
   { path: SK_PATHS.allNotifications, policy: 'instant' as const, minPeriod: 1000 },
@@ -98,6 +106,81 @@ const SUBSCRIPTIONS = [
   {
     path: SK_PATHS.navigationState,
     context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 5000,
+  },
+  // Static and voyage data at 30 s: the wire reports these about every six minutes.
+  {
+    path: SK_PATHS.aisClass,
+    context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.designLength,
+    context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.designBeam,
+    context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.destinationCommonName,
+    context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.destinationEta,
+    context: ALL_VESSELS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  // Aids to navigation: fixed or slow, but offPosition is safety-relevant, so it and the
+  // position ride a tighter cadence than the descriptive statics.
+  { path: SK_PATHS.position, context: ALL_ATONS_CONTEXT, policy: 'fixed' as const, period: 10000 },
+  { path: SK_PATHS.name, context: ALL_ATONS_CONTEXT, policy: 'fixed' as const, period: 30000 },
+  { path: SK_PATHS.atonType, context: ALL_ATONS_CONTEXT, policy: 'fixed' as const, period: 30000 },
+  {
+    path: SK_PATHS.atonVirtual,
+    context: ALL_ATONS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.atonOffPosition,
+    context: ALL_ATONS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 10000,
+  },
+  {
+    path: SK_PATHS.designLength,
+    context: ALL_ATONS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  {
+    path: SK_PATHS.designBeam,
+    context: ALL_ATONS_CONTEXT,
+    policy: 'fixed' as const,
+    period: 30000,
+  },
+  // Search-and-rescue targets move at aircraft speeds, so motion rides the vessel cadence.
+  { path: SK_PATHS.position, context: ALL_SAR_CONTEXT, policy: 'fixed' as const, period: 5000 },
+  { path: SK_PATHS.name, context: ALL_SAR_CONTEXT, policy: 'fixed' as const, period: 30000 },
+  {
+    path: SK_PATHS.courseOverGroundTrue,
+    context: ALL_SAR_CONTEXT,
+    policy: 'fixed' as const,
+    period: 5000,
+  },
+  {
+    path: SK_PATHS.speedOverGround,
+    context: ALL_SAR_CONTEXT,
     policy: 'fixed' as const,
     period: 5000,
   },

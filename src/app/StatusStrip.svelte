@@ -23,6 +23,7 @@ import {
   speedUnit,
   Toast,
 } from '$shared/lib';
+import { COG_MIN_SOG_MPS } from '$shared/nav';
 import { type ConnectionPhase, isConnectionDown } from '$shared/signalk';
 import { TransientNote } from '$shared/ui';
 
@@ -103,9 +104,6 @@ let {
   // Opens the Anchor watch panel: overnight the chip is the monitoring surface, so it is a door.
   onOpenAnchor?: () => void;
 } = $props();
-
-// COG is meaningless while the boat is stationary; under this speed the readout dashes.
-const COG_MIN_SOG_MPS = 0.15;
 
 const connectionDown = $derived(isConnectionDown(connectionPhase));
 

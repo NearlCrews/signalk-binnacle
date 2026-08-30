@@ -259,6 +259,8 @@ interface FlatProps {
   toggleCollisionMute: () => void;
   onSilenceNotification: (notification: ActiveNotification) => void;
   onAcknowledgeNotification: (notification: ActiveNotification) => void;
+  onSilenceAllNotifications: () => void;
+  onAcknowledgeAllNotifications: () => void;
   muteGenericHere: () => void;
   // The latest route-coverage result from the Offline charts panel, threaded up so a watch-handoff
   // snapshot can state whether the corridor was checked.
@@ -377,6 +379,8 @@ type ActionKey =
   | 'onRouteCoverageReport'
   | 'onSilenceNotification'
   | 'onAcknowledgeNotification'
+  | 'onSilenceAllNotifications'
+  | 'onAcknowledgeAllNotifications'
   | 'muteGenericHere'
   | 'openAlarmsPanel'
   | 'selectPoi'
@@ -560,6 +564,8 @@ const {
   toggleCollisionMute,
   onSilenceNotification,
   onAcknowledgeNotification,
+  onSilenceAllNotifications,
+  onAcknowledgeAllNotifications,
   muteGenericHere,
   onRouteCoverageReport,
   openAlarmsPanel,
@@ -975,6 +981,9 @@ $effect(() => {
         units={units.profile}
         xteAlarming={xteMonitor.alarming}
         {routeProgress}
+        onSetArrivalCircle={routeController.onSetArrivalCircle}
+        onRestartCourse={routeController.onRestartCourse}
+        onSetTargetArrivalTime={routeController.onSetTargetArrivalTime}
         onStop={() => routeController.onStopCourse()}
         onSkip={routeStore.activeId !== undefined ? routeController.onSkipPoint : undefined}
       />
@@ -1064,6 +1073,9 @@ $effect(() => {
         onClose={closeNote}
         onBack={onBackFromNote}
         onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
+        onNavigateHere={() => selectedNote && void routeController.onGoToHere(selectedNote.position)}
+        onSaveWaypoint={() =>
+          selectedNote && waypointsController.onDropWaypoint(selectedNote.position, selectedNote.name)}
         onEdit={selectedNote.ownedByBinnacle
           ? () => selectedNote && personalNotesController.openEdit(selectedNote)
           : undefined}
@@ -1599,8 +1611,11 @@ $effect(() => {
               error={alarmActionError}
               onSilence={notificationsApi ? onSilenceNotification : undefined}
               onAcknowledge={notificationsApi ? onAcknowledgeNotification : undefined}
+              onSilenceAll={notificationsApi ? onSilenceAllNotifications : undefined}
+              onAcknowledgeAll={notificationsApi ? onAcknowledgeAllNotifications : undefined}
               {audioState}
               shallow={shallowMonitor}
+              draftMeters={vessel.draftMeters}
               {alarmVolume}
               {alarmLog}
               wakeLockState={wakeLock.state}
