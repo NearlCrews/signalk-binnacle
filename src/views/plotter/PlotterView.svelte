@@ -21,6 +21,7 @@ import { loadAisListPanel } from '$features/ais-list';
 import { loadAnchorPanel } from '$features/anchor-watch';
 import { AuthBanner } from '$features/auth-banner';
 import { loadChartsManagementPanel } from '$features/charts-management';
+import { loadCompanionAiPanel } from '$features/companion-ai';
 import { loadHandoffPanel } from '$features/handoff';
 import { loadHelpPanel } from '$features/help';
 import { type LayersView, loadLayersPanel } from '$features/layers-panel';
@@ -118,6 +119,7 @@ interface FlatProps {
   marineRadar: RadarController;
   tidesController: TidesController;
   handoff: import('$features/handoff').HandoffController;
+  companionAi: import('$features/companion-ai').CompanionAiController;
 
   // Entity stores
   anchor: AnchorWatch;
@@ -327,7 +329,8 @@ type ControllerKey =
   | 'trackController'
   | 'marineRadar'
   | 'tidesController'
-  | 'handoff';
+  | 'handoff'
+  | 'companionAi';
 type EntityKey =
   | 'anchor'
   | 'mob'
@@ -512,6 +515,7 @@ const {
   marineRadar,
   tidesController,
   handoff,
+  companionAi,
 } = $derived(controllers);
 const {
   anchor,
@@ -1429,6 +1433,48 @@ $effect(() => {
             backLabel={trends.focusedId !== undefined
               ? 'Back to instrument details'
               : 'Back to menu'}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
+      {:else if activePanel === 'companion-ai'}
+        {#await forAttempt(loadCompanionAiPanel)}
+          <LazyPanelState
+            title="AI advisor"
+            closeLabel="Close AI advisor"
+            state="loading"
+            message="Loading AI advisor…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              controller={companionAi}
+              {auth}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="AI advisor"
+                closeLabel="Close AI advisor"
+                state="error"
+                message="The AI advisor stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="AI advisor"
+            closeLabel="Close AI advisor"
+            state="error"
+            message="The AI advisor could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
             onRetry={retryLazyPanel}
           />
         {/await}

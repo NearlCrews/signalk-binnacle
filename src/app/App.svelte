@@ -1,6 +1,7 @@
 <script lang="ts">
 import Anchor from '@lucide/svelte/icons/anchor';
 import Bell from '@lucide/svelte/icons/bell';
+import Bot from '@lucide/svelte/icons/bot';
 import ChartLine from '@lucide/svelte/icons/chart-line';
 import CircleHelp from '@lucide/svelte/icons/circle-help';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -57,6 +58,7 @@ import { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
 import { createUserChartsController } from '$features/charts';
+import { createCompanionAiController, latestCompanionHeadline } from '$features/companion-ai';
 import { NOAA_ENC_SOURCE_ID, shouldOfferNoaaEnc } from '$features/depth-charts';
 import { createHandoffClient, createHandoffController } from '$features/handoff';
 import {
@@ -1378,6 +1380,13 @@ const genericAlarm = new GenericAlarm(alarmCoordinator.channel({ id: 'generic', 
 const alarmVolume = createAlarmVolume();
 const alarmLog = createAlarmLog(clock);
 
+// The companion plugin's analyzer reports, read from its quiet nominal notifications; the panel
+// drives the refresh lifecycle, so construction here costs nothing until it opens.
+const companionAi = createCompanionAiController({
+  origin: () => origin,
+  token: () => authToken,
+});
+
 // A locked phone kills audio and visuals together, the one gap the worker-timer background design
 // does not cover: hold a screen wake lock while a watch is armed or a danger is active. Absent
 // over plain HTTP (the API needs a secure context); the Alarms panel surfaces that degrade.
@@ -1494,6 +1503,7 @@ const handoff = createHandoffController({
       }),
       depthWatch: () => shallowController.monitorState,
       alarmChronology: () => alarmChronologyFact(alarmLog),
+      companionHeadline: () => latestCompanionHeadline(companionAi.reports),
       radar: () =>
         radarHealth.state === 'quiet'
           ? 'quiet'
@@ -1894,6 +1904,17 @@ const menuItems = $derived<MenuItem[]>([
       trendReturnInstrumentId = undefined;
       togglePanel('trends');
     },
+  },
+  {
+    id: 'companion-ai',
+    label: 'AI advisor',
+    shortLabel: 'Advisor',
+    icon: Bot,
+    group: 'Instruments',
+    pressed: activePanel === 'companion-ai',
+    // Always listed: the panel itself carries the discoverable-while-unavailable landing that
+    // explains the companion plugin when it is absent.
+    onSelect: () => togglePanel('companion-ai'),
   },
   {
     id: 'open-kip',
@@ -2738,6 +2759,7 @@ const plotterControllers = {
   marineRadar,
   tidesController,
   handoff,
+  companionAi,
 };
 
 const plotterEntities = {

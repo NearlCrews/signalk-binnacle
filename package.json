@@ -67,7 +67,8 @@
       "signalk-ssl",
       "signalk-anchoralarm-plugin",
       "signalk-tides",
-      "signalk-symbol-manager"
+      "signalk-symbol-manager",
+      "signalk-openrouter-companion"
     ]
   },
   "files": [

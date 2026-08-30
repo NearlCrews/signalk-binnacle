@@ -23,6 +23,7 @@ function deps(overrides: Partial<HandoffFactDeps> = {}): HandoffFactDeps {
     depthWatch: () => 'monitoring',
     radar: () => 'not streaming',
     alarmChronology: () => undefined,
+    companionHeadline: () => undefined,
     weatherFetchedAtMs: () => undefined,
     tides: () => 'not loaded',
     routeCoverage: () => undefined,

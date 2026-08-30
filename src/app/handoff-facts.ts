@@ -28,6 +28,8 @@ export interface HandoffFactDeps {
   radar: () => string;
   // The bounded session alarm chronology as a ready fact, or undefined when nothing alarmed.
   alarmChronology: () => HandoffFact | undefined;
+  // The latest companion analyzer headline, quoted and timestamped; never model-drafted here.
+  companionHeadline: () => string | undefined;
   weatherFetchedAtMs: () => number | undefined;
   tides: () => string;
   routeCoverage: () => string | undefined;
@@ -116,6 +118,9 @@ export function collectHandoffFacts(deps: HandoffFactDeps): HandoffFact[] {
 
   const chronology = deps.alarmChronology();
   if (chronology) facts.push(chronology);
+
+  const companionHeadline = deps.companionHeadline();
+  if (companionHeadline) facts.push({ label: 'AI advisor', value: companionHeadline });
 
   const weatherAt = deps.weatherFetchedAtMs();
   facts.push({

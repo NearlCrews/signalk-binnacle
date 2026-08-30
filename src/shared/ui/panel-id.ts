@@ -12,6 +12,7 @@ export type PanelId =
   | 'anchor'
   | 'alarms'
   | 'poi-search'
+  | 'companion-ai'
   | 'profiles'
   | 'regions'
   | 'charts-management'
