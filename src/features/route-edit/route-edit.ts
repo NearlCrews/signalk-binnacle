@@ -1,6 +1,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import {
   type GeoJSONStoreFeatures,
+  type SnapToCustom,
   TerraDraw,
   TerraDrawLineStringMode,
   TerraDrawPointMode,
@@ -11,6 +12,7 @@ import type { Route, RouteWaypoint } from '$entities/route';
 import { isLonLat, type LatLon, latLonToLonLat, lonLatToLatLon, roundLatLon } from '$shared/geo';
 import { mapThemePaint } from '$shared/map';
 import type { Theme } from '$shared/ui';
+import { nearestSnapPosition, type SnapTarget } from './route-snap';
 
 // Terra Draw tags every feature with its mode in properties.mode; the on-chart route is a
 // single linestring drawn or edited in that mode. These names are Terra Draw's registered mode
@@ -77,9 +79,30 @@ export function createRouteEditor(opts: {
   map: MapLibreMap;
   beforeId?: string;
   theme: Theme;
+  // Saved-waypoint positions a placed or dragged vertex snaps to, read per event so the latest
+  // collection applies; absent disables snapping.
+  snapTargets?: () => readonly SnapTarget[];
   onChange: (waypoints: RouteWaypoint[]) => void;
 }): RouteEditor {
   const color = drawColor(opts.theme);
+  // Snapping rides Terra Draw's toCustom hook, the one snapping mechanism that reaches outside the
+  // draw store (toCoordinate and toLine only snap to other drawn features) and the only one both
+  // the drawing mode and select-mode vertex drags share, so placing and dragging behave alike
+  // without fighting the drag. The returned position is rounded to the store precision Terra Draw
+  // enforces (see DRAW_COORD_DECIMALS); at nine decimals the vertex sits within a tenth of a
+  // millimeter of the waypoint, and matches how a seeded route already stores it.
+  const snapTargets = opts.snapTargets;
+  const toCustom: SnapToCustom | undefined =
+    snapTargets &&
+    ((event, context) => {
+      const snapped = nearestSnapPosition(
+        { x: event.containerX, y: event.containerY },
+        snapTargets(),
+        context,
+      );
+      return snapped && latLonToLonLat(roundLatLon(snapped, DRAW_COORD_DECIMALS));
+    });
+  const snapping = toCustom && { toCustom };
   const draw = new TerraDraw({
     adapter: new TerraDrawMapLibreGLAdapter({
       map: opts.map,
@@ -89,7 +112,15 @@ export function createRouteEditor(opts: {
     modes: [
       new TerraDrawPointMode({ styles: { pointColor: color, pointWidth: 6 } }),
       new TerraDrawLineStringMode({
-        styles: { lineStringColor: color, lineStringWidth: 4 },
+        // The snapping guidance point Terra Draw renders while hovering a snap target takes the
+        // theme color too, so night-red never shows the library's default point colors.
+        styles: {
+          lineStringColor: color,
+          lineStringWidth: 4,
+          snappingPointColor: color,
+          snappingPointOutlineColor: color,
+        },
+        snapping,
       }),
       new TerraDrawSelectMode({
         styles: {
@@ -100,7 +131,12 @@ export function createRouteEditor(opts: {
           linestring: {
             feature: {
               draggable: true,
-              coordinates: { midpoints: true, draggable: true, deletable: true },
+              coordinates: {
+                midpoints: true,
+                draggable: true,
+                deletable: true,
+                snappable: snapping,
+              },
             },
           },
         },
@@ -286,7 +322,12 @@ export function createRouteEditor(opts: {
       const color = drawColor(theme);
       draw.updateModeOptions(POINT_MODE, { styles: { pointColor: color, pointWidth: 6 } });
       draw.updateModeOptions(LINESTRING_MODE, {
-        styles: { lineStringColor: color, lineStringWidth: 4 },
+        styles: {
+          lineStringColor: color,
+          lineStringWidth: 4,
+          snappingPointColor: color,
+          snappingPointOutlineColor: color,
+        },
       });
       draw.updateModeOptions(SELECT_MODE, {
         styles: { selectionPointColor: color, midPointColor: color },

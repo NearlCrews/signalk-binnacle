@@ -698,6 +698,7 @@ onMount(async () => {
               map,
               beforeId: editorBeforeId,
               theme,
+              snapTargets: () => waypoints.waypoints,
               onChange: (waypoints) => {
                 const working = routeStore.working;
                 if (working) routeStore.setWorking({ ...working, waypoints });

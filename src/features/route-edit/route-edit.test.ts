@@ -1,5 +1,12 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { TerraDraw } from 'terra-draw';
+import {
+  type SnappableContext,
+  type SnapToCustom,
+  TerraDraw,
+  TerraDrawLineStringMode,
+  type TerraDrawMouseEvent,
+  TerraDrawSelectMode,
+} from 'terra-draw';
 import { describe, expect, it, vi } from 'vitest';
 import type { RouteWaypoint } from '$entities/route';
 import { createRouteEditor, drawFeatureToWaypoints, routeToStoreFeature } from './route-edit';
@@ -18,11 +25,13 @@ vi.mock('terra-draw', () => {
   class FakeTerraDraw {
     static instances: FakeTerraDraw[] = [];
     features: StoreFeature[] = [];
+    modes: object[];
     #listeners: Array<(ids: Array<string | number>, type: string) => void> = [];
     #finishListeners: Array<() => void> = [];
     #nextId = 1;
     #clock = 1000;
-    constructor() {
+    constructor(options?: { modes?: object[] }) {
+      this.modes = options?.modes ?? [];
       FakeTerraDraw.instances.push(this);
     }
     on(event: string, cb: (ids: Array<string | number>, type: string) => void): void {
@@ -103,11 +112,19 @@ vi.mock('terra-draw', () => {
       for (const cb of [...this.#listeners]) cb([], 'update');
     }
   }
+  // Modes capture their constructor options so tests can reach the snapping wiring the editor
+  // passes to Terra Draw.
+  class FakeMode {
+    options?: Record<string, unknown>;
+    constructor(options?: Record<string, unknown>) {
+      this.options = options;
+    }
+  }
   return {
     TerraDraw: FakeTerraDraw,
-    TerraDrawLineStringMode: class {},
-    TerraDrawPointMode: class {},
-    TerraDrawSelectMode: class {},
+    TerraDrawLineStringMode: class extends FakeMode {},
+    TerraDrawPointMode: class extends FakeMode {},
+    TerraDrawSelectMode: class extends FakeMode {},
   } as unknown as typeof import('terra-draw');
 });
 
@@ -117,10 +134,26 @@ interface FakeDraw {
     properties: Record<string, unknown>;
     geometry: { type: string; coordinates: number[][] | number[] };
   }>;
+  modes: object[];
   mutateLine(coordinates: number[][]): void;
   addLine(coordinates: number[][]): void;
   addCursorPoint(coordinates: number[]): void;
   finishLine(): void;
+}
+
+interface CapturedMode {
+  options?: {
+    snapping?: { toCustom?: SnapToCustom };
+    flags?: {
+      linestring?: { feature?: { coordinates?: { snappable?: unknown } } };
+    };
+  };
+}
+
+function capturedMode(draw: FakeDraw, ctor: unknown): CapturedMode {
+  const mode = draw.modes.find((entry) => entry instanceof (ctor as new () => object));
+  if (!mode) throw new Error('mode not constructed');
+  return mode as CapturedMode;
 }
 
 function lastInstance(): FakeDraw {
@@ -451,5 +484,77 @@ describe('createRouteEditor drawing-mode reads', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('createRouteEditor waypoint snapping', () => {
+  // 100 px per degree on both axes, matching the linear projection the pure snap tests use.
+  const context = {
+    project: (lng: number, lat: number) => ({ x: lng * 100, y: lat * -100 }),
+    unproject: (x: number, y: number) => ({ lng: x / 100, lat: y / -100 }),
+    getCurrentGeometrySnapshot: () => null,
+  } as SnappableContext;
+
+  function snapEvent(lng: number, lat: number): TerraDrawMouseEvent {
+    return { lng, lat, containerX: lng * 100, containerY: lat * -100 } as TerraDrawMouseEvent;
+  }
+
+  function startWithTargets(targets: RouteWaypoint[]): { draw: FakeDraw; toCustom: SnapToCustom } {
+    createRouteEditor({
+      map: {} as MapLibreMap,
+      theme: 'day',
+      snapTargets: () => targets,
+      onChange: () => {},
+    });
+    const draw = lastInstance();
+    const toCustom = capturedMode(draw, TerraDrawLineStringMode).options?.snapping?.toCustom;
+    if (!toCustom) throw new Error('snapping not wired');
+    return { draw, toCustom };
+  }
+
+  it('wires one snapping config into the drawing mode and the select-mode vertex drags', () => {
+    const { draw } = startWithTargets([{ position: { latitude: 10, longitude: 20 } }]);
+    const linestring = capturedMode(draw, TerraDrawLineStringMode).options?.snapping;
+    const snappable = capturedMode(draw, TerraDrawSelectMode).options?.flags?.linestring?.feature
+      ?.coordinates?.snappable;
+    expect(linestring?.toCustom).toBeTypeOf('function');
+    expect(snappable).toBe(linestring);
+  });
+
+  it('snaps a nearby vertex to the waypoint position at the draw store precision', () => {
+    const position = { latitude: 42 + 1 / 3, longitude: -83 - 1 / 7 };
+    const { toCustom } = startWithTargets([{ position }]);
+    // Half a pixel off the waypoint on each axis.
+    const snapped = toCustom(
+      snapEvent(position.longitude + 0.005, position.latitude + 0.005),
+      context,
+    );
+    expect(snapped).toEqual([
+      Number(position.longitude.toFixed(9)),
+      Number(position.latitude.toFixed(9)),
+    ]);
+  });
+
+  it('passes a far vertex through unsnapped', () => {
+    const { toCustom } = startWithTargets([{ position: { latitude: 10, longitude: 20 } }]);
+    expect(toCustom(snapEvent(21, 10), context)).toBeUndefined();
+  });
+
+  it('reads the target getter per event, so a waypoint saved mid-session snaps', () => {
+    const targets: RouteWaypoint[] = [];
+    const { toCustom } = startWithTargets(targets);
+    expect(toCustom(snapEvent(20, 10), context)).toBeUndefined();
+    targets.push({ position: { latitude: 10, longitude: 20 } });
+    expect(toCustom(snapEvent(20.0005, 10), context)).toEqual([20, 10]);
+  });
+
+  it('leaves snapping off when no target getter is supplied', () => {
+    createRouteEditor({ map: {} as MapLibreMap, theme: 'day', onChange: () => {} });
+    const draw = lastInstance();
+    expect(capturedMode(draw, TerraDrawLineStringMode).options?.snapping).toBeUndefined();
+    expect(
+      capturedMode(draw, TerraDrawSelectMode).options?.flags?.linestring?.feature?.coordinates
+        ?.snappable,
+    ).toBeUndefined();
   });
 });
