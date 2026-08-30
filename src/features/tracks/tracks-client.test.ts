@@ -19,6 +19,16 @@ const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   gap,
 });
 
+const tp = (lat: number, lon: number, t: number, gap?: boolean): TrackPoint => ({
+  lat,
+  lon,
+  t,
+  sog: 1,
+  gap,
+});
+
+const T0 = Date.parse('2026-08-29T10:00:00.000Z');
+
 describe('fetchSavedTracks', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -127,6 +137,146 @@ describe('fetchSavedTracks', () => {
     expect(tracks?.[0].durationSeconds).toBeUndefined();
   });
 
+  it('restores per-point times and the recorded span from valid coordTimes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          t1: {
+            type: 'Feature',
+            geometry: {
+              type: 'MultiLineString',
+              coordinates: [
+                [
+                  [-83.5, 42.6],
+                  [-83.4, 42.7],
+                ],
+                [
+                  [-83.3, 42.8],
+                  [-83.2, 42.9],
+                ],
+              ],
+            },
+            properties: {
+              name: 'Timed',
+              coordTimes: [
+                ['2026-08-29T10:00:00.000Z', '2026-08-29T10:00:10.000Z'],
+                ['2026-08-29T10:10:00.000Z', '2026-08-29T10:10:10.000Z'],
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks?.[0].points[0].map((point) => point.t)).toEqual([T0, T0 + 10_000]);
+    expect(tracks?.[0].startMs).toBe(T0);
+    expect(tracks?.[0].endMs).toBe(T0 + 610_000);
+  });
+
+  it('degrades mismatched coordTimes to a track without times instead of rejecting it', async () => {
+    // The second segment's times array is one short, so the whole structure fails the mirror
+    // check and every point stays untimed; the geometry itself still loads.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          t1: {
+            geometry: {
+              type: 'MultiLineString',
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 1],
+                ],
+                [
+                  [2, 2],
+                  [3, 3],
+                ],
+              ],
+            },
+            properties: {
+              coordTimes: [
+                ['2026-08-29T10:00:00.000Z', '2026-08-29T10:00:10.000Z'],
+                ['2026-08-29T10:10:00.000Z'],
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks).toHaveLength(1);
+    expect(tracks?.[0].points.flat().every((point) => point.t === 0)).toBe(true);
+    expect(tracks?.[0].startMs).toBeUndefined();
+    expect(tracks?.[0].endMs).toBeUndefined();
+  });
+
+  it('drops malformed stamps to untimed points and spans the remaining valid ones', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          t1: {
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+                [2, 2],
+              ],
+            },
+            // A LineString's coordTimes is one flat array. The middle stamp is not a time.
+            properties: {
+              coordTimes: ['2026-08-29T10:00:00.000Z', 'not-a-time', '2026-08-29T10:00:20.000Z'],
+            },
+          },
+        }),
+      ),
+    );
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks?.[0].points[0].map((point) => point.t)).toEqual([T0, 0, T0 + 20_000]);
+    expect(tracks?.[0].startMs).toBe(T0);
+    expect(tracks?.[0].endMs).toBe(T0 + 20_000);
+  });
+
+  it('leaves a lone valid stamp spanless: one moment is not a span', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          t1: {
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+            properties: { coordTimes: ['2026-08-29T10:00:00.000Z', 'not-a-time'] },
+          },
+        }),
+      ),
+    );
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks?.[0].startMs).toBeUndefined();
+    expect(tracks?.[0].endMs).toBeUndefined();
+  });
+
+  it('round-trips a saved track: the PUT body reads back with times and span intact', async () => {
+    const putMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal('fetch', putMock);
+    const points = [tp(42.6, -83.5, T0), tp(42.7, -83.4, T0 + 10_000)];
+    expect(await saveTrack('http://pi', 'tok', 'abc', 'Loop', points)).toBe('ok');
+    const body = JSON.parse((putMock.mock.calls[0][1] as RequestInit).body as string);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, { abc: body })));
+    const tracks = await fetchSavedTracks('http://pi');
+    expect(tracks?.[0].startMs).toBe(T0);
+    expect(tracks?.[0].endMs).toBe(T0 + 10_000);
+    expect(tracks?.[0].points[0].map((point) => point.t)).toEqual([T0, T0 + 10_000]);
+  });
+
   it('stops decoding entries after the saved-track limit', async () => {
     const keyed: Record<string, unknown> = {};
     for (let index = 0; index < 500; index += 1) {
@@ -192,6 +342,15 @@ describe('savedTrackFromPoints', () => {
     expect(track.points).toHaveLength(1);
     expect(track.distanceMeters).toBeGreaterThan(100);
     expect(track.durationSeconds).toBe(0);
+    // Untimed test points (t 0) carry no recorded span.
+    expect(track.startMs).toBeUndefined();
+    expect(track.endMs).toBeUndefined();
+  });
+
+  it('carries the recorded span, so a just-saved card shows it before the refresh', () => {
+    const track = savedTrackFromPoints('id', 'Timed', [tp(0, 0, T0), tp(0, 0.001, T0 + 60_000)]);
+    expect(track.startMs).toBe(T0);
+    expect(track.endMs).toBe(T0 + 60_000);
   });
 });
 
@@ -220,6 +379,27 @@ describe('saveTrack', () => {
       ],
     ]);
     expect(body.properties).toMatchObject({ name: 'Day 1', source: 'binnacle' });
+  });
+
+  it('persists coordTimes mirroring the coordinates, one stamp array per segment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const points = [
+      tp(42.6, -83.5, T0),
+      tp(42.7, -83.4, T0 + 10_000),
+      tp(42.8, -83.3, T0 + 400_000, true),
+      tp(42.9, -83.2, T0 + 410_000),
+    ];
+    await saveTrack('http://pi', 'tok', 'abc', 'Day 1', points);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.properties.coordTimes).toEqual([
+      ['2026-08-29T10:00:00.000Z', '2026-08-29T10:00:10.000Z'],
+      ['2026-08-29T10:06:40.000Z', '2026-08-29T10:06:50.000Z'],
+    ]);
+    const coordinates = body.geometry.coordinates as unknown[][];
+    expect((body.properties.coordTimes as string[][]).map((seg) => seg.length)).toEqual(
+      coordinates.map((seg) => seg.length),
+    );
   });
 
   it('reports a refusal as access-denied, so the caller can request write access', async () => {

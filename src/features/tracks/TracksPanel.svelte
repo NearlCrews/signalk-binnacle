@@ -1,6 +1,7 @@
 <script lang="ts">
 import Download from '@lucide/svelte/icons/download';
 import Eraser from '@lucide/svelte/icons/eraser';
+import History from '@lucide/svelte/icons/history';
 import Pause from '@lucide/svelte/icons/pause';
 import Play from '@lucide/svelte/icons/play';
 import Route from '@lucide/svelte/icons/route';
@@ -79,6 +80,13 @@ interface Props {
   onDelete: (id: string) => void;
   onToggleSaved: (id: string, shown: boolean) => void;
   onExport: (track: SavedTrack) => void;
+  // Enter history playback over a saved track's recorded span (epoch ms). Optional because the
+  // panel cannot reach the time-travel slice across features; the integrator wires it to the
+  // time-travel controller, and the action appears only on a track that carries its times.
+  onPlayback?: (track: SavedTrack, startMs: number, endMs: number) => void;
+  // Whether a history provider is known on the server; false keeps the Play back action visible
+  // but disabled with the reason, the same grayed treatment as the Playback menu tile.
+  playbackAvailable?: boolean;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -105,6 +113,8 @@ const {
   onDelete,
   onToggleSaved,
   onExport,
+  onPlayback,
+  playbackAvailable,
   onClose,
   onBack,
 }: Props = $props();
@@ -153,15 +163,35 @@ const writesDisabled = $derived(auth.writeBlocked || busy);
 const routeActionsDisabled = $derived(auth.writeBlocked || busy || routeBusy || !canMakeRoute);
 const minimize = createPanelMinimize();
 
-// Each saved track's distance and duration, formatted once per change. They ride on the SavedTrack as
-// SI metadata saved with the geometry, so the card reads them without re-walking the points; a track
-// saved without them shows the placeholder.
+// Mirrors the longest Playback range (the seven-day preset). The panel cannot import the
+// time-travel slice across features, and its own explainer above already names the same bound.
+const PLAYBACK_HISTORY_MS = 7 * 24 * 60 * 60 * 1000;
+
+// "Aug 30 09:14 to 17:41", naming the end day only when the span crosses local midnight, the same
+// convention as the debrief's end column. Empty when the track carries no times.
+function savedSpanText(track: SavedTrack): string {
+  if (track.startMs === undefined || track.endMs === undefined) return '';
+  const endDay = crossesLocalMidnight(track.startMs, track.endMs)
+    ? `${formatMonthDay(track.endMs)} `
+    : '';
+  return `${formatMonthDay(track.startMs)} ${formatClockTime(track.startMs)} to ${endDay}${formatClockTime(track.endMs)}`;
+}
+
+// Each saved track's distance, duration, and recorded span, formatted once per change. They ride on
+// the SavedTrack as metadata saved with the geometry (SI stats, coordTimes-derived span), so the
+// card reads them without re-walking the points; a track saved without them shows the placeholder
+// for the stats and no span row.
 const savedCards = $derived(
   saved.map((track) => ({
     track,
     distanceNm: track.distanceMeters == null ? PLACEHOLDER : formatNm(track.distanceMeters),
     durationText:
       track.durationSeconds == null ? PLACEHOLDER : formatDuration(track.durationSeconds),
+    spanText: savedSpanText(track),
+    span:
+      track.startMs !== undefined && track.endMs !== undefined
+        ? { startMs: track.startMs, endMs: track.endMs }
+        : undefined,
   })),
 );
 
@@ -490,7 +520,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     empty={savedEmptyText}
     key={({ track }) => track.id}
   >
-    {#snippet card({ track, distanceNm, durationText })}
+    {#snippet card({ track, distanceNm, durationText, spanText, span })}
       <div class="card-head">
         <span class="name" title={track.name}>{track.name}</span>
       </div>
@@ -502,6 +532,10 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         </dd>
         <dt class="caps-label">Duration</dt>
         <dd><span class="num">{durationText}</span></dd>
+        {#if spanText}
+          <dt class="caps-label">Recorded</dt>
+          <dd>{spanText}</dd>
+        {/if}
       </dl>
       {#if armedDelete.isArmed(track.id)}
         <InlineConfirm
@@ -515,6 +549,23 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
             visible={shown.has(track.id)}
             onToggle={(v) => onToggleSaved(track.id, v)}
           />
+          {#if onPlayback && span}
+            {@const beyondHistory = clock.now - span.endMs > PLAYBACK_HISTORY_MS}
+            <button
+              type="button"
+              class="icon-btn"
+              aria-label="Play back this span"
+              title={playbackAvailable === false
+                ? 'Playback needs a history provider plugin on the server.'
+                : beyondHistory
+                  ? 'Playback covers the last seven days of history. This track ended before that.'
+                  : 'Play back this span'}
+              disabled={playbackAvailable === false || beyondHistory}
+              onclick={() => onPlayback(track, span.startMs, span.endMs)}
+            >
+              <History size={18} aria-hidden="true" />
+            </button>
+          {/if}
           <button
             type="button"
             class="icon-btn"

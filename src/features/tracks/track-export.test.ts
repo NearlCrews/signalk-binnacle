@@ -15,6 +15,14 @@ const p = (lat: number, lon: number, gap?: boolean): TrackPoint => ({
   gap,
 });
 
+const tp = (lat: number, lon: number, t: number, gap?: boolean): TrackPoint => ({
+  lat,
+  lon,
+  t,
+  sog: 1,
+  gap,
+});
+
 describe('trackGeoJsonFilename', () => {
   it('creates a portable bounded filename', () => {
     expect(trackGeoJsonFilename(' Port/Starboard?.. ')).toBe('Port-Starboard-.geojson');
@@ -54,6 +62,42 @@ describe('toGeoJsonString', () => {
         [8, 7],
       ],
     ]);
+  });
+});
+
+describe('coordTimes persistence', () => {
+  const t0 = Date.parse('2026-08-29T10:00:00.000Z');
+
+  it('mirrors the MultiLineString coordinates with RFC 3339 stamps, one array per segment', () => {
+    const feature = toGeoJsonFeature('Voyage', [
+      tp(1, 2, t0),
+      tp(3, 4, t0 + 10_000),
+      tp(5, 6, t0 + 400_000, true),
+      tp(7, 8, t0 + 410_000),
+    ]);
+    expect(feature.properties?.coordTimes).toEqual([
+      ['2026-08-29T10:00:00.000Z', '2026-08-29T10:00:10.000Z'],
+      ['2026-08-29T10:06:40.000Z', '2026-08-29T10:06:50.000Z'],
+    ]);
+  });
+
+  it('drops a degenerate segment from the times exactly as from the coordinates', () => {
+    const feature = toGeoJsonFeature('x', [
+      tp(1, 2, t0),
+      tp(3, 4, t0 + 1_000, true),
+      tp(5, 6, t0 + 2_000, true),
+      tp(7, 8, t0 + 3_000),
+    ]);
+    const geometry = feature.geometry as GeoJSON.MultiLineString;
+    expect(geometry.coordinates).toHaveLength(1);
+    expect(feature.properties?.coordTimes).toEqual([
+      ['2026-08-29T10:00:02.000Z', '2026-08-29T10:00:03.000Z'],
+    ]);
+  });
+
+  it('omits coordTimes entirely when any kept point is untimed', () => {
+    const feature = toGeoJsonFeature('x', [tp(1, 2, t0), p(3, 4)]);
+    expect(feature.properties).toEqual({ name: 'x', source: 'binnacle' });
   });
 });
 

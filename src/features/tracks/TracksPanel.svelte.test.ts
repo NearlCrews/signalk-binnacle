@@ -1,14 +1,36 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrackRecorder } from '$entities/track';
+import { formatMonthDay } from '$shared/lib';
 import { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import TracksPanel from './TracksPanel.svelte';
+import type { SavedTrack } from './tracks-client';
 
 const connectedPoints = [
   { lat: 1, lon: 1, t: 0, sog: 1 },
   { lat: 1.001, lon: 1, t: 10_000, sog: 1 },
 ];
+
+const T0 = Date.parse('2026-08-29T10:00:00.000Z');
+
+const timedTrack: SavedTrack = {
+  id: 'saved-1',
+  name: 'Morning sail',
+  points: [connectedPoints],
+  distanceMeters: 1852,
+  durationSeconds: 3600,
+  startMs: T0,
+  endMs: T0 + 3_600_000,
+};
+
+const untimedTrack: SavedTrack = {
+  id: 'saved-2',
+  name: 'Old trail',
+  points: [connectedPoints],
+  distanceMeters: 1852,
+  durationSeconds: 3600,
+};
 
 function renderPanel(overrides: Record<string, unknown> = {}): string {
   const recorder = {
@@ -207,6 +229,53 @@ describe('TracksPanel', () => {
       'The debrief appears once the current track covers at least 10 min and 0.25 nm',
     );
     expect(body).not.toContain('Longest leg');
+  });
+
+  it('shows the recorded span and an enabled playback action on a timed saved track', () => {
+    const body = renderPanel({
+      saved: [timedTrack],
+      onPlayback: vi.fn(),
+      playbackAvailable: true,
+      clock: { now: T0 + 7_200_000 },
+    });
+    expect(body).toContain('Recorded');
+    expect(body).toContain(formatMonthDay(T0));
+    expect(body).toMatch(/aria-label="Play back this span"/);
+    expect(body).not.toMatch(/aria-label="Play back this span"[^>]*disabled/);
+  });
+
+  it('omits the span row and the playback action for a saved track without times', () => {
+    const body = renderPanel({ saved: [untimedTrack], onPlayback: vi.fn() });
+    expect(body).not.toContain('Recorded');
+    expect(body).not.toContain('Play back this span');
+  });
+
+  it('offers no playback action when the integrator did not wire one', () => {
+    const body = renderPanel({ saved: [timedTrack], clock: { now: T0 + 7_200_000 } });
+    expect(body).toContain('Recorded');
+    expect(body).not.toContain('Play back this span');
+  });
+
+  it('disables the playback action and names the missing history provider', () => {
+    const body = renderPanel({
+      saved: [timedTrack],
+      onPlayback: vi.fn(),
+      playbackAvailable: false,
+      clock: { now: T0 + 7_200_000 },
+    });
+    expect(body).toContain('Playback needs a history provider plugin on the server.');
+    expect(body).toMatch(/aria-label="Play back this span"[^>]*disabled/);
+  });
+
+  it('disables the playback action once the span is beyond the seven-day history', () => {
+    const body = renderPanel({
+      saved: [timedTrack],
+      onPlayback: vi.fn(),
+      playbackAvailable: true,
+      clock: { now: T0 + 9 * 24 * 60 * 60 * 1000 },
+    });
+    expect(body).toContain('This track ended before that.');
+    expect(body).toMatch(/aria-label="Play back this span"[^>]*disabled/);
   });
 
   it('explains memory-only persistence and gap-safe route conversion', () => {
