@@ -1,6 +1,13 @@
 export { COG_MIN_SOG_MPS, COURSE_VECTOR_SECONDS } from './course-vector';
 export { computeCpa } from './cpa';
 export {
+  blendLonLat,
+  createOwnShipReckoner,
+  deadReckonedPosition,
+  MOTION_SNAP_METERS,
+  type ReckonedFix,
+} from './dead-reckoning';
+export {
   geodesicCircleRing,
   geodesicDestination,
   haversineMeters,

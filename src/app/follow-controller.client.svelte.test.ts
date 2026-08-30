@@ -5,7 +5,40 @@ import { createFollowController } from './follow-controller.svelte';
 
 const mountedCleanups: Array<() => void> = [];
 
-function mount(options: { commandsReady?: boolean } = {}) {
+// A manually driven stand-in for the requestAnimationFrame trio, so the glide tests control both
+// the schedule and the clock.
+function fakeMotion(reducedMotion = false) {
+  let nowMs = 0;
+  let nextHandle = 1;
+  const pending = new Map<number, (t: number) => void>();
+  return {
+    motion: {
+      schedule: (callback: (t: number) => void) => {
+        const handle = nextHandle;
+        nextHandle += 1;
+        pending.set(handle, callback);
+        return handle;
+      },
+      cancel: (handle: number) => {
+        pending.delete(handle);
+      },
+      now: () => nowMs,
+      reducedMotion: () => reducedMotion,
+    },
+    pendingFrames: () => pending.size,
+    step: (toMs: number) => {
+      nowMs = toMs;
+      const next = pending.entries().next().value;
+      if (!next) throw new Error('no pending frame to run');
+      pending.delete(next[0]);
+      next[1](toMs);
+    },
+  };
+}
+
+function mount(
+  options: { commandsReady?: boolean; motion?: ReturnType<typeof fakeMotion>['motion'] } = {},
+) {
   const vessel = $state<{ position: LatLon | undefined; positionStale: boolean }>({
     position: undefined,
     positionStale: false,
@@ -21,6 +54,7 @@ function mount(options: { commandsReady?: boolean } = {}) {
       controller = createFollowController({
         vessel,
         commands: () => commands.current,
+        motion: options.motion,
       });
     });
   });
@@ -96,5 +130,87 @@ describe('createFollowController', () => {
     test.commands.current = { recenterOnVessel: test.recenterOnVessel };
     flushSync();
     expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24, 0);
+  });
+
+  it('glides to a nearby fix over the ease window instead of jumping', () => {
+    const fake = fakeMotion();
+    const test = mount({ motion: fake.motion });
+    test.vessel.position = { latitude: 60, longitude: 24 };
+    test.controller.toggle();
+    flushSync();
+    expect(test.recenterOnVessel).toHaveBeenCalledExactlyOnceWith(60, 24, 0);
+
+    // About 22 m north: inside the plausibility bound, so the camera chases rather than snaps.
+    test.vessel.position = { latitude: 60.0002, longitude: 24 };
+    flushSync();
+    expect(test.recenterOnVessel).toHaveBeenCalledTimes(1);
+    expect(fake.pendingFrames()).toBe(1);
+
+    fake.step(500);
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(expect.closeTo(60.0001, 9), 24, 0);
+    fake.step(1_000);
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(60.0002, 24, 0);
+    expect(fake.pendingFrames()).toBe(0);
+  });
+
+  it('restarts the chase from the currently commanded center when a fresh fix lands mid-glide', () => {
+    const fake = fakeMotion();
+    const test = mount({ motion: fake.motion });
+    test.vessel.position = { latitude: 60, longitude: 24 };
+    test.controller.toggle();
+    flushSync();
+
+    test.vessel.position = { latitude: 60.0002, longitude: 24 };
+    flushSync();
+    fake.step(500);
+
+    test.vessel.position = { latitude: 60.0004, longitude: 24 };
+    flushSync();
+    expect(fake.pendingFrames()).toBe(1);
+    fake.step(1_000);
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(expect.closeTo(60.00025, 9), 24, 0);
+  });
+
+  it('teleports past the plausibility bound instead of gliding', () => {
+    const fake = fakeMotion();
+    const test = mount({ motion: fake.motion });
+    test.vessel.position = { latitude: 60, longitude: 24 };
+    test.controller.toggle();
+    flushSync();
+
+    test.vessel.position = { latitude: 61, longitude: 24 };
+    flushSync();
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(61, 24, 0);
+    expect(fake.pendingFrames()).toBe(0);
+  });
+
+  it('falls back to an instant recenter under reduced motion', () => {
+    const fake = fakeMotion(true);
+    const test = mount({ motion: fake.motion });
+    test.vessel.position = { latitude: 60, longitude: 24 };
+    test.controller.toggle();
+    flushSync();
+
+    test.vessel.position = { latitude: 60.0002, longitude: 24 };
+    flushSync();
+    expect(test.recenterOnVessel).toHaveBeenLastCalledWith(60.0002, 24, 0);
+    expect(fake.pendingFrames()).toBe(0);
+  });
+
+  it('release cancels a glide in flight', () => {
+    const fake = fakeMotion();
+    const test = mount({ motion: fake.motion });
+    test.vessel.position = { latitude: 60, longitude: 24 };
+    test.controller.toggle();
+    flushSync();
+    test.vessel.position = { latitude: 60.0002, longitude: 24 };
+    flushSync();
+    expect(fake.pendingFrames()).toBe(1);
+    test.recenterOnVessel.mockClear();
+
+    test.controller.release();
+    flushSync();
+    expect(fake.pendingFrames()).toBe(0);
+    expect(test.recenterOnVessel).not.toHaveBeenCalled();
   });
 });

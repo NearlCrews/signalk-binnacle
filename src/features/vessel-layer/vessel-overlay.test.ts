@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OwnVessel } from '$entities/vessel';
 import { mapThemePaint } from '$shared/map';
+import { deadReckonedPosition } from '$shared/nav';
 import { SignalKStore } from '$shared/signalk';
 import { createFakeMap, fakeOverlayContext, sourceFeatures } from '$shared/testing';
-import { createVesselOverlay } from './vessel-overlay';
+import { createVesselOverlay, type VesselMotion } from './vessel-overlay';
 
 // ImageData is a browser global; the overlay builds the vessel icon with it, so the
 // node test environment needs a minimal stand-in.
@@ -248,5 +249,173 @@ describe('vessel overlay', () => {
       'line-opacity',
       0.5 * 0.8,
     );
+  });
+});
+
+// A manually driven stand-in for the requestAnimationFrame trio, so the frame-loop tests control
+// both the schedule and the clock.
+function fakeMotion() {
+  let nowMs = 0;
+  let nextHandle = 1;
+  const pending = new Map<number, (t: number) => void>();
+  const motion: VesselMotion = {
+    schedule: (callback) => {
+      const handle = nextHandle;
+      nextHandle += 1;
+      pending.set(handle, callback);
+      return handle;
+    },
+    cancel: (handle) => {
+      pending.delete(handle);
+    },
+    now: () => nowMs,
+  };
+  return {
+    motion,
+    pendingFrames: () => pending.size,
+    // Advance the clock without running a frame, for a tick-style sync between frames.
+    setNow: (toMs: number) => {
+      nowMs = toMs;
+    },
+    // Advance the clock and run the single pending frame, the way a display refresh would.
+    step: (toMs: number) => {
+      nowMs = toMs;
+      const next = pending.entries().next().value;
+      if (!next) throw new Error('no pending frame to run');
+      pending.delete(next[0]);
+      next[1](toMs);
+    },
+  };
+}
+
+function iconCoordinates(map: ReturnType<typeof createFakeMap>): [number, number] {
+  const [feature] = sourceFeatures<{ geometry: { coordinates: [number, number] } }>(
+    map,
+    'binnacle-own-vessel',
+  );
+  return [...feature.geometry.coordinates];
+}
+
+const EAST = Math.PI / 2;
+
+describe('vessel overlay dead reckoning', () => {
+  async function mountUnderway(sogMps = 5) {
+    const store = new SignalKStore();
+    const fake = fakeMotion();
+    const overlay = createVesselOverlay(new OwnVessel(store), () => false, fake.motion);
+    const map = createFakeMap();
+    const ctx = fakeOverlayContext(map);
+    await overlay.add(ctx);
+    store.applyFrame({
+      self: new Map<string, unknown>([
+        ['navigation.position', { latitude: 0, longitude: 0 }],
+        ['navigation.courseOverGroundTrue', EAST],
+        ['navigation.speedOverGround', sogMps],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1,
+    });
+    overlay.sync(ctx);
+    return { store, fake, overlay, map, ctx };
+  }
+
+  it('advances the icon and the predictor origin together between fixes, capped at the horizon', async () => {
+    const test = await mountUnderway();
+    expect(iconCoordinates(test.map)).toEqual([0, 0]);
+    expect(test.fake.pendingFrames()).toBe(1);
+
+    test.fake.step(500);
+    const reckoned = deadReckonedPosition(0, 0, EAST, 5, 500);
+    expect(iconCoordinates(test.map)).toEqual([...reckoned]);
+    const vector = sourceFeatures<{ geometry: { coordinates: [number, number][] } }>(
+      test.map,
+      'binnacle-own-vessel-vector',
+    );
+    expect(vector[0].geometry.coordinates[0]).toEqual([...reckoned]);
+    expect(test.fake.pendingFrames()).toBe(1);
+
+    // Past the horizon the ship holds at the last reckoned point and the loop stops.
+    test.fake.step(5_000);
+    expect(iconCoordinates(test.map)).toEqual([...deadReckonedPosition(0, 0, EAST, 5, 3_000)]);
+    expect(test.fake.pendingFrames()).toBe(0);
+  });
+
+  it('converges onto a fresh fix instead of snapping, then rides the new reckoning', async () => {
+    const test = await mountUnderway();
+    test.fake.step(500);
+    const drawnBefore = deadReckonedPosition(0, 0, EAST, 5, 1_000);
+    // The next fix lands near the reckoning, inside the plausibility bound.
+    const next = { latitude: 0.00001, longitude: drawnBefore[0] };
+    test.store.applyFrame({
+      self: new Map<string, unknown>([['navigation.position', next]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2,
+    });
+    test.fake.step(1_000);
+    // The accepting frame still draws the previously reckoned point: no snap.
+    expect(iconCoordinates(test.map)).toEqual([...drawnBefore]);
+
+    // Past the convergence window the drawn position is exactly the new fix's reckoning.
+    test.fake.step(1_300);
+    expect(iconCoordinates(test.map)).toEqual([
+      ...deadReckonedPosition(next.latitude, next.longitude, EAST, 5, 300),
+    ]);
+  });
+
+  it('applies an implausible jump immediately', async () => {
+    const test = await mountUnderway();
+    test.fake.step(500);
+    test.store.applyFrame({
+      self: new Map<string, unknown>([['navigation.position', { latitude: 1, longitude: 1 }]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2,
+    });
+    test.fake.step(1_000);
+    expect(iconCoordinates(test.map)).toEqual([1, 1]);
+  });
+
+  it('leaves the loop off and draws the raw fix below the COG-meaningful speed floor', async () => {
+    const test = await mountUnderway(0.1);
+    expect(test.fake.pendingFrames()).toBe(0);
+    expect(iconCoordinates(test.map)).toEqual([0, 0]);
+  });
+
+  it('lets the frame loop own the writes while it is animating', async () => {
+    const test = await mountUnderway();
+    test.fake.step(500);
+    const drawn = iconCoordinates(test.map);
+    test.store.applyFrame({
+      self: new Map<string, unknown>([
+        ['navigation.position', { latitude: 0.00001, longitude: drawn[0] }],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 2,
+    });
+    // A tick sync between frames must not double-write past the loop.
+    test.fake.setNow(700);
+    test.overlay.sync(test.ctx);
+    expect(iconCoordinates(test.map)).toEqual(drawn);
+    test.fake.step(750);
+    expect(iconCoordinates(test.map)).not.toEqual(drawn);
+  });
+
+  it('stops the loop while the layer is hidden and resumes when shown again', async () => {
+    const test = await mountUnderway();
+    expect(test.fake.pendingFrames()).toBe(1);
+    test.overlay.setVisible?.(test.ctx, false);
+    expect(test.fake.pendingFrames()).toBe(0);
+    test.overlay.sync(test.ctx);
+    expect(test.fake.pendingFrames()).toBe(0);
+
+    test.overlay.setVisible?.(test.ctx, true);
+    test.overlay.sync(test.ctx);
+    expect(test.fake.pendingFrames()).toBe(1);
+  });
+
+  it('remove cancels the pending frame', async () => {
+    const test = await mountUnderway();
+    expect(test.fake.pendingFrames()).toBe(1);
+    test.overlay.remove(test.ctx);
+    expect(test.fake.pendingFrames()).toBe(0);
   });
 });
