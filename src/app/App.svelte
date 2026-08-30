@@ -17,6 +17,7 @@ import Lock from '@lucide/svelte/icons/lock';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import Menu from '@lucide/svelte/icons/menu';
 import Navigation from '@lucide/svelte/icons/navigation';
+import Navigation2 from '@lucide/svelte/icons/navigation-2';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Radar from '@lucide/svelte/icons/radar';
 import Route from '@lucide/svelte/icons/route';
@@ -60,6 +61,7 @@ import { WaypointsStore } from '$entities/waypoint';
 import { WeatherStore } from '$entities/weather';
 import { loadAisListPanel } from '$features/ais-list';
 import { ANCHOR_TONE, createAnchorController } from '$features/anchor-watch';
+import { createAutopilotController } from '$features/autopilot';
 import { createUserChartsController } from '$features/charts';
 import { createCompanionAiController, latestCompanionHeadline } from '$features/companion-ai';
 import { NOAA_ENC_SOURCE_ID, shouldOfferNoaaEnc } from '$features/depth-charts';
@@ -135,6 +137,7 @@ import {
   loadProfilesPanel,
   ProfileSwitcher,
 } from '$features/profiles';
+import { createRegionZonesStore } from '$features/regions-overlay';
 import { createRouteController } from '$features/routing';
 import { ThemeToggle } from '$features/theme-toggle';
 import {
@@ -453,6 +456,10 @@ const routeDistanceToGoMeters = $derived.by<number | undefined>(() => {
 // Tides and tidal currents from NOAA CO-OPS (US waters). The store feeds the panel and the nearest
 // station markers; the loader caches the station lists and predictions for the session.
 const tidesStore = new TidesStore();
+
+// Signal K region resources (exclusion and no-anchor zones), loaded when their chart layer first
+// shows and refreshed on every stream open.
+const regionZones = createRegionZonesStore({ origin, getToken: () => chartsToken });
 // Tide data prefers the signalk-tides plugin when the server runs it (worldwide coverage from
 // its configured source), falling back to NOAA CO-OPS exactly as before; a stock server never
 // sees a plugin call.
@@ -1529,6 +1536,18 @@ function onRouteCoverageReport(report: RouteCoverageReport | null): void {
   const verdict = report.verdict === 'complete' ? 'Complete' : 'Partial';
   routeCoverageFact = `${verdict} for a ${report.corridorNm} nm corridor, checked ${formatClockTime(Date.now())}`;
 }
+// The v2 Autopilot API surface: discovery is the provider probe, REST hydrate is truth, and the
+// stream keeps it live. Every command is write-guarded and confirm-armed in the panel.
+const autopilot = createAutopilotController({
+  origin,
+  getToken: () => authToken,
+  apiAdvertised: () =>
+    serverFeatures === undefined ? undefined : serverFeatures.apis.has('autopilot'),
+  writeBlocked: () => auth.writeBlocked,
+  requestWriteAccess: () => auth.requestWriteAccess(),
+  store,
+});
+
 // The ship's logbook: reads and offers entries through the signalk-logbook plugin when present.
 // Offers only; nothing is logged without a tap in the panel.
 const logbook = createLogbookController({
@@ -1812,6 +1831,15 @@ const menuItems = $derived<MenuItem[]>([
     group: 'Navigate',
     pressed: activePanel === 'tracks',
     onSelect: () => togglePanel('tracks'),
+  },
+  {
+    id: 'autopilot',
+    label: 'Autopilot',
+    icon: Navigation2,
+    group: 'Navigate',
+    pressed: activePanel === 'autopilot',
+    // Always listed: the panel carries the absent, unreachable, and access landing states.
+    onSelect: () => togglePanel('autopilot'),
   },
   {
     id: 'logbook',
@@ -2583,6 +2611,7 @@ function refreshAfterStreamReconnect(token: string | undefined): void {
   void fetchServerFeatures(origin, token).then((features) => {
     if (features) serverFeatures = features;
     void marineRadar.start();
+    void autopilot.rehydrate();
   });
   void probeKip(true);
   void probeHistoryProviders(
@@ -2638,6 +2667,8 @@ const streamController = createStreamController({
   // settles.
   onOpen: (firstOpen, token) => {
     void routeController.hydrateAndSeedCourse();
+    void regionZones.refresh();
+    void autopilot.rehydrate();
     if (firstOpen) mobController.onStreamReconnect();
     else refreshAfterStreamReconnect(token);
   },
@@ -2875,6 +2906,7 @@ const plotterControllers = {
   companionAi,
   display,
   logbook,
+  autopilot,
 };
 
 const plotterEntities = {
@@ -2882,6 +2914,7 @@ const plotterEntities = {
   mob,
   measure,
   collision,
+  regionZones,
   courseGuidance,
   recorder,
   routeStore,
@@ -3114,6 +3147,7 @@ const plotterActions = {
       monitorState: shallowController.monitorState,
       serverLimitMeters: shallowController.serverLimitMeters,
       serverZonesActive: shallowController.serverZonesActive,
+      publish: shallowController.zonePublish,
     }}
   />
 
@@ -3279,6 +3313,8 @@ const plotterActions = {
     shallowAlarming={shallowController.alarming}
     shallowState={shallowController.monitorState}
     {radarHealth}
+    autopilotChip={autopilot.chip}
+    onOpenAutopilot={() => openPanel('autopilot')}
     weatherWarning={weatherWarnings.headline}
     orientation={chartOrientation.value !== 'north'
       ? { label: orientation.label, active: orientation.active }

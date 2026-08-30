@@ -112,6 +112,7 @@ describe('buildDynamicOverlays', () => {
     const { overlays } = setup(radar);
 
     expect(overlays.map(({ id }) => id)).toEqual([
+      'region-zones',
       'tides',
       'anchor',
       'measure',
@@ -136,6 +137,7 @@ describe('buildDynamicOverlays', () => {
   it('omits only the optional radar layer when no radar controller supplied one', () => {
     const { overlays } = setup();
     expect(overlays.map(({ id }) => id)).toEqual([
+      'region-zones',
       'tides',
       'anchor',
       'measure',

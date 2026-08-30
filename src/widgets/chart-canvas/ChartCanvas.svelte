@@ -102,6 +102,8 @@ interface Props {
   routeStore: RouteStore;
   // The tides store, drawn as nearest-station markers and fed by the tides loader in App.
   tides: TidesStore;
+  // Signal K region resources (exclusion and no-anchor zones), a reference chart layer.
+  regionZones: import('$features/regions-overlay').RegionZonesStore;
   // The display-unit preference, threaded into the overlays that label distances and heights.
   units: UnitsStore;
   // Standard server waypoints, drawn as named markers in the routes band.
@@ -205,6 +207,7 @@ const {
   recorder,
   routeStore,
   tides,
+  regionZones,
   theme,
   trackSettings,
   savedTracks,
@@ -571,6 +574,7 @@ onMount(async () => {
         mob,
         measure,
         collision,
+        regionZones,
         guidance,
         recorder,
         routeStore,

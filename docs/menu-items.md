@@ -105,6 +105,12 @@ source, and surrounding traffic before relying on it.
   startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
   panel names the one-time Resources Provider step with a Check again action. See
   [Tracks](tracks.md).
+- **Autopilot** consumes the Signal K v2 Autopilot API when a provider plugin supplies it. The
+  status chip on the strip shows engaged or standby with the mode and target and opens the panel.
+  Engage, disengage, tack, and gybe each take an armed second tap naming the action and mode;
+  heading nudges are direct while engaged and disabled on standby. Absent-API, absent-provider,
+  access, and unreachable states are distinct, the unreachable state warns that the pilot may
+  still be steering, and every state carries the advisory line that the helm remains responsible.
 - **Logbook** reads and writes the ship's log through the signalk-logbook plugin. The panel shows
   the most recent logged days and a composer; taking a watch handoff, starting or stopping
   navigation, and dropping or raising the anchor each offer a prefilled factual entry, and nothing

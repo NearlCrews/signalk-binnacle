@@ -22,6 +22,7 @@ import type { PpiLayer } from '$features/marine-radar';
 import { createMeasureOverlay } from '$features/measure';
 import { createMobOverlay } from '$features/mob';
 import type { NotesOverlay } from '$features/notes';
+import { createRegionZonesOverlay, type RegionZonesStore } from '$features/regions-overlay';
 import { createCourseOverlay, createRouteOverlay } from '$features/route-layer';
 import { createTidesOverlay, type TideStationSelectionEvent } from '$features/tides';
 import {
@@ -57,6 +58,7 @@ export interface DynamicOverlaysDeps {
   recorder: TrackRecorder;
   routeStore: RouteStore;
   tides: TidesStore;
+  regionZones: RegionZonesStore;
   onTideStationSelect?: (selection: TideStationSelectionEvent) => void;
   interactionsAllowed?: () => boolean;
   units: UnitsStore;
@@ -98,6 +100,7 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     recorder,
     routeStore,
     tides,
+    regionZones,
     onTideStationSelect,
     interactionsAllowed,
     units,
@@ -113,6 +116,8 @@ export function buildDynamicOverlays(deps: DynamicOverlaysDeps) {
     marineRadarLayer,
   } = deps;
   return [
+    // First in the safety band so area fills draw beneath every marker overlay.
+    createRegionZonesOverlay(regionZones),
     interactionsAllowed
       ? createTidesOverlay(tides, units, onTideStationSelect, Date.now, interactionsAllowed)
       : createTidesOverlay(tides, units, onTideStationSelect),

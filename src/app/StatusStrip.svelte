@@ -8,6 +8,7 @@ import {
   type DepthReading,
   type OwnVessel,
 } from '$entities/vessel';
+import { AutopilotChip } from '$features/autopilot';
 import { type MenuItem, PinnedActions } from '$features/menu';
 import {
   createMediaQuery,
@@ -47,6 +48,8 @@ let {
   shallowAlarming,
   shallowState = 'monitoring',
   radarHealth = { state: 'quiet' },
+  autopilotChip = undefined,
+  onOpenAutopilot = undefined,
   weatherWarning = undefined,
   orientation = undefined,
   onResetOrientation = undefined,
@@ -87,6 +90,9 @@ let {
   shallowState?: import('$features/lookout').ShallowMonitorState;
   // Helm-visible radar health: failure and staleness stay visible with Radar Controls closed.
   radarHealth?: import('$features/marine-radar').RadarHelmHealth;
+  // The autopilot chip state; renders nothing while hidden. A door to the Autopilot panel.
+  autopilotChip?: import('$features/autopilot').AutopilotChipState;
+  onOpenAutopilot?: () => void;
   // The worst active provider weather warning (for example "Gale Warning"), the closed-panel cue;
   // a tap explains and points at the weather panel. Absent when no warning is in effect.
   weatherWarning?: string;
@@ -382,6 +388,9 @@ const depthWatchPaused = $derived(
               : 'Radar stream failed'}
         </span>
       </button>
+    {/if}
+    {#if autopilotChip && onOpenAutopilot}
+      <AutopilotChip chip={autopilotChip} onOpen={onOpenAutopilot} />
     {/if}
   </div>
   <TransientNote message={chipNote.message} noteClass="chip-note" />
