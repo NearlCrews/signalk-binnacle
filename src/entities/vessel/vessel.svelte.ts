@@ -1,5 +1,5 @@
 import { asNumber, isLatLon, type LatLon, parseLatLonKey, quantizeLatLonKey } from '$shared/geo';
-import type { ReactiveClock } from '$shared/lib';
+import { isRecord, type ReactiveClock } from '$shared/lib';
 import { predatesReconnect, type SignalKStore, SK_PATHS } from '$shared/signalk';
 
 // How long the own-vessel fix may go without a position update before it is treated as lost. The
@@ -50,6 +50,20 @@ const SAFETY_DEPTH_PRIORITY: readonly DepthSource[] = ['keel', 'transducer', 'su
 const ANCHOR_DEPTH_PRIORITY: readonly DepthSource[] = ['surface', 'transducer'];
 const TREND_DEPTH_PRIORITY: readonly DepthSource[] = ['transducer', 'surface', 'keel'];
 
+// Corruption guards for the declared hull dimensions, sized past the largest real vessels so no
+// legitimate declaration trips them while a provider mistake (feet fed as meters, a sign flip, a
+// junk sentinel) cannot poison the safety defaults that read these.
+const MAX_DRAFT_METERS = 30;
+const MAX_AIR_HEIGHT_METERS = 150;
+const MAX_LENGTH_METERS = 500;
+const MAX_BEAM_METERS = 100;
+
+// A declared dimension coerced to a plausible positive length, undefined otherwise.
+function boundedMeters(value: unknown, max: number): number | undefined {
+  const meters = asNumber(value);
+  return meters !== undefined && meters > 0 && meters <= max ? meters : undefined;
+}
+
 export class OwnVessel {
   #store: SignalKStore;
   #clock: ReactiveClock | undefined;
@@ -71,6 +85,10 @@ export class OwnVessel {
       SK_PATHS.depthBelowSurface,
       SK_PATHS.windSpeedApparent,
       SK_PATHS.outsidePressure,
+      SK_PATHS.designDraft,
+      SK_PATHS.designAirHeight,
+      SK_PATHS.designLength,
+      SK_PATHS.designBeam,
     ]);
   }
 
@@ -97,6 +115,32 @@ export class OwnVessel {
   // Outside air pressure in Pascals (SI), when a barometer publishes it.
   get outsidePressurePa(): number | undefined {
     return this.#num(SK_PATHS.outsidePressure);
+  }
+
+  // The declared maximum draft in meters, when the boat declares one. design.draft is an object
+  // in the spec (maximum, minimum, current), but some providers publish the bare number, so the
+  // scalar is the accepted degrade. Near-static facts, not flows, so none of the dimension
+  // getters carry a staleness window.
+  get draftMeters(): number | undefined {
+    const raw = this.#raw(SK_PATHS.designDraft);
+    return boundedMeters(isRecord(raw) ? raw.maximum : raw, MAX_DRAFT_METERS);
+  }
+
+  // The declared height above the waterline in meters (design.airHeight), for bridge clearance.
+  get airHeightMeters(): number | undefined {
+    return boundedMeters(this.#raw(SK_PATHS.designAirHeight), MAX_AIR_HEIGHT_METERS);
+  }
+
+  // The declared length overall in meters. design.length is an object in the spec (overall,
+  // hull, waterline), with the same scalar degrade as draft.
+  get lengthMeters(): number | undefined {
+    const raw = this.#raw(SK_PATHS.designLength);
+    return boundedMeters(isRecord(raw) ? raw.overall : raw, MAX_LENGTH_METERS);
+  }
+
+  // The declared beam in meters (design.beam).
+  get beamMeters(): number | undefined {
+    return boundedMeters(this.#raw(SK_PATHS.designBeam), MAX_BEAM_METERS);
   }
 
   get position(): LatLon | undefined {

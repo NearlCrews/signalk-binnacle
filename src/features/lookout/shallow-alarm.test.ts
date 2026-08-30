@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { GatedAlarm } from '$shared/audio';
+import { DEFAULT_THRESHOLDS } from '$shared/settings';
 import { createFakeAlarmControl } from '$shared/testing';
-import { isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
+import { defaultShallowLimitMeters, isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
 
 describe('shallow-water alarm', () => {
   it('sounds below the threshold, then stops for stale, cleared, or safe depth data', () => {
@@ -28,6 +29,15 @@ describe('shallow-water alarm', () => {
     update(2.5, false, 3);
     update(2.5, false, undefined);
     expect(events).toEqual(['start', 'stop', 'start', 'stop']);
+  });
+
+  it('defaults the threshold to the declared draft plus the under-keel margin', () => {
+    expect(defaultShallowLimitMeters(2)).toBe(2.5);
+    expect(defaultShallowLimitMeters(6.8)).toBe(7.3);
+  });
+
+  it('falls back to the fixed default threshold when no draft is declared', () => {
+    expect(defaultShallowLimitMeters(undefined)).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
   });
 
   it('stops immediately when disposed', () => {

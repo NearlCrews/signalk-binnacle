@@ -466,10 +466,10 @@ export function createPlanningSpeed(storage?: StorageLike): PersistedValue<numbe
 }
 
 export function createThresholds(storage?: StorageLike): PersistedValue<Thresholds> {
-  return new PersistedValue(
-    binnacleStorageKey('lookoutThresholds'),
-    DEFAULT_THRESHOLDS,
-    storage,
-    isThresholds,
-  );
+  // Seeded WITHOUT shallowDepthMeters: in the live record, absent means "never chosen", which is
+  // what lets the shallow monitor shape its default from the boat's declared draft. Seeding the
+  // fixed number here would read as a choice and pin every boat to it. Readers still resolve a
+  // displayable number through the `?? default` idiom.
+  const { shallowDepthMeters: _omit, ...seed } = DEFAULT_THRESHOLDS;
+  return new PersistedValue(binnacleStorageKey('lookoutThresholds'), seed, storage, isThresholds);
 }

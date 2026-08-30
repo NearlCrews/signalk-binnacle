@@ -221,6 +221,10 @@ describe('OwnVessel', () => {
       'environment.depth.belowSurface',
       'environment.wind.speedApparent',
       'environment.outside.pressure',
+      'design.draft',
+      'design.airHeight',
+      'design.length',
+      'design.beam',
     ]);
   });
 });
@@ -393,5 +397,55 @@ describe('OwnVessel depth resolution', () => {
     expect(vessel.trendDepth.source).toBeUndefined();
     store.applyFrame(frame({ [SK_PATHS.depthBelowKeel]: 7 }));
     expect(vessel.trendDepth.source).toBe('keel');
+  });
+
+  it('exposes the declared dimensions in meters from the spec object values', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.designDraft]: { maximum: 2.1, minimum: 1.2 },
+        [SK_PATHS.designAirHeight]: 18.5,
+        [SK_PATHS.designLength]: { overall: 12.8, hull: 12.1 },
+        [SK_PATHS.designBeam]: 4.2,
+      }),
+    );
+    expect(vessel.draftMeters).toBe(2.1);
+    expect(vessel.airHeightMeters).toBe(18.5);
+    expect(vessel.lengthMeters).toBe(12.8);
+    expect(vessel.beamMeters).toBe(4.2);
+  });
+
+  it('accepts a bare-number draft and length as the provider degrade', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(frame({ [SK_PATHS.designDraft]: 1.9, [SK_PATHS.designLength]: 11 }));
+    expect(vessel.draftMeters).toBe(1.9);
+    expect(vessel.lengthMeters).toBe(11);
+  });
+
+  it('rejects malformed or implausible dimension declarations', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame(
+      frame({
+        [SK_PATHS.designDraft]: { maximum: -1 },
+        [SK_PATHS.designAirHeight]: 0,
+        [SK_PATHS.designLength]: { overall: 5_000 },
+        [SK_PATHS.designBeam]: 'wide',
+      }),
+    );
+    expect(vessel.draftMeters).toBeUndefined();
+    expect(vessel.airHeightMeters).toBeUndefined();
+    expect(vessel.lengthMeters).toBeUndefined();
+    expect(vessel.beamMeters).toBeUndefined();
+  });
+
+  it('reports no dimensions before any declaration arrives', () => {
+    const vessel = new OwnVessel(new SignalKStore());
+    expect(vessel.draftMeters).toBeUndefined();
+    expect(vessel.airHeightMeters).toBeUndefined();
+    expect(vessel.lengthMeters).toBeUndefined();
+    expect(vessel.beamMeters).toBeUndefined();
   });
 });

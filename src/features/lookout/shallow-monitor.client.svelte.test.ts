@@ -38,15 +38,21 @@ interface Options {
   // Inject the stand-down cue channel; left off, the harness exercises the optional-absent path
   // every pre-existing case ran with.
   degrade?: boolean;
+  // The declared draft handed to the controller; left off, the harness exercises the
+  // optional-absent path every pre-existing case ran with.
+  draft?: number;
 }
 
 function harness(options: Options) {
   let depth = $state(options.depth ?? reading());
   const { control, events } = createFakeAlarmControl();
   const degrade = options.degrade ? createFakeAlarmControl() : undefined;
+  // Seeded without shallowDepthMeters, matching createThresholds: absent means the skipper never
+  // chose one, which is the state where the draft-shaped default governs.
+  const { shallowDepthMeters: _omit, ...seed } = DEFAULT_THRESHOLDS;
   const thresholds = new PersistedValue<Thresholds>(
     'binnacle:thresholds-test',
-    { ...DEFAULT_THRESHOLDS },
+    seed,
     createFakeStorage(),
   );
   const units = new UnitsStore(
@@ -58,6 +64,7 @@ function harness(options: Options) {
   );
   const controller = createShallowController({
     getSafetyDepth: () => depth,
+    getDraftMeters: options.draft === undefined ? undefined : () => options.draft,
     thresholds,
     units,
     origin: 'http://sk',
@@ -143,8 +150,8 @@ describe('createShallowController', () => {
   });
 
   it('keeps the deeper local threshold when the server bound is shallower', async () => {
-    // The skipper set 3 m (the default); the server's alarm band starts under 2 m. The deeper
-    // bound governs: the server must never quietly loosen a limit the skipper set.
+    // The local default is 3 m; the server's alarm band starts under 2 m. The deeper bound
+    // governs: the server must never quietly loosen the local limit.
     const test = mount({ token: 'tok-1', zones: [{ upper: 2, state: 'alarm' }] });
     await flushPromises();
     flushSync();
@@ -152,11 +159,30 @@ describe('createShallowController', () => {
     expect(test.controller.thresholdSource).toBe('local');
     expect(test.controller.serverLimitMeters).toBe(2);
     expect(test.controller.effectiveLimitMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
-    expect(test.thresholds.value.shallowDepthMeters).toBe(DEFAULT_THRESHOLDS.shallowDepthMeters);
+    expect(test.thresholds.value.shallowDepthMeters).toBeUndefined();
 
     test.setDepth(reading({ meters: 2.5 }));
     expect(test.controller.alarming).toBe(true);
     expect(test.events).toEqual(['start']);
+  });
+
+  it('shapes the default threshold from the declared draft, explicit setting still winning', async () => {
+    // Draft 2 m defaults the bound to 2.5 m (draft plus the under-keel margin), so 2.8 m of
+    // water is quiet where the fixed 3 m default would have alarmed, and 2.4 m still fires.
+    const test = mount({ draft: 2 });
+    await flushPromises();
+    expect(test.controller.effectiveLimitMeters).toBe(2.5);
+    expect(test.controller.thresholdSource).toBe('local');
+
+    test.setDepth(reading({ meters: 2.8 }));
+    expect(test.controller.alarming).toBe(false);
+    test.setDepth(reading({ meters: 2.4 }));
+    expect(test.controller.alarming).toBe(true);
+
+    // A threshold the skipper sets beats the draft-shaped default.
+    test.thresholds.set({ ...test.thresholds.value, shallowDepthMeters: 5 });
+    flushSync();
+    expect(test.controller.effectiveLimitMeters).toBe(5);
   });
 
   it('lets a deeper server bound tighten the alarm and claims the path only while alarming', async () => {

@@ -2,14 +2,19 @@ import type { UnitsStore } from '$entities/units';
 import type { DepthReading } from '$entities/vessel';
 import { type AlarmControl, GatedAlarm } from '$shared/audio';
 import { formatLengthOr, lengthUnit } from '$shared/lib';
-import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
+import type { PersistedValue, Thresholds } from '$shared/settings';
 import {
   createPathMetaCache,
   type MetaZone,
   NOTIFICATIONS_PREFIX,
   zoneStateFor,
 } from '$shared/signalk';
-import { isShallowAlarmActive, SHALLOW_DEGRADE_TONE, SHALLOW_TONE } from './shallow-alarm';
+import {
+  defaultShallowLimitMeters,
+  isShallowAlarmActive,
+  SHALLOW_DEGRADE_TONE,
+  SHALLOW_TONE,
+} from './shallow-alarm';
 
 // Whether the shallow alarm is actually watching the water. A tone that cannot fire is worth saying
 // out loud: a boat with no sounder, one whose sounder just dropped out, and one whose sounder is
@@ -25,6 +30,10 @@ interface ShallowControllerDeps {
   // A getter, not a value: the reading is rebuilt on every sample, and capturing one at
   // construction would freeze the alarm on the depth the app started with.
   getSafetyDepth: () => DepthReading;
+  // The declared draft (vessel.draftMeters), which shapes the DEFAULT threshold when the skipper
+  // has not set one. A getter for the same reason as the depth: the declaration can arrive after
+  // construction. Optional: without it the fixed default stands, as before draft was consumed.
+  getDraftMeters?: () => number | undefined;
   thresholds: PersistedValue<Thresholds>;
   units: UnitsStore;
   origin: string;
@@ -74,7 +83,7 @@ export function createShallowController(deps: ShallowControllerDeps) {
   // Only a source that has actually published has a winning path worth asking the server about.
   const winningPath = $derived(depth.source === undefined ? undefined : depth.path);
   const localLimit = $derived(
-    deps.thresholds.value.shallowDepthMeters ?? DEFAULT_THRESHOLDS.shallowDepthMeters,
+    deps.thresholds.value.shallowDepthMeters ?? defaultShallowLimitMeters(deps.getDraftMeters?.()),
   );
 
   // Server zones join in only when they carry an alarm band. A warning-only zone set would
