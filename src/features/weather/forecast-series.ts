@@ -1,18 +1,16 @@
 import type { WeatherGrid } from '$entities/weather';
 import {
-  formatFixed,
-  formatPressureOr,
   HOUR_MS,
   knotsToMetersPerSecond,
   nearestBySorted,
   PA_PER_HPA,
-  pressureUnit,
   type UnitsSelection,
 } from '$shared/lib';
 import type { PointConditions } from './signalk-weather';
 import {
   conditionsFromReadout,
   PRESSURE_TREND_WINDOW_MS,
+  pressureDeltaText,
   pressureTrendPa,
   readoutAt,
 } from './weather-readout';
@@ -31,6 +29,23 @@ const FOG_WEATHER_CODES = new Set([45, 48]);
 const RAPID_PRESSURE_FALL_PA_3H = -600;
 const ROUGH_SEA_HEIGHT_M = 2.5;
 const STRONG_CURRENT_MS = 1.5;
+// A squall signature needs both legs: gusts half again over the sustained wind, and a gust that
+// itself carries weight, so a 6 kn breeze gusting 9 never flags.
+const SQUALL_GUST_RATIO = 1.5;
+const SQUALL_GUST_FLOOR_MS = knotsToMetersPerSecond(25);
+// Deep-water wavelength is g*T^2/(2*pi), about 1.56*T^2 m, so height above T^2/13 puts steepness
+// (height over wavelength) past roughly 1/20, where seas turn short and breaking-prone well below
+// the rough-seas height floor.
+const STEEP_SEA_PERIOD_DIVISOR = 13;
+const OPPOSED_CURRENT_MIN_MS = 0.5;
+const OPPOSED_WIND_MIN_MS = knotsToMetersPerSecond(10);
+const OPPOSED_MAX_OFFSET_RAD = Math.PI / 4;
+
+// Smallest absolute separation between two directions, radians in 0..pi.
+function angleBetween(a: number, b: number): number {
+  const diff = Math.abs(a - b) % (2 * Math.PI);
+  return diff > Math.PI ? 2 * Math.PI - diff : diff;
+}
 
 function withGridProvenance(point: PointConditions): PointConditions {
   return { ...point, provenance: 'Open-Meteo' };
@@ -115,6 +130,14 @@ export function forecastRiskCues(rows: PointConditions[]): PointConditions[] {
     if (strongestWind >= STORM_MS) cues.push('Storm-force wind');
     else if (strongestWind >= GALE_MS) cues.push('Gale-force wind');
     if (
+      row.windMs !== undefined &&
+      row.gustMs !== undefined &&
+      row.gustMs >= SQUALL_GUST_RATIO * row.windMs &&
+      row.gustMs >= SQUALL_GUST_FLOOR_MS
+    ) {
+      cues.push('Squall risk');
+    }
+    if (
       (row.visibilityM !== undefined && row.visibilityM <= DENSE_FOG_VISIBILITY_M) ||
       (row.weatherCode !== undefined && FOG_WEATHER_CODES.has(row.weatherCode))
     ) {
@@ -123,8 +146,30 @@ export function forecastRiskCues(rows: PointConditions[]): PointConditions[] {
     if (row.waveHeightM !== undefined && row.waveHeightM >= ROUGH_SEA_HEIGHT_M) {
       cues.push('Rough seas');
     }
+    if (
+      row.waveHeightM !== undefined &&
+      row.wavePeriodS !== undefined &&
+      row.wavePeriodS > 0 &&
+      row.waveHeightM > (row.wavePeriodS * row.wavePeriodS) / STEEP_SEA_PERIOD_DIVISOR
+    ) {
+      cues.push('Steep seas');
+    }
     if (row.currentSpeedMs !== undefined && row.currentSpeedMs >= STRONG_CURRENT_MS) {
       cues.push('Strong current');
+    }
+    if (
+      row.currentSpeedMs !== undefined &&
+      row.currentSpeedMs >= OPPOSED_CURRENT_MIN_MS &&
+      row.windMs !== undefined &&
+      row.windMs >= OPPOSED_WIND_MIN_MS &&
+      row.fromRad !== undefined &&
+      row.currentDirectionRad !== undefined &&
+      // fromRad is where the wind comes FROM and currentDirectionRad is where the current flows
+      // TOWARD, so the wind blows against the current exactly when the two angles align: the wind
+      // arrives from the compass point the current is carrying the water toward.
+      angleBetween(row.fromRad, row.currentDirectionRad) <= OPPOSED_MAX_OFFSET_RAD
+    ) {
+      cues.push('Wind against current');
     }
     const previous = rows[index - 1];
     if (previous?.pressurePa !== undefined && row.pressurePa !== undefined) {
@@ -198,13 +243,5 @@ export function tendencyText(
   const deltaHpa = deltaPa / PA_PER_HPA;
   if (Math.abs(deltaHpa) < 0.5) return 'steady';
   const word = deltaHpa > 0 ? 'rising' : 'falling';
-  // A tendency delta needs finer precision than a spot reading, so the hectopascal-family units
-  // take one decimal here where formatPressureOr would round to whole; inHg and psi already carry
-  // decimals at their conventional precision.
-  const unit = pressureUnit(units);
-  const value =
-    unit === 'hPa' || unit === 'mbar'
-      ? formatFixed(Math.abs(deltaHpa), 1)
-      : formatPressureOr(Math.abs(deltaPa), units);
-  return `${word} ${value} ${unit}/${PRESSURE_TREND_WINDOW_H} h`;
+  return `${word} ${pressureDeltaText(deltaPa, units)}/${PRESSURE_TREND_WINDOW_H} h`;
 }

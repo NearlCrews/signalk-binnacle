@@ -10,16 +10,19 @@ import {
   formatPrecipRateOr,
   formatPressureOr,
   formatTemperatureOr,
+  HOUR_MS,
   lengthUnit,
   pressureUnit,
   speedUnit,
   temperatureUnit,
 } from '$shared/lib';
+import { BAROMETER_GRADE_WORDS, type BarometerTendency } from './barometer-trend.svelte';
 import type { PointConditions } from './signalk-weather';
 import {
   DEGREES_TRUE_TITLE,
   formatWholeSpeed,
   precipUnitLabel,
+  pressureDeltaText,
   RAIN_VISIBLE_MM_H,
 } from './weather-readout';
 
@@ -30,6 +33,9 @@ interface Props {
   cached?: boolean;
   observationAgeMs?: number;
   tendencyText?: string;
+  // The tendency graded from the boat's own barometer. It describes now, from readings actually
+  // taken aboard, so unlike tendencyText it never moves with the forecast time slider.
+  measuredTendency?: BarometerTendency;
   units: UnitsStore;
 }
 
@@ -40,8 +46,23 @@ const {
   cached = false,
   observationAgeMs,
   tendencyText,
+  measuredTendency,
   units,
 }: Props = $props();
+
+// One line for the measured-aboard tendency. The two caution fall grades take the explicit
+// "Pressure falling" wording so the same number is not said twice in adjacent lines, and a
+// provisional window names the short span it was measured over.
+const measuredLabel = $derived.by((): string | undefined => {
+  if (!measuredTendency) return undefined;
+  const { grade, ratePa3h, spanMs, provisional } = measuredTendency;
+  const suffix = provisional ? ` over first ${formatFixed(spanMs / HOUR_MS, 1)} h` : '';
+  if (grade === 'falling' || grade === 'falling-fast') {
+    return `Pressure falling ${pressureDeltaText(ratePa3h, units.profile)} per 3 h, measured aboard${suffix}`;
+  }
+  if (grade === 'steady') return `steady, measured aboard${suffix}`;
+  return `${BAROMETER_GRADE_WORDS[grade]} ${pressureDeltaText(ratePa3h, units.profile)} per 3 h, measured aboard${suffix}`;
+});
 
 const pressure = (v: number | undefined) => formatPressureOr(v, units.profile);
 const temp = (v: number | undefined) => formatTemperatureOr(v, units.profile);
@@ -94,16 +115,23 @@ function ageLabel(ageMs: number | undefined): string | undefined {
       <dd><b class="num">{speed(current.gustMs)}</b> {speedUnit(units.profile)}</dd>
     </div>
   {/if}
-  {#if current.pressurePa !== undefined}
+  {#if current.pressurePa !== undefined || measuredLabel}
     <div>
       <dt>Pressure</dt>
       <dd>
-        <b class="num">{pressure(current.pressurePa)}</b>
-        {pressureUnit(units.profile)}
+        {#if current.pressurePa !== undefined}
+          <b class="num">{pressure(current.pressurePa)}</b>
+          {pressureUnit(units.profile)}
+        {/if}
         {#if tendencyText}
           <span class="trend">{tendencyText}</span>
-        {:else}
+        {:else if !measuredLabel}
           <span class="trend">trend unavailable</span>
+        {/if}
+        {#if measuredLabel}
+          <span class="trend" class:sev-warning={measuredTendency?.grade === 'falling-fast'}>
+            {measuredLabel}
+          </span>
         {/if}
       </dd>
     </div>
@@ -258,5 +286,10 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   display: block;
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+/* The scoped .trend mute outranks the global severity color, so the fast-fall caution restates it
+   at scoped specificity. */
+.trend.sev-warning {
+  color: var(--warning);
 }
 </style>

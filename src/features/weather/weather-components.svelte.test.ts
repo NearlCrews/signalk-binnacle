@@ -1,11 +1,23 @@
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { UnitsStore } from '$entities/units';
-import { METRIC_UNITS } from '$shared/lib';
+import { HOUR_MS, METRIC_UNITS } from '$shared/lib';
+import type { BarometerTendency } from './barometer-trend.svelte';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
 
 const units = { mode: 'metric', profile: METRIC_UNITS } as UnitsStore;
+
+function renderMeasured(measuredTendency: BarometerTendency): string {
+  return render(ConditionsBlock, {
+    props: {
+      units,
+      observed: false,
+      current: { timeMs: Date.parse('2026-06-11T12:00:00Z'), pressurePa: 100_800 },
+      measuredTendency,
+    },
+  }).body;
+}
 
 describe('ConditionsBlock', () => {
   it('shows observation age, stale wording, and high-value provider fields', () => {
@@ -39,6 +51,43 @@ describe('ConditionsBlock', () => {
     }
     expect(body).toContain('Sunrise');
     expect(body).toContain('Sunset');
+  });
+
+  it('cautions on a measured fast fall with the severity treatment', () => {
+    const body = renderMeasured({
+      ratePa3h: -720,
+      deltaPa: -720,
+      spanMs: 3 * HOUR_MS,
+      provisional: false,
+      grade: 'falling-fast',
+    });
+    expect(body).toContain('Pressure falling 7.2 hPa per 3 h, measured aboard');
+    expect(body).toContain('sev-warning');
+    expect(body).not.toContain('trend unavailable');
+  });
+
+  it('cautions on a measured fall without the severity treatment', () => {
+    const body = renderMeasured({
+      ratePa3h: -320,
+      deltaPa: -320,
+      spanMs: 3 * HOUR_MS,
+      provisional: false,
+      grade: 'falling',
+    });
+    expect(body).toContain('Pressure falling 3.2 hPa per 3 h, measured aboard');
+    expect(body).not.toContain('sev-warning');
+  });
+
+  it('names the short span of a provisional measured tendency', () => {
+    const body = renderMeasured({
+      ratePa3h: 40,
+      deltaPa: 20,
+      spanMs: 1.5 * HOUR_MS,
+      provisional: true,
+      grade: 'steady',
+    });
+    expect(body).toContain('steady, measured aboard over first 1.5 h');
+    expect(body).not.toContain('sev-warning');
   });
 });
 

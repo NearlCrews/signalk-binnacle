@@ -64,6 +64,24 @@ describe('weatherLegend', () => {
     expect(legend?.note).toMatch(/nowcast/);
   });
 
+  it('states the radar coverage bound so offshore silence never reads as no rain', () => {
+    const legend = weatherLegend('weather-radar', 'day', 'metric');
+    expect(legend?.coverageNote).toMatch(/land-based/i);
+    expect(legend?.coverageNote).toMatch(/no data, not no rain/);
+  });
+
+  it('carries no coverage bound on the globally modeled layers', () => {
+    for (const id of [
+      'weather-wind',
+      'weather-pressure',
+      'weather-waves',
+      'weather-precip',
+      'weather-cloud',
+    ]) {
+      expect(weatherLegend(id, 'day', 'metric')?.coverageNote).toBeUndefined();
+    }
+  });
+
   it('labels cloud cover in whole percent', () => {
     expect(weatherLegend('weather-cloud', 'day', 'metric')?.highLabel).toBe('100');
   });

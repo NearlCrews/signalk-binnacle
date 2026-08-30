@@ -6,11 +6,15 @@ import {
   type WeatherGrid,
 } from '$entities/weather';
 import {
+  formatFixed,
+  formatPressureOr,
   formatSpeedOr,
   HOUR_MS,
   lerp,
   lerpAngle,
+  PA_PER_HPA,
   precipRateUnit,
+  pressureUnit,
   resolveUnits,
   type UnitsSelection,
 } from '$shared/lib';
@@ -50,6 +54,19 @@ export function provenanceLabel(
   if (provenance === 'mixed' && providerLabel) return `${providerLabel} + ${GRID_SOURCE_LABEL}`;
   if (provenance === 'provider') return providerLabel ?? GRID_SOURCE_LABEL;
   return GRID_SOURCE_LABEL;
+}
+
+// The magnitude of a pressure change with its unit, shared by the grid tendency text and the
+// measured-aboard tendency so one delta cannot format two ways. A change needs finer precision
+// than a spot reading, so the hectopascal-family units take one decimal here where formatPressureOr
+// would round to whole; inHg and psi already carry decimals at their conventional precision.
+export function pressureDeltaText(deltaPa: number, units: UnitsSelection): string {
+  const unit = pressureUnit(units);
+  const value =
+    unit === 'hPa' || unit === 'mbar'
+      ? formatFixed(Math.abs(deltaPa) / PA_PER_HPA, 1)
+      : formatPressureOr(Math.abs(deltaPa), units);
+  return `${value} ${unit}`;
 }
 
 export interface WeatherReadout {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { WeatherGrid } from '$entities/weather';
+import { knotsToMetersPerSecond } from '$shared/lib';
 import { forecastRiskCues, mergeConditions, pickForecast } from './forecast-series';
 
 const HOUR = 3_600_000;
+const kn = knotsToMetersPerSecond;
 const grid: WeatherGrid = {
   lats: [0, 1],
   lons: [0, 1],
@@ -149,5 +151,63 @@ describe('forecastRiskCues', () => {
     ]);
     expect(rows[0].riskCues).toEqual(['Dense fog']);
     expect(rows[1].riskCues).toEqual(['Dense fog']);
+  });
+
+  it('flags squall risk only when the gust ratio and the gust floor both hold', () => {
+    const rows = forecastRiskCues([
+      { timeMs: 0, windMs: kn(16), gustMs: kn(25) },
+      // The ratio alone: a 6 kn breeze gusting 9 is an ordinary afternoon, not a squall.
+      { timeMs: HOUR, windMs: kn(6), gustMs: kn(9) },
+      // The floor alone: 26 kn gusting over 20 kn wind is under the 1.5 ratio.
+      { timeMs: 2 * HOUR, windMs: kn(20), gustMs: kn(26) },
+      // A heavy gust with no sustained wind reading cannot grade the ratio.
+      { timeMs: 3 * HOUR, gustMs: kn(40) },
+    ]);
+    expect(rows[0].riskCues).toEqual(['Squall risk']);
+    expect(rows[1].riskCues).toBeUndefined();
+    expect(rows[2].riskCues).toBeUndefined();
+    expect(rows[3].riskCues).toEqual(['Gale-force wind']);
+  });
+
+  it('flags steep seas from the height-to-period breaking heuristic', () => {
+    const rows = forecastRiskCues([
+      // 2 m at 4 s: T^2/13 is 1.23 m, so the sea is steep while still under the rough floor.
+      { timeMs: 0, waveHeightM: 2, wavePeriodS: 4 },
+      // The same 2 m at 8 s is long, easy swell.
+      { timeMs: HOUR, waveHeightM: 2, wavePeriodS: 8 },
+      { timeMs: 2 * HOUR, waveHeightM: 2, wavePeriodS: 0 },
+      { timeMs: 3 * HOUR, waveHeightM: 3, wavePeriodS: 5 },
+    ]);
+    expect(rows[0].riskCues).toEqual(['Steep seas']);
+    expect(rows[1].riskCues).toBeUndefined();
+    expect(rows[2].riskCues).toBeUndefined();
+    expect(rows[3].riskCues).toEqual(['Rough seas', 'Steep seas']);
+  });
+
+  it('flags wind against current when the wind arrives from where the current flows toward', () => {
+    const opposed = {
+      windMs: kn(15),
+      currentSpeedMs: 0.6,
+    };
+    const rows = forecastRiskCues([
+      // Wind from the north against a current flowing toward the north.
+      { timeMs: 0, ...opposed, fromRad: 0.1, currentDirectionRad: 0.2 },
+      // The same opposition across the 0/2pi seam.
+      { timeMs: HOUR, ...opposed, fromRad: 0.2, currentDirectionRad: 2 * Math.PI - 0.2 },
+      // Wind from the south with a north-flowing current runs WITH it: no cue.
+      { timeMs: 2 * HOUR, ...opposed, fromRad: Math.PI, currentDirectionRad: 0 },
+      // Past the 45 degree alignment window.
+      { timeMs: 3 * HOUR, ...opposed, fromRad: 0, currentDirectionRad: Math.PI / 3 },
+      // Under the wind floor.
+      { timeMs: 4 * HOUR, windMs: kn(9), currentSpeedMs: 0.6, fromRad: 0, currentDirectionRad: 0 },
+      // Under the current floor.
+      { timeMs: 5 * HOUR, windMs: kn(15), currentSpeedMs: 0.4, fromRad: 0, currentDirectionRad: 0 },
+    ]);
+    expect(rows[0].riskCues).toEqual(['Wind against current']);
+    expect(rows[1].riskCues).toEqual(['Wind against current']);
+    expect(rows[2].riskCues).toBeUndefined();
+    expect(rows[3].riskCues).toBeUndefined();
+    expect(rows[4].riskCues).toBeUndefined();
+    expect(rows[5].riskCues).toBeUndefined();
   });
 });

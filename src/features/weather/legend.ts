@@ -35,6 +35,9 @@ export interface WeatherLegend {
   swatches?: LegendSwatch[];
   // An optional short footnote, for example the radar's resolution limit.
   note?: string;
+  // The layer's coverage bound for a region-limited source, so silence outside coverage never
+  // reads as an all-clear. Rendered beside the note and never substituted by a live status line.
+  coverageNote?: string;
 }
 
 // Whole-knot stops (in m/s): sailors think in 10-knot bands, and the old m/s stops rendered as
@@ -152,6 +155,9 @@ export function weatherLegend(
         // The newest RainViewer frames are model extrapolation, not observation; "live radar"
         // would overstate them.
         note: 'radar with short-term nowcast, regional resolution',
+        // RainViewer composites land-based radar, so beyond radar range there is simply no data;
+        // without this bound an offshore blank would read as no rain.
+        coverageNote: 'land-based radar coverage only; blank offshore means no data, not no rain',
       };
     default:
       return undefined;
