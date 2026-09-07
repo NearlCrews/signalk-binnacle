@@ -456,6 +456,47 @@ describe('createMarineRadarController', () => {
     await controller.dispose();
   });
 
+  // The provider counts every spoke subscriber as someone watching the radar and may let an
+  // unwatched radar stand down, so the stream must exist only while the picture is on screen. This
+  // pins that end to end on a Radar API 3.4.0 server, where the entry is hydrated from /capabilities
+  // and /controls and the stream lives at /spokes.
+  it('holds the spoke stream only while the overlay is shown on a visible page', async () => {
+    const testDocument = new EventTarget();
+    Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
+    vi.stubGlobal('document', testDocument);
+    stubRadarFetch({
+      radars: () => jsonResponse({ version: '3.4.0', radars: { a: { name: 'Halo A' } } }),
+      capabilities: () =>
+        jsonResponse({ spokesPerRevolution: 2048, maxSpokeLength: 1024, controls: {} }),
+      controls: () => jsonResponse({ power: { value: 2 }, range: { value: 926 } }),
+    });
+    const controller = makeController({ origin: 'http://pi' });
+    await controller.start();
+    expect(controller.store.selectedId).toBe('a');
+    expect(controller.store.operationalStatus).toBe('transmit');
+    await Promise.resolve();
+    expect(workerMock.open).not.toHaveBeenCalled();
+
+    const map = createFakeMap();
+    controller.layer.setVisible(fakeOverlayContext(map), true);
+    await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledOnce());
+    expect(workerMock.open.mock.calls[0]?.[0]).toBe(
+      'ws://pi/signalk/v2/api/vessels/self/radars/a/spokes',
+    );
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => expect(workerMock.close).toHaveBeenCalledOnce());
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => expect(workerMock.open).toHaveBeenCalledTimes(2));
+
+    controller.layer.setVisible(fakeOverlayContext(map), false);
+    await vi.waitFor(() => expect(workerMock.close).toHaveBeenCalledTimes(2));
+    await controller.dispose();
+  });
+
   it('finishes a pending close before reopening the worker', async () => {
     let finishClose: (() => void) | undefined;
     const testDocument = new EventTarget();

@@ -8,6 +8,9 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Marine radar speaks Radar API 3.4.0: the keyed `{ version, radars }` discovery envelope, spoke
+  geometry and the legend from the capability manifest, the radar's power state and range from its
+  control values, and the spoke stream at `/spokes`. The pre-3.4.0 array shape still works.
 - The autopilot arrives: a status chip showing engaged or standby with the mode and target, and a
   panel with armed engage, disengage, tack, and gybe plus direct heading nudges while engaged,
   consuming the Signal K v2 Autopilot API with honest absent, access, and unreachable states.
