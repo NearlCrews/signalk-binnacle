@@ -63,12 +63,15 @@ source, and surrounding traffic before relying on it.
   sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
   adjusted copy uses available sources. Saved-area cards lead with an at-a-glance summary: plain
   detail level, chart count with any unavailable ones, and the approximate span in nautical miles.
-  While navigating a route, an advisory route-coverage check samples a chosen 1, 5, or 10
+  From an active route or a saved route's passage plan, an advisory route-coverage check samples a
+  chosen 1, 5, or 10
   nautical-mile corridor (the route line and both edges) against the ready saved areas, the
   catalog coverage of their included charts, and a requested detail level; it reports Complete,
   Partial, or Unknown, highlights uncovered and insufficient-detail stretches read-only on the
-  chart, clears with the route, and states that it does not certify navigation or passage safety.
-  Provider readiness stays a separate readout.
+  chart, and states that it does not certify navigation or passage safety. Changes to the route,
+  provider, chart catalog, or saved-area coverage invalidate the previous check. Provider readiness
+  stays a separate readout. Failed settings writes retain the selected values with an error and
+  offer a targeted retry without claiming the server accepted the change.
   See the [Offline charts guide](offline-charts.md) and the Offline charts section in the
   [README](../README.md#offline-charts-chart-locker-and-ssl-optional).
 
@@ -88,7 +91,12 @@ source, and surrounding traffic before relying on it.
   with a Check again action. Route ids, names, geometry, and collection size are bounded before
   use. GPX imports
   accept at most 5 MB, 100 encountered routes, and 10,000 encountered route points. Malformed
-  coordinates are skipped, but their records still count toward the limits.
+  coordinates are skipped, but their records still count toward the limits. **Edit route points
+  without dragging** provides decimal-degree coordinate entry, chart-center additions, insertion,
+  movement, ordering, deletion, and Undo for the edit draft. Existing route and point metadata are
+  retained when geometry changes. Passage weather states its model source and fetch age, identifies
+  retained or partial data, and leaves arrivals outside the forecast window unassessed rather than
+  copying the nearest forecast hour.
 - **Waypoints** loads standard Signal K waypoint resources, supports chart drops, edits, deletes,
   location, and confirmed navigation. Navigation sends the waypoint's resource reference so the
   destination name reaches the navigation strip and other stations. The panel searches name and
@@ -98,29 +106,44 @@ source, and surrounding traffic before relying on it.
   Retry. The chart drop dialog also offers Save and navigate, which saves the mark and arms the
   same destination-naming confirmation; plain Save stays primary and edit mode never offers it. On
   a server with no waypoints resource provider the panel names the one-time Resources Provider
-  step with a Check again action instead of blaming the connection. See [Waypoints](waypoints.md).
-- **Tracks** records a continuous local track and manages saved Signal K track resources. GPS gaps
+  step with a Check again action instead of blaming the connection. A chart-selected mark stays
+  visible even outside the current search or result cap without changing the search. Failed saves
+  retain the entered values, and canceled row confirmations restore focus. See
+  [Waypoints](waypoints.md).
+- **Tracks** records a segmented local track and manages saved Signal K track resources. GPS gaps
   remain gaps, server mutations update the UI immediately, and route conversion uses only the latest
-  continuous segment. Retrace requires confirmation, and failed resource loads offer Retry without a
-  startup toast. A server with no tracks resource provider is detected, Save is disabled, and the
+  continuous segment of the active recording. Retrace requires confirmation, failed saves retain
+  the entered name, and failed resource loads offer Retry without a startup toast. A server with no
+  tracks resource provider is detected, Save is disabled, and the
   panel names the one-time Resources Provider step with a Check again action. See
   [Tracks](tracks.md).
 - **Autopilot** consumes the Signal K v2 Autopilot API when a provider plugin supplies it. The
-  status chip on the strip shows engaged or standby with the mode and target and opens the panel.
+  status chip opens the panel and shows engaged or standby only when that state is known and fresh.
   Engage, disengage, tack, and gybe each take an armed second tap naming the action and mode;
-  heading nudges are direct while engaged and disabled on standby. Absent-API, absent-provider,
-  access, and unreachable states are distinct, the unreachable state warns that the pilot may
-  still be steering, and every state carries the advisory line that the helm remains responsible.
+  changing mode while engaged also requires confirmation. Heading nudges are direct while engaged
+  and disabled on standby or when state is untrusted. Unknown, stale, and lost state never imply
+  standby: the panel warns that the pilot may still be steering and keeps a confirmed disengage
+  action available when provider access permits. Changing the pilot or action context invalidates
+  an armed confirmation. Absent-API, absent-provider, access, and unreachable states are distinct,
+  and the helm remains responsible.
 - **Logbook** reads and writes the ship's log through the signalk-logbook plugin. The panel shows
-  the most recent logged days and a composer; taking a watch handoff, starting or stopping
+  entries from the last two days, newest first, and a composer; taking a watch handoff, starting or stopping
   navigation, and dropping or raising the anchor each offer a prefilled factual entry, and nothing
-  is ever logged without a tap. Absent-plugin, access, and failure states are distinct, and the
-  landing state explains installing the plugin from the Signal K App Store.
+  is ever logged without a tap. A pending or failed write preserves the draft, and closing the panel
+  does not discard typed text. **Refresh entries** and bounded visible-panel refreshes update the
+  list; failures retain the accepted entries with an explanation. Access requires a Signal K
+  administrator browser session, not a read-write device token. **Sign in to Signal K (new tab)**
+  and **Check again** provide recovery. Absent-plugin, access, and failure states are distinct, and
+  the landing state explains installing the plugin from the Signal K App Store.
 - **Playback** reviews bounded 1-hour, 6-hour, 24-hour, and 7-day ranges from one available
   history provider. Each range has a fixed adaptive resolution and row cap. The range-owned track,
-  scrubbed marker, and four-metric readout share the same accepted provider snapshot. Play and pause
-  offer Slow, Normal, and Fast (0.5x, 1x, and 2x) speeds, pause when the document is hidden, and stay disabled for reduced
-  motion. Loading, no-provider, empty, and failed states are distinct. A failed range retains and
+  scrubbed marker, and four-metric readout share the same accepted provider snapshot. The readouts
+  distinguish average depth below the transducer, peak apparent wind, average pressure, and average
+  SOG from instantaneous readings. A sample without position hides the replay marker. Automatic
+  playback offers Slow, Normal, and Fast (0.5x, 1x, and 2x), pauses when the document is hidden, and
+  is disabled for reduced motion; manual stepping and scrubbing remain available. Playback is
+  historical, while alarms continue monitoring live data. Loading, no-provider, empty, and failed
+  states are distinct. A failed range retains and
   correctly labels the accepted range, Retry repeats the failed request, and Latest moves to its newest
   loaded sample without another network query. Tracks records the boat's own
   breadcrumb trail; Playback reviews the server's recorded history. They cross-link: a saved track
@@ -135,9 +158,10 @@ source, and surrounding traffic before relying on it.
   [Find places](find-places.md).
 - **Measure** arms chart taps for rhumb-line distance and true bearing. Points can be selected through
   a 44 px chart target or the strip, moved deliberately by drag, chart tap, or chart-center keyboard
-  workflow, deleted, and restored through operation-based Undo. The strip shows both legs adjacent to
+  workflow, entered or moved through **Enter measurement coordinates**, deleted, and restored through
+  operation-based Undo. The strip shows both legs adjacent to
   a selected point, while collision-managed chart labels show distance only above a bounded zoom.
-  Clear confirms, nested Escape cancels movement before ending Measure, route editing is excluded in
+  Clear confirms, nested Escape cancels a confirmation or movement before ending Measure, route editing is excluded in
   both directions, and selecting Measure again preserves current work. See [Measure](measure.md).
 
 ## Safety
@@ -157,7 +181,8 @@ source, and surrounding traffic before relying on it.
   identity, control-write state, spoke-stream health, renderer health, and stale pictures. Transmit
   requires confirmation, Standby stays immediate, complete native zones, no-transmit sectors, and
   rectangles have atomic form and chart editors, and Open overlay settings moves directly to the
-  Overlays view. See
+  Overlays view. Rejected area writes retain the draft for **Retry save** or **Discard draft**, and
+  canceling the emission confirmation restores focus without saving. See
   [Marine radar](marine-radar.md).
 - **Anchor watch** prefers the Signal K Anchor API and falls back to a browser-only watch. A fresh GPS
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
@@ -166,31 +191,44 @@ source, and surrounding traffic before relying on it.
   (which re-arms when the fix returns) and Raise. A stream reconnect's stale server state is
   reported as "Anchor watch state is stale: reconnecting to the server." only after about 5 seconds
   and is never worded as a GPS loss. Server-mode changes require write access; client-mode changes
-  stay available. Conflicting actions are locked until completion.
-- **Man overboard** raises the boat-wide alarm through the Notifications API with a v1 delta
-  fallback. A raise or clear lost to a closed socket is replayed on reconnect, the MOB strip warns
-  when the boat-wide alarm may not have reached the server, and the confirm dialog qualifies its
-  every-station promise while writes are blocked.
+  stay available. Conflicting actions are locked until completion. In server mode, **Edit anchor
+  position** offers decimal-degree fields and a separate **Move anchor** confirmation. A rejected
+  position write preserves the draft for **Retry position**. The tide summary names the station,
+  datum or unknown datum, fetch age, and dated event times with a time zone. Its distance is from
+  the anchor or fresh vessel fix, not the chart center. Predictions do not adjust the watch radius.
+- **Man overboard** captures the press time and available fresh position when its confirmation
+  opens. Confirming commits that mark locally and publishes it as a standard Signal K
+  `notifications.mob` delta. No fix still raises
+  the alarm but cannot supply a mark position. An unconfirmed raise lost to a closed socket is
+  replayed on reconnect with its original position and time, not the boat's later fix. The strip
+  warns when server sharing is unconfirmed or blocked. A received MOB without a valid original
+  time reports elapsed time as unknown. Steering to the mark and canceling MOB require separate
+  confirmations tied to the current mark and course; steering warns about replacing an active
+  course and any coupled autopilot. Closing the alarm never means the person has been recovered.
 - **Alarms** lists bounded, validated Signal K notifications by severity, and its menu entry carries
   the live count of raised generic alarms. Any inbound alarm or emergency grade notification outside the
   dedicated hazards sounds a shared tone and raises a safety strip offering Silence, Acknowledge,
   Mute here, and Open Alarms; within those two grades the notification method field is honored with
   an audible-safe default, warn and alert grades stay visual by design, and a device-local mute
-  never swallows a newly raised alarm. Silence and acknowledge are locked
-  while pending and require server write access. A disconnected stream is labeled because displayed
+  never swallows a newly raised alarm. Silence and Acknowledge require a server-actionable
+  notification and write access. A pending row action does not disable unrelated alarms. Server
+  acceptance alone is not confirmation: Binnacle waits for a matching state update, checks the
+  server after a bounded wait, and offers retry if status remains unconfirmed. **Mute here** stays
+  available for this display even when server actions are unsupported, blocked, or pending.
+  Acknowledgment marks an alarm as seen; it does not resolve the condition. A disconnected stream is labeled because displayed
   alarm state may be stale. Collision warnings publish as visual-only Signal K deltas, while danger
   alarms use the Notifications API with visual and sound methods. Collision and shallow-water
   settings stay in safe numeric bounds, in SI internally, with conversion only at display inputs.
   The shallow threshold merges the server's depth zones with the locally configured limit
   conservatively: whichever bound is deeper governs, so the server can tighten the alarm but never
   quietly loosen it. The panel names which one is in force and says when no depth source is
-  publishing. Alarm audio is reported where an alarm lives, not in the status strip: the Alarms and
+  publishing. **Local fallback off-course limit** and its mute control affect only this display's
+  fallback monitor, not a server-owned off-course alarm. Resetting collision thresholds does not
+  reset the shallow-water limit. Alarm audio is reported where an alarm lives, not in the status strip: the Alarms and
   Anchor watch panels state the grade (blocked until this display is tapped, failed to start, or
   unavailable on this display), and the Help setup checklist carries it as a row. Any tap or key
-  anywhere primes the audio, so the blocked grade clears itself in ordinary use. The strip stays a
-  readout row: a browser-permission condition is not a helm reading, and on a boat with nothing
-  audible armed a standing chip claimed a silence that could not happen while costing the readouts
-  a wrapped row. One alarm sounds at
+  anywhere attempts to enable audio, and the status reflects whether the browser actually allowed
+  it. The status strip remains reserved for helm readings. One alarm sounds at
   a time through a single audio authority: man overboard and an escalating collision danger
   interleave at the top, lower alarms rotate with bounded reminders, and courtesy tones yield.
   **Alarms this session** combines generic notifications with dedicated MOB, collision, anchor,
@@ -218,13 +256,20 @@ source, and surrounding traffic before relying on it.
 
 - **Forecast** opens a weather mini-map at the navigation chart view. Wind and waves start visible on
   a fresh install. Cached data is labeled with source and fetch time, stale data remains visible, and
-  a manual Retry bypasses automatic backoff after a failed fetch. Conditions at the boat require a
-  fresh GPS fix. Provider point requests are time-bounded, warning intervals are validated, and
+  a manual Retry bypasses automatic backoff after a failed fetch. Reopening follows the current
+  navigation chart view, not the previous mini-map center. Conditions at the boat require a fresh
+  GPS fix, refresh on a bounded cadence while visible, and retain accepted data when a replacement
+  fails. Returning to the page checks whether a refresh is due without bypassing that cadence.
+  Forecast times are not observation or fetch times, and stale or unknown ages remain explicit.
+  Animation pauses while hidden and cannot play without loaded grid frames.
+  Provider point requests are time-bounded, warning intervals are validated, and
   missing optional warning labels receive bounded fallbacks. Open-Meteo marine fields are omitted
   when the provider's sea-snapped coordinate is too far from the requested grid cell. Provider
   warnings state when warning data is unavailable or cached. The routes shown on the chart draw
   read-only over the forecast with their named waypoints; they are not offered as a weather layer,
-  cannot be edited there, and never imply the forecast was routed along the path.
+  cannot be edited there, and never imply the forecast was routed along the path. Background weather
+  warnings can request data with the vessel's fresh coordinates while Forecast is closed. See the
+  [privacy disclosure](../README.md#network-privacy) for external provider requests.
 - **Tides and currents** independently selects tide-height and tidal-current stations. Automatic mode is the
   session default, prefers signalk-tides for tide height, and uses NOAA CO-OPS as the US-waters
   fallback and current source. Up to eight NOAA stations of each kind are listed within the supported
@@ -240,7 +285,11 @@ source, and surrounding traffic before relying on it.
   that none is nearby once a search has actually finished; before one starts, while one runs, or
   after one fails, the panel explains the real reason instead of making a claim about the water.
   Provider station and event payloads are validated and bounded, and CO-OPS station identifiers are
-  constrained before URL construction. Choices are not persisted across reloads.
+  constrained before URL construction. A valid current remains visible when tide-height data is
+  missing. Tide heights name the supplied datum or **Datum unknown**, not an assumed universal
+  chart datum. Events include a date and time zone, current bearings describe flow **toward** a
+  true bearing, and fetch age is unknown when the provider supplies no trustworthy fetch time.
+  Choices are not persisted across reloads.
 
 ## Instruments
 
@@ -266,11 +315,15 @@ source, and surrounding traffic before relying on it.
   window, a Recent sources list names each source with its own formatted value and age, neutrally
   and without judging disagreement. Staleness honors the server first: a path the server declares
   timed out under its meta.timeout reads Stale (server declared) with the last good value retained
-  and aged from its own receipt, and the detail names the source that went quiet. Because the
+  and aged from its measurement timestamp, using receipt time only when a legacy sample lacks one.
+  The detail names the source that went quiet. Because the
   server declares staleness per source, a declaration for a source other than the one feeding the
   shown value never marks the path. A path's explicitly declared meta.timeout also replaces the
   ten-second client staleness window on its tile, so a legitimately slow sensor is not flashed
-  stale, and a declared timeout of zero means never stale.
+  stale, and a declared timeout of zero means never stale. Late or invalid samples do not make an
+  old reading fresh. Customize supports drag handles, keyboard movement, and **Reorder** menus
+  with **Move up** and **Move down**. Invalid numeric settings restore the last valid value and
+  announce the rejected entry.
 - **Data trends** shows zero to eight profile-owned instrument trends in saved order.
   Customize groups the available readings by category, supports touch and keyboard reordering, keeps
   unavailable saved selections removable, and disables a ninth addition without hiding it. Opening
@@ -292,9 +345,14 @@ source, and surrounding traffic before relying on it.
   availability in the checking state instead of claiming KIP is absent. A blocked pop-up produces a
   visible message.
 - **AI advisor** shows the signalk-openrouter-companion plugin's analyzer reports: advisory prose,
-  timestamped, refreshed while the panel is open, with a Run now action per analyzer that fires
-  the plugin's own trigger and shows its acknowledgment verbatim, budget refusals included. The
-  reports never enter an alarm path, and the absent-plugin landing explains what the companion is.
+  dated and age-qualified, refreshed while the panel is open. **Run now** sends the analyzer's
+  configured vessel telemetry through OpenRouter to its selected model provider and may use paid
+  credits; **Refresh reports** only reads saved reports. An accepted asynchronous run stays pending
+  until completion, failure, or a bounded status timeout, and closing the panel does not start a
+  duplicate run or claim completion. Budget refusals and missing, stale, or invalid report times
+  remain explicit. These report notifications do not sound an alarm; separate provider alarms still
+  follow the ordinary alarm path. The absent-plugin landing explains what the companion is. See
+  [AI guardrails](ai-guardrails.md) for the distinction and telemetry disclosure.
 
 ## Settings
 
@@ -302,7 +360,7 @@ source, and surrounding traffic before relying on it.
   transparent and never exceeds the alarm-distinguishable floor, the opt-in automatic day and
   night theme (from the boat's day and night signal with a solar fallback, paused by a manual
   choice until the next boundary), the bright-sun chart contrast for direct sunlight, and the
-  interface text size from 100 to 130 percent with touch targets that only grow. All four travel
+  interface text size from 100 to 130 percent with controls no smaller than 44 px. All four travel
   with the active profile. With auto theme off, sunset raises a one-time offer to switch to the
   night theme.
 - **Profiles** (tile subtitle: units, sync, and privacy) saves portable chart, weather, threshold,
@@ -345,12 +403,16 @@ source, and surrounding traffic before relying on it.
   the top-bar hamburger is a cross-screen reach, and AIS keeps one Safety action thumb-reachable
   with its live collision-risk count. Pinning Menu hides the top-bar hamburger, so exactly one
   control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
-  since tapping a tile is the pin control.
+  since tapping a tile is the pin control. Pinned actions can be dragged, moved with the keyboard,
+  or changed through their **Reorder** menu's **Move up** and **Move down** actions. Moves preserve
+  focus and announce the new position; Reset requires confirmation. When the bar cannot fit its
+  actions, **More** exposes the overflow while keeping Menu reachable.
 - Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
   chip, the depth chip, or a radar-trouble chip shows its explanation as a
   transient note above the strip. Waiting for GPS carries a Help action, and the anchor chip opens
-  Anchor watch. A chip that carries an action keeps it on the same row as its label, never stacked
-  beneath it, so one degraded state costs the chart one row and not two.
+  Anchor watch. Labels and their actions stay grouped where space permits and wrap within the
+  available width when text or the viewport requires it. Short screens use compact spacing without
+  shrinking the 44 px controls.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
   course, heading, and the depth watch) are subordinated so the strip presents one failure with
   one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

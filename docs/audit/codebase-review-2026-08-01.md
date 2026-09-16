@@ -1,5 +1,10 @@
 # Binnacle codebase review, 2026-08-01
 
+> Historical snapshot dated August 1, 2026. Later releases supersede its code
+> locations, dependency versions, gate commands, and implementation status. The findings below are
+> not a current defect list or release checklist. See the [current guides](../README.md) and
+> [changelog](../../CHANGELOG.md) for maintained behavior and release history.
+
 A full-repo engineering audit of the Binnacle chartplotter: app shell, views, widgets, all feature
 slices, entity stores, shared modules, styles, service worker packaging, build configuration, and
 test infrastructure. Every finding below has been read against the cited code twice: once when it

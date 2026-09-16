@@ -36,7 +36,7 @@ not have to be corrected after the fact.
 - Framework: Svelte 5 (runes), Vite, TypeScript. This was a deliberate clean break from the
   Angular lineage of the prior fork; do not reintroduce Angular.
 - Map: MapLibre GL JS 6.x used directly, plus a thin imperative LayerManager for dynamic
-  overlays. deck.gl MapboxOverlay is an optional pluggable overlay, not the base.
+  overlays. There is no Svelte map wrapper or deck.gl dependency.
 - Charts: a generic ChartSourceAdapter over the Signal K `/resources/charts` API, plus a
   vector base map. S-57 to vector-tile pipeline and full S-52 styling are a later spec.
 - Real-time: a dedicated Web Worker hosts the Signal K WebSocket client, bridged with Comlink,
@@ -52,9 +52,10 @@ not have to be corrected after the fact.
   Library and OpenBridge, not from a UI icon set.
 - Themes: day, dusk, and night-red. Night-red is pure red on true black. No blue at night,
   alarms always distinguishable, brightest pixel low.
-- App shell: hybrid chart-centric, structured so the three-mode shell (Watch, Anchor, Inhabit)
-  drops in later without a rebuild.
-- Layer control: per-layer toggle, opacity slider, and drag-to-reorder z-order.
+- App shell: chart-centric, with App constructing services and shell chrome, and PlotterView
+  composing chart workflows and panels through injected dependency groups.
+- Layer control: per-layer toggle, opacity slider, and constrained z-order changes through dragging,
+  keyboard movement, and individual Move up and Move down actions.
 
 ## Toolchain (lint, format, build)
 
@@ -70,13 +71,13 @@ not have to be corrected after the fact.
   typescript-eslint is not only those three rules: `tseslint.parser` is also the TypeScript parser
   in `eslint.config.js`, both for `**/*.ts` and inside `**/*.svelte` so eslint-plugin-svelte can
   read a `lang="ts"` script block. Dropping it costs a parser too. Biome is not a substitute here:
-  as of 2.5.10 its `noFloatingPromises`, `noMisusedPromises`, and `useAwaitThenable` (the
-  `await-thenable` equivalent, added in 2.3.9) are all still Nursery and run on Biome's own type
-  inference rather than the TypeScript compiler, and eslint-plugin-svelte has no Biome counterpart.
+  its promise checks do not replace this repository's TypeScript-compiler-backed rules, and
+  eslint-plugin-svelte has no Biome counterpart. Check the installed tool versions and schema before
+  changing this division of ownership.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
-  flow is added (Phase 6 onward); if it ever mangles a `.svelte` file, exclude `.svelte` from
+  flow is added; if it ever mangles a `.svelte` file, exclude `.svelte` from
   Biome and rely on `svelte-check` for correctness. Because Biome cannot see a `{#snippet}`
   parameter used in the template body, `noUnusedFunctionParameters` is turned off for `.svelte`
   files in `biome.json`; the real backstop is `noUnusedLocals` and `noUnusedParameters` in
@@ -174,8 +175,9 @@ not have to be corrected after the fact.
   maintenance activity, weekly downloads, bundle cost, API fit, license, and issue health, and
   record the comparison in the commit or PR description. Never adopt the first search hit; never
   add a dependency a few dozen lines of owned code would cover better.
-- Keep every dependency at its latest compatible version. The stack is on Vite 8, TypeScript 6.0.3,
-  Svelte 5.56.8, MapLibre GL JS 6.6.0 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
+- Keep every dependency at its latest compatible version. `package.json` and `package-lock.json`
+  own the current ranges and resolved versions; historical version notes are not pins. The current
+  stack uses Vite 8, Svelte 5, MapLibre GL JS 6 (used directly, not svelte-maplibre-gl), pmtiles 4, Comlink 4,
   and pbf 5.1.2 (its v5 rewrite is pure ESM with the old `Pbf` class split into `PbfReader` and
   `PbfWriter`, no default export; the radar protocol's decoder imports `PbfReader`, the encoder and
   test fixtures import `PbfWriter`). The `typescript` package stays on 6.x, and raising it to 7 is
@@ -186,18 +188,20 @@ not have to be corrected after the fact.
   The compiler API now lives behind `./unstable/*` (`unstable/ast`, `unstable/sync`, and kin) next
   to twenty platform Go binaries. So `createProgram`, the `TypeChecker`, the language service, and
   `tsserver` are all unreachable from `typescript@7`, which is why every type-reading tool peer-caps
-  below it. Here that is typescript-eslint (peers `>=4.8.4 <6.1.0`) and svelte-check (4.7.4, the
-  latest, peers `^5.0.0 || ^6.0.0`). Replacing typescript-eslint does NOT unblock it, so do not go
+  below it. The installed typescript-eslint 8.70.0 peers `>=4.8.4 <6.1.0`, and svelte-check 4.7.6 peers
+  `^5.0.0 || ^6.0.0`. Replacing typescript-eslint does NOT unblock it, so do not go
   down that road: svelte-check is the binding cap and has no substitute, since `sv` is a scaffolding
   CLI and `svelte-language-server` is an editor LSP with the same dependency. Nor is anything being
   missed meanwhile: the check engine is `@typescript/native` (the npm alias for `typescript@^7`,
   stable), which replaced the retired `@typescript/native-preview` dev-snapshot line (it stopped
-  publishing on 2026-07-07; TS7 nightlies now ship as `typescript@next`). Do not reintroduce the
+  publishing on 2026-07-07; TS7 nightly builds now ship as `typescript@next`). Do not reintroduce the
   preview package. The only prize left is
   retiring one of the two package names once the API stabilizes. WATCH TRIGGER, and it is one
   command, not a calendar entry: re-check when `npm view svelte-check peerDependencies` admits `^7`.
-  typescript-eslint waits on the new compiler API expected in TypeScript 7.1 (7.0 ships none). npm
-  12.0.2 requires Node 22.22.2, Node 24.15.0, or Node 26.0.0 and later. The PWA pipeline is
+  Recheck both installed peer ranges before changing that arrangement. Node and npm floors come
+  from `engines` and `devEngines`; CI installs the `packageManager` pin outside the checkout before
+  running any repository npm command. Do not infer those requirements from an unrelated npm release.
+  The PWA pipeline is
   @serwist/vite (with `serwist` in the worker and `@serwist/window` on the page; all three move
   together on one version line), which replaced vite-plugin-pwa plus workbox-build and with them
   retired the off-main-thread override, the EJS chain, and the deprecated transitive `glob` 11.
@@ -207,8 +211,8 @@ not have to be corrected after the fact.
   plugin or reach maplibre-gl through a barrel). In dev the plugin serves the worker without a
   precache manifest and registration is skipped (`import.meta.env.MODE !== 'development'` guards
   it; vitest runs under mode `test` on purpose), and sw.ts must omit `navigateFallback` whenever
-  `self.__SW_MANIFEST` is undefined or the Serwist constructor throws `non-precached-url` and
-  kills the worker at evaluation. Serwist's `cleanupOutdatedCaches` is opt-in and stays on: it
+  `self.__SW_MANIFEST` is undefined or the Serwist constructor rejects the missing navigation-fallback
+  precache entry and kills the worker at evaluation. Serwist's `cleanupOutdatedCaches` is opt-in and stays on: it
   also sweeps the retired `workbox-precache-v2` cache on upgraded installations, and the privacy
   erase keeps BOTH precache prefixes in App.svelte's `cachePrefixes` for the same reason.
   MapLibre 6 ships ESM-only, and bundlers cannot automatically discover the runtime worker
@@ -246,8 +250,10 @@ per the SignalK pack-banner caveat above):
 
 - `pre-commit` runs `npm run verify:commit`, the shared formatting, lint, prose, architecture, and
   dead-code gate.
-- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, Chromium, PWA, and
-  focused WebKit smoke gate without rebuilding the application for Playwright.
+- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, and browser gate.
+  Every project in `playwright.config.ts` participates: Chromium, PWA, WebKit smoke, desktop and mobile
+  WebKit UI, and focused WebKit live safety scenarios. Playwright reuses the production build from
+  `verify`, without a duplicate build.
   A failure blocks the push.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
@@ -256,6 +262,13 @@ per the SignalK pack-banner caveat above):
 
 Follow `AGENTS.md` for commit and publishing authority. Keep significant work verified and
 review-ready, but do not push, publish, tag, or release without the authorization that guide requires.
+
+The full command hierarchy lives in `package.json`: `verify:fast` adds type checks to `verify:commit`,
+`verify` adds coverage, build, and size budgets, and `verify:browser` adds the existing-build browser
+matrix. `verify:ci` also checks package integrity and both dependency audits. `verify:release` uses
+the release-specific package checks. `test:e2e:fast` builds and runs Chromium only;
+`test:e2e:cross-browser` builds and runs all projects. Do not start competing Playwright suites on
+their shared preview and fixture ports.
 
 ## Working-tree hygiene and the scratch directory
 
@@ -282,9 +295,9 @@ panes actually closed before `TeamDelete`.
 
 ## Modularity is a first-class rule
 
-Adding a later feature (weather, tides, routing, the CoPilot, anchor mode, the dashboard,
-watch handoff) MUST be a self-contained module dropped in against stable interfaces, never
-surgery on the core. The core never hardcodes knowledge of a specific feature.
+Each feature remains a self-contained slice behind stable interfaces. Keep feature behavior in its
+controller, state owner, and presentation components rather than growing it inside the composition
+root. App and PlotterView own the explicit construction and wiring between those interfaces.
 
 - Layered structure (Feature-Sliced Design, adapted): imports flow strictly downward,
   `app -> views -> widgets -> features -> entities -> shared`. A slice may reach a same-layer sibling
@@ -315,11 +328,13 @@ surgery on the core. The core never hardcodes knowledge of a specific feature.
   popover and modal backdrop styles) and the shell into panels and strips; the order keeps `.is-on` after the
   `.btn` and `.icon-pill` bases it overrides, so do not reorder the manifest blindly. New global styling
   goes into the right module, never back into one monolith; new shared UI behavior goes through
-  the `$shared/ui` primitives (SlideOver, AnchoredMenu, InlineConfirm, UnitField, ConfirmArm, SavedList,
+  the `$shared/ui` primitives (SlideOver, PanelHeader, AnchoredMenu, InlineConfirm, UnitField,
+  PositionFields, ConfirmArm, SavedList,
   VisibilityToggle, ShowOnChartToggle, and LayerToggle (the three share one VisibilityToggleProps
-  contract), CustomizeToggle, the dialog dismiss stack, the createReorder drag-reorder controller, the
-  rovingFocus (with Home and End support), focusOnMount, focusSelectOnMount, focusOnMountIf, and
-  onKeydownAction focus actions, the createMenuFocusMachine toolbar-menu keyboard machine (one
+  contract), CustomizeToggle, the dialog dismiss stack, the createReorder controller with
+  ReorderActions, rovingFocus (with Home and End support), focusOnMount, trapFocus,
+  restoreFocusAfterCancel, observeClientHeight, and the createMenuFocusMachine toolbar-menu keyboard
+  machine (one
   arrow-roving, Tab-redirect, and close-focus-restore protocol shared by OverflowActions and the
   pinned More menu; the roving index math lives once in focus.ts as nextRovingIndex, and the
   rovingFocus action, the menu-focus machine, and the app menu's tile grid all step through that one
@@ -407,8 +422,29 @@ watch-handoff snapshots, whose fact getters App wires through `collectHandoffFac
   construction and shell chrome without adding a singleton.
 - Whole-document settings that can be changed again while a request is in flight use
   `createLatestWriter`. It serializes requests, coalesces queued snapshots to the newest value, and
-  exposes idle, saving, saved, and error states with retry. Do not fire independent writes for two
-  controls that update the same server document.
+  exposes idle, saving, saved, and error states with retry through `SaveStatus`. Do not fire independent
+  writes for two controls that update the same server document.
+
+Shared interaction contracts belong in `docs/design-system.md`, not local variants:
+
+- `AnchoredMenu.onPositioned` follows a measured visible layout box after the placement style is
+  applied. Consumers initialize focus there, with `focusFrames: 0` for the menu-focus machine, rather
+  than scheduling their own focus delay. Closing, destruction, disconnection, and inert ancestry
+  prevent a stale callback from taking focus.
+- `restoreFocusAfterCancel` resolves a surviving trigger after the DOM update and leaves another
+  active surface alone. It belongs on deliberate cancellation, not successful submission. A busy
+  `NameEntry` consumes Escape without canceling its pending write or closing the parent panel.
+- `PositionFields` supplies bounded decimal-degree drafts. Features retain their own apply, undo,
+  and server-write semantics. Reordering uses the same bounds, focus, and announcement for taps,
+  keys, and dragging, and keeps resource identity with the moved item.
+- `observeClientHeight` measures the Plotter panel slot outside ResizeObserver delivery, reports
+  changed heights, and tears down its pending frame. Preserve the measured room above a collapsed
+  Routes header while its editing strip remains visible.
+- Shared headers wrap instead of squeezing titles between enlarged controls. Native point editors
+  use the shared viewport-bounded `.editor-dialog` frame, scrolling body, and wrapping footer.
+  Short-screen geometry preserves the physical 44px floor without reducing enlarged text.
+- Chart Locker administrator recovery uses `AccessRecoveryNote`, not the device-token authorization
+  prompt. The symbol chooser is `IconPicker` from `$entities/icon-picker`, not a shared UI export.
 
 ### Find places contract
 
@@ -447,6 +483,20 @@ The overlay must draw the short antimeridian leg. The active strip guides the ne
 Clear, Done, and Escape. The chart shows a crosshair while Measure owns taps. Selecting the active menu
 item preserves current points, while Measure from here explicitly starts fresh. Keep this aligned with
 `docs/measure.md`.
+
+Coordinate fields and Add at chart center create the first point without a pointer gesture. Selection,
+movement, deletion, and Undo share the existing measurement store. While Clear is armed,
+Escape cancels only that prompt, preserves the measurement, and returns focus to Clear.
+
+### Route draft interaction
+
+The coordinate editor changes the same working route as chart drawing. Add, insert, move, delete,
+earlier and later reorder, and Undo all enforce the route point limit. Reorder keeps each point's
+identity and metadata, and selection follows it. A chart edit clears conflicting coordinate-edit undo
+history. Escape belongs to the app's exit confirmation; the draw library must not erase placed points
+before that confirmation is accepted. Expand a minimized Routes panel before presenting the prompt.
+Route weather readouts retain their source, fetched age, and stale or failed status; retained model
+data is not live observation or passage clearance.
 
 ### Marine radar contract
 
@@ -535,10 +585,11 @@ must not be repeatable.
   resolves and returns 200 from the boat network.
 - The offline/PWA caching (the @serwist/vite service worker) only activates in a SECURE CONTEXT:
   HTTPS or `http://localhost`. The Signal K server serves Binnacle over plain HTTP on the LAN by
-  default, where the browser disables the entire serviceWorker and CacheStorage APIs, so offline
-  caching is inert. The app must DEGRADE CLEANLY there (getSerwist resolves undefined so
+  default, where service-worker caching is unavailable. Direct IndexedDB caches still work after
+  the application loads, but a cold reload needs a reachable server for the application shell.
+  The app must DEGRADE CLEANLY there (getSerwist resolves undefined so
   registration is never attempted, OnlineStatus falls back
-  to navigator.onLine, zero errors), which it does. To activate offline, enable SSL in the Signal K
+  to navigator.onLine, zero errors), which it does. To enable browser shell caching, enable SSL in the Signal K
   server (Server > Settings > SSL). Do not chase "the service worker is not registering" as a code
   bug without first checking `window.isSecureContext`.
 - Chart Locker saved areas and automatic caching are server-side offline chart preparation, separate

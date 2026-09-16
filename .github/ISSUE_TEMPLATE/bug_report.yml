@@ -101,7 +101,7 @@ body:
     id: console
     attributes:
       label: Browser Console Output
-      description: Open the browser developer tools and paste any errors or warnings from the console.
+      description: Open the browser developer tools and paste relevant errors or warnings. Remove tokens, private chart URL query values, vessel positions, and other sensitive data first.
       render: shell
 
   - type: textarea

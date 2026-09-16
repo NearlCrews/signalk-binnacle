@@ -34,12 +34,21 @@ Dependency-cruiser enforces the rule.
 - Hoist duplicate markup or CSS at the second copy.
 - Use lucide icons for app chrome when an icon exists.
 - Night-red must remain true night-readable: no blue, no bright stray pixels, and alarms still distinct.
+- Preserve 44px action targets at narrow widths, short heights, and 200% text. Reflow shared headers
+  and editor footers, and keep a real body action reachable through the bounded scroll region.
+- Point workflows use `PositionFields` plus chart-center actions where available. Reorderable lists
+  offer `ReorderActions` alongside dragging and keyboard movement through the same bounded operation.
+- Anchored menus initialize focus from `onPositioned`, after visible layout is measured. Inline
+  cancellation uses `restoreFocusAfterCancel` with a surviving-trigger getter, without stealing focus
+  from a different surface. Measure panel-slot height through `observeClientHeight`.
 
 ## Implementation Rules
 
 - Construct services in `src/app/App.svelte` and inject them. Do not add global singletons.
 - Feature orchestration belongs in `create<Feature>Controller(...)` factories in `*.svelte.ts` modules.
 - Reactive dependencies that can change, such as auth tokens and feature flags, are injected as getters.
+- App owns service construction and menu actions; `PlotterView` composes chart panels using the shared
+  `PanelId` union and injected dependency groups. Profiles remains app-owned.
 - Reuse helpers from `$shared/lib`, `$shared/map`, `$shared/geo`, `$shared/signalk`, `$shared/ui`,
   and existing entity stores before creating new helpers.
 - Keep overlays idempotent: stable source ids, layer ids, teardown, theme application, and reset paths.
@@ -66,7 +75,10 @@ Dependency-cruiser enforces the rule.
 - Coverage: `npm run test:coverage`
 - Build: `npm run build`
 - Full gate: `npm run verify`
+- Full browser gate: `npm run verify:browser`
 - E2E smoke, Chromium only: `npm run test:e2e:fast` (the offline/PWA and WebKit specs run in `test:e2e:gate`)
+- Existing-build browser matrix: `npm run test:e2e:gate`
+- CI gate, including package integrity and both dependency audits: `npm run verify:ci`
 - Release gate: `npm run verify:release`
 
 ## Verification
@@ -79,12 +91,21 @@ Run `npm run verify:browser` when the app shell, layout, instruments, chart life
 behavior is touched. The preview server may require approval to bind localhost in sandboxed Codex
 sessions.
 
+The layered gates are `verify:commit` (workflow policy, lint, prose, boundaries, and dead code),
+`verify:fast` (adds type checks), `verify` (adds coverage, build, and sizes), and `verify:browser`
+(adds every Playwright project). The browser matrix includes desktop and mobile WebKit UI, focused
+live safety scenarios, Chromium, and PWA coverage. `test:e2e:gate` reuses the build from `verify`;
+standalone use requires a current production build. Do not run competing suites on their shared ports.
+
 Browser specs share `e2e/helpers.ts`: `stubVesselsSelf` (the self-vessel document every spec needs
 answered), `openMenuItem` (open the app menu and activate one tile, scoped to the launcher so a
 label that also names a bar pill cannot match the wrong control), and `expectInsideViewport`. Reach
 for those before writing a file-local copy, because a file-local helper is invisible to the other
 specs and each one ends up re-rolling it. `test:e2e:gate` runs every project in
 `playwright.config.ts`, so new browser projects participate in both the local push gate and CI.
+For interaction assertions, test the action directly: a preliminary visibility or geometry wait can
+mask a focus-before-layout defect. For layout assertions, wait for the explicit data state under test
+before measuring controls; connection, GPS, and retained-data notices can legitimately resize chrome.
 For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
 publishing.
 

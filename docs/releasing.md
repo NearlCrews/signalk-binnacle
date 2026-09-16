@@ -6,8 +6,10 @@ release, or npm publication. Obtain explicit owner approval immediately before c
 
 ## Prepare the version
 
-1. Work from `main`, preserve unrelated local changes, and confirm the intended version with the
-   owner.
+1. Work from `main`, preserve unrelated local changes, and confirm the requested version size with
+   the owner. Check `package.json`, existing tags, the latest GitHub release, and npm's `latest`
+   version before choosing the next version. A minor release after `0.21.0` is `0.22.0`; never reuse
+   a published version or move its tag.
 2. Set the same version in `package.json` and the root package entries in `package-lock.json`.
 3. Move every shipped change from **Unreleased** into the versioned changelog section, add the release
    date, keep the stable anchor used by the README, and leave **Unreleased** ready for later work.
@@ -22,6 +24,36 @@ release, or npm publication. Obtain explicit owner approval immediately before c
    inspect the instrument dock and trailing status cluster for coordinates, inspect every image for
    recognizable private locations, and confirm the PNG files contain no EXIF, GPS, or text metadata.
    Do not replace screenshots as an unrelated side effect of release preparation.
+
+Preserve historical changelog entries and dated audit evidence. Mark an old audit as a historical
+snapshot if readers could mistake it for the current backlog. Keep current behavior in the feature
+guides, developer references, and README instead of duplicating a frozen list of test counts.
+
+## Check branch hygiene
+
+Inspect local branches, remote-tracking references, worktrees, and open pull requests before calling
+the checkout clean:
+
+```bash
+git status --short
+git fetch --prune origin
+git branch -a -vv
+git worktree list
+git ls-remote --heads origin
+gh pr list --state open
+```
+
+Pruning removes local tracking references for branches that no longer exist on the remote. It does
+not delete a remote branch. Delete a local branch only after confirming its work is merged or
+preserved elsewhere and that no worktree uses it. Do not treat every non-main branch as stale:
+active pull requests, including contributions from forks, may contain work that is not in `main`.
+Compare dependency pull requests with the current manifest and lockfile, since manually applied
+upgrades can supersede them even without a merge commit.
+
+Remote branch deletion and closing a pull request are external changes. Respect any no-push or
+local-only instruction, list remaining remote cleanup separately, and obtain authorization before
+changing those remote references or pull requests. Do not force-delete unmerged work merely to make
+the branch list shorter.
 
 ## Run the release gate
 
@@ -39,6 +71,12 @@ runtime and full dependency audits. Inspect the final pack output. It must conta
 `public/` application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICENSE`, and the
 Markdown guides linked from the README. It must not contain source maps, source files, test artifacts,
 local configuration, or scratch files.
+
+Both audits matter for this static webapp. `audit:runtime` checks the production installation,
+which has no runtime npm dependencies. `audit:full` also checks the browser libraries and build
+toolchain in `devDependencies`; those browser libraries can still contribute code to the shipped
+assets. A clean production-only audit does not establish that the bundled browser code is free of
+known dependency vulnerabilities.
 
 The build generates `public/THIRD_PARTY_NOTICES.txt` and its JSON inventory from emitted JavaScript
 modules and asset origins across the app, workers, and service worker. Both files must ship in the
@@ -74,6 +112,12 @@ Before requesting publication approval, also confirm:
 - the release commit is on `main`, and CI, SignalK Webapp CI, and CodeQL pass on that exact commit;
 - the CodeQL alerts API reports zero open alerts after the successful workflow; and
 - the generated service worker, manifest, app icons, screenshots, and production entry assets exist.
+
+When preparation is explicitly local-only, record the local gate and package results, the prepared
+commit, and any remaining remote branch cleanup. Exact-commit hosted CI, CodeQL, and publication
+checks remain pending until pushing is authorized. Do not describe those checks as passed merely
+because an earlier commit or the local gate passed. If publication happens on a later date, update
+the prepared changelog date before the final release commit and rerun the affected checks.
 
 ## Cut the release after approval
 

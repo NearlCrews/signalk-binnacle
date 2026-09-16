@@ -22,13 +22,19 @@ restricted areas, or the vessel's maneuvering limits.
 For a keyboard movement path, select the point in the strip, choose **Move point**, focus and pan the
 chart with MapLibre's keyboard controls, then choose **Move to chart center**.
 
+For precise entry without dragging, open **Enter measurement coordinates**. Enter latitude and
+longitude in decimal degrees, then choose **Add measurement point** or **Move point to coordinates**
+for the selected point. Negative latitude means south, and negative longitude means west. **Add at
+chart center** adds the current chart center without needing a vessel fix. Coordinate edits use the
+same validation and Undo history as chart edits.
+
 Press and hold or right-click a chart position before Measure is active, then choose **Measure from
 here** to start a fresh measurement at that exact position. Keyboard users can focus the chart and use
 the Context Menu key or Shift+F10 to open the same actions at the chart center. Selecting the
 already-active Measure menu item closes the menu without erasing current work.
 
-Escape cancels move mode first and preserves the measurement. A following Escape ends Measure when
-it is the topmost dismissible surface.
+Escape first cancels an open Clear confirmation, then cancels move mode if active, preserving the
+measurement in both cases. Otherwise it ends Measure when this is the topmost dismissible surface.
 
 Measure and route editing cannot own chart gestures at the same time. Route editing disables Measure
 with an explanation. Starting or editing a route while Measure is active is refused without clearing
@@ -67,6 +73,8 @@ cannot be undone.
 Only finite coordinates in the valid latitude and longitude ranges are accepted. Consecutive
 duplicate points are ignored. A move that would duplicate an adjacent point is rejected. Deleting a
 middle point is rejected if joining its neighbors would create a duplicate leg endpoint.
+Latitude must be between -90 and 90, and longitude between -180 and 180. Invalid numeric entries are
+rejected with an announcement, and the field restores its last valid value.
 
 A measurement is capped at 1,000 points. Add remains blocked at the limit, while selection, move,
 delete, and Undo remain available. The history bound retains the ability to undo all 1,000 additions.
@@ -96,7 +104,7 @@ temporary advisory measurement.
 - `src/features/measure/measure-overlay.ts` builds antimeridian-safe per-leg geometry, collision-managed
   distance labels, the total label, selection styling, the 44 px hit layer, and drag cleanup.
 - `src/features/measure/MeasureStrip.svelte` owns guidance, adjacent-leg readouts, keyboard-equivalent
-  editing, Undo, confirmed Clear, Done, and nested Escape behavior.
+  editing, shared coordinate fields, Undo, confirmed Clear, Done, and nested Escape behavior.
 - `src/widgets/chart-canvas/ChartCanvas.svelte` resolves vertex hits before chart additions, gives
   Measure one result per click, and applies the tool cursor as soon as MapLibre creates its canvas
   without waiting for the base style to load.
@@ -107,4 +115,5 @@ Unit coverage verifies operation Undo, invalid and duplicate edits, point limits
 commit and cancellation, pan restoration, antimeridian geometry and label midpoints, collision
 settings, theming, unit changes, opacity, and cleanup. The Playwright flow covers a 44 px chart
 selection target, pointer dragging, delete and Undo, keyboard chart-center movement, nested Escape,
-menu retention, route exclusion in both directions, cursor restoration, and a 320 px layout.
+coordinate entry, menu retention, route exclusion in both directions, cursor restoration, and a
+320 px layout.

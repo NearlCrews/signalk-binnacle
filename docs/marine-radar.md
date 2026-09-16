@@ -41,7 +41,8 @@ not accepted.
    standby, range, gain, clutter, or other controls.
 3. Open **Radar** from the Safety group. If several radars are present, select one.
 4. Select **Transmit**, review the emission confirmation, and confirm only when it is safe to emit.
-   **Standby** remains immediate so emission can stop without another confirmation.
+   Cancel returns focus to Transmit. **Standby** remains immediate so emission can stop without another
+   confirmation.
 5. Enable **Show echo on chart**, then select **Open overlay settings** to adjust opacity and stacking
    directly in the Overlays view.
 
@@ -111,7 +112,9 @@ and a positive width.
 
 The panel snapshots the accepted geometry when Edit starts. Form changes affect only that draft. Save
 revalidates every field and sends one complete geometry update, while Cancel leaves the provider
-unchanged. Start and end angles are not sorted because a valid zone can cross the capability boundary.
+unchanged. A rejected save keeps the editor open with the draft and offers **Retry save** or **Discard
+draft**; the displayed accepted area returns to its prior geometry. Start and end angles are relative
+to heading, not true north, and are not sorted because a valid zone can cross the capability boundary.
 A provider update during editing preserves the draft, reports a conflict, and requires the navigator
 to reload the current geometry before saving. Closing the panel, going Back, switching radars, or
 opening overlay settings asks before discarding a dirty draft.
@@ -121,7 +124,10 @@ not mean a guard zone is alarming. Alarm styling and copy remain reserved for a 
 notification. Live `allowed: false`, static read-only state, missing write access, and an in-flight
 write all block Save independently. A no-transmit sector keeps its safety warning associated with
 both angle fields and both Area enabled buttons for assistive technology. Saving it also requires a
-separate confirmation because the change can alter the radar emission envelope.
+separate **Apply sector** confirmation because the change can alter the radar emission envelope.
+Canceling that confirmation preserves the draft and returns focus to the save control. Geometry
+validation and write permission are checked again when the navigator selects Apply sector; a blocked
+or invalid draft is not submitted.
 
 The form is the complete keyboard-accessible workflow. **Edit on chart** is an optional, explicit
 placement mode for a form draft:
@@ -162,6 +168,7 @@ is active, Binnacle coalesces unsent values to the newest snapshot so an older r
 radar after the desired final value. Polling stays excluded for the full request lifetime, then observes
 a short echo grace period. The panel shows pending state and rejected writes, restores the exact prior
 scalar or geometry entry after the final write fails, and explains when read-write access is required.
+A geometry rollback does not discard the form draft; retry submits the retained edited values.
 A pending scalar write never disables its widget: the queue accepts the newer value, so rapid tuning
 stays possible on a slow link, while structured area saves and the power control stay blocked during
 their in-flight write.
@@ -197,8 +204,8 @@ dismissal, direct overlay-settings transition from a collapsed disclosure, slide
 forms, no-transmit confirmation, and exact zone, sector, and rectangle bulk-control payloads. Focused
 coverage also pins complete zone-tap pairing, bounded provider angles, capped tessellation,
 frame-owned heading and range, pure-red area colors, delegated marker gating, stale-input failure
-reporting, external editor cleanup, and persistent footer behavior while a phone panel body is
-collapsed.
+reporting, retained drafts after failed saves, cancellation focus, external editor cleanup, and
+persistent footer behavior while a phone panel body is collapsed.
 
 Native zone and stationary rectangle SI round trips were verified against the Mayara 3.7.0 built-in
 emulator. The checks include fresh values with omitted enabled state, capability bounds, signed and

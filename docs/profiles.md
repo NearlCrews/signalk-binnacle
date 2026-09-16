@@ -13,6 +13,11 @@ Each saved-profile card keeps its device-selection action visible. Rename, set-d
 delete actions live in the labeled three-dot menu. That menu flips above or below its trigger and
 stays within the visible viewport on narrow displays and while the panel scrolls.
 
+**Use profile** applies a setup to this device, and **Active here** identifies the current choice.
+**Set as default** changes the shared starting choice for a device that has no active profile. It does
+not switch displays already in use. Deleting a profile requires confirmation and, when sync is
+available, propagates the deletion to other stations using the same Signal K account.
+
 A profile contains:
 
 - theme, automatic theme selection, display dimming, bright-sun chart palette, and text size;
@@ -29,6 +34,14 @@ A profile contains:
 - the preferred radius for the next anchor drop.
 
 Stored settings remain in SI units. Conversion happens only at the display boundary.
+The Signal K server's published unit preference takes precedence over the profile's local fallback.
+The Units section explains which source is in use; the fallback selector is offered only when the
+server does not publish a preference.
+
+Applying a profile changes this display's local collision and shallow-depth settings. It does not
+publish server depth zones or change the boat's alarm configuration. Sharing a shallow-depth limit
+boat-wide is a separate, confirmed action in the alarm settings. Server depth zones still participate
+in the local watch, so selecting a profile cannot silently weaken a deeper server limit.
 
 The Data trends selection is independent from the instrument dock selection. New starter profiles
 and legacy profiles without a stored trends selection resolve to Depth, Apparent wind, Barometer,
@@ -40,7 +53,9 @@ the instrument is discovered again.
 
 Each browser keeps its own active profile. Selecting a profile on a tablet does not switch the helm
 display running in another browser. The chart center and zoom, instrument-dock open state, layer
-category disclosure, panel layout, dismissed hints, and similar browser chrome also stay local.
+category disclosure, panel layout, alarm volume, dismissed hints, and similar browser chrome also
+stay local. A browser origin includes its protocol, hostname, and port; another address for the same
+boat server has separate browser storage.
 
 The synced default is used when a browser has no active profile. If synced profiles exist without a
 default, Binnacle captures the browser's current settings as **Current setup** instead of applying an
@@ -65,11 +80,20 @@ silently travel to another station.
 
 On a secured Signal K server, profiles sync through the authenticated user's applicationData store.
 The active profile id is deliberately absent from the server document, while the default profile is
-shared.
+shared. This is account-scoped synchronization, not a boat-wide library shared automatically with
+every Signal K user. Another station needs access to the same account's applicationData to receive
+that library.
 
-Binnacle keeps a durable local journal of changed fields, names, defaults, and deletions. A failed or
-offline write remains queued across reloads. Reconnect, window focus, and returning to a visible tab
-retry synchronization.
+Binnacle journals changed fields, names, defaults, and deletions in browser storage. A failed or
+offline server write remains queued across reloads when that storage is available. If the browser
+refuses local storage, the running setup can continue in memory, but unsynced changes are not
+guaranteed to survive a reload. Reconnect, window focus, and returning to a visible tab retry
+synchronization.
+
+The panel distinguishes local-only settings, waiting for a connection, active synchronization, and
+successful synchronization. A refusal offers a read and write access request. Unreadable server data
+or an unresolved merge offers **Retry profile sync** rather than claiming that the server copy was
+saved.
 
 The version 2 profile document has a revision number, profile records keyed by id, deletion
 tombstones, and logical clocks for individual settings. A write tests the current revision before
@@ -78,9 +102,24 @@ of times. Edits to different settings are preserved instead of allowing the last
 to replace everything. Equal clocks without a pending local edit resolve to the server copy, so two
 stations converge instead of repeatedly restoring their own stale value.
 
-Signal K server 2.23.0 and later serialize applicationData writes per file, which provides the
-strongest concurrent-writer protection for revision tests. Profiles still save locally when the
-server is older, unavailable, unsecured, or has not granted write access.
+Concurrent-writer protection also depends on the server applying its read, revision test, and write
+as one serialized operation. Keep Signal K current when multiple stations edit profiles. Binnacle
+does not use a server-version number to decide whether to sync; it uses the actual API responses.
+Profiles still save locally when applicationData is unavailable, the server is unsecured, or write
+access has not been granted.
+
+## Import, export, and capacity
+
+**Export profile** downloads a JSON file containing the named setup, not device credentials, active
+safety state, or server resources. Treat exported settings and names as information about the vessel's
+setup, and review a file before sharing it. **Import** validates the file and creates new profile ids
+so it does not overwrite existing profiles. Importing does not activate the imported setup. Invalid
+or unusable files show an error; a successful import reports how many profiles were added.
+
+The library accepts up to 1,000 profiles. At that limit, **Save current as profile** is disabled with
+an explanation. An import can add only as many profiles as remain available. If synchronization would
+combine more than 1,000 profiles, the panel reports a capacity conflict and asks for a deletion before
+retrying; it does not report a completed sync.
 
 ## Startup and remote changes
 
@@ -118,7 +157,8 @@ during ingestion because device chrome and safety mute state are not portable.
 
 ## Device privacy
 
-**Forget credentials** removes Binnacle's Signal K device token from the current browser.
+**Forget credentials** removes Binnacle's Signal K device token from the current browser. It does not
+revoke that device authorization on the server or sign out an administrator session.
 **Erase all local data** removes Binnacle-owned settings, local profile cache and pending journal,
 offline databases, caches, service worker, and credentials after the safety checks pass.
 
@@ -126,6 +166,16 @@ Neither action deletes server profiles or other Signal K resources. Synced profi
 browser signs in and syncs again. Profiles and edits that have not synced are permanently lost during
 local erasure. Profile persistence is suspended before erasure so a queued autosave or in-flight
 server acknowledgement cannot recreate the cleared browser record.
+
+Both actions require confirmation. Erasure can be blocked while safety-critical or unsaved work is
+active, including another Binnacle tab when the browser supports the coordination check. A partial
+failure names the storage that could not be cleared; it is not reported as a complete erase. Data and
+sign-in state owned by other Signal K webapps are outside Binnacle's erase inventory.
+
+These actions are not a network privacy switch. External chart, weather, and tide requests can
+disclose the requested area, and automatic weather-warning checks can send the vessel position even
+with Weather closed. **Review network privacy** opens the explanation in Help. Closing a
+panel or removing local data does not disable the server's plugins or their external requests.
 
 ## Adding a setting
 

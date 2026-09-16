@@ -16,30 +16,23 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ![The Binnacle chart in the day theme, centered on Boston Harbor, with the MOB button and theme control in the top bar and the live status strip along the bottom](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
 
-<!-- Night-red hero: after capturing a night-red screenshot into static/screenshots/, reference it
-here with an absolute raw.githubusercontent.com URL, for example:
-![The same chart in the night-red theme, pure red on true black for a dark-adapted watch](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/06-night-red.png)
--->
+## What's new in 0.22.0
 
-## What's new in 0.21.0
+- **Helm controls:** an optional Autopilot panel, off-course alarms, alarm self-test and volume,
+  and a screen lock that leaves emergency controls available.
+- **Passage context:** forecast wind and after-dark arrivals in route plans, measured barometer
+  tendency, multi-day weather, and provider or NOAA weather warnings even when Weather is closed.
+- **Keyboard and touch workflows:** coordinate entry for routes, measurements, and anchor
+  corrections, tap-based reordering, and controls that remain reachable with enlarged text.
+- **Recovery without lost work:** retained logbook and handoff drafts, retryable radar-area edits,
+  explicit refresh actions, and offline coverage tied to the route and saved charts actually checked.
+- **Data confidence:** press-time MOB marks remain unchanged across stations and reconnects;
+  stale telemetry, tide datums, unknown hazard assessments, and unconfirmed actions stay explicit.
+- **Watchkeeping tools:** optional ship's logbook and AI advisor integrations, display dimming,
+  automatic themes, and per-category Signal K unit preferences.
 
-- **A real change of watch:** a timestamped handoff snapshot of the fix, course, alarms, closest
-  contact, depth watch, radar, weather and tide ages, and route coverage, shared between stations
-  through Signal K and honest about what is device-only.
-- **Course-up and heading-up:** explicit profile-owned orientation modes that fall back to north the
-  moment their reference goes stale, plus a passage plan with a departure time and a local-clock
-  arrival at every point.
-- **Honest staleness everywhere:** when the server declares a path timed out, retained values are
-  labeled with their age instead of posing as current, the instrument detail names the source that
-  went quiet, and with two GPS units the surviving one keeps the position live.
-- **One alarm authority:** every sound is ranked so MOB and a closing contact interleave instead of
-  colliding, the collision strip's CPA and TCPA take the largest numerals on screen, and the MOB
-  button becomes the chrome's one solid-red key.
-- **Two restored capabilities:** the NOAA chart offer renders for the first time inside US waters,
-  and a secured server's Chart Locker cache is detected instead of the whole session fetching tiles
-  straight from the internet.
-
-See the changelog for the full list.
+See the [0.22.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0220)
+for the full list.
 
 ## What it does
 
@@ -62,25 +55,29 @@ Binnacle ships its full feature set as a Signal K webapp:
   ambient badge grades the current view honestly and never calls the reference base map a chart.
 - **Offline charts:** with the optional Chart Locker plugin, draw and save the chart area needed
   for a passage, keep an automatic cache around the moving boat, and manage installed charts and
-  storage from one landing page. While navigating a route, an advisory coverage check reports
-  whether the charts along it are actually cached; without Chart Locker, the menu entry stays
-  visible and explains how to add it.
+  storage from one landing page. Check any saved route from its passage plan without activating
+  navigation. The advisory result reports Complete, Partial, or Unknown for the assessed corridor
+  and detail; without Chart Locker, the landing page remains available with setup guidance.
 - **Overlays:** free, key-free OpenSeaMap seamarks, marine protected areas, maritime boundaries, and
   NASA GIBS ocean conditions (sea-surface temperature and sea ice), each with its source attribution.
 - **Marine radar:** an optional live radar picture from the Signal K Radar API, rendered over the
   chart with range rings, a heading line, strict night-red colors, confirmed transmit, and the
   tuning and zone controls the radar reports. Provider, stream, stale-data, access, and renderer
   failures stay distinct, so an old picture is never presented as live.
-- **Routing:** draw and save routes as Signal K resources, tap **Go to here** to navigate straight
-  to a point, and follow a route with a nav strip (cross-track, distance, bearing, velocity made
-  good, and time to go) over the v2 Course API. A plan speed and an editable departure time turn
-  the route into a passage plan with a local-clock arrival at every point, and routes import and
-  export as GPX.
+- **Routing:** draw or enter coordinates and save routes as Signal K resources, tap **Go to here**
+  to navigate straight to a point, and follow a route with a nav strip (cross-track, distance,
+  bearing, velocity made good, and time to go) over the v2 Course API. A plan speed and departure time turn
+  the route into a passage plan with a local-clock arrival, forecast wind, and after-dark cues at
+  every point. Edit or reorder points without dragging, snap chart edits to saved waypoints, and
+  import or export GPX.
+- **Autopilot:** detect a Signal K v2 Autopilot API provider, show its state, mode, and target, and
+  offer only its supported controls. Engagement and maneuvers require deliberate confirmation;
+  missing, unknown, stale, and unreachable states never appear as confirmed standby.
 - **Profiles:** keep named helm setups containing the theme, chart and weather layers, chart
   orientation, collision thresholds, track and planning settings, unit fallback, toolbar pins,
-  instrument and Data trends selections, and preferred anchor radius. Changes to the active profile
-  save automatically and sync through Signal K when you are logged in, while each browser keeps its
-  own active choice.
+  instrument and Data trends selections, display settings, and preferred anchor radius. Changes to
+  the active profile save automatically and sync through Signal K when you are logged in, while
+  each browser keeps its own active choice.
 - **Instruments:** a gauge dock (SOG, heading, depth, apparent wind, and more from a curated
   catalog you pick and reorder) that takes the full screen on a phone. Values color by your
   server's configured alarm zones, staleness honors the server's own declarations, and every tile's
@@ -90,27 +87,33 @@ Binnacle ships its full feature set as a Signal K webapp:
   apparent wind, barometer, and speed over ground.
 - **Weather:** a zoom-capped mini-map with animated WebGL wind, pressure isobars, waves,
   precipitation, cloud, and radar, plus time-aware point readouts, marine forecasts, and official
-  warnings when a Signal K weather provider supplies them. Open-Meteo provides the key-free
-  fallback, and cached forecasts remain available offline with explicit stale labeling.
+  warnings from a Signal K weather provider or the NOAA point-alert fallback. Observed conditions
+  stay distinct from forecast estimates. Open-Meteo provides the key-free forecast fallback, and
+  cached forecasts remain available offline with explicit stale labeling.
 - **Tides:** independent tide-height and tidal-current station selection with automatic nearest
   choices, exact manual NOAA CO-OPS choices, a 48-hour tide curve, and the next high, low, flood,
-  ebb, or slack. Automatic tide height prefers the signalk-tides plugin when the server runs it.
+  ebb, or slack. Heights retain the provider's datum or explicitly say it is unspecified; times
+  include their date and local-time basis. Currents remain available without tide heights.
+  Automatic tide height prefers the signalk-tides plugin when the server runs it.
 - **Lookout:** a collision watch with CPA and TCPA, chart-highlight rings, an audible alarm, and a
   published Signal K notification, plus a searchable AIS target list and an Alarms panel that
-  collects every active alert on the boat. One alarm sounds at a time through a single audio
-  authority, with one-tap Silence and Acknowledge that propagate to every station.
+  collects every active alert on the boat. One audio authority coordinates audible alarms.
+  Supported Silence and Acknowledge actions propagate through Signal K; acknowledgment means
+  seen, not resolved. Device-local mute remains distinct and available after a boat-wide action fails.
 - **Anchor watch:** drop the anchor at the boat, set the swing radius, and get a drag alarm that
   latches until acknowledged. It drives the signalk-anchoralarm-plugin when installed, so the alarm
   keeps running with the browser closed, and falls back to a fully in-browser watch when it is not.
 - **Man overboard:** an always-visible MOB button with a confirm pop-out that marks the spot,
   publishes the boat-wide Signal K alarm, and raises a recovery strip with live bearing, range, and
-  elapsed time. An MOB raised by another station shows here too.
+  elapsed time. The position and time are captured on the initial press and preserved through
+  confirmation and reconnects. An MOB raised by another station shows here too. Without a fresh
+  fix, the alarm still raises but does not invent a position.
 - **Watch handoff:** a timestamped review-status snapshot for the change of watch: fix, course,
   alarms, the top contact, depth watch, radar health, weather and tide ages, and route coverage,
   plus a short operator note. Snapshots share between stations through Signal K and always state
   whether they synced; the surface reviews status and never declares it safe to take watch.
-- **Measure:** tap points on the chart for rhumb-line leg range, true bearing, and a running total,
-  with movable points, Undo, and a confirmed Clear.
+- **Measure:** tap points on the chart or enter coordinates for rhumb-line leg range, true bearing,
+  and a running total, with movable points, Undo, and a confirmed Clear.
 - **Tracks:** record, pause, save, show, and export segmented voyage tracks as GeoJSON, and GPS
   gaps never become invented route legs. Save the latest continuous segment as a reusable route, or
   confirm a retrace to navigate home along it.
@@ -129,9 +132,19 @@ Binnacle ships its full feature set as a Signal K webapp:
   profile-owned choices that fall back to north the moment their reference goes stale.
 - **Help:** a first-run orientation banner and a permanent Help panel with safe-use framing,
   Signal K access and alarm-sound setup, a marine glossary, and operating-context checklists.
-- **Your units:** every readout follows the server's imperial-or-metric unit preference; knots,
-  nautical miles, and bearings stay nautical.
-- **Themes:** day, dusk, and night-red, with true red on black for a dark-adapted watch.
+- **Logbook:** read recent entries and compose notes through the optional `signalk-logbook` plugin.
+  Navigation, anchor, and handoff events can offer factual drafts, but never save an entry without
+  your action.
+- **AI advisor:** read reports and request analyzer runs through optional
+  `signalk-openrouter-companion`. Reports are advisory and show their age. Run now discloses the
+  telemetry and paid-credit implications, tracks server status with a bounded wait, and shows
+  completion, refusal, or an unconfirmed outcome alongside the plugin's run and budget responses.
+- **Your units:** supported readouts and editable limits follow the server's per-category unit
+  preferences, with the profile's preference as fallback. Navigation-specific fields such as track
+  distance and route plan speed retain their labeled nautical-mile and knot conventions. Stored
+  values remain SI.
+- **Display:** day, dusk, and night-red themes, a dimmer, a bright-sun chart palette, automatic
+  theme switching, and interface text sizing. Night-red stays red on black for a dark-adapted watch.
 
 Each feature's full behavior, availability, and recovery states are documented in the guides in
 the repository's docs directory, which also ship inside the installed package.
@@ -232,10 +245,12 @@ A few interactions cover most of the helm:
   navigate straight to that point, or start a route or measurement.
 - **Measure a chart leg.** Open **Measure**, tap a start and destination, then read the rhumb range,
   true bearing, and total. Select a point to inspect both adjacent legs, choose **Move point** to drag
-  or place it again, and use **Undo** to reverse an add, move, or deletion. Use **Done** when finished.
+  or place it again, or enter its coordinates. Use **Undo** to reverse an add, move, or deletion.
+  Use **Done** when finished.
 - **Manage charts and overlays.** Open **Charts** to select chart sources, inspect their details,
   repair a saved PMTiles URL, refresh its metadata, or change server sharing. Switch to **Overlays**
-  to toggle overlays, change opacity, and drag rows to reorder their stack.
+  to toggle overlays, change opacity, and reorder their stack by dragging or with each row's
+  **Move up** and **Move down** actions.
 - **Prepare offline charts.** Open **Offline charts**, choose **Save a chart area**, draw over the
   passage, review the included charts and detail, and start the download. Confirm the saved area's
   status and update date before relying on it away from coverage.
@@ -298,8 +313,8 @@ credentials and boat data are encrypted on the local network.
 Chart Locker is optional, but it is the recommended way to prepare a passage rather than depending
 only on charts viewed previously in one browser. Install `signalk-chart-locker` from the Signal K App
 Store, then open **Offline charts** in Binnacle. If the plugin cannot be reached, that menu item stays
-visible but unavailable and explains whether to install, start, or sign in to Signal K as an
-administrator. When administrator access is required, the header status opens that sign-in directly.
+available and opens a setup page explaining whether to install, start, retry, or sign in to Signal K
+as an administrator. When administrator access is required, the header status opens that sign-in directly.
 The sign-in flow stays in the PWA window and redirects back to the current Binnacle route. If Signal K
 already reports an administrator session but Chart Locker refuses it, Binnacle reports an access
 error and offers a retry instead of asking the administrator to sign in again.
@@ -309,17 +324,19 @@ troubleshooting, download, and storage workflow.
 
 The Offline charts landing page has four jobs:
 
-1. **Saved areas.** Choose **Save a chart area**, draw a rectangle on the chart, review the smart
-   default chart selection, pick Overview, Coastal, or Harbor detail, check the estimated download and
-   free space, name it, and start the download. On a phone, the panel collapses while drawing so the
+1. **Saved areas.** Choose **Save a chart area**, draw a rectangle on the chart or enter its bounds,
+   review the default chart selection, pick Overview, Coastal, or Harbor detail, check the estimated
+   download and free space, name it, and start the download. On a phone, the panel collapses while drawing so the
    chart owns the gesture. A saved-area card is ready only when it says **Saved, works offline**.
    Accepted downloads recover by area identifier if their immediate job response is lost, and a
    temporary status failure offers Retry status without starting a duplicate download. If a saved
    definition references a removed chart source, Binnacle preserves the existing cached coverage,
    labels the missing source, and directs the user to adjust a copy before downloading again.
 2. **Automatic caching.** Optionally keep selected charts cached around the moving boat. This is a
-   rolling nearby cache, not a substitute for saving and verifying the full planned passage. Settings
-   follow Chart Locker's limits for 64 sources, zoom 0 through 24, distances up to 100 km, and update
+   rolling nearby cache, not a substitute for saving and verifying the full planned passage. Controls
+   remain disabled until the saved server policy loads; a failed load offers Retry instead of
+   presenting defaults as the current policy. Accepted changes report saving, saved, or failure.
+   Settings follow Chart Locker's limits for 64 sources, zoom 0 through 24, distances up to 100 km, and update
    intervals from one minute through 24 hours.
 3. **Installed charts.** Rename installed PMTiles charts, edit their descriptions, inspect bounds,
    zoom range, and scale, refresh the file list, and see actionable errors for invalid files. Add,
@@ -335,10 +352,11 @@ SSL is not required. Binnacle runs fully over plain HTTP, which is how the Signa
 by default: the chart, AIS, weather, points of interest, tracks, and the Lookout alarms all work
 without it.
 
-Much of the offline caching works without SSL. PMTiles chart areas, the weather forecast, tides,
-chart notes, and the vessel conditions are cached in IndexedDB, which is not secure-context gated,
-so even over plain HTTP a reload replays the last data and previously viewed PMTiles charts keep
-rendering offline. What SSL adds is the service-worker layer: browsers expose the service worker
+Much of the data caching works without SSL. PMTiles chart areas, the weather forecast, tides,
+chart notes, and the vessel conditions are cached in IndexedDB, which is not secure-context gated.
+Over plain HTTP, those retained records are available once the application has loaded, but a full
+reload still needs the Signal K server to serve the application shell. What SSL adds is the
+service-worker layer: browsers expose the service worker
 and cache-storage APIs only in a secure context (HTTPS or `http://localhost`), so caching the base
 map, plugin-served chart tiles, and the streaming overlays activates only when the server is
 reached over HTTPS. Over plain HTTP those degrade cleanly to online-only with no loss of live
@@ -450,7 +468,7 @@ open data and open source:
   pipelines, and wind farms); [GEBCO](https://www.gebco.net/) for global bathymetry;
   [Open Waters](https://openwaters.io/charts/seascape) for Seascape, merging GEBCO, EMODnet,
   NOAA CUDEM, and other regional sources into worldwide depth shading, hillshade, contours, and
-  soundings; [NASA EOSDIS GIBS](https://www.earthdata.nasa.gov/engage/gibs) for the ocean-conditions imagery;
+  soundings; [NASA EOSDIS GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) for the ocean-conditions imagery;
   [OpenSeaMap](https://www.openseamap.org/) for the seamark overlay; and the
   [Flanders Marine Institute (VLIZ)](https://www.vliz.be/) Marine Regions service for the maritime
   boundaries, the 12 nm, 24 nm, and high seas limits, the IHO sea areas, and the UNESCO marine

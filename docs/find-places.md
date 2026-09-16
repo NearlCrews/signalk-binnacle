@@ -13,9 +13,9 @@ providers can contribute marinas, anchorages, services, hazards, and other place
 same resource API.
 
 The chart overlay fetches a padded area for efficient panning, but Find places clips those records to
-the current visible chart bounds. Opening Find places also turns on the Places overlay (the same Signal K notes the chart shows), so
-the list and the chart markers cannot disagree because of a hidden layer. The panel's **Show places on
-chart** control reads and writes that same overlay state and restores a hidden layer directly. Panning
+the current visible chart bounds. Opening Find places also turns on the Places overlay, which shows
+the same Signal K notes, so a hidden layer cannot leave the list without its chart markers. The panel's
+**Show places on chart** control reads and writes that same overlay state and restores a hidden layer directly. Panning
 or zooming refreshes the list. Below zoom level 9, the panel asks the navigator to zoom in before it
 requests places. On a phone, minimize the panel to inspect or move the chart without closing the list.
 
@@ -32,9 +32,12 @@ Search matches the place name, category, source, and attribution. Matching ignor
 The list can sort by name, category, distance, or true bearing. Equal values use name and resource id
 as stable tie-breakers, so a provider refresh does not randomly reorder rows.
 
-With a fresh GPS fix, the initial order is nearest first. Without a fix, or when the last fix is more
-than ten seconds old, the initial order is by name and distance and bearing display as unavailable. An
-explicit sort choice is preserved if GPS availability changes.
+With a fresh GPS fix, the initial order is nearest first. Without a usable fix, including a fix that
+is more than ten seconds old, predates the current connection, or is declared timed out by Signal K,
+distance and bearing display as unavailable. Until the
+navigator chooses a sort, Binnacle switches between nearest-first with a fresh fix and name-first
+without one. An explicit sort choice is preserved if GPS availability changes. Bearings are marked
+in degrees true, not magnetic.
 
 Pointing at or focusing a row previews it with the chart ring. Selecting a row keeps it highlighted,
 rings the marker, and opens the standard note detail panel without moving the chart. Closing Find
@@ -43,7 +46,36 @@ replaces the list because both surfaces use the same bottom-sheet position. Its 
 Find places with the current results and selection intact.
 
 At most 250 matching rows render at once. Search or zoom in to narrow a larger result set. The complete
-in-view set still participates in search and sort before this display limit is applied.
+accepted in-view set still participates in search and sort before this display limit is applied. The
+panel states how many matches are shown when the display limit is reached. That is separate from the
+5,000-note ingestion limit; neither number promises an exhaustive directory of every place nearby.
+The search field has a clear control. While the field is focused, Escape clears its text before a
+second Escape dismisses the panel.
+
+## Place details and confidence
+
+Opening a result reads its detail from Signal K. **Details checked** shows when Binnacle last received
+the detail, including the date, time zone, and age. This is a retrieval time, not a survey date or proof
+that a provider's measurements are current. Details are kept in a bounded session cache for five
+minutes; reopening the same record within that interval does not reset its age.
+
+**Refresh place details** requests a new copy. If the refresh fails, the last detail stays visible
+with its original checked time and an explicit retained-information warning. **Retry place details**
+tries again without treating the old content as newly fetched. A failure with no retained detail says
+that the detail could not load. Switching to a different place cannot display the previous place's
+detail as the new one.
+
+Provider descriptions render as plain text. True and false flag values are distinct from missing or
+malformed values, which display **Unknown**. A Dangerous flag becomes **Dangerous to navigation**,
+**Provider does not mark this feature as dangerous**, or **Danger status unknown**. A false or absent
+danger flag is not a claim that the place is safe. Check provider attribution, charts, notices, and
+conditions before acting on these details. External source links open outside Binnacle and may share
+request information with that website.
+
+Selecting a result does not start navigation. **Show on chart** explicitly centers the place.
+**Navigate here** requires a confirmation naming the destination before changing the shared Signal K
+course. **Save as waypoint** opens an editor with the place's name and position. Navigation and saved
+resource writes require appropriate Signal K access.
 
 ## Personal notes
 
@@ -65,6 +97,11 @@ explains how to enable Notes in Signal K's built-in Resources Provider. Read-onl
 a direct read and write access request. A refused or failed save keeps the editor and all entered values
 open; a refused or failed delete keeps the selected note and confirmation context intact.
 
+Latitude and longitude controls keep invalid or partial input visible with an inline explanation
+rather than silently moving the note. A pending save disables editing and duplicate submission, and
+Escape cannot discard the pending editor. After a failed save, correct the input or access problem
+and retry; canceling the editor is an explicit dismissal, not a durable draft save.
+
 After Signal K accepts a create, edit, move, or delete, the chart and Find places apply that result
 immediately. A bounded session-only bridge keeps the confirmed result through a slow or failed
 collection refresh, including when the first refresh has no prior provider snapshot. Signal K remains
@@ -82,22 +119,31 @@ The panel distinguishes these states instead of presenting every empty list as t
 - showing a cached result while offline; and
 - provider or connection failure.
 
-Successful validated note sets persist in IndexedDB and may be reused across reloads. Malformed stored
-entries are discarded before they can reach the list or chart. While offline, an expired cached set
-remains available and is labeled as cached because recent provider changes may be missing. With no
-cached set, the panel says that no places are available offline and does not issue a provider request.
-A cache read or write failure cannot delay or block a successful live response.
+Successful validated note sets persist in IndexedDB and may be reused across reloads for up to seven
+days. Malformed stored entries are discarded before they can reach the list or chart. While offline,
+an already loaded set can remain available past its session-cache freshness window and is labeled
+as cached because provider changes may be missing. This does not guarantee that an expired persisted
+set survives a reload. With no usable cached set, the panel explains that none is available for this
+view and does not issue a provider request. A cache failure does not prevent a live request, and
+writing the cache does not delay rendering a successful live response.
 
 A transient refresh failure keeps the last rendered results and labels them as such. Failed requests
-retry after a cooldown and a subsequent chart sync. Reconnecting requests the current viewport
-immediately instead of waiting for a fresh-cache interval. A token change invalidates session cache and
-pending results so data fetched under prior credentials cannot leak into the new access context.
+retry after a cooldown and a subsequent chart sync. **Retry places** forces a new current-viewport
+request when online, bypassing that cooldown and the cached result. While offline, reconnect first;
+retry does not manufacture fresh data. Reconnecting requests the current viewport immediately instead
+of waiting for a fresh-cache interval. A token change invalidates session caches and pending results.
+This is not a substitute for erasing persisted browser data on a shared device: use the
+[Profiles device privacy controls](profiles.md#device-privacy) before handing the device to someone
+else.
 
 ## Implementation map
 
 - `src/features/notes/notes-client.ts` validates and normalizes resource entries.
 - `src/features/notes/notes-source.ts` owns viewport cache, persistence, single-flight loading, and
   retry cooldown.
+- `src/features/notes/notes-detail.ts` owns validated detail loading and the session detail cache.
+- `src/features/notes/NoteDetailPanel.svelte` owns detail freshness, retained-data recovery, and
+  confirmed navigation.
 - `src/features/notes/notes-overlay.ts` renders markers and reports the current viewport state.
 - `src/features/notes/personal-note-contract.ts` owns field bounds and the strict ownership marker.
 - `src/features/notes/personal-notes-client.ts` probes write capability and performs v2 mutations.
@@ -108,9 +154,10 @@ pending results so data fetched under prior credentials cannot leak into the new
 - `src/features/poi-search/poi-search-rows.ts` owns search, distance, bearing, and stable sorting.
 - `src/features/poi-search/PoiSearchPanel.svelte` owns the accessible list interaction and copy.
 
-Focused tests cover parsing, bounds, cache corruption and failure, provider and connectivity changes,
-token invalidation, ownership, v1 and v2 capability states, mutation failures, accepted-write
-synchronization, search normalization, stable sorting, and hover and selection wiring. The Playwright
-suite covers a provider-backed menu flow, a layer initially saved as hidden, metadata search, the
+Focused tests cover parsing, unknown hazard flags, bounds, cache corruption and failure, provider and
+connectivity changes, detail freshness and retry, token invalidation, ownership, v1 and v2 capability
+states, mutation failures, accepted-write synchronization, search normalization, stable sorting, row
+limits, and hover and selection wiring. The Playwright suite covers a provider-backed menu flow, a
+layer initially saved as hidden, metadata search, the
 direct visibility toggle, selection, personal-note create, edit, move, and delete, refresh failure,
 the zoom-limit message, narrow-screen overflow, and phone detail navigation.

@@ -3,8 +3,8 @@
 These guides document Binnacle's behavior in depth. They ship inside the installed package, and
 each one is a plain Markdown file in this directory:
 
-- **ai-guardrails.md:** the design constraints bounding AI-assisted content: server-held keys,
-  no model text in safety paths, and a UI that never blocks on a cloud call.
+- **ai-guardrails.md:** advisory reports, server-held keys, telemetry disclosures, and separation
+  from Binnacle's local safety calculations.
 - **building-menu-items.md:** the step-by-step build checklist for adding a menu item, its panel,
   and its controls so a new one matches the shipped ones.
 - **design-system.md:** the authoritative design and front-end build standard: tokens, themes,
@@ -22,3 +22,7 @@ each one is a plain Markdown file in this directory:
 - **releasing.md:** the maintainer checklist for preparing and publishing a release.
 - **tracks.md:** recording, saving, exporting, and retracing segmented voyage tracks.
 - **waypoints.md:** dropping, managing, and navigating to server-stored waypoints.
+
+The `audit/` directory contains dated historical snapshots kept in the repository, not in the
+installed package. Their findings, source locations, and deferred decisions are not a current
+release checklist. Use the guides above and the changelog for current behavior and requirements.

@@ -1,5 +1,10 @@
 # Deferred catalog sources, 2026-08-02
 
+> Historical snapshot of the August 2, 2026 catalog decision. The source versions, availability,
+> cache behavior, and proposed prerequisites below are not current implementation guidance.
+> Later releases and the [current menu reference](../menu-items.md) and
+> [offline chart guide](../offline-charts.md) supersede this snapshot.
+
 `signalk-chart-sources` 0.7.0 added twenty sources. Eleven were surfaced in the Layers panel at the
 upgrade, and nine were deliberately left out. This records which nine, why each was held, and what
 each one needs before it ships, so the decision does not have to be rediscovered from the catalog

@@ -28,8 +28,11 @@ During edits, the fast per-file loop:
 
 Then run `npm run verify:commit` before committing. The pre-push hook runs
 `npm run verify:browser`, including type checks, coverage, a production build, bundle budgets, and
-Chromium E2E without a duplicate build. CI runs `npm run verify:ci` for Chromium, WebKit,
-package, and runtime dependency coverage.
+every project in `playwright.config.ts` without a duplicate build: Chromium, PWA, desktop and mobile
+WebKit UI, and focused live safety scenarios. CI runs `npm run verify:ci`, which adds package integrity
+and both runtime and development dependency audits. `npm run verify:release` adds the release-specific
+package checks. Standalone `test:e2e:gate` expects an existing production build; `test:e2e:fast` builds
+and runs Chromium only, while `test:e2e:cross-browser` builds and runs all projects.
 
 Tooling traps, each of which has bitten us:
 
@@ -54,13 +57,13 @@ Tooling traps, each of which has bitten us:
 
 ---
 
-## 1. Wire the menu item in `app/App.svelte` (all four steps, together)
+## 1. Wire the menu item and its panel (all four steps, together)
 
 The menu and bottom bar are data-driven, so these four steps are the whole integration. Doing one or
 two leaves a tile that opens nothing, or a panel with no way in.
 
-1. Add a `MenuItem` to the `menuItems` array, in the right intent group. The groups today are
-   Chart, Navigate, Safety, Weather, Instruments, and Settings. Groups derive from contiguous item
+1. Add a `MenuItem` to the `menuItems` array in `app/App.svelte`, in the right intent group. The groups
+   today are Chart, Navigate, Safety, Weather, Instruments, and Settings. Groups derive from contiguous item
    order, so a group move means relocating the literal, not only editing its `group` string. Safety
    stays before Weather and Instruments; Settings (Profiles) MUST stay last. Set `id`, `label`, `icon` (a lucide component),
    `group`, `pressed: activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add
@@ -78,12 +81,15 @@ two leaves a tile that opens nothing, or a panel with no way in.
    Chart Locker management requests use the browser's Signal K administrator session. Do not attach
    Binnacle's device bearer token to its administrator-gated `/api` routes. Classify 401 and 403
    responses against `/skServer/loginStatus` instead of assuming the browser is signed out.
-2. Add the panel id to the `LeftPanel` union type.
-3. Add the mount block: `{#if activePanel === '<id>' && <guards>}` wrapping `<div
-   class="panel-slot"><YourPanel ... onClose={closePanel} onBack={backToMenu} /></div>`. The guards
-   mirror the menu gating.
+2. Add the panel id to the `PanelId` union exported from `$shared/ui`.
+3. Add the mount branch in `views/plotter/PlotterView.svelte` under its existing `.panel-slot` and
+   forward `onClose` and `onBack`. The guards mirror the menu gating, including a setup or recovery
+   branch when the menu remains actionable without its provider. Do not nest another panel slot.
+   Profiles is the existing app-owned exception, not the model for a new chart panel.
 4. Construct the feature's controller and services in `App.svelte` and pass them down as props.
-   Services are never global singletons; they are built here so they are swappable in tests.
+   Extend Plotter's matching service, controller, entity-store, or action group when it needs those
+   dependencies. Services are never global singletons; they are built here so they are swappable in
+   tests.
 
 Large optional panels should expose a cached dynamic-import loader from the slice's `index.ts` and
 mount through an `{#await}` block with loading, failure, and Retry states. Keep the import behind the
@@ -124,6 +130,10 @@ level. Inside, in this order:
    of the viewport height and Plotter's measured chart height. Do not replace that cap with a
    feature-local viewport calculation or extend the panel over the global header and MOB action. Keep enough
    space for usable body controls after the header and footer, not merely an on-screen outer frame.
+   Use `PanelHeader`'s wrapping title and secondary-action layout, including the shared 44px compact
+   icon controls. For a native waypoint or note editor, compose `.modal-card.editor-dialog`, a bounded
+   `.dialog-body`, and a wrapping `.dialog-footer`; do not let enlarged text widen the form or push
+   Cancel and Save outside the viewport.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
    role="alert">{error}</p>`, and a write-gate teach note through the shared
    `WriteAccessNote` when `auth.writeBlocked`, whose message names what is blocked in the panel's
@@ -163,7 +173,10 @@ level. Inside, in this order:
     selection offers Use current chart view for the initial area, followed by bounded coordinates
     for adjustment.
     Selecting an already-active menu item must not silently erase work. Measure is the canonical
-    example.
+    example. Route draft controls also provide bounded earlier and later moves that preserve point
+    identity and metadata, follow the selected point, and participate in Undo. A dirty route's
+    Escape and Close paths keep the points until the app's discard confirmation is accepted; expand
+    a minimized panel before showing the prompt.
 11. Sensor-derived actions must reject stale inputs at the action boundary, not only gray the button.
     Center, Follow, and Anchor watch are the canonical GPS examples. Readouts derived from stale own
     position must become unavailable instead of keeping frozen range or bearing values.
@@ -352,6 +365,9 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | Explain why a control is grayed | `UnavailableHint` plus a matching `title` | a `title` alone, silent to assistive tech |
 | Focus a freshly revealed control | `focusOnMount` | an ad hoc onMount focus call |
 | Restore focus after inline cancellation | `restoreFocusAfterCancel` with a trigger getter | focusing a removed trigger or stealing focus after success |
+| Measure layout-dependent panel-slot height | `observeClientHeight` | reading layout synchronously inside ResizeObserver delivery |
+| Show a serialized settings write outcome | `SaveStatus` with `createLatestWriter` from `$shared/lib` | independent writes or silent save failures |
+| Explain Chart Locker administrator access | `AccessRecoveryNote` | treating the device token as an administrator session |
 | Arrow-key roving in a small menu | `rovingFocus` | a bespoke keydown index walker |
 | Import a text file | `pickTextFile` plus `readErrorMessage` | a hidden `<input type="file">` |
 | A dated default save name | `defaultSaveName` | an inline date string |
@@ -363,7 +379,21 @@ Two rules that apply to every list and every toggle row:
   hover and focus tooltip (it falls back to the title). A toggleable row with no gloss is a finding.
 - `SavedList` owns the list `<ul>`, the card frame, and the `empty` state; the panel owns the `<h3>`
   heading above the list and each card body. Do not pass SavedList a `heading` AND render your own
-  `<h3>` for the same list, and do not hand-roll the empty `<p>`.
+  `<h3>` for the same list, and do not hand-roll the empty `<p>`. Supply `ariaLabel` when there is no
+  internal heading naming the list.
+
+For an anchored toolbar menu, set `focusFrames: 0` on `createMenuFocusMachine` and initialize its rows
+from `AnchoredMenu.onPositioned`. That callback follows a measured visible layout box, not only a
+style update. Placement coalesces resize and scroll work, and teardown cancels callbacks. Keep
+`onFocusLeft` on the primitive; do not add another focus timer or close-on-blur implementation.
+
+Canceling a form or armed confirmation calls `restoreFocusAfterCancel` in the same turn that clears
+its state. Resolve the surviving trigger through the getter after the DOM update, with a stable row
+identity for recreated controls. A different active surface keeps its focus. Do not apply this
+restoration to successful operations. Busy `NameEntry` consumes Escape without closing the panel.
+
+`IconPicker` belongs to `$entities/icon-picker`. Its fixed anchored list stays inside the viewport
+and focuses the selected option after placement, scrolling the picker rather than the outer editor.
 
 ---
 
@@ -415,8 +445,9 @@ These are the style corrections we keep making. Each has a one-line fix.
    after a higher one trips the rule. Order higher-specificity selectors AFTER lower ones, or compose
    `.row-interactive` and scope only your own grid. Reach for a `biome-ignore` only with a written
    justification, as `buttons.css` does for `.segmented .btn` before `.btn`.
-5. Use tokens, never a hard-coded px or color. The only sanctioned off-scale literals are the
-   hairline tier (0.05 to 0.2 rem) and 0.3, 0.35, 0.4, 0.45, 0.55, and 0.6 rem.
+5. Use tokens rather than a new geometry or color literal. The design system documents off-scale
+   spacing, component dimensions, the shared physical 44px compact-control floor, and the literal
+   lengths required in media and container queries. Do not invent a feature-local compact scale.
 
 ---
 
@@ -504,8 +535,8 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
   where it updates live.
 - Section headings are `<h3 class="caps-label">`. The panel's own title comes from `SlideOver` or
   `SubViewHeader`; do not add a second top-level title.
-- Use the shared focus actions in `src/shared/ui/focus.ts` (`focusOnMount`, `rovingFocus`,
-  `onKeydownAction`); do not hand-roll focus code. True modals use a native `<dialog>` with
+- Use the public focus helpers from `$shared/ui` (`focusOnMount`, `rovingFocus`, and `trapFocus`);
+  do not import internal action files or hand-roll focus code. True modals use a native `<dialog>` with
   `showModal()`, which provides browser-native Tab trapping without a manual action.
 - Revealing a confirm step transfers focus to it, and cancellation returns to a meaningful control.
   Help deep links focus and scroll to their destination after mounting. Do not let a parent panel's
@@ -513,6 +544,7 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
 - Numeric validation gives visible and programmatic feedback. Preserve the effective value on
   rejection, set `aria-invalid`, associate the message with `aria-describedby`, and state the allowed
   range or increment. Never silently replace an invalid entry with a different active value.
+  `UnitField` defaults to `step="any"`; a numeric increment must match the displayed unit's contract.
 - Pointer dragging has a single-tap alternative as well as a keyboard path. Native checkbox labels
   provide a full 44 px row, and primary actions such as Use profile have visible words. Preserve
   meaningful accessible names when compact visual labels are necessary.
@@ -528,9 +560,9 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
 
 Tick all of these before you commit a new menu item.
 
-- [ ] All four `App.svelte` steps: menu item in the right group (Settings stays last), `LeftPanel`
-      union member, mount block with matching guards, and the controller and services constructed and
-      passed as props.
+- [ ] All four integration steps: menu item in the right group (Settings stays last), shared `PanelId`
+      union member, Plotter mount branch with matching guards, and the controller and services
+      constructed in App and passed through the appropriate dependency group.
 - [ ] The panel is one `SlideOver` with a specific `closeLabel`, `bodyFlex` (unless it is an
       accordion), and `onClose` and `onBack`. Responsive focus-trap changes preserve that same shell.
 - [ ] At narrow widths, short heights, and 200% text, Back, Close, and a real body control remain

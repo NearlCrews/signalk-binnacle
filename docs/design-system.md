@@ -26,9 +26,10 @@ is not done.
 All geometry, type, color, depth, and timing come from CSS custom properties defined in
 `src/styles/tokens.css`. Never hardcode a literal where a token exists. The sanctioned off-scale
 exceptions are the hairline spacing tier (0.05 to 0.2 rem) and the specific fine values 0.3, 0.35, 0.4,
-0.45, 0.55, and 0.6 rem; anything else is a token. The one further exception is a `@media` or
-`@container` condition, which must carry a literal length: a custom property cannot be read inside a
-query condition, and one used there drops the whole block.
+0.45, 0.55, and 0.6 rem; anything else is a token unless a documented component dimension applies.
+Shared compact controls may use the physical 44px target floor without reducing text size. A `@media`
+or `@container` condition must carry a literal length: a custom property cannot be read inside a query
+condition, and one used there drops the whole block.
 
 ### Geometry and type (theme-independent)
 
@@ -85,8 +86,10 @@ query condition, and one used there drops the whole block.
   proof that the panel's body or actions fit. Check actual controls after the header and footer
   take their space.
 - Layout-dependent panel-slot height uses `observeClientHeight`, which coalesces measurements into
-  an animation frame so layout reads occur outside ResizeObserver delivery. Its teardown cancels
-  queued measurements and disconnects the observer.
+  an animation frame so layout reads occur outside ResizeObserver delivery and reports only changed
+  heights. Its teardown cancels queued measurements and disconnects the observer. The measured slot
+  also reserves room above a minimized Routes header so its Close control remains reachable while
+  the route-edit strip is present.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
   (panel + 2), and `--z-menu` 5. The MOB confirm is a native top-layer `<dialog>`, above everything without a z-index.
 
@@ -302,8 +305,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   explicit aggregate, fallback, display, and precision semantics are eligible. A profile owns zero to
   eight trend IDs independently of the instrument dock. Customize keeps the saved order, groups
   options by instrument category, leaves unavailable saved IDs removable, and uses the shared
-  `createReorder` pointer and keyboard behavior. At eight selections, every unselected option stays
-  visible and disabled with the instruction to remove a trend first.
+  `createReorder` pointer and keyboard behavior with `ReorderActions` for individual taps. At eight
+  selections, every unselected option stays visible and disabled with the instruction to remove a
+  trend first.
   Opening Data trends triggers live and historical discovery even when the instrument dock has never
   opened. Rescan retains previously accepted live and historical-only options while reporting
   provider degradation. Only the eight saved descriptors and one optional focused descriptor keep
@@ -344,7 +348,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   `createRetryableLazyUiLoader` times out retryable user-interface imports instead of caching an
   unresolved request for the rest of the session. One-shot feature registration without a recovery
   action uses the unbounded `createRetryableLazyLoader`, so a slow import can still complete.
-- Overlays, modals: `.modal-card`.
+- Overlays, modals: `.modal-card` supplies the frame. Native point editors also compose
+  `.editor-dialog`, `.dialog-header`, `.dialog-body`, `.dialog-footer`, and `.dialog-field`. The shared
+  editor frame replaces the browser's font-relative dialog size cap with a viewport bound; the
+  editor's body scrolls while its header and wrapping action footer remain in the flex layout. Fields
+  and buttons may shrink and wrap inside the body instead of widening it at enlarged text.
 - Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by nine strips:
   Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Alarm, Route edit, History
   playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
@@ -380,6 +388,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   accessible name), so the headers cannot drift apart. Do not hand-roll a panel header. At narrow
   widths or enlarged text, titles and secondary actions reflow into separate rows. Keep Back and
   Close reachable and reserve usable body space; clipping a tall header is not a reflow strategy.
+  The heading keeps a usable minimum text width, and the shared narrow-container rule holds icon
+  controls at 44px while text continues to scale. Do not let growing controls squeeze the title into
+  a single-letter column.
   Verify that a real body control can be reached and operated, including after scrolling. An
   on-screen panel rectangle or a positive body height alone does not establish that the task works.
 - `ErrorBoundary`: the render boundary around every resolved lazy component. Its fallback receives
@@ -392,20 +403,26 @@ Shared behavior lives here. Compose these; do not re-implement them.
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
   for a bespoke coordinate system. Pass `anchor`, `preferredPlacement`, and `anchorAlign` for shared
-  viewport-fixed placement that flips and clamps at every screen edge. Pass `onFocusLeft` with the
-  close function for the shared close-on-focus-out contract: the primitive applies it against its own
-  surface while open, and ignores a transient focus loss to the body, so an in-place content swap
+  viewport-fixed placement that flips and clamps at every screen edge. Placement and ResizeObserver
+  notifications coalesce into an animation frame. `onPositioned` runs once after the visible surface
+  has a measured, nonempty layout box, not merely after its style attribute changes. Use that callback
+  for initial focus; do not add a separate focus timer. Teardown and stale, disconnected, or inert
+  surfaces cancel it. Menus with their own point-based placement must bound and scroll their content
+  within the viewport too. Pass `onFocusLeft` with the close function for the shared close-on-focus-out
+  contract: the primitive applies it against its own surface while open and ignores a transient focus
+  loss to the body, so an in-place content swap
   (the chart menu's confirm step) never self-closes. Do not re-derive that check from a `surfaceRef`
-  binding in a consumer.
+  binding in a consumer. Focus-out waits for the DOM update before checking the current active
+  element, so replacement forms retain focus and outgoing surfaces cannot read an inert owner.
 - `OverflowActions`: a labeled More button and keyboard-focused anchored menu for secondary saved-card
   actions. It uses viewport-fixed, collision-aware positioning so the menu stays on-screen at every
   card position and while its panel scrolls. Keep one primary action visible, then move dense secondary
   actions here instead of wrapping five or six icon-only controls across a phone card.
 - `CustomizeToggle`: the edit-mode entry control (see "Edit modes" below). Props: `object` (the
   label's object noun), `editing`, and `onToggle`. Render it, never a hand-written ghost button.
-- `createReorder`: the shared pointer and keyboard reorder controller. Use it when a list can be
-  reordered outside the Layers panel, such as the app menu's toolbar editor. Pass a stable row
-  attribute and handle selector; keep the persisted order in the owning feature, not in the UI row.
+- `ReorderActions`: the labeled reorder menu with Move up and Move down. Pass `label`, `canMoveUp`,
+  `canMoveDown`, and `onMove`. Pair it with `createReorder` so single taps, Arrow keys, and dragging
+  share the same constraints, persisted order, focus destination, and live announcement.
 - `InlineConfirm` and `ConfirmArm`: the armed two-step confirm for destructive actions and immediate
   navigation handoffs. Never a blocking `window.confirm`. The prompt names the effect and, for derived
   guidance, the data scope. Retrace track names the latest continuous segment.
@@ -425,14 +442,20 @@ Shared behavior lives here. Compose these; do not re-implement them.
   drag (that is a `.range` slider). Pass `ariaDescribedBy` when a safety or validation note describes
   the field. Invalid entries leave the effective value unchanged and expose a visible, associated
   explanation through `aria-invalid` and `aria-describedby`. Reverting a value silently is not
-  validation feedback.
+  validation feedback. The default step is `any`; set a numeric step only when that display-unit
+  increment is part of the setting's contract. Convert bounds and values at the display edge rather
+  than accidentally applying a meter increment to a feet entry.
 - `PositionFields`: bounded decimal-degree latitude and longitude fields for a chart-point workflow.
-  Use them alongside a chart-center action when a point can also be placed with a pointer. Route and
-  measurement point lists keep the same order and limits for both input paths.
+  Pass `position`, `onChange`, and optional `disabled`. Latitude is bounded to -90 through 90 and
+  longitude to -180 through 180, with signed directions explained in the accessible names. The
+  caller owns the draft and the explicit operation that applies it. Use them alongside a chart-center
+  action when a point can also be placed with a pointer. Route and measurement point lists keep the
+  same order and limits for both input paths.
 - `SavedList`: the saved-item card list (used by routes, tracks, waypoints, profiles). Renders the
-  `.saved` card frame and the actions row, plus the caps heading and the `empty` state; the panel
-  supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
-  must distinguish loading, refresh with retained cards, real empty, and failure outside the
+  `.saved` list and card frame, optional caps label, and the `empty` state; the panel supplies each
+  card's content and actions. Omit `heading` when the panel owns a semantic `<h3>` for that list, and
+  pass `ariaLabel` when the list has no internal label. A server-backed list must distinguish loading,
+  refresh with retained cards, real empty, and failure outside the
   primitive. Disable conflicting mutations while one is pending.
 - `NavSortControl`: the generic segmented sort control over `$shared/nav`'s `NavSortState`. Pass the
   sort keys and labels, the current `state`, and `onChoose`; it renders the active segment and its
@@ -461,6 +484,13 @@ Shared behavior lives here. Compose these; do not re-implement them.
   request's outcome (declined, unanswered, or unreachable) renders from the shared
   `UPGRADE_OUTCOME_COPY` map in `$shared/signalk`, so the panel and the app-wide banner cannot
   drift, and the requesting state names where the approval happens.
+- `AccessRecoveryNote`: Chart Locker administrator-session recovery, distinct from the device's
+  read-and-write authorization. Pass the classified access state, capability, sign-in URL, and retry
+  callback. A missing or non-administrator session offers sign-in; a refused administrator session
+  or connection failure offers Retry access instead of another sign-in loop.
+- `SaveStatus`: the shared saving, saved, and retryable-error presentation. Pass the writer `state`,
+  a contextual `errorMessage`, and `onRetry`. Use it with `createLatestWriter` when several controls
+  update one server document.
 - `TransientNote`: the timed explanatory note a tap on a blocked or informational control shows,
   since the title tooltip such a control also carries is mouse-hover-only. Backed by a `Toast`, it
   is absolutely positioned by the host's own class so it never contributes layout height. Shared
@@ -468,18 +498,19 @@ Shared behavior lives here. Compose these; do not re-implement them.
   strip's copy layers below `--z-safety-strips` and lifts by `--rail-clearance` so it can never
   cover a safety card.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
-  seeded default starts selected). Seed it with `defaultSaveName`.
+  seeded default starts selected). Seed it with `defaultSaveName`. While `busy`, disable edits and
+  submission and consume Escape without canceling the write or dismissing the enclosing panel.
 - `restoreFocusAfterCancel`: call from a name-form or confirmation cancellation with a getter for
   its trigger. The getter resolves after the DOM update, including recreated controls. It restores
-  lost focus without taking it from another active surface. Do not call it after a successful action.
+  lost focus without taking it from another active surface. Call it in the same turn that clears the
+  form state; pass an optional closing surface when the whole form owns focus. Resolve a surviving
+  control by stable resource identity instead of retaining a detached row button. Do not call it
+  after a successful action.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
   `expanded` (bindable), never `open` (which collides with `window.open`).
 - `LayerToggle`: the layer or chart toggle row, with a `description` that becomes the hover and focus
   tooltip. Set a plain-language `description` on every toggle row.
 - `VisibilityToggle`: the show/hide eye toggle for a saved overlay item.
-- `IconPicker`: the waypoint and note symbol chooser. Pass `disabled` with the enclosing mutation
-  state so a pending dialog cannot change fields while its accepted values are in flight. Its list
-  chooses the roomier vertical direction and clamps to the live viewport.
 - `ShowOnChartToggle`: the full-width "Show X on chart" `.btn` toggle in a panel body that mirrors a
   layer's visibility, with the Layers eye as the source of truth.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
@@ -500,7 +531,7 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
   and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
   CSS token contract.
-- Focus and dialog helpers: `rovingFocus`, `focusOnMount`, `onKeydownAction`, `isTabKey`,
+- Focus and dialog helpers: `rovingFocus`, `focusOnMount`, `trapFocus`, `isTabKey`, `nextRovingIndex`,
   `dialog`, and `registerDismiss` (the Escape dismiss stack that peels the topmost surface first).
 - `createMenuFocusMachine` and `initializeMenuFocus`: the toolbar-menu keyboard machine shared by
   `OverflowActions` and the pinned-actions More menu. It owns arrow and Home and End roving over
@@ -510,10 +541,19 @@ Shared behavior lives here. Compose these; do not re-implement them.
   use steps through the same copy, so arrow behavior cannot drift between menu families. Disabled
   rows are skipped by default. A menu whose blocked actions explain their reason opts into
   `includeAriaDisabled`; those rows remain reachable but must not execute their blocked command.
+  An anchored consumer sets `focusFrames: 0` and calls `initializeMenuFocus` from `onPositioned`,
+  leaving placement as the sole initial-focus owner.
 - `pickTextFile` and `readErrorMessage` for file import; `defaultSaveName` to seed a save name, and
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.
 - `THEMES`, `ThemeController`, `createThemeController` for the theme switch.
+
+`IconPicker` is exported from `$entities/icon-picker`, not `$shared/ui`. It is the waypoint and note
+symbol chooser. Pass `disabled` with the enclosing mutation state so a pending dialog cannot change
+accepted fields in flight. Its anchored list chooses the roomier vertical direction and clamps to
+the live viewport. Opening focuses the selected option after placement and scrolls only the picker
+to reveal it, without moving the surrounding editor. Arrow keys, Home, End, and typeahead continue to
+reveal the active option.
 
 `$shared/audio` (`Alarm`, `GatedAlarm`) draws one module-scoped `AudioContext` for the whole app, not
 one per alarm: `primeAlarmAudio` and `alarmAudioPrimed` are the gesture-priming pair, wired to both
@@ -541,9 +581,10 @@ without another explicit Play action. Its temporary track and vessel dimming mus
 profile-owned layer manager.
 
 `createPathMetaCache` (`$shared/signalk`): the shared per-session cache of `meta.zones` and related
-path metadata, with a null in-flight sentinel and a retry on the next reactive visit after any failed
-fetch. The instruments controller and the shallow monitor both read through it, so a path's meta is
-fetched once per session rather than once per consumer.
+path metadata, with a null in-flight sentinel, a bounded attempt budget, and a cooldown before a failed
+read can retry. A changed token resets spent attempts, and explicit refresh invalidates settled
+answers. The instruments controller and shallow monitor share accepted results rather than fetching
+once per consumer. Successful reads also publish the path's declared staleness window to its cell.
 
 ### Settings persistence
 
@@ -681,7 +722,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   used for the waypoint editor and the MOB confirm.
 - The bottom bar renders the pinned `MenuItem`s in stored order (using `shortLabel`) plus a More
   overflow. The app menu's toolbar edit mode owns membership, order, reset, and the live reorder
-  announcement; the bar only renders the resolved list.
+  announcement; the bar only renders the resolved list. Fit against the available layout column and
+  the control's resolved size, including inherited compact overrides. Do not measure a content-sized
+  bar that shrinks again whenever a pill moves into More.
 - The Layers and charts panel opens on chart sources first. The Charts view lists server and user chart
   sources, opens chart detail from the row gear, shows bounds when known, and keeps "Add a chart" for
   user PMTiles URLs. Every query-bearing URL defaults to device-only, displays redact all query
@@ -717,6 +760,11 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   reference: point selection is separate from movement, the invisible chart hit area is 44 px, and
   the editor supplies keyboard-equivalent creation, selection, movement, deletion, and ordering
   wherever those operations exist.
+  Route point editing includes Add at chart center, Insert after selected point, Move point earlier
+  and later, and Undo point edit. Reordering keeps point identity and metadata with the moved point;
+  selection and coordinate fields follow its new position. A chart edit invalidates conflicting
+  coordinate-edit undo history. Route Escape requests the app's discard confirmation without letting
+  the drawing library erase the draft first; a minimized panel expands before showing that prompt.
   Offline area selection also offers Use current chart view and bounded coordinate fields; dragging
   is never the only way to create the first area.
 - Interactive map surfaces use the shared drag-safe tap path for mouse and one-finger touch input.
@@ -746,7 +794,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   notifications, are the two sanctioned exceptions).
 - Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
   `prefers-reduced-motion`, and Playback disables automatic advance while keeping manual
-  stepping and scrubbing available.
+  stepping and scrubbing available. The global transition reset is `0s`, not a small nonzero duration
+  that can introduce a visibility transition on an element whose default transition property is all.
 
 ## 10. Icons
 
@@ -764,10 +813,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   idioms. A reactive dependency injected into a controller is passed as a getter `() => value`, never by
   value, or it freezes at construction (a real stale-value bug class).
 - Feature-Sliced Design: imports flow strictly downward, `app -> views -> widgets -> features ->
-  entities -> shared`. No same-layer slice-to-slice imports. Every slice exposes a public API via
-  `index.ts` with named re-exports only, never `export *`. Cross-feature data flows through an
-  `entities` store, never feature to feature. These boundaries are machine-enforced by dependency-cruiser
-  and fail the build.
+  entities -> shared`. Same-layer siblings are reachable only through their `index.ts` public API,
+  never internal paths. Every public API uses named re-exports only, never `export *`. Cross-feature
+  data flows through an `entities` store, never feature to feature. These boundaries are enforced by
+  dependency-cruiser in the verification gate.
 - Feature orchestration lives in a `create<Feature>Controller(deps)` factory in a `*.svelte.ts` module
   that owns the feature's runes and returns the handlers and getters the panels and chart read. Services
   (the Signal K client, the map, the stores) are constructed in `app/App.svelte` and passed down as
@@ -833,11 +882,13 @@ short version:
    immediate navigation actions, and `.panel-controls` for the action row.
 4. Use only tokens and shared classes. If you need a shape twice, hoist it into a shared class or
    primitive, not a second scoped copy.
-5. Wire it in `app/App.svelte`: construct the controller and services there and pass them down, render
-   the SlideOver in the panel slot, and add a `MenuItem` to open it. If a user-relevant provider is
+5. Construct the controller and services and add the `MenuItem` in `app/App.svelte`. Add the shared
+   `PanelId` and pass the dependencies to `views/plotter/PlotterView.svelte`, which composes chart
+   panels in its existing slot. Profiles remains app-owned. If a user-relevant provider is
    optional, keep the item visible with `available` and an actionable `unavailableHint`; do not hide
    it conditionally.
 6. Run `npm run verify`, all green. Run `npm run verify:browser` when app-shell, layout, map,
-   interaction, or browser behavior changes. CI adds WebKit, package, and runtime audit coverage
-   through `npm run verify:release`. See `docs/building-menu-items.md` section 0 for the per-file
-   loop and tooling traps.
+   interaction, or browser behavior changes. That browser gate runs every configured Chromium and
+   WebKit project, including PWA, mobile layout, and live safety scenarios. CI adds package and both
+   dependency audits through `npm run verify:ci`; release preparation uses `npm run verify:release`.
+   See `docs/building-menu-items.md` section 0 for the per-file loop and tooling traps.

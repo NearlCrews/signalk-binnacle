@@ -46,8 +46,8 @@ Save stays disabled and the panel names the one step that fixes it. See Server p
 
 Duration is elapsed time from the first kept point to the latest kept point, including time between
 segments. Distance and average speed never include a direct leg across a segment gap. Top speed is the
-highest valid recorded speed. Displayed distance and speed use nautical miles and knots, while stored
-values remain SI.
+highest valid recorded speed. Distances display in nautical miles, and speeds follow the Signal K
+server unit preference. Stored distance and speed remain SI.
 
 ## Panel behavior
 
@@ -58,6 +58,15 @@ retrace are disabled while their required write access or operation capacity is 
 
 Discard and delete require inline confirmation. Retrace also requires confirmation because it creates,
 saves, activates, and reverses a route. Visibility toggles and GeoJSON export remain local read actions.
+Cancel returns focus to the control that opened the confirmation or naming form. A failed save keeps
+the entered name and form available for retry instead of making the navigator start over.
+
+**Passage debrief** summarizes the active recording once it spans at least 10 minutes and 0.25 nautical
+miles. It shows start and end, time underway and stopped, distance, average and top speed while
+underway, and the longest continuous underway leg. Underway classification uses distance made good
+over time, with a 0.26 m/s floor. Recording gaps contribute to neither underway nor stopped time, so
+their sum can be shorter than the recording's elapsed duration. These are recorded-track estimates,
+not a complete log of vessel activity.
 
 Saved-track visibility is session UI state. It does not modify the server resource and is not synced to
 another display. Saved records themselves are server resources and appear on other clients that read the
@@ -125,9 +134,10 @@ first successful write.
 
 ## Route conversion and retrace
 
-GPS gaps are hard navigation boundaries. Save as route and Retrace track use only the latest continuous
-segment and require at least two connected points. Earlier segments remain in the saved track but never
-become a straight route leg across missing GPS history. The segment is simplified to route turning
+GPS gaps are hard navigation boundaries. **Save as route** and **Retrace track** operate on the active
+recording, not a selected saved-track card. They use only its latest continuous segment and require at
+least two connected points. Earlier segments remain part of the track but never become a straight
+route leg across missing GPS history. The segment is simplified to route turning
 points before it is saved. Simplification unwraps longitude while calculating, so a short crossing at
 the antimeridian does not become a nearly world-spanning segment. Retrace reverses those waypoints and
 starts Signal K course navigation only after confirmation.
@@ -169,12 +179,15 @@ The saved-track controller uses latest-result-wins refreshes and one mutation at
 writes update local state before reloading the collection, so a slow or failed follow-up read cannot
 erase an accepted save. The recorder serializes local appends, clears, and prefix rewrites to prevent
 IndexedDB completion order from resurrecting discarded points or dropping a post-save tail.
+Replacing the stored recording uses one IndexedDB transaction, so an interrupted replacement cannot
+leave a partially rewritten track. A storage failure retains the working in-memory recording and
+reports memory-only persistence.
 Device-data erasure remains blocked until the recorder has checked IndexedDB, so a slow startup read
 cannot reveal an unsaved track only after its storage has already been deleted.
 
 ## Verification
 
 Run `npm run verify:browser`. Unit coverage includes recorder corruption and races, persistence
-degradation, resource parsing, optimistic controller state, portable export names, panel states, and
-gap-safe route conversion. The browser test covers saved-resource loading without a live stream and
-narrow-screen panel layout.
+degradation, atomic replacement, resource parsing, optimistic controller state, portable export names,
+retained save names, cancellation focus, passage debrief calculations, and gap-safe route conversion.
+Browser coverage includes saved-resource loading without a live stream and narrow-screen panel layout.

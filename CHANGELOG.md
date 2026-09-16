@@ -6,11 +6,20 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0220"></a>
+
+## [0.22.0] - 2026-09-16
+
+Helm controls, passage preparation, and recovery workflows, with explicit limits for unavailable,
+stale, and advisory data.
+
 ### Added
 
 - Coordinate-entry controls for routes, measurements, and anchor corrections, plus tap-based
-  ordering controls for toolbar actions, layers, instruments, and trends.
+  ordering controls for route points, toolbar actions, layers, instruments, and trends.
 - A persistent Offline charts setup page, contextual GPS help, and in-app network privacy guidance.
+- Keyboard navigation and type-ahead selection for waypoint icons, plus a Return to now action
+  for forecast playback.
 - The autopilot arrives: a status chip showing engaged or standby with the mode and target, and a
   panel with armed engage, disengage, tack, and gybe plus direct heading nudges while engaged,
   consuming the Signal K v2 Autopilot API with honest absent, access, and unreachable states.
@@ -77,6 +86,8 @@ All notable changes to Binnacle are documented here. The format follows
 - The README leads with a first-run quickstart and hero image, the docs gain an index, an AI
   guardrails guide, and refreshed menu and radar references, and the setup checklist explains
   what HTTPS unlocks.
+- User, developer, and release guides describe the current controls, shared primitives, provider
+  requirements, and recovery paths. Historical audit documents are marked as dated snapshots.
 
 ### Fixed
 
@@ -86,6 +97,9 @@ All notable changes to Binnacle are documented here. The format follows
   boat-wide silence fails. Local fallback off-course controls state their scope.
 - Enlarged-text panel headers, editor dialogs, and chart menus keep controls reachable. Night-red
   active badges meet text contrast requirements, and menu cancellation restores keyboard focus.
+- Safari menu and icon-picker focus waits for rendered placement, and panel height measurement
+  avoids resize-observer delivery loops. Compact panel headers preserve usable body space with
+  enlarged text on short displays.
 - Tide displays retain provider datum, timestamps, and failure context, and current predictions
   remain available without tide heights. Missing instrument assessments and unknown danger flags
   no longer appear normal or safe.

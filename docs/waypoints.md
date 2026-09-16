@@ -19,6 +19,11 @@ hazards, conditions, and direct observation.
 6. Tap a mark on the chart to open the Waypoints panel with that mark's card current. A hidden or
    fully faded waypoint layer is not a tap target, and chart editing tools keep the tap.
 
+When dropping a new mark, **Save and navigate** saves it and then opens the same named navigation
+confirmation. It does not start a course immediately. Plain **Save** remains available, and editing an
+existing mark does not offer Save and navigate. Keyboard chart actions use the chart center as the
+new waypoint position.
+
 Adding, editing, deleting, and starting navigation require read and write access on a secured Signal K
 server. The panel leaves local read actions available and explains when writes are blocked.
 
@@ -64,7 +69,8 @@ change.
 
 Delete and navigation use separate inline confirmations. Delete names the destructive action.
 Navigation names the exact waypoint and warns the navigator to check the destination before relying on
-it.
+it. Cancel returns focus to the initiating action, or to the waypoint name if that action is no longer
+available. A failed write retains the dialog values for another attempt.
 
 ## Finding a waypoint in the panel
 
@@ -82,8 +88,11 @@ The panel searches and sorts saved marks with the same list idioms as Find place
   and the panel explains why.
 - Until the navigator chooses a sort, the panel follows the fix: nearest first as soon as a fresh fix
   arrives, by name while it is absent or stale. An explicit choice is never overridden.
-- At most 250 cards render at once. The panel reports how many matches are hidden and asks for a
-  narrower search rather than rendering a full collection of action-bearing cards.
+- Up to 250 search results render at once. The panel reports how many matches are hidden and asks for
+  a narrower search rather than rendering a full collection of action-bearing cards.
+- A waypoint selected on the chart stays visible as an additional first card when it falls outside
+  the current search or result limit. The panel explains why it is pinned without changing the
+  search or sort choice.
 - When the collection arrives at the 5,000-waypoint ingestion limit, the panel says more marks may
   exist on the server, so a short list is never mistaken for the whole locker.
 
@@ -107,6 +116,10 @@ the optional `signalk-symbol-manager` plugin supplies compatible waypoint symbol
 offers those resources. Missing or removed custom symbols degrade to the default marker. Binnacle does
 not require the plugin for standard waypoint behavior.
 
+The symbol picker supports arrow keys, Home, End, and typing to find a symbol. Escape closes the
+picker and restores focus to its trigger. On narrow screens or with enlarged text, the dialog body
+and symbol choices scroll while Save and Cancel remain available.
+
 ## Implementation and verification
 
 - `src/entities/waypoint/waypoint-geojson.ts` owns resource validation and conversion.
@@ -122,5 +135,6 @@ not require the plugin for standard waypoint behavior.
 
 Unit coverage verifies resource conversion, validation limits, stale refresh rejection, retained
 dialogs, serialized writes, optimistic state, load copy, access gating, search matching, sort order and
-tie-breaking, and the render and ingestion cap notices. The Playwright flow covers HTTP-only loading,
-narrow layout, and the navigation confirmation boundary.
+tie-breaking, selected-card visibility, cancellation focus, and the render and ingestion cap notices.
+Browser coverage includes HTTP-only loading, narrow and enlarged-text dialog layouts, symbol-picker
+keyboard access, and the navigation confirmation boundary.

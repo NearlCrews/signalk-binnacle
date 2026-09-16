@@ -17,6 +17,10 @@ Check existing issues first to avoid duplicates, then open a bug report with:
 - Environment details (Binnacle version, Signal K server version, browser, and device)
 - Relevant browser console output
 
+Remove access tokens, private chart URL query values, vessel positions, and other sensitive data
+from logs and screenshots before posting. Report vulnerabilities through the private channel in
+the [security policy](SECURITY.md), not a public issue.
+
 ## Suggesting enhancements
 
 Open a feature request issue describing the proposed feature, the use case it
@@ -26,12 +30,15 @@ serves, and any implementation ideas you have.
 
 1. Fork the repository and create a feature branch from `main`.
 2. Follow the [Development section of the README](../README.md#development)
-   for setup, build, and test commands. `npm install` provides every repository-local tool.
+   for setup, build, and test commands. `npm install` provides the repository-local tools; install
+   the browser binaries with `npx playwright install chromium webkit` before browser tests.
 3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
 6. Run `npm run verify`. Run `npm run verify:browser` when browser behavior is affected. CI runs
-   `npm run verify:ci`, including Chromium, WebKit, package, and runtime audit checks.
+   `npm run verify:ci`, including Chromium, WebKit, package, runtime dependency, and full dependency
+   audit checks. `test:e2e:gate` uses the existing production build and runs every configured browser
+   project.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 
@@ -47,6 +54,8 @@ serves, and any implementation ideas you have.
   preceding-hour precipitation in millimeters. Signal K provider precipitation is converted from
   meters to millimeters at ingestion.
 - American English everywhere (color, behavior, center, gray).
+- Use Oxford commas, write "and" rather than an ampersand in prose, and do not use em dashes.
+- Spell chartplotter as one word.
 - Default to no comments. Add one only when the WHY is non-obvious (a hidden
   constraint, a subtle invariant, or a workaround).
 
