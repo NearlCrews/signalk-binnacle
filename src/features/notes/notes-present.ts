@@ -53,3 +53,13 @@ export function isRedundantNoteLabel(label: string, sectionTitle: string): boole
 export function isDangerFlag(label: string, kind: string | undefined): boolean {
   return kind === 'flag' && label.trim().toLowerCase() === 'dangerous';
 }
+
+export function dangerFlagText(value: unknown): string {
+  if (value === true) return 'Dangerous to navigation';
+  if (value === false) return 'Provider does not mark this feature as dangerous';
+  return 'Danger status unknown';
+}
+
+export function flagText(value: unknown): string {
+  return value === true ? 'Yes' : value === false ? 'No' : 'Unknown';
+}

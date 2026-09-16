@@ -52,7 +52,7 @@ import {
   RouteStore,
 } from '$entities/route';
 import { SymbolsStore } from '$entities/symbols';
-import { TidesStore } from '$entities/tides';
+import { TidesStore, tideHandoffFact } from '$entities/tides';
 import { type TrackPoint, TrackRecorder } from '$entities/track';
 import { UnitsStore } from '$entities/units';
 import { cleanUserChartSource, type UserChartSource, UserCharts } from '$entities/user-charts';
@@ -128,7 +128,7 @@ import {
   type PoiViewState,
 } from '$features/notes';
 import type { Poi } from '$features/poi-search';
-import { CompanionStatus, type RouteCoverageReport } from '$features/prewarm';
+import { CompanionStatus, loadRegionsClient } from '$features/prewarm';
 import {
   createProfileBindings,
   createProfilesController,
@@ -183,7 +183,6 @@ import {
 import {
   Clock,
   createMediaQuery,
-  formatClockTime,
   HeldFlag,
   hasControlCharacters,
   isRecord,
@@ -258,6 +257,7 @@ import { createFollowController } from './follow-controller.svelte';
 import { collectHandoffFacts } from './handoff-facts';
 import LiveRegions from './LiveRegions.svelte';
 import { createNotificationsController } from './notifications-controller.svelte';
+import { createRouteCoverageState } from './route-coverage-state.svelte';
 import StatusStrip from './StatusStrip.svelte';
 import { createSafetyController } from './safety-controller.svelte';
 import { createStreamController } from './stream-controller.svelte';
@@ -279,7 +279,6 @@ const clock = new Clock();
 // silence that could not happen while costing the readouts a whole wrapped row.
 const alarmAudioGate = new AlarmAudioGate(clock);
 const audioState = $derived(alarmAudioGate.state);
-const audioBlocked = $derived(alarmAudioGate.blocked);
 const vessel = new OwnVessel(store, clock);
 const aisTargets = new AisTargets(store);
 // A worker that dies after connect fires no Comlink settle; the failure callback routes it into
@@ -534,6 +533,7 @@ let layersView = $state<LayersView | undefined>();
 // docks at the leading edge at a time. A single active-panel value enforces that structurally, so
 // opening one closes whatever was open without each opener having to clear the others by hand.
 let activePanel = $state<PanelId | null>(null);
+let helpTarget = $state<'gps' | 'privacy'>();
 let selectedAisId = $state<string | undefined>();
 let selectedWaypointId = $state<string | undefined>();
 let tidesOpenedFrom = $state<'menu' | 'chart'>('menu');
@@ -602,6 +602,7 @@ let instrumentsFullScreen = $state(false);
 // full-screen dock) can reserve the space the rail floats over.
 let safetyRailClearance = $state('0px');
 const openPanel = (panel: PanelId): void => {
+  if (panel === 'help') helpTarget = undefined;
   if (instrumentsFullScreen && instruments.open) instruments.setOpen(false);
   if (activePanel === 'trends' && panel !== 'trends') {
     trends.setOpen(false);
@@ -618,6 +619,10 @@ const openPanel = (panel: PanelId): void => {
   if (panel === 'trends') trends.setOpen(true);
   if (narrow) selectedNote = undefined;
 };
+function openHelpPanel(target?: 'gps' | 'privacy'): void {
+  openPanel('help');
+  helpTarget = target;
+}
 // Open the panel if it is closed, close it if it is already open, so a bar pill and a menu tile both
 // toggle. Delegates to openPanel/closePanel to keep the narrow-width clear-selectedNote side effect.
 const togglePanel = (panel: PanelId, onOpen?: () => void): void => {
@@ -1531,15 +1536,14 @@ const handoffDrafts = new PersistedValue<HandoffSnapshot[]>(
 const handoffClient = createHandoffClient(origin, () => authToken);
 // The latest route-coverage report, threaded up from the Offline charts panel, so a handoff can
 // state whether the corridor was checked without re-running the check.
-let routeCoverageFact = $state<string | undefined>();
-function onRouteCoverageReport(report: RouteCoverageReport | null): void {
-  if (report === null || report.verdict === 'unknown') {
-    routeCoverageFact = undefined;
-    return;
-  }
-  const verdict = report.verdict === 'complete' ? 'Complete' : 'Partial';
-  routeCoverageFact = `${verdict} for a ${report.corridorNm} nm corridor, checked ${formatClockTime(Date.now())}`;
-}
+const routeCoverage = createRouteCoverageState({
+  route: () => (routeStore.activeId ? routeStore.routeById(routeStore.activeId) : undefined),
+  provider: () => companionBase,
+  online: () => net.online && companionStatus.state === 'serving',
+  clock,
+  getRegions: async (provider, signal) =>
+    (await loadRegionsClient()).createRegionsClient(provider).getRegions(signal),
+});
 // The v2 Autopilot API surface: discovery is the provider probe, REST hydrate is truth, and the
 // stream keeps it live. Every command is write-guarded and confirm-armed in the panel.
 const autopilot = createAutopilotController({
@@ -1610,7 +1614,7 @@ const handoff = createHandoffController({
       }),
       depthWatch: () => shallowController.monitorState,
       alarmChronology: () => alarmChronologyFact(alarmLog),
-      companionHeadline: () => latestCompanionHeadline(companionAi.reports),
+      companionHeadline: () => latestCompanionHeadline(companionAi.reports, clock.now),
       radar: () =>
         radarHealth.state === 'quiet'
           ? 'quiet'
@@ -1618,13 +1622,8 @@ const handoff = createHandoffController({
             ? 'transmitting, picture stale'
             : `failed (${radarHealth.reason})`,
       weatherFetchedAtMs: () => weather.grid?.fetchedAt,
-      tides: () =>
-        tidesStore.tide !== undefined
-          ? 'tide station data loaded'
-          : tidesStore.status === 'idle'
-            ? 'not loaded'
-            : tidesStore.status,
-      routeCoverage: () => routeCoverageFact,
+      tides: () => tideHandoffFact(tidesStore, clock.now),
+      routeCoverage: () => routeCoverage.fact,
       multiSourcePaths: () => {
         // Watch-critical paths a handoff should name when more than one source fed them recently.
         const watched: Array<[string, string]> = [
@@ -1855,7 +1854,6 @@ const menuItems = $derived<MenuItem[]>([
     shortLabel: 'Offline',
     icon: DownloadCloud,
     group: 'Chart',
-    available: companionBase !== null,
     unavailableHint:
       companionProbe === undefined
         ? 'Checking whether Chart Locker is available on the Signal K server.'
@@ -2189,8 +2187,8 @@ function publishDelta(path: string, value: unknown): void {
 }
 
 // The man-overboard orchestration: the alarm effect, the MOB live-region string, and the trigger,
-// cancel, and steer handlers (the v2 postMobNotification route with its v1 delta fallback and the
-// in-flight-id cancel race) all live in the controller; the host wires its handlers to the MOB
+// cancel, and steer handlers (an immutable notification delta with echo confirmation and reconnect
+// replay) all live in the controller; the host wires its handlers to the MOB
 // button and strip and reads mobController.mobAlert into LiveRegions. The reactive inputs (token,
 // notificationsApi) are getters so the controller reads them live, not frozen at construction.
 const mobController = createMobController({
@@ -2272,6 +2270,7 @@ const routeController = createRouteController({
     return true;
   },
   stopRouteEdit: () => mapCommands?.stopRouteEdit(),
+  replaceRouteWaypoints: (waypoints) => mapCommands?.replaceRouteWaypoints(waypoints) ?? false,
   getTrackPoints: () => recorder.points,
   toast,
   onCourseLogMoment: (kind, name) => logbook.offerEntry(logbookCourseSuggestion(kind, name)),
@@ -3020,13 +3019,14 @@ const plotterActions = {
   onTideStationSelect,
   onNotes: (notes: NotePoint[]) => (poiNotes = notes),
   onPoiStatus: (state: PoiViewState) => (poiViewState = state),
+  retryPlaces: () => mapCommands?.retryPlaces(),
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => (applyWeatherLayers = apply),
   onSilenceNotification,
   onAcknowledgeNotification,
   onSilenceAllNotifications,
   onAcknowledgeAllNotifications,
   muteGenericHere,
-  onRouteCoverageReport,
+  onRouteCoverageAssessment: routeCoverage.accept,
   openAlarmsPanel: () => openPanel('alarms'),
   closePanel,
   backToMenu,
@@ -3040,7 +3040,7 @@ const plotterActions = {
   },
   setLayerVisible,
   onRetryHistoryProviders: () => void probeHistoryProviders(true, true),
-  onRetryChartLocker: () => void companionStatus.refresh(),
+  onRetryChartLocker: refreshCompanionProbe,
   armMeasure,
   moveSelectedMeasureToCenter,
   toggleCollisionMute,
@@ -3052,7 +3052,7 @@ const plotterActions = {
   backFromRoutesPanel,
   openRoutesPanel: () => openPanel('routes'),
   openProfilesPanel: () => openPanel('profiles'),
-  openHelpPanel: () => openPanel('help'),
+  openHelpPanel,
   enableAlarmSound: primeAlarmAudio,
   resetChartHints,
   dismissHelpOrientation: () => helpOrientationSeen.set(true),
@@ -3192,6 +3192,7 @@ const plotterActions = {
     {chartLockerAccessUrl}
     chartLockerState={companionStatus.state}
     chartLockerAdminAccess={companionStatus.state === 'serving'}
+    offlineSetupState={companionProbe?.state === 'access-refused' ? 'access-refused' : companionBase !== null || companionProbe?.state === 'present' ? 'chart-loading' : companionProbe?.state ?? 'checking'}
     pwaStatus={pwa.status}
     {arrivalBanner}
     toastMessage={toast.message}
@@ -3202,9 +3203,9 @@ const plotterActions = {
     {historyProviders}
     {serverFeatures}
     {notificationsApi}
-    {audioBlocked}
     {audioState}
     helpFirstRun={!helpOrientationSeen.value}
+    {helpTarget}
     {showHelpWelcome}
     {showEncPrompt}
     insecureNoteDismissed={insecureNoteSeen.value}
@@ -3257,6 +3258,7 @@ const plotterActions = {
             onImport={onImportProfiles}
             onForgetCredentials={forgetDeviceCredentials}
             onEraseAllLocalData={eraseAllLocalData}
+            onOpenNetworkPrivacy={() => openHelpPanel('privacy')}
             onClose={closePanel}
             onBack={backToMenu}
           />
@@ -3396,7 +3398,7 @@ const plotterActions = {
     pinnedActions={resolvedPinned}
     editing={menuEditing}
     {clock}
-    onOpenHelp={() => openPanel('help')}
+    onOpenHelp={() => openHelpPanel('gps')}
     onOpenAnchor={() => openPanel('anchor')}
     onReconnect={() => {
       // On a fixed helm display no focus or visibility event ever re-probes an exhausted auth

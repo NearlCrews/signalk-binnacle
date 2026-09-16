@@ -36,6 +36,7 @@ import {
   solarDefsFor,
   TILE_CATALOG,
   type TileDef,
+  type TileReading,
   tankDefsFor,
   tileById,
   trendDescriptorFor,
@@ -75,6 +76,7 @@ export interface InstrumentsController {
   // The name to show for a tile: the server's meta displayName when it is usable, else the catalog label.
   resolvedLabel(def: TileDef): string;
   zoneState(def: TileDef, value: number | undefined): ZoneState;
+  zoneAssessment?(def: TileDef, reading: TileReading): string;
   resubscribe(): void;
   dispose(): void;
 }
@@ -412,6 +414,25 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     return zoneStateFor(value, CLIENT_DEFAULT_ZONES.get(def.zonesPath));
   }
 
+  function zoneAssessment(def: TileDef, reading: TileReading): string {
+    void metaCache.version;
+    void deps.store.notificationsVersion;
+    if (deps.store.notifications.has(`notifications.${def.zonesPath}`)) return 'Reported alarm';
+    if (reading.state === 'stale') return 'Stale assessment';
+    if (
+      reading.state !== 'live' ||
+      reading.siValue === undefined ||
+      !Number.isFinite(reading.siValue)
+    )
+      return 'No measurement to assess';
+    const zones = metaCache.get(def.zonesPath)?.zones;
+    const effective = zones?.length ? zones : CLIENT_DEFAULT_ZONES.get(def.zonesPath);
+    if (!effective?.length) return 'No zones configured';
+    const state = zoneStateFor(reading.siValue, effective);
+    const label = state === 'alarm' ? 'Alarm' : state === 'warning' ? 'Warning' : 'Normal';
+    return `${label} (${zones?.length ? 'server zones' : 'Binnacle default zones'})`;
+  }
+
   // The dock can be opened, or restored open, while the history-provider probe is still running.
   // Watch the probe and run the armed scan the moment it settles. $effect.root, not a bare $effect:
   // the controller is a plain factory, constructed outside a component by its own tests.
@@ -509,6 +530,7 @@ export function createInstrumentsController(deps: InstrumentsDeps): InstrumentsC
     refreshLiveCatalog,
     resolvedLabel,
     zoneState,
+    zoneAssessment,
     resubscribe,
     dispose,
   };

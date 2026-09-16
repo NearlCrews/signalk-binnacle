@@ -123,6 +123,15 @@ export function mergeConditions(
   };
 }
 
+export function separateObservedConditions(
+  free: PointConditions | undefined,
+  provider: { cond: PointConditions; observed: boolean } | undefined,
+): { current: PointConditions | undefined; model: PointConditions | undefined } {
+  const merged = mergeConditions(free, provider?.cond);
+  if (!provider?.observed) return { current: merged, model: undefined };
+  return { current: provider.cond, model: merged?.provenance === 'mixed' ? free : undefined };
+}
+
 export function forecastRiskCues(rows: PointConditions[]): PointConditions[] {
   return rows.map((row, index) => {
     const cues: string[] = [];

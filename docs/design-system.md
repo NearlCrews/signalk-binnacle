@@ -43,11 +43,17 @@ query condition, and one used there drops the whole block.
   per-component decision. Text-entry controls use the adaptive aliases `--text-input` and
   `--text-input-large`; both resolve to at least 1rem on phone-width or coarse-pointer displays to
   prevent focus zoom on iOS.
-- Targets: `--control-size` 2.75rem is the action tap target (buttons, pills, icon buttons);
+- Targets: `--control-size` defaults to 2.75rem for action tap targets (buttons, pills, icon buttons);
   `--row-size` is the list-row height (menu items, layer toggles) and is defined as
-  `var(--control-size)`, so the two are the same 2.75rem. WCAG 2.5.5 sets 44px as the
+  `var(--control-size)` at the root, where both default to 2.75rem. WCAG 2.5.5 sets 44px as the
   touch-target minimum, and pinning them together keeps a list row from drifting below it. A row reads denser through
   tighter padding and smaller type, never through a smaller target.
+- Short screens, at 600px high or less, use `:root` geometry overrides in `tokens.css`: `--control-size` is
+  44px, `--space-1` and `--space-2` are 4px, and `--space-3` and `--space-4` are 8px. Text sizes
+  remain unchanged, including enlarged text. The shared root gives the app shell and native dialogs
+  the same density, and dependent tokens such as `--row-size` and `--system-bar-fallback` resolve
+  from those values. Use these tokens rather than shrinking type or adding a separate compact
+  target size inside a feature.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.
@@ -73,6 +79,14 @@ query condition, and one used there drops the whole block.
   `max-block-size: min(calc(60 * var(--dvh)), 24rem)`. Never write a `vh`-then-`dvh` declaration pair
   at the site; that idiom carried a duplicate-property lint suppression and a repeated comment at
   every copy.
+- Plotter publishes the measured chart area as `--chart-height`. At phone widths, slide-overs cap
+  their height at the smaller of 60% of the viewport height and that chart height, keeping their
+  frame within the chart area below the global header and MOB action. This is an outer bound, not
+  proof that the panel's body or actions fit. Check actual controls after the header and footer
+  take their space.
+- Layout-dependent panel-slot height uses `observeClientHeight`, which coalesces measurements into
+  an animation frame so layout reads occur outside ResizeObserver delivery. Its teardown cancels
+  queued measurements and disconnects the observer.
 - Z-order is a token ladder, never a raw number: `--z-overlay` 1, `--z-panel` 2, `--z-safety-strips`
   (panel + 2), and `--z-menu` 5. The MOB confirm is a native top-layer `<dialog>`, above everything without a z-index.
 
@@ -363,7 +377,11 @@ Shared behavior lives here. Compose these; do not re-implement them.
   interleaved `headerExtra`, a minimize control, and the close button. SlideOver renders its header
   through it, and the floating weather map panel and the instruments dock reuse it (the dock passes
   its compact "Customize" entry through `headerExtra`, with "Customize instruments" retained as the
-  accessible name), so the headers cannot drift apart. Do not hand-roll a panel header.
+  accessible name), so the headers cannot drift apart. Do not hand-roll a panel header. At narrow
+  widths or enlarged text, titles and secondary actions reflow into separate rows. Keep Back and
+  Close reachable and reserve usable body space; clipping a tall header is not a reflow strategy.
+  Verify that a real body control can be reached and operated, including after scrolling. An
+  on-screen panel rectangle or a positive body height alone does not establish that the task works.
 - `ErrorBoundary`: the render boundary around every resolved lazy component. Its fallback receives
   the error and a one-use reset function. Render the same contextual Back, Close, Exit, or Done
   controls as the import-failure state, plus Retry. Update any local state that caused the failure
@@ -405,7 +423,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `UnitField`: the labeled number-input-with-unit row for stored SI thresholds (commit on blur, snaps
   back to the effective value). Use it for a single number field with a unit; do not use it for a live
   drag (that is a `.range` slider). Pass `ariaDescribedBy` when a safety or validation note describes
-  the field.
+  the field. Invalid entries leave the effective value unchanged and expose a visible, associated
+  explanation through `aria-invalid` and `aria-describedby`. Reverting a value silently is not
+  validation feedback.
+- `PositionFields`: bounded decimal-degree latitude and longitude fields for a chart-point workflow.
+  Use them alongside a chart-center action when a point can also be placed with a pointer. Route and
+  measurement point lists keep the same order and limits for both input paths.
 - `SavedList`: the saved-item card list (used by routes, tracks, waypoints, profiles). Renders the
   `.saved` card frame and the actions row, plus the caps heading and the `empty` state; the panel
   supplies the card body. Do not also render your own `<h3>` for the same list. A server-backed list
@@ -446,6 +469,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   cover a safety card.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
   seeded default starts selected). Seed it with `defaultSaveName`.
+- `restoreFocusAfterCancel`: call from a name-form or confirmation cancellation with a getter for
+  its trigger. The getter resolves after the DOM update, including recreated controls. It restores
+  lost focus without taking it from another active surface. Do not call it after a successful action.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
   `expanded` (bindable), never `open` (which collides with `window.open`).
 - `LayerToggle`: the layer or chart toggle row, with a `description` that becomes the hover and focus
@@ -468,7 +494,9 @@ Shared behavior lives here. Compose these; do not re-implement them.
   lifts on hover, identically in every list. A row that wires the commit but omits the feedback
   snaps to its new spot with no animation, which reads as inconsistent. Third, the grip carries
   `touch-action: none` (provided by `.reorder-row .handle`), or a touchscreen claims the gesture as
-  a scroll and the drag never fires.
+  a scroll and the drag never fires. Also provide `ReorderActions` with Move up and Move down for
+  single-tap operation without dragging. Those actions and Arrow keys use the same bounded order
+  mutation and announcement as drag; unavailable boundary moves stay disabled.
 - `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
   and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
   CSS token contract.
@@ -476,10 +504,12 @@ Shared behavior lives here. Compose these; do not re-implement them.
   `dialog`, and `registerDismiss` (the Escape dismiss stack that peels the topmost surface first).
 - `createMenuFocusMachine` and `initializeMenuFocus`: the toolbar-menu keyboard machine shared by
   `OverflowActions` and the pinned-actions More menu. It owns arrow and Home and End roving over
-  enabled rows (disabled and aria-disabled rows are never arrow-reachable), the Tab redirect to the
+  enabled rows, the Tab redirect to the
   control after the trigger (reverse Tab returns to the trigger), and the close-focus restore
   protocol. The roving index math lives once in `focus.ts`; the `rovingFocus` action the map menus
-  use steps through the same copy, so arrow behavior cannot drift between menu families.
+  use steps through the same copy, so arrow behavior cannot drift between menu families. Disabled
+  rows are skipped by default. A menu whose blocked actions explain their reason opts into
+  `includeAriaDisabled`; those rows remain reachable but must not execute their blocked command.
 - `pickTextFile` and `readErrorMessage` for file import; `defaultSaveName` to seed a save name, and
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.
@@ -490,6 +520,11 @@ one per alarm: `primeAlarmAudio` and `alarmAudioPrimed` are the gesture-priming 
 `pointerdown` and `keydown` in `App.svelte` so a keyboard-only operator still gets audible alarms, and
 `GatedAlarm.restart` re-articulates an already-sounding tone so a second alarm raised mid-burst is
 heard rather than absorbed into the first one's loop.
+
+Alarm readiness has four states: ready, blocked, failed, and unsupported. Pass the complete
+`AlarmAudioState` to every setup or alarm surface and use `alarmAudioNote` for degraded explanations.
+Only ready may say alarms can sound. Failed offers a retry; unsupported explains visual-only alerts
+without promising that a gesture can enable audio. Help and Alarms are the sound-readiness surfaces.
 
 `AlarmStrip` (`features/lookout`, composed by `PlotterView`) is the fourth bottom-strip in the safety
 tier, alongside `AnchorStrip`, `DangerStrip`, and `MobStrip`: the generic channel for any inbound alarm
@@ -527,6 +562,11 @@ Register production localStorage keys in `src/shared/persistence/storage-keys.ts
 autosaves portable settings. Do not show dirty, manual-save, or discard chrome for profile edits.
 Never carry active safety state, credentials, server resources, browser layout, or caches in a
 profile. See [Profiles and settings](profiles.md).
+
+Fresh starter profiles keep Menu in the bottom toolbar and include a safety shortcut appropriate to
+the operating context. Seeding an empty library must not rewrite an existing profile's deliberate
+pins. Use profile changes this device; the shared default is the starting choice for a device
+without an active profile, not a command to switch every display.
 
 ## 7. Panel anatomy and the field idioms
 
@@ -573,6 +613,22 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - A live-data panel reports transport, data freshness, and renderer health separately when they can fail
   independently. Never label an open connection as live until usable data arrives, and clear a stale
   safety-relevant picture instead of leaving it frozen on screen.
+- A retained result remains visibly retained after a refresh error, with its source, age, and Retry
+  action. Failure is not an empty collection and is not indefinite Loading. Independently available
+  products, such as tide heights and tidal currents, keep independent success and failure states.
+- A provider-backed settings form is not editable until an accepted policy has loaded. Initial local
+  defaults are not the server's policy. Show checking or unavailable explicitly, preserve untouched
+  accepted fields in a write, and retain the draft and error when a save fails.
+- Carry datum, depth reference, model versus observation, sample time, and aggregate interval through
+  every derived presentation and handoff. MLLW means mean lower low water, not automatically the
+  displayed chart's zero. An absent or invalid datum stays unknown; never infer chart compatibility
+  from a provider name. Weather model fills must not masquerade as observations, and an unassessed
+  instrument value must not read Normal.
+- Route coverage is a read-only assessment of the selected passage, independent of the active
+  navigation route. A reusable result carries route identity, geometry, saved-area and catalog
+  identities, corridor, detail, and checked-at time. Handoff facts revalidate that context even with
+  Offline charts closed and retire a mismatched or unavailable assessment. Complete is sampled cache
+  coverage, never a safety clearance.
 - Empty and degraded states are first-class: a `.muted-note` for "none yet", an `.alert-note` for an
   error, a grayed unavailable row with a tooltip (via `UnavailableHint`) when a provider is absent.
   Never a blank panel.
@@ -598,14 +654,15 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   Safety stays before Weather and Instruments; Settings stays last. Adding a menu option is one more
   `MenuItem`, never a change to the menu component. A capability whose provider is absent sets
   `available: false` with an `unavailableHint`: the launcher and bottom bar render it grayed and
-  non-interactive with the hint as a tooltip and screen-reader text, rather than dropping it from the
-  menu. (`disabled` plus `disabledLabel` is the transient block for an action that is momentarily
-  unavailable, such as a chart still loading.)
+  unable to execute the blocked command, with the reason available on touch and keyboard activation
+  as well as hover and assistive text. Do not remove it from the menu or rely on a title alone.
+  `disabled` plus `disabledLabel` describes a transient block, such as a chart still loading.
 - A user-relevant optional feature never disappears merely because its provider is missing. Offline
-  charts is the canonical case: its one menu entry remains visible with `available: false`, and its
-  `unavailableHint` explains how to install, start, or sign in to Signal K as an administrator. When
-  available, that entry opens one landing page for saved areas, automatic caching, installed charts,
-  and storage, rather than exposing provider internals as separate menu tiles.
+  charts stays actionable and opens a persistent requirements panel when the provider is missing or
+  unreachable. It distinguishes checking, absent, refused access, and a failed connection, with a
+  local Retry and a route to Signal K administration. When available, the same entry opens one
+  landing page for saved areas, automatic caching, installed charts, and storage, rather than
+  exposing provider internals as separate menu tiles.
 - A compact subsystem status reports only what it knows. The Offline header control may report cached
   bytes, required access, an unreachable service, or an error. It must never turn provider health into
   a claim that a passage is ready. Coverage, included charts, completion state, and update time belong
@@ -616,6 +673,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - Chart Locker management clients authenticate with the browser's Signal K administrator session.
   They must not attach Binnacle's device bearer token because it can mask a valid administrator
   cookie. Use `/skServer/loginStatus` to classify a management-route 401 or 403.
+- Distinguish browser caching from the boat's Chart Locker cache. Browser offline support requires
+  an eligible secure context. Areas already saved on the server can work without internet over the
+  boat network, but still require a connection to that server.
 - An anchored menu (a popover hung off a control) is `AnchoredMenu`. A modal is the rare exception
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.
@@ -655,7 +715,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   the next gesture, and restores the prior cursor and interaction state on exit. If it adds a nested
   manipulation mode, the first Escape cancels that mode and preserves the parent tool. Measure is the
   reference: point selection is separate from movement, the invisible chart hit area is 44 px, and
-  the strip supplies the keyboard-equivalent movement path.
+  the editor supplies keyboard-equivalent creation, selection, movement, deletion, and ordering
+  wherever those operations exist.
+  Offline area selection also offers Use current chart view and bounded coordinate fields; dragging
+  is never the only way to create the first area.
 - Interactive map surfaces use the shared drag-safe tap path for mouse and one-finger touch input.
   They reject pans, long presses, and multi-touch, preserve the pointer while overlapping surfaces
   remain hovered, and route one gesture to the highest visible overlay instead of opening several
@@ -663,6 +726,12 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.
+- A primary action has a visible verb, not only an icon and tooltip. Native checkbox labels provide
+  the full control-height touch row. Modal content scrolls within a usable viewport budget while its
+  confirmation and dismissal controls stay reachable at 320 px and 200% text.
+- A deep-linked Help action focuses and reveals the named section. A confirmation or replacement
+  control receives focus after it is revealed; cancel and close restore a meaningful trigger without
+  moving focus out of a different active surface.
 - A live status uses `role="status"` and `aria-live="polite"`; the one assertive collision channel is
   owned by `App` and never duplicated.
 - The lit state is `.is-on` (`--accent-tint-text` text, accent border, accent-tint fill, and accent
@@ -715,6 +784,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   state which server resources remain. A blocked safety check is an alert, a partial erase names the
   failures, and any successful deletion reloads immediately so live stores cannot repopulate it.
   Browser Web Locks extend the safety guard across open Binnacle tabs when the browser supports them.
+- Network disclosure belongs in reachable Help and device-privacy surfaces. Explain automatic
+  external vessel-position requests even when related panels are closed, the actual available
+  opt-outs, and the capabilities lost through network blocking. Local-data erasure is not a network
+  privacy switch. Disclose manual external telemetry processing before its first request.
 - Persisted UI state enters through a bounded codec. Invalid stored data repairs to the documented
   fallback, and known legacy shapes migrate to a clean literal. A record codec must rebuild the fields
   it owns when unknown fields should be removed; a predicate-only codec validates the accepted shape

@@ -9,14 +9,14 @@ import {
   capturedRadius,
   MIN_RADIUS_M,
 } from '$entities/anchor';
-import type { TidesStore } from '$entities/tides';
+import { formatTideDatum, formatTideEventTime, type TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import { DEPTH_SOURCE_LABELS, DEPTH_SOURCE_TITLES, type OwnVessel } from '$entities/vessel';
 import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
+import { isLatLon, type LatLon } from '$shared/geo';
 import {
   Clock,
   feetToMeters,
-  formatClockTime,
   formatLengthOr,
   formatMetersOrNm,
   lengthUnit,
@@ -24,11 +24,14 @@ import {
   metersToFeet,
   PLACEHOLDER,
 } from '$shared/lib';
+import { haversineMeters } from '$shared/nav';
 import type { AuthController } from '$shared/signalk';
 import {
   createPanelMinimize,
   Disclosure,
   InlineConfirm,
+  PositionFields,
+  restoreFocusAfterCancel,
   SlideOver,
   UnitField,
   WriteAccessNote,
@@ -54,6 +57,7 @@ interface Props {
   onDrop: () => void;
   onRaise: () => void;
   onSetRadius: (meters: number) => void;
+  onSetPosition?: (position: LatLon) => Promise<boolean>;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -71,6 +75,7 @@ const {
   onDrop,
   onRaise,
   onSetRadius,
+  onSetPosition,
   onClose,
   onBack,
 }: Props = $props();
@@ -139,11 +144,58 @@ function commitRadius(entered: number): void {
 // Raising ends the watch and silences the alarm in one motion, so the panel matches the strip's
 // armed-confirm protection: the first tap swaps the controls row for an inline confirm.
 let raiseArmed = $state(false);
+let raiseTrigger = $state<HTMLButtonElement>();
+let positionTrigger = $state<HTMLButtonElement>();
+let editPositionTrigger = $state<HTMLButtonElement>();
 const minimize = createPanelMinimize();
+let positionDraft = $state<LatLon | undefined>();
+let positionBaseline = $state('');
+let positionArmed = $state(false);
+let positionSaving = $state(false);
+let positionFailed = $state(false);
+const positionContext = $derived(JSON.stringify([anchor.mode, anchor.position, watching]));
+const positionConflict = $derived(
+  positionDraft !== undefined && positionContext !== positionBaseline,
+);
+
+function editPosition(): void {
+  if (!anchor.position || !watching || busy || serverWritesBlocked) return;
+  positionDraft = { ...anchor.position };
+  positionBaseline = positionContext;
+  positionFailed = false;
+  positionArmed = false;
+}
+
+async function applyPosition(): Promise<void> {
+  positionArmed = false;
+  if (
+    !onSetPosition ||
+    !positionDraft ||
+    !isLatLon(positionDraft) ||
+    positionConflict ||
+    busy ||
+    positionSaving ||
+    serverWritesBlocked ||
+    !watching
+  )
+    return;
+  positionSaving = true;
+  positionFailed = false;
+  try {
+    if (await onSetPosition({ ...positionDraft })) positionDraft = undefined;
+    else positionFailed = true;
+  } catch {
+    positionFailed = true;
+  } finally {
+    positionSaving = false;
+  }
+}
+
 $effect(() => {
   // Reset the armed confirm when the watch ends. The write is untracked so the effect depends only on
   // `watching`, never re-running on its own reset (no read-and-write of the same signal).
   if (!watching) untrack(() => (raiseArmed = false));
+  if (!watching || positionConflict) untrack(() => (positionArmed = false));
 });
 
 // Capture the real swing: the live distance plus a safety margin becomes the new radius.
@@ -197,9 +249,24 @@ const tideReading = $derived(tides?.tide);
 const tideExtremes = $derived(
   tideReading ? nextTideExtremes(tideReading.events, clock.now) : undefined,
 );
-const tideDistanceText = $derived(
-  tideReading ? formatMetersOrNm(tideReading.distanceMeters, mode) : '',
+const tideReference = $derived(
+  anchor.position ?? (!vessel.positionStale ? vessel.position : undefined),
 );
+const tideDistanceText = $derived(
+  tideReading && tideReference
+    ? formatMetersOrNm(
+        haversineMeters(
+          tideReference.latitude,
+          tideReference.longitude,
+          tideReading.station.latitude,
+          tideReading.station.longitude,
+        ),
+        mode,
+      )
+    : undefined,
+);
+const tideReferenceLabel = $derived(anchor.position ? 'the anchor' : 'the boat');
+const tideFailure = $derived(tides?.failure('tide'));
 </script>
 
 <SlideOver
@@ -370,6 +437,7 @@ const tideDistanceText = $derived(
       }}
       onCancel={() => {
         raiseArmed = false;
+        void restoreFocusAfterCancel(() => raiseTrigger);
       }}
     />
   {:else}
@@ -378,6 +446,7 @@ const tideDistanceText = $derived(
         <button
           type="button"
           class="btn btn-danger"
+          bind:this={raiseTrigger}
           disabled={busy || serverWritesBlocked}
           onclick={() => {
             raiseArmed = true;
@@ -407,14 +476,107 @@ const tideDistanceText = $derived(
     </p>
   {/if}
   {#if watching}
-    <p class="muted-note">Drag the anchor marker on the chart to correct the drop point.</p>
+    <p class="muted-note">
+      Drag the anchor marker on the chart or enter its position to correct the drop point.
+    </p>
+    {#if onSetPosition && anchor.position}
+      {#if positionDraft}
+        <section class="panel-section" aria-label="Anchor position">
+          <h3 class="caps-label">Anchor position</h3>
+          <PositionFields
+            position={positionDraft}
+            disabled={busy || positionSaving || serverWritesBlocked}
+            onChange={(position) => { positionDraft = position; positionArmed = false; }}
+          />
+          {#if positionConflict}
+            <p class="alert-note" role="alert">
+              The anchor watch changed. Reload its position before applying your correction.
+            </p>
+            <button
+              type="button"
+              class="btn"
+              disabled={busy || positionSaving}
+              onclick={editPosition}
+            >
+              Reload anchor position
+            </button>
+          {/if}
+          {#if positionFailed}
+            <p class="alert-note" role="alert">
+              The anchor position was not saved. Your entered position is preserved. Retry or
+              cancel.
+            </p>
+          {/if}
+          {#if positionArmed}
+            <InlineConfirm
+              question="Move the anchor watch to this position? This changes where drag is measured."
+              confirmLabel="Move anchor"
+              onConfirm={() => void applyPosition()}
+              onCancel={() => {
+                positionArmed = false;
+                void restoreFocusAfterCancel(() => positionTrigger);
+              }}
+            />
+          {:else}
+            <div class="panel-controls">
+              <button
+                type="button"
+                class="btn"
+                disabled={busy || positionSaving || serverWritesBlocked || positionConflict}
+                bind:this={positionTrigger}
+                onclick={() => (positionArmed = true)}
+              >
+                {positionSaving ? 'Saving…' : positionFailed ? 'Retry position' : 'Apply anchor position'}
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled={positionSaving}
+                onclick={() => {
+                  positionDraft = undefined;
+                  void restoreFocusAfterCancel(() => editPositionTrigger);
+                }}
+              >
+                Cancel position edit
+              </button>
+            </div>
+          {/if}
+        </section>
+      {:else}
+        <button
+          type="button"
+          class="btn btn-ghost"
+          disabled={busy || serverWritesBlocked}
+          bind:this={editPositionTrigger}
+          onclick={editPosition}
+        >
+          Edit anchor position
+        </button>
+      {/if}
+    {/if}
   {/if}
   {#if tides}
-    <Disclosure label="Nearby tide prediction">
+    <Disclosure label="Selected tide prediction">
       {#if tideReading}
         <p class="tide-station">
           <span class="truncate">{tideReading.station.name}</span>
-          <span class="caps-label">{tideDistanceText} away</span>
+          <span class="muted-note"
+            >{tideDistanceText ? `${tideDistanceText} from ${tideReferenceLabel}` : 'Distance unavailable'}</span
+          >
+        </p>
+        {#if tideFailure}
+          <p class="alert-note" role="status">
+            The latest tide refresh failed. These retained predictions may be out of date. Open
+            Tides and currents to retry.
+          </p>
+        {:else if tides.status === 'loading'}
+          <p class="muted-note" role="status">
+            Refreshing tide predictions. Showing the previously loaded predictions.
+          </p>
+        {/if}
+        <p class="muted-note muted-note--xs">
+          {formatTideDatum(tideReading)}.
+          {tideReading.fetchedAtMs === undefined ? 'Prediction fetch time is unknown.' : `Predictions fetched ${formatTideEventTime(tideReading.fetchedAtMs)}.`}
         </p>
         {#if tideReading.events.length === 0}
           <p class="muted-note" role="status">No predictions in this window.</p>
@@ -424,7 +586,7 @@ const tideDistanceText = $derived(
             <dd>
               {#if tideExtremes?.high}
                 <span class="num"
-                  >{formatClockTime(tideExtremes.high.timeMs)},
+                  >{formatTideEventTime(tideExtremes.high.timeMs)},
                   {formatLengthOr(
                     tideExtremes.high.heightMeters,
                     mode,
@@ -439,7 +601,7 @@ const tideDistanceText = $derived(
             <dd>
               {#if tideExtremes?.low}
                 <span class="num"
-                  >{formatClockTime(tideExtremes.low.timeMs)},
+                  >{formatTideEventTime(tideExtremes.low.timeMs)},
                   {formatLengthOr(
                     tideExtremes.low.heightMeters,
                     mode,
@@ -453,8 +615,10 @@ const tideDistanceText = $derived(
           </dl>
         {/if}
         <p class="muted-note muted-note--xs">
-          Predictions come from {tideReading.station.name}, {tideDistanceText} away, not from this
-          anchorage. The tide here can differ, and the depth under the boat moves with it.
+          Predictions come from
+          {tideReading.station.name}{tideDistanceText ? `, ${tideDistanceText} from ${tideReferenceLabel}` : ''},
+          not from this anchorage. The tide here can differ, and the depth under the boat moves with
+          it.
         </p>
       {:else if tides.status === 'loading'}
         <p class="muted-note" role="status">Loading tide predictions…</p>
@@ -494,8 +658,5 @@ const tideDistanceText = $derived(
 .tide-station .truncate {
   flex: 1;
   min-inline-size: 0;
-}
-.tide-station .caps-label {
-  white-space: nowrap;
 }
 </style>

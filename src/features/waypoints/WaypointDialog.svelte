@@ -86,7 +86,7 @@ function saveAndNavigate(): void {
 const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
 </script>
 
-<dialog class="modal-card wp-dialog" aria-label={title} use:dialog={onCancel}>
+<dialog class="modal-card editor-dialog wp-dialog" aria-label={title} use:dialog={onCancel}>
   <header class="dialog-header"><h2>{title}</h2></header>
   <div class="wp-body dialog-body">
     <TextField
@@ -102,7 +102,7 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
       onCommit={(value) => (wpName = value)}
       onEnter={save}
     />
-    <div class="wp-field">
+    <div class="dialog-field">
       <label for="wp-icon-picker">Icon</label>
       <IconPicker
         id="wp-icon-picker"
@@ -116,30 +116,19 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
   </div>
   <footer class="dialog-footer">
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
+    <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={busy}>
+      {busy ? 'Saving…' : 'Save'}
+    </button>
     {#if onSaveAndNavigate && !waypoint}
       <button type="button" class="btn btn-pill" onclick={saveAndNavigate} disabled={busy}>
         Save and navigate
       </button>
     {/if}
-    <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={busy}>
-      {busy ? 'Saving…' : 'Save'}
-    </button>
   </footer>
 </dialog>
 
 <style>
 .wp-dialog {
   inline-size: min(22rem, calc(100dvw - 2 * var(--space-4)));
-}
-.wp-body {
-  overflow: visible;
-}
-.wp-field {
-  display: grid;
-  gap: var(--space-1);
-  /* The per-field label idiom: sentence case, muted, text-sm (the caps treatment is for section
-     headings only, matching the Notes editor's field labels). */
-  color: var(--text-muted);
-  font-size: var(--text-sm);
 }
 </style>

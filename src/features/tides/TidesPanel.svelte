@@ -7,9 +7,9 @@ import type {
   TideStationSelection,
   TidesStore,
 } from '$entities/tides';
-import { MAX_NEARBY_STATIONS } from '$entities/tides';
+import { formatTideDatum, formatTideEventTime, MAX_NEARBY_STATIONS } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
-import { Clock, formatBearingOr, formatClockTime, MINUTE_MS } from '$shared/lib';
+import { Clock, formatBearingOr, MINUTE_MS } from '$shared/lib';
 import { createPanelMinimize, ShowOnChartToggle, SlideOver } from '$shared/ui';
 import type { TidesController } from './tides-controller.svelte';
 import {
@@ -86,7 +86,7 @@ const currentRate = $derived.by(() => {
   if (!nextCurrent) return '';
   const dirSuffix =
     nextCurrent.directionRad !== undefined
-      ? `, ${formatBearingOr(nextCurrent.directionRad, 0)}°`
+      ? `, toward ${formatBearingOr(nextCurrent.directionRad, 0)}°T`
       : '';
   return `${formatCurrentRate(nextCurrent.velocityMps, units.profile)}${dirSuffix}`;
 });
@@ -262,13 +262,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
     </div>
   </section>
 
-  {#if !tide && store.status === 'loading'}
-    <p class="muted-note" role="status">Finding tide and current stations…</p>
-  {:else if store.status === 'no-coverage'}
-    <p class="muted-note" role="status">
-      No tide station nearby. NOAA tide predictions cover US waters only.
-    </p>
-  {:else if tide}
+  {#if tide}
     <section class="panel-section reading" aria-label="Tide prediction">
       <h3 class="caps-label">Tide prediction</h3>
       <div class="station">
@@ -284,7 +278,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           <dd>
             {#if nextHigh}
               <span class="num"
-                >{formatClockTime(nextHigh.timeMs)},
+                >{formatTideEventTime(nextHigh.timeMs)},
                 {formatTideHeight(
                   nextHigh.heightMeters,
                   units.profile,
@@ -301,7 +295,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           <dd>
             {#if nextLow}
               <span class="num"
-                >{formatClockTime(nextLow.timeMs)},
+                >{formatTideEventTime(nextLow.timeMs)},
                 {formatTideHeight(
                   nextLow.heightMeters,
                   units.profile,
@@ -328,87 +322,68 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
         </svg>
       {/if}
     </section>
+  {:else if store.status === 'loading'}
+    <p class="muted-note" role="status">Finding a tide-height prediction…</p>
+  {:else if !store.failure('tide')}
+    <p class="muted-note" role="status">
+      No tide-height prediction nearby. NOAA tide predictions cover US waters only.
+    </p>
+  {/if}
 
-    <section class="panel-section current" aria-label="Tidal current prediction">
-      <h3 class="caps-label">Tidal current</h3>
-      {#if current}
-        <div class="station">
-          <span class="name" title={current.station.name}>{current.station.name}</span>
-          <span class="dist caps-label">{currentStationDistanceText} away</span>
-        </div>
-        {#if current.events.length === 0}
-          <p class="muted-note" role="status">No predictions in this window.</p>
-        {:else}
-          <dl class="stat-grid">
-            <dt>
-              {nextCurrent
+  <section class="panel-section current" aria-label="Tidal current prediction">
+    <h3 class="caps-label">Tidal current</h3>
+    {#if current}
+      <div class="station">
+        <span class="name" title={current.station.name}>{current.station.name}</span>
+        <span class="dist caps-label">{currentStationDistanceText} away</span>
+      </div>
+      {#if current.events.length === 0}
+        <p class="muted-note" role="status">No predictions in this window.</p>
+      {:else}
+        <dl class="stat-grid">
+          <dt>
+            {nextCurrent
                 ? `Next ${nextCurrent.kind}`
                 : 'Next current'}
-            </dt>
+          </dt>
+          <dd>
+            {#if nextCurrent}
+              <span class="num">{formatTideEventTime(nextCurrent.timeMs)}, {currentRate}</span>
+              <span class="unit"></span>
+            {:else}
+              <span class="num">--</span><span class="unit"></span>
+            {/if}
+          </dd>
+          {#if followingFlow}
+            <dt>{`Then ${followingFlow.kind}`}</dt>
             <dd>
-              {#if nextCurrent}
-                <span class="num">{formatClockTime(nextCurrent.timeMs)}, {currentRate}</span>
-                <span class="unit"></span>
-              {:else}
-                <span class="num">--</span><span class="unit"></span>
-              {/if}
-            </dd>
-            {#if followingFlow}
-              <dt>{`Then ${followingFlow.kind}`}</dt>
-              <dd>
-                <span class="num"
-                  >{formatClockTime(followingFlow.timeMs)},
-                  {formatCurrentRate(
+              <span class="num"
+                >{formatTideEventTime(followingFlow.timeMs)},
+                {formatCurrentRate(
                     followingFlow.velocityMps,
                     units.profile,
                   )}{followingFlow.directionRad !== undefined
-                    ? `, ${formatBearingOr(followingFlow.directionRad, 0)}°`
+                    ? `, toward ${formatBearingOr(followingFlow.directionRad, 0)}°T`
                     : ''}</span
-                >
-                <span class="unit"></span>
-              </dd>
-            {/if}
-          </dl>
-        {/if}
-        <p class="footnote">Ebb flows out toward the sea, and flood flows in from it.</p>
-      {:else}
-        <p class="muted-note">No tidal-current prediction is available for the selected mode.</p>
+              >
+              <span class="unit"></span>
+            </dd>
+          {/if}
+        </dl>
       {/if}
-    </section>
-
-    {#if selectionFailure('tide') || selectionFailure('current')}
-      <div class="refresh-note" role="alert">
-        <div>
-          {#if selectionFailure('tide')}
-            <p class="alert-note">{selectionFailure('tide')}</p>
-          {/if}
-          {#if selectionFailure('current')}
-            <p class="alert-note">{selectionFailure('current')}</p>
-          {/if}
-        </div>
-        <button type="button" class="btn" onclick={() => void controller.retry()}>
-          <RefreshCw size={16} aria-hidden="true" />
-          Retry
-        </button>
-      </div>
+      <p class="footnote">Ebb flows out toward the sea, and flood flows in from it.</p>
     {:else if store.status === 'loading'}
-      <p class="muted-note" role="status">Refreshing selected tide and current stations…</p>
+      <p class="muted-note" role="status">Finding a tidal-current prediction…</p>
+    {:else}
+      <p class="muted-note">No tidal-current prediction is available for the selected mode.</p>
     {/if}
+  </section>
 
-    {#if sourceNote}
-      <p class="muted-note source-note">{sourceNote}</p>
-    {/if}
-    <p class="footnote">
-      Heights are above mean lower low water (MLLW), the chart's zero. Times are in the device's
-      local time.
-    </p>
-  {:else if store.status === 'error'}
+  {#if selectionFailure('tide') || selectionFailure('current')}
     <div class="refresh-note" role="alert">
       <div>
         {#if selectionFailure('tide')}
           <p class="alert-note">{selectionFailure('tide')}</p>
-        {:else}
-          <p class="alert-note">Could not load tide predictions. Check the connection.</p>
         {/if}
         {#if selectionFailure('current')}
           <p class="alert-note">{selectionFailure('current')}</p>
@@ -419,9 +394,22 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
         Retry
       </button>
     </div>
-  {:else}
-    <p class="muted-note" role="status">Pan to a US coast to see tide predictions.</p>
+  {:else if store.status === 'loading'}
+    <p class="muted-note" role="status">Refreshing selected tide and current stations…</p>
   {/if}
+
+  {#if sourceNote}
+    <p class="muted-note source-note">{sourceNote}</p>
+  {/if}
+  {#if tide}
+    <p class="footnote">
+      {formatTideDatum(tide)}. Check the chart's datum before combining heights.
+    </p>
+  {/if}
+  <p class="footnote">
+    Times include the date and the device's local timezone. Current directions are toward, in
+    degrees true.
+  </p>
 </SlideOver>
 
 <style>

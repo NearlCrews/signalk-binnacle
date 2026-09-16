@@ -15,6 +15,7 @@ interface Props {
   // The name of the destination the vessel is currently navigating to, when a course is active,
   // so the steer confirmation can say what it replaces.
   activeCourse?: string;
+  activeCourseContext?: string;
   // Set the Signal K course destination to the mark, the deliberate second tap (never automatic,
   // since a coupled autopilot may follow the course).
   onSteer: () => void;
@@ -22,7 +23,8 @@ interface Props {
   onCancel: () => void;
 }
 
-const { mob, units, publishWarning, activeCourse, onSteer, onCancel }: Props = $props();
+const { mob, units, publishWarning, activeCourse, activeCourseContext, onSteer, onCancel }: Props =
+  $props();
 
 // Cancel wipes the splash point boat-wide, so it arms a confirm step instead of firing on a
 // single tap; the arm times out back to plain Cancel on its own.
@@ -35,11 +37,21 @@ onDestroy(() => {
   steerArm.disarm();
 });
 
+let armedMobContext: string | undefined;
+let armedSteerContext: string | undefined;
+const mobContext = $derived(mob.actionContext ?? JSON.stringify([mob.position, mob.markEpochMs]));
+const steerContext = $derived(JSON.stringify([mobContext, activeCourseContext, activeCourse]));
+
 function tapCancel(): void {
+  if (armedMobContext !== mobContext) cancelArm.disarm();
+  armedMobContext = mobContext;
   if (cancelArm.tap()) onCancel();
 }
 
 function tapSteer(): void {
+  if (armedSteerContext !== steerContext || !mob.position) steerArm.disarm();
+  if (!mob.position) return;
+  armedSteerContext = steerContext;
   if (steerArm.tap()) onSteer();
 }
 
@@ -53,12 +65,8 @@ function disarmSteerOnEscape(event: KeyboardEvent): void {
 // A steer armed against a position that has since been lost, or against a navigation state that
 // changed under it, is confirming a different action than the one explained: disarm.
 $effect(() => {
-  if (!mob.position) steerArm.disarm();
-});
-let lastCourse: string | undefined;
-$effect(() => {
-  if (activeCourse !== lastCourse) steerArm.disarm();
-  lastCourse = activeCourse;
+  if (!mob.position || armedSteerContext !== steerContext) steerArm.disarm();
+  if (armedMobContext !== mobContext) cancelArm.disarm();
 });
 
 const steerWarning = $derived(

@@ -10,6 +10,7 @@ const PLAY_INTERVAL_MS = 700;
 export function createForecastPlayback(
   getStore: () => WeatherStore,
   range: () => TimeRange | undefined,
+  now: () => number = Date.now,
 ) {
   let playing = $state(false);
   let playTimer: ReturnType<typeof setInterval> | undefined;
@@ -52,6 +53,7 @@ export function createForecastPlayback(
   return {
     toggle,
     setTime,
+    returnToNow: () => setTime(now()),
     step,
     destroy,
     get playing() {

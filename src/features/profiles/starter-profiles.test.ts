@@ -24,6 +24,26 @@ const base: ProfileSettings = {
 };
 
 describe('seedStarterProfiles', () => {
+  it('keeps Menu and a context-relevant safety action on each fresh helm', () => {
+    const store = new ProfileStore(adapter);
+    seedStarterProfiles(store, base);
+    for (const profile of store.profiles) {
+      expect(profile.settings.pinnedActionIds?.[0]).toBe('menu');
+      expect(profile.settings.pinnedActionIds?.some((id) => id === 'ais' || id === 'anchor')).toBe(
+        true,
+      );
+    }
+    expect(store.profiles[0].settings.pinnedActionIds).toEqual(['menu', 'center', 'follow', 'ais']);
+  });
+
+  it('does not replace deliberate pins in an existing profile library', () => {
+    const store = new ProfileStore(adapter);
+    store.save('My helm', { ...base, pinnedActionIds: ['layers', 'poi-search'] });
+    seedStarterProfiles(store, base);
+    expect(store.profiles).toHaveLength(1);
+    expect(store.profiles[0].settings.pinnedActionIds).toEqual(['layers', 'poi-search']);
+  });
+
   it('creates distinct operating setups instead of theme-only copies', () => {
     const store = new ProfileStore(adapter);
     seedStarterProfiles(store, base);

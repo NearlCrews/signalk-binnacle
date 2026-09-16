@@ -66,6 +66,37 @@ describe('CompanionStatus', () => {
     expect(status.present).toBe(true);
   });
 
+  it('does not request a provider that changed while its client was loading', async () => {
+    let base: string | null = BASE;
+    const fetchImpl = vi.fn(async () => statsResponse(16));
+    const status = statusWith(fetchImpl as unknown as typeof fetch, () => base);
+    const refresh = status.refresh();
+    base = null;
+    await refresh;
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(status.state).toBe('checking');
+    expect(status.cacheBytes).toBeNull();
+  });
+
+  it('ignores accepted statistics from a provider replaced during the request', async () => {
+    let base = BASE;
+    let finish!: (response: Response) => void;
+    const fetchImpl = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const status = statusWith(fetchImpl as unknown as typeof fetch, () => base);
+    const refresh = status.refresh();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+    base = 'http://other/plugins/signalk-chart-locker';
+    finish(statsResponse(16));
+    await refresh;
+    expect(status.state).toBe('checking');
+    expect(status.cacheBytes).toBeNull();
+  });
+
   it('polls immediately when feature detection resolves after start', async () => {
     let base: string | null = null;
     const fetchImpl = vi.fn(async () => statsResponse(16));

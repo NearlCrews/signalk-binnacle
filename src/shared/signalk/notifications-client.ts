@@ -222,14 +222,3 @@ export async function fetchRaisedNotificationsById(
   if (entries.size >= MAX_SNAPSHOT_PATHS) return undefined;
   return entries;
 }
-
-// The server's MOB convenience route: raises an emergency at notifications.mob.{id} with
-// position and createdAt included.
-export async function postMobNotification(
-  base: string,
-  token: string | undefined,
-  message?: string,
-): Promise<string | undefined> {
-  const body = message === undefined ? {} : { message };
-  return idFrom(await postJson(`${base}${NOTIFICATIONS_API}/mob`, token, body));
-}

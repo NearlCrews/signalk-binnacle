@@ -39,6 +39,7 @@ export interface NotesOverlay extends OverlayModule, Syncable {
   // Ring the marker at a position, or clear the ring with undefined. Position-driven so the POI
   // search can highlight a result without a rendered map feature and without moving the map.
   highlight(ctx: OverlayContext, position: LatLon | undefined): void;
+  retry(ctx: OverlayContext): void;
 }
 
 export interface NotesOverlayOptions {
@@ -210,6 +211,15 @@ export function createNotesOverlay(
 
   return {
     id: 'notes',
+    retry(ctx) {
+      if (!mounted || !visible || !isOnline() || source.inFlight()) return;
+      requestGeneration += 1;
+      source.invalidate();
+      forceRefresh = true;
+      failed = false;
+      invalidateIdleAnchor();
+      this.sync(ctx);
+    },
     title: 'Places',
     description: 'Harbors, anchorages, services, and hazards from community chart notes.',
     band: 'routes',

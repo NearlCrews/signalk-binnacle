@@ -292,7 +292,7 @@ describe('createMarineRadarController', () => {
       enabled: false,
       allowed: true,
     });
-    await write;
+    await expect(write).resolves.toBe(false);
     expect(capturedBody).toEqual({
       value: {
         guardZone1: {

@@ -6,7 +6,7 @@ import {
   isTrendInstrumentId,
   MAX_TREND_INSTRUMENTS,
 } from '$entities/instrument-trend';
-import { createRetryableLazyUiLoader } from '$shared/lib';
+import { createRetryableLazyUiLoader, MINUTE_MS } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import type { HistoryProviders, SignalKStore, SubscribeEntry } from '$shared/signalk';
 import { type SessionTrendSeries, TrendSessionRecorder } from './session-recorder.svelte';
@@ -54,6 +54,7 @@ export interface TrendsController {
   readonly focusedTransient: boolean;
   readonly discovering: boolean;
   readonly loading: boolean;
+  readonly lastCheckedMs?: number;
   readonly history: TrendHistory | undefined;
   readonly historyState: TrendHistoryState | 'idle' | 'loading';
   readonly providerState: TrendProviderState;
@@ -78,12 +79,16 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
   let focusedId = $state<string | undefined>();
   let focusedTransient = $state(false);
   let loading = $state(false);
+  let lastCheckedMs = $state<number | undefined>();
+  // Pace starts, not completions: response latency must not skip the next minute's timer tick.
+  let historyRequestedAtMs: number | undefined;
   let history = $state.raw<TrendHistory | undefined>();
   let historyState = $state<TrendHistoryState | 'idle' | 'loading'>('idle');
   let refreshGeneration = $state(0);
   let historyGeneration = 0;
   let historyAbort: AbortController | undefined;
   let disposed = false;
+  let stopRefresh: (() => void) | undefined;
 
   const selectedIds = $derived.by<readonly string[]>(() =>
     cleanTrendInstrumentIds(deps.selectionStore.value),
@@ -248,6 +253,7 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     historyAbort?.abort();
     const abort = new AbortController();
     historyAbort = abort;
+    historyRequestedAtMs = Date.now();
     loading = true;
     historyState = 'loading';
     try {
@@ -276,6 +282,7 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     } finally {
       if (!disposed && generation === historyGeneration) {
         loading = false;
+        lastCheckedMs = Date.now();
         if (historyAbort === abort) historyAbort = undefined;
       }
     }
@@ -323,6 +330,33 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     }
     void loadHistoryNow(providers, descriptors, token);
     return () => historyAbort?.abort();
+  });
+
+  $effect(() => {
+    if (disposed || !open || typeof document === 'undefined') return;
+    const refreshVisible = () => {
+      if (
+        !disposed &&
+        document.visibilityState !== 'hidden' &&
+        !loading &&
+        deps.getHistoryProviderState() === 'available' &&
+        Date.now() - (historyRequestedAtMs ?? 0) >= MINUTE_MS
+      )
+        refreshHistory();
+    };
+    const timer = setInterval(refreshVisible, MINUTE_MS);
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const stop = () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
+    stopRefresh = stop;
+    return () => {
+      stop();
+      if (stopRefresh === stop) stopRefresh = undefined;
+    };
   });
 
   function toggle(id: string): void {
@@ -390,6 +424,8 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
 
   function dispose(): void {
     disposed = true;
+    stopRefresh?.();
+    stopRefresh = undefined;
     cancelHistory();
     recorder.stop();
     if (subscribedPaths.size > 0) {
@@ -425,6 +461,9 @@ export function createTrendsController(deps: TrendsDeps): TrendsController {
     },
     get loading() {
       return loading;
+    },
+    get lastCheckedMs() {
+      return lastCheckedMs;
     },
     get history() {
       return history;

@@ -7,16 +7,20 @@ export interface MobNotificationValue {
   message: string;
   // Not in the notification schema proper, but carried so other clients can mark the spot.
   position?: LatLon;
+  createdAt?: string;
 }
 
-export function mobNotification(position?: LatLon): MobNotificationValue {
+export function mobNotification(position?: LatLon, epochMs?: number): MobNotificationValue {
   return {
     state: 'emergency',
     method: ['visual', 'sound'],
     message: position
       ? `Man overboard at ${formatLatitude(position.latitude)} ${formatLongitude(position.longitude)}`
       : 'Man overboard, no position fix',
-    ...(position ? { position } : {}),
+    ...(position
+      ? { position: { latitude: position.latitude, longitude: position.longitude } }
+      : {}),
+    ...(epochMs !== undefined ? { createdAt: new Date(epochMs).toISOString() } : {}),
   };
 }
 

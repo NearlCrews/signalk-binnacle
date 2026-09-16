@@ -8,7 +8,7 @@ import {
 } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
 import type { AuthController } from '$shared/signalk';
-import { dialog, TextField, UnitField, WriteAccessNote } from '$shared/ui';
+import { dialog, PositionFields, TextField, WriteAccessNote } from '$shared/ui';
 import {
   MAX_PERSONAL_NOTE_NAME_LENGTH,
   MAX_PERSONAL_NOTE_TEXT_LENGTH,
@@ -101,7 +101,7 @@ function chooseCategory(event: Event): void {
 }
 </script>
 
-<dialog class="modal-card note-dialog" aria-label={title} use:dialog={onCancel}>
+<dialog class="modal-card editor-dialog note-dialog" aria-label={title} use:dialog={onCancel}>
   <header class="dialog-header"><h2>{title}</h2></header>
   <div class="note-body dialog-body">
     {#if auth.writeBlocked}
@@ -142,7 +142,7 @@ function chooseCategory(event: Event): void {
       onEnter={save}
     />
 
-    <label class="note-field">
+    <label class="dialog-field">
       <span>Text</span>
       <textarea
         class="input note-text"
@@ -153,7 +153,7 @@ function chooseCategory(event: Event): void {
       ></textarea>
     </label>
 
-    <label class="note-field">
+    <label class="dialog-field">
       <span>Category</span>
       <select class="input" value={category} disabled={busy} onchange={chooseCategory}>
         {#each POI_CATEGORIES as option (option)}
@@ -162,7 +162,7 @@ function chooseCategory(event: Event): void {
       </select>
     </label>
 
-    <div class="note-field">
+    <div class="dialog-field">
       <label for="personal-note-symbol">Symbol</label>
       <IconPicker
         id="personal-note-symbol"
@@ -176,25 +176,13 @@ function chooseCategory(event: Event): void {
 
     <section class="position-fields" aria-labelledby="personal-note-position">
       <h3 id="personal-note-position" class="caps-label">Position</h3>
-      <UnitField
-        label="Latitude"
-        unit="°"
-        value={latitude}
-        min={-90}
-        max={90}
-        step={0.000001}
+      <PositionFields
+        position={{ latitude, longitude }}
         disabled={busy}
-        onCommit={(value) => (latitude = Math.max(-90, Math.min(90, value)))}
-      />
-      <UnitField
-        label="Longitude"
-        unit="°"
-        value={longitude}
-        min={-180}
-        max={180}
-        step={0.000001}
-        disabled={busy}
-        onCommit={(value) => (longitude = Math.max(-180, Math.min(180, value)))}
+        onChange={(position) => {
+          latitude = position.latitude;
+          longitude = position.longitude;
+        }}
       />
     </section>
   </div>
@@ -209,10 +197,6 @@ function chooseCategory(event: Event): void {
 <style>
 .note-dialog {
   inline-size: min(25rem, calc(100dvw - 2 * var(--space-4)));
-  max-block-size: calc(100 * var(--dvh) - 2 * var(--space-4));
-}
-.note-body {
-  overflow: auto;
 }
 .note-body p {
   margin: 0;
@@ -223,12 +207,6 @@ function chooseCategory(event: Event): void {
   display: grid;
   gap: var(--space-2);
   justify-items: start;
-}
-.note-field {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
 }
 .note-text {
   min-block-size: calc(3 * var(--control-size));

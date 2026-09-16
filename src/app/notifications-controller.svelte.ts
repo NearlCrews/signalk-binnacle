@@ -7,6 +7,8 @@ import type { ActiveNotification, NotificationsStore } from '$entities/notificat
 import type { AlarmLogKind, CollisionMute, GenericAlarm, LookoutAlarm } from '$features/lookout';
 import {
   CollisionNotifier,
+  canAcknowledgeNotification,
+  canSilenceNotification,
   isRaisedNotification,
   notificationGrade,
   notificationLabel,
@@ -62,6 +64,49 @@ interface NotificationsControllerDeps {
 // several feature and entity slices, while each feature's own controller stays self-contained.
 export function createNotificationsController(deps: NotificationsControllerDeps) {
   let alarmActionError = $state<string | undefined>();
+  let disposed = false;
+  const confirmationWaiters = new Set<{ settled: () => boolean; finish: () => void }>();
+
+  $effect(() => {
+    void deps.notificationsStore.version;
+    for (const waiter of confirmationWaiters) if (waiter.settled()) waiter.finish();
+  });
+
+  async function confirmNotificationAction(
+    original: readonly ActiveNotification[],
+    kind: 'silenced' | 'acknowledged',
+    token: string | undefined,
+  ): Promise<boolean> {
+    const settled = (): boolean => {
+      const current = deps.notificationsStore.list();
+      return original.every((before) => {
+        const after = current.find((candidate) => candidate.path === before.path);
+        return (
+          !after ||
+          after.id !== before.id ||
+          after.activation !== before.activation ||
+          after[kind] === true ||
+          (kind === 'silenced' && after.acknowledged === true)
+        );
+      });
+    };
+    if (settled()) return true;
+    await new Promise<void>((resolve) => {
+      const waiter = {
+        settled,
+        finish: () => {
+          clearTimeout(timer);
+          confirmationWaiters.delete(waiter);
+          resolve();
+        },
+      };
+      const timer = setTimeout(waiter.finish, 3_000);
+      confirmationWaiters.add(waiter);
+    });
+    if (disposed || token !== deps.token()) return false;
+    if (!settled()) await reconcileAfterReconnect(token);
+    return !disposed && token === deps.token() && settled();
+  }
 
   function publishDelta(path: string, value: unknown): void {
     void deps.client.publish({
@@ -99,7 +144,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     });
   }
 
-  function runNotificationAction(
+  async function runNotificationAction(
     notification: ActiveNotification,
     action: (
       base: string,
@@ -109,67 +154,78 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     unsupportedMessage: string,
     failMessage: string,
     logKind: 'silenced' | 'acknowledged',
-  ): void {
+  ): Promise<void> {
     if (!notification.id) return;
     alarmActionError = undefined;
     if (deps.writeBlocked()) {
       alarmActionError = 'Server write access is needed for this alarm action.';
       return;
     }
-    void action(deps.origin, deps.token(), notification.id).then((result) => {
-      if (result === 'unsupported') alarmActionError = unsupportedMessage;
-      else if (result === 'failed') alarmActionError = failMessage;
-      else
-        deps.log?.({
-          kind: logKind,
-          label: notificationLabel(notification),
-          source: notification.path,
-        });
-    });
+    const token = deps.token();
+    const result = await action(deps.origin, token, notification.id);
+    if (disposed || token !== deps.token()) return;
+    if (result === 'unsupported') alarmActionError = unsupportedMessage;
+    else if (result === 'failed') alarmActionError = failMessage;
+    else if (await confirmNotificationAction([notification], logKind, token))
+      deps.log?.({
+        kind: logKind,
+        label: notificationLabel(notification),
+        source: notification.path,
+      });
+    else if (!disposed && token === deps.token())
+      alarmActionError =
+        'The server accepted the request, but the alarm status is unconfirmed. Retry or use Mute here on the alarm strip.';
   }
 
   // An alarm flood is one tap: the server's bulk routes apply to every active alarm at once. The
   // same write gate and error grammar as the per-id actions, logged once as a bulk entry.
-  function runBulkNotificationAction(
+  async function runBulkNotificationAction(
     action: (base: string, token: string | undefined) => Promise<NotificationActionResult>,
     logKind: 'silenced' | 'acknowledged',
     failMessage: string,
-  ): void {
+  ): Promise<void> {
     alarmActionError = undefined;
     if (deps.writeBlocked()) {
       alarmActionError = 'Server write access is needed for this alarm action.';
       return;
     }
-    void action(deps.origin, deps.token()).then((result) => {
-      if (result === 'unsupported') {
-        alarmActionError =
-          'This server delegates notification management, so bulk actions are unavailable.';
-      } else if (result === 'failed') {
-        alarmActionError = failMessage;
-      } else {
-        deps.log?.({ kind: logKind, label: 'All active alarms' });
-      }
-    });
+    const token = deps.token();
+    const original = deps.notificationsStore
+      .list()
+      .filter(logKind === 'silenced' ? canSilenceNotification : canAcknowledgeNotification);
+    const result = await action(deps.origin, token);
+    if (disposed || token !== deps.token()) return;
+    if (result === 'unsupported') {
+      alarmActionError =
+        'This server delegates notification management, so bulk actions are unavailable.';
+    } else if (result === 'failed') {
+      alarmActionError = failMessage;
+    } else if (await confirmNotificationAction(original, logKind, token)) {
+      deps.log?.({ kind: logKind, label: 'All active alarms' });
+    } else if (!disposed && token === deps.token()) {
+      alarmActionError =
+        'The server accepted the request, but some alarm statuses are unconfirmed. Retry or use Mute here on the alarm strip.';
+    }
   }
 
-  function onSilenceAllNotifications(): void {
-    runBulkNotificationAction(
+  function onSilenceAllNotifications(): Promise<void> {
+    return runBulkNotificationAction(
       silenceAllNotifications,
       'silenced',
       'Could not silence every alert. Check the connection and access.',
     );
   }
 
-  function onAcknowledgeAllNotifications(): void {
-    runBulkNotificationAction(
+  function onAcknowledgeAllNotifications(): Promise<void> {
+    return runBulkNotificationAction(
       acknowledgeAllNotifications,
       'acknowledged',
       'Could not acknowledge every alert. Check the connection and access.',
     );
   }
 
-  function onSilenceNotification(notification: ActiveNotification): void {
-    runNotificationAction(
+  function onSilenceNotification(notification: ActiveNotification): Promise<void> {
+    return runNotificationAction(
       notification,
       silenceNotification,
       'This server delegates notification management, so silence is unavailable.',
@@ -178,8 +234,8 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     );
   }
 
-  function onAcknowledgeNotification(notification: ActiveNotification): void {
-    runNotificationAction(
+  function onAcknowledgeNotification(notification: ActiveNotification): Promise<void> {
+    return runNotificationAction(
       notification,
       acknowledgeNotification,
       'This server delegates notification management, so acknowledgment is unavailable.',
@@ -308,12 +364,14 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     const snapshotEpoch = Date.now();
     if (deps.notificationsApi()) {
       const byId = await fetchRaisedNotificationsById(deps.origin, token, deps.selfContext());
+      if (disposed || token !== deps.token()) return;
       if (byId) {
         deps.notificationsStore.reconcileWithValues(byId, snapshotEpoch);
         return;
       }
     }
     const paths = await fetchRaisedNotificationPaths(deps.origin, token);
+    if (disposed || token !== deps.token()) return;
     if (paths) deps.notificationsStore.reconcile(paths, snapshotEpoch);
   }
 
@@ -325,7 +383,11 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     onAcknowledgeAllNotifications,
     muteGenericHere,
     reconcileAfterReconnect,
-    dispose: collisionPublisher.dispose,
+    dispose() {
+      disposed = true;
+      for (const waiter of confirmationWaiters) waiter.finish();
+      collisionPublisher.dispose();
+    },
     get genericAlarms() {
       return genericNotifications;
     },

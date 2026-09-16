@@ -33,8 +33,9 @@ const FILL_LAYER = 'binnacle-anchor-swing-fill';
 const RING_LAYER = 'binnacle-anchor-swing-ring';
 const RODE_LAYER = 'binnacle-anchor-rode';
 const MARKER_LAYER = 'binnacle-anchor-marker';
+const HIT_LAYER = 'binnacle-anchor-hit';
 const BAND = 'routes';
-const LAYERS = [FILL_LAYER, RING_LAYER, RODE_LAYER, MARKER_LAYER];
+const LAYERS = [FILL_LAYER, RING_LAYER, RODE_LAYER, HIT_LAYER, MARKER_LAYER];
 
 export const ANCHOR_OVERLAY_ID = 'anchor-watch';
 
@@ -176,6 +177,17 @@ export function createAnchorOverlay(
         };
         map.addLayer(layer, before);
       }
+      if (!map.getLayer(HIT_LAYER)) {
+        map.addLayer(
+          {
+            id: HIT_LAYER,
+            type: 'circle',
+            source: POINT_SRC,
+            paint: { 'circle-radius': 22, 'circle-opacity': 0 },
+          },
+          before,
+        );
+      }
       if (!map.getLayer(MARKER_LAYER)) {
         const layer: CircleLayerSpecification = {
           id: MARKER_LAYER,
@@ -245,15 +257,15 @@ export function createAnchorOverlay(
       const onMarkerLeave = (): void => {
         map.getCanvas().style.cursor = '';
       };
-      map.on('mousedown', MARKER_LAYER, onMarkerMouseDown);
-      map.on('touchstart', MARKER_LAYER, onMarkerTouchStart);
-      map.on('mouseenter', MARKER_LAYER, onMarkerEnter);
-      map.on('mouseleave', MARKER_LAYER, onMarkerLeave);
+      map.on('mousedown', HIT_LAYER, onMarkerMouseDown);
+      map.on('touchstart', HIT_LAYER, onMarkerTouchStart);
+      map.on('mouseenter', HIT_LAYER, onMarkerEnter);
+      map.on('mouseleave', HIT_LAYER, onMarkerLeave);
       detachMarkerDrag = () => {
-        map.off('mousedown', MARKER_LAYER, onMarkerMouseDown);
-        map.off('touchstart', MARKER_LAYER, onMarkerTouchStart);
-        map.off('mouseenter', MARKER_LAYER, onMarkerEnter);
-        map.off('mouseleave', MARKER_LAYER, onMarkerLeave);
+        map.off('mousedown', HIT_LAYER, onMarkerMouseDown);
+        map.off('touchstart', HIT_LAYER, onMarkerTouchStart);
+        map.off('mouseenter', HIT_LAYER, onMarkerEnter);
+        map.off('mouseleave', HIT_LAYER, onMarkerLeave);
         // Drop any in-flight drag listeners too, so a teardown mid-drag leaves nothing attached.
         map.off('mousemove', onPointerMove);
         map.off('touchmove', onPointerMove);

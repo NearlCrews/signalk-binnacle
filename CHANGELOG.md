@@ -8,6 +8,9 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Added
 
+- Coordinate-entry controls for routes, measurements, and anchor corrections, plus tap-based
+  ordering controls for toolbar actions, layers, instruments, and trends.
+- A persistent Offline charts setup page, contextual GPS help, and in-app network privacy guidance.
 - The autopilot arrives: a status chip showing engaged or standby with the mode and target, and a
   panel with armed engage, disengage, tack, and gybe plus direct heading nudges while engaged,
   consuming the Signal K v2 Autopilot API with honest absent, access, and unreachable states.
@@ -77,6 +80,21 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- MOB publication preserves the position and time captured when the button was pressed across
+  stations. Navigation confirmations disarm when their course, leg, or recovery mark changes.
+- Alarm actions have bounded confirmation waits, and device-local mute remains available after
+  boat-wide silence fails. Local fallback off-course controls state their scope.
+- Enlarged-text panel headers, editor dialogs, and chart menus keep controls reachable. Night-red
+  active badges meet text contrast requirements, and menu cancellation restores keyboard focus.
+- Tide displays retain provider datum, timestamps, and failure context, and current predictions
+  remain available without tide heights. Missing instrument assessments and unknown danger flags
+  no longer appear normal or safe.
+- Watch handoffs bind offline coverage to the assessed route and saved-chart inputs, preserve
+  forecast and tide qualifications, and never silently evict unsynchronized snapshots.
+- Logbook and handoff drafts survive panel changes, failed radar-area saves retain their drafts,
+  and saved lists, place details, and trends offer explicit refresh or retry paths.
+- Automatic chart caching waits for the saved server configuration before allowing changes, and
+  setup readiness distinguishes missing audio support, stale GPS, and unverified storage.
 - Delayed and replayed telemetry retain their measurement time, so receiving old data cannot make a
   safety reading look fresh. Reconnect arbitration uses a separate transport receipt time.
 - Connection details report Connecting until the Signal K stream actually opens.

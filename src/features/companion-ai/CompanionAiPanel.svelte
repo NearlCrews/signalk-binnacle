@@ -1,10 +1,10 @@
 <script lang="ts">
 import { onDestroy, onMount } from 'svelte';
-import { formatClockTime, formatMonthDay } from '$shared/lib';
+import { Clock, MINUTE_MS } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import { SlideOver, WriteAccessNote } from '$shared/ui';
 import type { CompanionAiController } from './companion-ai-controller.svelte';
-import { analyzerTitle } from './companion-reports';
+import { analyzerTitle, companionReportTime } from './companion-reports';
 
 interface Props {
   controller: CompanionAiController;
@@ -18,12 +18,11 @@ const { controller, auth, onClose, onBack }: Props = $props();
 onMount(() => {
   controller.start();
 });
-onDestroy(() => controller.stop());
-
-function whenText(timestampMs: number | undefined): string {
-  if (timestampMs === undefined) return '';
-  return `${formatClockTime(timestampMs)} ${formatMonthDay(timestampMs)}`;
-}
+const clock = new Clock(MINUTE_MS);
+onDestroy(() => {
+  controller.stop();
+  clock.dispose();
+});
 </script>
 
 <SlideOver title="AI advisor" closeLabel="Close AI advisor panel" {onClose} {onBack} bodyFlex>
@@ -39,6 +38,12 @@ function whenText(timestampMs: number | undefined): string {
   <p class="muted-note">
     Advisory reports from the companion plugin's analyzers about the boat's engines, batteries,
     sensors, and weather. They are AI summaries for review, never navigation truth.
+  </p>
+  <p class="muted-note">
+    Run now sends the analyzer's configured vessel telemetry through OpenRouter to its selected
+    model provider and may use shared paid credits. Refresh reports only reads saved reports; it
+    does not start an analysis. Check the companion plugin's telemetry and model settings before
+    running.
   </p>
 
   {#if controller.availability === 'absent'}
@@ -89,9 +94,7 @@ function whenText(timestampMs: number | undefined): string {
                 {#if report.state === 'warn'}
                   <span class="caps-label sev-warning">Report unavailable</span>
                 {/if}
-                {#if report.timestampMs !== undefined}
-                  <span class="num when">{whenText(report.timestampMs)}</span>
-                {/if}
+                <span class="num when">{companionReportTime(report.timestampMs, clock.now)}</span>
               </div>
               <p class="report-text" class:sev-warning={report.state === 'warn'}>
                 {report.message}

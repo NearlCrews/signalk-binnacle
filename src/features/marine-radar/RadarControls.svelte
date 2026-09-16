@@ -10,7 +10,7 @@ import {
   RAD_TO_DEG,
   type UnitsMode,
 } from '$shared/lib';
-import { Disclosure, InlineConfirm, ShowOnChartToggle } from '$shared/ui';
+import { Disclosure, InlineConfirm, restoreFocusAfterCancel, ShowOnChartToggle } from '$shared/ui';
 import type { MarineRadarStore } from './marine-radar-store.svelte';
 import RadarAreaControl from './RadarAreaControl.svelte';
 import {
@@ -42,7 +42,7 @@ let {
   store: MarineRadarStore;
   onSetControl: (controlId: string, value: number | string | boolean) => void;
   onSetAuto: (controlId: string, auto: boolean) => void;
-  onSetAreaControl: (controlId: string, value: RadarStructuredValue) => void;
+  onSetAreaControl: (controlId: string, value: RadarStructuredValue) => Promise<boolean>;
   onSetAreaDraft: (draft: import('./radar-types').RadarAreaDraft | undefined) => void;
   onStartAreaChartEdit: (controlId: string) => string | undefined;
   onStopAreaChartEdit: () => void;
@@ -60,6 +60,17 @@ let {
 let confirmingTransmit = $state<{ context: string; name: string } | undefined>();
 let activeEditorId = $state<string | undefined>(undefined);
 let activeEditorDirty = $state(false);
+let transmitTrigger = $state<HTMLButtonElement>();
+let discardTrigger: HTMLElement | undefined;
+let wasDiscardRequested = false;
+
+$effect.pre(() => {
+  if (discardRequested && !wasDiscardRequested) {
+    discardTrigger =
+      document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+  }
+  wasDiscardRequested = discardRequested;
+});
 
 const controls = $derived(
   [...store.capabilities].sort(
@@ -418,7 +429,10 @@ function discardActiveDraft(): void {
     question="Discard unsaved radar-area changes?"
     confirmLabel="Discard"
     onConfirm={discardActiveDraft}
-    onCancel={() => onDiscardResolved?.(false)}
+    onCancel={() => {
+      onDiscardResolved?.(false);
+      void restoreFocusAfterCancel(() => discardTrigger);
+    }}
   />
 {/if}
 
@@ -456,6 +470,7 @@ function discardActiveDraft(): void {
           type="button"
           class="btn"
           class:is-on={operational === 'transmit'}
+          bind:this={transmitTrigger}
           aria-pressed={operational === 'transmit'}
           disabled={transmitDisabled}
           onclick={() => {
@@ -485,7 +500,10 @@ function discardActiveDraft(): void {
           confirmingTransmit = undefined;
           if (valid) onSetPower('transmit');
         }}
-        onCancel={() => (confirmingTransmit = undefined)}
+        onCancel={() => {
+          confirmingTransmit = undefined;
+          void restoreFocusAfterCancel(() => transmitTrigger);
+        }}
       />
     {/if}
     <p class="muted-note">

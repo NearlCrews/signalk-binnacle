@@ -120,8 +120,14 @@ test('holds an off-course breach, follows a server alarm, and clears after recov
     },
   ]);
   await openMenuItem(page, /^Alarms(?:\s*,\s*\d+ active alarms?)?$/);
+  const offCourse = page.getByRole('region', { name: 'Off-course alarm', exact: true });
+  await expect(offCourse).toContainText('A server plugin raises the off-course alarm.');
+  await expect(offCourse).toContainText('settings below apply only to the local fallback');
   await expect(
-    page.getByText('A server plugin raises the off-course alarm; this display follows it.'),
+    offCourse.getByRole('button', { name: 'Mute local off-course fallback' }),
+  ).toBeVisible();
+  await expect(
+    offCourse.getByRole('spinbutton', { name: 'Local fallback off-course alarm limit' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close alarms panel' }).click();
   await sendValues(page, [
@@ -147,7 +153,9 @@ test('exposes the emergency action inside phone Trends keyboard scope', async ({
   await mob.focus();
   await page.keyboard.press('Enter');
   await expect(
-    page.getByRole('dialog').getByRole('button', { name: 'Mark man overboard', exact: true }),
+    page
+      .getByRole('alertdialog', { name: 'Man overboard' })
+      .getByRole('button', { name: 'Mark man overboard', exact: true }),
   ).toBeVisible();
 });
 

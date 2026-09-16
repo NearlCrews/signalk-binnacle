@@ -67,10 +67,12 @@ two leaves a tile that opens nothing, or a panel with no way in.
    `shortLabel` when the label is long (the bottom-bar pill renders `shortLabel ?? label`). Add
    `disabled` plus `disabledLabel` for a transient block, such as a chart still loading. When a
    user-relevant optional provider is absent, keep the item visible with `available: false` plus an
-   actionable `unavailableHint`; do not hide it with a conditional spread. Offline charts is the
-   canonical example: one entry is always present, and its hint explains how to install, start, or
-   sign in to Signal K as an administrator. Radar, Playback, and Instrument dashboard (KIP) follow the same
-   availability rule. When discovery has multiple failure states, derive the hint from current state
+   actionable `unavailableHint`; do not hide it with a conditional spread. A blocked entry explains
+   its reason on touch or keyboard activation without executing the command. When a capability has
+   setup steps, keep its entry actionable and open a persistent requirements panel. Offline charts
+   is the example: one entry opens installation, access, or connection guidance with Retry until
+   Chart Locker is usable, then opens the chart-management workflow. Radar, Playback, and Instrument
+   dashboard (KIP) keep their missing capability visible too. When discovery has multiple failure states, derive the hint from current state
    so absence, an access refusal, malformed provider data, and a transport failure do not collapse
    into the same message.
    Chart Locker management requests use the browser's Signal K administrator session. Do not attach
@@ -118,7 +120,10 @@ level. Inside, in this order:
    the gesture, and restore it when the gesture finishes or is canceled. Offline area drawing is the
    canonical example. When `focusTrap` changes at a responsive breakpoint, update the prop on the one
    stable `SlideOver`. Do not branch into duplicate panel shells because that discards scroll, focus,
-   and child-local state.
+   and child-local state. At phone widths, the shared shell caps the panel to the smaller of 60%
+   of the viewport height and Plotter's measured chart height. Do not replace that cap with a
+   feature-local viewport calculation or extend the panel over the global header and MOB action. Keep enough
+   space for usable body controls after the header and footer, not merely an on-screen outer frame.
 2. Top-of-body notes, before any section: a transient error as `<p class="alert-note"
    role="alert">{error}</p>`, and a write-gate teach note through the shared
    `WriteAccessNote` when `auth.writeBlocked`, whose message names what is blocked in the panel's
@@ -140,7 +145,9 @@ level. Inside, in this order:
    failure. Confirmed writes update local state before a follow-up refresh, late refreshes cannot
    overwrite newer results, and conflicting mutations disable until completion. Tracks and Waypoints
    are the canonical saved-resource examples. A failed modal write must preserve the dialog and its
-   entered values.
+   entered values. Initial read failures stop the loading label and offer Retry inside the affected
+   view. A failed refresh leaves accepted rows visible with a retained-data explanation, including
+   installed charts, saved offline areas, and storage information.
 8. An action that starts navigation or turns incomplete sensor history into guidance requires an
    explicit confirmation and states what data it will use. Retrace track and Navigate to waypoint are
    the canonical examples.
@@ -150,7 +157,11 @@ level. Inside, in this order:
 10. A chart-tap tool uses a visible mode affordance, gives the next gesture in its live strip, validates
     and bounds collected points, and restores chart chrome on exit. Selection must not implicitly
     begin a destructive drag. A nested manipulation mode cancels before the parent tool on Escape,
-    chart hit areas meet the 44 px target, and the strip supplies a keyboard-equivalent path.
+    chart hit areas meet the 44 px target, and the editor supplies a keyboard-equivalent path for
+    creating, selecting, moving, deleting, and reordering points wherever those operations exist.
+    Coordinate fields and Add chart center allow a first point without a map gesture. Offline area
+    selection offers Use current chart view for the initial area, followed by bounded coordinates
+    for adjustment.
     Selecting an already-active menu item must not silently erase work. Measure is the canonical
     example.
 11. Sensor-derived actions must reject stale inputs at the action boundary, not only gray the button.
@@ -179,6 +190,16 @@ level. Inside, in this order:
     settings also need a profile type, bounded validation, a binding-table entry, merge metadata, and
     tests. Device, safety, credential, server-resource, and cache values must not enter the profile
     capture path.
+18. A settings form must load and validate its current server policy before enabling edits. Do not
+    post local defaults while an initial read is pending or failed. Preserve untouched accepted
+    fields, distinguish checking from Off, and expose a local Retry for a failed read or save.
+19. Pass complete operational states, not a boolean that erases failure modes. Alarm sound uses
+    ready, blocked, failed, and unsupported; only ready promises sound. Setup completion requires
+    affirmative saved-data readiness, and a historical GPS fix is not evidence of a current fix.
+20. Preserve the selected resource across related sub-views. A passage plan's Offline charts action
+    checks that passage without activating navigation. Reusable coverage facts include route and
+    geometry identity, saved-area and catalog inputs, and checked-at time; invalidate mismatches
+    even while the panel is closed.
 
 Skeleton:
 
@@ -297,9 +318,11 @@ stating what a tap now does. The visual and aria recipe lives in the design syst
 entry.
 
 The app menu's toolbar editor also shows the current pinned bar order. Use the shared `createReorder`
-controller for pointer and ArrowUp or ArrowDown movement, keep the stored `pinnedActionIds` order as
-the source of truth, and include a reset action that restores `DEFAULT_PINNED`. The menu tile grid
-still controls membership by tapping tiles in edit mode.
+controller for dragging, ArrowUp or ArrowDown movement, and `ReorderActions` Move up and Move down
+buttons. Keep the stored `pinnedActionIds` order as the source of truth, and include a reset action
+that restores `DEFAULT_PINNED`. The menu tile grid still controls membership by tapping tiles in edit
+mode. Starter profiles keep Menu and an appropriate safety shortcut visible on a fresh helm without
+replacing an existing profile's deliberate pins.
 
 ---
 
@@ -315,6 +338,8 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | A list of saved items | `SavedList` (with `empty` and a `card` snippet) | a hand-rolled `<ul>` of cards |
 | A labeled text field | `TextField` | a raw `<input type="text">` |
 | A numeric setting with a unit | `UnitField` | a raw `<input type="number">` |
+| Decimal-degree point entry | `PositionFields` | a map gesture as the only way to add the first point |
+| Single-tap list reordering | `ReorderActions` with `createReorder` | a drag grip or keyboard shortcut as the only alternative |
 | Collect or rename a name | `NameEntry` (seeded with `defaultSaveName`) | `window.prompt` |
 | Confirm a destructive or immediate navigation action in a panel | `InlineConfirm` | `window.confirm` |
 | Confirm a destructive one-tap strip action | `ConfirmArm` | an unguarded one-tap delete |
@@ -326,6 +351,7 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | A toolbar menu with a trigger button | `createMenuFocusMachine` | a bespoke Tab redirect and close-focus protocol |
 | Explain why a control is grayed | `UnavailableHint` plus a matching `title` | a `title` alone, silent to assistive tech |
 | Focus a freshly revealed control | `focusOnMount` | an ad hoc onMount focus call |
+| Restore focus after inline cancellation | `restoreFocusAfterCancel` with a trigger getter | focusing a removed trigger or stealing focus after success |
 | Arrow-key roving in a small menu | `rovingFocus` | a bespoke keydown index walker |
 | Import a text file | `pickTextFile` plus `readErrorMessage` | a hidden `<input type="file">` |
 | A dated default save name | `defaultSaveName` | an inline date string |
@@ -398,7 +424,8 @@ These are the style corrections we keep making. Each has a one-line fix.
 
 - Read color tokens only, never a raw hex, so a control recolors across day, dusk, and night-red
   automatically.
-- Night-red forbids any non-red pixel. Shadows collapse to `none`, so never rely on a shadow alone to
+- Night-red keeps zero blue and only the bounded green required by its contrast tokens. Shadows
+  collapse to `none`, so never rely on a shadow alone to
   separate surfaces: a border must also be present. Signal state by brightness, never by hue alone
   (`--alarm` is brighter than `--warning`; `--ok` collapses to a dim red at night).
 - A raster overlay cannot recolor, so it routes through `applyRasterTheme` (which desaturates and
@@ -411,6 +438,9 @@ These are the style corrections we keep making. Each has a one-line fix.
 - Follow the server unit preference through the `UnitsStore`, never a panel-local imperial or metric
   toggle and never a locale guess. A unit-bearing field consumes the resolved `UnitsMode` as a prop
   and converts only when rendering.
+- Units and datum are separate contracts. Carry each tide provider's validated datum through the
+  station panel, chart inspection, events, and handoff. If the datum is absent or invalid, say
+  Unknown. Never assume that a provider's tide height uses the displayed chart's zero.
 
 ---
 
@@ -423,9 +453,10 @@ and guides.
   what the panel does and how to start ("Press and hold anywhere on the chart to drop a waypoint.").
 - Gloss every acronym and jargon term, inline the first time with the acronym in parentheses, or with
   a `title` or `description` tooltip. Established glosses to match the voice of: CPA to "Closest
-  pass", TCPA to "Time to closest", MLLW to "mean lower low water (MLLW), the chart's zero", ebb and
+  pass", TCPA to "Time to closest", MLLW to "mean lower low water (MLLW)", ebb and
   flood to "seaward" and "landward", degrees true to a "Degrees true, measured clockwise from true
   north" tooltip. Never ship a bare ZOC, MPA, AIS, or MLLW with no gloss anywhere on the panel.
+  Tide copy also asks the navigator to check chart-datum compatibility before combining heights.
 - Write guiding empty states with a next step, never a dead "No data": "No X yet. <do Y> to ...".
   Use the `SavedList` `empty` prop rather than a hand-rolled `<p>`.
 - Voice: second person, imperative for actions, present tense, short sentences. No marketing tone, no
@@ -436,6 +467,16 @@ and guides.
 - Use `.alert-note` with `role="alert"` only for actionable failure or safety state. Write-access
   teaching and optional-capability explanations use `.muted-note`; add `role="status"` only when a
   state change should be announced politely.
+- Name source, reference, valid time, and retained status where they change the meaning of a value.
+  Distinguish model fills from observations, a provider's negative hazard assessment from a safety
+  clearance, and unassessed instrument data from an assessed Normal state. Aggregates name their
+  statistic and bucket duration; future or undated reports never look fresh by omission.
+- Explain operational scope accurately. MOB sharing requires server acceptance and connectivity;
+  browser offline caching and server-side Chart Locker storage are separate capabilities. Help must
+  point to actual sound-readiness controls, and a GPS Help action opens the GPS section directly.
+- Keep network privacy reachable from Help and Profiles. Automatic background position requests are
+  disclosed even when their panels are closed, including the lack of an in-app opt-out where that is
+  the actual behavior. Device-data erasure is not presented as a network privacy control.
 
 House writing rules, mandatory in UI text, labels, commit messages, PR bodies, comments, and docs:
 
@@ -466,6 +507,18 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
 - Use the shared focus actions in `src/shared/ui/focus.ts` (`focusOnMount`, `rovingFocus`,
   `onKeydownAction`); do not hand-roll focus code. True modals use a native `<dialog>` with
   `showModal()`, which provides browser-native Tab trapping without a manual action.
+- Revealing a confirm step transfers focus to it, and cancellation returns to a meaningful control.
+  Help deep links focus and scroll to their destination after mounting. Do not let a parent panel's
+  startup focus override that destination, or let a close action steal focus from another surface.
+- Numeric validation gives visible and programmatic feedback. Preserve the effective value on
+  rejection, set `aria-invalid`, associate the message with `aria-describedby`, and state the allowed
+  range or increment. Never silently replace an invalid entry with a different active value.
+- Pointer dragging has a single-tap alternative as well as a keyboard path. Native checkbox labels
+  provide a full 44 px row, and primary actions such as Use profile have visible words. Preserve
+  meaningful accessible names when compact visual labels are necessary.
+- At 320 px and enlarged text, reflow panel headers and action rows instead of clipping them.
+  Dialog content scrolls while confirmation and dismissal controls remain reachable. Test actual
+  pointer hits and keyboard focus, not only whether a control exists in the DOM.
 - A grayed control with a `title` must also carry an `UnavailableHint`, or assistive-technology users
   get no reason. The gloss on a row goes in the `description` prop, not a one-off span.
 
@@ -480,6 +533,10 @@ Tick all of these before you commit a new menu item.
       passed as props.
 - [ ] The panel is one `SlideOver` with a specific `closeLabel`, `bodyFlex` (unless it is an
       accordion), and `onClose` and `onBack`. Responsive focus-trap changes preserve that same shell.
+- [ ] At narrow widths, short heights, and 200% text, Back, Close, and a real body control remain
+      reachable and operable. Check scrolling and actual pointer targets, not only the panel bounds.
+      Preserve the shared root's 44px short-screen targets and compact spacing in panels and native
+      dialogs without shrinking text.
 - [ ] A teach line opens the body; sections are `<section aria-label>` with `<h3 class="caps-label">`
       headings.
 - [ ] Every control is a shared primitive (section 4), every row and section uses a shared class
@@ -487,10 +544,14 @@ Tick all of these before you commit a new menu item.
 - [ ] Every toggle row sets a `description`; every saved list uses `SavedList` with a next-step
       `empty`; every destructive action or immediate navigation handoff arms an `InlineConfirm` or
       `ConfirmArm`.
-- [ ] A user-relevant optional provider remains visible through `available` and `unavailableHint`;
-      the menu does not conditionally hide the missing capability.
+- [ ] A user-relevant optional provider stays visible with an actionable explanation or persistent
+      setup landing. The menu does not conditionally hide the missing capability.
 - [ ] Determinate progress has a visible percentage or count plus matching progressbar semantics; a
       phone workflow that needs the chart collapses and restores its panel around the gesture.
+- [ ] Initial failures expose Retry, accepted data survives a failed refresh, and no server policy
+      can be overwritten before its initial read succeeds.
+- [ ] All pointer-only point and reorder operations have equivalent bounded keyboard and single-tap
+      paths, and invalid fields expose associated error text.
 - [ ] Tokens only, no hard-coded px or color; reads color tokens so it survives night-red; values
       stored in SI and converted only at the edge through the server unit preference.
 - [ ] Copy follows the house writing rules; acronyms are glossed; aria-labels, roles, and headings

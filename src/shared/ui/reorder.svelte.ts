@@ -24,6 +24,8 @@ export interface Reorder {
   indicatorFor(id: string): { before: boolean; after: boolean };
   handlePointerDown(id: string, event: PointerEvent): void;
   handleKeydown(id: string, event: KeyboardEvent): void;
+  canMove(id: string, direction: -1 | 1): boolean;
+  moveBy(id: string, direction: -1 | 1): void;
 }
 
 // The imperative pointer-and-keyboard drag-reorder controller. It owns the drag state and the
@@ -152,19 +154,25 @@ export function createReorder(options: ReorderOptions): Reorder {
     handle.addEventListener('pointercancel', () => finish(false), { signal });
   }
 
-  function handleKeydown(id: string, event: KeyboardEvent): void {
+  function targetIndex(id: string, direction: -1 | 1): number | undefined {
     const from = movableIndex(id);
-    if (from < 0) return;
-    let to = from;
-    if (event.key === 'ArrowUp') to = from - 1;
-    else if (event.key === 'ArrowDown') to = from + 1;
-    else return;
-    event.preventDefault();
+    if (from < 0) return undefined;
+    let to = from + direction;
     if (to < 0 || to >= movable.length) return;
     // Hold the move inside the row's own category: a clamp back to the current slot means the row
     // is already at its bucket edge, so there is nothing to move or announce.
     to = clamp(movable, id, to);
-    if (to === from) return;
+    return to === from ? undefined : to;
+  }
+
+  function canMove(id: string, direction: -1 | 1): boolean {
+    return targetIndex(id, direction) !== undefined;
+  }
+
+  function moveBy(id: string, direction: -1 | 1): void {
+    const to = targetIndex(id, direction);
+    if (to === undefined) return;
+    const from = movableIndex(id);
     const title = movable[from]?.title ?? options.itemNoun;
     options.commit(id, to);
     reorderAnnouncement = `Moved ${title} to position ${to + 1} of ${movable.length}.`;
@@ -181,6 +189,12 @@ export function createReorder(options: ReorderOptions): Reorder {
     });
   }
 
+  function handleKeydown(id: string, event: KeyboardEvent): void {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    moveBy(id, event.key === 'ArrowUp' ? -1 : 1);
+  }
+
   return {
     get dragId() {
       return dragId;
@@ -191,5 +205,7 @@ export function createReorder(options: ReorderOptions): Reorder {
     indicatorFor,
     handlePointerDown,
     handleKeydown,
+    canMove,
+    moveBy,
   };
 }

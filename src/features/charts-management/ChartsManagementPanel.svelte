@@ -61,7 +61,10 @@ async function loadCharts(manual = false): Promise<void> {
     const result = await fetchManagedCharts(companionBase);
     if (generation !== loadGeneration) return;
     if (result === undefined) {
-      loadError = 'Could not load installed charts. Check the connection and access.';
+      loadError =
+        data === null
+          ? 'Could not load installed charts. Check the connection and access.'
+          : 'Could not refresh installed charts. Showing the last accepted list; file health may have changed.';
     } else {
       data = result;
     }
@@ -132,9 +135,14 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
 
     {#if loadError !== null}
       <p class="alert-note" role="alert">{loadError}</p>
-      <button type="button" class="btn" onclick={() => void loadCharts(true)}>Try again</button>
-    {:else if data === null}
-      <p class="muted-note" role="status">Loading charts…</p>
+      <button type="button" class="btn" disabled={refreshing} onclick={() => void loadCharts(true)}>
+        Retry chart list
+      </button>
+    {/if}
+    {#if data === null}
+      {#if loadError === null}
+        <p class="muted-note" role="status">Loading charts…</p>
+      {/if}
     {:else if data.charts.length === 0}
       <p class="muted-note">
         No charts yet. Drop chart files (.pmtiles) into the server's chart folder and they show up

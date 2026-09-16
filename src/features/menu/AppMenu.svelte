@@ -1,6 +1,6 @@
 <script lang="ts">
 import Menu from '@lucide/svelte/icons/menu';
-import { onDestroy } from 'svelte';
+import { onDestroy, tick } from 'svelte';
 import { Toast, vibrate } from '$shared/lib';
 import {
   AnchoredMenu,
@@ -8,6 +8,7 @@ import {
   menuFocusLeft,
   nextRovingIndex,
   type RovingKey,
+  restoreMenuFocus,
   TransientNote,
   UnavailableHint,
 } from '$shared/ui';
@@ -55,13 +56,31 @@ const pinnedItems = $derived(resolvePinned(items, pinnedIds));
 
 let trigger = $state<HTMLButtonElement>();
 let card = $state<HTMLElement>();
+let opener: HTMLElement | undefined;
+let openerFallback: HTMLElement | undefined;
+let wasOpen = false;
+let disposed = false;
+
+$effect.pre(() => {
+  if (open && !wasOpen) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    openerFallback =
+      opener
+        ?.closest('[data-menu-opener-group]')
+        ?.querySelector<HTMLElement>('[data-menu-opener]') ?? trigger;
+  }
+  wasOpen = open;
+});
 
 // A tap or click on a blocked tile explains itself via Toast's timed-message primitive instead of
 // silently doing nothing, since the title tooltip it also carries is mouse-hover-only. Sized
 // generously since this is unfamiliar explanatory text, not a short confirmation.
 const blockedNote = new Toast();
 const BLOCKED_NOTE_MS = 8_000;
-onDestroy(() => blockedNote.dispose());
+onDestroy(() => {
+  disposed = true;
+  blockedNote.dispose();
+});
 
 // The items split into contiguous groups by their group label, so each renders as a tile section
 // with its caps-label header. The launcher stays generic: it renders whatever it is given.
@@ -80,12 +99,17 @@ const groups = $derived.by(() => {
 });
 
 function closeMenu(restoreFocus = false): void {
+  const closingSurface = card;
+  const target = opener?.isConnected ? opener : (openerFallback ?? trigger);
   if (editing) onEditingChange?.(false);
   onOpenChange(false);
   blockedNote.clear();
   // Return focus to the trigger when the menu closes by keyboard or selection, so a keyboard
   // user lands back on the control that opened it rather than at the top of the document.
-  if (restoreFocus) trigger?.focus();
+  if (restoreFocus)
+    void tick().then(() => {
+      if (!disposed) restoreMenuFocus(undefined, target, closingSurface);
+    });
 }
 
 function select(item: MenuItem): void {

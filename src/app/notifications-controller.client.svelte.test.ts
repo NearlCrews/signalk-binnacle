@@ -1,8 +1,9 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Assessment } from '$entities/collision';
-import type { ActiveNotification } from '$entities/notifications';
+import { type ActiveNotification, NotificationsStore } from '$entities/notifications';
 import * as signalk from '$shared/signalk';
+import { createFrameFactory } from '$shared/testing';
 import { createNotificationsController } from './notifications-controller.svelte';
 
 vi.mock('$shared/signalk', async (importOriginal) => ({
@@ -13,6 +14,8 @@ vi.mock('$shared/signalk', async (importOriginal) => ({
   resolveNotification: vi.fn(),
   silenceNotification: vi.fn(),
   silenceAllNotifications: vi.fn(),
+  fetchRaisedNotificationsById: vi.fn(),
+  fetchRaisedNotificationPaths: vi.fn(),
   updateNotification: vi.fn(),
 }));
 
@@ -43,6 +46,7 @@ function setup(
     mobActive?: boolean;
     ownedDepthPath?: string;
     notifications?: unknown[];
+    notificationsStore?: NotificationsStore;
   } = {},
 ) {
   const assessment = options.assessment ?? DANGER;
@@ -79,7 +83,8 @@ function setup(
     collisionMute: collisionMute as never,
     lookoutAlarm: lookoutAlarm as never,
     anchor: { watching: false } as never,
-    notificationsStore: { list: () => options.notifications ?? [] } as never,
+    notificationsStore:
+      options.notificationsStore ?? ({ list: () => options.notifications ?? [] } as never),
     companionStatus: { state: 'ready', down: false } as never,
     timeTravel: timeTravel as never,
     mob: mob as never,
@@ -133,9 +138,83 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const cleanup of mountedCleanups.splice(0).reverse()) cleanup();
+  vi.useRealTimers();
 });
 
 describe('createNotificationsController', () => {
+  it('bounds missing echo confirmation, refreshes once, and reports an unchanged alarm honestly', async () => {
+    vi.useFakeTimers();
+    const store = new signalk.SignalKStore();
+    const value = {
+      id: 'alarm-id',
+      state: 'alarm',
+      message: 'Bilge high',
+      status: { canSilence: true, canAcknowledge: true },
+    };
+    store.applyFrame(createFrameFactory()({ 'notifications.bilge': value }));
+    const notificationsStore = new NotificationsStore(store);
+    const test = mount({ notificationsStore });
+    vi.mocked(signalk.fetchRaisedNotificationsById).mockResolvedValue(
+      new Map([['notifications.bilge', value]]),
+    );
+    const action = test.controller.onSilenceNotification(notificationsStore.list()[0]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await action;
+    expect(signalk.fetchRaisedNotificationsById).toHaveBeenCalledOnce();
+    expect(test.controller.alarmActionError).toContain('unconfirmed');
+    expect(notificationsStore.list()[0].silenced).not.toBe(true);
+    expect(test.log.mock.calls.filter(([entry]) => entry.kind === 'silenced')).toHaveLength(0);
+  });
+
+  it('confirms from the stream without waiting for a REST refresh', async () => {
+    vi.useFakeTimers();
+    const store = new signalk.SignalKStore();
+    const frame = createFrameFactory();
+    const value = {
+      id: 'alarm-id',
+      state: 'alarm',
+      message: 'Bilge high',
+      status: { canSilence: true },
+    };
+    store.applyFrame(frame({ 'notifications.bilge': value }));
+    const notificationsStore = new NotificationsStore(store);
+    const test = mount({ notificationsStore });
+    const action = test.controller.onSilenceNotification(notificationsStore.list()[0]);
+    await Promise.resolve();
+    store.applyFrame(
+      frame({ 'notifications.bilge': { ...value, status: { ...value.status, silenced: true } } }),
+    );
+    flushSync();
+    await action;
+    expect(signalk.fetchRaisedNotificationsById).not.toHaveBeenCalled();
+    expect(test.controller.alarmActionError).toBeUndefined();
+    expect(test.log).toHaveBeenCalledWith(expect.objectContaining({ kind: 'silenced' }));
+  });
+
+  it('accepts refreshed status after a missing echo without clearing a raised condition', async () => {
+    vi.useFakeTimers();
+    const store = new signalk.SignalKStore();
+    const value = {
+      id: 'alarm-id',
+      state: 'emergency',
+      message: 'Fire',
+      status: { canAcknowledge: true },
+    };
+    store.applyFrame(createFrameFactory()({ 'notifications.fire': value }));
+    const notificationsStore = new NotificationsStore(store);
+    const test = mount({ notificationsStore });
+    vi.mocked(signalk.fetchRaisedNotificationsById).mockResolvedValue(
+      new Map([
+        ['notifications.fire', { ...value, status: { ...value.status, acknowledged: true } }],
+      ]),
+    );
+    const action = test.controller.onAcknowledgeNotification(notificationsStore.list()[0]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await action;
+    expect(notificationsStore.list()[0]).toMatchObject({ state: 'emergency', acknowledged: true });
+    expect(test.controller.alarmActionError).toBeUndefined();
+  });
+
   it('falls back to a Signal K delta and updates the audible alarm when the API is absent', async () => {
     const test = mount({ apiAvailable: false });
     await Promise.resolve();
@@ -196,10 +275,10 @@ describe('createNotificationsController', () => {
   it('records bulk actions only after the server confirms them', async () => {
     const test = mount();
     vi.mocked(signalk.silenceAllNotifications).mockResolvedValueOnce('failed');
-    test.controller.onSilenceAllNotifications();
+    void test.controller.onSilenceAllNotifications();
     await vi.waitFor(() => expect(test.controller.alarmActionError).toContain('Could not silence'));
     expect(test.log.mock.calls.filter(([event]) => event.kind === 'silenced')).toHaveLength(0);
-    test.controller.onAcknowledgeAllNotifications();
+    void test.controller.onAcknowledgeAllNotifications();
     await vi.waitFor(() =>
       expect(test.log).toHaveBeenCalledWith({ kind: 'acknowledged', label: 'All active alarms' }),
     );
@@ -219,18 +298,18 @@ describe('createNotificationsController', () => {
   it('surfaces unsupported and failed notification actions', async () => {
     const test = mount();
     vi.mocked(signalk.silenceNotification).mockResolvedValueOnce('unsupported');
-    test.controller.onSilenceNotification({ id: 'n1' } as never);
+    void test.controller.onSilenceNotification({ id: 'n1' } as never);
     await vi.waitFor(() => expect(test.controller.alarmActionError).toContain('unavailable'));
 
     vi.mocked(signalk.acknowledgeNotification).mockResolvedValueOnce('failed');
-    test.controller.onAcknowledgeNotification({ id: 'n1' } as never);
+    void test.controller.onAcknowledgeNotification({ id: 'n1' } as never);
     await vi.waitFor(() =>
       expect(test.controller.alarmActionError).toContain('Could not acknowledge'),
     );
     expect(
       test.log.mock.calls.filter(([event]) => ['silenced', 'acknowledged'].includes(event.kind)),
     ).toHaveLength(0);
-    test.controller.onAcknowledgeNotification({
+    void test.controller.onAcknowledgeNotification({
       id: 'n1',
       path: 'notifications.test',
       value: { state: 'alarm', message: 'Engine hot' },

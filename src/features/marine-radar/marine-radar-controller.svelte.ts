@@ -76,7 +76,7 @@ type QueuedPayload =
 interface QueuedControlWrite {
   payload: QueuedPayload;
   desired: ControlSnapshot;
-  resolve: () => void;
+  resolve: (accepted: boolean) => void;
 }
 
 interface ControlWriteQueue {
@@ -502,7 +502,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         queue.selectionEpoch !== selectionEpoch ||
         store.selectedId !== queue.radarId
       ) {
-        queue.queued.resolve();
+        queue.queued.resolve(false);
         queue.queued = undefined;
         break;
       }
@@ -531,7 +531,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         store.setControlsForbidden(false);
       } else if (stillSelected && (result.status === 401 || result.status === 403)) {
         const superseded = queue.queued as QueuedControlWrite | undefined;
-        superseded?.resolve();
+        superseded?.resolve(false);
         queue.queued = undefined;
         restoreControl(queue.controlId, queue.accepted);
         store.setControlsForbidden(true);
@@ -540,7 +540,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         restoreControl(queue.controlId, queue.accepted);
         store.setControlError(queue.controlId, errorMessage(result.status));
       }
-      current.resolve();
+      current.resolve(stillSelected && result.ok);
     }
     queue.active = false;
     if (controlWriteQueues.get(key) === queue) controlWriteQueues.delete(key);
@@ -559,7 +559,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     controlId: string,
     acceptedBeforeOptimistic: ControlSnapshot,
     payload: QueuedPayload,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const key = queueKey(radarId, controlId);
     let queue = controlWriteQueues.get(key);
     if (!queue || queue.selectionEpoch !== selectionEpoch) {
@@ -572,10 +572,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
       };
       controlWriteQueues.set(key, queue);
     }
-    const promise = new Promise<void>((resolve) => {
-      queue?.queued?.resolve();
+    const promise = new Promise<boolean>((resolve) => {
+      queue?.queued?.resolve(false);
       if (!queue) {
-        resolve();
+        resolve(false);
         return;
       }
       queue.queued = { payload, desired: snapshotControl(controlId), resolve };
@@ -613,9 +613,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   async function setStructuredControl(
     controlId: string,
     value: RadarStructuredValue,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const radar = store.selected;
-    if (!radar) return;
+    if (!radar) return false;
     const definition = controlDefinition(controlId);
     const blocked = controlWriteBlockReason(
       definition,
@@ -625,11 +625,11 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     const validation = validateStructuredControl(definition, value);
     if (blocked || validation) {
       store.setControlError(controlId, blocked ?? validation);
-      return;
+      return false;
     }
     const accepted = snapshotControl(controlId);
     applyStructuredControl(controlId, value);
-    await enqueueControlWrite(radar.id, controlId, accepted, { kind: 'structured', value });
+    return enqueueControlWrite(radar.id, controlId, accepted, { kind: 'structured', value });
   }
 
   function setAreaDraft(draft: RadarAreaDraft | undefined): void {

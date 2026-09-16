@@ -61,6 +61,7 @@ function makeController(
   const fitBounds = vi.fn();
   const flyTo = vi.fn();
   const startRouteEdit = vi.fn(() => true);
+  const replaceRouteWaypoints = vi.fn(() => true);
   const requestWriteAccess = vi.fn(async () => {});
   const controller = createRouteController({
     origin: 'http://sk',
@@ -74,6 +75,7 @@ function makeController(
     flyTo,
     fitBounds,
     startRouteEdit,
+    replaceRouteWaypoints,
     stopRouteEdit: vi.fn(),
     getTrackPoints: () => [],
     wait,
@@ -86,6 +88,7 @@ function makeController(
     fitBounds,
     flyTo,
     startRouteEdit,
+    replaceRouteWaypoints,
     requestWriteAccess,
   };
 }
@@ -101,6 +104,29 @@ function gpxRoute(name: string, lat: number, lon: number): string {
 }
 
 describe('createRouteController', () => {
+  it('applies coordinate edits only to an editable active draft', () => {
+    const test = makeController();
+    expect(test.controller.onSetRouteWaypoints(route.waypoints)).toBe(false);
+    test.routeStore.setWorking(route);
+    expect(test.controller.onSetRouteWaypoints(route.waypoints)).toBe(true);
+    expect(test.replaceRouteWaypoints).toHaveBeenCalledWith(route.waypoints);
+    expect(
+      test.controller.onSetRouteWaypoints([{ position: { latitude: 91, longitude: 0 } }]),
+    ).toBe(false);
+    expect(test.replaceRouteWaypoints).toHaveBeenCalledTimes(1);
+    test.replaceRouteWaypoints.mockReturnValue(false);
+    expect(test.controller.onSetRouteWaypoints(route.waypoints)).toBe(false);
+    expect(test.toast.show).toHaveBeenLastCalledWith(expect.stringContaining('not ready'));
+  });
+
+  it('does not send a coordinate edit with read-only access', () => {
+    const test = makeController(true);
+    test.routeStore.setWorking(route);
+    expect(test.controller.onSetRouteWaypoints(route.waypoints)).toBe(false);
+    expect(test.replaceRouteWaypoints).not.toHaveBeenCalled();
+    expect(test.toast.show).toHaveBeenCalledWith(expect.stringContaining('Read-only'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(courseClient.hydrateCourse).mockResolvedValue({});

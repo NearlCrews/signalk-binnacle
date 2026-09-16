@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { NormalizedSection } from './notes-detail';
-import { isDangerFlag, isRedundantNoteLabel, orderSections } from './notes-present';
+import {
+  dangerFlagText,
+  flagText,
+  isDangerFlag,
+  isRedundantNoteLabel,
+  orderSections,
+} from './notes-present';
 
 const section = (id: string): NormalizedSection => ({ id, title: id, items: [] });
 
@@ -45,5 +51,16 @@ describe('isDangerFlag', () => {
     expect(isDangerFlag('Dangerous', 'flag')).toBe(true);
     expect(isDangerFlag('Transient', 'flag')).toBe(false);
     expect(isDangerFlag('Dangerous', 'text')).toBe(false);
+  });
+
+  it('distinguishes positive, negative, and unknown provider assessments', () => {
+    expect(dangerFlagText(true)).toBe('Dangerous to navigation');
+    expect(dangerFlagText(false)).toBe('Provider does not mark this feature as dangerous');
+    for (const value of ['unknown', 'false', 0, 1]) {
+      expect(dangerFlagText(value)).toBe('Danger status unknown');
+      expect(flagText(value)).toBe('Unknown');
+    }
+    expect(flagText(false)).toBe('No');
+    expect(flagText(true)).toBe('Yes');
   });
 });

@@ -2,7 +2,7 @@
 import { onDestroy, onMount } from 'svelte';
 import { MAX_HANDOFF_NOTE_LENGTH } from '$entities/handoff';
 import { Clock, formatClockTime, formatMonthDay, MINUTE_MS } from '$shared/lib';
-import { SlideOver } from '$shared/ui';
+import { InlineConfirm, restoreFocusAfterCancel, SlideOver } from '$shared/ui';
 import type { HandoffController } from './handoff-controller.svelte';
 
 interface Props {
@@ -13,7 +13,8 @@ interface Props {
 
 const { controller, onClose, onBack }: Props = $props();
 
-let note = $state('');
+let discardArmed = $state(false);
+let discardTrigger = $state<HTMLButtonElement>();
 
 // A coarse minute tick keeps the snapshot ages honest during a long-open panel.
 const clock = new Clock(MINUTE_MS);
@@ -23,8 +24,7 @@ onMount(() => {
 });
 
 function takeSnapshot(): void {
-  controller.create(note);
-  note = '';
+  if (controller.create(controller.draft)) controller.draft = '';
 }
 
 function ageText(createdAt: number): string {
@@ -51,19 +51,55 @@ const SYNC_LABELS = {
 
   <section class="panel-section" aria-label="New snapshot">
     <h3 class="caps-label">New snapshot</h3>
+    {#if controller.error}
+      <p class="alert-note" role="alert">{controller.error}</p>
+    {/if}
     <label class="note-field">
       <span class="caps-label">Note for the oncoming watch</span>
       <textarea
         class="input"
-        bind:value={note}
+        bind:value={controller.draft}
         maxlength={MAX_HANDOFF_NOTE_LENGTH}
         rows="3"
         placeholder="Sea state, traffic, engine, anything to watch"
       ></textarea>
     </label>
-    <button type="button" class="btn btn-primary" onclick={takeSnapshot}>
+    <button
+      type="button"
+      class="btn btn-primary"
+      disabled={controller.queueFull}
+      onclick={takeSnapshot}
+    >
       Take handoff snapshot
     </button>
+    {#if controller.draft}
+      <p class="muted-note">
+        This note stays while this app is open, including when you change panels. Reloading or
+        closing the app loses an unsaved note.
+      </p>
+      {#if discardArmed}
+        <InlineConfirm
+          question="Discard this handoff note?"
+          onCancel={() => {
+            discardArmed = false;
+            void restoreFocusAfterCancel(() => discardTrigger);
+          }}
+          onConfirm={() => {
+          controller.draft = '';
+          discardArmed = false;
+        }}
+        />
+      {:else}
+        <button
+          type="button"
+          class="btn btn-ghost"
+          bind:this={discardTrigger}
+          onclick={() => (discardArmed = true)}
+        >
+          Discard note
+        </button>
+      {/if}
+    {/if}
     <p class="muted-note">
       Taking a snapshot changes nothing else: no alarms are acknowledged and no navigation is
       altered.
@@ -72,6 +108,26 @@ const SYNC_LABELS = {
 
   <section class="panel-section" aria-label="Snapshots">
     <h3 class="caps-label">Snapshots</h3>
+    {#if controller.pendingCount > 0}
+      <p class="muted-note" role="status">
+        {controller.pendingCount}
+        of 10 offline queue slots used.{controller.queueFull ? ' Sync queued snapshots before taking another. No queued records have been removed.' : ''}
+      </p>
+      <button
+        type="button"
+        class="btn"
+        disabled={controller.syncing}
+        onclick={() => void controller.syncDrafts()}
+      >
+        {controller.syncing ? 'Syncing snapshots…' : 'Retry syncing'}
+      </button>
+    {/if}
+    {#if controller.memoryOnly}
+      <p class="alert-note" role="alert">
+        Device storage could not be updated. Changes are in memory only; keep this app open until
+        syncing finishes.
+      </p>
+    {/if}
     {#if controller.loadState === 'loading' && controller.records.length === 0}
       <p class="muted-note" role="status">Loading shared snapshots…</p>
     {:else if controller.loadState === 'unavailable'}

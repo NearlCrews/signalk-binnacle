@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { expectInsideViewport, stubVesselsSelf } from './helpers';
+import { expectInsideViewport, openMenuItem, stubVesselsSelf } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -125,6 +125,93 @@ test('profile overflow actions stay inside a narrow viewport', async ({ page }) 
   const actions = page.getByRole('menu', { name: 'More actions for Test helm' });
   await expect(actions).toBeVisible();
   await expectInsideViewport(actions, page);
+});
+
+test('a pending route rename keeps its draft through Escape and a failed save, then retries', async ({
+  page,
+}) => {
+  await installProfileServer(page, profileDocument());
+  const savedRoute = {
+    name: 'Harbor passage',
+    feature: {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-83.5, 42.6],
+          [-83.4, 42.7],
+        ],
+      },
+      properties: { coordinatesMeta: [{ name: 'Start' }, { name: 'Harbor' }] },
+    },
+  };
+  const submittedNames: string[] = [];
+  let releaseFailure: (() => Promise<void>) | undefined;
+  await page.route(/\/signalk\/v2\/api\/resources\/routes$/, async (route) => {
+    await route.fulfill({ json: { passage: savedRoute } });
+  });
+  await page.route(/\/signalk\/v2\/api\/resources\/routes\/passage$/, async (route) => {
+    if (route.request().method() !== 'PUT') {
+      await route.fulfill({ json: savedRoute });
+      return;
+    }
+    const body = route.request().postDataJSON() as { name: string };
+    submittedNames.push(body.name);
+    if (submittedNames.length === 1) {
+      await new Promise<void>((resolve) => {
+        releaseFailure = async () => {
+          releaseFailure = undefined;
+          try {
+            await route.fulfill({ status: 503, json: { message: 'Synthetic save outage' } });
+          } finally {
+            resolve();
+          }
+        };
+      });
+      return;
+    }
+    savedRoute.name = body.name;
+    await route.fulfill({ status: 200, json: {} });
+  });
+
+  try {
+    await page.goto('/');
+    await openMenuItem(page, 'Routes');
+    const panel = page.getByRole('complementary', { name: 'Routes', exact: true });
+    await panel.getByRole('button', { name: 'More actions for Harbor passage' }).click();
+    await page.getByRole('menuitem', { name: 'Rename route', exact: true }).click();
+    const form = panel.getByRole('form', { name: 'Rename route', exact: true });
+    const name = form.getByRole('textbox', { name: 'Rename route', exact: true });
+    await name.fill('Night approach');
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => releaseFailure !== undefined).toBe(true);
+    await expect(form).toHaveAttribute('aria-busy', 'true');
+    await expect(name).toBeDisabled();
+    await expect(form.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeVisible();
+    await expect(form).toBeVisible();
+    await expect(name).toHaveValue('Night approach');
+    expect(submittedNames).toEqual(['Night approach']);
+    expect(savedRoute.name).toBe('Harbor passage');
+
+    if (!releaseFailure) throw new Error('The first route save did not become pending.');
+    await releaseFailure();
+    await expect(page.getByText('Could not rename the route.', { exact: true })).toBeVisible();
+    await expect(form).toHaveAttribute('aria-busy', 'false');
+    await expect(name).toBeEnabled();
+    await expect(name).toHaveValue('Night approach');
+    expect(savedRoute.name).toBe('Harbor passage');
+
+    await form.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(form).not.toBeVisible();
+    await expect(panel.getByText('Night approach', { exact: true })).toBeVisible();
+    expect(submittedNames).toEqual(['Night approach', 'Night approach']);
+    expect(savedRoute.name).toBe('Night approach');
+  } finally {
+    await releaseFailure?.();
+  }
 });
 
 test('profiles restore instrument order in a different browser', async ({ browser, page }) => {

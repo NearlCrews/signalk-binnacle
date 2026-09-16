@@ -27,7 +27,7 @@ export function seedStarterProfiles(store: ProfileStore, base: ProfileSettings):
       ...base,
       theme: 'day',
       chartOrientation: 'north',
-      pinnedActionIds: ['center', 'follow', 'layers', 'poi-search'],
+      pinnedActionIds: ['menu', 'center', 'follow', 'ais'],
       instrumentTiles: ['sog', 'heading', 'depth', 'wind-apparent'],
       trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),
@@ -38,7 +38,7 @@ export function seedStarterProfiles(store: ProfileStore, base: ProfileSettings):
       // The literal, not MARINE_RADAR_OVERLAY_ID: a feature slice cannot import a sibling
       // feature's module. A starter profile only names layers, so it takes the id by value.
       layers: { ...base.layers, 'marine-radar': DEFAULT_OVERLAY_STATE },
-      pinnedActionIds: ['center', 'follow', 'radar', 'instruments'],
+      pinnedActionIds: ['menu', 'center', 'ais', 'radar'],
       instrumentTiles: ['heading', 'depth', 'course', 'course-xte'],
       trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),
@@ -47,7 +47,7 @@ export function seedStarterProfiles(store: ProfileStore, base: ProfileSettings):
       theme: 'dusk',
       chartOrientation: 'north',
       layers: { ...base.layers, tides: DEFAULT_OVERLAY_STATE },
-      pinnedActionIds: ['anchor', 'layers', 'tides', 'instruments'],
+      pinnedActionIds: ['menu', 'anchor', 'tides', 'instruments'],
       instrumentTiles: ['depth', 'wind-apparent', 'pressure', 'position'],
       trendInstrumentIds: [...DEFAULT_TREND_INSTRUMENT_IDS],
     }),

@@ -73,7 +73,7 @@ describe('TidesPanel', () => {
     store.applyLoad({
       tide: {
         state: 'accepted',
-        reading: { station: tideStation, distanceMeters: 1000, events: [] },
+        reading: { station: tideStation, distanceMeters: 1000, events: [], datum: 'MLLW' },
         source: 'noaa-coops',
         selection: store.requestedTide,
       },
@@ -90,8 +90,9 @@ describe('TidesPanel', () => {
     expect(body).toContain('do not guarantee that a station represents local water movement');
     expect(body.match(/No predictions in this window\./g)).toHaveLength(2);
     expect(body).toContain('manually selected tide station');
-    expect(body).toContain('mean lower low water (MLLW)');
-    expect(body).toContain("device's local time");
+    expect(body).toContain('Datum: MLLW');
+    expect(body).toContain("device's local timezone");
+    expect(body).toContain("Check the chart's datum");
   });
 
   it('names a failed requested station, retains the accepted reading, and offers Retry', () => {
@@ -118,5 +119,45 @@ describe('TidesPanel', () => {
     );
     expect(body).toContain('Retry');
     expect(body).toContain('Harbor tide');
+  });
+
+  it('renders current-only predictions and their true toward-direction independently', () => {
+    const store = new TidesStore();
+    store.setReadings(undefined, {
+      station: currentStation,
+      distanceMeters: 1000,
+      events: [
+        {
+          timeMs: Date.now() + 86_400_000,
+          velocityMps: 1,
+          directionRad: Math.PI / 2,
+          kind: 'flood',
+        },
+      ],
+    });
+    const body = renderPanel(store);
+    expect(store.status).toBe('ready');
+    expect(body).toContain('Channel current');
+    expect(body).toContain('Next flood');
+    expect(body).toContain('toward 090°T');
+    expect(body).toContain('No tide-height prediction nearby');
+    expect(body).not.toContain('Datum: MLLW');
+  });
+
+  it('does not invent a datum for legacy or non-NOAA readings', () => {
+    const store = new TidesStore();
+    store.setReadings(
+      { station: tideStation, distanceMeters: 0, events: [], datum: 'LAT' },
+      undefined,
+      'signalk-tides',
+    );
+    expect(renderPanel(store)).toContain('Datum: LAT');
+    store.setReadings(
+      { station: tideStation, distanceMeters: 0, events: [] },
+      undefined,
+      'signalk-tides',
+    );
+    expect(renderPanel(store)).toContain('Datum unknown');
+    expect(renderPanel(store)).not.toContain("chart's zero");
   });
 });

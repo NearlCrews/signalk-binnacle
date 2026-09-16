@@ -1,6 +1,12 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import { createMediaQuery, createRetryableLazyUiLoader, type UnitsSelection } from '$shared/lib';
+import {
+  createMediaQuery,
+  createRetryableLazyUiLoader,
+  formatDayClock,
+  formatMonthDay,
+  type UnitsSelection,
+} from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
 import TrendsCustomize from './TrendsCustomize.svelte';
@@ -107,6 +113,13 @@ const focused = $derived(controller.focusedId !== undefined);
       Recent Signal K instrument data, with values converted only for display.
     </p>
     <p class="muted-note" role="status">{sourceNote}</p>
+    {#if controller.lastCheckedMs !== undefined}
+      <p class="muted-note">
+        History last checked {formatMonthDay(controller.lastCheckedMs)}
+        {formatDayClock(controller.lastCheckedMs, { zone: true })}. Refreshes every minute while
+        this panel is visible.
+      </p>
+    {/if}
     {#if controller.providerState === 'failed' || controller.providerState === 'absent'}
       <button type="button" class="btn" onclick={onRetryProvider}>
         {controller.providerState === 'failed'
@@ -114,14 +127,14 @@ const focused = $derived(controller.focusedId !== undefined);
           : 'Check for provider again'}
       </button>
     {/if}
-    {#if controller.historyState === 'failed' && controller.hasProvider}
+    {#if controller.hasProvider}
       <button
         type="button"
         class="btn"
         disabled={controller.loading}
         onclick={() => controller.refreshHistory()}
       >
-        Retry history
+        {controller.loading ? 'Refreshing history…' : controller.historyState === 'failed' || controller.historyState === 'partial' ? 'Retry history' : 'Refresh history'}
       </button>
     {/if}
 

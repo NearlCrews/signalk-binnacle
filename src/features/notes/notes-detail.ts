@@ -1,5 +1,5 @@
 import type { PoiType } from '$entities/poi-icons';
-import { readBoundedJson, withTimeout } from '$shared/lib';
+import { MINUTE_MS, readBoundedJson, withTimeout } from '$shared/lib';
 import { asKeyedObject, authInit, str } from '$shared/signalk';
 import { cleanNoteText, NOTES_PATH, NOTES_V1_PATH } from './notes-client';
 
@@ -46,6 +46,8 @@ export interface NoteDetail {
   attribution?: string;
   sources?: string[];
   url?: string;
+  fetchedAtMs?: number;
+  retained?: boolean;
 }
 
 // A provider description is untrusted, so it is shown as plain text; its markup is never injected.
@@ -79,6 +81,9 @@ function parseItem(raw: unknown): NormalizedItem | undefined {
   const label = cleanNoteText(r.label, 256);
   if (label === undefined) return undefined;
   const value = r.value;
+  if (r.kind === 'flag') {
+    return { label, kind: 'flag', value: typeof value === 'boolean' ? value : 'Unknown' };
+  }
   if (
     (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') ||
     (typeof value === 'number' && !Number.isFinite(value))
@@ -211,13 +216,14 @@ export async function fetchNoteDetail(
 }
 
 export interface NoteDetailLoader {
-  load(id: string): Promise<NoteDetail | undefined>;
+  load(id: string, force?: boolean): Promise<NoteDetail | undefined>;
   invalidate(id: string): void;
 }
 
 // The most note details to keep memoized, so a long session of tapping markers cannot grow the
 // cache without bound. Details are small and reopening is the common case, so the cap is generous.
 const MAX_DETAIL_ENTRIES = 64;
+const DETAIL_FRESH_MS = 5 * MINUTE_MS;
 
 // Memoizes detail by id so reopening a marker is instant; a failed fetch is not cached, so it
 // stays retryable. An in-flight load is shared rather than duplicated. The token is read through a
@@ -228,13 +234,27 @@ const MAX_DETAIL_ENTRIES = 64;
 export function createNoteDetailLoader(
   base: string,
   getToken: () => string | undefined,
+  now: () => number = Date.now,
 ): NoteDetailLoader {
   const cache = new Map<string, NoteDetail>();
   const inflight = new Map<string, Promise<NoteDetail | undefined>>();
+  let cachedToken = getToken();
   return {
-    load(id) {
+    load(id, force = false) {
+      const token = getToken();
+      if (token !== cachedToken) {
+        cachedToken = token;
+        cache.clear();
+        inflight.clear();
+      }
       const cached = cache.get(id);
-      if (cached) {
+      if (
+        !force &&
+        cached &&
+        !cached.retained &&
+        now() - (cached.fetchedAtMs ?? 0) >= 0 &&
+        now() - (cached.fetchedAtMs ?? 0) < DETAIL_FRESH_MS
+      ) {
         // LRU refresh: re-insert on hit so a frequently reopened marker is not the first evicted
         // (Map iteration order is insertion order, and eviction takes the front).
         cache.delete(id);
@@ -243,20 +263,28 @@ export function createNoteDetailLoader(
       }
       const pending = inflight.get(id);
       if (pending) return pending;
-      const promise = fetchNoteDetail(base, getToken(), id)
+      const promise = fetchNoteDetail(base, token, id)
         .then((detail) => {
+          if (inflight.get(id) !== promise) return undefined;
           if (detail) {
+            detail = { ...detail, fetchedAtMs: now(), retained: false };
             if (cache.size >= MAX_DETAIL_ENTRIES) {
               const oldest = cache.keys().next().value;
               if (oldest !== undefined) cache.delete(oldest);
             }
             cache.set(id, detail);
           }
-          return detail;
+          if (detail) return detail;
+          if (cached) {
+            const retained = { ...cached, retained: true };
+            cache.set(id, retained);
+            return retained;
+          }
+          return undefined;
         })
         .finally(() => {
           // Clear on settle (resolve or reject) so a failure never wedges the id.
-          inflight.delete(id);
+          if (inflight.get(id) === promise) inflight.delete(id);
         });
       inflight.set(id, promise);
       return promise;

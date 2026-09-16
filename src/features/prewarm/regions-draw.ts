@@ -27,6 +27,7 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
 
   const onFinish = (id: string | number): void => {
     const feature = draw.getSnapshotFeature(id);
+    draw.setMode('static');
     if (feature?.geometry.type !== 'Polygon') {
       onFinishCb(null);
       return;
@@ -49,6 +50,7 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
         draw.start();
         started = true;
       }
+      draw.clear();
       draw.setMode('rectangle');
     },
     set(bbox) {
@@ -67,12 +69,16 @@ export function createRegionRectangle(map: MapLibreMap): RegionRectangle {
       };
       const [validation] = draw.addFeatures([feature]);
       if (validation && !validation.valid) console.warn('Offline area seed rejected by Terra Draw');
-      draw.setMode('rectangle');
+      // A keyboard-selected or copied area is complete, not a request to capture another chart click.
+      draw.setMode('static');
     },
     clear() {
       // draw.clear() runs terra-draw's checkEnabled(), which throws when the instance was never
       // started, so guard it with the same started flag start() uses; the null change still fires.
-      if (started) draw.clear();
+      if (started) {
+        draw.setMode('static');
+        draw.clear();
+      }
       onFinishCb(null);
     },
     onFinish(cb) {

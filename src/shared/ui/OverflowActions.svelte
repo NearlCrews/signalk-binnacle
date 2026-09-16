@@ -2,7 +2,7 @@
 import MoreHorizontal from '@lucide/svelte/icons/more-horizontal';
 import type { Snippet } from 'svelte';
 import AnchoredMenu from './AnchoredMenu.svelte';
-import { createMenuFocusMachine, MENU_ITEM_SELECTOR } from './menu-focus';
+import { createMenuFocusMachine, initializeMenuFocus, MENU_ITEM_SELECTOR } from './menu-focus';
 
 interface Props {
   open: boolean;
@@ -19,6 +19,7 @@ let surface = $state<HTMLElement>();
 const machine = createMenuFocusMachine({
   surface: () => surface,
   trigger: () => trigger,
+  focusFrames: 0,
   // A closure, not the prop itself: capturing onClose at construction would freeze the parent's
   // initial callback identity.
   requestClose: () => onClose(),
@@ -35,6 +36,12 @@ function handleClick(event: MouseEvent): void {
     // explicitly here; the close effect restores it only when focus was actually lost.
     machine.close();
   }
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  machine.handleKeydown(event);
+  // A nested menu owns its navigation keys, not the enclosing panel or launcher grid.
+  if (event.defaultPrevented) event.stopPropagation();
 }
 </script>
 
@@ -59,7 +66,8 @@ function handleClick(event: MouseEvent): void {
     ariaLabel={label}
     role="menu"
     bind:surfaceRef={surface}
-    onKeydown={machine.handleKeydown}
+    onPositioned={() => initializeMenuFocus(surface)}
+    onKeydown={handleKeydown}
     onFocusLeft={() => machine.close()}
     onClick={handleClick}
   >

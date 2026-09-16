@@ -20,6 +20,34 @@ function applySelf(store: SignalKStore, self: Record<string, unknown>, epoch: nu
 }
 
 describe('CourseGuidance', () => {
+  it('changes action context for a same-destination leg restart, not ordinary vessel motion', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 }, name: 'Harbor' },
+      'navigation.course.previousPoint': { position: { latitude: 0, longitude: 0 } },
+    });
+    const guidance = new CourseGuidance(store, new OwnVessel(store));
+    const original = guidance.actionContext;
+    applySelf(store, { 'navigation.position': { latitude: 0.01, longitude: 0.01 } }, 2);
+    expect(guidance.actionContext).toBe(original);
+    applySelf(
+      store,
+      { 'navigation.course.previousPoint': { position: { latitude: 0.01, longitude: 0.01 } } },
+      3,
+    );
+    expect(guidance.actionContext).not.toBe(original);
+  });
+
+  it('does not use moving own position as an action identity when the leg origin is absent', () => {
+    const store = storeWith({
+      'navigation.position': { latitude: 0, longitude: 0 },
+      'navigation.course.nextPoint': { position: { latitude: 0, longitude: 1 } },
+    });
+    const guidance = new CourseGuidance(store, new OwnVessel(store));
+    const original = guidance.actionContext;
+    applySelf(store, { 'navigation.position': { latitude: 0.01, longitude: 0.01 } }, 2);
+    expect(guidance.actionContext).toBe(original);
+  });
   it('reports no active leg when there is no nextPoint', () => {
     const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
     const g = new CourseGuidance(store, new OwnVessel(store));

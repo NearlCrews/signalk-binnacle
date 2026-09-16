@@ -1,7 +1,6 @@
 import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export type { PoiViewState } from '$entities/poi';
-export { default as NoteDetailPanel } from './NoteDetailPanel.svelte';
 export type { NotePoint, NoteSelection } from './notes-client';
 export { createNoteDetailLoader, type NoteDetailLoader } from './notes-detail';
 export { createNotesOverlay, type NotesOverlay } from './notes-overlay';
@@ -19,6 +18,11 @@ export {
 const personalNoteDialogLoader = createRetryableLazyUiLoader(
   () => import('./PersonalNoteDialog.svelte'),
 );
+const noteDetailPanelLoader = createRetryableLazyUiLoader(() => import('./NoteDetailPanel.svelte'));
+
+export function loadNoteDetailPanel(): Promise<typeof import('./NoteDetailPanel.svelte')> {
+  return noteDetailPanelLoader();
+}
 
 export function loadPersonalNoteDialog(): Promise<typeof import('./PersonalNoteDialog.svelte')> {
   return personalNoteDialogLoader();

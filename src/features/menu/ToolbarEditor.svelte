@@ -1,7 +1,14 @@
 <script lang="ts">
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-import { createReorder, InlineConfirm, UnavailableHint } from '$shared/ui';
+import { tick } from 'svelte';
+import {
+  createReorder,
+  InlineConfirm,
+  ReorderActions,
+  restoreMenuFocus,
+  UnavailableHint,
+} from '$shared/ui';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, type MenuItem } from './menu-item';
 
@@ -14,6 +21,12 @@ interface Props {
 const { items, onReorder, onReset }: Props = $props();
 let list: HTMLElement | undefined = $state(undefined);
 let resetArmed = $state(false);
+let resetTrigger = $state<HTMLButtonElement>();
+
+function closeReset(): void {
+  resetArmed = false;
+  void tick().then(() => restoreMenuFocus(undefined, resetTrigger, undefined));
+}
 
 const reorder = createReorder({
   getItems: () => items.map((item) => ({ id: item.id, title: item.label })),
@@ -34,7 +47,12 @@ function handleKeydown(id: string, event: KeyboardEvent): void {
   <div class="toolbar-editor-head">
     <h3 class="caps-label toolbar-title">Toolbar</h3>
     {#if !resetArmed}
-      <button type="button" class="btn btn-ghost reset-toolbar" onclick={() => (resetArmed = true)}>
+      <button
+        type="button"
+        class="btn btn-ghost reset-toolbar"
+        bind:this={resetTrigger}
+        onclick={() => (resetArmed = true)}
+      >
         <RotateCcw size={16} aria-hidden="true" />
         Reset toolbar
       </button>
@@ -45,10 +63,10 @@ function handleKeydown(id: string, event: KeyboardEvent): void {
       question="Reset to defaults?"
       confirmLabel="Reset"
       onConfirm={() => {
-        resetArmed = false;
+        closeReset();
         onReset?.();
       }}
-      onCancel={() => (resetArmed = false)}
+      onCancel={closeReset}
     />
   {/if}
   {#if items.length === 0}
@@ -81,6 +99,12 @@ function handleKeydown(id: string, event: KeyboardEvent): void {
           >
             <GripVertical size={18} aria-hidden="true" />
           </button>
+          <ReorderActions
+            label={item.label}
+            canMoveUp={reorder.canMove(item.id, -1)}
+            canMoveDown={reorder.canMove(item.id, 1)}
+            onMove={(direction) => reorder.moveBy(item.id, direction)}
+          />
         </li>
       {/each}
     </ol>

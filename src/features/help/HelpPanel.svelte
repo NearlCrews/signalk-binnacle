@@ -1,6 +1,8 @@
 <script lang="ts">
+import { tick } from 'svelte';
+import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
 import type { UpgradeOutcome } from '$shared/signalk';
-import { SlideOver, WriteAccessNote } from '$shared/ui';
+import { focusOnMount, SlideOver, WriteAccessNote } from '$shared/ui';
 import SetupChecklist from './SetupChecklist.svelte';
 
 // Help and helm setup: the first-run orientation, the advisory boundary, the setup routes into
@@ -15,12 +17,14 @@ interface Props {
   onRequestWrite: () => void;
   // How the last read and write request ended, so the outcome lands beside the button here too.
   writeOutcome?: UpgradeOutcome;
-  audioBlocked: boolean;
+  audioState: AlarmAudioState;
   onEnableSound: () => void;
   // Live setup state for the checklist: a nautical chart layer is visible, the server has ever
   // published a position, and whether it stores saved data (undefined while the probe is out).
   chartOn?: boolean;
   gpsSeen?: boolean;
+  gpsCurrent?: boolean;
+  target?: 'gps' | 'privacy';
   savedDataProvisioned?: boolean;
   onOpenLayers: () => void;
   onOpenProfiles: () => void;
@@ -37,10 +41,12 @@ const {
   requestingWrite,
   onRequestWrite,
   writeOutcome,
-  audioBlocked,
+  audioState,
   onEnableSound,
   chartOn = false,
   gpsSeen = false,
+  gpsCurrent = false,
+  target,
   savedDataProvisioned,
   onOpenLayers,
   onOpenProfiles,
@@ -51,6 +57,25 @@ const {
 }: Props = $props();
 
 let hintsReset = $state(false);
+let gpsHeading: HTMLHeadingElement | undefined;
+let privacyHeading: HTMLHeadingElement | undefined;
+
+$effect(() => {
+  const destination = target;
+  if (!destination) return;
+  let cancelled = false;
+  void tick().then(() => {
+    if (cancelled) return;
+    const heading = destination === 'gps' ? gpsHeading : privacyHeading;
+    if (heading) {
+      focusOnMount(heading);
+      heading.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  });
+  return () => {
+    cancelled = true;
+  };
+});
 
 const GLOSSARY: Array<{ term: string; meaning: string; word?: boolean }> = [
   { term: 'SOG', meaning: 'Speed over ground: the GPS-measured speed of the boat.' },
@@ -138,8 +163,9 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
   <SetupChecklist
     {chartOn}
     {gpsSeen}
+    {gpsCurrent}
     writeAllowed={!writeBlocked}
-    soundEnabled={!audioBlocked}
+    {audioState}
     {savedDataProvisioned}
     {onOpenLayers}
     {onRequestWrite}
@@ -171,8 +197,9 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
     <h3 class="caps-label">Signal K access</h3>
     <p class="muted-note">
       Binnacle stores routes, waypoints, tracks, alarms, and profiles on the Signal K server, so it
-      needs read and write approval from the server admin. Read-only access keeps every view working
-      and disables writes honestly.
+      needs read and write approval from the server admin. Read-only access allows viewing available
+      boat data but blocks saving and control actions. Some provider management panels also require
+      a separate administrator sign-in.
     </p>
     <p class="muted-note">
       Connections over plain HTTP are not encrypted, so credentials and boat data can be observed on
@@ -200,7 +227,7 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
   </section>
 
   <section class="panel-section" aria-label="GPS readiness">
-    <h3 class="caps-label">GPS readiness</h3>
+    <h3 class="caps-label" tabindex="-1" bind:this={gpsHeading}>GPS readiness</h3>
     <p class="muted-note">
       Waiting for GPS means the server has not published a position yet; check the GPS source in the
       Data Browser of the Signal K server admin UI. No GPS fix means the position was lost, and
@@ -222,14 +249,16 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
 
   <section class="panel-section" aria-label="Alarm sound">
     <h3 class="caps-label">Alarm sound</h3>
+    <p class="muted-note" role="status">
+      {alarmAudioNote(audioState) ?? 'Alarms can sound on this display.'}
+    </p>
     <p class="muted-note">
-      Browsers block audio until a display is touched once, so tap anywhere after loading a helm
-      display; the status strip says so until you do. Alarms stay visual either way, and each alarm
+      Check sound readiness here or in Alarms. Alarms stay visual either way, and each alarm
       separates acknowledge, boat-wide silence, and mute-on-this-display.
     </p>
-    {#if audioBlocked}
+    {#if audioState === 'blocked' || audioState === 'failed'}
       <button type="button" class="btn btn-ghost" onclick={onEnableSound}>
-        Enable alarm sound now
+        {audioState === 'failed' ? 'Retry alarm sound' : 'Enable alarm sound now'}
       </button>
     {/if}
     <button type="button" class="btn btn-ghost" onclick={onOpenAlarms}>Open Alarms</button>
@@ -238,9 +267,35 @@ const CONTEXTS: Array<{ name: string; role: string }> = [
   <section class="panel-section" aria-label="Man overboard">
     <h3 class="caps-label">Man overboard</h3>
     <p class="muted-note">
-      The MOB button marks the spot at the moment it is pressed, asks to confirm, and alarms every
-      station. It never changes the course by itself: Steer to MOB is a separate, confirmed action.
+      The MOB button captures the current fix when pressed and asks you to confirm before activating
+      the alarm. If no current fix is available, it asks you to mark the position on the chart. The
+      alarm stays on this display until the server accepts it. Sharing requires a server connection
+      and write access; only connected stations that receive the alarm can respond. It never changes
+      the course by itself: Steer to MOB is a separate, confirmed action.
     </p>
+  </section>
+
+  <section class="panel-section" aria-label="Network privacy">
+    <h3 class="caps-label" tabindex="-1" bind:this={privacyHeading}>Network privacy</h3>
+    <p class="muted-note">
+      External chart, weather, and tide services can see your public network address and the map
+      area or coordinates requested. User-added chart URLs are fetched by this browser. Sharing a
+      chart URL sends its full URL, including query values, to the Signal K server.
+    </p>
+    <p class="muted-note">
+      Weather warnings run automatically with a fresh vessel position, even when Weather and its
+      layers are closed. When the Signal K weather provider cannot supply warnings, Binnacle can
+      query NOAA point alerts using latitude and longitude rounded to four decimal places, normally
+      every ten minutes and after area or provider changes or failed requests. Closing a panel does
+      not stop this check. There is currently no in-app opt-out.
+    </p>
+    <p class="muted-note">
+      Browser or network blocking can prevent external requests, but also removes external warning
+      coverage and can disable online charts, weather, and tides. Device privacy in Profiles removes
+      local data or credentials; it does not stop background network requests while Binnacle is
+      open.
+    </p>
+    <button type="button" class="btn btn-ghost" onclick={onOpenProfiles}>Open Profiles</button>
   </section>
 
   <section class="panel-section" aria-label="Operating contexts">

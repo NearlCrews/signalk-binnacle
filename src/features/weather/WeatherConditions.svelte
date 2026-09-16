@@ -8,7 +8,11 @@ import { Clock, formatDayClock, MINUTE_MS } from '$shared/lib';
 import type { BarometerTendency } from './barometer-trend.svelte';
 import ConditionsBlock from './ConditionsBlock.svelte';
 import ForecastList from './ForecastList.svelte';
-import { mergeConditions, pickForecast, tendencyText as tendencyTextFor } from './forecast-series';
+import {
+  pickForecast,
+  separateObservedConditions,
+  tendencyText as tendencyTextFor,
+} from './forecast-series';
 
 import {
   createPointConditionsLoader,
@@ -327,7 +331,8 @@ const freeCurrent = $derived.by<PointConditions | undefined>(() => {
   return r ? conditionsFromReadout(r, store.selectedTime) : undefined;
 });
 
-const current = $derived(mergeConditions(freeCurrent, providerCurrent?.cond));
+const conditionGroups = $derived(separateObservedConditions(freeCurrent, providerCurrent));
+const current = $derived(conditionGroups.current);
 const currentObserved = $derived(providerCurrent?.observed ?? false);
 const observationAgeMs = $derived(
   currentObserved && current ? Math.max(0, clock.now - current.timeMs) : undefined,
@@ -448,12 +453,24 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
         stale={currentStale}
         cached={currentCached}
         {observationAgeMs}
-        {tendencyText}
+        tendencyText={currentObserved ? providerCurrent?.cond.pressureTendency : tendencyText}
+        source={sourceLabel}
         {measuredTendency}
         {units}
       />
+      {#if conditionGroups.model}
+        <p class="caps-label">Model forecast, not observed</p>
+        <ConditionsBlock
+          current={conditionGroups.model}
+          observed={false}
+          source="Open-Meteo"
+          stale={store.status === 'stale'}
+          cached={store.status === 'stale'}
+          {units}
+        />
+      {/if}
     {:else if loading}
-      <p class="muted-note" role="status">Loading conditions.</p>
+      <p class="muted-note" role="status">Loading conditions…</p>
     {:else if !effectiveProviderId && !store.grid}
       <p class="muted-note" role="status">Turn on a weather layer to load conditions.</p>
     {:else}

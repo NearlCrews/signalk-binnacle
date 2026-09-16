@@ -67,7 +67,9 @@ const {
       <span class="subtitle">{subtitle}</span>
     {/if}
   </div>
-  {@render headerExtra?.()}
+  {#if headerExtra}
+    <div class="header-extra">{@render headerExtra()}</div>
+  {/if}
   {#if minimize}
     <button
       type="button"
@@ -98,8 +100,15 @@ const {
 
 <style>
 .heading {
-  flex: 1;
-  min-inline-size: 0;
+  flex: 1 1 8ch;
+  min-inline-size: min(100%, 8ch);
+}
+.header-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  max-inline-size: 100%;
 }
 .subtitle {
   display: block;

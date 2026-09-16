@@ -3,11 +3,11 @@ import {
   ARRIVAL_CIRCLE_MIN_METERS,
   type CourseGuidance,
 } from '$entities/course';
-import type { Route, RouteStore } from '$entities/route';
-import { reverseRoute } from '$entities/route';
+import type { Route, RouteStore, RouteWaypoint } from '$entities/route';
+import { MAX_ROUTE_WAYPOINTS, reverseRoute } from '$entities/route';
 import { type TrackPoint, trackToRoute } from '$entities/track';
 import { type Waypoint, waypointHref } from '$entities/waypoint';
-import { boundsOfPoints, type LatLon } from '$shared/geo';
+import { boundsOfPoints, isLatLon, type LatLon } from '$shared/geo';
 import { clamp, createBusyGate, ErrorState, type Toast, uuidv4 } from '$shared/lib';
 import {
   type ActiveRoute,
@@ -61,6 +61,7 @@ export interface RouteControllerDeps {
   flyTo: (lat: number, lon: number) => void;
   fitBounds: (bounds: [number, number, number, number]) => void;
   startRouteEdit: (route?: Route, initialPoint?: LatLon) => boolean;
+  replaceRouteWaypoints?: (waypoints: RouteWaypoint[]) => boolean;
   stopRouteEdit: () => void;
   // The live recorder's points, read at call time so the save-as-route actions never rebuild
   // closures per GPS fix in the composition root.
@@ -361,6 +362,28 @@ export function createRouteController(deps: RouteControllerDeps) {
   function onCancelRouteEdit(): void {
     deps.stopRouteEdit();
     routeStore.setWorking(undefined);
+  }
+
+  function onSetRouteWaypoints(waypoints: RouteWaypoint[]): boolean {
+    if (!routeStore.working || busy) return false;
+    if (
+      blockedWrite(
+        'Read-only access: the route was not changed. Request read and write access to continue.',
+      )
+    )
+      return false;
+    if (
+      waypoints.length > MAX_ROUTE_WAYPOINTS ||
+      !waypoints.every((waypoint) => isLatLon(waypoint.position))
+    ) {
+      flagRouteError('Route points must have valid latitude and longitude.');
+      return false;
+    }
+    if (!deps.replaceRouteWaypoints?.(waypoints)) {
+      flagRouteError('The route editor is not ready. Retry once the chart has loaded.');
+      return false;
+    }
+    return true;
   }
 
   async function onDeleteRoute(id: string): Promise<void> {
@@ -788,6 +811,7 @@ export function createRouteController(deps: RouteControllerDeps) {
     onEditRoute,
     onSaveRoute: withBusy(onSaveRoute, false),
     onCancelRouteEdit,
+    onSetRouteWaypoints,
     onDeleteRoute: withBusy(onDeleteRoute),
     onActivateRoute: withBusy(onActivateRoute),
     onStopCourse: withBusy(onStopCourse),

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { WeatherGrid } from '$entities/weather';
 import type { UnitsProfile } from '$shared/lib';
-import { type RouteWindSample, routeWindAt, windLineText } from './route-weather';
+import {
+  type RouteWindSample,
+  routeForecastContext,
+  routeWindAt,
+  routeWindUnavailableReason,
+  windLineText,
+} from './route-weather';
 
 const T0 = Date.parse('2026-08-11T00:00:00Z');
 const HOUR = 3_600_000;
@@ -18,6 +24,50 @@ function makeGrid(overrides: Partial<WeatherGrid> = {}): WeatherGrid {
     ...overrides,
   };
 }
+
+describe('route forecast confidence', () => {
+  it('labels the model and fetch age without calling stale data current', () => {
+    const fresh = routeForecastContext(makeGrid({ fetchedAt: T0 }), 'ready', T0 + 60_000);
+    expect(fresh.text).toContain('Open-Meteo model forecast');
+    expect(fresh.text).toContain('Fetched 1 min ago');
+    expect(fresh.degraded).toBe(false);
+    expect(routeForecastContext(makeGrid({ fetchedAt: T0 }), 'ready', T0 + HOUR).degraded).toBe(
+      true,
+    );
+    expect(routeForecastContext(makeGrid({ fetchedAt: T0 }), 'error', T0 + 60_000).text).toContain(
+      'Refresh failed; showing retained forecast',
+    );
+    expect(
+      routeForecastContext(makeGrid({ fetchedAt: T0 }), 'loading', T0 + 60_000).text,
+    ).toContain('Refreshing; showing retained forecast');
+    expect(routeForecastContext(makeGrid({ fetchedAt: T0 }), 'stale', T0 + 60_000).text).toContain(
+      'not current',
+    );
+  });
+
+  it('makes missing, unknown-age, future-dated, and partial grids explicit', () => {
+    expect(routeForecastContext(undefined, 'error', T0).text).toContain('Open Forecast');
+    expect(routeForecastContext(undefined, 'loading', T0).text).toContain('Loading');
+    expect(routeForecastContext(makeGrid(), 'ready', T0).text).toContain('Fetch age unknown');
+    expect(routeForecastContext(makeGrid({ fetchedAt: T0 + HOUR }), 'ready', T0).degraded).toBe(
+      true,
+    );
+    const partial = routeForecastContext(
+      makeGrid({ fetchedAt: T0, partialWaves: true }),
+      'ready',
+      T0,
+    );
+    expect(partial.text).toContain('Wave data unavailable; wind model only');
+    expect(partial.degraded).toBe(true);
+  });
+
+  it('distinguishes arrival beyond the horizon from a missing point sample', () => {
+    expect(routeWindUnavailableReason(makeGrid(), T0 + 3 * HOUR)).toContain(
+      'outside the forecast period',
+    );
+    expect(routeWindUnavailableReason(makeGrid(), T0)).toContain('at this route point');
+  });
+});
 
 describe('routeWindAt', () => {
   it('samples a uniform northerly as five meters per second from true north', () => {

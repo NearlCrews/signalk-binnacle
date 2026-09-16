@@ -337,6 +337,9 @@ const reorder = createLayerReorder(
                   dropAfter={indicator.after}
                   onHandlePointerDown={(e) => reorder.handlePointerDown(item.id, e)}
                   onHandleKeydown={(e) => reorder.handleKeydown(item.id, e)}
+                  canMoveUp={reorder.canMove(item.id, -1)}
+                  canMoveDown={reorder.canMove(item.id, 1)}
+                  onMove={(direction) => reorder.moveBy(item.id, direction)}
                   manageLabel={item.chart ? `Open ${item.title} chart details` : undefined}
                   onManage={item.chart
                     ? () => (detailId = item.id)

@@ -80,7 +80,7 @@ export class MobStore {
   #remoteNotifications = $derived.by<
     Array<{
       path: string;
-      value: { state?: unknown; position?: unknown; id?: unknown };
+      value: { state?: unknown; position?: unknown; id?: unknown; createdAt?: unknown };
       activation: number;
     }>
   >(() => {
@@ -93,7 +93,7 @@ export class MobStore {
       if (!isSoundingNotification(raw)) continue;
       notifications.push({
         path,
-        value: raw as { state?: unknown; position?: unknown; id?: unknown },
+        value: raw,
         activation: this.#store.cell(path).activation,
       });
       if (notifications.length === MAX_REMOTE_NOTIFICATIONS) break;
@@ -121,21 +121,52 @@ export class MobStore {
     return this.#remoteActive;
   }
 
+  confirmsMark(mark: MobMark): boolean {
+    return this.#remoteNotifications.some(({ value }) => {
+      if (value.createdAt !== new Date(mark.epochMs).toISOString()) return false;
+      return mark.position === undefined
+        ? value.position === undefined
+        : isLatLon(value.position) &&
+            value.position.latitude === mark.position.latitude &&
+            value.position.longitude === mark.position.longitude;
+    });
+  }
+
+  get actionContext(): string {
+    return JSON.stringify([
+      this.#local,
+      this.#remoteNotifications.map(({ path, activation, value }) => [
+        path,
+        activation,
+        value.id,
+        value.position,
+        value.createdAt,
+      ]),
+    ]);
+  }
+
   // The mark to render and steer to: this station's own, or the remote one when carried.
   get position(): LatLon | undefined {
     return this.#local?.position ?? this.#remotePosition;
   }
 
-  // When this station's mark was made: the timestamp the log and the VHF relay need, so a stressed
-  // skipper never does clock arithmetic from elapsed. A remote alarm carries no reliable epoch.
+  // A remote mark can carry the same immutable press time as the originating station.
   get markEpochMs(): number | undefined {
-    return this.#local?.epochMs;
+    if (this.#local) return this.#local.epochMs;
+    const notification =
+      this.#remoteNotifications.find(({ value }) => isLatLon(value.position)) ??
+      this.#remoteNotifications[0];
+    const createdAt = notification?.value.createdAt;
+    if (typeof createdAt !== 'string' || createdAt.length > 128) return undefined;
+    const epoch = Date.parse(createdAt);
+    return Number.isFinite(epoch) && epoch >= 0 ? epoch : undefined;
   }
 
-  // Seconds since this station's trigger. A remote alarm carries no reliable epoch, so it has none.
+  // No elapsed claim when the originating station did not supply a usable mark time.
   get elapsedSeconds(): number | undefined {
-    if (!this.#clock || !this.#local) return undefined;
-    return Math.max(0, (this.#clock.now - this.#local.epochMs) / 1000);
+    const epoch = this.markEpochMs;
+    if (!this.#clock || epoch === undefined) return undefined;
+    return Math.max(0, (this.#clock.now - epoch) / 1000);
   }
 
   // Live bearing (radians true) and range (meters) from the boat back to the mark. A stale fix

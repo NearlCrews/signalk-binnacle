@@ -11,7 +11,7 @@ import type {
 } from '$entities/tides';
 import { isTideStation, MAX_NEARBY_STATIONS } from '$entities/tides';
 import { quantizeCellDeg } from '$shared/geo';
-import { DAY_MS, isFiniteNumber, isRecord, MINUTE_MS } from '$shared/lib';
+import { cleanBoundedText, DAY_MS, isFiniteNumber, isRecord, MINUTE_MS } from '$shared/lib';
 import { haversineMeters } from '$shared/nav';
 import { createExpiringStore, type ExpiringStore, MemoryCache } from '$shared/storage';
 import {
@@ -156,8 +156,14 @@ function validatedTideReading(value: unknown): TideReading | undefined {
   ) {
     return undefined;
   }
-  if (events === value.events) return value as unknown as TideReading;
-  return { station: value.station, distanceMeters: value.distanceMeters, events };
+  return {
+    station: value.station,
+    distanceMeters: value.distanceMeters,
+    events,
+    datum: cleanBoundedText(value.datum, 64),
+    fetchedAtMs:
+      isFiniteNumber(value.fetchedAtMs) && value.fetchedAtMs >= 0 ? value.fetchedAtMs : undefined,
+  };
 }
 
 // Persisted predictions expire at the end of the 48-hour window the day's fetch covered. The day
@@ -424,6 +430,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
             station: selection.station,
             distanceMeters: selection.distanceMeters,
             events,
+            datum: 'MLLW',
           },
           source: 'noaa-coops',
           selection,
@@ -453,7 +460,7 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
       );
       return {
         state: 'accepted',
-        reading: { ...nearest, events },
+        reading: { ...nearest, events, datum: 'MLLW' },
         source: 'noaa-coops',
         selection,
       };

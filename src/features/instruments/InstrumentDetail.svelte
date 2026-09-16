@@ -12,6 +12,7 @@ interface Props {
   deps: TileDeps;
   reading: TileReading;
   zone: ZoneState;
+  assessment?: string;
   historicalOnly?: boolean;
   onBack: () => void;
   onViewTrend?: () => void;
@@ -25,6 +26,7 @@ const {
   deps,
   reading,
   zone,
+  assessment,
   historicalOnly = false,
   onBack,
   onViewTrend,
@@ -114,7 +116,16 @@ const sourceRows = $derived.by(() => {
     };
   });
 });
-const zoneLabel = $derived(zone === 'alarm' ? 'Alarm' : zone === 'warning' ? 'Warning' : 'Normal');
+const zoneLabel = $derived(
+  assessment ??
+    (reading.state !== 'live'
+      ? 'No current assessment'
+      : zone === 'alarm'
+        ? 'Alarm'
+        : zone === 'warning'
+          ? 'Warning'
+          : 'Not assessed'),
+);
 </script>
 
 <div class="detail">

@@ -15,6 +15,32 @@ describe('NameEntry Escape dismissal', () => {
     document.body.innerHTML = '';
   });
 
+  it('consumes Escape while a save is pending without canceling the form or its panel', async () => {
+    const panelClose = vi.fn();
+    const unregister = registerDismiss(panelClose);
+    const onCancel = vi.fn();
+    const component = mount(NameEntry, {
+      target: document.body,
+      props: {
+        label: 'Save route as',
+        value: 'Night passage',
+        busy: true,
+        onConfirm: vi.fn(),
+        onCancel,
+      },
+    });
+    flushSync();
+    try {
+      pressEscape();
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(panelClose).not.toHaveBeenCalled();
+      expect(document.querySelector('input')?.value).toBe('Night passage');
+    } finally {
+      await unmount(component);
+      unregister();
+    }
+  });
+
   it('cancels only the form first, then the enclosing panel on a second Escape', async () => {
     const panelClose = vi.fn();
     const unregisterPanel = registerDismiss(panelClose);

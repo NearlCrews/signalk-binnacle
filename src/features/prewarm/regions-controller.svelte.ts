@@ -1,7 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { LngLatBbox } from 'signalk-chart-sources';
-import type { RouteWaypoint } from '$entities/route';
-import { bboxCenter, normalizeBounds } from '$shared/geo';
+import { bboxCenter, normalizeBounds, wrapLongitude } from '$shared/geo';
 import {
   clampInt,
   createLatestWriter,
@@ -24,6 +23,13 @@ import {
   CHART_LOCKER_MAX_WARM_ZOOM,
   CHART_LOCKER_MIN_INTERVAL_SECONDS,
 } from './contract.js';
+import {
+  type CoverageRoute,
+  type RouteCoverageAssessment,
+  routeCoverageAreasKey,
+  routeCoverageCatalogKey,
+  routeCoverageGeometryKey,
+} from './coverage-context';
 import { DETAIL_PRESETS, type DetailKey, presetForRange, rangeForPreset } from './detail-level.js';
 import {
   canDownloadRegion,
@@ -69,9 +75,8 @@ export interface RegionsControllerDeps {
   getClient: () => RegionsClient;
   getMap: () => MapLibreMap;
   getUnitsMode: () => UnitsMode;
-  // The route being navigated, injected as a getter so the coverage check always reads the live
-  // route rather than one captured at construction. Absent on hosts without routing.
-  getActiveRoute?: () => { name: string; waypoints: RouteWaypoint[] } | undefined;
+  // Resolve the selected passage at the time of the check, never switch navigation to select it.
+  getCoverageRoute?: () => CoverageRoute | undefined;
   createRectangle?: (map: MapLibreMap) => RegionRectangle;
   createHighlight?: (map: MapLibreMap) => CoverageHighlight;
   pollMs?: number;
@@ -103,8 +108,10 @@ export class RegionsController {
 
   stats = $state<CacheStats | null>(null);
   statsError = $state<string | null>(null);
+  statsLoading = $state(false);
   regions = $state<SavedRegionDto[] | null>(null);
   loadError = $state<string | null>(null);
+  regionsLoading = $state(false);
   bbox = $state<LngLatBbox | null>(null);
   selectedSources = $state<string[]>([]);
   minzoom = $state(6);
@@ -129,9 +136,12 @@ export class RegionsController {
   positionBaseZoom = $state(12);
   positionSources = $state<string[]>([]);
   positionLoadError = $state<string | null>(null);
+  positionLoading = $state(false);
+  positionSettingsReady = $state(false);
   coverageCorridorNm = $state<number>(DEFAULT_COVERAGE_CORRIDOR_NM);
   coverageDetail = $state<DetailKey>('coastal');
   #coverageReport = $state<RouteCoverageReport | null>(null);
+  #coverageAssessment = $state<RouteCoverageAssessment | null>(null);
   #coverageContext = '';
   #highlight: CoverageHighlight | null = null;
   readonly armedDelete = new ArmedRow((id) => void this.deleteRegion(id));
@@ -172,6 +182,7 @@ export class RegionsController {
     this.regionStatus = {};
     this.regionPollError = {};
     this.positionLoadError = null;
+    this.positionSettingsReady = false;
     void this.loadStats();
     void this.loadRegions();
     void this.loadPositionWarm();
@@ -299,6 +310,7 @@ export class RegionsController {
   }
 
   retryPositionWrite(): void {
+    if (!this.canEditPositionSettings) return;
     this.#positionWriter.retry();
   }
 
@@ -312,6 +324,7 @@ export class RegionsController {
     const abort = new AbortController();
     this.#positionAbort = abort;
     this.positionLoadError = null;
+    this.positionLoading = true;
     try {
       const pw = extractPositionWarm(await this.deps.getClient().getConfig(abort.signal));
       if (this.#disposed || abort.signal.aborted || generation !== this.#positionGeneration) return;
@@ -325,15 +338,22 @@ export class RegionsController {
       this.positionIntervalSecs = pw.intervalSecs;
       this.positionBaseZoom = pw.baseZoom;
       this.positionSources = pw.sources;
+      this.positionSettingsReady = true;
     } catch {
       if (!abort.signal.aborted && generation === this.#positionGeneration) {
         this.positionLoadError = 'Could not load automatic-caching settings.';
       }
+    } finally {
+      if (generation === this.#positionGeneration) this.positionLoading = false;
     }
   }
 
+  get canEditPositionSettings(): boolean {
+    return this.deps.getAdminAccess() && this.positionSettingsReady && !this.positionLoading;
+  }
+
   savePositionWarm(): void {
-    if (!this.deps.getAdminAccess()) return;
+    if (!this.canEditPositionSettings) return;
     this.#positionGeneration += 1;
     this.#positionAbort?.abort();
     this.positionLoadError = null;
@@ -350,11 +370,13 @@ export class RegionsController {
   }
 
   setPositionEnabled(enabled: boolean): void {
+    if (!this.canEditPositionSettings) return;
     this.positionEnabled = enabled;
     this.savePositionWarm();
   }
 
   togglePositionSource(id: string, enabled: boolean): void {
+    if (!this.canEditPositionSettings) return;
     this.positionSources = this.#toggleId(this.positionSources, id, enabled);
     if (this.positionSources.length > CHART_LOCKER_MAX_SOURCES) {
       this.positionSources = this.positionSources.slice(0, CHART_LOCKER_MAX_SOURCES);
@@ -363,7 +385,7 @@ export class RegionsController {
   }
 
   commitPositionRadius(entered: number): void {
-    if (!isFiniteNumber(entered)) return;
+    if (!this.canEditPositionSettings || !isFiniteNumber(entered)) return;
     this.positionRadiusMeters = Math.min(
       CHART_LOCKER_MAX_DISTANCE_METERS,
       Math.max(1, this.#fromDisplayLength(entered)),
@@ -372,7 +394,7 @@ export class RegionsController {
   }
 
   commitMoveThreshold(entered: number): void {
-    if (!isFiniteNumber(entered)) return;
+    if (!this.canEditPositionSettings || !isFiniteNumber(entered)) return;
     this.positionMoveThresholdMeters = Math.min(
       CHART_LOCKER_MAX_DISTANCE_METERS,
       Math.max(0, this.#fromDisplayLength(entered)),
@@ -381,7 +403,7 @@ export class RegionsController {
   }
 
   commitPositionInterval(value: number): void {
-    if (!isFiniteNumber(value)) return;
+    if (!this.canEditPositionSettings || !isFiniteNumber(value)) return;
     this.positionIntervalSecs = clampInt(
       value,
       CHART_LOCKER_MIN_INTERVAL_SECONDS,
@@ -391,7 +413,7 @@ export class RegionsController {
   }
 
   commitPositionBaseZoom(value: number): void {
-    if (!isFiniteNumber(value)) return;
+    if (!this.canEditPositionSettings || !isFiniteNumber(value)) return;
     this.positionBaseZoom = clampInt(value, 0, CHART_LOCKER_MAX_WARM_ZOOM);
     this.savePositionWarm();
   }
@@ -426,6 +448,7 @@ export class RegionsController {
     this.#regionsAbort?.abort();
     const abort = new AbortController();
     this.#regionsAbort = abort;
+    this.regionsLoading = true;
     try {
       const list = await this.deps.getClient().getRegions(abort.signal);
       if (this.#disposed || abort.signal.aborted || generation !== this.#regionsGeneration) return;
@@ -451,6 +474,8 @@ export class RegionsController {
       } else {
         this.error = 'Could not refresh the saved regions.';
       }
+    } finally {
+      if (generation === this.#regionsGeneration) this.regionsLoading = false;
     }
   }
 
@@ -459,6 +484,7 @@ export class RegionsController {
     this.#statsAbort?.abort();
     const abort = new AbortController();
     this.#statsAbort = abort;
+    this.statsLoading = true;
     try {
       const stats = await this.deps.getClient().getCacheStats(abort.signal);
       if (this.#disposed || abort.signal.aborted || generation !== this.#statsGeneration) return;
@@ -470,6 +496,8 @@ export class RegionsController {
       if (abort.signal.aborted || generation !== this.#statsGeneration) return;
       if (this.stats === null) this.statsError = 'Could not load the cache stats.';
       else this.error = 'Could not refresh the cache stats.';
+    } finally {
+      if (generation === this.#statsGeneration) this.statsLoading = false;
     }
   }
 
@@ -670,6 +698,77 @@ export class RegionsController {
     this.#rect?.start();
   }
 
+  cancelDrawing(): void {
+    this.drawing = false;
+    this.panelCollapsed = false;
+    if (this.bbox === null) this.#rect?.clear();
+    else this.#rect?.set(this.bbox);
+  }
+
+  useCurrentView(): void {
+    if (!this.deps.getAdminAccess()) return;
+    const bounds = this.deps.getMap().getBounds();
+    if (!bounds) return;
+    const normalized = normalizeBounds([
+      bounds.getWest(),
+      bounds.getSouth(),
+      bounds.getEast(),
+      bounds.getNorth(),
+    ]);
+    if (normalized === null) {
+      this.error = 'The current chart view has invalid bounds. Zoom in and try again.';
+      return;
+    }
+    const [[west, south], [east, north]] = normalized;
+    const fullWorld = east - west >= 360;
+    this.#setSelectedBounds([
+      fullWorld ? -180 : wrapLongitude(west),
+      Math.max(-85, south),
+      fullWorld ? 180 : east === 180 ? 180 : wrapLongitude(east),
+      Math.min(85, north),
+    ]);
+  }
+
+  commitAreaBound(index: 0 | 1 | 2 | 3, value: number): void {
+    if (!this.deps.getAdminAccess() || this.bbox === null || !isFiniteNumber(value)) return;
+    const next: [number, number, number, number] = [...this.bbox];
+    next[index] = value;
+    this.#setSelectedBounds(next, true);
+  }
+
+  #setSelectedBounds(next: LngLatBbox, preserveSources = false): void {
+    const [west, south, east, north] = next;
+    if (
+      west < -180 ||
+      west > 180 ||
+      east < -180 ||
+      east > 180 ||
+      south < -85 ||
+      north > 85 ||
+      south >= north ||
+      west === east
+    ) {
+      this.error =
+        'Use longitudes from -180 to 180 and latitudes from -85 to 85, with north above south and different east and west bounds.';
+      return;
+    }
+    this.error = null;
+    this.bbox = next;
+    try {
+      const sources = coveringSources(next, [this.minzoom, this.maxzoom]);
+      this.selectedSources = preserveSources
+        ? this.selectedSources.filter((id) => sources.some((source) => source.id === id))
+        : defaultSelection(sources);
+    } catch {
+      this.selectedSources = [];
+      this.error = 'The chart provider returned invalid coverage information.';
+    }
+    this.namePrep = false;
+    this.drawing = false;
+    this.panelCollapsed = false;
+    this.#rect?.set(next);
+  }
+
   startNewRegion(): void {
     this.bbox = null;
     this.selectedSources = [];
@@ -720,14 +819,15 @@ export class RegionsController {
     this.#rect?.clear();
   }
 
-  get activeRoute(): { name: string; waypoints: RouteWaypoint[] } | undefined {
-    return this.deps.getActiveRoute?.();
+  get coverageRoute(): CoverageRoute | undefined {
+    return this.deps.getCoverageRoute?.();
   }
 
   #coverageKey(): string {
     return JSON.stringify([
-      this.activeRoute,
-      this.regions,
+      this.coverageRoute,
+      routeCoverageAreasKey(this.regions),
+      routeCoverageCatalogKey(this.regions),
       this.coverageCorridorNm,
       this.coverageDetail,
     ]);
@@ -735,6 +835,10 @@ export class RegionsController {
 
   get coverageReport(): RouteCoverageReport | null {
     return this.#coverageContext === this.#coverageKey() ? this.#coverageReport : null;
+  }
+
+  get coverageAssessment(): RouteCoverageAssessment | null {
+    return this.coverageReport === null ? null : this.#coverageAssessment;
   }
 
   syncCoverageContext(): void {
@@ -759,7 +863,7 @@ export class RegionsController {
 
   runCoverageCheck(): void {
     if (this.#disposed) return;
-    const route = this.activeRoute;
+    const route = this.coverageRoute;
     if (route === undefined) {
       this.clearCoverageCheck();
       return;
@@ -772,12 +876,23 @@ export class RegionsController {
     });
     this.#coverageContext = this.#coverageKey();
     this.#coverageReport = report;
+    this.#coverageAssessment = route.id
+      ? {
+          report,
+          routeId: route.id,
+          geometryKey: routeCoverageGeometryKey(route.waypoints),
+          areasKey: routeCoverageAreasKey(this.regions),
+          catalogKey: routeCoverageCatalogKey(this.regions),
+          checkedAt: Date.now(),
+        }
+      : null;
     this.#highlight ??= (this.deps.createHighlight ?? createCoverageHighlight)(this.deps.getMap());
     this.#highlight.set(report.gaps);
   }
 
   clearCoverageCheck(): void {
     this.#coverageReport = null;
+    this.#coverageAssessment = null;
     this.#highlight?.clear();
   }
 

@@ -28,7 +28,7 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 
-function mountPanel() {
+function mountPanel(overrides: Partial<ComponentProps<typeof PoiSearchPanel>> = {}) {
   let notes = $state.raw<Poi[]>([]);
   let shown = $state(true);
   const pois = $derived(notes.filter(() => true).map((note) => ({ ...note })));
@@ -51,6 +51,7 @@ function mountPanel() {
     onSelect: vi.fn(),
     onHover: vi.fn(),
     onClose: vi.fn(),
+    ...overrides,
   };
   const component = mount(PoiSearchPanel, { target, props });
   flushSync();
@@ -72,6 +73,17 @@ function mountPanel() {
 }
 
 describe('PoiSearchPanel reactive results', () => {
+  it('retries failed current-view results without requiring chart movement', () => {
+    const onRetry = vi.fn();
+    const panel = mountPanel({ viewState: { phase: 'error', offline: false }, onRetry });
+    const retry = [...panel.target.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Retry places',
+    );
+    expect(retry).toBeDefined();
+    retry?.click();
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
   it('keeps lazy-mounted derived results live through a hidden-cache round trip', async () => {
     const target = document.createElement('div');
     document.body.append(target);

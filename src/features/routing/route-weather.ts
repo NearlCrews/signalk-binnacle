@@ -1,5 +1,62 @@
-import { bilinearAt, type TimeBracket, timeBracket, type WeatherGrid } from '$entities/weather';
-import { formatBearingOr, formatSpeedOr, speedUnit, type UnitsSelection } from '$shared/lib';
+import {
+  bilinearAt,
+  type TimeBracket,
+  timeBracket,
+  type WeatherGrid,
+  type WeatherStatus,
+} from '$entities/weather';
+import {
+  formatBearingOr,
+  formatDuration,
+  formatSpeedOr,
+  HOUR_MS,
+  speedUnit,
+  type UnitsSelection,
+} from '$shared/lib';
+
+export function routeForecastContext(
+  grid: WeatherGrid | undefined,
+  status: WeatherStatus,
+  nowMs: number,
+): { text: string; degraded: boolean } {
+  if (!grid)
+    return {
+      text:
+        status === 'loading'
+          ? 'Loading route wind forecast.'
+          : 'Route wind forecast unavailable. Open Forecast to load or refresh it.',
+      degraded: true,
+    };
+  const ageMs =
+    grid.fetchedAt === undefined || !Number.isFinite(grid.fetchedAt) || grid.fetchedAt > nowMs
+      ? undefined
+      : nowMs - grid.fetchedAt;
+  const age =
+    ageMs === undefined ? 'Fetch age unknown.' : `Fetched ${formatDuration(ageMs / 1000)} ago.`;
+  let state = '';
+  if (status === 'error') state = ' Refresh failed; showing retained forecast.';
+  else if (status === 'stale') state = ' Retained or partial forecast; not current.';
+  else if (status === 'loading') state = ' Refreshing; showing retained forecast.';
+  else if (ageMs !== undefined && ageMs >= HOUR_MS)
+    state = ' Retained forecast is over an hour old.';
+  else if (status === 'idle') state = ' Forecast refresh status unknown.';
+  const partial = grid.partialWaves ? ' Wave data unavailable; wind model only.' : '';
+  return {
+    text: `Open-Meteo model forecast. ${age}${state}${partial}`,
+    degraded:
+      ageMs === undefined || ageMs >= HOUR_MS || status !== 'ready' || grid.partialWaves === true,
+  };
+}
+
+export function routeWindUnavailableReason(grid: WeatherGrid, arrivalMs: number): string {
+  if (
+    !grid.times.length ||
+    arrivalMs < grid.times[0] ||
+    arrivalMs > grid.times[grid.times.length - 1]
+  )
+    return 'Planned arrival is outside the forecast period.';
+  return 'Wind unavailable at this route point and planned arrival.';
+}
 
 // The forecast wind at one waypoint's planned arrival, SI like the grid it came from.
 export interface RouteWindSample {

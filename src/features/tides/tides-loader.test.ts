@@ -41,6 +41,7 @@ describe('createTidesLoader', () => {
     expect(store.tide?.station.id).toBe('T1');
     expect(store.current?.station.id).toBe('C1');
     expect(store.source).toBe('noaa-coops');
+    expect(store.tide?.datum).toBe('MLLW');
   });
 
   it('never consults the plugin when it is not available', async () => {
@@ -58,7 +59,7 @@ describe('createTidesLoader', () => {
     const store = new TidesStore();
     await loader.load(store, 27.7, -82.7);
     expect(store.status).toBe('ready');
-    expect(store.tide).toBe(pluginReading);
+    expect(store.tide).toMatchObject(pluginReading);
     expect(store.source).toBe('signalk-tides');
     expect(store.current?.station.id).toBe('C1');
     expect(d.tideEvents).not.toHaveBeenCalled();
@@ -174,7 +175,7 @@ describe('createTidesLoader', () => {
     const store = new TidesStore();
     await loader.load(store, 27.7, -82.7);
     expect(store.status).toBe('error');
-    expect(store.tide).toBe(pluginReading);
+    expect(store.tide).toMatchObject(pluginReading);
     expect(store.current).toBeUndefined();
     expect(store.source).toBe('signalk-tides');
     expect(store.failure('current')).toBeDefined();
@@ -208,11 +209,27 @@ describe('createTidesLoader', () => {
     const loader = createTidesLoader(
       deps({
         tideStations: vi.fn(async () => [{ id: 'X', name: 'Far', latitude: 0, longitude: 0 }]),
+        currentStations: vi.fn(async () => [
+          { id: 'Y', name: 'Far current', latitude: 0, longitude: 0 },
+        ]),
       }),
     );
     const store = new TidesStore();
     await loader.load(store, 27.7, -82.7);
     expect(store.status).toBe('no-coverage');
+    expect(store.source).toBeUndefined();
+    expect(store.tide).toBeUndefined();
+    expect(store.current).toBeUndefined();
+  });
+
+  it('keeps current-only coverage ready when no tide-height station is within range', async () => {
+    const loader = createTidesLoader(deps({ tideStations: vi.fn(async () => []) }));
+    const store = new TidesStore();
+    await loader.load(store, 27.7, -82.7);
+    expect(store.status).toBe('ready');
+    expect(store.tide).toBeUndefined();
+    expect(store.current?.station.id).toBe(currentStation.id);
+    expect(store.current?.events).toEqual(currentEvents);
     expect(store.source).toBeUndefined();
   });
 
@@ -359,8 +376,9 @@ describe('createTidesLoader', () => {
 
   it("replays the day's persisted plugin reading when the plugin fetch fails", async () => {
     const persist = freshPersist();
+    const reading = { ...pluginReading, datum: 'LAT', fetchedAtMs: 900_000 };
     const first = createTidesLoader(
-      deps({ persist, pluginAvailable: () => true, pluginTides: vi.fn(async () => pluginReading) }),
+      deps({ persist, pluginAvailable: () => true, pluginTides: vi.fn(async () => reading) }),
     );
     await first.load(new TidesStore(), 27.7, -82.7);
 
@@ -374,6 +392,8 @@ describe('createTidesLoader', () => {
     await second.load(store, 27.7, -82.7);
     expect(store.status).toBe('ready');
     expect(store.tide?.station.id).toBe('tides');
+    expect(store.tide?.datum).toBe('LAT');
+    expect(store.tide?.fetchedAtMs).toBe(900_000);
     expect(store.source).toBe('signalk-tides');
     expect(d.tideEvents).not.toHaveBeenCalled();
   });

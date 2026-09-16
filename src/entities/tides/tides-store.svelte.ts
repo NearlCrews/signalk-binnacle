@@ -209,7 +209,8 @@ export class TidesStore {
       failures.push({ kind: 'current', requested: result.current.selection });
     }
     this.failures = failures;
-    this.status = failures.length > 0 ? 'error' : this.tide ? 'ready' : 'no-coverage';
+    this.status =
+      failures.length > 0 ? 'error' : this.tide || this.current ? 'ready' : 'no-coverage';
   }
 
   // Compatibility helpers for focused store and overlay tests.
@@ -222,7 +223,7 @@ export class TidesStore {
     this.current = current;
     this.source = tide ? source : undefined;
     this.failures = [];
-    this.status = tide ? 'ready' : 'no-coverage';
+    this.status = tide || current ? 'ready' : 'no-coverage';
   }
 
   setNoCoverage(): void {

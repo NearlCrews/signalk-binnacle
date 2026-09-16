@@ -990,7 +990,7 @@ onDestroy(() => {
   position: absolute;
   inset-block-start: var(--space-2);
   inset-inline-start: 50%;
-  z-index: var(--z-menu);
+  z-index: var(--z-overlay);
   inline-size: max-content;
   max-inline-size: calc(100% - 2 * var(--space-4));
   padding: var(--space-1) var(--space-2);

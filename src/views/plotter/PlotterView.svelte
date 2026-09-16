@@ -38,9 +38,9 @@ import {
 } from '$features/marine-radar';
 import { loadMeasureStrip } from '$features/measure';
 import { NavStrip, type RouteProgress } from '$features/navigation';
-import { type NoteDetailLoader, NoteDetailPanel, type NoteSelection } from '$features/notes';
+import { loadNoteDetailPanel, type NoteDetailLoader, type NoteSelection } from '$features/notes';
 import { loadPoiSearchPanel, type Poi } from '$features/poi-search';
-import { loadRegionsPanel } from '$features/prewarm';
+import { loadOfflineSetupPanel, loadRegionsPanel, type OfflineSetupState } from '$features/prewarm';
 import { loadRoutesPanel, RouteEditStrip } from '$features/routing';
 import {
   loadTidesPanel,
@@ -74,6 +74,7 @@ import {
   dialog,
   ErrorBoundary,
   LazyPanelState,
+  observeClientHeight,
   type PanelId,
   registerDismiss,
   SlideOver,
@@ -201,6 +202,7 @@ interface FlatProps {
   chartLockerAccessUrl: string;
   chartLockerState: import('$features/prewarm').CompanionState;
   chartLockerAdminAccess: boolean;
+  offlineSetupState: OfflineSetupState;
   pwaStatus: PwaStatus;
   arrivalBanner: string | undefined;
   toastMessage: string | undefined;
@@ -211,12 +213,11 @@ interface FlatProps {
   historyProviders: HistoryProviders | undefined;
   serverFeatures: ServerFeatures | undefined;
   notificationsApi: boolean;
-  // Alarm audio cannot sound while a watch is armed (no priming gesture since load).
-  audioBlocked?: boolean;
   // The full audio grade, for the surfaces that must also state a failed or unsupported device.
   audioState?: import('$shared/audio').AlarmAudioState;
   // The first-run orientation has not been dismissed on this device yet.
   helpFirstRun?: boolean;
+  helpTarget?: 'gps' | 'privacy';
   // Show the compact first-run welcome banner inviting the safety orientation.
   showHelpWelcome?: boolean;
   showEncPrompt?: boolean;
@@ -253,6 +254,7 @@ interface FlatProps {
   onTideStationSelect: (selection: TideStationSelectionEvent) => void;
   onNotes: (notes: NotePoint[]) => void;
   onPoiStatus: (state: PoiViewState) => void;
+  retryPlaces: () => void;
   onWeatherLayersReady: (apply: (settings: LayerSettings) => void) => void;
 
   // Panel actions
@@ -273,14 +275,16 @@ interface FlatProps {
   // keyboard controls.
   moveSelectedMeasureToCenter: () => void;
   toggleCollisionMute: () => void;
-  onSilenceNotification: (notification: ActiveNotification) => void;
-  onAcknowledgeNotification: (notification: ActiveNotification) => void;
-  onSilenceAllNotifications: () => void;
-  onAcknowledgeAllNotifications: () => void;
+  onSilenceNotification: (notification: ActiveNotification) => Promise<void>;
+  onAcknowledgeNotification: (notification: ActiveNotification) => Promise<void>;
+  onSilenceAllNotifications: () => Promise<void>;
+  onAcknowledgeAllNotifications: () => Promise<void>;
   muteGenericHere: () => void;
   // The latest route-coverage result from the Offline charts panel, threaded up so a watch-handoff
   // snapshot can state whether the corridor was checked.
-  onRouteCoverageReport: (report: import('$features/prewarm').RouteCoverageReport | null) => void;
+  onRouteCoverageAssessment: (
+    assessment: import('$features/prewarm').RouteCoverageAssessment | null,
+  ) => void;
   openAlarmsPanel: () => void;
   selectPoi: (poi: Poi) => void;
   flyToPosition: (position: LatLon) => void;
@@ -292,7 +296,7 @@ interface FlatProps {
   openRoutesPanel: () => void;
   // Help panel setup routes and hooks.
   openProfilesPanel: () => void;
-  openHelpPanel: () => void;
+  openHelpPanel: (target?: 'gps' | 'privacy') => void;
   enableAlarmSound: () => void;
   resetChartHints: () => void;
   dismissHelpOrientation: () => void;
@@ -384,6 +388,7 @@ type ActionKey =
   | 'onTideStationSelect'
   | 'onNotes'
   | 'onPoiStatus'
+  | 'retryPlaces'
   | 'onWeatherLayersReady'
   | 'closePanel'
   | 'backToMenu'
@@ -398,7 +403,7 @@ type ActionKey =
   | 'armMeasure'
   | 'moveSelectedMeasureToCenter'
   | 'toggleCollisionMute'
-  | 'onRouteCoverageReport'
+  | 'onRouteCoverageAssessment'
   | 'onSilenceNotification'
   | 'onAcknowledgeNotification'
   | 'onSilenceAllNotifications'
@@ -474,6 +479,7 @@ let {
   chartLockerAccessUrl,
   chartLockerState,
   chartLockerAdminAccess,
+  offlineSetupState,
   pwaStatus,
   arrivalBanner,
   toastMessage,
@@ -484,9 +490,9 @@ let {
   historyProviders,
   serverFeatures,
   notificationsApi,
-  audioBlocked = false,
   audioState = 'ready',
   helpFirstRun = false,
+  helpTarget,
   showHelpWelcome = false,
   showEncPrompt = false,
   insecureNoteDismissed = false,
@@ -577,6 +583,7 @@ const {
   onTideStationSelect,
   onNotes,
   onPoiStatus,
+  retryPlaces,
   onWeatherLayersReady,
   closePanel,
   backToMenu,
@@ -596,7 +603,7 @@ const {
   onSilenceAllNotifications,
   onAcknowledgeAllNotifications,
   muteGenericHere,
-  onRouteCoverageReport,
+  onRouteCoverageAssessment,
   openAlarmsPanel,
   selectPoi,
   flyToPosition,
@@ -650,7 +657,21 @@ function retryLazyPanel(): void {
 // The secondary bottom stack sits directly above the emergency rail, whose height depends on the
 // active conditions, so the stack's bottom offset tracks the measured rail height.
 let railHeight = $state(0);
+let chartHeight = $state(0);
+let panelHeight = $state(0);
+let coverageRouteId = $state<string>();
+$effect(() => {
+  if (activePanel !== 'regions' && activePanel !== 'charts-management') coverageRouteId = undefined;
+});
 const railClearance = $derived(railHeight > 0 ? `calc(${railHeight}px + var(--space-2))` : '0px');
+const editingPanelClearance = $derived(
+  activePanel === 'routes' && routeStore.working ? `${panelHeight}px` : '0px',
+);
+
+function getChartCenter(): LatLon | undefined {
+  const center = mapInstance?.getCenter();
+  return center ? { latitude: center.lat, longitude: center.lng } : undefined;
+}
 // Mirror the clearance to the bindable prop for App-level consumers outside the chart host.
 $effect(() => {
   safetyRailClearance = railClearance;
@@ -766,11 +787,13 @@ const accessRequestsUrl = $derived(`${origin}/admin/#/security/access/requests`)
 
 // The route being navigated, for the Offline charts route-coverage check. A function, not a value,
 // so the panel and its controller always read the live route.
-function activeRouteForCoverage(): { name: string; waypoints: RouteWaypoint[] } | undefined {
-  const id = routeStore.activeId;
+function activeRouteForCoverage():
+  | { id: string; name: string; waypoints: RouteWaypoint[] }
+  | undefined {
+  const id = coverageRouteId ?? routeStore.activeId;
   if (id === undefined) return undefined;
   const route = routeStore.routeById(id);
-  return route === undefined ? undefined : { name: route.name, waypoints: route.waypoints };
+  return route === undefined ? undefined : { id, name: route.name, waypoints: route.waypoints };
 }
 const radarEchoShown = $derived(layerSettings[MARINE_RADAR_OVERLAY_ID]?.visible ?? false);
 // Whole-route time: the active leg's own estimate (server timeToGo, else positive-VMG) plus the
@@ -854,8 +877,11 @@ $effect(() => {
      to 0px while no alerts are up, so consumers apply it unconditionally. -->
 <section
   class="chart-host"
+  bind:clientHeight={chartHeight}
+  style:--chart-height={`${chartHeight}px`}
   class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
   style:--rail-clearance={railClearance}
+  style:--editing-panel-clearance={editingPanelClearance}
   aria-label="Chart"
 >
   <ChartCanvas
@@ -948,7 +974,9 @@ $effect(() => {
            back to the chart on every boot. Dismiss persists on this device. -->
       <div class="alert-note toast-banner action-note action-note--wrap" role="status">
         <span>First time with Binnacle? Read the short safety orientation, or set up charts.</span>
-        <button type="button" class="btn btn-compact" onclick={openHelpPanel}>Open Help</button>
+        <button type="button" class="btn btn-compact" onclick={() => openHelpPanel()}>
+          Open Help
+        </button>
         <!-- The new navigator's actual first question is where the charts are, and the reference
              base map alone never answers it. -->
         <button type="button" class="btn btn-compact" onclick={() => openLayersPanel('charts')}>
@@ -1055,6 +1083,7 @@ $effect(() => {
               {measure}
               {units}
               onMoveSelectedToCenter={moveSelectedMeasureToCenter}
+              {getChartCenter}
             />
 
             {#snippet fallback(_error, reset)}
@@ -1098,6 +1127,7 @@ $effect(() => {
       mobActiveCourse={courseGuidance.active
         ? (courseGuidance.nextPointName ?? 'the current destination')
         : undefined}
+      mobActiveCourseContext={courseGuidance.actionContext}
       {genericAlarms}
       {genericSounding}
       {genericLocallyMuted}
@@ -1110,33 +1140,74 @@ $effect(() => {
   </div>
   {#if selectedNote && noteLoader}
     <div class="panel-slot panel-slot--end">
-      <NoteDetailPanel
-        selection={selectedNote}
-        load={noteLoader.load}
-        onClose={closeNote}
-        onBack={onBackFromNote}
-        onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
-        onNavigateHere={() => selectedNote && void routeController.onGoToHere(selectedNote.position)}
-        onSaveWaypoint={() =>
-          selectedNote && waypointsController.onDropWaypoint(selectedNote.position, selectedNote.name)}
-        onEdit={selectedNote.ownedByBinnacle
-          ? () => selectedNote && personalNotesController.openEdit(selectedNote)
-          : undefined}
-        onDelete={selectedNote.ownedByBinnacle
-          ? () => selectedNote && void personalNotesController.remove(selectedNote)
-          : undefined}
-        writeBlocked={auth.writeBlocked}
-        onRequestWriteAccess={() => void auth.requestWriteAccess()}
-        requestingWriteAccess={auth.upgrading}
-        writeOutcome={auth.upgradeOutcome}
-        busy={personalNotesController.busy}
-        mutationError={personalNotesController.error}
-        onDismissMutationError={personalNotesController.clearError}
-      />
+      {#await forAttempt(loadNoteDetailPanel)}
+        <LazyPanelState
+          title={`Details for ${selectedNote.name}`}
+          closeLabel="Close place details"
+          state="loading"
+          message="Loading place details controls…"
+          onClose={closeNote}
+          onBack={onBackFromNote}
+          backLabel="Back to find places"
+        />
+      {:then module}
+        <ErrorBoundary>
+          <module.default
+            selection={selectedNote}
+            load={noteLoader.load}
+            onClose={closeNote}
+            onBack={onBackFromNote}
+            onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
+            onNavigateHere={() => selectedNote && void routeController.onGoToHere(selectedNote.position)}
+            onSaveWaypoint={() =>
+              selectedNote && waypointsController.onDropWaypoint(selectedNote.position, selectedNote.name)}
+            onEdit={selectedNote.ownedByBinnacle
+              ? () => selectedNote && personalNotesController.openEdit(selectedNote)
+              : undefined}
+            onDelete={selectedNote.ownedByBinnacle
+              ? () => selectedNote && void personalNotesController.remove(selectedNote)
+              : undefined}
+            writeBlocked={auth.writeBlocked}
+            onRequestWriteAccess={() => void auth.requestWriteAccess()}
+            requestingWriteAccess={auth.upgrading}
+            writeOutcome={auth.upgradeOutcome}
+            busy={personalNotesController.busy}
+            mutationError={personalNotesController.error}
+            onDismissMutationError={personalNotesController.clearError}
+          />
+          {#snippet fallback(_error, reset)}
+            <LazyPanelState
+              title={`Details for ${selectedNote.name}`}
+              closeLabel="Close place details"
+              state="error"
+              message="Place details controls stopped unexpectedly."
+              onClose={closeNote}
+              onBack={onBackFromNote}
+              backLabel="Back to find places"
+              onRetry={reset}
+            />
+          {/snippet}
+        </ErrorBoundary>
+      {:catch}
+        <LazyPanelState
+          title={`Details for ${selectedNote.name}`}
+          closeLabel="Close place details"
+          state="error"
+          message="Place details controls could not load."
+          onClose={closeNote}
+          onBack={onBackFromNote}
+          backLabel="Back to find places"
+          onRetry={retryLazyPanel}
+        />
+      {/await}
     </div>
   {/if}
   {#if activePanel && activePanel !== 'profiles'}
-    <div class="panel-slot" id={activePanel === 'layers' ? 'layers-panel' : undefined}>
+    <div
+      class="panel-slot"
+      use:observeClientHeight={(height) => (panelHeight = height)}
+      id={activePanel === 'layers' ? 'layers-panel' : undefined}
+    >
       {#if activePanel === 'layers' && layersView}
         {#await forAttempt(loadLayersPanel)}
           <LazyPanelState
@@ -1208,8 +1279,16 @@ $effect(() => {
               routes={routeStore.routes}
               shownIds={routeStore.shownIds}
               weatherGrid={weather.grid}
+              weatherStatus={weather.status}
+              weatherNowMs={clock.now}
+              onOpenForecast={() => {
+                closePanel();
+                weatherPanelOpen = true;
+              }}
               units={units.profile}
               working={routeStore.working}
+              onSetWaypoints={routeController.onSetRouteWaypoints}
+              {getChartCenter}
               activeId={routeStore.activeId}
               refreshing={routeController.refreshing}
               loadState={routeController.loadState}
@@ -1225,7 +1304,10 @@ $effect(() => {
               onEditRoute={routeController.onEditRoute}
               onSave={routeController.onSaveRoute}
               onRename={routeController.onRenameRoute}
-              onOpenOfflineCharts={companionBase !== null ? backToOfflineCharts : undefined}
+              onOpenOfflineCharts={(id) => {
+                coverageRouteId = id;
+                backToOfflineCharts();
+              }}
               onCancelEdit={routeController.onCancelRouteEdit}
               onToggleShown={routeController.onToggleRouteShown}
               onLocate={routeController.showRoute}
@@ -1674,6 +1756,7 @@ $effect(() => {
               {vessel}
               {units}
               viewState={poiViewState}
+              onRetry={retryPlaces}
               selectedId={selectedNote?.id}
               placesShown={layerSettings.notes?.visible ?? false}
               onTogglePlaces={(shown) => setLayerVisible('notes', shown)}
@@ -1730,6 +1813,7 @@ $effect(() => {
               onDrop={() => void anchorController.onDrop()}
               onRaise={() => void anchorController.onRaise()}
               onSetRadius={(meters) => void anchorController.onSetRadius(meters)}
+              onSetPosition={anchorController.onAnchorMoved}
               {audioState}
               onClose={closePanel}
               onBack={backToMenu}
@@ -1845,10 +1929,12 @@ $effect(() => {
               writeOutcome={auth.upgradeOutcome}
               chartOn={layersView !== undefined && hasVisibleNavigationChart(layersView.items)}
               gpsSeen={vessel.positionReceived}
+              gpsCurrent={vessel.positionReceived && !vessel.positionStale}
+              target={helpTarget}
               savedDataProvisioned={waypointsController.provisioning === 'unknown'
                 ? undefined
                 : waypointsController.provisioning === 'provisioned'}
-              {audioBlocked}
+              {audioState}
               onEnableSound={enableAlarmSound}
               onOpenLayers={() => openLayersPanel('charts')}
               onOpenProfiles={openProfilesPanel}
@@ -1918,6 +2004,48 @@ $effect(() => {
             onRetry={retryLazyPanel}
           />
         {/await}
+      {:else if activePanel === 'regions' && (companionBase === null || !mapInstance)}
+        {#await forAttempt(loadOfflineSetupPanel)}
+          <LazyPanelState
+            title="Offline charts"
+            closeLabel="Close offline charts"
+            state="loading"
+            message="Loading offline chart requirements…"
+            onClose={closePanel}
+            onBack={backToMenu}
+          />
+        {:then module}
+          <ErrorBoundary>
+            <module.default
+              state={offlineSetupState}
+              accessUrl={chartLockerAccessUrl}
+              onRetry={onRetryChartLocker}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
+            {#snippet fallback(_error, reset)}
+              <LazyPanelState
+                title="Offline charts"
+                closeLabel="Close offline charts"
+                state="error"
+                message="Offline chart requirements stopped unexpectedly."
+                onClose={closePanel}
+                onBack={backToMenu}
+                onRetry={reset}
+              />
+            {/snippet}
+          </ErrorBoundary>
+        {:catch}
+          <LazyPanelState
+            title="Offline charts"
+            closeLabel="Close offline charts"
+            state="error"
+            message="Offline chart requirements could not load."
+            onClose={closePanel}
+            onBack={backToMenu}
+            onRetry={retryLazyPanel}
+          />
+        {/await}
       {:else if activePanel === 'regions' && companionBase !== null && mapInstance}
         {#await forAttempt(loadRegionsPanel)}
           <LazyPanelState
@@ -1938,8 +2066,8 @@ $effect(() => {
               map={mapInstance}
               {units}
               {companionBase}
-              activeRoute={activeRouteForCoverage}
-              onCoverageReport={onRouteCoverageReport}
+              coverageRoute={activeRouteForCoverage}
+              onCoverageAssessment={onRouteCoverageAssessment}
               onClose={closePanel}
               onBack={backToMenu}
               onOpenCharts={openInstalledCharts}
@@ -2045,7 +2173,7 @@ $effect(() => {
               unitsMode={units.mode}
               onSetControl={(id, value) => void marineRadar.setControl(id, { value })}
               onSetAuto={(id, auto) => void marineRadar.setControl(id, { auto })}
-              onSetAreaControl={(id, value) => void marineRadar.setStructuredControl(id, value)}
+              onSetAreaControl={(id, value) => marineRadar.setStructuredControl(id, value)}
               onSetAreaDraft={marineRadar.setAreaDraft}
               onStartAreaChartEdit={startRadarAreaChartEdit}
               onStopAreaChartEdit={marineRadar.stopAreaChartEdit}
@@ -2238,6 +2366,26 @@ $effect(() => {
 }
 .bottom-stack.above-weather {
   inset-block-end: calc(var(--control-size) + 2 * var(--space-2) + var(--weather-panel-height));
+}
+@media (max-width: 600px) {
+  .bottom-stack {
+    inset-block-end: calc(
+      var(--space-3) +
+      max(var(--rail-clearance, 0px), var(--editing-panel-clearance, 0px))
+    );
+    max-block-size: max(
+      0px,
+      min(
+        calc(60 * var(--dvh)),
+        calc(
+          100% -
+          2 *
+          var(--space-3) -
+          max(var(--rail-clearance, 0px), var(--editing-panel-clearance, 0px))
+        )
+      )
+    );
+  }
 }
 /* The emergency rail stays at the reachable bottom edge and is NOT lifted while Forecast is open;
    it stacks above the Forecast panel instead. Its only height cap is the chart viewport itself: at

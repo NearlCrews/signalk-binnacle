@@ -93,12 +93,14 @@ const queryNoteRole = $derived(shareWithServer && shareChanged ? 'alert' : 'stat
 <style>
 .share-choice {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  min-block-size: var(--control-size);
+  padding-block: var(--space-1);
   gap: var(--space-2);
   font-size: var(--text-sm);
 }
 .share-choice input {
   flex: 0 0 auto;
-  margin-block-start: 0.15rem;
+  margin: 0;
 }
 </style>

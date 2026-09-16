@@ -2,12 +2,229 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 import {
   contrastRatio,
+  expectHelmHitTarget,
   expectInsideViewport,
   expectNoHorizontalOverflow,
+  FIXTURE_ORIGIN,
   openMenuItem,
+  stubVesselsSelf,
+  waitForSignalKConnection,
 } from './helpers';
 
 test.use({ serviceWorkers: 'block' });
+
+test('reorders toolbar actions by taps and restores focus after canceling reset', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('binnacle:help-orientation', 'true');
+  });
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const launcher = page.locator('#app-menu-launcher');
+  await launcher.getByRole('button', { name: 'Customize toolbar' }).click();
+  const reorder = launcher.getByRole('button', { name: 'Reorder Follow boat', exact: true });
+  await reorder.scrollIntoViewIfNeeded();
+  await expectHelmHitTarget(reorder);
+  await reorder.click();
+  const menu = page.getByRole('menu', { name: 'Reorder Follow boat', exact: true });
+  const moveUp = menu.getByRole('menuitem', { name: 'Move up' });
+  await expect(moveUp).toBeFocused();
+  await expectHelmHitTarget(moveUp);
+  await moveUp.click();
+  await expect(
+    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+  ).toBeVisible();
+  await expect(menu).not.toBeVisible();
+  await expect(
+    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+  ).toBeFocused();
+  const reset = launcher.getByRole('button', { name: 'Reset toolbar' });
+  await reset.click();
+  await launcher.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(reset).toBeFocused();
+  await expect(
+    launcher.getByRole('button', { name: 'Move Follow boat, position 2 of 4', exact: true }),
+  ).toBeVisible();
+});
+
+test('resolves CSS Color 4 and translucent surfaces for contrast checks', async ({ page }) => {
+  await page.setContent(
+    '<div style="background: white"><span id="sample" style="color: color(srgb 0 0 0); background: rgb(0 0 0 / 50%)">Reading</span></div>',
+  );
+  const ratio = await contrastRatio(page.locator('#sample'));
+  expect(ratio).toBeGreaterThan(5);
+  expect(ratio).toBeLessThan(5.4);
+});
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 568, height: 320 },
+  { width: 1024, height: 768 },
+]) {
+  for (const fontSize of [16, 24, 32]) {
+    test(`reflows panel headers at ${viewport.width}x${viewport.height} with ${fontSize}px text`, async ({
+      page,
+    }) => {
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(error.message));
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.addInitScript(() => {
+        localStorage.clear();
+        localStorage.setItem('binnacle:help-orientation', 'true');
+      });
+      await stubVesselsSelf(page);
+      await page.goto(FIXTURE_ORIGIN);
+      await waitForSignalKConnection(page);
+      // The no-fix grace state grows the strip, so settle it before scrolling panel controls.
+      await expect(page.getByRole('status').filter({ hasText: 'Waiting for GPS' })).toBeVisible({
+        timeout: 15_000,
+      });
+      await page.evaluate((size) => {
+        document.documentElement.style.fontSize = `${size}px`;
+      }, fontSize);
+      for (const [label, panelName, closeName] of [
+        ['Help', 'Help and helm setup', 'Close help'],
+        ['Layers and charts', 'Layers and charts', 'Close layers and charts'],
+        ['Instrument dock', 'Instruments', 'Close instruments'],
+      ]) {
+        await openMenuItem(page, label);
+        const panel = page.getByRole(
+          panelName === 'Instruments' && viewport.width <= 600 ? 'dialog' : 'complementary',
+          {
+            name: panelName,
+            exact: true,
+          },
+        );
+        await expect(panel).toBeVisible();
+        const close = panel.getByRole('button', { name: new RegExp(`^${closeName}`) });
+        await expectInsideViewport(close, page);
+        await expect
+          .poll(() =>
+            panel.evaluate((element) => {
+              const header = element.querySelector('.panel-header')?.getBoundingClientRect();
+              return header ? element.getBoundingClientRect().bottom - header.bottom : 0;
+            }),
+          )
+          .toBeGreaterThanOrEqual(44);
+        await expectNoHorizontalOverflow(panel);
+        if (panelName !== 'Instruments') {
+          const bodyAction = panel.locator('.panel-body button:visible:not(:disabled)').first();
+          await bodyAction.scrollIntoViewIfNeeded();
+          await expectHelmHitTarget(bodyAction);
+          await expectHelmHitTarget(
+            page
+              .locator('header')
+              .getByRole('button', { name: 'Mark man overboard here', exact: true }),
+          );
+        } else {
+          const instrument = panel.locator('.tiles button').first();
+          await instrument.scrollIntoViewIfNeeded();
+          await expectHelmHitTarget(instrument);
+          await expectHelmHitTarget(
+            (viewport.width <= 600 ? panel : page.locator('header')).getByRole('button', {
+              name: 'Mark man overboard here',
+              exact: true,
+            }),
+          );
+        }
+        await close.click();
+      }
+      expect(pageErrors).toEqual([]);
+    });
+  }
+}
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 568, height: 320 },
+  { width: 1024, height: 768 },
+]) {
+  test(`keeps enlarged editor actions and icon choices reachable at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addInitScript(() => {
+      localStorage.clear();
+      localStorage.setItem('binnacle:help-orientation', 'true');
+    });
+    await stubVesselsSelf(page);
+    await page.goto(FIXTURE_ORIGIN);
+    await waitForSignalKConnection(page);
+    const canvas = page.locator('canvas[aria-label="Navigation chart"]');
+    await expect(page.locator('.maplibregl-ctrl-scale')).toContainText(/nm|km/);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '32px';
+    });
+    for (const [menuLabel, dialogName, pickerLabel] of [
+      ['Add note here', 'Add personal note', 'Symbol'],
+      ['Drop waypoint', 'Add waypoint', 'Icon'],
+    ]) {
+      await canvas.focus();
+      await page.keyboard.press('Shift+F10');
+      await page.getByRole('menuitem', { name: menuLabel, exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: dialogName, exact: true });
+      await expect(dialog).toBeVisible();
+      const bodySpace = await dialog.locator('.dialog-body').evaluate((body) => {
+        const style = getComputedStyle(body);
+        return (
+          body.clientHeight -
+          Number.parseFloat(style.paddingBlockStart) -
+          Number.parseFloat(style.paddingBlockEnd)
+        );
+      });
+      expect(bodySpace).toBeGreaterThanOrEqual(44);
+      await expectInsideViewport(dialog.locator('.dialog-footer'), page);
+      for (const action of await dialog.locator('.dialog-footer button').all()) {
+        await expectInsideViewport(action, page);
+        if (await action.isEnabled()) await expectHelmHitTarget(action);
+      }
+      await expectInsideViewport(dialog.getByRole('button', { name: 'Cancel', exact: true }), page);
+      await dialog.getByLabel(pickerLabel, { exact: true }).click();
+      const choices = page.getByRole('listbox', { name: 'Icon', exact: true });
+      await expectInsideViewport(choices, page);
+      await expect(choices.getByRole('option').first()).toBeFocused();
+      await page.keyboard.press('End');
+      await expect(choices.getByRole('option').last()).toBeFocused();
+      await page.keyboard.press('Home');
+      await expect(choices.getByRole('option').first()).toBeFocused();
+      await page.keyboard.press('m');
+      await expect(choices.getByRole('option', { name: 'Marina', exact: true })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expectNoHorizontalOverflow(dialog.locator('.dialog-body'));
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
+  });
+}
+
+test('keeps the night-red active profile badge readable', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => localStorage.clear());
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  await openMenuItem(page, /^Profiles/);
+  const panel = page.getByRole('complementary', { name: 'Profiles' });
+  const useNight = panel.getByRole('button', {
+    name: 'Use Night passage on this device',
+    exact: true,
+  });
+  await expect(useNight).toBeVisible({ timeout: 20_000 });
+  await useNight.click();
+  const row = panel.getByRole('listitem').filter({
+    has: page.getByText('Night passage', { exact: true }),
+  });
+  await expect(row).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night-red');
+  const badge = row.getByText('Active here', { exact: true });
+  await expect(badge).toBeVisible();
+  expect(await contrastRatio(badge)).toBeGreaterThanOrEqual(4.5);
+});
 
 async function expectRelevantAxeClean(page: Page, state: string): Promise<void> {
   // Svelte's short fly transition changes effective foreground and background colors while the
@@ -334,7 +551,7 @@ test('honors reduced motion and keeps menu keyboard focus contained', async ({ p
   await first.focus();
   await page.keyboard.press('Tab');
   await expect(menu.locator(':focus')).toHaveCount(1);
-  await expect(first).toHaveCSS('transition-duration', /1e-05s|0\.00001s|0\.01ms/);
+  await expect(first).toHaveCSS('transition-duration', '0s');
 });
 
 test('has no serious or critical automated accessibility violations', async ({ page }) => {

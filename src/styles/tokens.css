@@ -152,6 +152,18 @@
   --scrim: rgb(11 34 51 / 0.3);
 }
 
+/* Short screens keep full-size text, with physical touch targets and tighter spacing so the
+   chart, panels, and editor dialogs retain usable content between their action controls. */
+@media (max-height: 600px) {
+  :root {
+    --control-size: 44px;
+    --space-1: 4px;
+    --space-2: 4px;
+    --space-3: 8px;
+    --space-4: 8px;
+  }
+}
+
 @media (max-width: 600px), (pointer: coarse) {
   :root {
     --text-input: var(--text-lg);

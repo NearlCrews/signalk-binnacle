@@ -678,6 +678,7 @@ onDestroy(() => {
         onStep={playback.step}
         onTogglePlay={playback.toggle}
         onSetTime={playback.setTime}
+        onReturnToNow={playback.returnToNow}
       />
     {/if}
     {#if legends.length > 0}

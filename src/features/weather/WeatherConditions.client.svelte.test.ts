@@ -34,7 +34,7 @@ describe('WeatherConditions recovery', () => {
     };
   }
 
-  function setup(failed = true, initial?: ProviderPoint) {
+  function setup(failed = true, initial?: ProviderPoint, store = new WeatherStore()) {
     const state = $state({ token: 'first' });
     const load = vi.fn<PointConditionsLoader['load']>().mockResolvedValue(initial ?? point(failed));
     const target = document.createElement('div');
@@ -48,7 +48,7 @@ describe('WeatherConditions recovery', () => {
         },
         providerId: 'provider',
         position: { latitude: 1, longitude: 2 },
-        store: new WeatherStore(),
+        store,
         units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
         pointLoader: { load, loadWarnings: async () => point(false) },
       },
@@ -101,6 +101,36 @@ describe('WeatherConditions recovery', () => {
     await vi.waitFor(() => expect(test.target.textContent).toContain('cached, refresh failed'));
     expect(test.target.textContent).toContain('Weather observations could not refresh');
     expect(test.target.textContent).not.toContain('Weather forecasts could not refresh');
+  });
+
+  it('keeps a pressure observation separate from model wind and its valid time', async () => {
+    const now = Date.now();
+    const initial = point(false);
+    initial.obs = { date: new Date(now).toISOString(), outside: { pressure: 101_200 } };
+    initial.observationStatus = 'success';
+    const store = new WeatherStore();
+    store.setGrid(
+      {
+        lats: [0, 2],
+        lons: [1, 3],
+        times: [now],
+        windU: [[5, 5, 5, 5]],
+        windV: [[0, 0, 0, 0]],
+        pressureMsl: [[101_000, 101_000, 101_000, 101_000]],
+      },
+      now,
+    );
+    const test = setup(false, initial, store);
+    await vi.waitFor(() =>
+      expect(test.target.textContent).toContain('Model forecast, not observed'),
+    );
+    const blocks = [...test.target.querySelectorAll('.cond-when')];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].textContent).toContain('Observed');
+    expect(blocks[0].nextElementSibling?.textContent).not.toContain('Wind');
+    expect(blocks[1].textContent).toContain('Forecast');
+    expect(blocks[1].textContent).toContain('Open-Meteo');
+    expect(blocks[1].nextElementSibling?.textContent).toContain('Wind');
   });
 
   it('paces periodic and focus refresh instead of refetching every clock tick', async () => {

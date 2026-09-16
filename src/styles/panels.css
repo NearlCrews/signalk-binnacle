@@ -24,7 +24,7 @@
   .slide-over {
     inline-size: 100%;
     block-size: auto;
-    max-block-size: calc(60 * var(--dvh));
+    max-block-size: min(calc(60 * var(--dvh)), var(--chart-height, calc(60 * var(--dvh))));
     border-block-start: 1px solid var(--border);
   }
   .slide-over--dock-left,
@@ -47,14 +47,29 @@
    the body read the same across them. A panel marks its header .panel-header and its scroll area
    .panel-body, adding --flex when the body lays its content out as a gapped column. */
 .panel-header {
+  container-type: inline-size;
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.6rem var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-block-end: 1px solid var(--border);
+}
+@container (max-width: 20rem) {
+  .panel-header .icon-btn,
+  .panel-header .panel-close,
+  .panel-header .panel-minimize {
+    inline-size: 44px;
+    block-size: 44px;
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
 }
 .panel-body {
   flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3) var(--space-3);
   scrollbar-width: thin;
@@ -129,6 +144,7 @@
    visible at the bottom of the panel regardless of scroll position. */
 .panel-footer {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);

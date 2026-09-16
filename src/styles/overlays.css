@@ -46,6 +46,40 @@ dialog.modal-card {
   border: 1px solid var(--border);
 }
 
+dialog.editor-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  /* Replace the native font-relative width cap so enlarged text does not shrink the form. */
+  max-inline-size: calc(100vw - 2 * var(--space-4));
+  max-block-size: calc(100 * var(--dvh) - 2 * var(--space-4));
+  overflow: hidden;
+}
+
+.editor-dialog .dialog-header,
+.editor-dialog .dialog-footer {
+  flex: none;
+}
+
+.editor-dialog .dialog-body :is(.input, .select, .btn) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.editor-dialog .dialog-body :is(.input, .select) {
+  inline-size: 100%;
+}
+.editor-dialog .dialog-body .btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.dialog-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 /* The anchored floating-card frame shared by the map popovers and menus (the weather layer menu, the
    chart context menu, the bottom-bar More menu, and the map note): one border, radius, surface, and
    shadow so the floating-card look cannot drift across the places that drew it by hand. Consumers
@@ -188,13 +222,33 @@ dialog.modal-card {
 }
 .modal-card .dialog-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-4);
 }
+.editor-dialog .dialog-body {
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-2);
+}
 .modal-card .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-block-start: 1px solid var(--border);
+}
+.editor-dialog .dialog-footer .btn {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-inline: var(--space-1);
+}
+.editor-dialog .dialog-footer {
+  gap: var(--space-1);
+  padding: var(--space-2);
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy } from 'svelte';
 import { formatLengthOr, lengthUnit, RAD_TO_DEG, type UnitsMode } from '$shared/lib';
-import { InlineConfirm, registerDismiss, UnitField } from '$shared/ui';
+import { InlineConfirm, registerDismiss, restoreFocusAfterCancel, UnitField } from '$shared/ui';
 import { displayRadarDistance, siRadarDistance } from './radar-area-units';
 import { controlWriteBlockReason, validateStructuredControl } from './radar-controls-model';
 import { isNativeRectDefinition, radarRectSignature, radarRectValue } from './radar-rect-model';
@@ -48,7 +48,7 @@ let {
   pending: boolean;
   anotherEditorActive: boolean;
   areaDraft: RadarAreaDraft | undefined;
-  onSave: (controlId: string, value: RadarStructuredValue) => void;
+  onSave: (controlId: string, value: RadarStructuredValue) => Promise<boolean>;
   onDraftChange: (draft: RadarAreaDraft | undefined) => void;
   onStartChartEdit: (controlId: string) => string | undefined;
   onStopChartEdit: () => void;
@@ -60,6 +60,11 @@ let conflict = $state(false);
 let identity = $state('');
 let chartError = $state<string | undefined>(undefined);
 let confirmingSector = $state(false);
+let saveTrigger = $state<HTMLButtonElement>();
+let editTrigger = $state<HTMLButtonElement>();
+let saving = $state(false);
+let saveFailed = $state(false);
+let saveGeneration = 0;
 let ownsEditor = false;
 let sawOwnedDraft = false;
 
@@ -97,6 +102,7 @@ const isNoTransmitSector = $derived(
     !('startDistance' in proposed),
 );
 const noTransmitWarningId = $derived(isNoTransmitSector ? NO_TRANSMIT_WARNING_ID : undefined);
+const busy = $derived(pending || saving);
 
 function definitionSupported(): boolean {
   if (definition.type === 'zone') return isNativeZoneDefinition(definition);
@@ -123,6 +129,9 @@ function structuredSignature(value: RadarStructuredValue): string {
 }
 
 function cancel(): void {
+  saveGeneration += 1;
+  saving = false;
+  saveFailed = false;
   onStopChartEdit();
   onDraftChange(undefined);
   baselineSignature = undefined;
@@ -140,6 +149,7 @@ function loadAccepted(): void {
   conflict = false;
   chartError = undefined;
   confirmingSector = false;
+  saveFailed = false;
   ownsEditor = true;
   onDraftChange({
     radarId,
@@ -152,10 +162,24 @@ function loadAccepted(): void {
   onEditStateChange(definition.id, 'editing');
 }
 
-function commitSave(): void {
-  if (!proposed || validation || blockedReason || conflict || pending) return;
-  onSave(definition.id, proposed);
-  cancel();
+async function commitSave(): Promise<void> {
+  if (!proposed || validation || blockedReason || conflict || busy) return;
+  const generation = ++saveGeneration;
+  const draft = activeDraft;
+  saving = true;
+  saveFailed = false;
+  confirmingSector = false;
+  onStopChartEdit();
+  try {
+    const saved = await onSave(definition.id, proposed);
+    if (generation !== saveGeneration || activeDraft?.radarId !== draft?.radarId) return;
+    if (saved) cancel();
+    else saveFailed = true;
+  } catch {
+    if (generation === saveGeneration) saveFailed = true;
+  } finally {
+    if (generation === saveGeneration) saving = false;
+  }
 }
 
 function save(): void {
@@ -163,12 +187,13 @@ function save(): void {
     confirmingSector = true;
     return;
   }
-  commitSave();
+  void commitSave();
 }
 
 function updateValue(value: RadarStructuredValue): void {
   if (!activeDraft) return;
   chartError = undefined;
+  saveFailed = false;
   onDraftChange({ ...activeDraft, value, chartError: undefined });
 }
 
@@ -226,7 +251,7 @@ $effect(() => {
 // republished the original geometry, must clear the conflict and unblock this draft again rather
 // than forcing the navigator to discard work over a change that no longer exists.
 $effect(() => {
-  if (!activeDraft || !accepted || !baselineSignature) return;
+  if (!activeDraft || !accepted || !baselineSignature || busy) return;
   conflict = structuredSignature(accepted) !== baselineSignature;
 });
 
@@ -270,7 +295,7 @@ onDestroy(() => {
           min={angleMin}
           max={angleMax}
           step={angleStep}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...zone, value: value / RAD_TO_DEG })}
         />
         <UnitField
@@ -280,7 +305,7 @@ onDestroy(() => {
           min={angleMin}
           max={angleMax}
           step={angleStep}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...zone, endValue: value / RAD_TO_DEG })}
         />
         <UnitField
@@ -290,7 +315,7 @@ onDestroy(() => {
           min={0}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) =>
             updateValue({ ...zone, startDistance: siRadarDistance(value, unitsMode) })}
         />
@@ -301,7 +326,7 @@ onDestroy(() => {
           min={0}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) =>
             updateValue({ ...zone, endDistance: siRadarDistance(value, unitsMode) })}
         />
@@ -317,7 +342,7 @@ onDestroy(() => {
           min={angleMin}
           max={angleMax}
           step={angleStep}
-          disabled={pending}
+          disabled={busy}
           ariaDescribedBy={NO_TRANSMIT_WARNING_ID}
           onCommit={(value) => updateValue({ ...sector, value: value / RAD_TO_DEG })}
         />
@@ -329,7 +354,7 @@ onDestroy(() => {
           max={angleMax}
           step={angleStep}
           ariaDescribedBy={NO_TRANSMIT_WARNING_ID}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...sector, endValue: value / RAD_TO_DEG })}
         />
       {:else if definition.type === 'rect' && 'x1' in proposed}
@@ -341,7 +366,7 @@ onDestroy(() => {
           min={-distanceMax}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...rect, x1: siRadarDistance(value, unitsMode) })}
         />
         <UnitField
@@ -351,7 +376,7 @@ onDestroy(() => {
           min={-distanceMax}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...rect, y1: siRadarDistance(value, unitsMode) })}
         />
         <UnitField
@@ -361,7 +386,7 @@ onDestroy(() => {
           min={-distanceMax}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...rect, x2: siRadarDistance(value, unitsMode) })}
         />
         <UnitField
@@ -371,7 +396,7 @@ onDestroy(() => {
           min={-distanceMax}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...rect, y2: siRadarDistance(value, unitsMode) })}
         />
         <UnitField
@@ -381,7 +406,7 @@ onDestroy(() => {
           min={0}
           max={distanceMax}
           step={unitsMode === 'imperial' ? 1 : 0.5}
-          disabled={pending}
+          disabled={busy}
           onCommit={(value) => updateValue({ ...rect, width: siRadarDistance(value, unitsMode) })}
         />
       {/if}
@@ -395,7 +420,7 @@ onDestroy(() => {
             class:is-on={!proposed.enabled}
             aria-pressed={!proposed.enabled}
             aria-describedby={noTransmitWarningId}
-            disabled={pending}
+            disabled={busy}
             onclick={() => updateEnabled(false)}
           >
             Off
@@ -406,7 +431,7 @@ onDestroy(() => {
             class:is-on={proposed.enabled}
             aria-pressed={proposed.enabled}
             aria-describedby={noTransmitWarningId}
-            disabled={pending}
+            disabled={busy}
             onclick={() => updateEnabled(true)}
           >
             On
@@ -415,7 +440,7 @@ onDestroy(() => {
       </div>
 
       {#if !activeDraft.chartEditing}
-        <button type="button" class="btn btn-ghost" disabled={pending} onclick={startChartEdit}>
+        <button type="button" class="btn btn-ghost" disabled={busy} onclick={startChartEdit}>
           Edit on chart
         </button>
       {/if}
@@ -435,22 +460,41 @@ onDestroy(() => {
         <p class="muted-note" role="status">{blockedReason} Your draft is preserved.</p>
       {/if}
       <div class="panel-controls">
-        <button type="button" class="btn btn-ghost" onclick={cancel}>Cancel</button>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          disabled={busy}
+          onclick={() => {
+          cancel();
+          void restoreFocusAfterCancel(() => editTrigger);
+        }}
+        >
+          {saveFailed ? 'Discard draft' : 'Cancel'}
+        </button>
         <button
           type="button"
           class="btn btn-primary"
-          disabled={Boolean(validation || blockedReason || conflict || pending)}
+          bind:this={saveTrigger}
+          disabled={Boolean(validation || blockedReason || conflict || busy)}
           onclick={save}
         >
-          {saveLabel()}
+          {saving ? 'Saving…' : saveFailed ? 'Retry save' : saveLabel()}
         </button>
       </div>
+      {#if saveFailed}
+        <p class="alert-note" role="alert">
+          The radar did not accept this area. Your draft is preserved. Retry or discard it.
+        </p>
+      {/if}
       {#if confirmingSector}
         <InlineConfirm
           question="Apply this no-transmit sector and change the radar emission envelope?"
           confirmLabel="Apply sector"
           onConfirm={commitSave}
-          onCancel={() => (confirmingSector = false)}
+          onCancel={() => {
+            confirmingSector = false;
+            void restoreFocusAfterCancel(() => saveTrigger);
+          }}
         />
       {/if}
     </div>
@@ -458,8 +502,9 @@ onDestroy(() => {
     <button
       type="button"
       class="btn btn-ghost"
-      disabled={Boolean(blockedReason || pending || anotherEditorActive)}
+      disabled={Boolean(blockedReason || busy || anotherEditorActive)}
       title={blockedReason}
+      bind:this={editTrigger}
       onclick={loadAccepted}
     >
       {editLabel()}

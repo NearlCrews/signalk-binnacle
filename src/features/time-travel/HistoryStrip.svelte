@@ -269,6 +269,13 @@ const liveMessage = $derived.by(() => {
         Source: <span class="num">{controller.accepted?.provider}</span>. {acceptedPreset?.name}
         loaded.
       </p>
+      {#if acceptedPreset}
+        <p class="muted-note">
+          Each {acceptedPreset.resolutionSeconds} s bucket shows average depth below transducer,
+          pressure, and SOG, plus maximum apparent wind speed. These are aggregated readings, not
+          instantaneous conditions.
+        </p>
+      {/if}
       {#if coverageNote}
         <p class="muted-note">{coverageNote}</p>
       {/if}
@@ -282,18 +289,20 @@ const liveMessage = $derived.by(() => {
         {/if}
         <div class="row">
           <span class="metric"
-            >Depth <b>{formatLengthOr(current.depth ?? null, units.profile)}</b> {depthUnit}</span
+            >Depth below transducer, average
+            <b>{formatLengthOr(current.depth ?? null, units.profile)}</b> {depthUnit}</span
           >
           <span class="metric"
-            >Wind <b>{formatSpeedOr(current.windApparent ?? null, units.profile)}</b>
+            >Peak apparent wind <b>{formatSpeedOr(current.windApparent ?? null, units.profile)}</b>
             {speedUnitLabel}</span
           >
           <span class="metric"
-            >Baro <b>{formatPressureOr(current.pressure ?? null, units.profile)}</b>
+            >Baro, average <b>{formatPressureOr(current.pressure ?? null, units.profile)}</b>
             {baroUnit}</span
           >
           <span class="metric"
-            >SOG <b>{formatSpeedOr(current.sog ?? null, units.profile)}</b> {speedUnitLabel}</span
+            >SOG, average <b>{formatSpeedOr(current.sog ?? null, units.profile)}</b>
+            {speedUnitLabel}</span
           >
         </div>
       {/if}

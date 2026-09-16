@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Snippet } from 'svelte';
+import { onDestroy, type Snippet, tick } from 'svelte';
 import { scale } from 'svelte/transition';
 import { prefersReducedMotion } from '$shared/lib';
 import { registerDismiss } from './dialog';
@@ -43,6 +43,9 @@ interface Props {
   // loss to the body never fires it). Consumers pass their close function instead of re-deriving
   // the check from a surfaceRef binding.
   onFocusLeft?: () => void;
+  // Runs after the visible anchored surface has a measured layout box, so initial focus follows
+  // placement in the browser as well as the DOM style update.
+  onPositioned?: () => void;
   onClick?: (event: MouseEvent) => void;
   children: Snippet;
 }
@@ -64,13 +67,30 @@ let {
   onKeydown,
   onFocusOut,
   onFocusLeft,
+  onPositioned,
   onClick,
   children,
 }: Props = $props();
 
-// The surface stays mounted during the closing transition, so gate on open to keep a late
-// focusout from double-closing.
-function handleFocusOut(event: FocusEvent): void {
+let destroyed = false;
+onDestroy(() => {
+  destroyed = true;
+});
+
+// A replacement form can take focus before the outgoing menu's DOM is removed. Wait for that
+// update before reading props, whose derived owner may already be inert during the focus event.
+async function handleFocusOut(event: FocusEvent): Promise<void> {
+  const surface = event.currentTarget;
+  await tick();
+  if (
+    destroyed ||
+    !(surface instanceof HTMLElement) ||
+    !surface.isConnected ||
+    surface.closest('[inert]') ||
+    surface.contains(document.activeElement)
+  ) {
+    return;
+  }
   onFocusOut?.(event);
   if (open && onFocusLeft && menuFocusLeft(event.relatedTarget, surfaceRef)) onFocusLeft();
 }
@@ -83,15 +103,18 @@ const resolvedSurfaceStyle = $derived(
 $effect(() => {
   if (!open || !anchor) return;
   automaticStyle = 'position: fixed; visibility: hidden;';
+  let disposed = false;
+  let positioned = false;
 
   const position = (): void => {
-    if (!surfaceRef) return;
+    const surface = surfaceRef;
+    if (!surface) return;
     const result = floatingPosition(
       anchor.getBoundingClientRect(),
       // offsetWidth and offsetHeight are the untransformed layout dimensions. Measuring the bounding
       // box during the opening scale transition would understate the final size and let the fully
       // expanded surface cross a viewport edge by a few pixels.
-      { width: surfaceRef.offsetWidth, height: surfaceRef.offsetHeight },
+      { width: surface.offsetWidth, height: surface.offsetHeight },
       {
         width: document.documentElement.clientWidth,
         height: document.documentElement.clientHeight,
@@ -99,21 +122,50 @@ $effect(() => {
       { placement: preferredPlacement, align: anchorAlign },
     );
     automaticStyle = `position: fixed; left: ${Math.round(result.left)}px; top: ${Math.round(result.top)}px; visibility: visible; --anchored-origin-y: ${result.opensBelow ? 'top' : 'bottom'};`;
+    if (!positioned) {
+      void tick().then(() => {
+        if (disposed || positioned || destroyed) return;
+        // Check the captured DOM before reactive props: an outgoing owner's derived state can
+        // already be inert while its menu surface remains connected for a transition.
+        if (!surface.isConnected || surface.closest('[inert]')) return;
+        if (surfaceRef !== surface || !open) return;
+        // tick flushes the style attribute, not browser layout. Measure that visible placement
+        // before a consumer focuses an item. A later resize can complete a surface whose ancestor
+        // does not yet have a layout box, without a timer or repeated focus attempts.
+        const bounds = surface.getBoundingClientRect();
+        if (bounds.width === 0 || bounds.height === 0) return;
+        positioned = true;
+        onPositioned?.();
+      });
+    }
   };
 
-  const frame = requestAnimationFrame(position);
+  let frame: number | undefined;
+  const schedulePosition = (): void => {
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      position();
+    });
+  };
+  schedulePosition();
+  const observer = new ResizeObserver(schedulePosition);
+  observer.observe(anchor);
+  if (surfaceRef) observer.observe(surfaceRef);
   const visualViewport = window.visualViewport;
-  window.addEventListener('resize', position);
-  window.addEventListener('scroll', position, true);
-  visualViewport?.addEventListener('resize', position);
-  visualViewport?.addEventListener('scroll', position);
+  window.addEventListener('resize', schedulePosition);
+  window.addEventListener('scroll', schedulePosition, true);
+  visualViewport?.addEventListener('resize', schedulePosition);
+  visualViewport?.addEventListener('scroll', schedulePosition);
 
   return () => {
-    cancelAnimationFrame(frame);
-    window.removeEventListener('resize', position);
-    window.removeEventListener('scroll', position, true);
-    visualViewport?.removeEventListener('resize', position);
-    visualViewport?.removeEventListener('scroll', position);
+    disposed = true;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    observer.disconnect();
+    window.removeEventListener('resize', schedulePosition);
+    window.removeEventListener('scroll', schedulePosition, true);
+    visualViewport?.removeEventListener('resize', schedulePosition);
+    visualViewport?.removeEventListener('scroll', schedulePosition);
   };
 });
 
@@ -168,6 +220,9 @@ $effect(() => {
 
 <style>
 .anchored-menu-surface {
+  /* Placement and visibility are immediate. The reduced-motion duration reset must not create
+     a visibility transition that leaves the surface unfocusable after positioning. */
+  transition-property: none;
   /* The grow transition originates at the inline-start top corner by default, matching the
      corner-anchored dropdown. A consumer's :global block can override transform-origin for a
      bottom-sheet that grows from the bottom edge. */

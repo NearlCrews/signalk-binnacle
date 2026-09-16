@@ -1,16 +1,18 @@
 <script lang="ts">
 import Check from '@lucide/svelte/icons/check';
 import Circle from '@lucide/svelte/icons/circle';
+import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
 
 interface Props {
   // A nautical chart layer is visible, so the view is a chart and not a reference map.
   chartOn: boolean;
   // The server has published a position at least once this session.
   gpsSeen: boolean;
+  gpsCurrent?: boolean;
   // Binnacle can write to the server (routes, waypoints, tracks, alarms, and course).
   writeAllowed: boolean;
   // Alarm audio is primed, so an armed watch can actually sound.
-  soundEnabled: boolean;
+  audioState: AlarmAudioState;
   // Whether the server can store saved data at all: undefined while the probe has not answered,
   // which renders as neither done nor a dead end.
   savedDataProvisioned?: boolean;
@@ -25,8 +27,9 @@ interface Props {
 const {
   chartOn,
   gpsSeen,
+  gpsCurrent = false,
   writeAllowed,
-  soundEnabled,
+  audioState,
   savedDataProvisioned,
   secureContext = typeof isSecureContext === 'boolean' ? isSecureContext : true,
   onOpenLayers,
@@ -39,7 +42,7 @@ const {
 // checklist at the top of Help on every visit of a fully set-up boat and then have it vanish
 // mid-read. They still render, with live checks.
 const durableDone = $derived(
-  chartOn && writeAllowed && savedDataProvisioned !== false && secureContext,
+  chartOn && writeAllowed && savedDataProvisioned === true && secureContext,
 );
 const rows = $derived([
   {
@@ -51,11 +54,13 @@ const rows = $derived([
   },
   {
     id: 'gps',
-    done: gpsSeen,
+    done: gpsCurrent,
     label: 'See a GPS position',
-    detail: gpsSeen
-      ? 'The server is publishing a position.'
-      : 'No position yet. Check the GPS source in the Data Browser of the Signal K server admin UI; see GPS readiness below.',
+    detail: gpsCurrent
+      ? 'A current vessel position is available.'
+      : gpsSeen
+        ? 'A position was received earlier, but no current fix is available. See GPS readiness below.'
+        : 'No position yet. Check the GPS source in the Data Browser of the Signal K server admin UI; see GPS readiness below.',
     action: undefined,
   },
   {
@@ -64,19 +69,23 @@ const rows = $derived([
     label: 'Get read and write access',
     detail: writeAllowed
       ? 'Routes, waypoints, tracks, alarms, and course can be saved to the boat.'
-      : 'Read-only access keeps every view working and blocks saving.',
+      : 'Read-only access allows viewing available boat data but blocks saving and control actions.',
     action: writeAllowed
       ? undefined
       : { label: 'Request read and write access', run: onRequestWrite },
   },
   {
     id: 'sound',
-    done: soundEnabled,
+    done: audioState === 'ready',
     label: 'Enable alarm sound',
-    detail: soundEnabled
-      ? 'Alarms can sound on this display.'
-      : 'Browsers block audio until a display is touched once. Alarms stay visual either way.',
-    action: soundEnabled ? undefined : { label: 'Enable alarm sound now', run: onEnableSound },
+    detail: alarmAudioNote(audioState) ?? 'Alarms can sound on this display.',
+    action:
+      audioState === 'blocked' || audioState === 'failed'
+        ? {
+            label: audioState === 'failed' ? 'Retry alarm sound' : 'Enable alarm sound now',
+            run: onEnableSound,
+          }
+        : undefined,
   },
   {
     id: 'storage',
@@ -88,10 +97,10 @@ const rows = $derived([
   {
     id: 'https',
     done: secureContext,
-    label: 'Serve over HTTPS for offline charts',
+    label: 'Serve over HTTPS for browser offline caching',
     detail: secureContext
       ? 'This connection is secure, so the browser can cache charts for offline use and keep the screen awake during an armed watch.'
-      : 'Over plain HTTP the browser disables offline caching and screen wake, so charts need a live connection and an armed watch can go dark when the display locks. An administrator can enable SSL in the Signal K admin UI under Server, then Settings, and reopen Binnacle over https.',
+      : 'Over plain HTTP the browser disables offline caching and screen wake. Chart Locker areas saved on the boat can still work over its local network without internet. The display can lock during an armed watch. An administrator can enable SSL in the Signal K admin UI under Server, then Settings, and reopen Binnacle over https.',
     action: undefined,
   },
 ]);

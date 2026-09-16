@@ -17,6 +17,7 @@ interface Props {
   onStep: (dir: 1 | -1) => void;
   onTogglePlay: () => void;
   onSetTime: (t: number) => void;
+  onReturnToNow?: () => void;
 }
 
 const {
@@ -29,6 +30,7 @@ const {
   onStep,
   onTogglePlay,
   onSetTime,
+  onReturnToNow,
 }: Props = $props();
 </script>
 
@@ -69,7 +71,24 @@ const {
     {/if}
   </span>
   <span class="time">{timeKind} &middot; {timeLabel}</span>
+  {#if onReturnToNow}
+    <button
+      type="button"
+      class="btn btn-ghost return-now"
+      onclick={onReturnToNow}
+      title="Stop playback and select the available forecast time nearest now"
+    >
+      Return to now
+    </button>
+  {/if}
   <!-- Announce manual time changes (the visible label is too chatty to be live during
        playback, so the mirror empties while playing). -->
   <span class="visually-hidden" role="status">{playing ? '' : timeLabel}</span>
 </div>
+
+<style>
+.return-now {
+  grid-column: 1 / -1;
+  flex: 0 0 auto;
+}
+</style>

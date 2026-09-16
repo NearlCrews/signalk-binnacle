@@ -37,6 +37,7 @@ interface Props {
   mobPublishWarning?: string;
   // The active navigation destination name, for the steer confirmation to say what it replaces.
   mobActiveCourse?: string;
+  mobActiveCourseContext?: string;
   genericAlarms: ActiveNotification[];
   genericSounding: boolean;
   genericLocallyMuted: boolean;
@@ -60,6 +61,7 @@ const {
   onMobCancel,
   mobPublishWarning,
   mobActiveCourse,
+  mobActiveCourseContext,
   genericAlarms,
   genericSounding,
   genericLocallyMuted,
@@ -190,6 +192,7 @@ function chipDescription(condition: ChipCondition): string {
         onCancel={onMobCancel}
         publishWarning={mobPublishWarning}
         activeCourse={mobActiveCourse}
+        activeCourseContext={mobActiveCourseContext}
       />
     {:else if stack.shownId === 'collision'}
       <DangerStrip

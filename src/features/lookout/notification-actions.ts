@@ -37,6 +37,6 @@ export const canSilenceNotification = (n: ActiveNotification): boolean =>
   !n.acknowledged;
 
 // Whether the v2 acknowledge route can act on this alert. Unlike silence, it applies to every
-// raised grade, since acknowledging is how an emergency is cleared.
+// raised grade. Acknowledgment marks an alert as seen; its producer resolves the condition.
 export const canAcknowledgeNotification = (n: ActiveNotification): boolean =>
   n.id !== undefined && n.canAcknowledge === true && !n.acknowledged;

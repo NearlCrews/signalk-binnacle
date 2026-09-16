@@ -9,7 +9,6 @@ import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { chartSourceById } from 'signalk-chart-sources';
 import { onDestroy } from 'svelte';
-import type { RouteWaypoint } from '$entities/route';
 import type { UnitsStore } from '$entities/units';
 import { BASEMAP_SOURCE_ID } from '$shared/map';
 import type { PwaStatus } from '$shared/pwa';
@@ -19,17 +18,19 @@ import {
   type AccessRecoveryState,
   Disclosure,
   LayerToggle,
+  registerDismiss,
   SlideOver,
   TextField,
   UnitField,
 } from '$shared/ui';
 import AutoCacheView from './AutoCacheView.svelte';
 import { CHART_LOCKER_MAX_REGION_NAME_LENGTH, CHART_LOCKER_MAX_WARM_ZOOM } from './contract.js';
+import type { CoverageRoute, RouteCoverageAssessment } from './coverage-context';
 import { DETAIL_PRESETS } from './detail-level.js';
 import type { SavedRegionDto } from './regions-client.js';
 import { createRegionsClient } from './regions-client.js';
 import { createRegionsController } from './regions-controller.svelte.js';
-import { COVERAGE_CORRIDOR_CHOICES_NM, type RouteCoverageReport } from './route-coverage.js';
+import { COVERAGE_CORRIDOR_CHOICES_NM } from './route-coverage.js';
 import SavedRegionsView from './SavedRegionsView.svelte';
 import StorageView from './StorageView.svelte';
 import { sourceDescription } from './source-summary.js';
@@ -49,12 +50,10 @@ interface Props {
   // 'untrusted-certificate' gets its own notice: over HTTPS with a certificate the browser does
   // not trust, insecureTransport is false and the cache silently stays off without it.
   pwaStatus?: PwaStatus;
-  // The route being navigated, as a getter so the coverage check reads the live route. Absent or
-  // returning undefined when nothing is being navigated.
-  activeRoute?: () => { name: string; waypoints: RouteWaypoint[] } | undefined;
-  // Reports the latest coverage result (and its clearing) upward, so a watch-handoff snapshot can
-  // state whether the corridor was checked without re-running the check.
-  onCoverageReport?: (report: RouteCoverageReport | null) => void;
+  // The passage selected for a read-only check, independent of active navigation.
+  coverageRoute?: () => CoverageRoute | undefined;
+  // Carries the checked identities and time upward for revalidation outside this panel.
+  onCoverageAssessment?: (assessment: RouteCoverageAssessment | null) => void;
   onClose: () => void;
   onBack?: () => void;
   onOpenCharts: () => void;
@@ -72,8 +71,8 @@ const {
   // a service worker is claimed by the origin that served the page, so do not unify these two.
   insecureTransport = typeof location !== 'undefined' && isInsecureTransportOrigin(serverOrigin()),
   pwaStatus = 'pending',
-  activeRoute,
-  onCoverageReport,
+  coverageRoute,
+  onCoverageAssessment,
   onClose,
   onBack,
   onOpenCharts,
@@ -88,15 +87,19 @@ const controller = createRegionsController({
   getClient: () => client,
   getMap: () => map,
   getUnitsMode: () => units.mode,
-  getActiveRoute: () => activeRoute?.(),
+  getCoverageRoute: () => coverageRoute?.(),
 });
 controller.start();
 $effect(() => controller.syncClient());
 $effect(() => controller.syncRectangle());
+$effect(() => {
+  if (!controller.drawing) return;
+  return registerDismiss(() => controller.cancelDrawing());
+});
 // Retire both the report and its highlight when any checked input changes.
 $effect(() => controller.syncCoverageContext());
 $effect(() => {
-  onCoverageReport?.(controller.coverageReport);
+  onCoverageAssessment?.(controller.coverageAssessment);
 });
 onDestroy(() => controller.destroy());
 
@@ -170,7 +173,7 @@ const positionBaseZoom = $derived(controller.positionBaseZoom);
 const positionWarmSourceList = controller.positionWarmSourceList;
 const providerError = $derived(controller.providerError);
 
-const routeForCheck = $derived(activeRoute?.());
+const routeForCheck = $derived(controller.coverageRoute);
 const coverageReport = $derived(controller.coverageReport);
 const coverageCorridorNm = $derived(controller.coverageCorridorNm);
 const coverageDetailKey = $derived(controller.coverageDetail);
@@ -250,6 +253,14 @@ function chartLabel(id: string): string {
 }
 </script>
 
+{#snippet drawingFooter()}
+  <div class="panel-controls">
+    <button type="button" class="btn" onclick={() => controller.cancelDrawing()}>
+      Cancel selection
+    </button>
+  </div>
+{/snippet}
+
 {#snippet detailPicker(
   groupLabel: string,
   selectedKey: string,
@@ -285,6 +296,7 @@ function chartLabel(id: string): string {
     ? { collapsed: panelCollapsed, onToggle: () => controller.toggleCollapsed() }
     : undefined}
   bodyFlex
+  footer={drawing ? drawingFooter : undefined}
 >
   <p class="visually-hidden" aria-live="polite">{drawAnnouncement}</p>
   {#if error !== null}
@@ -321,6 +333,8 @@ function chartLabel(id: string): string {
     <SavedRegionsView
       {regions}
       loadError={adminAccess ? loadError : null}
+      loading={controller.regionsLoading}
+      onRetryLoad={() => void controller.loadRegions()}
       {regionStatus}
       {regionPollError}
       {pendingRegion}
@@ -340,7 +354,8 @@ function chartLabel(id: string): string {
         <p class="muted-note">
           Checks a corridor around {routeForCheck.name} against your ready saved areas and the
           charts they include. Advisory only: it does not certify navigation or passage safety, and
-          it is separate from Chart Locker's own health.
+          it is separate from Chart Locker's own health. This check does not start navigation or
+          change the active course.
         </p>
         <div class="segmented" role="group" aria-label="Corridor width">
           {#each COVERAGE_CORRIDOR_CHOICES_NM as nm (nm)}
@@ -384,7 +399,8 @@ function chartLabel(id: string): string {
         {/if}
       {:else}
         <p class="muted-note">
-          Start navigation on a route to check its corridor against your saved areas.
+          Open a saved route's passage plan and choose Offline charts to check its corridor without
+          starting navigation.
         </p>
       {/if}
     </section>
@@ -395,7 +411,9 @@ function chartLabel(id: string): string {
       onclick={() => controller.showSubView('auto')}
     >
       <span class="subview-link-label">Automatic caching</span>
-      <span class="subview-link-value">{positionEnabled ? 'On' : 'Off'}</span>
+      <span class="subview-link-value"
+        >{controller.positionLoading ? 'Checking…' : !controller.positionSettingsReady ? 'Unavailable' : positionEnabled ? 'On' : 'Off'}</span
+      >
       <ChevronRight class="subview-link-chevron" size={18} aria-hidden="true" />
     </button>
     <button type="button" class="subview-link row-interactive" onclick={onOpenCharts}>
@@ -424,6 +442,14 @@ function chartLabel(id: string): string {
           type="button"
           class="btn btn--grow"
           disabled={!adminAccess}
+          onclick={() => controller.useCurrentView()}
+        >
+          Use current chart view
+        </button>
+        <button
+          type="button"
+          class="btn btn--grow"
+          disabled={!adminAccess}
           class:is-on={drawing}
           aria-pressed={drawing}
           onclick={startDrawing}
@@ -442,9 +468,31 @@ function chartLabel(id: string): string {
         </button>
       </div>
       {#if bbox !== null}
-        <p class="muted-note">Area set. Draw again to change it.</p>
+        <p class="muted-note">
+          Area set. Adjust the bounds, use the current view, or draw again to change it.
+        </p>
+        <Disclosure label="Adjust area coordinates">
+          {#each [{ label: 'West longitude', index: 0, limit: 180 }, { label: 'South latitude', index: 1, limit: 85 }, { label: 'East longitude', index: 2, limit: 180 }, { label: 'North latitude', index: 3, limit: 85 }] as coordinate (coordinate.index)}
+            <UnitField
+              label={coordinate.label}
+              unit="°"
+              value={bbox[coordinate.index]}
+              min={-coordinate.limit}
+              max={coordinate.limit}
+              step={0.001}
+              disabled={!adminAccess}
+              onCommit={(value) => controller.commitAreaBound(coordinate.index as 0 | 1 | 2 | 3, value)}
+            />
+          {/each}
+          <p class="muted-note">
+            Use decimal degrees. West greater than east selects an area across the antimeridian.
+          </p>
+        </Disclosure>
       {:else}
-        <p class="muted-note">Tap Draw on the chart, then drag a box over where you are going.</p>
+        <p class="muted-note">
+          Use the current chart view, or choose Draw on the chart and drag a box over where you are
+          going.
+        </p>
       {/if}
       {#if providerError !== null}
         <p class="alert-note" role="alert">{providerError}</p>
@@ -618,6 +666,9 @@ function chartLabel(id: string): string {
   {:else if subView === 'storage'}
     <StorageView
       {stats}
+      loadError={statsError}
+      loading={controller.statsLoading}
+      onRetryLoad={() => void loadStats()}
       {usedPercent}
       used={usedFmt}
       cap={capFmt}
@@ -641,6 +692,8 @@ function chartLabel(id: string): string {
       enabled={positionEnabled}
       {adminAccess}
       loadError={positionLoadError}
+      loading={controller.positionLoading}
+      settingsReady={controller.positionSettingsReady}
       writerState={controller.positionWriterState}
       sources={positionWarmSourceList}
       selectedSources={positionSet}

@@ -101,6 +101,23 @@ describe('RadarControls enum values', () => {
 });
 
 describe('RadarControls status', () => {
+  it('returns focus to Transmit when its confirmation is canceled without sending power', async () => {
+    const store = new MarineRadarStore();
+    discoverRadar(store);
+    const { target, onSetPower } = mountControls(store);
+    const transmit = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Transmit',
+    );
+    flushSync(() => transmit?.click());
+    const cancel = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Cancel',
+    );
+    expect(cancel).toBeDefined();
+    flushSync(() => cancel?.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(transmit));
+    expect(onSetPower).not.toHaveBeenCalled();
+  });
+
   it.each(['selection', 'access', 'capabilities', 'power'])(
     'disarms scanner-bound transmit when %s changes',
     (change) => {

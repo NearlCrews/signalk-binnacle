@@ -2,7 +2,13 @@
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy, onMount } from 'svelte';
 import { createMediaQuery, Toast } from '$shared/lib';
-import { AnchoredMenu, createMenuFocusMachine, TransientNote, UnavailableHint } from '$shared/ui';
+import {
+  AnchoredMenu,
+  createMenuFocusMachine,
+  initializeMenuFocus,
+  TransientNote,
+  UnavailableHint,
+} from '$shared/ui';
 import MenuItemCount from './MenuItemCount.svelte';
 import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
@@ -31,15 +37,16 @@ let measuredCapacity = $state<number>();
 let largeText = $state(false);
 
 // The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the open-focus and
-// close-focus protocol live in $shared/ui menu-focus, identical to OverflowActions. The extra
-// focus frame lets the surface position itself before the initial roving focus lands.
+// close-focus protocol live in $shared/ui menu-focus, identical to OverflowActions. Initial focus
+// follows the placement callback so the surface is visible before a menu item receives focus.
 const machine = createMenuFocusMachine({
   surface: () => moreSurface,
   trigger: () => moreTrigger,
   requestClose: () => {
     moreOpen = false;
   },
-  focusFrames: 2,
+  focusFrames: 0,
+  includeAriaDisabled: true,
 });
 const responsiveMaximum = $derived(compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS);
 const capacity = $derived(Math.min(responsiveMaximum, measuredCapacity ?? responsiveMaximum));
@@ -58,16 +65,29 @@ onMount(() => {
     const rootStyle = getComputedStyle(document.documentElement);
     const barStyle = getComputedStyle(element);
     const rootSize = Number.parseFloat(rootStyle.fontSize) || 16;
-    const controlSize = Number.parseFloat(rootStyle.getPropertyValue('--control-size')) * rootSize;
+    // Computed control dimensions resolve inherited px, rem, and calc() tokens alike.
+    const control = element.querySelector<HTMLElement>('.btn-pill');
+    const controlSize = control ? Number.parseFloat(getComputedStyle(control).minBlockSize) : 0;
     const gap = Number.parseFloat(barStyle.columnGap || barStyle.gap) || 0;
     largeText = rootSize >= 24;
     measuredCapacity = barCapacity(element.clientWidth, controlSize, gap, responsiveMaximum);
   };
-  const observer = new ResizeObserver(measure);
+  let frame: number | undefined;
+  const scheduleMeasure = () => {
+    if (frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      measure();
+    });
+  };
+  const observer = new ResizeObserver(scheduleMeasure);
   observer.observe(element);
   observer.observe(document.documentElement);
   measure();
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+    if (frame !== undefined) cancelAnimationFrame(frame);
+  };
 });
 
 function run(action: MenuItem, after?: () => void): void {
@@ -86,7 +106,9 @@ $effect(() => machine.syncOpen(moreOpen));
 </script>
 
 <div class="pinned-actions strip-center" bind:this={bar}>
-  <TransientNote message={blockedNote.message} noteClass="blocked-pill-note" />
+  {#if !moreOpen}
+    <TransientNote message={blockedNote.message} noteClass="blocked-pill-note" />
+  {/if}
   {#each split.visible as action (action.id)}
     <button
       type="button"
@@ -94,8 +116,7 @@ $effect(() => machine.syncOpen(moreOpen));
       class:icon-only={iconOnly}
       class:is-on={action.pressed === true}
       aria-pressed={action.pressed === undefined ? undefined : action.pressed}
-      disabled={action.disabled === true}
-      aria-disabled={action.available === false ? true : undefined}
+      aria-disabled={itemBlocked(action) ? true : undefined}
       title={blockedReason(action) ?? action.label}
       onclick={() => run(action)}
     >
@@ -106,12 +127,13 @@ $effect(() => machine.syncOpen(moreOpen));
     </button>
   {/each}
   {#if split.overflow.length > 0}
-    <div class="more-wrap">
+    <div class="more-wrap" data-menu-opener-group>
       <button
         type="button"
         class="btn btn-pill"
         class:icon-only={iconOnly}
         bind:this={moreTrigger}
+        data-menu-opener
         class:is-on={moreActive || moreOpen}
         aria-haspopup="menu"
         aria-expanded={moreOpen}
@@ -138,6 +160,7 @@ $effect(() => machine.syncOpen(moreOpen));
         preferredPlacement="above"
         anchorAlign="end"
         bind:surfaceRef={moreSurface}
+        onPositioned={() => initializeMenuFocus(moreSurface, true)}
         onKeydown={machine.handleKeydown}
         onFocusLeft={() => machine.close()}
       >
@@ -149,8 +172,7 @@ $effect(() => machine.syncOpen(moreOpen));
             class="menu-item"
             class:is-on={action.pressed === true}
             aria-checked={action.pressed}
-            disabled={action.disabled === true}
-            aria-disabled={action.available === false ? true : undefined}
+            aria-disabled={itemBlocked(action) ? true : undefined}
             title={blockedReason(action) ?? action.label}
             onclick={() => run(action, machine.close)}
           >
@@ -162,6 +184,7 @@ $effect(() => machine.syncOpen(moreOpen));
             <MenuItemCount item={action} />
           </button>
         {/each}
+        <p class="muted-note blocked-more-note" role="status">{blockedNote.message ?? ''}</p>
       </AnchoredMenu>
     </div>
   {/if}
@@ -200,6 +223,13 @@ $effect(() => machine.syncOpen(moreOpen));
 .more-wrap {
   position: relative;
 }
+.blocked-more-note {
+  margin: 0;
+  white-space: normal;
+}
+.blocked-more-note:empty {
+  display: none;
+}
 :global(.blocked-pill-note) {
   inset-block-end: calc(100% + var(--space-1));
   max-inline-size: 16rem;
@@ -211,6 +241,13 @@ $effect(() => machine.syncOpen(moreOpen));
   gap: var(--space-1);
   max-block-size: calc(100 * var(--dvh) - 1rem);
   overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .pinned-actions {
+    /* The stacked strip has one column. Measure its available width, not the shrinking pills. */
+    justify-self: stretch;
+    inline-size: 100%;
+  }
 }
 @media (max-width: 600px) {
   .pinned-actions {

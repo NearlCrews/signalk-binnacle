@@ -52,6 +52,8 @@ describe('WaypointsPanel', () => {
     const body = renderPanel({ waypoints: many, vessel: boat, selectedId: 'w259' });
     expect(body).toContain('Mark 259');
     expect(body).toContain('chart-selected waypoint is shown first');
+    expect(body).toContain('It is outside the displayed result limit.');
+    expect(body).not.toContain('It does not match the current search.');
     // Without a selection the same mark stays capped out and no pin note renders.
     const unpinned = renderPanel({ waypoints: many, vessel: boat });
     expect(unpinned).not.toContain('chart-selected waypoint');

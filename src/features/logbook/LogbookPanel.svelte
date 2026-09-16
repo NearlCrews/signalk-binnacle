@@ -1,8 +1,8 @@
 <script lang="ts">
 import { onMount } from 'svelte';
-import { formatClockTime, formatMonthDay } from '$shared/lib';
+import { formatClockTime, formatDayClock, formatMonthDay, MINUTE_MS } from '$shared/lib';
 import { adminLoginUrl } from '$shared/signalk';
-import { SlideOver } from '$shared/ui';
+import { InlineConfirm, restoreFocusAfterCancel, SlideOver } from '$shared/ui';
 import { type LogbookEntry, MAX_LOGBOOK_TEXT_LENGTH } from './logbook-client';
 import type { LogbookController } from './logbook-controller.svelte';
 
@@ -23,22 +23,39 @@ const loginUrl = $derived(
   ),
 );
 
-let draft = $state('');
-let seededText = $state('');
+let discardArmed = $state(false);
+let discardTrigger = $state<HTMLButtonElement>();
 
 // Seed the composer from a pending offer without ever clobbering typed text: an offer lands only
 // in an empty composer or over the previous offer's untouched text, and a composer the navigator
 // cleared does not re-seed the same offer.
 $effect(() => {
   const offered = controller.suggestion;
-  if (!offered || offered.text === seededText) return;
-  if (draft !== '' && draft !== seededText) return;
-  draft = offered.text;
-  seededText = offered.text;
+  if (!offered || offered.text === controller.seededText) return;
+  if (controller.draft !== '' && controller.draft !== controller.seededText) return;
+  controller.draft = offered.text;
+  controller.seededText = offered.text;
 });
 
 onMount(() => {
-  controller.start();
+  if (controller.open) controller.open();
+  else controller.start();
+  const refresh = () => {
+    if (
+      document.visibilityState !== 'hidden' &&
+      controller.availability === 'available' &&
+      Date.now() - (controller.lastCheckedMs ?? 0) >= MINUTE_MS
+    )
+      void controller.refresh();
+  };
+  const timer = setInterval(refresh, MINUTE_MS);
+  window.addEventListener('focus', refresh);
+  document.addEventListener('visibilitychange', refresh);
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('focus', refresh);
+    document.removeEventListener('visibilitychange', refresh);
+  };
 });
 
 $effect(() => {
@@ -49,27 +66,27 @@ $effect(() => {
 
 const writesDisabled = $derived(controller.busy);
 const offerInComposer = $derived(
-  controller.suggestion !== undefined && draft === controller.suggestion.text,
+  controller.suggestion !== undefined && controller.draft === controller.suggestion.text,
 );
 
 async function submit(): Promise<void> {
-  const submitted = draft;
-  if ((await controller.addEntry(submitted)) && draft === submitted) {
-    draft = '';
-    seededText = '';
+  const submitted = controller.draft;
+  if ((await controller.addEntry(submitted)) && controller.draft === submitted) {
+    controller.draft = '';
+    controller.seededText = '';
   }
 }
 
 function useSuggestion(): void {
   const offered = controller.suggestion;
   if (!offered) return;
-  draft = offered.text;
-  seededText = offered.text;
+  controller.draft = offered.text;
+  controller.seededText = offered.text;
 }
 
 function dismissSuggestion(): void {
-  if (offerInComposer) draft = '';
-  seededText = '';
+  if (offerInComposer) controller.draft = '';
+  controller.seededText = '';
   controller.dismissSuggestion();
 }
 
@@ -103,6 +120,35 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
   <p class="muted-note">
     Keep a written log of the passage. Entries save to the boat's logbook on the Signal K server.
   </p>
+  {#if controller.draft}
+    <p class="muted-note">
+      This draft stays while this app is open, including when you change panels. Reloading or
+      closing the app loses it.
+    </p>
+    {#if discardArmed}
+      <InlineConfirm
+        question="Discard this log draft?"
+        onCancel={() => {
+          discardArmed = false;
+          void restoreFocusAfterCancel(() => discardTrigger);
+        }}
+        onConfirm={() => {
+        controller.draft = '';
+        controller.seededText = controller.suggestion?.text ?? '';
+        discardArmed = false;
+      }}
+      />
+    {:else}
+      <button
+        type="button"
+        class="btn btn-ghost"
+        bind:this={discardTrigger}
+        onclick={() => (discardArmed = true)}
+      >
+        Discard draft
+      </button>
+    {/if}
+  {/if}
 
   {#if controller.availability === 'absent'}
     <section class="panel-section" aria-label="Logbook provider not detected">
@@ -134,7 +180,9 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
         check again.
       </p>
       <div class="panel-controls">
-        <a class="btn" href={loginUrl}>Sign in to Signal K</a>
+        <a class="btn" href={loginUrl} target="_blank" rel="noopener noreferrer"
+          >Sign in to Signal K (new tab)</a
+        >
         <button
           type="button"
           class="btn btn-ghost"
@@ -177,7 +225,7 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
         <span class="field-label">Entry text</span>
         <textarea
           class="input"
-          bind:value={draft}
+          bind:value={controller.draft}
           maxlength={MAX_LOGBOOK_TEXT_LENGTH}
           rows="3"
           placeholder="What happened, in your own words"
@@ -187,7 +235,7 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
         <button
           type="button"
           class="btn btn-primary"
-          disabled={writesDisabled || draft.trim() === ''}
+          disabled={writesDisabled || controller.draft.trim() === ''}
           onclick={() => void submit()}
         >
           {controller.busy ? 'Logging…' : offerInComposer ? 'Log it' : 'Add entry'}
@@ -207,6 +255,20 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
 
     <section class="panel-section" aria-label="Recent entries">
       <h3 class="caps-label">Recent entries</h3>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={controller.refreshing}
+        onclick={() => void controller.refresh()}
+      >
+        {controller.refreshing ? 'Refreshing entries…' : 'Refresh entries'}
+      </button>
+      {#if controller.lastCheckedMs !== undefined}
+        <p class="muted-note">
+          Last checked {formatMonthDay(controller.lastCheckedMs)}
+          {formatDayClock(controller.lastCheckedMs, { zone: true })}.
+        </p>
+      {/if}
       {#if controller.loadState === 'loading'}
         <p class="muted-note" role="status">Loading recent entries…</p>
       {:else if controller.loadState === 'error'}

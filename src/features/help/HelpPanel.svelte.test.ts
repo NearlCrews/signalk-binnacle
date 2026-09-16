@@ -10,7 +10,7 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
       writeBlocked: false,
       requestingWrite: false,
       onRequestWrite: () => {},
-      audioBlocked: false,
+      audioState: 'ready',
       onEnableSound: () => {},
       onOpenLayers: () => {},
       onOpenProfiles: () => {},
@@ -23,6 +23,28 @@ function renderPanel(overrides: Record<string, unknown> = {}): string {
 }
 
 describe('HelpPanel degraded-state literacy', () => {
+  it.each(['blocked', 'failed', 'unsupported'])(
+    'never claims alarms can sound when %s',
+    (audioState) => {
+      const body = renderPanel({ audioState });
+      expect(body).not.toContain('Alarms can sound on this display.');
+      if (audioState === 'unsupported') {
+        expect(body).toContain('Alerts remain visual only.');
+        expect(body).not.toContain('Enable alarm sound now');
+        expect(body).not.toContain('Retry alarm sound');
+      }
+      if (audioState === 'failed') expect(body).toContain('Retry alarm sound');
+    },
+  );
+
+  it('discloses automatic position sharing and qualifies MOB propagation', () => {
+    const body = renderPanel();
+    expect(body).toContain('There is currently no in-app opt-out.');
+    expect(body).toContain('latitude and longitude rounded to four decimal places');
+    expect(body).toContain('Sharing requires a server');
+    expect(body).not.toContain('alarms every');
+    expect(body).not.toContain('the status strip says so until you do');
+  });
   it('explains the connection states and the stale divergence in always-reachable prose', () => {
     const body = renderPanel();
     expect(body).toContain('aria-label="Connection"');

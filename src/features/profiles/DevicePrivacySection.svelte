@@ -2,19 +2,29 @@
 import LogOut from '@lucide/svelte/icons/log-out';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { PrivacyReport } from '$shared/privacy';
-import { InlineConfirm } from '$shared/ui';
+import { InlineConfirm, restoreFocusAfterCancel } from '$shared/ui';
 
 interface Props {
   onForgetCredentials: () => Promise<PrivacyReport>;
   onEraseAllLocalData: () => Promise<PrivacyReport>;
+  onOpenNetworkPrivacy?: () => void;
 }
 
-const { onForgetCredentials, onEraseAllLocalData }: Props = $props();
+const { onForgetCredentials, onEraseAllLocalData, onOpenNetworkPrivacy }: Props = $props();
 let confirming = $state<'credentials' | 'all' | undefined>();
 let working = $state<'credentials' | 'all' | undefined>();
 let report = $state<PrivacyReport | undefined>();
 let actionError = $state<string | undefined>();
+let credentialsTrigger = $state<HTMLButtonElement>();
+let eraseTrigger = $state<HTMLButtonElement>();
 const reloadPending = $derived((report?.clearedOwnerIds.length ?? 0) > 0);
+
+function cancelConfirmation(action: 'credentials' | 'all'): void {
+  confirming = undefined;
+  void restoreFocusAfterCancel(() =>
+    action === 'credentials' ? credentialsTrigger : eraseTrigger,
+  );
+}
 
 async function run(action: 'credentials' | 'all'): Promise<void> {
   if (working || reloadPending) return;
@@ -68,6 +78,15 @@ const reportText = $derived.by(() => {
 <section class="panel-section" aria-label="Device privacy">
   <h3 class="caps-label">Device privacy</h3>
   <p class="muted-note">
+    Automatic weather-warning requests can share the vessel position with an external service, even
+    with Weather closed. These local-data actions are not a network privacy switch.
+  </p>
+  {#if onOpenNetworkPrivacy}
+    <button type="button" class="btn btn-ghost" onclick={onOpenNetworkPrivacy}>
+      Review network privacy
+    </button>
+  {/if}
+  <p class="muted-note">
     These actions affect this device only. Server routes, waypoints, tracks, profiles, Chart Locker
     data, administrator sessions, and server-side device authorization are not deleted or revoked.
     Synced profiles return after this device signs in and syncs again. Profiles and changes that
@@ -92,14 +111,14 @@ const reportText = $derived.by(() => {
       question="Forget Binnacle's Signal K device token on this device?"
       confirmLabel="Forget credentials"
       onConfirm={() => void run('credentials')}
-      onCancel={() => (confirming = undefined)}
+      onCancel={() => cancelConfirmation('credentials')}
     />
   {:else if confirming === 'all'}
     <InlineConfirm
       question="Erase all Binnacle settings, offline browser caches, unsaved local data, profiles, and credentials from this device? Profiles and changes that have not synced will be lost."
       confirmLabel="Erase local data"
       onConfirm={() => void run('all')}
-      onCancel={() => (confirming = undefined)}
+      onCancel={() => cancelConfirmation('all')}
     />
   {:else if !reloadPending}
     <div class="panel-controls">
@@ -107,6 +126,7 @@ const reportText = $derived.by(() => {
         type="button"
         class="btn"
         disabled={working !== undefined}
+        bind:this={credentialsTrigger}
         onclick={() => (confirming = 'credentials')}
       >
         <LogOut size={16} aria-hidden="true" />
@@ -116,6 +136,7 @@ const reportText = $derived.by(() => {
         type="button"
         class="btn sev-danger"
         disabled={working !== undefined}
+        bind:this={eraseTrigger}
         onclick={() => (confirming = 'all')}
       >
         <Trash2 size={16} aria-hidden="true" />

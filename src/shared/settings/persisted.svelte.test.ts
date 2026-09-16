@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { knotsToMetersPerSecond } from '$shared/lib';
 import { binnacleStorageKey } from '$shared/persistence';
 import { createFakeStorage } from '$shared/testing';
@@ -18,6 +18,37 @@ import {
 } from './persisted.svelte';
 
 describe('PersistedValue', () => {
+  it('reports failed writes without losing memory and clears the status after recovery', () => {
+    const storage = createFakeStorage();
+    const write = vi.spyOn(storage, 'setItem');
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const p = new PersistedValue('k', 1, storage);
+    expect(p.lastWriteFailed).toBe(false);
+    write.mockImplementationOnce(() => {
+      throw new Error('Storage unavailable');
+    });
+    p.set(2);
+    expect(p.value).toBe(2);
+    expect(p.lastWriteFailed).toBe(true);
+    p.set(3);
+    expect(p.lastWriteFailed).toBe(false);
+    expect(storage.data.get('k')).toBe('3');
+    warning.mockRestore();
+    write.mockRestore();
+  });
+
+  it('reports memory-only writes when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    try {
+      const p = new PersistedValue('k', 1);
+      p.set(2);
+      expect(p.value).toBe(2);
+      expect(p.lastWriteFailed).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses the default when storage is empty', () => {
     const storage = createFakeStorage();
     const p = new PersistedValue('k', { a: 1 }, storage);

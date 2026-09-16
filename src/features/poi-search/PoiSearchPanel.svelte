@@ -37,6 +37,7 @@ interface Props {
   onHover: (poi: Poi | undefined) => void;
   onClose: () => void;
   onBack?: () => void;
+  onRetry?: () => void;
 }
 
 const {
@@ -51,6 +52,7 @@ const {
   onHover,
   onClose,
   onBack,
+  onRetry,
 }: Props = $props();
 
 let query = $state('');
@@ -134,6 +136,11 @@ onDestroy(() => onHover(undefined));
       Offline: showing cached places. Recent provider changes may be missing.
     </p>
   {/if}
+  {#if onRetry && (viewState.phase === 'error' || viewState.offline)}
+    <button type="button" class="btn" onclick={onRetry} disabled={viewState.phase === 'loading'}>
+      Retry places
+    </button>
+  {/if}
   {#if pois.length > 0 && vesselPosition === undefined}
     <p class="muted-note" role="status">
       Distance and bearing need a fresh GPS fix. Results are sorted by name until one arrives.
@@ -158,7 +165,7 @@ onDestroy(() => onHover(undefined));
       </p>
     {:else if viewState.phase === 'ready' && viewState.offline}
       <p class="muted-note" role="status">
-        No places are available from cache for this view. Reconnect, then pan or zoom to load them.
+        No places are available from cache for this view. Reconnect, then retry places.
       </p>
     {:else if viewState.phase === 'zoomed-out'}
       <p class="muted-note" role="status">
@@ -170,8 +177,8 @@ onDestroy(() => onHover(undefined));
       </p>
     {:else if viewState.phase === 'error'}
       <p class="alert-note" role="alert">
-        Places could not load. Check the connection and that a notes provider is enabled, then pan
-        or zoom to retry.
+        Places could not load. Check the connection and that a notes provider is enabled, then
+        retry.
       </p>
     {:else if viewState.phase === 'loading' || viewState.phase === 'idle'}
       <p class="muted-note" role="status">Loading places for this chart view…</p>

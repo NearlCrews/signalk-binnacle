@@ -7,7 +7,7 @@ import {
   poiInlineIconSvg,
 } from '$entities/poi-icons';
 import type { SymbolsStore } from '$entities/symbols';
-import { isTabKey, registerDismiss } from '$shared/ui';
+import { AnchoredMenu, isTabKey } from '$shared/ui';
 
 // Optional "default" entry at the top of the list (e.g. "Default waypoint marker"). When provided,
 // value='' selects it. If no override symbol exists for defaultOption.iconId, fallbackSvg renders.
@@ -93,35 +93,14 @@ const poiOverrides = $derived(
 );
 
 let isOpen = $state(false);
-let opensAbove = $state(false);
-let listMaxHeight = $state(256);
-let pickerEl: HTMLElement | undefined;
-let triggerEl: HTMLButtonElement | undefined;
-const optionEls = $state<(HTMLElement | null)[]>([]);
-// The pending placement frame, so closing or unmounting the picker cannot leave a frame that reads
-// a detached trigger.
-let placeFrame: number | null = null;
+let triggerEl = $state<HTMLButtonElement>();
+let typeahead = '';
+let lastTypedAt = 0;
+let surfaceRef = $state<HTMLElement>();
 
-$effect(() => {
-  if (!isOpen) return;
-  // An outside pointer closes without moving focus (the pointer already left). Escape goes through
-  // the shared dismiss stack so it peels this picker before the dialog it sits inside, and returns
-  // focus to the trigger the way a keyboard close should.
-  const close = (e: MouseEvent) => {
-    if (pickerEl && !pickerEl.contains(e.target as Node)) isOpen = false;
-  };
-  window.addEventListener('click', close, { capture: true });
-  const unregister = registerDismiss(closeAndReturnFocus);
-  return () => {
-    window.removeEventListener('click', close, { capture: true });
-    unregister();
-    if (placeFrame !== null) {
-      cancelAnimationFrame(placeFrame);
-      placeFrame = null;
-    }
-  };
-});
-
+function optionElements(): HTMLElement[] {
+  return [...(surfaceRef?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+}
 function closeAndReturnFocus(): void {
   isOpen = false;
   triggerEl?.focus();
@@ -135,25 +114,23 @@ function select(v: string): void {
 
 function openAndFocus(): void {
   if (disabled) return;
-  // Drop stale element refs so a now-shorter option list cannot focus a removed node on reopen.
-  optionEls.length = 0;
+  typeahead = '';
   isOpen = true;
+}
+
+function focusSelected(): void {
   const idx = options.findIndex((o) => o.value === value);
-  const target = idx >= 0 ? idx : 0;
-  // After the list paints, place it in the roomier direction and focus the active row. Reopening
-  // while a frame is still queued supersedes it, so the older target cannot steal the focus.
-  if (placeFrame !== null) cancelAnimationFrame(placeFrame);
-  placeFrame = requestAnimationFrame(() => {
-    placeFrame = null;
-    const rect = triggerEl?.getBoundingClientRect();
-    if (rect) {
-      const below = window.innerHeight - rect.bottom - 8;
-      const above = rect.top - 8;
-      opensAbove = below < 256 && above > below;
-      listMaxHeight = Math.max(128, Math.min(256, opensAbove ? above : below));
-    }
-    optionEls[target]?.focus();
-  });
+  const option = optionElements()[idx >= 0 ? idx : 0];
+  const surface = surfaceRef;
+  if (!option || !surface) return;
+  // Scroll only the picker so a selected symbol stays visible without moving its editor.
+  const top = option.offsetTop;
+  const bottom = top + option.offsetHeight;
+  if (top < surface.scrollTop) surface.scrollTop = top;
+  else if (bottom > surface.scrollTop + surface.clientHeight) {
+    surface.scrollTop = bottom - surface.clientHeight;
+  }
+  option.focus({ preventScroll: true });
 }
 
 function handleTriggerKey(e: KeyboardEvent): void {
@@ -175,13 +152,31 @@ function handleOptionKey(e: KeyboardEvent, i: number): void {
     closeAndReturnFocus();
   } else if (e.key === 'ArrowDown') {
     e.preventDefault();
-    optionEls[Math.min(i + 1, options.length - 1)]?.focus();
+    optionElements()[Math.min(i + 1, options.length - 1)]?.focus();
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     if (i === 0) {
       closeAndReturnFocus();
     } else {
-      optionEls[i - 1]?.focus();
+      optionElements()[i - 1]?.focus();
+    }
+  } else if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    optionElements()[e.key === 'Home' ? 0 : options.length - 1]?.focus();
+  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key !== ' ') {
+    e.preventDefault();
+    const now = performance.now();
+    typeahead = `${now - lastTypedAt > 700 ? '' : typeahead}${e.key.toLocaleLowerCase()}`;
+    lastTypedAt = now;
+    const query = [...typeahead].every((letter) => letter === typeahead[0])
+      ? typeahead[0]
+      : typeahead;
+    for (let offset = 1; offset <= options.length; offset++) {
+      const index = (i + offset) % options.length;
+      if (options[index].label.toLocaleLowerCase().startsWith(query)) {
+        optionElements()[index]?.focus();
+        break;
+      }
     }
   }
 }
@@ -214,7 +209,7 @@ $effect(() => {
   {/if}
 {/snippet}
 
-<div class="icon-picker" bind:this={pickerEl}>
+<div class="icon-picker">
   <button
     type="button"
     class="picker-trigger"
@@ -234,37 +229,40 @@ $effect(() => {
     <ChevronDown class="picker-chevron" size={14} aria-hidden="true" />
   </button>
 
-  {#if isOpen}
-    <div
-      class="picker-list popover-card"
-      class:opens-above={opensAbove}
-      style:max-block-size={`${listMaxHeight}px`}
-      role="listbox"
-      aria-label="Icon"
-    >
-      {#each options as opt, i (opt.value)}
-        {#if i === poiStart}
-          <div class="caps-label picker-group-label" aria-hidden="true">POI categories</div>
-        {:else if i === poiStart + poiOptions.length && symbolOptions.length > 0}
-          <div class="caps-label picker-group-label" aria-hidden="true">Custom symbols</div>
-        {/if}
-        <button
-          type="button"
-          role="option"
-          class="row-interactive picker-option"
-          aria-selected={value === opt.value}
-          class:is-on={value === opt.value}
-          tabindex={-1}
-          bind:this={optionEls[i]}
-          onclick={() => select(opt.value)}
-          onkeydown={(e) => handleOptionKey(e, i)}
-        >
-          <span class="picker-icon"> {@render iconGlyph(opt)} </span>
-          <span>{opt.label}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <AnchoredMenu
+    open={isOpen}
+    onClose={closeAndReturnFocus}
+    onFocusLeft={() => (isOpen = false)}
+    onPositioned={focusSelected}
+    bind:surfaceRef
+    backdropLabel="Close icon choices"
+    surfaceClass="picker-list popover-card"
+    surfaceStyle={`inline-size: ${triggerEl?.clientWidth ?? 256}px;`}
+    anchor={triggerEl}
+    role="listbox"
+    ariaLabel="Icon"
+  >
+    {#each options as opt, i (opt.value)}
+      {#if i === poiStart}
+        <div class="caps-label picker-group-label" aria-hidden="true">POI categories</div>
+      {:else if i === poiStart + poiOptions.length && symbolOptions.length > 0}
+        <div class="caps-label picker-group-label" aria-hidden="true">Custom symbols</div>
+      {/if}
+      <button
+        type="button"
+        role="option"
+        class="row-interactive picker-option"
+        aria-selected={value === opt.value}
+        class:is-on={value === opt.value}
+        tabindex={-1}
+        onclick={() => select(opt.value)}
+        onkeydown={(e) => handleOptionKey(e, i)}
+      >
+        <span class="picker-icon"> {@render iconGlyph(opt)} </span>
+        <span>{opt.label}</span>
+      </button>
+    {/each}
+  </AnchoredMenu>
 </div>
 
 <style>
@@ -314,27 +312,19 @@ $effect(() => {
 
 /* The floating frame is the shared .popover-card; only position, sizing, scroll, padding, and
    stacking stay scoped here. */
-.picker-list {
-  position: absolute;
-  inset-block-start: calc(100% + 2px);
-  inset-inline-start: 0;
-  inline-size: 100%;
-  max-block-size: 16rem;
+:global(.picker-list) {
+  max-inline-size: calc(100vw - 2 * var(--space-2));
+  max-block-size: min(16rem, calc(100 * var(--dvh) - 2 * var(--space-2)));
   overflow-y: auto;
   margin: 0;
   padding: var(--space-1) 0;
   z-index: var(--z-menu);
 }
 
-.picker-list.opens-above {
-  inset-block-start: auto;
-  inset-block-end: calc(100% + 2px);
-}
-
 /* Option rows compose the shared .row-interactive primitive (hover tint, lit .is-on body, control
    height) so they are buttons that activate on Enter and Space, pick up the shared :focus-visible
    ring, and match the app's other interactive rows. Only the row's own layout stays scoped. */
-.picker-list .picker-option {
+.picker-option {
   display: flex;
   align-items: center;
   gap: var(--space-2);

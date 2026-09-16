@@ -12,7 +12,11 @@ const armedDelete = {
   confirm: noop,
 } as unknown as ArmedRow;
 
-function body(region: SavedRegionDto, pollFailed = false): string {
+function body(
+  region: SavedRegionDto,
+  pollFailed = false,
+  overrides: Record<string, unknown> = {},
+): string {
   return render(SavedRegionsView, {
     props: {
       regions: [region],
@@ -28,6 +32,7 @@ function body(region: SavedRegionDto, pollFailed = false): string {
       onUseTemplate: noop,
       onRedownload: noop,
       onRetryStatus: noop,
+      ...overrides,
     },
   }).body;
 }
@@ -48,6 +53,16 @@ const savedRegion: SavedRegionDto = {
 };
 
 describe('SavedRegionsView', () => {
+  it('provides a local retry when the first area read fails', () => {
+    const html = body(savedRegion, false, {
+      regions: null,
+      loadError: 'Could not load saved areas.',
+      onRetryLoad: noop,
+    });
+    expect(html).toContain('Could not load saved areas.');
+    expect(html).toContain('Retry saved areas');
+    expect(html).not.toContain('Loading areas');
+  });
   it('offers a status retry after a recovery poll loses contact', () => {
     const html = body(savedRegion, true);
     expect(html).toContain('Download status is unavailable');

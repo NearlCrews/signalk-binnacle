@@ -79,6 +79,10 @@ describe('HistoryStrip', () => {
     expect(body).toContain('aria-label="Fast playback, 2 times real time"');
     expect(body).toContain('2026');
     expect(body).toContain('Source: <span class="num">provider-a</span>');
+    expect(body).toContain(`Each ${timeTravelPreset('24h').resolutionSeconds} s bucket`);
+    expect(body).toContain('average depth below transducer');
+    expect(body).toContain('maximum apparent wind speed');
+    expect(body).toContain('aggregated readings, not instantaneous conditions');
     controller.dispose();
   });
 

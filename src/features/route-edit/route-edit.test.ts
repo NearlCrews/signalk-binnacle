@@ -26,6 +26,7 @@ vi.mock('terra-draw', () => {
     static instances: FakeTerraDraw[] = [];
     features: StoreFeature[] = [];
     modes: object[];
+    rejectNext = false;
     #listeners: Array<(ids: Array<string | number>, type: string) => void> = [];
     #finishListeners: Array<() => void> = [];
     #nextId = 1;
@@ -39,7 +40,9 @@ vi.mock('terra-draw', () => {
       else if (event === 'finish') this.#finishListeners.push(cb as () => void);
     }
     start(): void {}
-    stop(): void {}
+    stop(): void {
+      this.features = [];
+    }
     setMode(mode: string): void {
       // Real Terra Draw throws on an unregistered mode name, so a typo surfaces in tests too.
       if (mode !== 'point' && mode !== 'linestring' && mode !== 'select') {
@@ -51,6 +54,10 @@ vi.mock('terra-draw', () => {
       return [...this.features];
     }
     addFeatures(features: StoreFeature[]): Array<{ valid: boolean }> {
+      if (this.rejectNext) {
+        this.rejectNext = false;
+        return features.map(() => ({ valid: false }));
+      }
       for (const f of features) {
         this.features.push({
           ...f,
@@ -129,6 +136,7 @@ vi.mock('terra-draw', () => {
 });
 
 interface FakeDraw {
+  rejectNext: boolean;
   features: Array<{
     id?: string | number;
     properties: Record<string, unknown>;
@@ -139,10 +147,12 @@ interface FakeDraw {
   addLine(coordinates: number[][]): void;
   addCursorPoint(coordinates: number[]): void;
   finishLine(): void;
+  removeFeatures(ids: Array<string | number>): void;
 }
 
 interface CapturedMode {
   options?: {
+    keyEvents?: { cancel: string | null; finish: string | null };
     snapping?: { toCustom?: SnapToCustom };
     flags?: {
       linestring?: { feature?: { coordinates?: { snappable?: unknown } } };
@@ -187,6 +197,83 @@ function startDrawing(): {
   editor.start();
   return { draw: lastInstance(), editor, emitted };
 }
+
+describe('coordinate route replacement', () => {
+  it('leaves Escape cancellation to the guarded application dismissal', () => {
+    const { draw } = startDrawing();
+    expect(capturedMode(draw, TerraDrawLineStringMode).options?.keyEvents).toEqual({
+      cancel: null,
+      finish: 'Enter',
+    });
+  });
+
+  it('replaces the adapter geometry once, preserves names, and permits an empty draft', () => {
+    const { editor, emitted, draw } = startDrawing();
+    const points = [
+      { position: { latitude: 42, longitude: -83 }, name: 'Harbor' },
+      { position: { latitude: 43, longitude: -82 } },
+    ];
+    expect(editor.replaceWaypoints(points)).toBe(true);
+    expect(emitted).toEqual([points]);
+    expect(draw.features).toHaveLength(1);
+    expect(draw.features[0].geometry.coordinates).toEqual([
+      [-83, 42],
+      [-82, 43],
+    ]);
+    expect(editor.replaceWaypoints([])).toBe(true);
+    expect(draw.features).toEqual([]);
+    expect(emitted.at(-1)).toEqual([]);
+    editor.stop();
+    expect(editor.replaceWaypoints(points)).toBe(false);
+  });
+
+  it('rejects invalid coordinates without replacing the working geometry', () => {
+    const { editor, emitted, draw } = startDrawing();
+    draw.addLine([
+      [0, 0],
+      [1, 1],
+      [1, 1],
+    ]);
+    const before = [...emitted];
+    expect(editor.replaceWaypoints([{ position: { latitude: Number.NaN, longitude: 0 } }])).toBe(
+      false,
+    );
+    expect(emitted).toEqual(before);
+    expect(draw.features).toHaveLength(1);
+  });
+
+  it('restores the preceding draft when the draw store rejects replacement geometry', () => {
+    const { editor, emitted, draw } = startDrawing();
+    const previous = [
+      { position: { latitude: 42, longitude: -83 } },
+      { position: { latitude: 43, longitude: -82 } },
+    ];
+    expect(editor.replaceWaypoints(previous)).toBe(true);
+    draw.rejectNext = true;
+    expect(
+      editor.replaceWaypoints(
+        previous.map((point) => ({
+          position: { ...point.position, latitude: point.position.latitude + 1 },
+        })),
+      ),
+    ).toBe(false);
+    expect(draw.features).toHaveLength(1);
+    expect(draw.features[0].geometry.coordinates).toEqual([
+      [-83, 42],
+      [-82, 43],
+    ]);
+    expect(emitted).toEqual([previous]);
+  });
+
+  it('cancels a queued first-point seed when a newer coordinate edit replaces it', async () => {
+    const { editor } = startDrawing();
+    expect(editor.replaceWaypoints([{ position: { latitude: 1, longitude: 2 } }])).toBe(true);
+    expect(editor.replaceWaypoints([])).toBe(true);
+    // The map stub has no canvas. A stale queued seed would throw if it reached the adapter.
+    await Promise.resolve();
+    editor.stop();
+  });
+});
 
 describe('route-edit converters', () => {
   it('routeToStoreFeature emits a linestring Feature in [lon, lat] with mode linestring', () => {
@@ -440,6 +527,7 @@ describe('createRouteEditor drawing-mode reads', () => {
 
   it('does not prune queued stale lines after the editor stops', async () => {
     const { draw, editor } = startDrawing();
+    const removeFeatures = vi.spyOn(draw, 'removeFeatures');
     draw.addLine([
       [0, 0],
       [1, 1],
@@ -450,9 +538,8 @@ describe('createRouteEditor drawing-mode reads', () => {
     ]);
     editor.stop();
     await Promise.resolve();
-    expect(draw.features.filter((feature) => feature.geometry.type === 'LineString')).toHaveLength(
-      2,
-    );
+    expect(removeFeatures).not.toHaveBeenCalled();
+    expect(draw.features).toEqual([]);
   });
 
   it('seeds the first waypoint by dispatching an opening tap at the projected pixel', async () => {

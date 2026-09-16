@@ -16,7 +16,13 @@ import {
 import { type Bbox4, formatBounds } from '$shared/geo';
 import type { LayerListItem } from '$shared/map';
 import type { UpgradeOutcome } from '$shared/signalk';
-import { InlineConfirm, SubViewHeader, TextField, WriteAccessNote } from '$shared/ui';
+import {
+  InlineConfirm,
+  restoreFocusAfterCancel,
+  SubViewHeader,
+  TextField,
+  WriteAccessNote,
+} from '$shared/ui';
 import ChartSourceReview from './ChartSourceReview.svelte';
 import ChartSpecList from './ChartSpecList.svelte';
 
@@ -49,6 +55,8 @@ const {
 }: Props = $props();
 
 let confirming = $state(false);
+let deleteTrigger = $state<HTMLButtonElement>();
+let replacementTrigger = $state<HTMLButtonElement>();
 // Not `name`: that shadows the global window.name, which the linter flags on reassignment.
 let chartName = $derived(userSource?.name ?? item.title);
 let replacementMode = $state<'idle' | 'url' | 'review'>('idle');
@@ -138,6 +146,11 @@ function doDelete(): void {
   userCharts.remove(id);
 }
 
+function cancelDelete(): void {
+  confirming = false;
+  void restoreFocusAfterCancel(() => deleteTrigger);
+}
+
 function startReplacement(): void {
   if (!canEdit || sourceMutationBlocked || operation) return;
   replacementMode = 'url';
@@ -156,6 +169,7 @@ function cancelReplacement(): void {
   replacementDraft = undefined;
   operation = undefined;
   operationError = undefined;
+  void restoreFocusAfterCancel(() => replacementTrigger);
 }
 
 function stageReplacement(url: string): void {
@@ -303,6 +317,7 @@ function changeSharing(share: boolean): void {
             type="button"
             class="btn"
             onclick={startReplacement}
+            bind:this={replacementTrigger}
             disabled={sourceMutationBlocked || operation !== undefined}
           >
             <Link2 size={16} aria-hidden="true" />
@@ -430,16 +445,13 @@ function changeSharing(share: boolean): void {
       </p>
     {/if}
     {#if confirming}
-      <InlineConfirm
-        question="Delete this chart?"
-        onConfirm={doDelete}
-        onCancel={() => (confirming = false)}
-      />
+      <InlineConfirm question="Delete this chart?" onConfirm={doDelete} onCancel={cancelDelete} />
     {:else}
       <button
         type="button"
         class="btn btn-danger"
         onclick={() => (confirming = true)}
+        bind:this={deleteTrigger}
         disabled={deleteBlocked}
       >
         <Trash2 size={16} aria-hidden="true" />

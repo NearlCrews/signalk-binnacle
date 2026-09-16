@@ -5,6 +5,16 @@ import { PersistedValue } from '$shared/settings';
 import { SignalKStore } from '$shared/signalk';
 import { createTrendsController, type TrendsDeps } from './trends-controller.svelte';
 
+const { loadTrendHistory } = vi.hoisted(() => ({
+  loadTrendHistory: vi.fn(async () => ({
+    state: 'empty',
+    series: new Map(),
+    failedProviders: [],
+    answeredProviders: ['history'],
+  })),
+}));
+vi.mock('./trends-history', () => ({ loadTrendHistory }));
+
 function descriptor(id: string, path = `path.${id}`): InstrumentTrendDescriptor {
   return {
     id,
@@ -73,6 +83,57 @@ function setup(
 }
 
 describe('createTrendsController in a reactive client root', () => {
+  it('refreshes visible server history at a bounded cadence and stops when closed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.UTC(2026, 8, 16));
+    loadTrendHistory.mockClear();
+    loadTrendHistory.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      return {
+        state: 'empty',
+        series: new Map(),
+        failedProviders: [],
+        answeredProviders: ['history'],
+      };
+    });
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const harness = setup(['depth'], undefined, {
+      getHistoryProviders: () => ({ ids: ['history'] }),
+      getHistoryProviderState: () => 'available',
+    });
+    try {
+      harness.controller.setOpen(true);
+      await tick();
+      await vi.waitFor(() => expect(loadTrendHistory).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(500);
+      await vi.waitFor(() => expect(harness.controller.loading).toBe(false));
+      expect(harness.controller.lastCheckedMs).toBeDefined();
+      window.dispatchEvent(new Event('focus'));
+      await tick();
+      expect(loadTrendHistory).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await tick();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loadTrendHistory).toHaveBeenCalledTimes(2);
+      visibility.mockReturnValue('hidden');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(loadTrendHistory).toHaveBeenCalledTimes(2);
+      visibility.mockReturnValue('visible');
+      window.dispatchEvent(new Event('focus'));
+      await tick();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loadTrendHistory).toHaveBeenCalledTimes(3);
+      harness.controller.setOpen(false);
+      await tick();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(loadTrendHistory).toHaveBeenCalledTimes(3);
+    } finally {
+      harness.dispose();
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps selected instruments subscribed with the Instruments instant policy', () => {
     const harness = setup();
     expect(harness.subscribe).toHaveBeenCalledWith([

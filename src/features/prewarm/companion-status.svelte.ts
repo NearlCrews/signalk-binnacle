@@ -5,7 +5,7 @@
 
 import { fetchAdminSessionState } from '$shared/signalk';
 import type { AccessRecoveryState } from '$shared/ui';
-import { createRegionsClient, HttpStatusError, InvalidCacheStatsError } from './regions-client.js';
+import { loadRegionsClient } from './regions-client-loader';
 
 export const COMPANION_POLL_MS = 30_000;
 
@@ -86,6 +86,7 @@ export class CompanionStatus {
   async #classifyAccessRefusal(base: string): Promise<void> {
     const origin = new URL(base).origin;
     const session = await fetchAdminSessionState(origin, this.#fetchImpl);
+    if (base !== this.#getBase()) return;
     this.#state =
       session === 'signed-out'
         ? 'needs-login'
@@ -101,16 +102,25 @@ export class CompanionStatus {
     if (typeof document !== 'undefined' && document.hidden) return;
 
     this.#inFlight = true;
+    let client: Awaited<ReturnType<typeof loadRegionsClient>> | undefined;
     try {
-      const stats = await createRegionsClient(base, this.#fetchImpl).getCacheStats();
+      client = await loadRegionsClient();
+      if (base !== this.#getBase() || (typeof document !== 'undefined' && document.hidden)) return;
+      const stats = await client.createRegionsClient(base, this.#fetchImpl).getCacheStats();
+      if (base !== this.#getBase()) return;
       this.#state = 'serving';
       this.#cacheBytes = stats.bytes;
       this.#failStreak = 0;
     } catch (error) {
-      if (error instanceof HttpStatusError && (error.status === 401 || error.status === 403)) {
+      if (base !== this.#getBase()) return;
+      if (
+        client &&
+        error instanceof client.HttpStatusError &&
+        (error.status === 401 || error.status === 403)
+      ) {
         await this.#classifyAccessRefusal(base);
         this.#failStreak = 0;
-      } else if (error instanceof InvalidCacheStatsError) {
+      } else if (client && error instanceof client.InvalidCacheStatsError) {
         // A reachable companion with malformed data is a server error, not an unavailable service.
         this.#state = 'error';
         this.#failStreak = 0;
@@ -118,7 +128,9 @@ export class CompanionStatus {
         this.#failStreak += 1;
         if (this.#failStreak >= COMPANION_FAIL_THRESHOLD) {
           this.#state =
-            error instanceof HttpStatusError && error.status >= 500 ? 'error' : 'offline';
+            client && error instanceof client.HttpStatusError && error.status >= 500
+              ? 'error'
+              : 'offline';
         }
       }
     } finally {

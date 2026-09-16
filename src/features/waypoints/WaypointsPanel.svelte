@@ -19,6 +19,7 @@ import {
   createPanelMinimize,
   InlineConfirm,
   NavSortControl,
+  restoreFocusAfterCancel,
   SavedList,
   SearchInput,
   SlideOver,
@@ -177,6 +178,18 @@ function confirmNavigation(): void {
   minimize.collapse();
 }
 
+function cancelRowAction(label: 'Navigate to waypoint' | 'Delete waypoint'): void {
+  const card = document.activeElement?.closest<HTMLElement>('.card-frame');
+  if (label === 'Navigate to waypoint') confirmingNavigate = undefined;
+  else armedDelete.cancel();
+  void restoreFocusAfterCancel(() => {
+    const trigger = card?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    return trigger && !trigger.disabled
+      ? trigger
+      : (card?.querySelector<HTMLButtonElement>('button.name') ?? undefined);
+  });
+}
+
 // Before the navigator chooses a sort, follow GPS availability: nearest first as soon as a fresh fix
 // arrives, and name first if the fix is absent or stale. An explicit sort choice is never overridden.
 $effect(() => {
@@ -262,8 +275,11 @@ $effect(() => {
 
   {#if selectedPinned}
     <p class="muted-note" role="status">
-      The chart-selected waypoint is shown first. It does not match the current search, which is
-      unchanged below.
+      The chart-selected waypoint is shown first.
+      {allRows.some((row) => row.id === selectedId)
+        ? 'It is outside the displayed result limit.'
+        : 'It does not match the current search.'}
+      The search and sort are unchanged below.
     </p>
   {/if}
   <SavedList
@@ -312,13 +328,13 @@ $effect(() => {
           question={`Start navigation to ${waypoint.name}? Check the destination before relying on it.`}
           confirmLabel="Start navigation"
           onConfirm={confirmNavigation}
-          onCancel={() => (confirmingNavigate = undefined)}
+          onCancel={() => cancelRowAction('Navigate to waypoint')}
         />
       {:else if armedDelete.isArmed(waypoint.id)}
         <InlineConfirm
           question="Delete this waypoint?"
           onConfirm={() => armedDelete.confirm(waypoint.id)}
-          onCancel={() => armedDelete.cancel()}
+          onCancel={() => cancelRowAction('Delete waypoint')}
         />
       {:else}
         <div class="actions">

@@ -52,6 +52,13 @@ afterEach(() => {
 });
 
 describe('ProfileSwitcher menu', () => {
+  it('focuses the first row after viewport placement makes the menu visible', async () => {
+    const target = mountSwitcher();
+    trigger(target).focus();
+    openMenu(target);
+    await vi.waitFor(() => expect(document.activeElement).toBe(menuRows(target)[0]));
+  });
+
   it('opens one row per profile plus Manage profiles, marking the active row', () => {
     const target = mountSwitcher();
     openMenu(target);

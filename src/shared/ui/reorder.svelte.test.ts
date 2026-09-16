@@ -37,6 +37,27 @@ function fakeKey(key: string): KeyboardEvent {
 }
 
 describe('createReorder', () => {
+  it('offers the same bounded and announced movement to individual pointer taps', () => {
+    const commit = vi.fn();
+    const r = createReorder({
+      getItems: () => makeItems(3),
+      getListEl: () => undefined,
+      commit,
+      rowAttribute: 'data-row',
+      handleSelector: '.handle',
+      itemNoun: 'Item',
+      clampSlot: (_items, _id, slot) => Math.max(1, slot),
+    });
+    expect(r.canMove('item-1', -1)).toBe(false);
+    expect(r.canMove('item-1', 1)).toBe(true);
+    r.moveBy('item-1', -1);
+    expect(commit).not.toHaveBeenCalled();
+    r.moveBy('item-1', 1);
+    expect(commit).toHaveBeenCalledExactlyOnceWith('item-1', 2);
+    expect(r.reorderAnnouncement).toBe('Moved Item 1 to position 3 of 3.');
+    expect(r.canMove('missing', 1)).toBe(false);
+    expect(r.canMove('item-2', 1)).toBe(false);
+  });
   it('ArrowDown commits id to from + 1 and sets a non-empty announcement', () => {
     const items = makeItems(3);
     const committed: Array<{ id: string; slot: number }> = [];

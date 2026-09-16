@@ -41,6 +41,9 @@ describe('CompanionAiPanel', () => {
   it('frames the reports as advisory, never navigation truth', () => {
     const html = renderPanel();
     expect(html).toContain('They are AI summaries for review, never navigation truth.');
+    expect(html).toContain('through OpenRouter to its selected model provider');
+    expect(html).toContain('shared paid credits');
+    expect(html).toContain('Refresh reports only reads saved reports');
   });
 
   it('explains the absent plugin instead of hiding the feature', () => {
@@ -89,6 +92,17 @@ describe('CompanionAiPanel', () => {
           : undefined,
     });
     expect(html).toContain('Run started. The report updates here when it completes.');
+  });
+
+  it('labels undated and future reports instead of hiding their freshness state', () => {
+    const html = renderPanel({
+      reports: [
+        report({ timestampMs: undefined }),
+        report({ analyzerId: 'forecast', timestampMs: Date.now() + 86_400_000 }),
+      ],
+    });
+    expect(html).toContain('Report time unknown');
+    expect(html).toContain('Report time is in the future; age unknown');
   });
 
   it('blocks Run now and teaches the access fix when writes are blocked', () => {

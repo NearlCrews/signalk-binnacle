@@ -5,10 +5,15 @@ import type { HandoffController } from './handoff-controller.svelte';
 
 function renderPanel(overrides: Partial<HandoffController> = {}): string {
   const controller: HandoffController = {
+    draft: '',
+    error: undefined,
+    pendingCount: 0,
+    queueFull: false,
+    memoryOnly: false,
     records: [],
     loadState: 'ready',
     syncing: false,
-    create: vi.fn(),
+    create: vi.fn(() => true),
     refresh: vi.fn(async () => undefined),
     syncDrafts: vi.fn(async () => undefined),
     dispose: vi.fn(),
@@ -60,5 +65,18 @@ describe('HandoffPanel', () => {
   it('explains the device-only degrade instead of hiding it', () => {
     const html = renderPanel({ loadState: 'unavailable' });
     expect(html).toContain('snapshots stay on this device and sync when it returns');
+  });
+
+  it('shows queue capacity and a recoverable full state without silently removing records', () => {
+    const html = renderPanel({ pendingCount: 10, queueFull: true, draft: 'Hold this note.' });
+    expect(html).toContain('10 of 10 offline queue slots used');
+    expect(html).toContain('No queued records have been removed');
+    expect(html).toContain('Retry syncing');
+    expect(html).toContain('Discard note');
+    expect(html).toMatch(/<button\b[^>]*\bdisabled[^>]*>\s*Take handoff snapshot\s*<\/button>/);
+  });
+
+  it('does not imply a failed device write is durable', () => {
+    expect(renderPanel({ memoryOnly: true })).toContain('Changes are in memory only');
   });
 });

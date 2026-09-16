@@ -12,6 +12,8 @@ export { default as DangerStrip } from './DangerStrip.svelte';
 export { GenericAlarm, selectGenericAlarms } from './generic-alarm.svelte';
 export { LookoutAlarm } from './lookout-alarm';
 export {
+  canAcknowledgeNotification,
+  canSilenceNotification,
   isRaisedNotification,
   notificationGrade,
   notificationLabel,

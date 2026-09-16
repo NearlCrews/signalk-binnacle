@@ -43,7 +43,11 @@ const {
 // explicit and keeps the compiler from flagging a missed reactive reference.
 let text = $state(untrack(() => value));
 
-$effect(() => registerDismiss(() => onCancel()));
+$effect(() =>
+  registerDismiss(() => {
+    if (!busy) onCancel();
+  }),
+);
 
 function submit(event: SubmitEvent): void {
   event.preventDefault();

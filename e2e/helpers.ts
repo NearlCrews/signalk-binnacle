@@ -53,18 +53,27 @@ export async function expectNoHorizontalOverflow(surface: Locator): Promise<void
 // they exclude a scrollbar, which a surface pinned to the trailing edge sits inside of.
 export async function expectInsideViewport(surface: Locator, page: Page): Promise<void> {
   await expect(surface).toBeVisible();
-  const [box, viewport] = await Promise.all([
-    surface.boundingBox(),
-    page.evaluate(() => ({
-      width: document.documentElement.clientWidth,
-      height: document.documentElement.clientHeight,
-    })),
-  ]);
-  if (!box) throw new Error('Floating surface did not lay out.');
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  await expect
+    .poll(async () => {
+      const [box, viewport] = await Promise.all([
+        surface.boundingBox(),
+        page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          height: document.documentElement.clientHeight,
+        })),
+      ]);
+      if (!box) return 'Surface is still laying out';
+      if (
+        box.x < 0 ||
+        box.y < 0 ||
+        box.x + box.width > viewport.width ||
+        box.y + box.height > viewport.height
+      ) {
+        return `Surface ${JSON.stringify(box)} exceeds viewport ${JSON.stringify(viewport)}`;
+      }
+      return null;
+    })
+    .toBeNull();
 }
 
 // Safety chrome and its touch-lock holes update through layout observers. Visibility alone can
@@ -87,14 +96,31 @@ export async function expectHelmHitTarget(control: Locator): Promise<void> {
     .toBeNull();
 }
 
-// Measure rendered text contrast against the first opaque ancestor surface. This is intentionally
+// Measure rendered text contrast against the composited ancestor surfaces. This is intentionally
 // browser-side so color-mix(), theme variables, and the real cascade are all resolved before the
 // WCAG relative-luminance calculation runs.
 export async function contrastRatio(target: Locator): Promise<number> {
   return target.evaluate((element) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('A 2D canvas is required to resolve rendered colors.');
     const rgba = (value: string): [number, number, number, number] => {
-      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
-      return [channels[0] ?? 0, channels[1] ?? 0, channels[2] ?? 0, channels[3] ?? 1];
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = value;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b, alpha] = context.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, alpha / 255];
+    };
+    const over = (
+      front: [number, number, number, number],
+      back: [number, number, number, number],
+    ): [number, number, number, number] => {
+      const alpha = front[3] + back[3] * (1 - front[3]);
+      if (alpha === 0) return [0, 0, 0, 0];
+      const channel = (index: number) =>
+        (front[index] * front[3] + back[index] * back[3] * (1 - front[3])) / alpha;
+      return [channel(0), channel(1), channel(2), alpha];
     };
     const luminance = ([r, g, b]: [number, number, number, number]) => {
       const linear = [r, g, b].map((channel) => {
@@ -103,12 +129,13 @@ export async function contrastRatio(target: Locator): Promise<number> {
       });
       return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
     };
-    const foreground = rgba(getComputedStyle(element).color);
     let background: [number, number, number, number] = [0, 0, 0, 0];
     for (let node: Element | null = element; node; node = node.parentElement) {
-      background = rgba(getComputedStyle(node).backgroundColor);
+      background = over(background, rgba(getComputedStyle(node).backgroundColor));
       if (background[3] >= 0.99) break;
     }
+    background = over(background, [255, 255, 255, 1]);
+    const foreground = over(rgba(getComputedStyle(element).color), background);
     const light = Math.max(luminance(foreground), luminance(background));
     const dark = Math.min(luminance(foreground), luminance(background));
     return (light + 0.05) / (dark + 0.05);

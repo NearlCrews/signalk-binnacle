@@ -36,6 +36,45 @@ afterEach(() => {
 });
 
 describe('handoff controller', () => {
+  it('blocks the eleventh offline snapshot without evicting an accepted draft', () => {
+    const client = fakeClient();
+    const queue = drafts();
+    const controller = createHandoffController({
+      client: () => client,
+      drafts: queue,
+      collectFacts: () => [],
+      online: () => false,
+      now: () => 1_000,
+    });
+    cleanups.push(() => controller.dispose());
+    for (let index = 0; index < 10; index += 1)
+      expect(controller.create(`Snapshot ${index}`)).toBe(true);
+    controller.draft = 'Do not lose this note';
+    expect(controller.create(controller.draft)).toBe(false);
+    expect(controller.queueFull).toBe(true);
+    expect(controller.pendingCount).toBe(10);
+    expect(queue.value[0].note).toBe('Snapshot 0');
+    expect(controller.draft).toBe('Do not lose this note');
+    expect(controller.error).toContain('Ten snapshots are waiting');
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it('does not accept a snapshot or lose the note when device persistence fails', () => {
+    const storage = createFakeStorage();
+    vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    const queue = new PersistedValue<HandoffSnapshot[]>('test:handoff-quota', [], storage);
+    const client = fakeClient();
+    const { controller } = controllerWith(client, queue);
+    controller.draft = 'Retain this authored note';
+    expect(controller.create(controller.draft)).toBe(false);
+    expect(queue.value).toEqual([]);
+    expect(controller.draft).toBe('Retain this authored note');
+    expect(controller.error).toContain('could not be saved');
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
   it('retains an accepted snapshot when an older in-flight server read finishes', async () => {
     let finish!: (result: HandoffLoadResult) => void;
     const load = vi.fn(

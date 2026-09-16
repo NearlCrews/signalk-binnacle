@@ -662,4 +662,61 @@ describe('notes overlay', () => {
       vi.useRealTimers();
     }
   });
+
+  it('explicit retry bypasses the unchanged viewport and failure cooldown', async () => {
+    fetchNotesMock.mockResolvedValueOnce(undefined).mockResolvedValueOnce([MARINA_NOTE]);
+    const overlay = createNotesOverlay('http://pi', () => undefined);
+    const ctx = viewCtx({ zoom: 12, lng: 0, lat: 0 });
+    overlay.sync(ctx);
+    await settle();
+    overlay.sync(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledTimes(1);
+    overlay.retry(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('explicit retry bypasses a fresh cache but does not duplicate an in-flight request', async () => {
+    fetchNotesMock.mockResolvedValueOnce([MARINA_NOTE]);
+    const overlay = createNotesOverlay('http://pi', () => undefined);
+    const ctx = viewCtx({ zoom: 12, lng: 0, lat: 0 });
+    overlay.sync(ctx);
+    await settle();
+    let finish!: (notes: NotePoint[] | undefined) => void;
+    fetchNotesMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    overlay.retry(ctx);
+    overlay.retry(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledTimes(2);
+    finish([MARINA_NOTE]);
+    await settle();
+  });
+
+  it('keeps accepted visible notes when retry fails and does not retry while offline', async () => {
+    let online = true;
+    const seen: NotePoint[][] = [];
+    fetchNotesMock.mockResolvedValueOnce([MARINA_NOTE]).mockResolvedValueOnce(undefined);
+    const overlay = createNotesOverlay('http://pi', () => undefined, undefined, undefined, {
+      isOnline: () => online,
+      onNotes: (notes) => seen.push(notes),
+    });
+    const ctx = fakeOverlayContext(viewFakeMap({ zoom: 12, lng: 0, lat: 0 }));
+    await overlay.add(ctx);
+    overlay.sync(ctx);
+    await settle();
+    expect(seen.at(-1)?.map((note) => note.id)).toEqual(['n1']);
+    overlay.retry(ctx);
+    await settle();
+    expect(seen.at(-1)?.map((note) => note.id)).toEqual(['n1']);
+    online = false;
+    overlay.retry(ctx);
+    await settle();
+    expect(fetchNotesMock).toHaveBeenCalledTimes(2);
+  });
 });

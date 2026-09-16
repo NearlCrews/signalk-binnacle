@@ -7,8 +7,10 @@ import { SignalKStore } from '$shared/signalk';
 import { createFrameFactory } from '$shared/testing';
 import NavStrip from './NavStrip.svelte';
 
-function activeGuidance(extraSelf: Record<string, unknown> = {}): CourseGuidance {
-  const store = new SignalKStore();
+function activeGuidance(
+  extraSelf: Record<string, unknown> = {},
+  store = new SignalKStore(),
+): CourseGuidance {
   store.applyFrame(
     createFrameFactory()({
       'navigation.position': { latitude: 42, longitude: -83 },
@@ -34,13 +36,14 @@ function mountStrip(
   const onRestartCourse = vi.fn();
   const onSetTargetArrivalTime = vi.fn();
   const target = document.createElement('div');
+  const store = new SignalKStore();
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
     component = mount(NavStrip, {
       target,
       props: {
-        guidance: activeGuidance(extraSelf),
+        guidance: activeGuidance(extraSelf, store),
         units,
         onStop,
         ...(withSettings ? { onSetArrivalCircle, onRestartCourse, onSetTargetArrivalTime } : {}),
@@ -68,6 +71,7 @@ function mountStrip(
   };
   return {
     target,
+    store,
     onStop,
     onSetArrivalCircle,
     onRestartCourse,
@@ -99,6 +103,38 @@ afterEach(() => {
 });
 
 describe('NavStrip stop', () => {
+  it('invalidates a stop confirmation when the same-named course changes position', () => {
+    const strip = mountStrip();
+    strip.tapStop();
+    strip.store.applyFrame(
+      createFrameFactory()({
+        'navigation.course.nextPoint': {
+          name: 'Harbor entrance',
+          position: { latitude: 44, longitude: -81 },
+        },
+      }),
+    );
+    flushSync();
+    expect(strip.label()).toBe('Stop');
+    strip.tapStop();
+    expect(strip.onStop).not.toHaveBeenCalled();
+  });
+
+  it('invalidates a stop confirmation when another station restarts the leg origin', () => {
+    const strip = mountStrip({
+      'navigation.course.previousPoint': { position: { latitude: 42, longitude: -83 } },
+    });
+    strip.tapStop();
+    strip.store.applyFrame(
+      createFrameFactory()({
+        'navigation.course.previousPoint': { position: { latitude: 42.01, longitude: -83.01 } },
+      }),
+    );
+    flushSync();
+    expect(strip.label()).toBe('Stop');
+    strip.tapStop();
+    expect(strip.onStop).not.toHaveBeenCalled();
+  });
   it('arms on the first tap without stopping navigation', () => {
     const strip = mountStrip();
     strip.tapStop();
@@ -211,6 +247,31 @@ describe('NavStrip course settings', () => {
     expect(strip.query('button[aria-label="Course settings"]').getAttribute('aria-expanded')).toBe(
       'false',
     );
+  });
+
+  it('invalidates restart when the active route leg changes', () => {
+    const strip = mountStrip(
+      { 'navigation.course.activeRoute': { href: '/routes/one', pointIndex: 0, pointTotal: 3 } },
+      true,
+    );
+    strip.openSettings();
+    const restart = [
+      ...strip.target.querySelectorAll<HTMLButtonElement>('.course-body button'),
+    ].find((button) => button.textContent?.includes('Restart'));
+    if (!restart) throw new Error('Missing restart button');
+    restart.click();
+    flushSync();
+    expect(restart.textContent).toContain('Restart from here?');
+    strip.store.applyFrame(
+      createFrameFactory()({
+        'navigation.course.activeRoute': { href: '/routes/one', pointIndex: 1, pointTotal: 3 },
+      }),
+    );
+    flushSync();
+    expect(restart.textContent).not.toContain('Restart from here?');
+    restart.click();
+    flushSync();
+    expect(strip.onRestartCourse).not.toHaveBeenCalled();
   });
 
   it('offers no settings trigger when no settings write is wired', () => {

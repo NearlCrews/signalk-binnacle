@@ -1,7 +1,13 @@
 <script lang="ts">
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import type { LatestWriterState } from '$shared/lib';
-import { Disclosure, InlineConfirm, SaveStatus, UnitField } from '$shared/ui';
+import {
+  Disclosure,
+  InlineConfirm,
+  restoreFocusAfterCancel,
+  SaveStatus,
+  UnitField,
+} from '$shared/ui';
 import { formatBySource } from './estimate.js';
 import type { CacheStats } from './regions-client.js';
 
@@ -9,6 +15,9 @@ type FormattedBytes = { value: string; unit: string };
 
 interface Props {
   stats: CacheStats | null;
+  loadError?: string | null;
+  loading?: boolean;
+  onRetryLoad?: () => void;
   usedPercent: number;
   used: FormattedBytes | null;
   cap: FormattedBytes | null;
@@ -30,6 +39,9 @@ interface Props {
 
 const {
   stats,
+  loadError = null,
+  loading = false,
+  onRetryLoad,
   usedPercent,
   used,
   cap,
@@ -48,9 +60,23 @@ const {
   onConfirmClear,
   onCancelClear,
 }: Props = $props();
+let clearTrigger = $state<HTMLButtonElement>();
+
+function cancelClear(): void {
+  onCancelClear();
+  void restoreFocusAfterCancel(() => clearTrigger);
+}
 </script>
 
 <section class="panel-section" aria-label="Storage">
+  {#if loadError !== null}
+    <p class="alert-note" role="alert">{loadError}</p>
+    {#if onRetryLoad}
+      <button type="button" class="btn btn-ghost" disabled={loading} onclick={onRetryLoad}>
+        Retry storage
+      </button>
+    {/if}
+  {/if}
   {#if stats !== null}
     <div
       class="progress-track"
@@ -98,8 +124,10 @@ const {
         {/each}
       </dl>
     </Disclosure>
-  {:else}
+  {:else if loading}
     <p class="muted-note" role="status">Loading storage…</p>
+  {:else if loadError === null}
+    <p class="muted-note">Storage information is unavailable.</p>
   {/if}
   <UnitField
     label="Auto-clear after"
@@ -125,11 +153,17 @@ const {
     <InlineConfirm
       question="Clear recently viewed charts? Your saved areas are kept."
       onConfirm={onConfirmClear}
-      onCancel={onCancelClear}
+      onCancel={cancelClear}
     />
   {:else}
     <div class="panel-controls">
-      <button type="button" class="btn btn-danger" disabled={!adminAccess} onclick={onRequestClear}>
+      <button
+        type="button"
+        class="btn btn-danger"
+        disabled={!adminAccess}
+        bind:this={clearTrigger}
+        onclick={onRequestClear}
+      >
         <Trash2 size={16} aria-hidden="true" />
         Clear recently viewed
       </button>

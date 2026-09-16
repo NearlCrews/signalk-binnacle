@@ -2,7 +2,7 @@ import type { MobMark, MobStore } from '$entities/mob';
 import type { GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
 import type { UnitsMode } from '$shared/lib';
-import { postMobNotification, resolveNotification, SK_PATHS } from '$shared/signalk';
+import { resolveNotification, SK_PATHS } from '$shared/signalk';
 import { shouldSoundMobAlarm } from './mob-alarm';
 import { mobAlertText } from './mob-format';
 import { mobClearNotification, mobNotification } from './mob-notification';
@@ -40,8 +40,7 @@ export interface MobControllerDeps {
   // The active units mode, so the live-region range matches the strip's Range readout. A
   // getter-backed object (the shared UnitsStore) so a mid-session preference change reads live.
   units: { mode: UnitsMode };
-  // Whether the v2 Notifications API is available. A getter because it resolves asynchronously from
-  // server feature discovery and the trigger path must branch on its live value.
+  // Whether remote notifications can be resolved through the v2 Notifications API.
   notificationsApi: () => boolean;
   // Whether server writes are known to be blocked (a read-only token). A getter for the same
   // reason as the token: an approval from another tab must be read live.
@@ -60,8 +59,8 @@ export interface MobControllerDeps {
 
 // Man overboard orchestration: one tap on the strip button marks the spot, publishes the boat-wide
 // alarm, and raises the recovery strip; a remote station's notifications.mob raises it here too. Owns
-// the in-flight raise so a cancel racing it resolves the eventual id, the MOB alarm effect, and the
-// MOB live-region string; the host wires onTrigger, onCancel, and onSteer to the MOB button and strip,
+// the immutable mark publication, the MOB alarm effect, and the MOB live-region string. The host
+// wires onTrigger, onCancel, and onSteer to the MOB button and strip,
 // calls onStreamReconnect from its reconnect refresh chain, and reads mobAlert into LiveRegions and
 // mobPublishWarning into the strip.
 const WRITE_BLOCKED_WARNING =
@@ -89,13 +88,10 @@ export function createMobController(deps: MobControllerDeps) {
     publishMobValue(mobClearNotification());
   }
 
-  // The broad v1 raise, shared by the no-API path and the failed-POST fallback. The warning is
-  // judged at publish time (a delta sent into a closed socket is silently dropped, and one sent
-  // with a read-only token is rejected server-side), but never cleared here: a fire-and-forget
-  // delta produces no error even when the server refuses it, so only the stream echoing the
-  // raise back proves the boat was told, and the echo effect below owns that clearing.
-  function publishFallback(committed: MobMark): void {
-    publishMobValue(mobNotification(committed.position));
+  function publishMark(committed: MobMark): void {
+    // The v2 MOB route substitutes server processing-time GPS and time. A standard notification
+    // delta preserves the immutable press-time mark at every receiving station.
+    publishMobValue(mobNotification(committed.position, committed.epochMs));
     mobPublishWarning = !deps.streamOpen()
       ? OFFLINE_WARNING
       : deps.writeBlocked()
@@ -103,10 +99,9 @@ export function createMobController(deps: MobControllerDeps) {
         : UNCONFIRMED_WARNING;
   }
 
-  // The server echoing a sounding notifications.mob back on the stream is the one proof the
-  // boat-wide alarm went out; clear the honesty warning only on that evidence.
+  // Another station's alarm cannot confirm delivery of this station's captured mark.
   $effect(() => {
-    if (mob.active && mob.remoteActive && mobPublishWarning !== undefined) {
+    if (activeMark && mob.confirmsMark(activeMark) && mobPublishWarning !== undefined) {
       mobPublishWarning = undefined;
     }
   });
@@ -138,40 +133,13 @@ export function createMobController(deps: MobControllerDeps) {
   // Commit the press-time mark, tell the whole boat, and bring the mark into view. Guidance only;
   // the course (and any coupled autopilot) is touched solely by the strip's deliberate Steer to MOB.
   // Without a fix the alarm still raises, position-less, so the crew mobilizes either way.
-  // Retain every local v2 raise until a cancel can resolve its eventual id. A position-less MOB can
-  // be triggered again while already active, so a single pending slot can strand an older alert.
-  let localTriggerSequence = 0;
-  let activeLocalTrigger: number | undefined;
-  // The active trigger's committed mark, retained so a reconnect can replay a raise the dead
-  // socket discarded.
-  let activeMark: MobMark | undefined;
-  const pendingMobAlerts = new Map<number, Promise<string | undefined>>();
+  let activeMark = $state<MobMark | undefined>();
 
   function raise(committed: MobMark): void {
-    const sequence = ++localTriggerSequence;
-    activeLocalTrigger = sequence;
     activeMark = committed;
     // A new raise supersedes any clear still owed to the boat.
     pendingClear = false;
-    if (deps.writeBlocked()) mobPublishWarning = WRITE_BLOCKED_WARNING;
-    if (deps.notificationsApi()) {
-      // The v2 route attaches the server's own position and timestamp; if the POST fails, fall
-      // back to the v1 delta so the boat-wide alarm is never lost to a transport error.
-      const pending = postMobNotification(deps.origin, deps.getToken(), 'Man overboard');
-      pendingMobAlerts.set(sequence, pending);
-      void pending.then((id) => {
-        // A canceled or superseded trigger must not raise a broad v1 alarm after its v2 request
-        // finishes. The current trigger owns the fallback.
-        if (activeLocalTrigger !== sequence) return;
-        if (id) {
-          mobPublishWarning = undefined;
-          return;
-        }
-        publishFallback(committed);
-      });
-    } else {
-      publishFallback(committed);
-    }
+    publishMark(committed);
   }
 
   function onTrigger(mark: MobMark | undefined): void {
@@ -184,53 +152,30 @@ export function createMobController(deps: MobControllerDeps) {
 
   // Replay whatever a dropped socket discarded, called by the host on a genuine stream reopen.
   // A published delta has no transport-level replay, so a raise or clear that went out mid-outage
-  // is silently lost. A raise still owed (an active local trigger whose alarm never echoed back on
-  // the stream) re-runs the whole chain, a fresh v2 POST first; the active-trigger guard means a
-  // cancel racing the reconnect wins. A clear still owed goes back out once no trigger is active.
+  // is silently lost. Replay the same captured mark, never the boat's reconnect-time position.
   function onStreamReconnect(): void {
-    if (activeLocalTrigger !== undefined && activeMark !== undefined && !mob.remoteActive) {
+    if (activeMark !== undefined && !mob.confirmsMark(activeMark)) {
       raise(activeMark);
       return;
     }
-    if (pendingClear && activeLocalTrigger === undefined) {
+    if (pendingClear && activeMark === undefined) {
       pendingClear = false;
       publishClear();
     }
   }
 
   function onCancel(): void {
-    const canceledThrough = activeLocalTrigger;
-    activeLocalTrigger = undefined;
+    const localWasActive = activeMark !== undefined;
     activeMark = undefined;
     mobPublishWarning = undefined;
     const streamedIds = mob.remoteNotificationIds;
     mob.cancel();
-    const pending = [...pendingMobAlerts]
-      .filter(([sequence]) => canceledThrough === undefined || sequence <= canceledThrough)
-      .map(([sequence, alert]) => {
-        pendingMobAlerts.delete(sequence);
-        return alert;
-      });
-    if (pending.length === 0 && streamedIds.length === 0) {
-      publishClear();
-      return;
-    }
-    // Resolve each locally raised v2 notification by its id even when its stream echo still keeps
-    // the aggregate MOB store active. Only the broad v1 fallback is suppressed by a newer trigger.
-    void Promise.all(pending).then(async (pendingIds) => {
-      const ids = new Set(streamedIds);
-      for (const id of pendingIds) if (id) ids.add(id);
-      const cleared = await resolveMobNotifications([...ids], (id) =>
-        resolveNotification(deps.origin, deps.getToken(), id),
-      );
-      // A raise that resolved without an id is exactly the case where the broad v1 fallback may
-      // have been published, so the broad clear must go out for it too; clearing an already-normal
-      // broad path is harmless.
-      const fallbackMayBeRaised = pendingIds.some((id) => id === undefined);
-      const anyUnresolved = cleared.some((value) => !value) || fallbackMayBeRaised;
-      if (anyUnresolved && activeLocalTrigger === undefined) {
-        publishClear();
-      }
+    if (localWasActive || streamedIds.length === 0 || !deps.notificationsApi()) publishClear();
+    if (!deps.notificationsApi() || streamedIds.length === 0) return;
+    void resolveMobNotifications(streamedIds, (id) =>
+      resolveNotification(deps.origin, deps.getToken(), id),
+    ).then((cleared) => {
+      if (cleared.some((value) => !value) && activeMark === undefined) publishClear();
     });
   }
 

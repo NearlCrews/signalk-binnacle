@@ -7,17 +7,25 @@ import SquarePen from '@lucide/svelte/icons/square-pen';
 import Star from '@lucide/svelte/icons/star';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import X from '@lucide/svelte/icons/x';
+import { onDestroy } from 'svelte';
 import { categoryLabel } from '$entities/poi-icons';
+import { Clock, formatDayClock, formatMonthDay, MINUTE_MS } from '$shared/lib';
 import type { UpgradeOutcome } from '$shared/signalk';
-import { InlineConfirm, SlideOver, WriteAccessNote } from '$shared/ui';
+import { InlineConfirm, restoreFocusAfterCancel, SlideOver, WriteAccessNote } from '$shared/ui';
 import type { NoteSelection } from './notes-client';
 import type { NormalizedItem, NoteDetail } from './notes-detail';
 import { safeHttpUrl } from './notes-detail';
-import { isDangerFlag, isRedundantNoteLabel, orderSections } from './notes-present';
+import {
+  dangerFlagText,
+  flagText,
+  isDangerFlag,
+  isRedundantNoteLabel,
+  orderSections,
+} from './notes-present';
 
 interface Props {
   selection: NoteSelection;
-  load: (id: string) => Promise<NoteDetail | undefined>;
+  load: (id: string, force?: boolean) => Promise<NoteDetail | undefined>;
   onClose: () => void;
   onBack?: () => void;
   // Pan the chart to this place; the action renders only when the host wires it.
@@ -68,6 +76,16 @@ let failed = $state(false);
 let attempt = $state(0);
 let confirmingDelete = $state(false);
 let confirmingNavigate = $state(false);
+let navigateTrigger = $state<HTMLButtonElement>();
+let deleteTrigger = $state<HTMLButtonElement>();
+let loadedId: string | undefined;
+const clock = new Clock(MINUTE_MS);
+onDestroy(() => clock.dispose());
+const detailAge = $derived(
+  detail?.fetchedAtMs !== undefined && detail.fetchedAtMs <= clock.now
+    ? `${formatMonthDay(detail.fetchedAtMs)} ${formatDayClock(detail.fetchedAtMs, { zone: true })}, ${Math.floor((clock.now - detail.fetchedAtMs) / MINUTE_MS)} min ago`
+    : 'unknown',
+);
 
 // One armed confirm at a time: arming either disarms the other, so a stale question can never sit
 // behind the one on screen.
@@ -79,6 +97,15 @@ function armNavigate(): void {
 function armDelete(): void {
   confirmingNavigate = false;
   confirmingDelete = true;
+}
+
+function cancelAction(action: 'navigate' | 'delete'): void {
+  const id = selection.id;
+  if (action === 'navigate') confirmingNavigate = false;
+  else confirmingDelete = false;
+  void restoreFocusAfterCancel(() =>
+    selection.id === id ? (action === 'navigate' ? navigateTrigger : deleteTrigger) : undefined,
+  );
 }
 
 // The guard covers access revoked while the confirm stood armed; the arming button is already
@@ -100,16 +127,19 @@ $effect(() => {
 const request = $derived({ id: selection.id, attempt });
 
 $effect(() => {
-  const { id } = request;
+  const { id, attempt: retry } = request;
   let active = true;
   loading = true;
   failed = false;
-  detail = undefined;
-  load(id)
+  if (loadedId !== id) detail = undefined;
+  loadedId = id;
+  load(id, retry > 0)
     .then((result) => {
       if (!active) return;
-      if (result) detail = result;
-      else failed = true;
+      if (result) {
+        detail = result;
+        failed = result.retained === true;
+      } else failed = true;
       loading = false;
     })
     .catch(() => {
@@ -161,6 +191,7 @@ function measure(item: NormalizedItem): string {
         type="button"
         class="btn btn-ghost"
         title="Start navigating to this place"
+        bind:this={navigateTrigger}
         onclick={armNavigate}
         disabled={writeBlocked}
       >
@@ -190,6 +221,7 @@ function measure(item: NormalizedItem): string {
       <button
         type="button"
         class="btn btn-danger"
+        bind:this={deleteTrigger}
         onclick={armDelete}
         disabled={busy || writeBlocked}
       >
@@ -211,14 +243,14 @@ function measure(item: NormalizedItem): string {
       question={`Start navigation to ${selection.name}? Check the destination before relying on it.`}
       confirmLabel="Start navigation"
       onConfirm={confirmNavigate}
-      onCancel={() => (confirmingNavigate = false)}
+      onCancel={() => cancelAction('navigate')}
     />
   {/if}
   {#if confirmingDelete && onDelete}
     <InlineConfirm
       question="Delete this personal note?"
       onConfirm={onDelete}
-      onCancel={() => (confirmingDelete = false)}
+      onCancel={() => cancelAction('delete')}
     />
   {/if}
   {#if mutationError}
@@ -236,14 +268,24 @@ function measure(item: NormalizedItem): string {
       {/if}
     </p>
   {/if}
-  {#if loading}
+  {#if detail}
+    <p class="muted-note">Details checked: {detailAge}.</p>
+  {/if}
+  <button type="button" class="btn btn-ghost" disabled={loading} onclick={() => (attempt += 1)}>
+    {loading ? 'Refreshing place details…' : 'Refresh place details'}
+  </button>
+  {#if loading && !detail}
     <p class="muted-note" role="status">Loading…</p>
-  {:else if failed}
-    <p class="alert-note" role="alert">Could not load the details for this place.</p>
+  {/if}
+  {#if failed}
+    <p class="alert-note" role="alert">
+      {detail ? 'Could not refresh place details. Showing retained information; provider changes may be missing.' : 'Could not load the details for this place.'}
+    </p>
     <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>
       Retry place details
     </button>
-  {:else if sections}
+  {/if}
+  {#if sections}
     {#each sections as section (section.id)}
       {@const danger = section.items.find((item) => isDangerFlag(item.label, item.kind))}
       {@const listItems = section.items.filter((item) => !isDangerFlag(item.label, item.kind))}
@@ -255,9 +297,9 @@ function measure(item: NormalizedItem): string {
           <div
             class="alert-note alert"
             class:alert-note--filled={danger.value === true}
-            data-danger={danger.value === true}
+            data-danger={danger.value === true ? 'true' : danger.value === false ? 'false' : 'unknown'}
           >
-            {danger.value === true ? 'Dangerous to navigation' : 'Not a danger to navigation'}
+            {dangerFlagText(danger.value)}
           </div>
         {/if}
         <dl class="detail-list">
@@ -282,8 +324,8 @@ function measure(item: NormalizedItem): string {
                       >{item.value}</span
                     >
                   {:else if item.kind === 'flag'}
-                    <span class="badge" data-value={item.value === true ? 'yes' : 'no'}>
-                      {item.value === true ? 'Yes' : 'No'}
+                    <span class="badge" data-value={flagText(item.value).toLowerCase()}>
+                      {flagText(item.value)}
                     </span>
                   {:else if linkUrl}
                     <a href={linkUrl} target="_blank" rel="noopener noreferrer"
@@ -315,7 +357,7 @@ function measure(item: NormalizedItem): string {
     {/each}
   {:else if detail?.fallbackText}
     <p class="prose">{detail.fallbackText}</p>
-  {:else}
+  {:else if !loading && !failed}
     <p class="muted-note" role="status">No extra detail for this place.</p>
   {/if}
 </SlideOver>
@@ -366,7 +408,7 @@ function measure(item: NormalizedItem): string {
 }
 /* The hazard danger status leads its section as a full-width banner on the global .alert-note
    frame: when dangerous to navigation it adds the shared .alert-note--filled tint (matching the
-   weather warning treatment), and when explicitly not a danger it drops to a quiet outline. */
+   weather warning treatment). A negative provider flag uses a quiet outline without implying safety. */
 .alert {
   margin-block: 0.2rem;
   padding: 0.4rem 0.55rem;

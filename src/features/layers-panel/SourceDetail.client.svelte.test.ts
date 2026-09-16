@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UserChartSource, UserCharts } from '$entities/user-charts';
 import type { LayerListItem } from '$shared/map';
@@ -30,7 +30,9 @@ function mountDetail() {
   document.body.append(target);
   const remove = vi.fn();
   // Never settles, so the panel stays in its 'reading' operation for the length of the test.
-  const stageReplacement = vi.fn(() => new Promise<never>(() => {}));
+  const stageReplacement = vi.fn<UserCharts['stageReplacement']>(
+    () => new Promise<never>(() => {}),
+  );
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
     component = mount(SourceDetail, {
@@ -58,7 +60,7 @@ function mountDetail() {
     found.click();
     flushSync();
   };
-  return { target, remove, button, click };
+  return { target, remove, stageReplacement, button, click };
 }
 
 afterEach(() => {
@@ -66,6 +68,44 @@ afterEach(() => {
 });
 
 describe('SourceDetail delete gating', () => {
+  it('returns focus to Delete chart without removing the chart on cancellation', async () => {
+    const detail = mountDetail();
+    detail.click('Delete chart');
+    detail.click('Cancel');
+    await tick();
+    expect(document.activeElement).toBe(detail.button('Delete chart'));
+    expect(detail.remove).not.toHaveBeenCalled();
+  });
+
+  it.each(['url', 'review'])(
+    'returns focus to Replace source URL when canceling the %s stage',
+    async (stage) => {
+      const detail = mountDetail();
+      detail.stageReplacement.mockResolvedValueOnce({ source });
+      detail.click('Replace source URL');
+      if (stage === 'review') {
+        const input = detail.target.querySelector<HTMLInputElement>('.replacement-editor input');
+        if (!input) throw new Error('Missing replacement URL input');
+        input.value = 'https://charts.example/replacement.pmtiles';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        flushSync();
+        detail.click('Review replacement');
+        await vi.waitFor(() => {
+          expect(
+            detail.target.querySelector('[aria-label="Review replacement chart"]'),
+          ).not.toBeNull();
+          expect(detail.button('Cancel')?.disabled).toBe(false);
+        });
+      }
+      detail.button('Cancel')?.focus();
+      detail.click('Cancel');
+      await tick();
+      expect(document.activeElement).toBe(detail.button('Replace source URL'));
+      expect(detail.target.querySelector('.replacement-editor')).toBeNull();
+      expect(detail.remove).not.toHaveBeenCalled();
+    },
+  );
+
   it('disarms the delete confirm and blocks deletion once a source write starts', () => {
     const detail = mountDetail();
     detail.click('Delete chart');

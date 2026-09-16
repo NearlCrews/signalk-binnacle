@@ -15,4 +15,5 @@ export {
   sampleGrid,
   timeBracket,
 } from './weather-grid';
+export type { WeatherStatus } from './weather-store.svelte';
 export { WeatherStore } from './weather-store.svelte';

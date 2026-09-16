@@ -33,6 +33,20 @@ function stubServerWithOneEntry() {
 }
 
 describe('logbook controller', () => {
+  it('refreshes on each panel return and preserves the session composer', async () => {
+    const fetchMock = stubServerWithOneEntry();
+    const { controller } = controllerWith();
+    controller.open?.();
+    await vi.waitFor(() => expect(controller.loadState).toBe('ready'));
+    controller.draft = 'Keep this note';
+    const count = fetchMock.mock.calls.length;
+    controller.open?.();
+    await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(count));
+    await vi.waitFor(() => expect(controller.refreshing).toBe(false));
+    expect(controller.draft).toBe('Keep this note');
+    expect(controller.lastCheckedMs).toBe(Date.parse('2026-08-30T12:00:00.000Z'));
+  });
+
   it('probes on start and loads entries once available', async () => {
     stubServerWithOneEntry();
     const { controller } = controllerWith();

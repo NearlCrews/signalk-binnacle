@@ -36,6 +36,7 @@ import {
   InlineConfirm,
   NameEntry,
   resolveSaveName,
+  restoreFocusAfterCancel,
   SavedList,
   SlideOver,
   VisibilityToggle,
@@ -162,6 +163,11 @@ const storageMissing = $derived(provisioning === 'unprovisioned');
 const writesDisabled = $derived(auth.writeBlocked || busy);
 const routeActionsDisabled = $derived(auth.writeBlocked || busy || routeBusy || !canMakeRoute);
 const minimize = createPanelMinimize();
+const panelId = $props.id();
+let saveTrackTrigger = $state<HTMLButtonElement>();
+let saveRouteTrigger = $state<HTMLButtonElement>();
+let discardTrigger = $state<HTMLButtonElement>();
+let retraceTrigger = $state<HTMLButtonElement>();
 
 // Mirrors the longest Playback range (the seven-day preset). The panel cannot import the
 // time-travel slice across features, and its own explainer above already names the same bound.
@@ -210,6 +216,11 @@ const savedEmptyText = $derived(savedEmptyMessage(loadState, storageMissing));
 // the Save and the Save-as-route flows, so only one name form is open at a time.
 let naming = $state<'track' | 'route' | null>(null);
 let savingName = $state(false);
+function cancelName(): void {
+  const target = naming;
+  naming = null;
+  void restoreFocusAfterCancel(() => (target === 'route' ? saveRouteTrigger : saveTrackTrigger));
+}
 // The form closes only once the write is accepted. Closing it on submit discarded the name the
 // navigator typed the moment a save failed, which is exactly when it is worth keeping: the failure
 // itself is reported on the app-wide toast, so there would be nothing left to retry from.
@@ -246,6 +257,18 @@ function confirmClear(): void {
 // Deleting a saved track is destructive, so it arms a confirm step rather than firing on a
 // single tap where a mis-tap on a rolling deck would lose a saved track.
 const armedDelete = new ArmedRow((id) => onDelete(id));
+
+function cancelDelete(id: string): void {
+  armedDelete.cancel();
+  void restoreFocusAfterCancel(() => {
+    const row = document.getElementById(`${panelId}-actions-${encodeURIComponent(id)}`);
+    return (
+      row?.querySelector<HTMLButtonElement>('button[aria-label="Delete track"]:not(:disabled)') ??
+      row?.querySelector<HTMLButtonElement>('button[aria-label="Download track file"]') ??
+      undefined
+    );
+  });
+}
 
 function setColorMode(mode: TrackSettings['colorMode']): void {
   settings.set({ ...settings.value, colorMode: mode });
@@ -309,6 +332,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <button
       type="button"
       class="btn btn-primary"
+      bind:this={saveTrackTrigger}
       onclick={() => (naming = 'track')}
       disabled={!canSaveTrack || writesDisabled || storageMissing}
     >
@@ -318,6 +342,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <button
       type="button"
       class="btn btn-danger"
+      bind:this={discardTrigger}
       onclick={() => (confirmingClear = true)}
       disabled={recorder.points.length === 0 || busy}
     >
@@ -331,7 +356,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       value={defaultSaveName('Track')}
       onConfirm={confirmName}
       busy={savingName}
-      onCancel={() => (naming = null)}
+      onCancel={cancelName}
     />
   {/if}
   {#if confirmingClear}
@@ -339,7 +364,10 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       question="Discard the current track? This cannot be undone."
       confirmLabel="Discard"
       onConfirm={confirmClear}
-      onCancel={() => (confirmingClear = false)}
+      onCancel={() => {
+        confirmingClear = false;
+        void restoreFocusAfterCancel(() => discardTrigger);
+      }}
     />
   {/if}
 
@@ -371,6 +399,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <button
       type="button"
       class="btn"
+      bind:this={saveRouteTrigger}
       onclick={() => (naming = 'route')}
       disabled={routeActionsDisabled}
     >
@@ -380,6 +409,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     <button
       type="button"
       class="btn"
+      bind:this={retraceTrigger}
       onclick={() => (confirmingRetrace = true)}
       disabled={routeActionsDisabled}
     >
@@ -393,7 +423,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       value={defaultSaveName('Route')}
       onConfirm={confirmName}
       busy={savingName}
-      onCancel={() => (naming = null)}
+      onCancel={cancelName}
     />
   {/if}
   {#if confirmingRetrace}
@@ -401,7 +431,10 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       question="Start navigation back along the latest continuous track segment? Check the route before relying on it."
       confirmLabel="Start retrace"
       onConfirm={confirmRetrace}
-      onCancel={() => (confirmingRetrace = false)}
+      onCancel={() => {
+        confirmingRetrace = false;
+        void restoreFocusAfterCancel(() => retraceTrigger);
+      }}
     />
   {/if}
   <p class="muted-note">
@@ -541,10 +574,10 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         <InlineConfirm
           question="Delete this track?"
           onConfirm={() => armedDelete.confirm(track.id)}
-          onCancel={() => armedDelete.cancel()}
+          onCancel={() => cancelDelete(track.id)}
         />
       {:else}
-        <div class="actions">
+        <div class="actions" id={`${panelId}-actions-${encodeURIComponent(track.id)}`}>
           <VisibilityToggle
             visible={shown.has(track.id)}
             onToggle={(v) => onToggleSaved(track.id, v)}

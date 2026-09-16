@@ -1,7 +1,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AnchorWatch } from '$entities/anchor';
-import type { TidesStore } from '$entities/tides';
+import { formatTideEventTime, type TidesStore } from '$entities/tides';
 import type { UnitsStore } from '$entities/units';
 import type { DepthReading, OwnVessel } from '$entities/vessel';
 import type { AlarmAudioState } from '$shared/audio';
@@ -32,7 +32,9 @@ function renderPanel(
     props: {
       auth,
       batteryNote: extras.batteryNote,
-      tides: extras.tides as unknown as TidesStore | undefined,
+      tides: (extras.tides
+        ? { failure: () => undefined, ...extras.tides }
+        : undefined) as unknown as TidesStore | undefined,
       anchor: {
         watching: false,
         fixLost: false,
@@ -238,7 +240,7 @@ describe('AnchorPanel', () => {
   });
 
   it('omits the tide section until the host wires the tides store', () => {
-    expect(renderPanel('metric')).not.toContain('Nearby tide prediction');
+    expect(renderPanel('metric')).not.toContain('Selected tide prediction');
   });
 
   it('summarizes the nearest station prediction with its distance honesty line', () => {
@@ -256,15 +258,71 @@ describe('AnchorPanel', () => {
         },
       },
     });
-    expect(body).toContain('Nearby tide prediction');
+    expect(body).toContain('Selected tide prediction');
     expect(body).toContain('Point Lookout');
-    expect(body).toContain('850 m away');
+    expect(body).toContain('0 m from the boat');
     expect(body).toContain('Next high');
     expect(body).toContain('2.1');
     expect(body).toContain('Next low');
     expect(body).toContain('0.4');
-    expect(body).toContain('Predictions come from Point Lookout');
+    expect(body).toMatch(/Predictions come from\s+Point Lookout, 0 m from the boat/);
     expect(body).toContain('The tide here can differ');
+    expect(body).toContain('Datum unknown');
+    expect(body).toContain('Prediction fetch time is unknown');
+  });
+
+  it('measures station distance from the anchor rather than the distant chart center', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      anchor: { position: { latitude: 42, longitude: -83 } },
+      vessel: { position: { latitude: 10, longitude: 20 } },
+      tides: {
+        status: 'ready',
+        tide: {
+          station: { id: 'test', name: 'Test station', latitude: 42, longitude: -83 },
+          distanceMeters: 90_000,
+          events: [],
+        },
+      },
+    });
+    expect(body).toContain('0 m from the anchor');
+    expect(body).not.toContain('48.6 nm');
+  });
+
+  it('withholds station distance without an anchor or fresh own fix', () => {
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      vessel: { positionStale: true },
+      tides: {
+        status: 'ready',
+        tide: {
+          station: { id: 'test', name: 'Test station', latitude: 42, longitude: -83 },
+          distanceMeters: 10,
+          events: [],
+        },
+      },
+    });
+    expect(body).toContain('Distance unavailable');
+    expect(body).not.toContain('10 m');
+  });
+
+  it('qualifies retained predictions with failed refresh, datum, date, timezone, and fetch time', () => {
+    const eventTime = Date.now() + 24 * 3_600_000;
+    const body = renderPanel('metric', NO_DEPTH, NO_DEPTH, undefined, {
+      tides: {
+        status: 'error',
+        failure: () => ({ kind: 'tide', requested: { mode: 'automatic' } }),
+        tide: {
+          station: { id: 'test', name: 'Test station', latitude: 42, longitude: -83 },
+          distanceMeters: 10,
+          datum: 'LAT',
+          fetchedAtMs: 1_800_000_000_000,
+          events: [{ kind: 'high', heightMeters: 2, timeMs: eventTime }],
+        },
+      },
+    });
+    expect(body).toContain('latest tide refresh failed');
+    expect(body).toContain('Datum: LAT');
+    expect(body).toContain(formatTideEventTime(eventTime));
+    expect(body).toContain('Predictions fetched');
   });
 
   it('states coverage honestly when no station is near', () => {

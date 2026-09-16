@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MenuItem } from './menu-item';
 import ToolbarEditor from './ToolbarEditor.svelte';
@@ -65,14 +65,16 @@ describe('ToolbarEditor reset', () => {
     expect(editor.has('Reset toolbar')).toBe(true);
   });
 
-  it('leaves the toolbar alone when the confirm is backed out of', () => {
+  it('leaves the toolbar alone and returns focus when the confirm is backed out of', async () => {
     const editor = mountEditor();
 
     editor.click('Reset toolbar');
     editor.click('Cancel');
+    await tick();
 
     expect(editor.onReset).not.toHaveBeenCalled();
     expect(editor.question()).toBeUndefined();
     expect(editor.has('Reset toolbar')).toBe(true);
+    expect(document.activeElement?.textContent?.trim()).toBe('Reset toolbar');
   });
 });

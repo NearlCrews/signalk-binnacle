@@ -2,7 +2,13 @@
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCw from '@lucide/svelte/icons/rotate-cw';
 import { MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
-import { CustomizeCategory, createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
+import {
+  CustomizeCategory,
+  createReorder,
+  LayerToggle,
+  ReorderActions,
+  UnavailableHint,
+} from '$shared/ui';
 import type { TrendItem, TrendsController } from './trends-controller.svelte';
 
 interface Props {
@@ -91,6 +97,12 @@ function statusText(item: TrendItem): string | undefined {
         >
           <GripVertical size={18} aria-hidden="true" />
         </button>
+        <ReorderActions
+          label={item.label}
+          canMoveUp={reorder.canMove(item.id, -1)}
+          canMoveDown={reorder.canMove(item.id, 1)}
+          onMove={(direction) => reorder.moveBy(item.id, direction)}
+        />
       </li>
     {/each}
   </ul>

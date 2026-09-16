@@ -47,10 +47,8 @@ const title = $derived(worst ? notificationGrade(worst) : 'Alarm');
 
 const canSilence = $derived(worst !== undefined && canSilenceNotification(worst));
 const canAcknowledge = $derived(worst !== undefined && canAcknowledgeNotification(worst));
-// Whether the boat-wide Silence is actually on offer here, which needs the server capability, a
-// wired handler, and a write token alike. The local mute keys off this rather than off the
-// capability alone: a server that can silence is no help to a device that cannot ask it to, and
-// gating the two controls on different conditions left a sounding alarm with neither.
+// Boat-wide Silence needs the server capability, a wired handler, and a write token.
+// Device-local mute stays independently available while an alarm is sounding.
 const silenceOffered = $derived(onSilence !== undefined && canSilence && !writeBlocked);
 // Quieted means the noise is handled, boat-wide or on this device, while the condition itself
 // persists: the strip dims and keeps its readout rather than vanishing. Sounding is the
@@ -84,12 +82,8 @@ function acknowledge(): void {
         {#if silenceOffered}
           <button type="button" class="ack" onclick={silence}>Silence</button>
         {/if}
-        <!-- Device-local mute wherever the boat-wide Silence does not cover everything sounding:
-             Silence acts on the worst alert only, so with a second unsilenced alert up, both
-             controls offer, and a sounding alarm always has at least one. It acts on the sound, so
-             it appears only while there is a sound to act on. The title spells out the narrower
-             scope, which the two similar labels do not. -->
-        {#if sounding && (!silenceOffered || raised.filter((n) => n.silenced !== true).length > 1)}
+        <!-- Local relief stays available while a server action is pending or unsupported. -->
+        {#if sounding}
           <button
             type="button"
             class="ack"

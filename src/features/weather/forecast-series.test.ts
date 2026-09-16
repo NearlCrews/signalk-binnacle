@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { WeatherGrid } from '$entities/weather';
 import { knotsToMetersPerSecond } from '$shared/lib';
-import { forecastRiskCues, mergeConditions, pickForecast } from './forecast-series';
+import {
+  forecastRiskCues,
+  mergeConditions,
+  pickForecast,
+  separateObservedConditions,
+} from './forecast-series';
+import type { PointConditions } from './signalk-weather';
 
 const HOUR = 3_600_000;
 const kn = knotsToMetersPerSecond;
@@ -48,6 +54,37 @@ describe('mergeConditions', () => {
         { timeMs: 0, windMs: 8, provenance: 'provider' },
       )?.provenance,
     ).toBe('provider');
+  });
+});
+
+describe('separateObservedConditions', () => {
+  it('never labels model-filled fields as an observation', () => {
+    const model: PointConditions = {
+      timeMs: 0,
+      windMs: 5,
+      pressurePa: 100_000,
+      provenance: 'Open-Meteo',
+    };
+    const observation: PointConditions = { timeMs: 0, pressurePa: 101_000, provenance: 'provider' };
+    const groups = separateObservedConditions(model, { cond: observation, observed: true });
+    expect(groups.current).toEqual(observation);
+    expect(groups.current?.windMs).toBeUndefined();
+    expect(groups.model).toEqual(model);
+  });
+
+  it('does not invent a second model block when no model fields contribute', () => {
+    expect(
+      separateObservedConditions(
+        { timeMs: 0, windMs: 5 },
+        { cond: { timeMs: 0, windMs: 7 }, observed: true },
+      ).model,
+    ).toBeUndefined();
+    expect(
+      separateObservedConditions(
+        { timeMs: 0, windMs: 5 },
+        { cond: { timeMs: 4 * HOUR, pressurePa: 101_000 }, observed: true },
+      ).model,
+    ).toBeUndefined();
   });
 });
 

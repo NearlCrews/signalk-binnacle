@@ -11,8 +11,7 @@ import { uuidv4 } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import type { HandoffClient } from './handoff-client';
 
-// How many unsynced drafts a device queues; past the bound the oldest draft is dropped, never the
-// newest snapshot (the one being handed over right now).
+// A full queue must never silently discard an unsynced watch record.
 const MAX_DRAFTS = 10;
 
 export interface HandoffDeps {
@@ -30,10 +29,15 @@ export interface HandoffDeps {
 }
 
 export interface HandoffController {
+  draft: string;
+  readonly error: string | undefined;
+  readonly pendingCount: number;
+  readonly queueFull: boolean;
+  readonly memoryOnly: boolean;
   readonly records: readonly HandoffRecord[];
   readonly loadState: 'idle' | 'loading' | 'ready' | 'unavailable';
   readonly syncing: boolean;
-  create(note: string): void;
+  create(note: string): boolean;
   refresh(): Promise<void>;
   syncDrafts(): Promise<void>;
   dispose(): void;
@@ -44,6 +48,8 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
   let shared = $state<HandoffSnapshot[]>([]);
   let loadState = $state<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
   let syncing = $state(false);
+  let draft = $state('');
+  let error = $state<string | undefined>();
   let loadGeneration = 0;
   let writesDuringLoad: Map<string, HandoffSnapshot> | undefined;
   let disposed = false;
@@ -122,20 +128,54 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
     }
   }
 
-  function create(note: string): void {
+  function create(note: string): boolean {
+    error = undefined;
+    if (disposed) return false;
+    if (deps.drafts.value.length >= MAX_DRAFTS) {
+      error =
+        'Ten snapshots are waiting to sync. Reconnect and retry syncing before taking another.';
+      return false;
+    }
     const snapshot: HandoffSnapshot = {
       id: uuidv4(),
       createdAt: now(),
       note: note.trim().slice(0, MAX_HANDOFF_NOTE_LENGTH),
       facts: deps.collectFacts().slice(0, MAX_HANDOFF_FACTS),
     };
-    const queue = [...deps.drafts.value, snapshot];
-    deps.drafts.set(queue.length > MAX_DRAFTS ? queue.slice(queue.length - MAX_DRAFTS) : queue);
+    const previous = deps.drafts.value;
+    deps.drafts.set([...previous, snapshot]);
+    if (deps.drafts.lastWriteFailed) {
+      // Keep the authored text and all accepted records. Do not offer success for a snapshot
+      // that could not be durably queued, or enqueue a duplicate when the navigator retries.
+      deps.drafts.set(previous);
+      error =
+        'The snapshot could not be saved on this device. Your note is retained in memory; keep the app open and retry.';
+      return false;
+    }
     void syncDrafts();
     deps.onCreated?.();
+    return true;
   }
 
   return {
+    get draft() {
+      return draft;
+    },
+    set draft(value: string) {
+      draft = value.slice(0, MAX_HANDOFF_NOTE_LENGTH);
+    },
+    get error() {
+      return error;
+    },
+    get pendingCount() {
+      return deps.drafts.value.length;
+    },
+    get queueFull() {
+      return deps.drafts.value.length >= MAX_DRAFTS;
+    },
+    get memoryOnly() {
+      return deps.drafts.lastWriteFailed;
+    },
     get records() {
       return records;
     },

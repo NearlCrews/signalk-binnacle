@@ -107,6 +107,7 @@ $effect(() => {
       {deps}
       {reading}
       {zone}
+      assessment={controller.zoneAssessment?.(detailDef, reading)}
       historicalOnly={controller.isHistoricalOnly(detailDef.id) &&
         detailDef.paths.every((path) => deps.store.cell(path).epoch === 0)}
       onBack={() => (detailId = undefined)}
@@ -118,7 +119,9 @@ $effect(() => {
     />
   {:else if customizing}
     <div class="customize-instruction">
-      <span class="muted-note">Tap an instrument to show or hide. Drag to reorder.</span>
+      <span class="muted-note"
+        >Tap an instrument to show or hide. Drag or use Reorder to move it.</span
+      >
     </div>
     <InstrumentsCustomize {controller} {deps} />
   {:else}

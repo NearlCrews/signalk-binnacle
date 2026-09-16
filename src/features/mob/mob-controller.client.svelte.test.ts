@@ -3,15 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MobStore } from '$entities/mob';
 import { OwnVessel } from '$entities/vessel';
 import type { GatedAlarm } from '$shared/audio';
-import * as signalk from '$shared/signalk';
 import { SignalKStore, SK_PATHS } from '$shared/signalk';
 import { createFakeStorage } from '$shared/testing';
 import { createMobController } from './mob-controller.svelte';
-
-vi.mock('$shared/signalk', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('$shared/signalk')>()),
-  postMobNotification: vi.fn(),
-}));
 
 const mountedCleanups: Array<() => void> = [];
 
@@ -50,10 +44,7 @@ afterEach(() => {
 });
 
 describe('createMobController warning honesty', () => {
-  it('holds the fallback warning until the server echoes the raise back', async () => {
-    // The POST fails without a transport error (a grant that cannot write notifications), so
-    // nothing at publish time looks wrong; the warning must still stand until proven delivered.
-    vi.mocked(signalk.postMobNotification).mockResolvedValue(undefined);
+  it('holds the warning until the server echoes the exact captured mark back', async () => {
     const test = mount();
     test.controller.onTrigger({ epochMs: 1 });
     await vi.waitFor(() => {
@@ -66,10 +57,35 @@ describe('createMobController warning honesty', () => {
     // The stream echoes a sounding notifications.mob: the one proof the boat was told.
     test.store.applyFrame({
       self: new Map([
-        [SK_PATHS.mobNotification, { state: 'emergency', message: 'MOB', method: ['sound'] }],
+        [
+          SK_PATHS.mobNotification,
+          {
+            state: 'emergency',
+            message: 'MOB',
+            method: ['sound'],
+            createdAt: new Date(2).toISOString(),
+          },
+        ],
       ]) as never,
       connection: { phase: 'open', attempt: 0 },
       epoch: 1000,
+    });
+    flushSync();
+    expect(test.controller.mobPublishWarning).toContain('not been confirmed');
+    test.store.applyFrame({
+      self: new Map([
+        [
+          SK_PATHS.mobNotification,
+          {
+            state: 'emergency',
+            message: 'MOB',
+            method: ['sound'],
+            createdAt: new Date(1).toISOString(),
+          },
+        ],
+      ]) as never,
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1001,
     });
     flushSync();
     expect(test.controller.mobPublishWarning).toBeUndefined();

@@ -2,7 +2,7 @@
 import Bell from '@lucide/svelte/icons/bell';
 import BellOff from '@lucide/svelte/icons/bell-off';
 import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-import { onDestroy, untrack } from 'svelte';
+import { onDestroy } from 'svelte';
 import {
   type ActiveNotification,
   MAX_ACTIVE_NOTIFICATIONS,
@@ -42,6 +42,7 @@ import {
   ConfirmArm,
   Disclosure,
   InlineConfirm,
+  restoreFocusAfterCancel,
   SlideOver,
   UnitField,
   WriteAccessNote,
@@ -76,12 +77,12 @@ interface Props {
   // A transient silence or acknowledge failure, surfaced because a refused action is otherwise
   // indistinguishable from a slow stream echo while the alarm keeps sounding.
   error?: string;
-  onSilence?: (n: ActiveNotification) => void;
-  onAcknowledge?: (n: ActiveNotification) => void;
+  onSilence?: (n: ActiveNotification) => Promise<void>;
+  onAcknowledge?: (n: ActiveNotification) => Promise<void>;
   // The one-tap flood relief over the server's bulk routes. Each renders only when wired and at
   // least two listed alerts can take that action; a single alert keeps its own button.
-  onSilenceAll?: () => void;
-  onAcknowledgeAll?: () => void;
+  onSilenceAll?: () => Promise<void>;
+  onAcknowledgeAll?: () => Promise<void>;
   thresholds: PersistedValue<Thresholds>;
   units: UnitsStore;
   // The per-device alarm loudness. Absent (an older caller, or SSR) hides the volume slider while
@@ -146,8 +147,11 @@ const {
 const t = $derived(thresholds.value);
 const displayUnits = $derived(units.profile ?? units.mode);
 const alerts = $derived(notifications.list());
-let pendingAction = $state<string | undefined>();
+let pendingActions = $state<Record<string, boolean>>({});
+const pendingCount = $derived(Object.keys(pendingActions).length);
+const bulkPending = $derived(Boolean(pendingActions.all));
 let confirmingReset = $state(false);
+let resetTrigger = $state<HTMLButtonElement>();
 
 const localTime = (timestamp: string | undefined): string | undefined => {
   const ms = timestamp ? Date.parse(timestamp) : Number.NaN;
@@ -225,53 +229,34 @@ const maxShallowDepth = $derived(
 const silenceableCount = $derived(alerts.filter(canSilenceNotification).length);
 const acknowledgeableCount = $derived(alerts.filter(canAcknowledgeNotification).length);
 
-function runAction(kind: 'silence' | 'acknowledge', notification: ActiveNotification): void {
-  if (auth.writeBlocked || pendingAction) return;
+async function runAction(
+  kind: 'silence' | 'acknowledge',
+  notification: ActiveNotification,
+): Promise<void> {
+  if (auth.writeBlocked || bulkPending || pendingActions[notification.path]) return;
   // Tactile registration for a gloved tap: the audible state change lands only after the server
   // round-trip, so the buzz is the immediate sign the press took.
   vibrate(30);
-  pendingAction = `${kind}:${notification.path}`;
-  if (kind === 'silence') onSilence?.(notification);
-  else onAcknowledge?.(notification);
+  pendingActions[notification.path] = true;
+  try {
+    if (kind === 'silence') await onSilence?.(notification);
+    else await onAcknowledge?.(notification);
+  } finally {
+    delete pendingActions[notification.path];
+  }
 }
 
-// The bulk pending keys carry no colon, so they can never collide with a per-alert
-// `kind:notifications.…` key.
-function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): void {
-  if (auth.writeBlocked || pendingAction) return;
+async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<void> {
+  if (auth.writeBlocked || pendingCount > 0) return;
   vibrate(30);
-  pendingAction = kind;
-  if (kind === 'silence-all') onSilenceAll?.();
-  else onAcknowledgeAll?.();
+  pendingActions.all = true;
+  try {
+    if (kind === 'silence-all') await onSilenceAll?.();
+    else await onAcknowledgeAll?.();
+  } finally {
+    delete pendingActions.all;
+  }
 }
-
-$effect(() => {
-  const pending = pendingAction;
-  const currentError = error;
-  const currentAlerts = alerts;
-  if (!pending) return;
-  if (currentError) {
-    untrack(() => (pendingAction = undefined));
-    return;
-  }
-  let settled: boolean;
-  if (pending === 'silence-all') {
-    settled = !currentAlerts.some(canSilenceNotification);
-  } else if (pending === 'acknowledge-all') {
-    settled = !currentAlerts.some(canAcknowledgeNotification);
-  } else {
-    const separator = pending.indexOf(':');
-    const kind = pending.slice(0, separator);
-    const path = pending.slice(separator + 1);
-    const notification = currentAlerts.find((candidate) => candidate.path === path);
-    settled =
-      !notification ||
-      (kind === 'silence'
-        ? !canSilenceNotification(notification)
-        : !canAcknowledgeNotification(notification));
-  }
-  if (settled) untrack(() => (pendingAction = undefined));
-});
 </script>
 
 <SlideOver title="Alarms" closeLabel="Close alarms panel" {onClose} {onBack} bodyFlex>
@@ -292,8 +277,8 @@ $effect(() => {
     </p>
   {/if}
   <p class="muted-note">
-    Active alarms show here. Silence stops the sound, acknowledge clears it. Tune the collision
-    warning below.
+    Silence stops the sound boat-wide. Acknowledge marks an alert as seen; the condition stays
+    active until its source resolves it. Tune the collision warning below.
   </p>
   <section class="panel-section" aria-label="Active alerts">
     <h3 class="caps-label">Active alerts</h3>
@@ -305,7 +290,7 @@ $effect(() => {
             class="btn btn-ghost"
             title="Stop the sound of every alert at once"
             onclick={() => runBulkAction('silence-all')}
-            disabled={auth.writeBlocked || pendingAction !== undefined}
+            disabled={auth.writeBlocked || pendingCount > 0}
           >
             Silence all
           </button>
@@ -314,9 +299,9 @@ $effect(() => {
           <button
             type="button"
             class="btn btn-ghost"
-            title="Mark every alert as seen and clear them at once"
+            title="Mark every alert as seen without resolving its condition"
             onclick={() => runBulkAction('acknowledge-all')}
-            disabled={auth.writeBlocked || pendingAction !== undefined}
+            disabled={auth.writeBlocked || pendingCount > 0}
           >
             Acknowledge all
           </button>
@@ -343,7 +328,7 @@ $effect(() => {
               class="btn btn-ghost"
               title="Stop the sound now"
               onclick={() => runAction('silence', n)}
-              disabled={auth.writeBlocked || pendingAction !== undefined}
+              disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
             >
               Silence
             </button>
@@ -356,9 +341,9 @@ $effect(() => {
             <button
               type="button"
               class="btn btn-ghost"
-              title="Mark as seen and clear it"
+              title="Mark as seen without resolving the condition"
               onclick={() => runAction('acknowledge', n)}
-              disabled={auth.writeBlocked || pendingAction !== undefined}
+              disabled={auth.writeBlocked || bulkPending || pendingActions[n.path]}
             >
               Acknowledge
             </button>
@@ -377,7 +362,7 @@ $effect(() => {
         Showing up to {MAX_ACTIVE_NOTIFICATIONS} highest-severity alerts.
       </p>
     {/if}
-    {#if pendingAction}
+    {#if pendingCount > 0}
       <p class="muted-note" role="status">Updating alarm status…</p>
     {/if}
   </section>
@@ -420,8 +405,8 @@ $effect(() => {
     {/if}
     {#if wakeLockState === 'unsupported'}
       <p class="muted-note">
-        Over plain HTTP the browser cannot keep the screen awake, so an armed watch may go dark when
-        the display locks. Serve Signal K over HTTPS to enable screen wake.
+        Screen wake is unavailable. It requires HTTPS and a browser that supports screen wake. The
+        screen may sleep during an armed watch.
       </p>
     {:else if wakeLockState === 'failed'}
       <p class="muted-note">
@@ -526,20 +511,32 @@ $effect(() => {
       {#if caution}
         <p class="muted-note sev-warning" role="status">{caution}</p>
       {/if}
-      <!-- Reset discards four tuned safety thresholds and the shallow depth at once, so it takes the
-           deliberate second tap every other destructive action here takes. -->
       {#if confirmingReset}
         <InlineConfirm
-          question="Reset all thresholds?"
+          question="Reset collision thresholds?"
           confirmLabel="Reset"
           onConfirm={() => {
-            thresholds.set({ ...DEFAULT_THRESHOLDS });
+            thresholds.set({
+              ...thresholds.value,
+              dangerCpaMeters: DEFAULT_THRESHOLDS.dangerCpaMeters,
+              dangerTcpaSeconds: DEFAULT_THRESHOLDS.dangerTcpaSeconds,
+              warningCpaMeters: DEFAULT_THRESHOLDS.warningCpaMeters,
+              warningTcpaSeconds: DEFAULT_THRESHOLDS.warningTcpaSeconds,
+            });
             confirmingReset = false;
           }}
-          onCancel={() => (confirmingReset = false)}
+          onCancel={() => {
+            confirmingReset = false;
+            void restoreFocusAfterCancel(() => resetTrigger);
+          }}
         />
       {:else}
-        <button type="button" class="btn btn-ghost reset" onclick={() => (confirmingReset = true)}>
+        <button
+          type="button"
+          class="btn btn-ghost reset"
+          bind:this={resetTrigger}
+          onclick={() => (confirmingReset = true)}
+        >
           Reset to defaults
         </button>
       {/if}
@@ -553,7 +550,9 @@ $effect(() => {
       </p>
       {#if xte.standing === 'server'}
         <p class="muted-note">
-          A server plugin raises the off-course alarm; this display follows it.
+          A server plugin raises the off-course alarm. Use its active alert above to silence it
+          boat-wide, or Mute here on the alarm strip for this display only. The settings below apply
+          only to the local fallback when no server alarm is available.
         </p>
       {/if}
       <button
@@ -568,16 +567,16 @@ $effect(() => {
         {:else}
           <Bell size={18} aria-hidden="true" />
         {/if}
-        <span>Mute off-course alarm</span>
+        <span>Mute local off-course fallback</span>
         <span class="mute-state" aria-hidden="true">{xte.muted ? 'On' : 'Off'}</span>
       </button>
       <UnitField
-        label="Off-course limit"
+        label="Local fallback off-course limit"
         unit={lengthUnit(displayUnits)}
         min={lengthToDisplay(20, displayUnits)}
         max={lengthToDisplay(2000, displayUnits)}
         step="any"
-        ariaLabel="Off-course alarm limit"
+        ariaLabel="Local fallback off-course alarm limit"
         value={lengthToDisplay(xte.limitMeters, displayUnits)}
         onCommit={(value) => xte?.setLimitMeters(lengthFromDisplay(value, displayUnits))}
       />

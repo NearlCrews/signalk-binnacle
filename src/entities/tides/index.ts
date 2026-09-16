@@ -1,3 +1,4 @@
+export { formatTideDatum, formatTideEventTime, tideHandoffFact } from './tide-confidence';
 export {
   isTideStation,
   MAX_PLAUSIBLE_TIDE_HEIGHT_M,

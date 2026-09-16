@@ -1,7 +1,7 @@
 <script lang="ts">
 import UserCog from '@lucide/svelte/icons/user-cog';
 import type { Profile } from '$entities/profile';
-import { AnchoredMenu, createMenuFocusMachine } from '$shared/ui';
+import { AnchoredMenu, createMenuFocusMachine, initializeMenuFocus } from '$shared/ui';
 
 interface Props {
   active: Profile | undefined;
@@ -21,6 +21,7 @@ let surface = $state<HTMLElement>();
 const machine = createMenuFocusMachine({
   surface: () => surface,
   trigger: () => trigger,
+  focusFrames: 0,
   requestClose: () => {
     menuOpen = false;
   },
@@ -74,6 +75,7 @@ function manage(): void {
     ariaLabel="Switch profile"
     role="menu"
     bind:surfaceRef={surface}
+    onPositioned={() => initializeMenuFocus(surface)}
     onKeydown={machine.handleKeydown}
     onFocusLeft={() => machine.close()}
   >

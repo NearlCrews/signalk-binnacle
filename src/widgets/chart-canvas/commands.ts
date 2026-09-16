@@ -1,4 +1,4 @@
-import type { Route } from '$entities/route';
+import type { Route, RouteWaypoint } from '$entities/route';
 import type { Bbox4, LatLon } from '$shared/geo';
 import type { LayerSettings, SignalKChart } from '$shared/map';
 
@@ -18,6 +18,7 @@ export interface MapCommands {
   // Ring the POI marker at a position, or clear the ring with undefined. Drives the chart highlight
   // from a selected or hovered note: a map-marker click, or a POI search result. Never moves the map.
   highlightPoi: (position: LatLon | undefined) => void;
+  retryPlaces: () => void;
   // Fly the map to a position (for example a route's start) at a usable zoom, animated.
   flyTo: (latitude: number, longitude: number) => void;
   // Fit the map to a [west, south, east, north] bounding box, animated; used after importing a
@@ -30,6 +31,7 @@ export interface MapCommands {
   // route. An initialPoint seeds the first waypoint of a fresh route at a chosen spot ("Start a route
   // here"). stopRouteEdit tears the editor down.
   startRouteEdit: (route?: Route, initialPoint?: LatLon) => void;
+  replaceRouteWaypoints: (waypoints: RouteWaypoint[]) => boolean;
   stopRouteEdit: () => void;
   // Apply a full per-layer visibility/opacity snapshot and stacking order to the nav chart at
   // runtime, so switching a profile updates the chart without a remount.

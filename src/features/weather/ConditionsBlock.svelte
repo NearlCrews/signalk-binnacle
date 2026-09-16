@@ -29,6 +29,7 @@ import {
 interface Props {
   current: PointConditions;
   observed: boolean;
+  source?: string;
   stale?: boolean;
   cached?: boolean;
   observationAgeMs?: number;
@@ -42,6 +43,7 @@ interface Props {
 const {
   current,
   observed,
+  source,
   stale = false,
   cached = false,
   observationAgeMs,
@@ -85,6 +87,9 @@ function ageLabel(ageMs: number | undefined): string | undefined {
 
 <p class="cond-when">
   {observed ? 'Observed' : 'Forecast'}
+  {#if source}
+    · {source}
+  {/if}
   · {validLabel(current.timeMs)}
   {#if observed && ageLabel(observationAgeMs)}
     · {ageLabel(observationAgeMs)}

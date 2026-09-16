@@ -58,6 +58,8 @@ describe('parseTidesResource', () => {
       NOW_MS,
     );
     expect(reading?.station.id).toBe('noaa/9414290');
+    expect(reading?.datum).toBe('MLLW');
+    expect(reading?.fetchedAtMs).toBe(NOW_MS);
     // Events come back sorted even when the wire order is not.
     expect(reading?.events.map((e) => e.kind)).toEqual(['low', 'high']);
     expect(reading?.events[1].heightMeters).toBeCloseTo(1.928);
@@ -76,6 +78,27 @@ describe('parseTidesResource', () => {
       NOW_MS,
     );
     expect(reading?.events.map((e) => e.kind)).toEqual(['high', 'low']);
+  });
+
+  it('preserves LAT and converts declared feet to stored SI without inferring chart datum', () => {
+    const reading = parseTidesResource(
+      {
+        datum: 'LAT',
+        units: 'feet',
+        extremes: [{ time: '2026-06-08T07:20:00Z', level: 10, high: true }],
+      },
+      50,
+      -1,
+      NOW_MS,
+    );
+    expect(reading?.datum).toBe('LAT');
+    expect(reading?.events[0].heightMeters).toBeCloseTo(3.048);
+  });
+
+  it('rejects unknown declared height units and leaves absent datum unknown', () => {
+    const body = { extremes: [{ time: '2026-06-08T07:20:00Z', level: 1, high: true }] };
+    expect(parseTidesResource({ ...body, units: 'furlongs' }, 50, -1, NOW_MS)).toBeUndefined();
+    expect(parseTidesResource(body, 50, -1, NOW_MS)?.datum).toBeUndefined();
   });
 
   it('synthesizes a local station at the given position when station metadata is absent', () => {

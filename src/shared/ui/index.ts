@@ -4,6 +4,7 @@ export type { AccessRecoveryState } from './access-recovery';
 export { ArmedRow } from './armed-row.svelte';
 export { default as CustomizeCategory } from './CustomizeCategory.svelte';
 export { default as CustomizeToggle } from './CustomizeToggle.svelte';
+export { restoreFocusAfterCancel } from './cancel-focus';
 export { ConfirmArm } from './confirm-arm.svelte';
 export { default as Disclosure } from './Disclosure.svelte';
 export { dialog, registerDismiss } from './dialog';
@@ -20,14 +21,22 @@ export {
 export { default as InlineConfirm } from './InlineConfirm.svelte';
 export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as LazyPanelState } from './LazyPanelState.svelte';
-export { createMenuFocusMachine, menuFocusLeft } from './menu-focus';
+export {
+  createMenuFocusMachine,
+  initializeMenuFocus,
+  menuFocusLeft,
+  restoreMenuFocus,
+} from './menu-focus';
 export { default as NameEntry } from './NameEntry.svelte';
 export { default as NavSortControl } from './NavSortControl.svelte';
 export { default as OverflowActions } from './OverflowActions.svelte';
+export { observeClientHeight } from './observe-client-height';
 export { default as PanelHeader } from './PanelHeader.svelte';
+export { default as PositionFields } from './PositionFields.svelte';
 export type { PanelId } from './panel-id';
 export { createPanelMinimize } from './panel-minimize.svelte';
 export { defaultSaveName, resolveSaveName } from './prompt';
+export { default as ReorderActions } from './ReorderActions.svelte';
 export type { Reorder } from './reorder.svelte';
 export { createReorder } from './reorder.svelte';
 export { default as SavedList } from './SavedList.svelte';

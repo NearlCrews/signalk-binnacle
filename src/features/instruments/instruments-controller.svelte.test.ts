@@ -21,6 +21,22 @@ function selfFrame(self: Record<string, unknown>): SKFrame {
 describe('createInstrumentsController', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('never calls an unassessed, stale, or missing instrument Normal', () => {
+    const ctrl = createInstrumentsController(makeDeps());
+    const reading = { state: 'live' as const, value: '5', unit: 'kn', siValue: 2.5 };
+    expect(ctrl.zoneAssessment?.(mustTile('sog'), reading)).toBe('No zones configured');
+    expect(
+      ctrl.zoneAssessment?.(mustTile('depth'), { ...reading, state: 'never', siValue: undefined }),
+    ).toBe('No measurement to assess');
+    expect(ctrl.zoneAssessment?.(mustTile('depth'), { ...reading, state: 'stale' })).toBe(
+      'Stale assessment',
+    );
+    expect(ctrl.zoneAssessment?.(mustTile('depth'), { ...reading, siValue: Number.NaN })).toBe(
+      'No measurement to assess',
+    );
+    ctrl.dispose();
+  });
+
   // Step 1 tests (written before implementation: RED phase)
 
   it('calls ensureCells with ALL_CATALOG_PATHS at construction, does not subscribe', () => {
@@ -694,6 +710,9 @@ describe('createInstrumentsController', () => {
     expect(ctrl.zoneState(depthDef, 1.5)).toBe('alarm');
     expect(ctrl.zoneState(depthDef, 3)).toBe('warning');
     expect(ctrl.zoneState(depthDef, 10)).toBe('normal');
+    expect(
+      ctrl.zoneAssessment?.(depthDef, { state: 'live', value: '10', unit: 'm', siValue: 10 }),
+    ).toBe('Normal (Binnacle default zones)');
 
     ctrl.dispose();
   });
@@ -742,6 +761,9 @@ describe('createInstrumentsController', () => {
     // Client default would fire alarm at 1.5 m, but server zones say only warn above 10 m.
     expect(ctrl.zoneState(depthDef, 1.5)).toBe('normal');
     expect(ctrl.zoneState(depthDef, 15)).toBe('warning');
+    expect(
+      ctrl.zoneAssessment?.(depthDef, { state: 'live', value: '15', unit: 'm', siValue: 15 }),
+    ).toBe('Warning (server zones)');
 
     ctrl.dispose();
   });

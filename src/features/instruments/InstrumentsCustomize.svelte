@@ -1,7 +1,13 @@
 <script lang="ts">
 import GripVertical from '@lucide/svelte/icons/grip-vertical';
 import RotateCw from '@lucide/svelte/icons/rotate-cw';
-import { CustomizeCategory, createReorder, LayerToggle, UnavailableHint } from '$shared/ui';
+import {
+  CustomizeCategory,
+  createReorder,
+  LayerToggle,
+  ReorderActions,
+  UnavailableHint,
+} from '$shared/ui';
 import type { InstrumentsController } from './instruments-controller.svelte';
 import { instrumentOptionLabels, type TileDef, type TileDeps } from './tile-catalog';
 
@@ -112,6 +118,12 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
         >
           <GripVertical size={18} aria-hidden="true" />
         </button>
+        <ReorderActions
+          label={title}
+          canMoveUp={reorder.canMove(def.id, -1)}
+          canMoveDown={reorder.canMove(def.id, 1)}
+          onMove={(direction) => reorder.moveBy(def.id, direction)}
+        />
       </li>
     {/each}
   </ul>

@@ -177,6 +177,18 @@ export class CourseGuidance {
     return this.#next !== undefined;
   }
 
+  // Stable across own-vessel fixes and calculated readouts, but not a course or leg replacement.
+  get actionContext(): string {
+    const previous = this.#info.previousPoint?.position;
+    return JSON.stringify([
+      this.active,
+      this.activeRouteSnapshot,
+      isLatLon(previous) ? previous : undefined,
+      this.#next,
+      this.nextPointName,
+    ]);
+  }
+
   // True when the active point is the last in the route, so the arrival advance does not step past
   // the end. Conservative: false when the route extent is unknown.
   get isLastPoint(): boolean {

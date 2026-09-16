@@ -8,8 +8,15 @@ import {
   TerraDrawSelectMode,
 } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
-import type { Route, RouteWaypoint } from '$entities/route';
-import { isLonLat, type LatLon, latLonToLonLat, lonLatToLatLon, roundLatLon } from '$shared/geo';
+import { MAX_ROUTE_WAYPOINTS, type Route, type RouteWaypoint } from '$entities/route';
+import {
+  isLatLon,
+  isLonLat,
+  type LatLon,
+  latLonToLonLat,
+  lonLatToLatLon,
+  roundLatLon,
+} from '$shared/geo';
 import { mapThemePaint } from '$shared/map';
 import type { Theme } from '$shared/ui';
 import { nearestSnapPosition, type SnapTarget } from './route-snap';
@@ -71,6 +78,7 @@ export function routeToStoreFeature(route: Route): GeoJSONStoreFeatures<GeoJSON.
 
 export interface RouteEditor {
   start(route?: Route, initialPoint?: LatLon): void;
+  replaceWaypoints(waypoints: RouteWaypoint[]): boolean;
   setTheme(theme: Theme): void;
   stop(): void;
 }
@@ -112,6 +120,8 @@ export function createRouteEditor(opts: {
     modes: [
       new TerraDrawPointMode({ styles: { pointColor: color, pointWidth: 6 } }),
       new TerraDrawLineStringMode({
+        // The app's guarded route exit owns Escape, including its matching keyup on the canvas.
+        keyEvents: { cancel: null, finish: 'Enter' },
         // The snapping guidance point Terra Draw renders while hovering a snap target takes the
         // theme color too, so night-red never shows the library's default point colors.
         styles: {
@@ -207,6 +217,7 @@ export function createRouteEditor(opts: {
   let pruning = false;
   let prunePending = false;
   let started = false;
+  let seedGeneration = 0;
 
   // Terra Draw appends features in creation order, so the line being drawn or edited is the last
   // entry; any earlier linestrings are stale extras left when one line was finished and a new one
@@ -277,8 +288,9 @@ export function createRouteEditor(opts: {
   // up at the point's screen pixel on the map canvas, which Terra Draw's adapter reads as the first
   // click. Deferred a microtask so linestring mode's listeners are attached first.
   const placeFirstPoint = (point: LatLon): void => {
+    const generation = seedGeneration;
     queueMicrotask(() => {
-      if (!started) return;
+      if (!started || generation !== seedGeneration) return;
       const canvas = opts.map.getCanvas();
       const rect = canvas.getBoundingClientRect();
       const { x, y } = opts.map.project([point.longitude, point.latitude]);
@@ -298,24 +310,56 @@ export function createRouteEditor(opts: {
     });
   };
 
+  const seed = (waypoints: RouteWaypoint[], initialPoint?: LatLon): boolean => {
+    seedGeneration += 1;
+    remember(waypoints);
+    draw.start();
+    started = true;
+    if (waypoints.length >= 2) {
+      drawing = false;
+      const validations = draw.addFeatures([routeToStoreFeature({ id: '', name: '', waypoints })]);
+      const accepted = validations.every((validation) => validation.valid);
+      draw.setMode(SELECT_MODE);
+      return accepted;
+    }
+    drawing = true;
+    draw.setMode(LINESTRING_MODE);
+    const first = waypoints[0]?.position ?? initialPoint;
+    if (first) placeFirstPoint(first);
+    return true;
+  };
+
   return {
     start(route, initialPoint) {
-      remember(route ? route.waypoints.slice() : []);
-      draw.start();
-      started = true;
-      if (route && route.waypoints.length > 0) {
-        drawing = false;
-        const validations = draw.addFeatures([routeToStoreFeature(route)]);
-        // A seed that fails Terra Draw's coordinate-precision validation is dropped silently and the
-        // editor would open blank; surface it so a rejected seed is observable rather than invisible.
-        const rejected = validations.filter((v) => !v.valid);
-        if (rejected.length > 0) console.warn('Route seed rejected by Terra Draw', rejected);
-        draw.setMode(SELECT_MODE);
-      } else {
-        drawing = true;
-        draw.setMode(LINESTRING_MODE);
-        if (initialPoint) placeFirstPoint(initialPoint);
+      if (!seed(route ? route.waypoints.slice() : [], initialPoint)) {
+        console.warn('Route seed rejected by Terra Draw');
       }
+    },
+    replaceWaypoints(waypoints) {
+      if (
+        !started ||
+        waypoints.length > MAX_ROUTE_WAYPOINTS ||
+        !waypoints.every((waypoint) => isLatLon(waypoint.position))
+      )
+        return false;
+      const previous = remembered.slice();
+      const next = waypoints.map((waypoint) => ({
+        ...waypoint,
+        position: roundLatLon(waypoint.position, DRAW_COORD_DECIMALS),
+      }));
+      pruning = true;
+      try {
+        draw.stop();
+        if (!seed(next)) {
+          draw.stop();
+          seed(previous);
+          return false;
+        }
+      } finally {
+        pruning = false;
+      }
+      opts.onChange(next);
+      return true;
     },
     setTheme(theme) {
       const color = drawColor(theme);
@@ -337,6 +381,7 @@ export function createRouteEditor(opts: {
       // rather than a Terra Draw "not started" throw.
       if (!started) return;
       started = false;
+      seedGeneration += 1;
       drawing = false;
       prunePending = false;
       // onRouteChange and onRouteFinish are registered once at construction, not per start(), and

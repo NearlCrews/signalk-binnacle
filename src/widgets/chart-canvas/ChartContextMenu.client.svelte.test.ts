@@ -4,7 +4,7 @@ import ChartContextMenu from './ChartContextMenu.svelte';
 
 const mounted: Array<() => void> = [];
 
-function mountMenu(): HTMLDivElement {
+async function mountMenu(): Promise<HTMLDivElement> {
   const target = document.createElement('div');
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
@@ -25,6 +25,12 @@ function mountMenu(): HTMLDivElement {
   mounted.push(() => {
     void unmount(component);
     target.remove();
+  });
+  await vi.waitFor(() => {
+    const surface = target.querySelector<HTMLElement>('.chart-context-menu');
+    if (!surface) throw new Error('Missing chart actions surface');
+    expect(getComputedStyle(surface).visibility).toBe('visible');
+    expect(document.activeElement).toBe(button(target, 'Go to here'));
   });
   return target;
 }
@@ -53,8 +59,8 @@ afterEach(() => {
 });
 
 describe('ChartContextMenu go-to confirmation', () => {
-  it('keeps Tab inside the confirmation dialog', () => {
-    const target = mountMenu();
+  it('keeps Tab inside the confirmation dialog', async () => {
+    const target = await mountMenu();
     button(target, 'Go to here').click();
     flushSync();
 
@@ -75,8 +81,8 @@ describe('ChartContextMenu go-to confirmation', () => {
     expect(document.activeElement).toBe(cancel);
   });
 
-  it('leaves the action menu untrapped', () => {
-    const target = mountMenu();
+  it('leaves the action menu untrapped', async () => {
+    const target = await mountMenu();
     const surface = target.querySelector<HTMLElement>('.chart-context-menu');
     expect(surface?.getAttribute('role')).toBe('menu');
     expect(surface?.getAttribute('aria-modal')).toBe(null);

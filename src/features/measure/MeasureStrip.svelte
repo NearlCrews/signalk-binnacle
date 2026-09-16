@@ -1,17 +1,56 @@
 <script lang="ts">
 import type { MeasureStore } from '$entities/measure';
 import type { UnitsStore } from '$entities/units';
+import type { LatLon } from '$shared/geo';
 import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
-import { InlineConfirm, registerDismiss } from '$shared/ui';
+import {
+  Disclosure,
+  InlineConfirm,
+  PositionFields,
+  registerDismiss,
+  restoreFocusAfterCancel,
+} from '$shared/ui';
 
 interface Props {
   measure: MeasureStore;
   units: UnitsStore;
   onMoveSelectedToCenter?: () => void;
+  getChartCenter?: () => LatLon | undefined;
 }
 
-const { measure, units, onMoveSelectedToCenter }: Props = $props();
+const { measure, units, onMoveSelectedToCenter, getChartCenter }: Props = $props();
 let clearArmed = $state(false);
+let clearTrigger = $state<HTMLButtonElement>();
+let position = $state<LatLon>({ latitude: 0, longitude: 0 });
+let coordinateMessage = $state('');
+let previousSelectedId: string | undefined;
+
+$effect(() => {
+  const selected = measure.selectedId;
+  if (selected === previousSelectedId) return;
+  previousSelectedId = selected;
+  const point = measure.vertices.find((vertex) => vertex.id === selected);
+  if (point) position = { ...point.position };
+});
+
+function addPoint(point: LatLon): void {
+  position = { ...point };
+  coordinateMessage = measure.add(point)
+    ? `Measurement point ${measure.vertices.length} added.`
+    : 'Point not added. Use a different position and check the point limit.';
+}
+
+function addCenter(): void {
+  const center = getChartCenter?.();
+  if (center) addPoint(center);
+  else coordinateMessage = 'Chart center is unavailable. Enter coordinates instead.';
+}
+
+function moveToCoordinates(): void {
+  coordinateMessage = measure.moveSelected(position)
+    ? 'Selected measurement point moved.'
+    : 'Point not moved. Use a different position from this point and its neighbors.';
+}
 
 const selectedNumber = $derived(
   measure.selectedIndex === undefined ? undefined : measure.selectedIndex + 1,
@@ -44,12 +83,20 @@ function clearMeasure(): void {
   clearArmed = false;
 }
 
+function cancelClear(): void {
+  clearArmed = false;
+  void restoreFocusAfterCancel(() => clearTrigger);
+}
+
 // Escape peels deliberate move mode before it ends the whole transient measurement. Registering one
 // live callback preserves the shared topmost-surface ordering without installing a second listener.
 $effect(() => {
   if (!measure.active) return;
   return registerDismiss(() => {
-    clearArmed = false;
+    if (clearArmed) {
+      cancelClear();
+      return;
+    }
     if (measure.moveArmed) measure.cancelMove();
     else measure.stop();
   });
@@ -74,6 +121,7 @@ $effect(() => {
           type="button"
           class="ack"
           disabled={measure.isEmpty || measure.moveArmed}
+          bind:this={clearTrigger}
           onclick={() => (clearArmed = true)}
         >
           Clear
@@ -82,12 +130,49 @@ $effect(() => {
       </div>
     </div>
 
+    <Disclosure label="Enter measurement coordinates">
+      <p class="muted-note">
+        Enter decimal degrees, or pan the chart and add its center. Select a measurement point to
+        move it.
+      </p>
+      <PositionFields {position} onChange={(next) => (position = next)} />
+      <div class="actions">
+        <button
+          type="button"
+          class="ack"
+          disabled={measure.atLimit || measure.moveArmed}
+          onclick={() => addPoint(position)}
+        >
+          Add measurement point
+        </button>
+        {#if getChartCenter}
+          <button
+            type="button"
+            class="ack"
+            disabled={measure.atLimit || measure.moveArmed}
+            onclick={addCenter}
+          >
+            Add at chart center
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="ack"
+          disabled={measure.selectedId === undefined}
+          onclick={moveToCoordinates}
+        >
+          Move point to coordinates
+        </button>
+      </div>
+      <p class="muted-note" role="status">{coordinateMessage}</p>
+    </Disclosure>
+
     {#if clearArmed}
       <InlineConfirm
         question={`Clear all ${measure.vertices.length} measurement points?`}
         confirmLabel="Clear points"
         onConfirm={clearMeasure}
-        onCancel={() => (clearArmed = false)}
+        onCancel={cancelClear}
       />
     {:else if !measure.isEmpty}
       <div class="edit-row">

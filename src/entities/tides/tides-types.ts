@@ -1,5 +1,5 @@
 // All values are SI: height in meters, velocity in m/s, time as Unix milliseconds, and position in
-// decimal degrees. NOAA CO-OPS is the source, so this is US and territories only.
+// decimal degrees. NOAA CO-OPS covers US waters; an optional server provider can cover other areas.
 
 // The tide and current prediction window, the current UTC day plus this many hours, so the next
 // high and low are always present even late in the day. Shared so the CO-OPS and signalk-tides
@@ -59,6 +59,9 @@ export interface TideReading {
   station: TideStation;
   distanceMeters: number;
   events: TideEvent[];
+  // Undefined on older cached readings or when the provider did not identify its reference.
+  datum?: string;
+  fetchedAtMs?: number;
 }
 
 export interface CurrentReading {

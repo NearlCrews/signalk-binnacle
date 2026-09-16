@@ -30,14 +30,19 @@ export interface LogbookSuggestion {
 type LogbookLoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface LogbookController {
+  draft: string;
+  seededText: string;
   readonly availability: 'unknown' | LogbookAvailability;
   readonly entries: readonly LogbookEntry[];
   readonly loadState: LogbookLoadState;
   readonly busy: boolean;
   readonly checking: boolean;
+  readonly refreshing?: boolean;
+  readonly lastCheckedMs?: number;
   readonly error: string | undefined;
   readonly suggestion: LogbookSuggestion | undefined;
   start(): void;
+  open?(): void;
   recheck(): Promise<void>;
   refresh(): Promise<void>;
   addEntry(text: string): Promise<boolean>;
@@ -57,6 +62,10 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
   let suggestion = $state<LogbookSuggestion | undefined>();
   let loadGeneration = 0;
   let started = false;
+  let draft = $state('');
+  let seededText = $state('');
+  let refreshing = $state(false);
+  let lastCheckedMs = $state<number | undefined>();
 
   const withBusy = createBusyGate(
     () => busy,
@@ -66,10 +75,21 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
   );
 
   async function refresh(): Promise<void> {
+    if (refreshing) return;
+    refreshing = true;
     const generation = ++loadGeneration;
     if (entries.length === 0) loadState = 'loading';
-    const result = await fetchRecentEntries(deps.origin(), deps.getToken());
+    let result: Awaited<ReturnType<typeof fetchRecentEntries>>;
+    try {
+      result = await fetchRecentEntries(deps.origin(), deps.getToken());
+    } catch {
+      if (generation === loadGeneration) loadState = 'error';
+      return;
+    } finally {
+      if (generation === loadGeneration) refreshing = false;
+    }
     if (generation !== loadGeneration) return;
+    lastCheckedMs = now();
     if (result.state === 'ok') {
       entries = result.entries;
       availability = 'available';
@@ -142,6 +162,10 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
       origin: 'manual',
     };
     entries = [echo, ...entries].slice(0, MAX_RECENT_ENTRIES);
+    // A read begun before the accepted write cannot replace the optimistic echo. Start a new
+    // refresh generation even if that earlier query is still settling.
+    loadGeneration += 1;
+    refreshing = false;
     // Any successful entry consumes the pending offer: its moment has been logged, edited or not.
     suggestion = undefined;
     void refresh();
@@ -155,6 +179,24 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
   }
 
   return {
+    get draft() {
+      return draft;
+    },
+    set draft(value: string) {
+      draft = value.slice(0, MAX_LOGBOOK_TEXT_LENGTH);
+    },
+    get seededText() {
+      return seededText;
+    },
+    set seededText(value: string) {
+      seededText = value.slice(0, MAX_LOGBOOK_TEXT_LENGTH);
+    },
+    get refreshing() {
+      return refreshing;
+    },
+    get lastCheckedMs() {
+      return lastCheckedMs;
+    },
     get availability() {
       return availability;
     },
@@ -177,6 +219,11 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
       return suggestion;
     },
     start,
+    open() {
+      if (!started) start();
+      else if (availability === 'available') void refresh();
+      else void recheck();
+    },
     recheck,
     refresh,
     addEntry,

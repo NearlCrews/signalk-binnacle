@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UnitsStore } from '$entities/units';
 import type { OwnVessel } from '$entities/vessel';
@@ -20,8 +20,10 @@ const waypoints: Waypoint[] = [
 
 const mounted: Array<() => void> = [];
 
-function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }) {
+function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }, selectedId?: string) {
   const target = document.createElement('div');
+  const onGoTo = vi.fn();
+  const onDelete = vi.fn();
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
@@ -30,6 +32,7 @@ function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }) {
       props: {
         auth: auth as unknown as AuthController,
         waypoints,
+        selectedId,
         vessel: fakeVesselFix(undefined) as unknown as OwnVessel,
         units: { mode: 'metric' } as UnitsStore,
         loadState: 'ready',
@@ -37,9 +40,9 @@ function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }) {
         routeBusy: false,
         onRetry: vi.fn(),
         onLocate: vi.fn(),
-        onGoTo: vi.fn(),
+        onGoTo,
         onEdit: vi.fn(),
-        onDelete: vi.fn(),
+        onDelete,
         onClose: vi.fn(),
       },
     });
@@ -52,6 +55,8 @@ function mountPanel(auth: Partial<AuthController> = { writeBlocked: false }) {
   if (!search) throw new Error('the waypoints panel rendered no search field');
   return {
     target,
+    onGoTo,
+    onDelete,
     click: (label: string): void => {
       const button = [...target.querySelectorAll<HTMLButtonElement>('button')].find(
         (candidate) =>
@@ -78,6 +83,42 @@ afterEach(() => {
 });
 
 describe('WaypointsPanel search', () => {
+  it.each(['Navigate to waypoint', 'Delete waypoint'])(
+    'returns focus to the same waypoint action after canceling %s',
+    async (label) => {
+      const panel = mountPanel();
+      panel.type('cove');
+      panel.click(label);
+      expect(document.activeElement?.textContent).toBe('Cancel');
+      panel.click('Cancel');
+      await tick();
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(label);
+      expect(document.activeElement?.closest('.card-frame')?.textContent).toContain('Quiet Cove');
+      expect(panel.onGoTo).not.toHaveBeenCalled();
+      expect(panel.onDelete).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not take focus back when another control receives it during cancellation', async () => {
+    const panel = mountPanel();
+    panel.type('cove');
+    panel.click('Delete waypoint');
+    panel.click('Cancel');
+    const search = panel.target.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error('Missing waypoint search');
+    search.focus();
+    await tick();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('names a search-excluded selected waypoint without claiming the result cap excluded it', () => {
+    const panel = mountPanel({ writeBlocked: false }, 'a');
+    panel.type('cove');
+    expect(panel.target.textContent).toContain('It does not match the current search.');
+    expect(panel.target.textContent).not.toContain('It is outside the displayed result limit.');
+    expect(panel.names()).toEqual(['Harbor Marina', 'Quiet Cove']);
+  });
+
   it('narrows the cards to the matching name', () => {
     const panel = mountPanel();
     expect(panel.names()).toHaveLength(3);

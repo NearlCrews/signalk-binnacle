@@ -200,13 +200,13 @@ describe('AlarmStrip actions', () => {
     expect(renderStrip()).toMatch(ACTION_BUTTON('Mute here'));
   });
 
-  it('hides Mute here when the server can silence the alarm instead', () => {
+  it('keeps Mute here available when the server offers silence for one alarm', () => {
     const body = renderStrip({
       notifications: [alert({ canSilence: true })],
       onSilence: () => {},
     });
 
-    expect(body).not.toMatch(ACTION_BUTTON('Mute here'));
+    expect(body).toMatch(ACTION_BUTTON('Mute here'));
   });
 
   // Silence acts on the worst alert only, so a second unsilenced alarm would be left sounding

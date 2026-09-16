@@ -17,7 +17,7 @@ const { state, errorMessage, onRetry }: Props = $props();
 {:else if state === 'error'}
   <div class="save-error" role="alert">
     <p class="alert-note">{errorMessage}</p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Try again</button>
+    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
   </div>
 {/if}
 

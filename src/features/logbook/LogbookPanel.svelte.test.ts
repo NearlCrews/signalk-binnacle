@@ -5,6 +5,8 @@ import type { LogbookController } from './logbook-controller.svelte';
 
 function renderPanel(controllerOverrides: Partial<LogbookController> = {}): string {
   const controller: LogbookController = {
+    draft: '',
+    seededText: '',
     availability: 'available',
     entries: [],
     loadState: 'ready',
@@ -47,6 +49,8 @@ describe('LogbookPanel', () => {
     const refused = renderPanel({ availability: 'unauthorized' });
     expect(refused).toContain('requires a Signal K administrator browser session');
     expect(refused).toContain('Sign in to Signal K');
+    expect(refused).toContain('(new tab)');
+    expect(refused).toContain('target="_blank"');
     expect(refused).toContain('/admin/#/login?redirect=');
     expect(refused).not.toContain('Request read and write access');
 
@@ -125,5 +129,17 @@ describe('LogbookPanel', () => {
   it('states that the server captures conditions, so no one expects Binnacle to', () => {
     const html = renderPanel();
     expect(html).toContain('Position, heading, speed, wind, and barometer are added by the server');
+  });
+
+  it('makes session draft retention and manual refresh visible', () => {
+    const html = renderPanel({
+      draft: 'Keep this note.',
+      lastCheckedMs: Date.UTC(2026, 8, 16, 12),
+    });
+    expect(html).toContain('Keep this note.');
+    expect(html).toContain('including when you change panels');
+    expect(html).toContain('Discard draft');
+    expect(html).toContain('Refresh entries');
+    expect(html).toContain('Last checked');
   });
 });

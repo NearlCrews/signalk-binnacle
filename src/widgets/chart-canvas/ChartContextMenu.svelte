@@ -4,7 +4,7 @@ import Navigation from '@lucide/svelte/icons/navigation';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Route from '@lucide/svelte/icons/route';
 import Ruler from '@lucide/svelte/icons/ruler';
-import { AnchoredMenu, InlineConfirm, rovingFocus } from '$shared/ui';
+import { AnchoredMenu, InlineConfirm, initializeMenuFocus, rovingFocus } from '$shared/ui';
 
 interface Props {
   // The press point in chart pixels, and the chart's pixel size, so the menu clamps inside the
@@ -47,35 +47,18 @@ const {
 // cause, breaking last-opened-first order; the wrapper reads the latest onClose when it fires.
 const close = (): void => onClose();
 
-// Wide enough for the longest label ("Start a route here") at the inherited font size; the menu
-// is fixed to this width below so the clamp math always matches the rendered box.
-const MENU_WIDTH = 240;
-// Mirrors the .menu-item control height (--control-size, 2.75rem at the 16px base) for the
-// above-or-below clamp math; the layout arithmetic needs a pixel number, not a CSS token.
-const ITEM_HEIGHT = 44;
-// The menu's top plus bottom padding, mirroring 2 * --space-1 (0.25rem each at the 16px base), so
-// the clamp height matches the rendered box; the CSS padding below uses the same token.
-const MENU_PADDING = 8;
-// The clear margin kept from each viewport edge, mirroring --space-2 (0.5rem at the 16px base).
-const EDGE = 8;
-
-// Clamp the anchor so the menu (centered on x) stays a margin clear of both side edges.
-const left = $derived(
-  Math.min(
-    Math.max(x, MENU_WIDTH / 2 + EDGE),
-    Math.max(MENU_WIDTH / 2 + EDGE, width - MENU_WIDTH / 2 - EDGE),
-  ),
-);
-// Prefer above the press so a finger does not cover the menu; drop below near the top edge.
+let anchor = $state<HTMLElement>();
+let surface = $state<HTMLElement>();
 let confirmingGoTo = $state(false);
-const itemCount = $derived(
-  confirmingGoTo ? 3 : 2 + (onDropWaypoint ? 1 : 0) + (onAddNote ? 1 : 0) + (onMeasureFrom ? 1 : 0),
-);
-const menuHeight = $derived(itemCount * ITEM_HEIGHT + MENU_PADDING);
-const above = $derived(y > menuHeight + EDGE * 2 || y > height / 2);
-const top = $derived(above ? y - EDGE : y + EDGE);
 </script>
 
+<span
+  class="chart-menu-anchor"
+  aria-hidden="true"
+  bind:this={anchor}
+  style:left={`${Math.min(width, Math.max(0, x))}px`}
+  style:top={`${Math.min(height, Math.max(0, y))}px`}
+></span>
 <AnchoredMenu
   open={true}
   onClose={close}
@@ -84,7 +67,10 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   ariaLabel={confirmingGoTo ? 'Confirm chart navigation' : 'Chart actions'}
   role={confirmingGoTo ? 'dialog' : 'menu'}
   focusTrap={confirmingGoTo}
-  surfaceStyle={`left: ${left}px; top: ${top}px; inline-size: ${MENU_WIDTH}px; transform: translate(-50%, ${above ? '-100%' : '0'});`}
+  {anchor}
+  bind:surfaceRef={surface}
+  onPositioned={() => { if (!confirmingGoTo) initializeMenuFocus(surface); }}
+  preferredPlacement="above"
   onFocusLeft={close}
 >
   {#if confirmingGoTo}
@@ -137,10 +123,20 @@ const top = $derived(above ? y - EDGE : y + EDGE);
 </AnchoredMenu>
 
 <style>
-:global(.chart-context-menu) {
+.chart-menu-anchor {
   position: absolute;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
+:global(.chart-context-menu) {
   z-index: var(--z-menu);
   padding: var(--space-1);
+  inline-size: min(15rem, calc(100dvw - 1rem));
+  max-block-size: calc(100 * var(--dvh) - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--text-sm);
 }
 /* Transparent to layout so the rows stay direct children of the menu surface and keep its padding;
    it adds no box and no containing block. */
@@ -148,7 +144,8 @@ const top = $derived(above ? y - EDGE : y + EDGE);
   display: contents;
 }
 .item {
-  white-space: nowrap;
+  white-space: normal;
+  text-align: start;
 }
 .goto-confirm {
   padding: var(--space-2);

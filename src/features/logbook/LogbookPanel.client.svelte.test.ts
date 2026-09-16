@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 function composer() {
-  const state = $state({ busy: false });
+  const state = $state({ busy: false, draft: '', seededText: '' });
   let finish!: (accepted: boolean) => void;
   const addEntry = vi.fn(async () => {
     state.busy = true;
@@ -20,6 +20,18 @@ function composer() {
     return accepted;
   });
   const controller = {
+    get draft() {
+      return state.draft;
+    },
+    set draft(value: string) {
+      state.draft = value;
+    },
+    get seededText() {
+      return state.seededText;
+    },
+    set seededText(value: string) {
+      state.seededText = value;
+    },
     availability: 'available',
     entries: [],
     loadState: 'ready',
@@ -39,7 +51,7 @@ function composer() {
   } as unknown as LogbookController;
   const target = document.createElement('div');
   document.body.append(target);
-  const component = mount(LogbookPanel, {
+  let component = mount(LogbookPanel, {
     target,
     props: { controller, origin: 'https://boat.test', onClose: vi.fn() },
   });
@@ -64,10 +76,63 @@ function composer() {
     button.click();
     flushSync();
   }
-  return { input, type, save, addEntry, state, finish: (accepted: boolean) => finish(accepted) };
+  return {
+    input,
+    type,
+    save,
+    addEntry,
+    state,
+    target,
+    controller,
+    finish: (accepted: boolean) => finish(accepted),
+    async reopen() {
+      await unmount(component);
+      component = mount(LogbookPanel, {
+        target,
+        props: { controller, origin: 'https://boat.test', onClose: vi.fn() },
+      });
+      flushSync();
+    },
+  };
 }
 
 describe('LogbookPanel pending save', () => {
+  it('returns cancellation focus to Discard draft without losing the draft', async () => {
+    const test = composer();
+    test.type('Retain this log entry');
+    const button = (label: string) => {
+      const match = [...test.target.querySelectorAll('button')].find(
+        (candidate) => candidate.textContent?.trim() === label,
+      );
+      if (!match) throw new Error(`Missing ${label}`);
+      return match;
+    };
+    button('Discard draft').focus();
+    button('Discard draft').click();
+    flushSync();
+    expect(document.activeElement).toBe(button('Cancel'));
+    button('Cancel').click();
+    flushSync();
+    await vi.waitFor(() => expect(document.activeElement).toBe(button('Discard draft')));
+    expect(test.controller.draft).toBe('Retain this log entry');
+    expect(test.addEntry).not.toHaveBeenCalled();
+  });
+
+  it('retains the composer across panel changes and an administrator sign-in recovery', async () => {
+    const test = composer();
+    test.type('Keep watch on the western approach');
+    await test.reopen();
+    expect(test.target.querySelector('textarea')?.value).toBe('Keep watch on the western approach');
+    Object.assign(test.controller, { availability: 'unauthorized' });
+    await test.reopen();
+    const login = test.target.querySelector<HTMLAnchorElement>('a[href*="/admin/"]');
+    expect(login?.target).toBe('_blank');
+    expect(test.controller.draft).toBe('Keep watch on the western approach');
+    Object.assign(test.controller, { availability: 'available' });
+    await test.reopen();
+    expect(test.target.querySelector('textarea')?.value).toBe('Keep watch on the western approach');
+  });
+
   it('retains a newer draft while saving only the submitted snapshot', async () => {
     const test = composer();
     test.type('First entry');

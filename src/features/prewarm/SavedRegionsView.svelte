@@ -5,13 +5,21 @@ import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import { formatBounds } from '$shared/geo';
 import { formatBytes } from '$shared/lib';
-import { type ArmedRow, Disclosure, InlineConfirm, SavedList } from '$shared/ui';
+import {
+  type ArmedRow,
+  Disclosure,
+  InlineConfirm,
+  restoreFocusAfterCancel,
+  SavedList,
+} from '$shared/ui';
 import { areaSummary } from './area-summary';
 import type { SavedRegionDto, WarmStatus } from './regions-client.js';
 
 interface Props {
   regions: SavedRegionDto[] | null;
   loadError: string | null;
+  loading?: boolean;
+  onRetryLoad?: () => void;
   regionStatus: Record<string, WarmStatus>;
   regionPollError: Record<string, boolean>;
   pendingRegion: Record<string, boolean>;
@@ -28,6 +36,8 @@ interface Props {
 const {
   regions,
   loadError,
+  loading = false,
+  onRetryLoad,
   regionStatus,
   regionPollError,
   pendingRegion,
@@ -40,6 +50,13 @@ const {
   onRedownload,
   onRetryStatus,
 }: Props = $props();
+
+const deleteTriggers = $state<Record<string, HTMLButtonElement | undefined>>({});
+
+function cancelDelete(id: string): void {
+  armedDelete.cancel();
+  void restoreFocusAfterCancel(() => deleteTriggers[id]);
+}
 
 const STATUS_META: Record<SavedRegionDto['status'], { label: string; severity: string }> = {
   downloading: { label: 'Saving…', severity: '' },
@@ -68,8 +85,20 @@ function chartList(region: SavedRegionDto): string {
   <h3 class="caps-label">My areas</h3>
   {#if loadError !== null}
     <p class="alert-note" role="alert">{loadError}</p>
-  {:else if regions === null}
-    <p class="muted-note" role="status">Loading areas…</p>
+    {#if onRetryLoad}
+      <button type="button" class="btn btn-ghost" disabled={loading} onclick={onRetryLoad}>
+        Retry saved areas
+      </button>
+    {/if}
+  {/if}
+  {#if regions === null}
+    {#if loading}
+      <p class="muted-note" role="status">Loading areas…</p>
+    {:else if loadError === null}
+      <p class="muted-note">
+        Saved areas are unavailable. Check the connection and administrator access.
+      </p>
+    {/if}
   {:else}
     <SavedList
       items={regions}
@@ -183,7 +212,7 @@ function chartList(region: SavedRegionDto): string {
           <InlineConfirm
             question="Delete this offline area?"
             onConfirm={() => armedDelete.confirm(region.id)}
-            onCancel={() => armedDelete.cancel()}
+            onCancel={() => cancelDelete(region.id)}
           />
         {:else}
           <div class="actions">
@@ -207,6 +236,7 @@ function chartList(region: SavedRegionDto): string {
               aria-label="Delete this area"
               title="Delete"
               disabled={!adminAccess || submitting || pendingRegion[region.id]}
+              bind:this={deleteTriggers[region.id]}
               onclick={() => armedDelete.arm(region.id)}
             >
               <Trash2 size={18} aria-hidden="true" />

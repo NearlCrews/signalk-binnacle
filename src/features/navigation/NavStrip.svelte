@@ -67,8 +67,13 @@ const {
 // confirm step instead of firing on a single tap; the arm times out back to plain Stop on its own.
 const stopArm = new ConfirmArm();
 onDestroy(() => stopArm.disarm());
+const actionContext = $derived(guidance.actionContext);
+let stopContext: string | undefined;
+let restartContext: string | undefined;
 
 function tapStop(): void {
+  if (stopContext !== actionContext) stopArm.disarm();
+  stopContext = actionContext;
   if (stopArm.tap()) onStop();
 }
 
@@ -97,11 +102,18 @@ function toggleSettings(): void {
 }
 
 function tapRestart(): void {
+  if (restartContext !== actionContext) restartArm.disarm();
+  restartContext = actionContext;
   if (restartArm.tap()) {
     onRestartCourse?.();
     closeSettings();
   }
 }
+
+$effect(() => {
+  if (stopContext !== actionContext) stopArm.disarm();
+  if (restartContext !== actionContext) restartArm.disarm();
+});
 
 // The streamed target arrival instant rendered in the field's own local-time vocabulary; empty when
 // none is set. datetime-local carries no zone, so the ISO instant is spelled in this display's zone.

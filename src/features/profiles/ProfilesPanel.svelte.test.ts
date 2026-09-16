@@ -69,6 +69,14 @@ function saveButtonTag(body: string): string {
 }
 
 describe('ProfilesPanel', () => {
+  it('labels profile selection visibly and distinguishes it from the shared default', () => {
+    const body = renderPanel({ profiles: profiles(2), onOpenNetworkPrivacy: vi.fn() });
+    expect(body).toMatch(
+      /<button[^>]*aria-label="Use Profile 1 on this device"[^>]*>[\s\S]*?Use profile[\s\S]*?<\/button>/,
+    );
+    expect(body).toContain('changing it does not switch displays');
+    expect(body).toContain('Review network privacy');
+  });
   it('discloses the unit source and hides the fallback selector when the server decides', () => {
     const serverLed = renderPanel({ units: fakeUnits('server') });
     expect(serverLed).toContain("Following the Signal K server's unit preference");

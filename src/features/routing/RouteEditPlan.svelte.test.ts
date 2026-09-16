@@ -147,18 +147,41 @@ describe('RouteEditPlan planning cues', () => {
     expect(body).toContain('advisory only');
   });
 
+  it('labels retained model data and offers the forecast recovery action alongside leg values', () => {
+    const now = Date.parse('2026-08-11T02:00:00Z');
+    vi.setSystemTime(now);
+    const body = renderPlan({
+      weatherGrid: {
+        ...testGrid('2026-08-11T00:00:00Z'),
+        fetchedAt: now - 120_000,
+        partialWaves: true,
+      },
+      weatherStatus: 'error',
+      weatherNowMs: now,
+      onOpenForecast: vi.fn(),
+    });
+    expect(body).toContain('Open-Meteo model forecast');
+    expect(body).toContain('Fetched 2 min ago');
+    expect(body).toContain('Refresh failed; showing retained forecast');
+    expect(body).toContain('Wave data unavailable; wind model only');
+    expect(body).toContain('Open Forecast');
+    expect(body).toContain('Wind 9.7 kn');
+  });
+
   it('shows no wind line when the grid does not cover the arrival times', () => {
     vi.setSystemTime(new Date('2026-08-11T02:00:00Z'));
     const body = renderPlan({ weatherGrid: testGrid('2026-08-09T00:00:00Z') });
     expect(body).not.toContain('Wind ');
     expect(body).not.toContain('advisory only');
+    expect(body).toContain('Planned arrival is outside the forecast period');
   });
 
-  it('shows no wind line and no note without a grid', () => {
+  it('explains the unavailable forecast without inventing wind values when there is no grid', () => {
     vi.setSystemTime(new Date('2026-08-11T02:00:00Z'));
     const body = renderPlan();
     expect(body).not.toContain('Wind ');
     expect(body).not.toContain('advisory only');
+    expect(body).toContain('Route wind forecast unavailable');
   });
 
   it('honors the units preference profile in the wind line', () => {

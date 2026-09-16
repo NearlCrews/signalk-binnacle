@@ -56,7 +56,8 @@ export function buildConfigPayload(settings: PositionWarmSettings): {
 }
 
 // Extract and validate the position-warm settings from the config response. Returns null when the
-// response is absent, malformed, or missing required fields, so the panel keeps its defaults.
+// response is absent, malformed, or missing required fields, so the panel cannot enable edits
+// until an accepted policy has loaded.
 //
 // GET /api/position-warm/config returns the positionWarm block directly, not a { positionWarm }
 // wrapper (the wrapper exists only on POST so a save merges that one key without dropping the saved

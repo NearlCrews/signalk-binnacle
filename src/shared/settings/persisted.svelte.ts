@@ -188,6 +188,11 @@ function resolveStorage(injected?: StorageLike): StorageLike | undefined {
 // immediately replaces with the read value.
 export class PersistedValue<T> {
   value = $state<T>(undefined as unknown as T);
+  #lastWriteFailed = $state(false);
+
+  get lastWriteFailed(): boolean {
+    return this.#lastWriteFailed;
+  }
 
   // True when `value` was loaded from storage, false when it fell back to the default.
   // Lets a caller persist a freshly generated default only on first run.
@@ -226,7 +231,9 @@ export class PersistedValue<T> {
     this.value = value;
     try {
       this.#write(value);
+      this.#lastWriteFailed = !this.#storage;
     } catch (error) {
+      this.#lastWriteFailed = true;
       // A failed persist (quota exceeded, private mode) must not break the in-memory update; a
       // breadcrumb makes "my settings stopped persisting" diagnosable without breaking anything.
       console.warn(`Could not persist "${this.#key}".`, error);

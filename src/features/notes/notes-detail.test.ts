@@ -103,6 +103,34 @@ describe('fetchNoteDetail', () => {
     ]);
   });
 
+  it.each([undefined, null, 'unknown', 'false', 0, 1])(
+    'retains a malformed boolean danger flag as Unknown (%s)',
+    async (value) => {
+      const body = {
+        ...structured,
+        properties: {
+          crowsNest: {
+            schemaVersion: 1,
+            sections: [
+              {
+                id: 'danger',
+                title: 'Danger',
+                items: [{ label: 'Dangerous', kind: 'flag', value }],
+              },
+            ],
+          },
+        },
+      };
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, body)));
+      const detail = await fetchNoteDetail('http://pi', undefined, 'danger');
+      expect(detail?.sections?.[0].items[0]).toEqual({
+        label: 'Dangerous',
+        kind: 'flag',
+        value: 'Unknown',
+      });
+    },
+  );
+
   it('keeps duplicate structured sections with deterministic unique ids', async () => {
     const section = {
       title: 'Details',
@@ -205,6 +233,84 @@ describe('createNoteDetailLoader', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     loader.invalidate('lll-1');
     await loader.load('lll-1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates after five minutes and allows an explicit fresh-cache refresh', async () => {
+    let now = 1_000;
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, structured));
+    vi.stubGlobal('fetch', fetchMock);
+    const loader = createNoteDetailLoader(
+      'http://pi',
+      () => undefined,
+      () => now,
+    );
+    expect((await loader.load('1'))?.fetchedAtMs).toBe(now);
+    await loader.load('1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    now += 300_000;
+    await loader.load('1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await loader.load('1', true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves original age and marks accepted detail retained after a failed refresh', async () => {
+    let now = 1_000;
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, structured));
+    vi.stubGlobal('fetch', fetchMock);
+    const loader = createNoteDetailLoader(
+      'http://pi',
+      () => undefined,
+      () => now,
+    );
+    await loader.load('1');
+    now += 300_000;
+    fetchMock.mockResolvedValue(jsonResponse(503, {}));
+    expect(await loader.load('1')).toMatchObject({
+      fetchedAtMs: 1_000,
+      retained: true,
+      name: structured.name,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not hide a failed forced refresh when the still-young cache is reopened', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, structured));
+    vi.stubGlobal('fetch', fetchMock);
+    const loader = createNoteDetailLoader(
+      'http://pi',
+      () => undefined,
+      () => 1_000,
+    );
+    await loader.load('1');
+    fetchMock.mockResolvedValue(jsonResponse(503, {}));
+    expect((await loader.load('1', true))?.retained).toBe(true);
+    expect((await loader.load('1'))?.retained).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not reuse another authorization context or let an invalidated read refill the cache', async () => {
+    let token = 'first';
+    let finish!: (response: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue(jsonResponse(200, structured));
+    vi.stubGlobal('fetch', fetchMock);
+    const loader = createNoteDetailLoader('http://pi', () => token);
+    const stale = loader.load('1');
+    loader.invalidate('1');
+    token = 'second';
+    await loader.load('1');
+    finish(jsonResponse(200, { ...structured, name: 'Old reply' }));
+    expect(await stale).toBeUndefined();
+    expect((await loader.load('1'))?.name).toBe(structured.name);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-import { type ComponentProps, flushSync, mount, unmount } from 'svelte';
+import { type ComponentProps, flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TrackRecorder } from '$entities/track';
 import { PersistedValue } from '$shared/settings';
@@ -16,6 +16,7 @@ const points = [
 function mountPanel(
   onSave: (name: string) => Promise<boolean>,
   auth: Partial<AuthController> = { writeBlocked: false },
+  overrides: Partial<ComponentProps<typeof TracksPanel>> = {},
 ) {
   const target = document.createElement('div');
   document.body.append(target);
@@ -27,7 +28,7 @@ function mountPanel(
     resume: vi.fn(),
     clear: vi.fn(),
   } as unknown as TrackRecorder;
-  const props: ComponentProps<typeof TracksPanel> = {
+  const props = $state<ComponentProps<typeof TracksPanel>>({
     auth: auth as unknown as AuthController,
     recorder,
     units: 'metric',
@@ -54,7 +55,8 @@ function mountPanel(
     onToggleSaved: vi.fn(),
     onExport: vi.fn(),
     onClose: vi.fn(),
-  };
+    ...overrides,
+  });
   let component!: ReturnType<typeof mount>;
   flushSync(() => {
     component = mount(TracksPanel, { target, props });
@@ -82,7 +84,7 @@ function mountPanel(
     target.querySelector<HTMLFormElement>('.name-entry')?.requestSubmit();
     flushSync();
   };
-  return { target, click, nameInput, submitName };
+  return { target, click, nameInput, submitName, props };
 }
 
 afterEach(() => {
@@ -149,5 +151,83 @@ describe('TracksPanel write access', () => {
     panel.click('Request read and write access');
 
     expect(requestWriteAccess).toHaveBeenCalledOnce();
+  });
+});
+
+describe('TracksPanel cancellation focus', () => {
+  it.each(['Save', 'Save as route'])('returns canceled naming to its %s trigger', async (label) => {
+    const panel = mountPanel(vi.fn(async () => true));
+    panel.click(label);
+    expect(document.activeElement).toBe(panel.nameInput());
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    flushSync();
+    await tick();
+
+    expect(panel.nameInput()).toBeNull();
+    expect(document.activeElement?.textContent?.trim()).toBe(label);
+    expect(panel.props.onSave).not.toHaveBeenCalled();
+    expect(panel.props.onSaveAsRoute).not.toHaveBeenCalled();
+    expect(panel.props.onClose).not.toHaveBeenCalled();
+  });
+
+  it.each(['Discard', 'Retrace track'])(
+    'returns canceled confirmation to its %s trigger without acting',
+    async (label) => {
+      const panel = mountPanel(vi.fn(async () => true));
+      panel.click(label);
+      panel.click('Cancel');
+      await tick();
+
+      expect(panel.target.querySelector('.confirm')).toBeNull();
+      expect(document.activeElement?.textContent?.trim()).toBe(label);
+      expect(panel.props.recorder.clear).not.toHaveBeenCalled();
+      expect(panel.props.onTrackHome).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns a canceled saved-track delete to the recreated Delete control', async () => {
+    const panel = mountPanel(
+      vi.fn(async () => true),
+      { writeBlocked: false },
+      {
+        saved: [
+          {
+            id: 'saved',
+            name: 'Morning passage',
+            points: [points],
+          },
+        ],
+      },
+    );
+    const original = panel.target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete track"]',
+    );
+    if (!original) throw new Error('no saved-track delete control');
+    original.click();
+    flushSync();
+    panel.click('Cancel');
+    await tick();
+
+    const restored = panel.target.querySelector('button[aria-label="Delete track"]');
+    expect(restored).not.toBe(original);
+    expect(document.activeElement).toBe(restored);
+    expect(panel.props.onDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not restore a trigger after a confirmed retrace moves focus elsewhere', async () => {
+    const panel = mountPanel(vi.fn(async () => true));
+    const destination = panel.target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Close tracks panel"]',
+    );
+    panel.props.onTrackHome = vi.fn(() => destination?.focus());
+    flushSync();
+    panel.click('Retrace track');
+    panel.click('Start retrace');
+    await tick();
+
+    expect(panel.props.onTrackHome).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(destination);
   });
 });

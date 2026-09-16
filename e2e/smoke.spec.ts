@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 import {
+  expectHelmHitTarget,
   expectInsideViewport,
   expectNoHorizontalOverflow,
   openMenuItem,
@@ -686,9 +687,12 @@ test('offline charts stays discoverable when Chart Locker is not installed', asy
   const menu = page.locator('#app-menu-launcher');
   const offline = menu.getByRole('button', { name: /Offline charts/ });
   await expect(offline).toBeVisible();
-  await expect(offline).toHaveAttribute('aria-disabled', 'true');
-  await offline.click({ force: true });
-  await expect(menu.locator('.transient-note')).toContainText('signalk-chart-locker');
+  await expect(offline).toBeEnabled();
+  await offline.click();
+  const panel = page.getByRole('complementary', { name: 'Offline charts', exact: true });
+  await expect(panel).toContainText('signalk-chart-locker');
+  await expect(panel.getByRole('button', { name: 'Retry offline chart setup' })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Close offline charts' })).toBeEnabled();
 });
 
 test('offline area review shows a planning estimate and catalog chart defaults', async ({
@@ -725,7 +729,11 @@ test('offline area review shows a planning estimate and catalog chart defaults',
   await page.mouse.move(box.x + box.width * 0.78, box.y + box.height * 0.62, { steps: 6 });
   await page.mouse.up();
 
-  await expect(panel.getByText('Area set. Draw again to change it.')).toBeVisible();
+  await expect(
+    panel.getByText(
+      'Area set. Adjust the bounds, use the current view, or draw again to change it.',
+    ),
+  ).toBeVisible();
   await expect(panel.getByText('Estimated download')).toBeVisible();
   await expect(panel.getByText('Maximum download')).toHaveCount(0);
   await expect(
@@ -906,6 +914,9 @@ test('saved PMTiles charts expose repair, refresh, and sharing controls', async 
   await expect(panel.getByRole('button', { name: 'Replace source URL' })).toBeEnabled();
   await expect(panel.getByRole('button', { name: 'Refresh metadata' })).toBeEnabled();
   await expect(panel.getByText('Share the full chart URL with the Signal K server')).toBeVisible();
+  const sharingChoice = panel.locator('label.share-choice');
+  await sharingChoice.scrollIntoViewIfNeeded();
+  await expectHelmHitTarget(sharingChoice);
 
   await panel.getByRole('button', { name: 'Refresh metadata' }).click();
   await expect(panel.getByRole('alert')).toContainText('Could not read chart metadata.');

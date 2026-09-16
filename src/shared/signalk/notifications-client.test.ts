@@ -5,7 +5,6 @@ import {
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
   fetchRaisedNotificationsById,
-  postMobNotification,
   postNotification,
   resolveNotification,
   silenceAllNotifications,
@@ -288,22 +287,5 @@ describe('fetchRaisedNotificationsById', () => {
     await expect(fetchRaisedNotificationsById(BASE, undefined, SELF)).resolves.toBeUndefined();
     stubFetch({ ok: true, body: [] });
     await expect(fetchRaisedNotificationsById(BASE, undefined, SELF)).resolves.toBeUndefined();
-  });
-});
-
-describe('postMobNotification', () => {
-  it('posts the optional message to the mob route and returns the id', async () => {
-    const mock = stubFetch({ ok: true, body: { id: ID } });
-    await expect(postMobNotification(BASE, 'tok', 'Crew overboard')).resolves.toBe(ID);
-    const [url, init] = mock.mock.calls[0];
-    expect(url).toBe(`${API}/mob`);
-    expect(init?.method).toBe('POST');
-    expect(JSON.parse(init?.body as string)).toEqual({ message: 'Crew overboard' });
-  });
-
-  it('sends an empty body when no message is given', async () => {
-    const mock = stubFetch({ ok: true, body: { id: ID } });
-    await expect(postMobNotification(BASE, undefined)).resolves.toBe(ID);
-    expect(JSON.parse(mock.mock.calls[0][1]?.body as string)).toEqual({});
   });
 });

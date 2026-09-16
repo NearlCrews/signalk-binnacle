@@ -15,6 +15,7 @@ interface MobShape {
   distanceMeters: number | undefined;
   elapsedSeconds: number | undefined;
   markEpochMs: number | undefined;
+  actionContext?: string;
 }
 
 const mounted: Array<() => void> = [];
@@ -33,6 +34,7 @@ function mountStrip(activeCourse?: string) {
     mob: mob as unknown as MobStore,
     units: { mode: 'metric' } as UnitsStore,
     activeCourse,
+    activeCourseContext: 'course-one',
     onSteer: vi.fn(),
     onCancel: vi.fn(),
   });
@@ -63,6 +65,40 @@ afterEach(() => {
 });
 
 describe('MobStrip steer arming', () => {
+  it('invalidates steering when a same-named destination or mark changes', () => {
+    const harness = mountStrip('Harbor');
+    harness.steerButton().click();
+    flushSync();
+    harness.props.activeCourseContext = 'course-two';
+    flushSync();
+    expect(harness.steerButton().textContent).toContain('Steer to MOB');
+    harness.steerButton().click();
+    flushSync();
+    harness.mob.position = { latitude: 28, longitude: -83 };
+    flushSync();
+    expect(harness.steerButton().textContent).toContain('Steer to MOB');
+    expect(harness.props.onSteer).not.toHaveBeenCalled();
+  });
+
+  it('invalidates cancel when a new remote activation arrives', () => {
+    const harness = mountStrip();
+    harness.mob.actionContext = 'activation-one';
+    flushSync();
+    const cancel = (): HTMLButtonElement => {
+      const button = harness.target.querySelector<HTMLButtonElement>('.ack--warning');
+      if (!button) throw new Error('Missing cancel');
+      return button;
+    };
+    cancel().click();
+    flushSync();
+    expect(cancel().textContent).toContain('Confirm cancel?');
+    harness.mob.actionContext = 'activation-two';
+    flushSync();
+    expect(cancel().textContent).toContain('Cancel');
+    cancel().click();
+    flushSync();
+    expect(harness.props.onCancel).not.toHaveBeenCalled();
+  });
   it('arms on the first tap without calling goTo and explains the consequence', () => {
     const harness = mountStrip();
     harness.steerButton().click();

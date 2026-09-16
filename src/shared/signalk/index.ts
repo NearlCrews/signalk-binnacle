@@ -33,7 +33,6 @@ export {
   acknowledgeNotification,
   fetchRaisedNotificationPaths,
   fetchRaisedNotificationsById,
-  postMobNotification,
   postNotification,
   resolveNotification,
   silenceAllNotifications,

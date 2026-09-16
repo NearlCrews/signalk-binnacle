@@ -1,4 +1,4 @@
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PrivacyReport } from '$shared/privacy';
 import DevicePrivacySection from './DevicePrivacySection.svelte';
@@ -35,12 +35,16 @@ function mountSection(report: PrivacyReport) {
   return target;
 }
 
-function clickText(target: HTMLElement, text: string): void {
+function buttonText(target: HTMLElement, text: string): HTMLButtonElement {
   const button = [...target.querySelectorAll('button')].find((item) =>
     item.textContent?.includes(text),
   );
   if (!button) throw new Error(`no button labeled ${text}`);
-  button.click();
+  return button;
+}
+
+function clickText(target: HTMLElement, text: string): void {
+  buttonText(target, text).click();
   flushSync();
 }
 
@@ -49,6 +53,32 @@ afterEach(() => {
 });
 
 describe('DevicePrivacySection partial failures', () => {
+  it.each(['Forget credentials', 'Erase all local data'])(
+    'returns focus to the recreated %s action after cancellation',
+    async (label) => {
+      const target = mountSection(PARTIAL);
+      buttonText(target, label).focus();
+      clickText(target, label);
+      expect(document.activeElement).toBe(buttonText(target, 'Cancel'));
+      clickText(target, 'Cancel');
+      await tick();
+      expect(document.activeElement).toBe(buttonText(target, label));
+      expect(target.querySelector('.confirm')).toBeNull();
+    },
+  );
+
+  it('does not reclaim focus from another control after cancellation', async () => {
+    const target = mountSection(PARTIAL);
+    const other = document.createElement('button');
+    other.textContent = 'Another action';
+    target.append(other);
+    clickText(target, 'Forget credentials');
+    clickText(target, 'Cancel');
+    other.focus();
+    await tick();
+    expect(document.activeElement).toBe(other);
+  });
+
   it('separates one failure from the next and from the sentence that follows', async () => {
     const target = mountSection(PARTIAL);
     clickText(target, 'Forget credentials');

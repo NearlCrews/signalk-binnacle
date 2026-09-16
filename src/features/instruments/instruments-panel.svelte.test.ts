@@ -88,6 +88,21 @@ function detailBody(cell: Record<string, unknown>, reading: TileReading, now = 7
 }
 
 describe('InstrumentsPanel', () => {
+  it('does not show Normal when a detail has no current measurement or assessment', () => {
+    const empty = detailBody(
+      { epoch: 0, sourceTrace: [] },
+      { state: 'never', value: '--', unit: 'kn' },
+    );
+    expect(empty).toContain('No current assessment');
+    expect(empty).not.toContain('>Normal<');
+    const live = detailBody(
+      { epoch: 69_000, sourceTrace: [] },
+      { state: 'live', value: '5', unit: 'kn', siValue: 2.5 },
+    );
+    expect(live).toContain('Not assessed');
+    expect(live).not.toContain('>Normal<');
+  });
+
   it('renders the Instruments heading in the panel header', () => {
     const controller = makeController();
     const deps = makeDeps();

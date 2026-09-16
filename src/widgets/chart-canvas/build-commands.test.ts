@@ -33,9 +33,9 @@ function setup() {
   };
   const manager = { applySnapshot: vi.fn() };
   const view = { refresh: vi.fn() };
-  const notesOverlay = { highlight: vi.fn() };
+  const notesOverlay = { highlight: vi.fn(), retry: vi.fn() };
   const workingRouteOverlay = { raise: vi.fn() };
-  const editor = { start: vi.fn(), stop: vi.fn() };
+  const editor = { start: vi.fn(), stop: vi.fn(), replaceWaypoints: vi.fn(() => true) };
   let loadRouteEditor = vi.fn<() => Promise<RouteEditor | undefined>>(
     async () => editor as unknown as RouteEditor,
   );
@@ -108,6 +108,27 @@ afterEach(() => {
 });
 
 describe('buildMapCommands', () => {
+  it('retries place loading through the existing overlay context', () => {
+    const test = setup();
+    test.commands().retryPlaces();
+    expect(test.notesOverlay.retry).toHaveBeenCalledWith(test.ctx);
+  });
+
+  it('replaces only an active route draft and raises its working overlay after acceptance', () => {
+    const test = setup();
+    const points = [{ position: { latitude: 42, longitude: -83 } }];
+    const commands = test.commands();
+    expect(commands.replaceRouteWaypoints(points)).toBe(false);
+    expect(test.editor.replaceWaypoints).not.toHaveBeenCalled();
+    test.setWorking(true);
+    expect(commands.replaceRouteWaypoints(points)).toBe(true);
+    expect(test.editor.replaceWaypoints).toHaveBeenCalledWith(points);
+    expect(test.workingRouteOverlay.raise).toHaveBeenCalledWith(test.ctx);
+    test.editor.replaceWaypoints.mockReturnValue(false);
+    expect(commands.replaceRouteWaypoints(points)).toBe(false);
+    expect(test.workingRouteOverlay.raise).toHaveBeenCalledTimes(1);
+  });
+
   it('centers only on a fresh vessel fix and raises a low zoom', () => {
     const test = setup();
     const commands = test.commands();

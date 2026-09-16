@@ -43,8 +43,8 @@ function renderPanel(
         auth: { writeBlocked: false } as AuthController,
         connectionPhase: 'open',
         notifications,
-        onSilence: () => {},
-        onAcknowledge: () => {},
+        onSilence: async () => {},
+        onAcknowledge: async () => {},
         thresholds: {
           value: DEFAULT_THRESHOLDS,
           set: () => {},
@@ -116,7 +116,7 @@ describe('AlarmsPanel notification actions', () => {
 });
 
 describe('AlarmsPanel bulk actions', () => {
-  const wired = { onSilenceAll: () => {}, onAcknowledgeAll: () => {} };
+  const wired = { onSilenceAll: async () => {}, onAcknowledgeAll: async () => {} };
   const bothActionable = { canSilence: true, canAcknowledge: true };
 
   it('offers both bulk actions when wired and two or more alerts can take them', () => {
@@ -178,7 +178,9 @@ describe('AlarmsPanel bulk actions', () => {
       },
     );
     expect(body).toMatch(/title="Stop the sound of every alert at once"[^>]*disabled/);
-    expect(body).toMatch(/title="Mark every alert as seen and clear them at once"[^>]*disabled/);
+    expect(body).toMatch(
+      /title="Mark every alert as seen without resolving its condition"[^>]*disabled/,
+    );
   });
 });
 
@@ -444,7 +446,7 @@ describe('AlarmsPanel session chronology', () => {
 describe('AlarmsPanel wake lock note', () => {
   it('explains an unsupported wake lock and a refused one, and stays quiet otherwise', () => {
     expect(renderPanel({}, undefined, {}, { wakeLockState: 'unsupported' })).toContain(
-      'Serve Signal K over HTTPS to enable screen wake.',
+      'It requires HTTPS and a browser that supports screen wake.',
     );
     expect(renderPanel({}, undefined, {}, { wakeLockState: 'failed' })).toContain(
       'The browser refused the screen wake lock, often battery saver.',
@@ -476,14 +478,18 @@ describe('AlarmsPanel off-course alarm section', () => {
 
   it('renders the mute toggle and the meters limit field', () => {
     const body = renderPanel({}, undefined, {}, { xte: xteControls() });
-    expect(body).toContain('Mute off-course alarm');
-    expect(body).toContain('Off-course limit');
+    expect(body).toContain('Mute local off-course fallback');
+    expect(body).toContain('Local fallback off-course limit');
+    expect(body).toContain('aria-label="Local fallback off-course alarm limit"');
     expect(body).toContain('150');
     expect(body).not.toContain('A server plugin raises the off-course alarm');
   });
 
   it('notes server standing when a plugin owns the alarm', () => {
     const body = renderPanel({}, undefined, {}, { xte: xteControls({ standing: 'server' }) });
-    expect(body).toContain('A server plugin raises the off-course alarm; this display follows it.');
+    expect(body).toContain('A server plugin raises the off-course alarm.');
+    expect(body).toContain('Use its active alert above to silence it boat-wide');
+    expect(body).toContain('Mute here on the alarm strip for this display only');
+    expect(body).toContain('settings below apply only to the local fallback');
   });
 });

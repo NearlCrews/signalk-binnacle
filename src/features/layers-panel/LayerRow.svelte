@@ -23,7 +23,7 @@ import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 import Settings2 from '@lucide/svelte/icons/settings-2';
 import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 import type { LayerListItem } from '$shared/map';
-import { AnchoredMenu, LayerToggle, UnavailableHint } from '$shared/ui';
+import { AnchoredMenu, LayerToggle, ReorderActions, UnavailableHint } from '$shared/ui';
 import type { LayersView } from './layers-view.svelte';
 
 interface Props {
@@ -36,6 +36,9 @@ interface Props {
   dropAfter: boolean;
   onHandlePointerDown: (event: PointerEvent) => void;
   onHandleKeydown: (event: KeyboardEvent) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMove?: (direction: -1 | 1) => void;
   // Present only on a user-imported chart row, which opens a detail (rename, info, delete).
   onManage?: () => void;
   manageLabel?: string;
@@ -61,6 +64,9 @@ const {
   dropAfter,
   onHandlePointerDown,
   onHandleKeydown,
+  canMoveUp = false,
+  canMoveDown = false,
+  onMove,
   onManage,
   manageLabel,
   draggable = true,
@@ -132,6 +138,9 @@ $effect(() => {
   >
     <GripVertical size={18} aria-hidden="true" />
   </button>
+  {#if onMove}
+    <ReorderActions label={handleLabel} {canMoveUp} {canMoveDown} {onMove} />
+  {/if}
 {/snippet}
 
 {#snippet trailing()}

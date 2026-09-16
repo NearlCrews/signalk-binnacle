@@ -1,7 +1,7 @@
 import type { AnchorWatch } from '$entities/anchor';
 import type { OwnVessel } from '$entities/vessel';
 import type { GatedAlarm } from '$shared/audio';
-import type { LatLon } from '$shared/geo';
+import { isLatLon, type LatLon } from '$shared/geo';
 import { createBusyGate } from '$shared/lib';
 import { shouldSoundAnchorAlarm } from './anchor-alarm';
 import { resolveAnchorTransport } from './anchor-transport';
@@ -154,21 +154,23 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     serverCall: () => Promise<boolean>,
     action: string,
     local: () => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     anchorError = undefined;
     if (anchor.mode === 'server' && deps.writeBlocked()) {
       anchorError = `Could not ${action}. Server write access is required.`;
-      return;
+      return false;
     }
     if (anchor.mode !== 'server') {
       local();
-      return;
+      return true;
     }
     if (!(await serverCall())) {
       anchorError = `Could not ${action} on the server. Check the connection.`;
+      return false;
     }
+    return true;
   }
-  const anchorAction = withBusy(performAnchorAction);
+  const anchorAction = withBusy(performAnchorAction, false);
 
   async function onRaise(): Promise<void> {
     const wasWatching = anchor.watching;
@@ -181,16 +183,20 @@ export function createAnchorController(deps: AnchorControllerDeps) {
     if (wasWatching && !anchor.watching) deps.onAnchorLogMoment?.('raised');
   }
 
-  function onSetRadius(meters: number): Promise<void> {
+  async function onSetRadius(meters: number): Promise<void> {
     anchor.rememberRadius(meters);
-    return anchorAction(
+    await anchorAction(
       () => anchorTransport.setRadius(meters),
       'set the radius',
       () => anchor.setRadiusLocal(meters),
     );
   }
 
-  function onAnchorMoved(position: LatLon): Promise<void> {
+  async function onAnchorMoved(position: LatLon): Promise<boolean> {
+    if (!isLatLon(position) || !anchor.watching) {
+      anchorError = 'An active anchor watch and a valid position are needed to move the anchor.';
+      return false;
+    }
     return anchorAction(
       () => anchorTransport.setPosition(position),
       'move the anchor',

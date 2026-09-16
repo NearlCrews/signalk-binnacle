@@ -1,6 +1,6 @@
 <script lang="ts">
 import { litLegIndices, type Route, type RouteHighlight, routeLegs } from '$entities/route';
-import type { WeatherGrid } from '$entities/weather';
+import type { WeatherGrid, WeatherStatus } from '$entities/weather';
 import {
   formatBearingOr,
   formatClockTime,
@@ -16,7 +16,12 @@ import {
 import { crossesLocalMidnight, etaSeconds, isAfterDark, plannedArrivalMs } from '$shared/nav';
 import { MAX_PLANNING_SPEED_KN, type PersistedValue } from '$shared/settings';
 import { UnitField } from '$shared/ui';
-import { routeWindAt, windLineText } from './route-weather';
+import {
+  routeForecastContext,
+  routeWindAt,
+  routeWindUnavailableReason,
+  windLineText,
+} from './route-weather';
 
 interface Props {
   // The route currently under edit on the chart.
@@ -29,9 +34,12 @@ interface Props {
   // The planning speed in m/s, persisted, that turns leg distances into per-waypoint passage times.
   // SI in storage like every other measure; this panel is the only place it becomes knots.
   planningSpeed: PersistedValue<number>;
-  // The loaded forecast grid, when the weather layer has ever fetched one. Absent (weather never
-  // opened, or offline with no cache) leaves the plan exactly as it was without wind lines.
+  // The loaded forecast grid, when the weather layer has fetched one. A missing grid keeps leg
+  // wind values unavailable and explains how to load the forecast.
   weatherGrid?: WeatherGrid | undefined;
+  weatherStatus?: WeatherStatus;
+  weatherNowMs?: number;
+  onOpenForecast?: () => void;
   // The per-category display units, for the wind line's speed. Defaults to the metric profile,
   // whose speed category is knots.
   units?: UnitsSelection;
@@ -43,6 +51,9 @@ const {
   onHighlightLeg,
   planningSpeed,
   weatherGrid = undefined,
+  weatherStatus = 'idle',
+  weatherNowMs = Date.now(),
+  onOpenForecast,
   units = 'metric',
 }: Props = $props();
 
@@ -116,6 +127,7 @@ function endpointName(fromIndex: number): string {
 interface LegForecast {
   afterDark: boolean;
   windLine: string | undefined;
+  windUnavailable?: string;
 }
 const legForecasts: LegForecast[] = $derived.by(() =>
   workingLegs.map((leg) => {
@@ -131,10 +143,13 @@ const legForecasts: LegForecast[] = $derived.by(() =>
     return {
       afterDark: isAfterDark(at, latitude, longitude),
       windLine: wind === undefined ? undefined : windLineText(wind, units),
+      windUnavailable:
+        weatherGrid && wind === undefined ? routeWindUnavailableReason(weatherGrid, at) : undefined,
     };
   }),
 );
 const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefined));
+const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus, weatherNowMs));
 </script>
 
 <dl class="stat-grid">
@@ -200,7 +215,7 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
       Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
     </span>
   </span>
-  {#if forecast !== undefined && (forecast.afterDark || forecast.windLine !== undefined)}
+  {#if forecast !== undefined && (forecast.afterDark || forecast.windLine !== undefined || forecast.windUnavailable)}
     <span class="leg-line leg-line--metrics">
       {#if forecast.afterDark}
         <span
@@ -208,6 +223,9 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
           title="The planned arrival at this point is after dark: past evening or before morning civil twilight"
           >After dark</span
         >
+      {/if}
+      {#if forecast.windUnavailable}
+        <span class="muted-note">{forecast.windUnavailable}</span>
       {/if}
       {#if forecast.windLine !== undefined}
         <span class="num" title="Forecast wind at this point's planned arrival time, degrees true"
@@ -218,6 +236,12 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
   {/if}
 {/snippet}
 {#if workingLegs.length > 0}
+  <div class="forecast-context">
+    <p class="muted-note" class:sev-warning={forecastContext.degraded}>{forecastContext.text}</p>
+    {#if onOpenForecast}
+      <button type="button" class="btn btn-ghost" onclick={onOpenForecast}>Open Forecast</button>
+    {/if}
+  </div>
   <ol class="legs bare-list" aria-label="Legs">
     {#each workingLegs as leg (leg.fromIndex)}
       <li>
@@ -248,6 +272,9 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
 {/if}
 
 <style>
+.forecast-context p {
+  margin: 0;
+}
 /* The leg-by-leg readout for the route under edit: two-line rows (endpoint name and arrival, then
    distance, bearing, and cumulative elapsed), mono and tabular so the columns read as a table
    while still wrapping cleanly at 320 pixels. */

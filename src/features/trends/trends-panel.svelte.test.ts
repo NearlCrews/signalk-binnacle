@@ -72,6 +72,29 @@ function controller(overrides: Partial<TrendsController> = {}): TrendsController
 }
 
 describe('Trends UI', () => {
+  it.each(['complete', 'partial'] as const)(
+    'offers a history refresh for %s results with checked time',
+    (historyState) => {
+      const body = render(TrendsPanel, {
+        props: {
+          controller: controller({
+            historyState,
+            providerState: 'available',
+            hasProvider: true,
+            lastCheckedMs: Date.UTC(2026, 8, 16, 12),
+          }),
+          onRetryProvider: () => {},
+          units: 'metric',
+          theme: 'day',
+          onClose: () => {},
+        },
+      }).body.replaceAll(/\s+/g, ' ');
+      expect(body).toContain(historyState === 'partial' ? 'Retry history' : 'Refresh history');
+      expect(body).toContain('History last checked');
+      expect(body).toContain('Refreshes every minute while this panel is visible');
+    },
+  );
+
   it('shows a profile-owned zero-selection state with a visible Customize action', () => {
     const ctrl = controller({ selectedIds: [], selected: [], charts: [], catalog: [] });
     const body = render(TrendsPanel, {

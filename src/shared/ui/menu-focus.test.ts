@@ -45,6 +45,14 @@ describe('menu-focus selector', () => {
 
     expect(menu.querySelectorAll).toHaveBeenCalledWith(MENU_ITEM_SELECTOR);
   });
+
+  it('allows explanatory aria-disabled actions into an explicitly opted-in menu', () => {
+    const menu = surface([item()]);
+    initializeMenuFocus(menu, true);
+    const selector = vi.mocked(menu.querySelectorAll).mock.calls[0]?.[0];
+    expect(selector).toContain(':not(:disabled)');
+    expect(selector).not.toContain('aria-disabled');
+  });
 });
 
 describe('initializeMenuFocus', () => {
@@ -285,6 +293,17 @@ describe('createMenuFocusMachine syncOpen', () => {
     expect(items[0]?.focus).not.toHaveBeenCalled();
     flushFrames();
     expect(items[0]?.focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it('defers initial focus entirely to the placement callback when focusFrames is zero', () => {
+    stubFrames();
+    const items = [item()];
+    const machine = machineWith(items, 0);
+    const cleanup = machine.syncOpen(true);
+    expect(frames).toHaveLength(0);
+    expect(items[0].focus).not.toHaveBeenCalled();
+    cleanup?.();
+    expect(() => machine.syncOpen(false)).not.toThrow();
   });
 
   it('cleanup cancels the pending focus frame', () => {

@@ -196,7 +196,7 @@ describe('offline charts home view', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('offers the route coverage check with its noncertifying copy while navigating', () => {
+  it('offers the selected passage coverage check without requiring navigation', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(404, {})),
@@ -212,7 +212,8 @@ describe('offline charts home view', () => {
           new PersistedValue<UnitsMode>('binnacle:units-test', 'metric', createFakeStorage()),
         ),
         insecureTransport: false,
-        activeRoute: () => ({
+        coverageRoute: () => ({
+          id: 'harbor-passage',
           name: 'Harbor passage',
           waypoints: [
             { position: { latitude: 0, longitude: 0 } },
@@ -227,13 +228,14 @@ describe('offline charts home view', () => {
     expect(html).toContain('Harbor passage');
     expect(html).toContain('it does not certify navigation or passage safety');
     expect(html).toContain('Check route coverage');
+    expect(html).toContain('This check does not start navigation or change the active course.');
     expect(html).toContain('aria-label="Corridor width"');
     expect(html).toContain('aria-label="Required detail"');
   });
 
-  it('invites starting navigation when no route is active', () => {
+  it('invites selecting a saved passage without starting navigation', () => {
     expect(renderHome(false)).toContain(
-      'Start navigation on a route to check its corridor against your saved areas.',
+      "Open a saved route's passage plan and choose Offline charts to check its corridor without starting navigation.",
     );
   });
 

@@ -58,14 +58,15 @@ function eventKind(raw: Record<string, unknown>): 'high' | 'low' | undefined {
   return undefined;
 }
 
-function parseExtremes(raw: unknown): TideEvent[] {
+function parseExtremes(raw: unknown, metersPerUnit = 1): TideEvent[] {
   if (!Array.isArray(raw)) return [];
   const events: TideEvent[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') continue;
     const record = entry as Record<string, unknown>;
     const kind = eventKind(record);
-    const heightMeters = toFiniteNumber(record.value ?? record.level);
+    const height = toFiniteNumber(record.value ?? record.level);
+    const heightMeters = height === undefined ? undefined : height * metersPerUnit;
     const timeMs = typeof record.time === 'string' ? Date.parse(record.time) : Number.NaN;
     if (
       !kind ||
@@ -112,12 +113,21 @@ export function parseTidesResource(
 ): TideReading | undefined {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
   const record = body as Record<string, unknown>;
+  // Legacy resources omit units and use meters. Explicit units must be understood before use.
+  const units = typeof record.units === 'string' ? record.units.trim().toLowerCase() : record.units;
+  const metersPerUnit =
+    units === undefined || units === 'meters' || units === 'metres' || units === 'm'
+      ? 1
+      : units === 'feet' || units === 'ft'
+        ? 0.3048
+        : undefined;
+  if (metersPerUnit === undefined) return undefined;
   // From today's UTC midnight, not from nowMs, matching the CO-OPS day window so a persisted
   // reading replays identically from either source; upcomingEvents trims to now at render time.
   const now = new Date(nowMs);
   const windowStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const windowEnd = windowStart + TIDE_WINDOW_HOURS * HOUR_MS;
-  const events = parseExtremes(record.extremes).filter(
+  const events = parseExtremes(record.extremes, metersPerUnit).filter(
     (event) => event.timeMs >= windowStart && event.timeMs <= windowEnd,
   );
   if (events.length === 0) return undefined;
@@ -126,6 +136,8 @@ export function parseTidesResource(
     station,
     distanceMeters: haversineMeters(lat, lon, station.latitude, station.longitude),
     events,
+    datum: cleanBoundedText(record.datum, 64),
+    fetchedAtMs: nowMs,
   };
 }
 

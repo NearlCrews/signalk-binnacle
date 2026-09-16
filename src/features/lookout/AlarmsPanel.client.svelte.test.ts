@@ -61,6 +61,46 @@ afterEach(() => {
 });
 
 describe('AlarmsPanel bulk actions', () => {
+  it('keeps another alarm actionable and releases a completed unconfirmed request for retry', async () => {
+    let finish!: () => void;
+    const onSilence = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const onAcknowledge = vi.fn(async () => {});
+    const alerts = [0, 1].map((index) => ({
+      path: `notifications.test.${index}`,
+      activation: 1,
+      state: 'alarm' as const,
+      message: `Alert ${index}`,
+      id: `id-${index}`,
+      canSilence: true,
+      canAcknowledge: true,
+    }));
+    const panel = mountPanel({
+      notifications: { list: () => alerts } as unknown as NotificationsStore,
+      onSilence,
+      onAcknowledge,
+    });
+    const rows = panel.target.querySelectorAll('.alert-row');
+    const first = rows[0].querySelectorAll<HTMLButtonElement>('button');
+    const second = rows[1].querySelectorAll<HTMLButtonElement>('button');
+    first[0].click();
+    flushSync();
+    expect(first[0].disabled).toBe(true);
+    expect(first[1].disabled).toBe(true);
+    expect(second[0].disabled).toBe(false);
+    second[1].click();
+    expect(onAcknowledge).toHaveBeenCalledWith(alerts[1]);
+    finish();
+    await Promise.resolve();
+    flushSync();
+    expect(first[0].disabled).toBe(false);
+    expect(first[1].disabled).toBe(false);
+    expect(panel.target.textContent).not.toContain('Updating alarm status…');
+  });
   it('fires a wired bulk action once and holds both buttons while it lands', () => {
     const onSilenceAll = vi.fn();
     const onAcknowledgeAll = vi.fn();
@@ -91,6 +131,27 @@ describe('AlarmsPanel bulk actions', () => {
 });
 
 describe('AlarmsPanel threshold reset', () => {
+  it('returns focus to the recreated reset button after cancellation without changing limits', async () => {
+    const panel = mountPanel();
+    panel.click('Reset to defaults');
+    panel.click('Cancel');
+    await vi.waitFor(() => expect(document.activeElement).toBe(panel.button('Reset to defaults')));
+    expect(panel.set).not.toHaveBeenCalled();
+  });
+
+  it('preserves a separately tuned shallow-water limit when resetting collision thresholds', () => {
+    const set = vi.fn();
+    const panel = mountPanel({
+      thresholds: {
+        value: { ...DEFAULT_THRESHOLDS, dangerCpaMeters: 1000, shallowDepthMeters: 7 },
+        set,
+      } as unknown as PersistedValue<Thresholds>,
+    });
+    panel.click('Reset to defaults');
+    expect(panel.target.textContent).toContain('Reset collision thresholds?');
+    panel.click('Reset');
+    expect(set).toHaveBeenCalledWith({ ...DEFAULT_THRESHOLDS, shallowDepthMeters: 7 });
+  });
   it('never commits a blank collision or shallow threshold as zero', () => {
     const panel = mountPanel();
     for (const input of panel.target.querySelectorAll<HTMLInputElement>('input[type="number"]')) {
@@ -115,7 +176,7 @@ describe('AlarmsPanel threshold reset', () => {
       },
     });
     const input = panel.target.querySelector<HTMLInputElement>(
-      'input[aria-label="Off-course alarm limit"]',
+      'input[aria-label="Local fallback off-course alarm limit"]',
     );
     if (!input) throw new Error('Missing off-course field');
     expect(input.valueAsNumber).toBeCloseTo(100 / 0.3048);
@@ -129,17 +190,17 @@ describe('AlarmsPanel threshold reset', () => {
     const panel = mountPanel();
 
     panel.click('Reset to defaults');
-    expect(panel.target.textContent).toContain('Reset all thresholds?');
+    expect(panel.target.textContent).toContain('Reset collision thresholds?');
     expect(panel.set).not.toHaveBeenCalled();
 
     panel.click('Cancel');
-    expect(panel.target.textContent).not.toContain('Reset all thresholds?');
+    expect(panel.target.textContent).not.toContain('Reset collision thresholds?');
     expect(panel.set).not.toHaveBeenCalled();
 
     panel.click('Reset to defaults');
     panel.click('Reset');
     expect(panel.set).toHaveBeenCalledWith(DEFAULT_THRESHOLDS);
-    expect(panel.target.textContent).not.toContain('Reset all thresholds?');
+    expect(panel.target.textContent).not.toContain('Reset collision thresholds?');
   });
 });
 

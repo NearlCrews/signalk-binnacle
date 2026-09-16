@@ -23,6 +23,7 @@ import {
   OverflowActions,
   pickTextFile,
   readErrorMessage,
+  restoreFocusAfterCancel,
   SavedList,
   SlideOver,
   WriteAccessNote,
@@ -61,6 +62,7 @@ interface Props {
   onImport: (profiles: ImportedProfile[]) => number;
   onForgetCredentials: () => Promise<PrivacyReport>;
   onEraseAllLocalData: () => Promise<PrivacyReport>;
+  onOpenNetworkPrivacy?: () => void;
   onClose: () => void;
   onBack?: () => void;
 }
@@ -88,6 +90,7 @@ const {
   onImport,
   onForgetCredentials,
   onEraseAllLocalData,
+  onOpenNetworkPrivacy,
   onClose,
   onBack,
 }: Props = $props();
@@ -98,6 +101,27 @@ const atProfileLimit = $derived(profiles.length >= MAX_PROFILES);
 // Naming a new profile or renaming an existing one happens inline through NameEntry rather than a
 // native prompt. One state drives both: 'new' for the top Save button, or a rename keyed by id.
 let naming = $state<{ mode: 'new' } | { mode: 'rename'; id: string } | null>(null);
+let saveTrigger = $state<HTMLButtonElement>();
+const profileActions = $state<Record<string, HTMLDivElement | undefined>>({});
+
+function cancelName(): void {
+  const id = naming?.mode === 'rename' ? naming.id : undefined;
+  naming = null;
+  void restoreFocusAfterCancel(() => (id ? profileActionTrigger(id) : saveTrigger));
+}
+
+function profileActionTrigger(id: string): HTMLElement | undefined {
+  return (
+    profileActions[id]?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    saveTrigger
+  );
+}
+
+function cancelDelete(id: string): void {
+  armedDelete.cancel();
+  void restoreFocusAfterCancel(() => profileActionTrigger(id));
+}
+
 function confirmName(value: string): void {
   if (naming === null) return;
   if (naming.mode === 'new') {
@@ -222,6 +246,7 @@ function useProfile(id: string): void {
       class="btn btn-primary btn--grow"
       disabled={atProfileLimit}
       aria-describedby={atProfileLimit ? 'profile-limit-note' : undefined}
+      bind:this={saveTrigger}
       onclick={() => (naming = { mode: 'new' })}
     >
       <Save size={16} aria-hidden="true" />
@@ -250,7 +275,7 @@ function useProfile(id: string): void {
       label="Name this profile"
       value={defaultSaveName(FALLBACK_PROFILE_NAME)}
       onConfirm={confirmName}
-      onCancel={() => (naming = null)}
+      onCancel={cancelName}
     />
   {/if}
 
@@ -260,6 +285,10 @@ function useProfile(id: string): void {
     <p class="muted-note" role="status">{importStatus}</p>
   {/if}
 
+  <p class="muted-note">
+    Use profile changes this device. Default is the shared starting choice for a device without an
+    active profile; changing it does not switch displays that already have an active profile.
+  </p>
   <SavedList
     heading="Saved profiles"
     items={profiles}
@@ -284,25 +313,26 @@ function useProfile(id: string): void {
           label="Rename profile"
           value={profile.name}
           onConfirm={confirmName}
-          onCancel={() => (naming = null)}
+          onCancel={cancelName}
         />
       {:else if armedDelete.isArmed(profile.id)}
         <InlineConfirm
           question="Delete this profile? If profile sync is available, the deletion will sync to other stations."
           onConfirm={() => armedDelete.confirm(profile.id)}
-          onCancel={() => armedDelete.cancel()}
+          onCancel={() => cancelDelete(profile.id)}
         />
       {:else}
-        <div class="actions">
+        <div class="actions" bind:this={profileActions[profile.id]}>
           {#if !isActive}
             <button
               type="button"
-              class="icon-btn"
+              class="btn"
               aria-label={`Use ${profile.name} on this device`}
               title={`Use ${profile.name} on this device`}
               onclick={() => useProfile(profile.id)}
             >
               <Check size={18} aria-hidden="true" />
+              Use profile
             </button>
           {/if}
           <OverflowActions
@@ -396,7 +426,7 @@ function useProfile(id: string): void {
     {/if}
   </section>
 
-  <DevicePrivacySection {onForgetCredentials} {onEraseAllLocalData} />
+  <DevicePrivacySection {onForgetCredentials} {onEraseAllLocalData} {onOpenNetworkPrivacy} />
 </SlideOver>
 
 <style>

@@ -3,8 +3,8 @@
 // arrow-key roving, the initial focus on open, focus restore on close, and the Tab redirect
 // identical across both, so neither drifts from its sibling. The map menus (weather layers, chart
 // context) rove with the rovingFocus action instead and share only the close-on-focus-out
-// contract, which AnchoredMenu itself applies through menuFocusLeft. Disabled and aria-disabled
-// items are excluded from the roving set in every menu, so a grayed item is never arrow-reachable.
+// contract, which AnchoredMenu itself applies through menuFocusLeft. Disabled items are excluded;
+// a consumer can include aria-disabled items when activating them explains the unavailable state.
 
 import { FOCUSABLE_SELECTOR, isRovingKey, nextRovingIndex } from './focus';
 
@@ -14,8 +14,11 @@ import { FOCUSABLE_SELECTOR, isRovingKey, nextRovingIndex } from './focus';
 export const MENU_ITEM_SELECTOR =
   '[role="menuitem"]:not(:disabled):not([aria-disabled="true"]), [role="menuitemcheckbox"]:not(:disabled):not([aria-disabled="true"])';
 
-function menuItems(surface: HTMLElement | undefined): HTMLElement[] {
-  return surface ? [...surface.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)] : [];
+function menuItems(surface: HTMLElement | undefined, includeAriaDisabled = false): HTMLElement[] {
+  const selector = includeAriaDisabled
+    ? '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)'
+    : MENU_ITEM_SELECTOR;
+  return surface ? [...surface.querySelectorAll<HTMLElement>(selector)] : [];
 }
 
 function focusMenuItem(items: HTMLElement[], index: number): void {
@@ -23,8 +26,11 @@ function focusMenuItem(items: HTMLElement[], index: number): void {
   items[index]?.focus({ preventScroll: true });
 }
 
-export function initializeMenuFocus(surface: HTMLElement | undefined): void {
-  const items = menuItems(surface);
+export function initializeMenuFocus(
+  surface: HTMLElement | undefined,
+  includeAriaDisabled = false,
+): void {
+  const items = menuItems(surface, includeAriaDisabled);
   if (items.length > 0) focusMenuItem(items, 0);
 }
 
@@ -33,6 +39,7 @@ export function handleMenuKeydown(
   surface: HTMLElement | undefined,
   activeElement: Element | null = document.activeElement,
   onTab?: (reverse: boolean) => boolean,
+  includeAriaDisabled = false,
 ): void {
   if (event.key === 'Tab' && onTab) {
     if (onTab(event.shiftKey)) event.preventDefault();
@@ -40,7 +47,7 @@ export function handleMenuKeydown(
   }
   if (!isRovingKey(event.key)) return;
 
-  const items = menuItems(surface);
+  const items = menuItems(surface, includeAriaDisabled);
   if (items.length === 0) return;
   event.preventDefault();
 
@@ -124,9 +131,10 @@ export function createMenuFocusMachine(deps: {
   surface: () => HTMLElement | undefined;
   trigger: () => HTMLElement | undefined;
   requestClose: () => void;
-  // Frames to wait before the initial roving focus: 2 for a menu that positions itself on its
-  // first frame (the bottom-bar More menu), otherwise 1.
+  // Frames before initial focus. Zero lets a positioned menu focus from its placement callback.
   focusFrames?: number;
+  // Explainable blocked actions remain reachable; activation still belongs to the caller's guard.
+  includeAriaDisabled?: boolean;
 }): MenuFocusMachine {
   let wasOpen = false;
   let requestedCloseFocus: HTMLElement | null | undefined;
@@ -138,11 +146,12 @@ export function createMenuFocusMachine(deps: {
 
   const opened = (): (() => void) => {
     wasOpen = true;
+    if (deps.focusFrames === 0) return () => {};
     let frame = 0;
     const schedule = (remaining: number): void => {
       frame = requestAnimationFrame(() => {
         if (remaining > 1) schedule(remaining - 1);
-        else initializeMenuFocus(deps.surface());
+        else initializeMenuFocus(deps.surface(), deps.includeAriaDisabled);
       });
     };
     schedule(deps.focusFrames ?? 1);
@@ -165,15 +174,21 @@ export function createMenuFocusMachine(deps: {
   return {
     close,
     handleKeydown(event: KeyboardEvent): void {
-      handleMenuKeydown(event, deps.surface(), document.activeElement, (reverse) => {
-        if (reverse) {
-          close(deps.trigger());
-          return true;
-        }
-        const target = menuTabTarget(deps.trigger(), deps.surface(), false, documentFocusables());
-        close(target ?? null);
-        return target !== undefined;
-      });
+      handleMenuKeydown(
+        event,
+        deps.surface(),
+        document.activeElement,
+        (reverse) => {
+          if (reverse) {
+            close(deps.trigger());
+            return true;
+          }
+          const target = menuTabTarget(deps.trigger(), deps.surface(), false, documentFocusables());
+          close(target ?? null);
+          return target !== undefined;
+        },
+        deps.includeAriaDisabled,
+      );
     },
     syncOpen(open: boolean): (() => void) | undefined {
       return open ? opened() : closed();

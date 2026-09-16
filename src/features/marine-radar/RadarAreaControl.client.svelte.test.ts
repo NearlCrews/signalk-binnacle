@@ -19,7 +19,7 @@ function mountArea(
 ) {
   const target = document.createElement('div');
   document.body.append(target);
-  const onSave = vi.fn();
+  const onSave = vi.fn(async () => true);
   const onStartChartEdit = vi.fn(() => undefined);
   const onEditStateChange = vi.fn();
   const props = $state<ComponentProps<typeof RadarAreaControl>>({
@@ -63,6 +63,58 @@ afterEach(() => {
 });
 
 describe('RadarAreaControl interactions', () => {
+  it('returns focus from a canceled sector confirmation to Save and from the canceled draft to Edit', async () => {
+    const panel = mountArea();
+    panel.click('Edit no-transmit sector');
+    panel.click('Save sector');
+    const confirmation = panel.target.querySelector('[role="group"][aria-label^="Apply this"]');
+    const cancel = [...(confirmation?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Cancel',
+    );
+    expect(cancel).toBeDefined();
+    flushSync(() => cancel?.click());
+    await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe('Save sector'));
+    expect(panel.props.areaDraft).toBeDefined();
+    expect(panel.onSave).not.toHaveBeenCalled();
+    panel.click('Cancel');
+    await vi.waitFor(() =>
+      expect(document.activeElement?.textContent?.trim()).toBe('Edit no-transmit sector'),
+    );
+  });
+
+  it('retains a failed area draft and its geometry for retry, clearing only after success', async () => {
+    const panel = mountArea();
+    panel.onSave.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    panel.click('Edit no-transmit sector');
+    panel.click('On');
+    panel.click('Save sector');
+    panel.click('Apply sector');
+    expect(panel.props.areaDraft?.value.enabled).toBe(true);
+    await Promise.resolve();
+    flushSync();
+    expect(panel.props.areaDraft?.value.enabled).toBe(true);
+    expect(panel.target.textContent).toContain('Your draft is preserved');
+    expect(panel.target.textContent).toContain('Discard draft');
+    panel.click('Retry save');
+    panel.click('Apply sector');
+    await Promise.resolve();
+    flushSync();
+    expect(panel.onSave).toHaveBeenCalledTimes(2);
+    expect(panel.onSave.mock.calls[0]).toEqual(panel.onSave.mock.calls[1]);
+    expect(panel.props.areaDraft).toBeUndefined();
+  });
+
+  it('preserves a draft after a rejected save promise', async () => {
+    const panel = mountArea();
+    panel.onSave.mockRejectedValueOnce(new Error('Provider unavailable'));
+    panel.click('Edit no-transmit sector');
+    panel.click('Save sector');
+    panel.click('Apply sector');
+    await Promise.resolve();
+    flushSync();
+    expect(panel.props.areaDraft).toBeDefined();
+    expect(panel.target.textContent).toContain('Retry save');
+  });
   it('requires a second explicit confirmation before saving a no-transmit sector', () => {
     const panel = mountArea();
     panel.click('Edit no-transmit sector');

@@ -104,6 +104,7 @@ export function buildMapCommands(deps: MapCommandsDeps): MapCommands {
     },
     getBounds: () => lngLatBoundsToBbox4(map.getBounds()),
     highlightPoi: (position) => notesOverlay.highlight(ctx, position),
+    retryPlaces: () => notesOverlay.retry(ctx),
     startRouteEdit: (route, initialPoint) => {
       const generation = nextEditGeneration();
       void loadRouteEditor().then((editor) => {
@@ -117,6 +118,12 @@ export function buildMapCommands(deps: MapCommandsDeps): MapCommands {
     stopRouteEdit: () => {
       cancelEditGeneration();
       getRouteEditor()?.stop();
+    },
+    replaceRouteWaypoints: (waypoints) => {
+      if (!routeStore.working) return false;
+      const accepted = getRouteEditor()?.replaceWaypoints(waypoints) ?? false;
+      if (accepted) getWorkingRouteOverlay()?.raise(ctx);
+      return accepted;
     },
     applyLayers: (settings, order) => {
       manager.applySnapshot(settings, order);

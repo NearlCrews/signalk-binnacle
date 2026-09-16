@@ -10,8 +10,14 @@ import SquarePen from '@lucide/svelte/icons/square-pen';
 import Trash2 from '@lucide/svelte/icons/trash-2';
 import Upload from '@lucide/svelte/icons/upload';
 import X from '@lucide/svelte/icons/x';
-import { type Route, type RouteHighlight, routeDistanceMeters } from '$entities/route';
-import type { WeatherGrid } from '$entities/weather';
+import {
+  type Route,
+  type RouteHighlight,
+  type RouteWaypoint,
+  routeDistanceMeters,
+} from '$entities/route';
+import type { WeatherGrid, WeatherStatus } from '$entities/weather';
+import type { LatLon } from '$shared/geo';
 import { createMediaQuery, formatNm, type UnitsSelection } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import { type AuthController, resourcesProviderNote } from '$shared/signalk';
@@ -25,12 +31,14 @@ import {
   pickTextFile,
   readErrorMessage,
   resolveSaveName,
+  restoreFocusAfterCancel,
   SavedList,
   SlideOver,
   VisibilityToggle,
   WriteAccessNote,
 } from '$shared/ui';
 import RouteEditPlan from './RouteEditPlan.svelte';
+import RoutePointEditor from './RoutePointEditor.svelte';
 import type { RouteLoadState, RoutesProvisioning } from './route-controller.svelte';
 
 interface Props {
@@ -64,6 +72,8 @@ interface Props {
   // Resolves whether the write succeeded, so a failure keeps the name form and its entered value.
   onSave: (name: string) => Promise<boolean>;
   onCancelEdit: () => void;
+  onSetWaypoints?: (waypoints: RouteWaypoint[]) => boolean;
+  getChartCenter?: () => LatLon | undefined;
   onToggleShown: (id: string, shown: boolean) => void;
   // Pan the chart to a route's start without changing its shown state.
   onLocate: (id: string) => void;
@@ -75,7 +85,7 @@ interface Props {
   onRename?: (id: string, name: string) => Promise<boolean>;
   // Open Offline charts, so the advisory route-coverage check is reachable from the plan a
   // navigator is reading rather than two groups away. Absent hides the link.
-  onOpenOfflineCharts?: () => void;
+  onOpenOfflineCharts?: (routeId: string) => void;
   onReverse: (id: string) => void;
   // Download the route as a GPX file for another chartplotter.
   onExportGpx: (id: string) => void;
@@ -86,6 +96,9 @@ interface Props {
   // The loaded forecast grid, for the plan's per-arrival wind lines; absent when the weather layer
   // has never fetched one, which leaves the plan unchanged.
   weatherGrid?: WeatherGrid | undefined;
+  weatherStatus?: WeatherStatus;
+  weatherNowMs?: number;
+  onOpenForecast?: () => void;
   // The per-category display units for those wind lines.
   units?: UnitsSelection;
   onDelete: (id: string) => void;
@@ -113,6 +126,8 @@ const {
   onEditRoute,
   onSave,
   onCancelEdit,
+  onSetWaypoints,
+  getChartCenter,
   onToggleShown,
   onLocate,
   onActivate,
@@ -124,6 +139,9 @@ const {
   onImportGpx,
   planningSpeed,
   weatherGrid = undefined,
+  weatherStatus,
+  weatherNowMs,
+  onOpenForecast,
   units = 'metric',
   onDelete,
   onClose,
@@ -132,6 +150,25 @@ const {
 
 const writesDisabled = $derived(auth.writeBlocked || busy);
 const storageMissing = $derived(provisioning === 'unprovisioned');
+const panelId = $props.id();
+let saveTrigger = $state<HTMLButtonElement>();
+let cancelEditTrigger = $state<HTMLButtonElement>();
+let editingGroup = $state<HTMLDivElement>();
+
+function restoreSavedAction(id: string, action: 'start' | 'stop' | 'overflow'): void {
+  void restoreFocusAfterCancel(() => {
+    const row = document.getElementById(`${panelId}-actions-${encodeURIComponent(id)}`);
+    const selector =
+      action === 'overflow'
+        ? 'button[aria-haspopup="menu"]'
+        : `button[data-route-action="${action}"]`;
+    return (
+      row?.querySelector<HTMLButtonElement>(`${selector}:not(:disabled)`) ??
+      document.getElementById(`${panelId}-name-${encodeURIComponent(id)}`) ??
+      undefined
+    );
+  });
+}
 
 // Delete is destructive and, for the active route, also stops navigation, so it arms a confirm step
 // rather than firing on a single tap where a mis-tap on a rolling deck would lose a saved route.
@@ -243,9 +280,18 @@ async function confirmName(value: string): Promise<boolean> {
 
 type ExitIntent = 'cancel' | 'close' | 'back';
 let exitIntent = $state<ExitIntent | undefined>();
+let exitTrigger: HTMLElement | undefined;
+
+function cancelExit(): void {
+  exitIntent = undefined;
+  const trigger = exitTrigger;
+  exitTrigger = undefined;
+  void restoreFocusAfterCancel(() => trigger);
+}
 
 function finishExit(intent: ExitIntent): void {
   exitIntent = undefined;
+  exitTrigger = undefined;
   onCancelEdit();
   if (intent === 'close') onClose();
   else if (intent === 'back') onBack?.();
@@ -253,6 +299,17 @@ function finishExit(intent: ExitIntent): void {
 
 function requestExit(intent: ExitIntent): void {
   if (working && working.waypoints.length > 0) {
+    exitTrigger =
+      intent === 'cancel'
+        ? cancelEditTrigger
+        : (editingGroup
+            ?.closest('.slide-over')
+            ?.querySelector<HTMLButtonElement>(
+              intent === 'close'
+                ? 'button[aria-label="Close routes panel"]'
+                : 'button[aria-label="Back to menu"]',
+            ) ?? undefined);
+    minimize.expand();
     exitIntent = intent;
     return;
   }
@@ -359,27 +416,37 @@ const emptyMessage = $derived(emptyReason());
   {/if}
 
   {#if working}
-    <div class="editing" role="group" aria-label="Route under edit">
+    <div class="editing" role="group" aria-label="Route under edit" bind:this={editingGroup}>
       {#if naming}
         <NameEntry
           label="Save route as"
           value={working.name.trim() || defaultSaveName('Route')}
           onConfirm={confirmName}
           busy={savingName}
-          onCancel={() => (naming = false)}
+          onCancel={() => {
+            naming = false;
+            void restoreFocusAfterCancel(() => saveTrigger);
+          }}
         />
       {:else}
         <div class="panel-controls">
           <button
             type="button"
             class="btn btn-primary btn--grow"
+            bind:this={saveTrigger}
             disabled={working.waypoints.length < 2 || writesDisabled}
             onclick={() => (naming = true)}
           >
             <Save size={16} aria-hidden="true" />
             Save
           </button>
-          <button type="button" class="btn" onclick={() => requestExit('cancel')} disabled={busy}>
+          <button
+            type="button"
+            class="btn"
+            bind:this={cancelEditTrigger}
+            onclick={() => requestExit('cancel')}
+            disabled={busy}
+          >
             <X size={16} aria-hidden="true" />
             Cancel
           </button>
@@ -390,13 +457,33 @@ const emptyMessage = $derived(emptyReason());
           question="Discard unsaved route changes?"
           confirmLabel="Discard"
           onConfirm={() => finishExit(exitIntent ?? 'cancel')}
-          onCancel={() => (exitIntent = undefined)}
+          onCancel={cancelExit}
         />
       {/if}
       {#if working.waypoints.length < 2}
         <p class="muted-note">Add at least two points to save this route.</p>
       {/if}
-      <RouteEditPlan {working} {highlight} {onHighlightLeg} {planningSpeed} {weatherGrid} {units} />
+      <RouteEditPlan
+        {working}
+        {highlight}
+        {onHighlightLeg}
+        {planningSpeed}
+        {weatherGrid}
+        {weatherStatus}
+        {weatherNowMs}
+        {onOpenForecast}
+        {units}
+      />
+      {#if onSetWaypoints}
+        {#key working.id}
+          <RoutePointEditor
+            {working}
+            {onSetWaypoints}
+            {getChartCenter}
+            disabled={writesDisabled || savingName}
+          />
+        {/key}
+      {/if}
       <p class="muted-note">
         Tap the chart to add waypoints. Drag a point to move it, tap a midpoint to insert one.
       </p>
@@ -436,6 +523,7 @@ const emptyMessage = $derived(emptyReason());
         <button
           type="button"
           class="name"
+          id={`${panelId}-name-${encodeURIComponent(route.id)}`}
           title="Show the entire route on the chart"
           onclick={() => {
             onLocate(route.id);
@@ -463,21 +551,30 @@ const emptyMessage = $derived(emptyReason());
           value={route.name}
           onConfirm={(value) => confirmRename(route.id, value)}
           busy={savingRename}
-          onCancel={() => (renamingId = undefined)}
+          onCancel={() => {
+            renamingId = undefined;
+            restoreSavedAction(route.id, 'overflow');
+          }}
         />
       {:else if confirmingActivateId === route.id}
         <InlineConfirm
           question={`Start navigation on ${route.name}? Check the route before relying on it.`}
           confirmLabel="Start navigation"
           onConfirm={confirmActivation}
-          onCancel={() => (confirmingActivateId = undefined)}
+          onCancel={() => {
+            confirmingActivateId = undefined;
+            restoreSavedAction(route.id, 'start');
+          }}
         />
       {:else if confirmingStopId === route.id}
         <InlineConfirm
           question={`Stop navigating ${route.name}?`}
           confirmLabel="Stop navigation"
           onConfirm={confirmStop}
-          onCancel={() => (confirmingStopId = undefined)}
+          onCancel={() => {
+            confirmingStopId = undefined;
+            restoreSavedAction(route.id, 'stop');
+          }}
         />
       {:else if armedDelete.isArmed(route.id)}
         <InlineConfirm
@@ -485,10 +582,13 @@ const emptyMessage = $derived(emptyReason());
             ? 'Delete this route and stop navigating?'
             : 'Delete this route?'}
           onConfirm={() => armedDelete.confirm(route.id)}
-          onCancel={() => armedDelete.cancel()}
+          onCancel={() => {
+            armedDelete.cancel();
+            restoreSavedAction(route.id, 'overflow');
+          }}
         />
       {:else}
-        <div class="actions">
+        <div class="actions" id={`${panelId}-actions-${encodeURIComponent(route.id)}`}>
           <VisibilityToggle
             visible={shownIds.has(route.id)}
             onToggle={(v) => onToggleShown(route.id, v)}
@@ -498,6 +598,7 @@ const emptyMessage = $derived(emptyReason());
               type="button"
               class="icon-btn icon-btn--accent"
               aria-label="Stop navigation"
+              data-route-action="stop"
               title="Stop navigation"
               disabled={writesDisabled}
               onclick={() => requestStop(route.id)}
@@ -509,6 +610,7 @@ const emptyMessage = $derived(emptyReason());
               type="button"
               class="icon-btn"
               aria-label="Start navigation on route"
+              data-route-action="start"
               title="Start navigation on route"
               disabled={working !== undefined || writesDisabled}
               onclick={() => requestActivation(route.id)}
@@ -615,10 +717,17 @@ const emptyMessage = $derived(emptyReason());
             highlight={undefined}
             {planningSpeed}
             {weatherGrid}
+            {weatherStatus}
+            {weatherNowMs}
+            {onOpenForecast}
             {units}
           />
           {#if onOpenOfflineCharts}
-            <button type="button" class="btn btn-ghost" onclick={onOpenOfflineCharts}>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => onOpenOfflineCharts?.(route.id)}
+            >
               Check offline chart coverage
             </button>
           {/if}
