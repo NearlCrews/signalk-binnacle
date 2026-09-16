@@ -22,6 +22,8 @@ function mountPanel(
   const store = new TidesStore();
   store.setCatalogs(tideStations, currentStations);
   const controller: TidesController = {
+    start: vi.fn(),
+    stop: vi.fn(),
     load: vi.fn(async () => undefined),
     loadCurrent: vi.fn(async () => undefined),
     selectStation: vi.fn(async () => undefined),

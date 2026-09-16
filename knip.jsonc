@@ -2,8 +2,11 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   // src/sw.ts is the service worker entry, referenced only by @serwist/vite's swSrc option,
   // which knip has no plugin for; src/main.ts stays discovered through index.html.
-  "entry": ["src/sw.ts"],
-  "ignore": ["static/theme-bootstrap.js"],
+  // Vite consumes the .mjs implementation, while TypeScript resolves its adjacent declaration.
+  "entry": ["src/sw.ts", "scripts/bundled-notices.d.mts"],
+  // These declarations describe the identically named .mjs exports, all consumed by build/tests.
+  // Knip follows their runtime module instead of TypeScript's declaration-resolution companion.
+  "ignoreIssues": { "scripts/bundled-notices.d.mts": ["exports"] },
   "includeEntryExports": true,
   "treatConfigHintsAsErrors": true,
   "cycles": {

@@ -93,13 +93,8 @@ const controller = createRegionsController({
 controller.start();
 $effect(() => controller.syncClient());
 $effect(() => controller.syncRectangle());
-// A route stopped while a coverage result stands would leave a stale highlight on the chart with
-// its explaining section gone, so the result clears with the route.
-$effect(() => {
-  if (routeForCheck === undefined && controller.coverageReport !== null) {
-    controller.clearCoverageCheck();
-  }
-});
+// Retire both the report and its highlight when any checked input changes.
+$effect(() => controller.syncCoverageContext());
 $effect(() => {
   onCoverageReport?.(controller.coverageReport);
 });

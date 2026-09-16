@@ -123,7 +123,7 @@ describe('fetchAutopilotInfo', () => {
       target: null,
       mode: null,
       state: null,
-      engaged: false,
+      engaged: null,
     });
   });
 

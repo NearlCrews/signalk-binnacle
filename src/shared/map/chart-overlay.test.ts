@@ -9,6 +9,54 @@ vi.mock('./pmtiles', () => ({
 }));
 
 describe('chart overlay', () => {
+  it('marks an initially undeclared schema unavailable when unsupported metadata arrives', async () => {
+    const overlay = createChartOverlay(
+      { identifier: 'unknown', name: 'Unknown', type: 'tileJSON', url: '/unknown.json' },
+      'http://pi.local',
+    );
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+    const source = map.getSource('chart-unknown');
+    if (!source) throw new Error('Expected chart source');
+    Object.assign(source, { maxzoom: 14, vectorLayerIds: ['DEPARE'] });
+    map.emit('sourcedata', { sourceId: 'chart-unknown', sourceDataType: 'metadata' });
+    expect(overlay.available?.()).toBe(false);
+    overlay.remove(fakeOverlayContext(map));
+  });
+  it('retains an unsupported vector schema as unavailable without adding empty sources', async () => {
+    const overlay = createChartOverlay(
+      {
+        identifier: 's57',
+        name: 'S57',
+        type: 'tileJSON',
+        url: '/s57.json',
+        layers: ['DEPARE', 'SOUNDG', 'BOYLAT'],
+      },
+      'http://pi.local',
+    );
+    const map = createFakeMap();
+    await overlay.add(fakeOverlayContext(map));
+    expect(overlay.available?.()).toBe(false);
+    expect(overlay.unavailableHint).toContain('no supported drawable layers');
+    expect(overlay.chart?.kind).toBe('vector');
+    expect(overlay.layerIds).toEqual([]);
+    expect(map.sources.size).toBe(0);
+  });
+
+  it('keeps supported layers in a mixed vector schema', () => {
+    const overlay = createChartOverlay(
+      {
+        identifier: 'mixed',
+        name: 'Mixed',
+        type: 'tileJSON',
+        url: '/mixed.json',
+        layers: ['DEPARE', 'water'],
+      },
+      'http://pi.local',
+    );
+    expect(overlay.layerIds).toEqual(['chart-mixed-water']);
+    expect(overlay.available?.() ?? true).toBe(true);
+  });
   it('lists a style-document chart as explicitly unsupported without touching the map', async () => {
     const overlay = createChartOverlay(
       {

@@ -5,6 +5,8 @@ import type { LatLon } from '$shared/geo';
 export interface RouteWaypoint {
   position: LatLon;
   name?: string;
+  // Untouched coordinate metadata from other Signal K clients, including waypoint hrefs.
+  metadata?: Record<string, unknown>;
 }
 
 // A planned route: an ordered list of waypoints with a stable client id and a name.
@@ -12,6 +14,11 @@ export interface Route {
   id: string;
   name: string;
   waypoints: RouteWaypoint[];
+  // Provider-owned fields survive replacement writes. Geometry and editable names remain
+  // authoritative in the typed model; these bags contain only the other resource fields.
+  resourceExtras?: Record<string, unknown>;
+  featureExtras?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 }
 
 // Which part of the working route is highlighted for the cross-highlight between the leg list and the

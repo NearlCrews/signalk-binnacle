@@ -57,7 +57,7 @@ export interface UnassessedContact {
   reason: UnassessedReason;
 }
 
-export interface NearestUnassessed {
+interface NearestUnassessed {
   id: string;
   name?: string;
   rangeMeters: number;
@@ -272,17 +272,15 @@ export function assessContacts(
       // expired. Never fabricate a track: a target without fresh speed is stationary only when its
       // reported navigation state says so, and a moving target without a fresh course cannot be
       // assessed at all. Unassessed is a data-quality outcome, never a danger and never clear.
-      const sog = t.sogMps;
+      const sog = t.sogMps ?? (STATIONARY_NAV_STATES.has(t.navigationState ?? '') ? 0 : undefined);
       const cog = t.cogRad;
       if (sog === undefined) {
-        if (!STATIONARY_NAV_STATES.has(t.navigationState ?? '')) {
-          unassessed.push({
-            id: t.id,
-            name: t.name,
-            position: t.position,
-            reason: 'motion-unknown',
-          });
-        }
+        unassessed.push({
+          id: t.id,
+          name: t.name,
+          position: t.position,
+          reason: 'motion-unknown',
+        });
         continue;
       }
       const targetSlow = sog < SLOW_TARGET_SOG_MPS;
@@ -515,18 +513,17 @@ export class CollisionAssessment {
     );
   }
 
-  // True when the worst contact is inside the hard inner ring: close enough and imminent enough that
+  // True when any danger contact is inside the hard inner ring: close enough and imminent enough that
   // the alarm must sound even if muted or acknowledged. Consumers use it to override suppression.
   // A receding contact never escalates: its approach is past, so nothing is imminent, and its TCPA
   // (zero or negative during the hold) would otherwise read as inside the ring.
   get escalating(): boolean {
-    const top = this.#topContact;
-    return (
-      !!top &&
-      !top.receding &&
-      top.severity === 'danger' &&
-      top.cpaMeters <= ESCALATE_CPA_METERS &&
-      top.tcpaSeconds <= ESCALATE_TCPA_SECONDS
+    return this.#assessment.contacts.some(
+      (contact) =>
+        !contact.receding &&
+        contact.severity === 'danger' &&
+        contact.cpaMeters <= ESCALATE_CPA_METERS &&
+        contact.tcpaSeconds <= ESCALATE_TCPA_SECONDS,
     );
   }
 

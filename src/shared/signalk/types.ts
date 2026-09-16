@@ -188,11 +188,14 @@ export interface SKFrame {
   self: Map<string, Value>;
   selfSources?: Map<string, PathSource>;
   selfEpochs?: Map<string, number>;
+  // Measurement epochs above retain provider time. Receipts measure transport activity only.
+  selfReceipts?: Map<string, number>;
   // Server-declared staleness markers, one per timed-out self path. A separate channel from self
   // on purpose: a marker must not stamp an epoch or read as data flow.
   selfStales?: Map<string, PathStaleMarker>;
   ais?: Map<string, Map<string, Value>>;
   aisEpochs?: Map<string, Map<string, number>>;
+  aisReceipts?: Map<string, Map<string, number>>;
   connection: ConnectionState;
   epoch: number;
   // Changes on every successful WebSocket open. Consumers retain safety latches across a
@@ -208,6 +211,7 @@ export interface SKFrame {
 export interface AisTargetState {
   values: Map<string, Value>;
   epochs: Map<string, number>;
+  receipts?: Map<string, number>;
   generations: Map<string, number>;
   lastUpdate: number;
   // Bumped only when a mirrored value actually changes, so a consumer can memoize per target

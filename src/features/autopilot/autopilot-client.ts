@@ -22,10 +22,6 @@ import {
 // a read-only token gets 403 { state: 'FAILED', statusCode: 403, message: 'Unauthorised' }.
 export const AUTOPILOTS_PATH = '/signalk/v2/api/vessels/self/autopilots';
 
-// The reserved id every route accepts for "the default device"; the server resolves it to the
-// first registered device when no default was set explicitly.
-export const DEFAULT_DEVICE_ID = '_default';
-
 const MAX_AUTOPILOT_JSON_BYTES = 64 * 1024;
 const MAX_AUTOPILOT_DEVICES = 16;
 const MAX_AUTOPILOT_ID_LENGTH = 128;
@@ -44,19 +40,19 @@ export interface AutopilotDevice {
   isDefault: boolean;
 }
 
-export interface AutopilotStateOption {
+interface AutopilotStateOption {
   name: string;
   // Whether this provider state is actively steering; the provider declares the mapping.
   engaged: boolean;
 }
 
-export interface AutopilotActionOption {
+interface AutopilotActionOption {
   id: string;
   name: string;
   available: boolean;
 }
 
-export interface AutopilotOptions {
+interface AutopilotOptions {
   states: AutopilotStateOption[];
   modes: string[];
   actions: AutopilotActionOption[];
@@ -69,7 +65,8 @@ export interface AutopilotInfo {
   target: number | null;
   mode: string | null;
   state: string | null;
-  engaged: boolean;
+  // Missing or malformed engagement is unknown, never an implicit standby confirmation.
+  engaged: boolean | null;
 }
 
 // absent covers both a server without the v2 API (404) and a v2 server whose discovery record is
@@ -151,7 +148,7 @@ function parseStateOptions(raw: unknown): AutopilotStateOption[] {
   for (const entry of raw) {
     if (!isRecord(entry)) continue;
     const name = boundedText(entry.name);
-    if (name) out.push({ name, engaged: entry.engaged === true });
+    if (name && typeof entry.engaged === 'boolean') out.push({ name, engaged: entry.engaged });
   }
   return out;
 }
@@ -173,7 +170,7 @@ function parseActions(raw: unknown): AutopilotActionOption[] {
   return out;
 }
 
-export function cleanTargetRadians(value: unknown): number | null {
+function cleanTargetRadians(value: unknown): number | null {
   return isFiniteNumber(value) && Math.abs(value) <= MAX_TARGET_RADIANS ? value : null;
 }
 
@@ -193,16 +190,21 @@ export async function fetchAutopilotInfo(
     const body = await readBoundedJson<unknown>(response, MAX_AUTOPILOT_JSON_BYTES);
     if (!isRecord(body)) return undefined;
     const options = isRecord(body.options) ? body.options : undefined;
+    const states = parseStateOptions(options?.states);
+    const state = boundedText(body.state) ?? null;
     return {
       options: {
-        states: parseStateOptions(options?.states),
+        states,
         modes: parseModes(options?.modes),
         actions: parseActions(options?.actions),
       },
       target: cleanTargetRadians(body.target),
       mode: boundedText(body.mode) ?? null,
-      state: boundedText(body.state) ?? null,
-      engaged: body.engaged === true,
+      state,
+      engaged:
+        typeof body.engaged === 'boolean'
+          ? body.engaged
+          : (states.find((option) => option.name === state)?.engaged ?? null),
     };
   } catch {
     return undefined;

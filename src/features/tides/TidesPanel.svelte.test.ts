@@ -19,6 +19,8 @@ const automatic: TideStationSelection = { mode: 'automatic' };
 
 function controller(): TidesController {
   return {
+    start: vi.fn(),
+    stop: vi.fn(),
     load: vi.fn(async () => undefined),
     loadCurrent: vi.fn(async () => undefined),
     selectStation: vi.fn(async () => undefined),

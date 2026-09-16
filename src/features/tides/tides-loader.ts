@@ -559,7 +559,9 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     // Start the preferred automatic provider before the independent NOAA catalog lookup. This
     // preserves plugin-first latency while the catalog warms for the panel and current selection.
     const automaticPlugin =
-      selection.tide.mode === 'automatic' ? pluginTide(lat, lon, nowMs, day) : undefined;
+      !movedLittle && selection.tide.mode === 'automatic'
+        ? pluginTide(lat, lon, nowMs, day)
+        : undefined;
     try {
       lists = await ensureLists(nowMs);
     } catch (error) {
@@ -590,6 +592,10 @@ export function createTidesLoader(overrides: Partial<LoaderDeps> = {}): TidesLoa
     store.applyLoad({ ...nearby, tide, current });
     if (tide.state === 'failed' || current.state === 'failed') {
       cooldownUntil = deps.now() + COOLDOWN_MS;
+      // A failed component has not established coverage. After the cooldown a stationary
+      // vessel must retry too, rather than treating this location as successfully loaded.
+      lastSelection = undefined;
+      return;
     }
     lastLat = lat;
     lastLon = lon;

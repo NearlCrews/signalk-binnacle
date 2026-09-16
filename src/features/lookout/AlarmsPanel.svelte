@@ -20,6 +20,8 @@ import {
   feetToMeters,
   formatClockTime,
   formatLengthOr,
+  lengthFromDisplay,
+  lengthToDisplay,
   lengthUnit,
   metersToFeet,
   metersToNauticalMiles,
@@ -142,6 +144,7 @@ const {
 }: Props = $props();
 
 const t = $derived(thresholds.value);
+const displayUnits = $derived(units.profile ?? units.mode);
 const alerts = $derived(notifications.list());
 let pendingAction = $state<string | undefined>();
 let confirmingReset = $state(false);
@@ -570,13 +573,13 @@ $effect(() => {
       </button>
       <UnitField
         label="Off-course limit"
-        unit="m"
-        min={20}
-        max={2000}
-        step={10}
+        unit={lengthUnit(displayUnits)}
+        min={lengthToDisplay(20, displayUnits)}
+        max={lengthToDisplay(2000, displayUnits)}
+        step="any"
         ariaLabel="Off-course alarm limit"
-        value={xte.limitMeters}
-        onCommit={(m) => xte?.setLimitMeters(m)}
+        value={lengthToDisplay(xte.limitMeters, displayUnits)}
+        onCommit={(value) => xte?.setLimitMeters(lengthFromDisplay(value, displayUnits))}
       />
     </section>
   {/if}

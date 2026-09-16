@@ -109,6 +109,49 @@ describe('routeToFeature', () => {
 });
 
 describe('featureToRoute', () => {
+  it('preserves external description, coordinate references, and untouched properties through rename and reverse', () => {
+    const body = {
+      name: 'External',
+      description: 'Keep north of shoal',
+      feature: {
+        type: 'Feature',
+        id: 'feature-id',
+        bbox: [0, 0, 1, 1],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+        properties: {
+          color: 'blue',
+          coordinatesMeta: [
+            { href: '/resources/waypoints/a', note: 'Arrival' },
+            { name: 'B', href: '/resources/waypoints/b' },
+          ],
+        },
+      },
+    };
+    const route = featureToRoute('route-id', body);
+    expect(route).toBeDefined();
+    if (!route) return;
+    const renamed = routeToFeature({ ...route, name: 'Renamed' });
+    expect(renamed).toMatchObject({
+      name: 'Renamed',
+      description: body.description,
+      feature: { id: 'feature-id', bbox: [0, 0, 1, 1], properties: body.feature.properties },
+    });
+    const reversed = routeToFeature({ ...route, waypoints: route.waypoints.toReversed() });
+    expect(reversed.feature.properties.coordinatesMeta).toEqual(
+      body.feature.properties.coordinatesMeta.toReversed(),
+    );
+    const moved = routeToFeature({
+      ...route,
+      waypoints: [route.waypoints[0], { position: { latitude: 2, longitude: 3 } }],
+    });
+    expect(moved.feature).toMatchObject({ bbox: [0, 0, 3, 2] });
+  });
   it('parses a server route Feature back to waypoints, deriving name from coordinatesMeta', () => {
     const body = {
       name: 'Server route',

@@ -131,7 +131,8 @@ export class RegionsController {
   positionLoadError = $state<string | null>(null);
   coverageCorridorNm = $state<number>(DEFAULT_COVERAGE_CORRIDOR_NM);
   coverageDetail = $state<DetailKey>('coastal');
-  coverageReport = $state<RouteCoverageReport | null>(null);
+  #coverageReport = $state<RouteCoverageReport | null>(null);
+  #coverageContext = '';
   #highlight: CoverageHighlight | null = null;
   readonly armedDelete = new ArmedRow((id) => void this.deleteRegion(id));
   readonly positionWarmSourceList = positionWarmSources();
@@ -429,6 +430,7 @@ export class RegionsController {
       const list = await this.deps.getClient().getRegions(abort.signal);
       if (this.#disposed || abort.signal.aborted || generation !== this.#regionsGeneration) return;
       this.regions = list;
+      this.syncCoverageContext();
       this.loadError = null;
       if (this.error === 'Could not refresh the saved regions.') this.error = null;
       const active = new Set(
@@ -722,16 +724,37 @@ export class RegionsController {
     return this.deps.getActiveRoute?.();
   }
 
+  #coverageKey(): string {
+    return JSON.stringify([
+      this.activeRoute,
+      this.regions,
+      this.coverageCorridorNm,
+      this.coverageDetail,
+    ]);
+  }
+
+  get coverageReport(): RouteCoverageReport | null {
+    return this.#coverageContext === this.#coverageKey() ? this.#coverageReport : null;
+  }
+
+  syncCoverageContext(): void {
+    if (this.#coverageReport !== null && this.#coverageContext !== this.#coverageKey()) {
+      this.clearCoverageCheck();
+    }
+  }
+
   setCoverageCorridor(nm: number): void {
     if (!isFiniteNumber(nm) || nm <= 0) return;
+    const checked = this.coverageReport !== null;
     this.coverageCorridorNm = nm;
     // A standing result must describe its shown inputs, so a control change re-runs the check.
-    if (this.coverageReport !== null) this.runCoverageCheck();
+    if (checked) this.runCoverageCheck();
   }
 
   setCoverageDetail(key: DetailKey): void {
+    const checked = this.coverageReport !== null;
     this.coverageDetail = key;
-    if (this.coverageReport !== null) this.runCoverageCheck();
+    if (checked) this.runCoverageCheck();
   }
 
   runCoverageCheck(): void {
@@ -747,13 +770,14 @@ export class RegionsController {
       corridorNm: this.coverageCorridorNm,
       detail: this.coverageDetail,
     });
-    this.coverageReport = report;
+    this.#coverageContext = this.#coverageKey();
+    this.#coverageReport = report;
     this.#highlight ??= (this.deps.createHighlight ?? createCoverageHighlight)(this.deps.getMap());
     this.#highlight.set(report.gaps);
   }
 
   clearCoverageCheck(): void {
-    this.coverageReport = null;
+    this.#coverageReport = null;
     this.#highlight?.clear();
   }
 

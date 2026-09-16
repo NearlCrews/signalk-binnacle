@@ -405,9 +405,6 @@ function onCardFocusOut(event: FocusEvent): void {
     color: var(--accent);
   }
 }
-.menu-tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
-  color: var(--accent);
-}
 .menu-tile:active:not(:disabled):not([aria-disabled="true"]) {
   filter: brightness(var(--brightness-press));
 }
@@ -421,6 +418,9 @@ function onCardFocusOut(event: FocusEvent): void {
   background: var(--accent-tint);
 }
 .menu-tile.is-on :global(svg:not(.menu-item-icon__badge)) {
+  color: var(--accent);
+}
+.menu-tile:focus-visible:not([aria-disabled="true"]) :global(svg:not(.menu-item-icon__badge)) {
   color: var(--accent);
 }
 /* An unavailable tile (aria-disabled) is grayed like a disabled one, but stays focusable and

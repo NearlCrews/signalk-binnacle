@@ -4,6 +4,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 import packageJson from './package.json' with { type: 'json' };
+import { createBundledNotices } from './scripts/bundled-notices.mjs';
 import tsconfigBase from './tsconfig.base.json' with { type: 'json' };
 import tsconfigPaths from './tsconfig.paths.json' with { type: 'json' };
 
@@ -22,6 +23,7 @@ const base = `/${packageJson.name}/`;
 // the serwist plugin resolves globDirectory against the process cwd, not the Vite root, so a
 // relative string would silently precache nothing when built from elsewhere.
 const outDir = fileURLToPath(new URL('public', import.meta.url));
+const bundledNotices = createBundledNotices({ root: fileURLToPath(new URL('.', import.meta.url)) });
 
 export default defineConfig({
   base: process.env.NODE_ENV === 'production' ? base : '/',
@@ -30,11 +32,13 @@ export default defineConfig({
   },
   plugins: [
     svelte(),
+    bundledNotices.plugin('app'),
     // The service worker is a real module (src/sw.ts) bundled by the plugin's child build; its
     // update flow stays prompt-mode (skipWaiting false there, the Update control in the UI). The
     // web app manifest is a static file (static/manifest.webmanifest) linked from index.html. The
     // fallback navigation route and its denylist live in sw.ts beside the runtime caching table.
     serwist({
+      plugins: [bundledNotices.plugin('service-worker')],
       swSrc: 'src/sw.ts',
       swDest: 'sw.js',
       globDirectory: outDir,
@@ -52,6 +56,7 @@ export default defineConfig({
     }),
   ],
   resolve: { alias },
+  worker: { plugins: () => [bundledNotices.plugin('worker')] },
   publicDir: 'static',
   build: {
     outDir,

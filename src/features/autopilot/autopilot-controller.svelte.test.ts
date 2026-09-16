@@ -5,6 +5,7 @@ import { AUTOPILOTS_PATH } from './autopilot-client';
 import { type AutopilotDeps, createAutopilotController } from './autopilot-controller.svelte';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -49,6 +50,7 @@ function stubRoutes(overrides: Partial<Record<'discovery' | 'info' | 'command', 
 
 function makeController(overrides: Partial<AutopilotDeps> = {}) {
   const store = new SignalKStore();
+  store.connection = { phase: 'open', attempt: 0 };
   const requestWriteAccess = vi.fn(async () => undefined);
   const controller = createAutopilotController({
     origin: '',
@@ -345,5 +347,247 @@ describe('commands', () => {
       expect(controller.adjustBusy).toBe(false);
     });
     expect(controller.target).toBeCloseTo(1.6);
+  });
+});
+
+describe('state confidence and command ownership', () => {
+  it('never presents missing engagement or failed information as confirmed standby', async () => {
+    stubRoutes({ info: () => json({ mode: 'compass', state: 'unrecognized' }) });
+    const { controller } = makeController();
+    await controller.rehydrate();
+    expect(controller.stateStatus).toBe('unknown');
+    expect(controller.stateKnown).toBe(false);
+    expect(controller.chip).toEqual({ kind: 'lost' });
+    expect(controller.pilotState).toBeNull();
+    const mock = stubRoutes({ info: () => json({}, 500) });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await controller.rehydrate();
+    await controller.engage();
+    expect(controller.stateKnown).toBe(false);
+    expect(mock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
+  it('loses confidence on disconnect and requires a new snapshot after reconnect', async () => {
+    stubRoutes();
+    const { controller, store } = makeController();
+    await controller.rehydrate();
+    store.connection = { phase: 'closed', attempt: 1 };
+    expect(controller.stateStatus).toBe('lost');
+    expect(controller.engaged).toBe(false);
+    expect(controller.chip).toEqual({ kind: 'lost' });
+    store.generation += 1;
+    store.connection = { phase: 'open', attempt: 0 };
+    expect(controller.stateStatus).toBe('stale');
+    await controller.rehydrate();
+    expect(controller.stateKnown).toBe(true);
+  });
+
+  it('ages out a snapshot without incoming data and rejects freshly received ancient telemetry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const clock = $state({ now: 1_000_000 });
+    stubRoutes();
+    const { controller, store } = makeController({ clock });
+    await controller.rehydrate();
+    expect(controller.stateKnown).toBe(true);
+    clock.now += 61_000;
+    expect(controller.stateStatus).toBe('stale');
+    await controller.rehydrate();
+    expect(controller.stateKnown).toBe(true);
+    const frame = frameWithSource(
+      createFrameFactory(clock.now)({ 'steering.autopilot.engaged': false }),
+      'pypilot',
+    );
+    frame.selfEpochs = new Map([['steering.autopilot.engaged', 100_000]]);
+    frame.selfReceipts = new Map([['steering.autopilot.engaged', clock.now + 1]]);
+    store.applyFrame(frame);
+    expect(controller.stateStatus).toBe('stale');
+    expect(controller.chip).toEqual({ kind: 'lost' });
+  });
+
+  it('retains telemetry that arrives while a status request is in flight', async () => {
+    let finish!: (response: Response) => void;
+    stubRoutes({
+      info: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const { controller, store } = makeController();
+    const pending = controller.rehydrate();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const frame = createFrameFactory(Date.now());
+    store.applyFrame(
+      frameWithSource(
+        frame({ 'steering.autopilot.engaged': false, 'steering.autopilot.state': 'standby' }),
+        'pypilot',
+      ),
+    );
+    finish(json(INFO));
+    await pending;
+    expect(controller.engaged).toBe(false);
+    expect(controller.pilotState).toBe('standby');
+  });
+
+  it('discards status responses from a previous authorization identity', async () => {
+    let finish!: (response: Response) => void;
+    let token = $state('old-token');
+    stubRoutes({
+      info: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const { controller } = makeController({ getToken: () => token });
+    const pending = controller.rehydrate();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    token = 'new-token';
+    finish(json(INFO));
+    await pending;
+    expect(controller.stateKnown).toBe(false);
+    stubRoutes();
+    await controller.rehydrate();
+    expect(controller.stateKnown).toBe(true);
+    token = 'third-token';
+    expect(controller.stateStatus).toBe('stale');
+  });
+
+  it('invalidates a pre-command read so it cannot restore an old steering mode', async () => {
+    stubRoutes();
+    const { controller } = makeController();
+    await controller.rehydrate();
+    let finish!: (response: Response) => void;
+    let infoCalls = 0;
+    stubRoutes({
+      info: () =>
+        ++infoCalls === 1
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : json({ ...INFO, mode: 'wind' }),
+    });
+    const oldRead = controller.rehydrate();
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    await controller.setMode('wind');
+    await vi.waitFor(() => expect(controller.mode).toBe('wind'));
+    finish(json(INFO));
+    await oldRead;
+    expect(controller.mode).toBe('wind');
+  });
+
+  it('does not apply an old command acknowledgment to a newly selected pilot', async () => {
+    let finish!: (response: Response) => void;
+    const mock = stubRoutes({
+      info: (url) =>
+        json({
+          ...INFO,
+          engaged: !url.endsWith('/backup'),
+          state: url.endsWith('/backup') ? 'standby' : 'auto',
+        }),
+      command: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    const { controller } = makeController();
+    await controller.rehydrate();
+    const pending = controller.engage();
+    controller.selectDevice('backup');
+    await vi.waitFor(() => expect(controller.stateKnown).toBe(true));
+    finish(json({ state: 'COMPLETED' }));
+    await pending;
+    expect(controller.selectedId).toBe('backup');
+    expect(controller.engaged).toBe(false);
+    expect(mock.mock.calls.filter(([url]) => String(url).endsWith('/pypilot'))).toHaveLength(1);
+  });
+
+  it.each(['device', 'connection', 'token', 'mode', 'dispose'] as const)(
+    'drops queued nudges when %s ownership changes',
+    async (change) => {
+      let finish!: (response: Response) => void;
+      let token = $state('first');
+      const mock = stubRoutes({
+        command: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      });
+      const { controller, store } = makeController({ getToken: () => token });
+      await controller.rehydrate();
+      controller.adjustTarget(0.1);
+      controller.adjustTarget(0.2);
+      if (change === 'device') controller.selectDevice('backup');
+      else if (change === 'connection') store.generation += 1;
+      else if (change === 'token') token = 'second';
+      else if (change === 'mode')
+        store.applyFrame(
+          frameWithSource(
+            createFrameFactory(Date.now())({ 'steering.autopilot.mode': 'wind' }),
+            'pypilot',
+          ),
+        );
+      else controller.dispose();
+      finish(json({ state: 'COMPLETED' }));
+      await vi.waitFor(() => expect(controller.adjustBusy).toBe(false));
+      expect(
+        mock.mock.calls.filter(([, init]) => init?.method !== undefined && init.method !== 'GET'),
+      ).toHaveLength(1);
+      if (change === 'device') expect(controller.target).toBe(1.5);
+    },
+  );
+
+  it('serializes a mode change behind the active adjustment and discards queued old-mode nudges', async () => {
+    let finish!: (response: Response) => void;
+    const mock = stubRoutes({
+      command: (url) =>
+        url.endsWith('/adjust')
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : json({ state: 'COMPLETED' }),
+    });
+    const { controller } = makeController();
+    await controller.rehydrate();
+    controller.adjustTarget(0.1);
+    controller.adjustTarget(0.2);
+    const pending = controller.setMode('wind');
+    expect(mock.mock.calls.some(([url]) => String(url).endsWith('/mode'))).toBe(false);
+    finish(json({ state: 'COMPLETED' }));
+    await pending;
+    const writes = mock.mock.calls.filter(
+      ([, init]) => init?.method !== undefined && init.method !== 'GET',
+    );
+    expect(writes.map(([url]) => String(url).split('/').at(-1))).toEqual(['adjust', 'mode']);
+  });
+
+  it('bounds every coalesced adjustment and rejects unsupported or standby maneuvers', async () => {
+    let finish!: (response: Response) => void;
+    let calls = 0;
+    const mock = stubRoutes({
+      command: () =>
+        ++calls === 1
+          ? new Promise((resolve) => {
+              finish = resolve;
+            })
+          : json({ state: 'COMPLETED' }),
+    });
+    const { controller } = makeController();
+    await controller.rehydrate();
+    controller.adjustTarget(0.1);
+    for (let i = 0; i < 10; i += 1) controller.adjustTarget(0.2);
+    finish(json({ state: 'COMPLETED' }));
+    await vi.waitFor(() => expect(controller.adjustBusy).toBe(false));
+    const deltas = mock.mock.calls
+      .filter(([, init]) => init?.method !== undefined && init.method !== 'GET')
+      .map(([, init]) => (JSON.parse(init?.body as string) as { value: number }).value);
+    expect(deltas.reduce((sum, value) => sum + value, 0)).toBeCloseTo(2.1);
+    expect(deltas.every((value) => Math.abs(value) <= Math.PI / 4)).toBe(true);
+    await controller.gybe('port');
+    expect(mock.mock.calls.some(([url]) => String(url).endsWith('/gybe'))).toBe(false);
+    stubRoutes({ info: () => json({ ...INFO, engaged: false, state: 'standby' }) });
+    await controller.rehydrate();
+    const standby = stubRoutes();
+    await controller.tack('port');
+    expect(standby).not.toHaveBeenCalled();
   });
 });

@@ -63,12 +63,7 @@ export function trackGeoJsonFilename(name: string): string {
   return portableFilename(name, 'track', 'geojson');
 }
 
-// Trigger a browser download of the track as a .geojson file.
-export function downloadGeoJson(name: string, points: readonly TrackPoint[]): void {
-  downloadText(trackGeoJsonFilename(name), toGeoJsonString(name, points), 'application/geo+json');
-}
-
-// The segments-input counterpart to downloadGeoJson, for a saved track's own per-segment points.
+// Download a saved track's own per-segment points as a GeoJSON file.
 export function downloadGeoJsonFromSegments(
   name: string,
   segments: readonly (readonly TrackPoint[])[],

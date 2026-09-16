@@ -1,15 +1,18 @@
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Assessment } from '$entities/collision';
+import type { ActiveNotification } from '$entities/notifications';
 import * as signalk from '$shared/signalk';
 import { createNotificationsController } from './notifications-controller.svelte';
 
 vi.mock('$shared/signalk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$shared/signalk')>()),
   acknowledgeNotification: vi.fn(),
+  acknowledgeAllNotifications: vi.fn(),
   postNotification: vi.fn(),
   resolveNotification: vi.fn(),
   silenceNotification: vi.fn(),
+  silenceAllNotifications: vi.fn(),
   updateNotification: vi.fn(),
 }));
 
@@ -35,6 +38,8 @@ function setup(
     apiAvailable?: boolean;
     writeBlocked?: boolean;
     timeTravelActive?: boolean;
+    suppressed?: boolean;
+    escalating?: boolean;
     mobActive?: boolean;
     ownedDepthPath?: string;
     notifications?: unknown[];
@@ -52,12 +57,13 @@ function setup(
   const lookoutAlarm = { update: vi.fn() };
   const genericAlarm = {
     update: vi.fn(),
-    muteActiveHere: vi.fn(),
+    muteActiveHere: vi.fn<() => readonly ActiveNotification[]>(() => []),
     sounding: false,
     locallyMuted: false,
   };
   const timeTravel = { active: options.timeTravelActive ?? false, exit: vi.fn() };
   const mob = { active: options.mobActive ?? false };
+  const log = vi.fn();
   const controller = createNotificationsController({
     origin: 'http://sk',
     token: () => 'token',
@@ -67,8 +73,8 @@ function setup(
     client: client as never,
     collision: {
       assessment,
-      suppressed: false,
-      escalating: false,
+      suppressed: options.suppressed ?? false,
+      escalating: options.escalating ?? false,
     } as never,
     collisionMute: collisionMute as never,
     lookoutAlarm: lookoutAlarm as never,
@@ -80,8 +86,10 @@ function setup(
     genericAlarm: genericAlarm as never,
     ownedDepthNotificationPath: () => options.ownedDepthPath,
     anchorNotificationCovered: () => true,
+    log,
   });
   return {
+    log,
     client,
     collisionMute,
     controller,
@@ -119,6 +127,8 @@ beforeEach(() => {
   vi.mocked(signalk.updateNotification).mockResolvedValue('updated');
   vi.mocked(signalk.silenceNotification).mockResolvedValue('completed');
   vi.mocked(signalk.acknowledgeNotification).mockResolvedValue('completed');
+  vi.mocked(signalk.acknowledgeAllNotifications).mockResolvedValue('completed');
+  vi.mocked(signalk.silenceAllNotifications).mockResolvedValue('completed');
 });
 
 afterEach(() => {
@@ -152,6 +162,49 @@ describe('createNotificationsController', () => {
     expect(test.timeTravel.exit).toHaveBeenCalledOnce();
   });
 
+  it('exits playback for an escalating danger despite an existing acknowledgment', () => {
+    const test = mount({ timeTravelActive: true, suppressed: true, escalating: true });
+    expect(test.timeTravel.exit).toHaveBeenCalledOnce();
+    const quiet = mount({ timeTravelActive: true, suppressed: true, escalating: false });
+    expect(quiet.timeTravel.exit).not.toHaveBeenCalled();
+  });
+
+  it('records only the newly muted notification activations returned by the local alarm', () => {
+    const test = mount();
+    test.genericAlarm.muteActiveHere.mockReturnValueOnce([
+      {
+        path: 'notifications.bilge',
+        message: 'Bilge high',
+        state: 'alarm',
+        activation: 1,
+      } as ActiveNotification,
+    ]);
+    test.controller.muteGenericHere();
+    test.controller.muteGenericHere();
+    expect(test.log.mock.calls.filter(([event]) => event.kind === 'muted')).toEqual([
+      [
+        {
+          kind: 'muted',
+          label: 'Bilge high',
+          source: 'notifications.bilge',
+          detail: 'On this device only.',
+        },
+      ],
+    ]);
+  });
+
+  it('records bulk actions only after the server confirms them', async () => {
+    const test = mount();
+    vi.mocked(signalk.silenceAllNotifications).mockResolvedValueOnce('failed');
+    test.controller.onSilenceAllNotifications();
+    await vi.waitFor(() => expect(test.controller.alarmActionError).toContain('Could not silence'));
+    expect(test.log.mock.calls.filter(([event]) => event.kind === 'silenced')).toHaveLength(0);
+    test.controller.onAcknowledgeAllNotifications();
+    await vi.waitFor(() =>
+      expect(test.log).toHaveBeenCalledWith({ kind: 'acknowledged', label: 'All active alarms' }),
+    );
+  });
+
   it('keeps a device mute but explains when boat-wide silence is write-blocked', async () => {
     const test = mount({ writeBlocked: true });
     await vi.waitFor(() => expect(signalk.postNotification).toHaveBeenCalledOnce());
@@ -173,6 +226,17 @@ describe('createNotificationsController', () => {
     test.controller.onAcknowledgeNotification({ id: 'n1' } as never);
     await vi.waitFor(() =>
       expect(test.controller.alarmActionError).toContain('Could not acknowledge'),
+    );
+    expect(
+      test.log.mock.calls.filter(([event]) => ['silenced', 'acknowledged'].includes(event.kind)),
+    ).toHaveLength(0);
+    test.controller.onAcknowledgeNotification({
+      id: 'n1',
+      path: 'notifications.test',
+      value: { state: 'alarm', message: 'Engine hot' },
+    } as never);
+    await vi.waitFor(() =>
+      expect(test.log).toHaveBeenCalledWith(expect.objectContaining({ kind: 'acknowledged' })),
     );
   });
 

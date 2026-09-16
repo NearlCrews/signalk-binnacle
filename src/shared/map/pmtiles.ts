@@ -1,5 +1,5 @@
 import * as maplibregl from 'maplibre-gl';
-import { PMTiles, Protocol, type RangeResponse, type Source } from 'pmtiles';
+import { EtagMismatch, PMTiles, Protocol, type RangeResponse, type Source } from 'pmtiles';
 import { withTimeout } from '$shared/lib';
 import { isAbort } from './abort';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';
@@ -193,7 +193,12 @@ export class NoStoreSource implements Source {
     return this.#url;
   }
 
-  async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
+  async getBytes(
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+    etag?: string,
+  ): Promise<RangeResponse> {
     const end = requestedRangeEnd(offset, length);
     const headers = { Range: `bytes=${offset}-${end}` };
     for (let attempt = 0; ; attempt++) {
@@ -212,6 +217,7 @@ export class NoStoreSource implements Source {
       }
       if (response.status === 200 || response.status === 206) {
         const validated = await validateRangeResponse(response, offset, length);
+        if (etag !== undefined && validated.validator !== etag) throw new EtagMismatch();
         return {
           data: validated.data,
           etag: validated.validator,
@@ -226,6 +232,7 @@ export class NoStoreSource implements Source {
         continue;
       }
       await cancelResponseBody(response);
+      if (response.status === 416) throw new EtagMismatch();
       throw new Error(
         `PMTiles fetch failed: ${response.status} for ${pmtilesUrlForError(this.#url)}`,
       );
@@ -271,7 +278,12 @@ export class CompanionSource implements Source {
     return this.#url;
   }
 
-  async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
+  async getBytes(
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+    etag?: string,
+  ): Promise<RangeResponse> {
     const end = requestedRangeEnd(offset, length);
     const headers: Record<string, string> = { Range: `bytes=${offset}-${end}` };
     const token = this.#getToken();
@@ -290,11 +302,13 @@ export class CompanionSource implements Source {
     }
     if (response.status !== 200 && response.status !== 206) {
       await cancelResponseBody(response);
+      if (response.status === 416) throw new EtagMismatch();
       throw new Error(
         `PMTiles fetch failed: ${response.status} for ${pmtilesUrlForError(this.#url)}`,
       );
     }
     const validated = await validateRangeResponse(response, offset, length);
+    if (etag !== undefined && validated.validator !== etag) throw new EtagMismatch();
     return {
       data: validated.data,
       etag: validated.validator,

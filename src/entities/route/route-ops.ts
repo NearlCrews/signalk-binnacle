@@ -6,6 +6,7 @@ import type { Route } from './route-types';
 // overwriting it. Per-waypoint names ride along, still attached to their points.
 export function reverseRoute(route: Route): Route {
   return {
+    ...route,
     id: uuidv4(),
     name: `${route.name} (reverse)`,
     waypoints: [...route.waypoints].reverse(),

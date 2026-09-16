@@ -16,6 +16,9 @@ import {
   formatDuration,
   formatNmOr,
   formatSpeedOr,
+  lengthFromDisplay,
+  lengthToDisplay,
+  lengthUnit,
   nauticalMilesToMeters,
   PLACEHOLDER,
   speedUnit,
@@ -27,8 +30,7 @@ import type { RouteProgress } from './route-progress';
 
 interface Props {
   guidance: CourseGuidance;
-  // The per-category display profile (or the coarse mode); only the VMG readout is
-  // preference-dependent, so the strip takes the resolved selection rather than the store.
+  // The per-category display profile (or coarse mode), used at the display edge only.
   units: UnitsSelection;
   // Whole-route distance and time to go across the legs still ahead, shown as a passage arrival
   // readout when a multi-leg route is active. Undefined for a single leg, where the per-leg numbers
@@ -238,13 +240,13 @@ const eta = $derived.by(() => {
               {#if onSetArrivalCircle}
                 <UnitField
                   label="Arrival radius"
-                  unit="m"
-                  value={Math.round(guidance.arrivalCircleEffectiveMeters)}
-                  min={ARRIVAL_CIRCLE_MIN_METERS}
-                  max={ARRIVAL_CIRCLE_MAX_METERS}
-                  step={1}
+                  unit={lengthUnit(units)}
+                  value={lengthToDisplay(guidance.arrivalCircleEffectiveMeters, units)}
+                  min={lengthToDisplay(ARRIVAL_CIRCLE_MIN_METERS, units)}
+                  max={lengthToDisplay(ARRIVAL_CIRCLE_MAX_METERS, units)}
+                  step="any"
                   ariaDescribedBy="nav-arrival-radius-note"
-                  onCommit={(meters) => onSetArrivalCircle(meters)}
+                  onCommit={(value) => onSetArrivalCircle(lengthFromDisplay(value, units))}
                 />
                 <p class="muted-note" id="nav-arrival-radius-note">
                   Arrival fires inside this radius of the waypoint, on every station.

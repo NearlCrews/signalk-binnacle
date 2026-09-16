@@ -17,6 +17,36 @@ function status(overrides: Partial<Parameters<typeof chartViewStatus>[0]> = {}) 
 }
 
 describe('chartViewStatus', () => {
+  it.each([170, 175, 180, -180, -175, -170, 535])(
+    'covers crossing bounds at longitude %s',
+    (longitude) => {
+      expect(
+        status({
+          charts: [{ visible: true, bounds: [170, -10, -170, 10] }],
+          center: { latitude: 0, longitude },
+        }),
+      ).toBe('active');
+      expect(
+        status({
+          charts: [{ visible: true, bounds: [170, -10, 190, 10] }],
+          center: { latitude: 0, longitude },
+        }),
+      ).toBe('active');
+    },
+  );
+
+  it('requires tile readiness and preserves a healthy chart alongside a failed one', () => {
+    expect(status({ charts: [{ ...covering, readiness: 'loading' }] })).toBe('source-loading');
+    expect(status({ charts: [{ ...covering, readiness: 'error' }] })).toBe('source-failed');
+    expect(
+      status({
+        charts: [
+          { ...covering, readiness: 'error' },
+          { ...covering, readiness: 'ready' },
+        ],
+      }),
+    ).toBe('active');
+  });
   it('grades a covering visible chart as active', () => {
     expect(status()).toBe('active');
   });

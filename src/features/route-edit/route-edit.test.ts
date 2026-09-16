@@ -252,6 +252,36 @@ describe('route-edit converters', () => {
 });
 
 describe('createRouteEditor name reconciliation', () => {
+  it('keeps unnamed waypoint references aligned through insertion and deletion, removing references when moved', () => {
+    const waypoints: RouteWaypoint[] = [
+      { position: { latitude: 0, longitude: 0 }, metadata: { href: '/resources/waypoints/a' } },
+      { position: { latitude: 1, longitude: 1 }, metadata: { href: '/resources/waypoints/b' } },
+      { position: { latitude: 2, longitude: 2 }, metadata: { href: '/resources/waypoints/c' } },
+    ];
+    const { draw, emitted } = startEditor(waypoints);
+    draw.mutateLine([
+      [0, 0],
+      [0.5, 0.5],
+      [1, 1],
+      [2, 2],
+    ]);
+    expect(emitted.at(-1)?.map((point) => point.metadata?.href)).toEqual([
+      '/resources/waypoints/a',
+      undefined,
+      '/resources/waypoints/b',
+      '/resources/waypoints/c',
+    ]);
+    draw.mutateLine([
+      [0, 0],
+      [1, 1],
+      [2.5, 2.5],
+    ]);
+    expect(emitted.at(-1)?.map((point) => point.metadata?.href)).toEqual([
+      '/resources/waypoints/a',
+      '/resources/waypoints/b',
+      undefined,
+    ]);
+  });
   const named: RouteWaypoint[] = [
     { position: { latitude: 0, longitude: 0 }, name: 'Alpha' },
     { position: { latitude: 1, longitude: 1 }, name: 'Bravo' },

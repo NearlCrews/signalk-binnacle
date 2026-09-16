@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { expectBearerAuth, stubFetch } from '$shared/testing';
+import { setWriteOutcomeListener } from '$shared/signalk';
+import { stubFetch } from '$shared/testing';
 import { createLogEntry, detectLogbook, fetchRecentEntries } from './logbook-client';
 
 const ORIGIN = 'http://boat.local:3000';
@@ -7,14 +8,16 @@ const LOGS_URL = `${ORIGIN}/plugins/signalk-logbook/logs`;
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  setWriteOutcomeListener(undefined);
 });
 
 describe('detectLogbook', () => {
-  it('probes the plugin mount with bearer auth and reports available', async () => {
+  it('probes with the administrator cookie rather than masking it with a device token', async () => {
     const mock = stubFetch({ ok: true, body: ['2026-08-30'] });
     await expect(detectLogbook(ORIGIN, 'tok')).resolves.toBe('available');
     expect(mock).toHaveBeenCalledWith(LOGS_URL, expect.anything());
-    expectBearerAuth(mock.mock.calls[0]?.[1], 'tok');
+    expect(mock.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include', cache: 'no-store' });
+    expect(mock.mock.calls[0]?.[1]?.headers).toBeUndefined();
   });
 
   it('maps a 404 on the mount to absent', async () => {
@@ -38,6 +41,36 @@ describe('detectLogbook', () => {
 });
 
 describe('fetchRecentEntries', () => {
+  it('keeps the newest entries beyond the daily cap and skips malformed rows before bounding', async () => {
+    const start = Date.parse('2026-08-30T00:00:00Z');
+    const rows = Array.from({ length: 250 }, (_, index) => ({
+      datetime: new Date(start + index * 60_000).toISOString(),
+      text: `entry-${index}`,
+    }));
+    stubFetch((url) =>
+      url === LOGS_URL
+        ? { ok: true, body: ['2026-08-30'] }
+        : { ok: true, body: [null, ...rows, { datetime: 'broken' }] },
+    );
+    const result = await fetchRecentEntries(ORIGIN, 'tok');
+    expect(result.state).toBe('ok');
+    if (result.state !== 'ok') return;
+    expect(result.entries).toHaveLength(200);
+    expect(result.entries[0]?.text).toBe('entry-249');
+    expect(result.entries.at(-1)?.text).toBe('entry-50');
+  });
+
+  it('selects the newest dates even after four thousand older listed days', async () => {
+    const start = Date.parse('2000-01-01');
+    const days = Array.from({ length: 4001 }, (_, index) =>
+      new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    );
+    const mock = stubFetch((url) =>
+      url === LOGS_URL ? { ok: true, body: days } : { ok: true, body: [] },
+    );
+    await fetchRecentEntries(ORIGIN, 'tok', 1);
+    expect(mock.mock.calls.at(-1)?.[0]).toBe(`${LOGS_URL}/${days.at(-1)}`);
+  });
   it('reads only the newest logged days and merges their entries newest first', async () => {
     const mock = stubFetch((url) => {
       if (url === LOGS_URL) {
@@ -153,12 +186,13 @@ describe('fetchRecentEntries', () => {
 });
 
 describe('createLogEntry', () => {
-  it('posts the text with bearer auth and reports ok on 201', async () => {
+  it('posts the text with the administrator cookie and reports ok on 201', async () => {
     const mock = stubFetch({ ok: true, status: 201 });
     await expect(createLogEntry(ORIGIN, 'tok', 'Anchor down.')).resolves.toBe('ok');
     expect(mock).toHaveBeenCalledWith(LOGS_URL, expect.anything());
     const init = mock.mock.calls[0]?.[1];
-    expectBearerAuth(init, 'tok');
+    expect(init).toMatchObject({ credentials: 'include', cache: 'no-store' });
+    expect(new Headers(init?.headers).has('Authorization')).toBe(false);
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({ text: 'Anchor down.' });
   });
@@ -185,5 +219,15 @@ describe('createLogEntry', () => {
     const mock = stubFetch({ ok: true, status: 201 });
     await expect(createLogEntry(ORIGIN, 'tok', '   ')).resolves.toBe('failed');
     expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('does not mark the independent device-token permissions blocked after an admin refusal', async () => {
+    const outcome = vi.fn();
+    setWriteOutcomeListener(outcome);
+    stubFetch({ ok: false, status: 403 });
+    expect(await createLogEntry(ORIGIN, 'readwrite-device-token', 'Kept draft')).toBe(
+      'access-denied',
+    );
+    expect(outcome).not.toHaveBeenCalled();
   });
 });

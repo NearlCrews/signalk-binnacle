@@ -102,6 +102,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     { center: deps.centerFresh, heading: deps.headingFresh },
   );
   let worker: RadarWorkerClient | undefined;
+  let streamStartedAt: number | undefined;
   let disposed = false;
   let documentVisible = typeof document === 'undefined' || !document.hidden;
   let reopenTimer: ReturnType<typeof setTimeout> | undefined;
@@ -171,9 +172,12 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   async function closeStream(status: 'idle' | 'paused' = 'paused'): Promise<void> {
     streamGeneration += 1;
     streamRadarId = undefined;
+    streamStartedAt = undefined;
     clearReopen();
     if (worker) await worker.close().catch(() => undefined);
     if (liveFrame) worker?.recycle(liveFrame.buffer);
+    worker?.dispose();
+    worker = undefined;
     liveFrame = undefined;
     layer.clearFrame();
     store.lastSpokeAt = undefined;
@@ -267,8 +271,9 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
   function startFreshnessWatch(): void {
     if (staleTimer) return;
     staleTimer = setInterval(() => {
-      if (!shouldStream() || store.lastSpokeAt === undefined) return;
-      const quiet = Date.now() - store.lastSpokeAt;
+      const lastActivity = store.lastSpokeAt ?? streamStartedAt;
+      if (!shouldStream() || lastActivity === undefined) return;
+      const quiet = Date.now() - lastActivity;
       if (quiet > STALE_MS && store.status !== 'stale') {
         store.setStatus('stale', `No new spokes in ${STALE_MS / 1000} s. Echo cleared.`);
         layer.clearFrame();
@@ -300,8 +305,10 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     )
       return;
     if (!worker) worker = createRadarWorkerClient();
+    const activeWorker = worker;
     const generation = ++streamGeneration;
     streamRadarId = radar.id;
+    streamStartedAt = Date.now();
     store.setStatus('connecting');
     let url: string;
     try {
@@ -314,11 +321,11 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         radarFlushHz(radar.spokesPerRevolution, radar.maxSpokeLen),
         (frame) => {
           if (disposed || generation !== streamGeneration || store.selectedId !== radar.id) {
-            worker?.recycle(frame.buffer);
+            activeWorker.recycle(frame.buffer);
             return;
           }
           if (frame.spokeCount <= 0) {
-            worker?.recycle(frame.buffer);
+            activeWorker.recycle(frame.buffer);
             return;
           }
           const spent = liveFrame;
@@ -329,7 +336,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
           try {
             layer.pushFrame(frame);
           } finally {
-            if (spent) worker?.recycle(spent.buffer);
+            if (spent) activeWorker.recycle(spent.buffer);
           }
           store.lastSpokeAt = Date.now();
           store.setStatus('live');
@@ -338,11 +345,23 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
         (status) => {
           if (disposed || generation !== streamGeneration) return;
           if (status === 'open') store.setStatus('waiting');
-          else scheduleReopen();
+          else {
+            streamGeneration += 1;
+            streamStartedAt = undefined;
+            if (liveFrame) activeWorker.recycle(liveFrame.buffer);
+            liveFrame = undefined;
+            layer.clearFrame();
+            store.lastSpokeAt = undefined;
+            activeWorker.dispose();
+            if (worker === activeWorker) worker = undefined;
+            scheduleReopen();
+          }
         },
       );
     } catch (error) {
       if (generation !== streamGeneration) return;
+      activeWorker.dispose();
+      if (worker === activeWorker) worker = undefined;
       streamRadarId = undefined;
       store.setStatus(
         'error',

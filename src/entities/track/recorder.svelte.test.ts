@@ -155,6 +155,7 @@ describe('TrackRecorder', () => {
       all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.clear();
@@ -175,6 +176,9 @@ describe('TrackRecorder', () => {
       clear: async () => {
         operations.push('clear');
       },
+      replaceAll: async () => {
+        operations.push('replace');
+      },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.consider(1, 1, 1, 1);
@@ -191,6 +195,9 @@ describe('TrackRecorder', () => {
       },
       clear: async () => {
         persisted.length = 0;
+      },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
       },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
@@ -211,6 +218,7 @@ describe('TrackRecorder', () => {
       all: async () => seeded.slice(),
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     // #restore runs asynchronously in the constructor; let its microtasks settle.
@@ -228,6 +236,7 @@ describe('TrackRecorder', () => {
       all: async () => legacy,
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     // #restore runs asynchronously in the constructor; let its microtasks settle.
@@ -244,6 +253,7 @@ describe('TrackRecorder', () => {
       ],
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     await Promise.resolve();
@@ -260,6 +270,7 @@ describe('TrackRecorder', () => {
         }),
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.consider(36.8, -121.7, 1, 20000); // a live fix lands before the store read finishes
@@ -275,6 +286,7 @@ describe('TrackRecorder', () => {
       all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const now = Date.now();
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
@@ -300,6 +312,7 @@ describe('TrackRecorder', () => {
       ],
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     await vi.waitFor(() => expect(r.restored).toBe(true));
@@ -315,6 +328,7 @@ describe('TrackRecorder', () => {
       ],
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     await vi.waitFor(() => expect(r.restored).toBe(true));
@@ -330,6 +344,9 @@ describe('TrackRecorder', () => {
       },
       clear: async () => {
         persisted.length = 0;
+      },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
       },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
@@ -356,6 +373,9 @@ describe('TrackRecorder', () => {
       },
       clear: async () => {
         persisted.length = 0;
+      },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
       },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
@@ -391,6 +411,9 @@ describe('TrackRecorder', () => {
       clear: async () => {
         persisted.length = 0;
       },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
+      },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.consider(1, 1, 1, liveT);
@@ -420,6 +443,9 @@ describe('TrackRecorder', () => {
       clear: async () => {
         persisted.length = 0;
       },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
+      },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.pause();
@@ -446,6 +472,9 @@ describe('TrackRecorder', () => {
       clear: async () => {
         persisted.length = 0;
       },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
+      },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.consider(1, 1, 2, 1_000_000);
@@ -462,6 +491,7 @@ describe('TrackRecorder', () => {
       all: () => new Promise<TrackPoint[]>((resolve) => (resolveAll = resolve)),
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     r.consider(1, 1, 1, 10_000);
@@ -486,6 +516,7 @@ describe('TrackRecorder', () => {
       all: async () => [{ lat: 1, lon: 1, t: oldClockTail, sog: 1 }],
       append: async () => {},
       clear: async () => {},
+      replaceAll: async () => {},
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);
     await vi.waitFor(() => expect(r.restored).toBe(true));
@@ -513,6 +544,9 @@ describe('TrackRecorder', () => {
       },
       clear: async () => {
         persisted.length = 0;
+      },
+      replaceAll: async (points: readonly TrackPoint[]) => {
+        persisted.splice(0, persisted.length, ...points);
       },
     };
     const r = new TrackRecorder(createTrackSettings(createFakeStorage()), store);

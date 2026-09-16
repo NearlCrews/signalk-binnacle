@@ -24,6 +24,7 @@ export interface HandoffDeps {
   // reconnect edge: an App effect calls syncDrafts when the browser comes back online.
   drafts: PersistedValue<HandoffSnapshot[]>;
   now?: () => number;
+  online?: () => boolean;
   // Fires after a snapshot is taken; the composition root offers a logbook entry from it.
   onCreated?: () => void;
 }
@@ -35,6 +36,7 @@ export interface HandoffController {
   create(note: string): void;
   refresh(): Promise<void>;
   syncDrafts(): Promise<void>;
+  dispose(): void;
 }
 
 export function createHandoffController(deps: HandoffDeps): HandoffController {
@@ -43,6 +45,10 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
   let loadState = $state<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
   let syncing = $state(false);
   let loadGeneration = 0;
+  let writesDuringLoad: Map<string, HandoffSnapshot> | undefined;
+  let disposed = false;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   // The shared list plus this device's drafts, deduplicated by id (a draft overrides its shared
   // copy so a just-synced snapshot never shows twice), newest first, bounded for display.
@@ -59,29 +65,54 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
 
   async function refresh(): Promise<void> {
     const generation = ++loadGeneration;
+    const acceptedWrites = new Map<string, HandoffSnapshot>();
+    writesDuringLoad = acceptedWrites;
     loadState = loadState === 'idle' ? 'loading' : loadState;
     const result = await deps.client().load();
-    if (generation !== loadGeneration) return;
+    if (disposed || generation !== loadGeneration) return;
+    writesDuringLoad = undefined;
     if (result.state === 'unavailable') {
       loadState = 'unavailable';
       return;
     }
-    shared = result.snapshots;
+    // The server snapshot may predate a POST accepted while this GET was in flight. Its local
+    // draft has already been removed, so retain that accepted write until a later read catches up.
+    const merged = new Map(result.snapshots.map((snapshot) => [snapshot.id, snapshot]));
+    for (const [id, snapshot] of acceptedWrites) merged.set(id, snapshot);
+    shared = newestHandoffs([...merged.values()], 200);
     loadState = 'ready';
     void deps.client().prune(result.snapshots);
+    void syncDrafts();
   }
 
   // Serialized: one pass posts drafts oldest first, stopping at the first failure so order is
   // preserved and a dead server costs one request, not one per draft.
   async function syncDrafts(): Promise<void> {
-    if (syncing) return;
+    if (disposed || syncing || deps.online?.() === false) return;
     if (deps.drafts.value.length === 0) return;
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
     syncing = true;
     try {
-      const queue = [...deps.drafts.value].sort((a, b) => a.createdAt - b.createdAt);
-      for (const draft of queue) {
+      while (!disposed && deps.online?.() !== false) {
+        const draft = [...deps.drafts.value].sort((a, b) => a.createdAt - b.createdAt)[0];
+        if (!draft) break;
         const accepted = await deps.client().post(draft);
-        if (!accepted) return;
+        if (disposed) return;
+        if (!accepted) {
+          loadState = 'unavailable';
+          if (deps.online?.() !== false) {
+            const delay = Math.min(120_000, 5_000 * 2 ** retryAttempt);
+            retryAttempt = Math.min(5, retryAttempt + 1);
+            retryTimer = setTimeout(() => {
+              retryTimer = undefined;
+              void syncDrafts();
+            }, delay);
+          }
+          return;
+        }
+        retryAttempt = 0;
+        writesDuringLoad?.set(draft.id, draft);
         deps.drafts.set(deps.drafts.value.filter((entry) => entry.id !== draft.id));
         shared = newestHandoffs([draft, ...shared], 200);
         if (loadState !== 'ready') loadState = 'ready';
@@ -117,5 +148,11 @@ export function createHandoffController(deps: HandoffDeps): HandoffController {
     create,
     refresh,
     syncDrafts,
+    dispose(): void {
+      disposed = true;
+      loadGeneration += 1;
+      writesDuringLoad = undefined;
+      clearTimeout(retryTimer);
+    },
   };
 }

@@ -37,14 +37,18 @@ export class FrameBatcher {
     selfEpochs?: Map<string, number>,
     aisEpochs?: Map<string, Map<string, number>>,
     selfStales?: Map<string, PathStaleMarker>,
+    selfReceipts?: Map<string, number>,
+    aisReceipts?: Map<string, Map<string, number>>,
   ) => void;
 
   #self = new Map<string, Value>();
   #selfSources = new Map<string, PathSource>();
   #selfEpochs = new Map<string, number>();
+  #selfReceipts = new Map<string, number>();
   #selfStales = new Map<string, PathStaleMarker>();
   #ais = new Map<string, Map<string, Value>>();
   #aisEpochs = new Map<string, Map<string, number>>();
+  #aisReceipts = new Map<string, Map<string, number>>();
   #scheduled = false;
   #cancel: (() => void) | undefined;
   #schedule: Schedule;
@@ -53,15 +57,23 @@ export class FrameBatcher {
     this.#schedule = schedule;
   }
 
-  put(path: string, value: Value, source?: PathSource, receivedAt = Date.now()): void {
+  put(
+    path: string,
+    value: Value,
+    source?: PathSource,
+    receivedAt = Date.now(),
+    measuredAt = receivedAt,
+  ): void {
     // A real value supersedes a pending stale marker for the path, in wire order. Deleted before
     // the capacity check: a cap-dropped value must not leave an earlier marker alive to invert
     // that order.
     if (this.#selfStales.size > 0) this.#selfStales.delete(path);
     if (!this.#self.has(path) && this.#self.size >= MAX_BATCH_SELF_PATHS) return;
     this.#self.set(path, value);
-    this.#selfEpochs.set(path, receivedAt);
+    this.#selfEpochs.set(path, measuredAt);
+    this.#selfReceipts.set(path, receivedAt);
     if (source) this.#selfSources.set(path, source);
+    else this.#selfSources.delete(path);
     this.#mark();
   }
 
@@ -76,7 +88,13 @@ export class FrameBatcher {
     this.#mark();
   }
 
-  putVessel(context: string, path: string, value: Value, receivedAt = Date.now()): void {
+  putVessel(
+    context: string,
+    path: string,
+    value: Value,
+    receivedAt = Date.now(),
+    measuredAt = receivedAt,
+  ): void {
     let vessel = this.#ais.get(context);
     if (!vessel) {
       if (this.#ais.size >= MAX_BATCH_AIS_CONTEXTS) return;
@@ -90,7 +108,13 @@ export class FrameBatcher {
       epochs = new Map();
       this.#aisEpochs.set(context, epochs);
     }
-    epochs.set(path, receivedAt);
+    epochs.set(path, measuredAt);
+    let receipts = this.#aisReceipts.get(context);
+    if (!receipts) {
+      receipts = new Map();
+      this.#aisReceipts.set(context, receipts);
+    }
+    receipts.set(path, receivedAt);
     this.#mark();
   }
 
@@ -103,9 +127,11 @@ export class FrameBatcher {
     this.#self.clear();
     this.#selfSources.clear();
     this.#selfEpochs.clear();
+    this.#selfReceipts.clear();
     this.#selfStales.clear();
     this.#ais.clear();
     this.#aisEpochs.clear();
+    this.#aisReceipts.clear();
   }
 
   #mark(): void {
@@ -128,14 +154,28 @@ export class FrameBatcher {
     const selfStales = this.#selfStales.size > 0 ? this.#selfStales : undefined;
     const ais = this.#ais;
     const aisEpochs = this.#aisEpochs;
+    const selfReceipts = this.#selfReceipts;
+    const aisReceipts = this.#aisReceipts;
     this.#self = new Map();
     this.#selfEpochs = new Map();
+    this.#selfReceipts = new Map();
     this.#ais = new Map();
     this.#aisEpochs = new Map();
+    this.#aisReceipts = new Map();
     // The sparse channels are replaced only when actually handed off: an empty map was not passed
     // to onFlush, so reusing it saves an allocation per flush on the common frame.
     if (selfSources !== undefined) this.#selfSources = new Map();
     if (selfStales !== undefined) this.#selfStales = new Map();
-    this.onFlush?.(self, ais, epoch, selfSources, selfEpochs, aisEpochs, selfStales);
+    this.onFlush?.(
+      self,
+      ais,
+      epoch,
+      selfSources,
+      selfEpochs,
+      aisEpochs,
+      selfStales,
+      selfReceipts,
+      aisReceipts,
+    );
   }
 }

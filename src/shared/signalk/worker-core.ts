@@ -26,6 +26,8 @@ type DeltaOrHello = Delta & { self?: string };
 type FrameCallback = ((frame: SKFrame) => void) & { [Comlink.releaseProxy]?: () => void };
 
 const MAX_DELTA_FRAME_CHARACTERS = 1_048_576;
+const MAX_TRACKED_SAMPLE_CLOCKS = 20_000;
+const MAX_FUTURE_CLOCK_SKEW_MS = 30_000;
 
 export class WorkerCore {
   #connection?: SkConnection;
@@ -40,6 +42,7 @@ export class WorkerCore {
   #selfContext?: string;
   #generation = 0;
   #receivedAt = 0;
+  #sampleClocks = new Map<string, number>();
 
   connect(url: string, onFrame: (frame: SKFrame) => void): void {
     // Release the previous connect()'s callback proxy before replacing it, so a page that calls
@@ -48,6 +51,7 @@ export class WorkerCore {
     this.#connection?.disconnect();
     this.#batcher.reset();
     this.#selfContext = undefined;
+    this.#sampleClocks.clear();
     this.#onFrame?.[Comlink.releaseProxy]?.();
     this.#onFrame = onFrame as FrameCallback;
     this.#connection = new SkConnection(url, {
@@ -75,14 +79,26 @@ export class WorkerCore {
         this.#registry.resubscribeAll();
       },
     });
-    this.#batcher.onFlush = (self, ais, epoch, selfSources, selfEpochs, aisEpochs, selfStales) => {
+    this.#batcher.onFlush = (
+      self,
+      ais,
+      epoch,
+      selfSources,
+      selfEpochs,
+      aisEpochs,
+      selfStales,
+      selfReceipts,
+      aisReceipts,
+    ) => {
       this.#onFrame?.({
         self,
         selfSources,
         selfEpochs,
+        selfReceipts,
         selfStales,
         ais,
         aisEpochs,
+        aisReceipts,
         connection: this.#connectionState,
         epoch,
         generation: this.#generation,
@@ -140,20 +156,43 @@ export class WorkerCore {
     value: Value,
     source?: PathSource,
     state?: PathValueState,
+    measurementEpoch?: number,
   ): void => {
-    if (this.#isSelf(context)) {
-      // A server stale declaration routes to its own channel and the wire null is suppressed, so
-      // the last good value survives in the store. Honored for self only and never for
-      // notifications, mirroring the enforcer's own scope; the server's event-contract exemption
-      // is deliberately NOT re-derived here, since the server's shipped classification table
-      // would drift from any client copy.
-      if (state?.timedOut === true && !path.startsWith(NOTIFICATIONS_PREFIX)) {
-        this.#batcher.putStale(path, this.#staleMarker(state, source));
-        return;
+    const notification = path.startsWith(NOTIFICATIONS_PREFIX);
+    const self = this.#isSelf(context);
+    if (self && state?.timedOut === true && !notification) {
+      // Keep the last good value: the server's stale declaration has its own channel. Honor its
+      // event-contract exemption rather than copying the server's classification table here.
+      this.#batcher.putStale(path, this.#staleMarker(state, source));
+      return;
+    }
+    // Missing timestamps retain compatibility with legacy producers. Invalid or grossly future
+    // telemetry cannot establish confidence. Small forward skew is clamped, never extrapolated.
+    // Alarm transitions remain authoritative even when the producer's clock is broken.
+    let measuredAt = measurementEpoch ?? this.#receivedAt;
+    if (
+      !Number.isFinite(measuredAt) ||
+      measuredAt <= 0 ||
+      measuredAt > this.#receivedAt + MAX_FUTURE_CLOCK_SKEW_MS
+    ) {
+      if (!notification) return;
+      measuredAt = this.#receivedAt;
+    }
+    measuredAt = Math.min(measuredAt, this.#receivedAt);
+    if (!notification && measurementEpoch !== undefined) {
+      const key = `${self ? SELF_CONTEXT : context}\u0000${path}\u0000${source?.ref ?? source?.label ?? ''}`;
+      const previous = this.#sampleClocks.get(key);
+      if (previous !== undefined && measuredAt < previous) return;
+      if (previous === undefined && this.#sampleClocks.size >= MAX_TRACKED_SAMPLE_CLOCKS) {
+        const oldest = this.#sampleClocks.keys().next();
+        if (!oldest.done) this.#sampleClocks.delete(oldest.value);
       }
-      this.#batcher.put(path, value, source, this.#receivedAt);
+      this.#sampleClocks.set(key, measuredAt);
+    }
+    if (self) {
+      this.#batcher.put(path, value, source, this.#receivedAt, measuredAt);
     } else {
-      this.#batcher.putVessel(context, path, value, this.#receivedAt);
+      this.#batcher.putVessel(context, path, value, this.#receivedAt, measuredAt);
     }
   };
 

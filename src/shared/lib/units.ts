@@ -192,6 +192,14 @@ export function lengthUnit(units: UnitsSelection): 'm' | 'ft' {
   return resolveUnits(units).length;
 }
 
+export function lengthToDisplay(meters: number, units: UnitsSelection): number {
+  return lengthUnit(units) === 'ft' ? meters / METERS_PER_FOOT : meters;
+}
+
+export function lengthFromDisplay(value: number, units: UnitsSelection): number {
+  return lengthUnit(units) === 'ft' ? feetToMeters(value) : value;
+}
+
 // A preference-aware length reading (value only; the caller renders lengthUnit beside it).
 export function formatLengthOr(
   meters: number | null | undefined,

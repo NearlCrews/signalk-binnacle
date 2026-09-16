@@ -14,6 +14,25 @@ afterEach(() => {
 });
 
 describe('createSafetyAnnunciator', () => {
+  it('removes resolved queued warnings before they are spoken', () => {
+    const annunciator = createSafetyAnnunciator();
+    annunciator.update([item('mob', 0, 'Man overboard.'), item('shallow', 3, 'Shallow water.')]);
+    annunciator.update([item('shallow', 3, '')]);
+    vi.advanceTimersByTime(8_000);
+    expect(annunciator.polite).toBe('');
+    annunciator.dispose();
+  });
+
+  it('replaces queued channel text instead of speaking obsolete warnings', () => {
+    const annunciator = createSafetyAnnunciator();
+    annunciator.update([item('mob', 0, 'Man overboard.'), item('collision', 1, 'Old contact.')]);
+    annunciator.update([item('collision', 1, 'New contact.')]);
+    vi.advanceTimersByTime(4_000);
+    expect(annunciator.polite).toBe('New contact.');
+    annunciator.update([item('collision', 1, '')]);
+    expect(annunciator.polite).toBe('');
+    annunciator.dispose();
+  });
   it('announces the worst changed message first and queues the rest politely', () => {
     const annunciator = createSafetyAnnunciator();
     annunciator.update([

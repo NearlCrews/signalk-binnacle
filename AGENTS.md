@@ -83,9 +83,8 @@ Browser specs share `e2e/helpers.ts`: `stubVesselsSelf` (the self-vessel documen
 answered), `openMenuItem` (open the app menu and activate one tile, scoped to the launcher so a
 label that also names a bar pill cannot match the wrong control), and `expectInsideViewport`. Reach
 for those before writing a file-local copy, because a file-local helper is invisible to the other
-specs and each one ends up re-rolling it. `scripts/check-package.mjs` cross-checks the projects
-`test:e2e:gate` names against `playwright.config.ts`, so a new project cannot fall out of the local
-push gate while CI keeps covering it.
+specs and each one ends up re-rolling it. `test:e2e:gate` runs every project in
+`playwright.config.ts`, so new browser projects participate in both the local push gate and CI.
 For releases, also follow `docs/releasing.md` and obtain explicit approval before tagging or
 publishing.
 
@@ -111,3 +110,15 @@ which does see template usage, is the real backstop.
 - Keep scratch files in `tmp/`.
 - After significant green work, commit and push to `main` only when the user has asked for that flow or
   the active task clearly includes publishing the local changes.
+
+## Shared skills
+
+Domain expertise for this repository lives in the shared skills installed for both Codex and Claude Code from `~/src/nearlcrews-agent-toolkit` (Claude Code: `/skill-name`; Codex: `$skill-name`; both hosts also select them from their descriptions). Load these before working here:
+
+- `svelte-maplibre-stack`: Svelte 5, Vite 8, MapLibre GL JS 6, PMTiles, Terra Draw, uPlot, Comlink workers, Serwist, Biome, Vitest, Playwright, and dependency-cruiser idioms and lifecycle rules.
+- `maritime-ui`: helm-facing presentation, alarms, routes, weather, AIS, and the operational safety contract.
+- `signalk-development`: Signal K plugin and webapp lifecycle, server APIs, deltas, route security, package metadata, App Store, registry score, plugin CI, and release readiness.
+- `standardize-project-toolchain`: toolchain audits, lint, type, test, and CI alignment, and Node or TypeScript floor decisions.
+- `better-accessibility, better-colors, better-layout, better-typography, and better-writing`: UI copy, layout, color, type, and accessibility.
+
+To delegate, spawn a general-purpose subagent and tell it which of these to load; there are no per-host agent definitions.

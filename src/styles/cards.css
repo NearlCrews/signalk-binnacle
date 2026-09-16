@@ -117,8 +117,7 @@
    just short (3.99:1); left as-is, a further fix would need a badge-specific color and this is a
    two-word all-caps label, not body copy. */
 .saved li.active .name,
-.saved li.active .card-stats,
-.saved li.active .card-stats .num {
+.saved li.active .card-stats {
   color: var(--accent-tint-text);
 }
 .saved li.active::before {
@@ -239,6 +238,9 @@
 }
 .nav-metric .num {
   color: var(--text);
+}
+.saved li.active .card-stats .num {
+  color: var(--accent-tint-text);
 }
 
 /* A flat list row: the uniform, control-height, hairline-divided row the Layers panel's layer rows and

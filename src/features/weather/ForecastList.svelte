@@ -220,8 +220,10 @@ function windRangeText(day: DayOutlook): string {
   flex: 1;
 }
 .f-details > span:not(.f-wind) {
-  color: var(--text-muted);
   font-size: var(--text-xs);
+}
+.f-details > span:not(.f-wind, .sev-danger, .sev-warning) {
+  color: var(--text-muted);
 }
 .f-wind {
   flex-basis: 100%;

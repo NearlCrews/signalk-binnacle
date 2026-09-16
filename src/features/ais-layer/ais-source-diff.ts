@@ -42,7 +42,7 @@ interface PaintedTarget {
   tick: number;
 }
 
-export type AisSourceUpdate =
+type AisSourceUpdate =
   | { kind: 'none' }
   | { kind: 'full'; features: GeoJSON.Feature[] }
   | { kind: 'diff'; diff: GeoJSONSourceDiff };

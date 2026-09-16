@@ -5,7 +5,7 @@ import {
   readBoundedJson,
   withTimeout,
 } from '$shared/lib';
-import { authInit, sendJson } from '$shared/signalk';
+import { authInit, isSameOriginPath, sendJson } from '$shared/signalk';
 
 // Client for the signalk-openrouter-companion plugin's advisory reports. The plugin publishes each
 // analyzer's latest report as a self notification at notifications.openrouter-companion.
@@ -21,6 +21,8 @@ const MAX_STATE_LENGTH = 32;
 const MAX_ACK_MESSAGE_LENGTH = 512;
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_ACK_RESPONSE_BYTES = 65_536;
+export const COMPANION_RUN_TIMEOUT_MS = 180_000;
+const RUN_POLL_INTERVAL_MS = 1000;
 
 export interface CompanionReport {
   analyzerId: string;
@@ -41,7 +43,14 @@ export type CompanionReportsResult =
   | { state: 'unavailable' };
 
 export interface RunAnalyzerAck {
-  kind: 'started' | 'completed' | 'refused' | 'access-denied' | 'unavailable' | 'unreachable';
+  kind:
+    | 'started'
+    | 'completed'
+    | 'refused'
+    | 'access-denied'
+    | 'unavailable'
+    | 'unreachable'
+    | 'unconfirmed';
   // The server's own ack sentence (budget exhausted, a run already in flight, nothing to report),
   // passed through so the honest reason reaches the panel.
   message?: string;
@@ -121,22 +130,85 @@ export async function runAnalyzer(
   origin: string,
   token: string | undefined,
   analyzerId: string,
+  signal?: AbortSignal,
 ): Promise<RunAnalyzerAck> {
   if (isUnsafeProviderKey(analyzerId)) return { kind: 'refused' };
-  const response = await sendJson(runUrl(origin, analyzerId), token, 'PUT', { value: {} });
-  if (!response) return { kind: 'unreachable' };
-  let body: unknown;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal?.aborted) return { kind: 'unconfirmed' };
+  signal?.addEventListener('abort', cancel, { once: true });
+  const timeout = setTimeout(cancel, COMPANION_RUN_TIMEOUT_MS);
   try {
-    body = await readBoundedJson<unknown>(response, MAX_ACK_RESPONSE_BYTES);
+    let response = await sendJson(
+      runUrl(origin, analyzerId),
+      token,
+      'PUT',
+      { value: {} },
+      controller.signal,
+    );
+    if (!response) return { kind: 'unreachable' };
+    let statusPath: string | undefined;
+    while (!controller.signal.aborted) {
+      const body: unknown = await readBoundedJson<unknown>(response, MAX_ACK_RESPONSE_BYTES).catch(
+        () => undefined,
+      );
+      const message = isRecord(body)
+        ? cleanBoundedText(body.message, MAX_ACK_MESSAGE_LENGTH)
+        : undefined;
+      const status =
+        isRecord(body) && Number.isInteger(body.statusCode) && typeof body.statusCode === 'number'
+          ? body.statusCode
+          : response.status;
+      if (status === 401 || status === 403) return { kind: 'access-denied', message };
+      if (status === 404 || status === 405) return { kind: 'unavailable', message };
+      if (!response.ok || status >= 400 || (isRecord(body) && body.state === 'FAILED'))
+        return { kind: 'refused', message };
+      if (isRecord(body) && body.state === 'COMPLETED') return { kind: 'completed', message };
+      if (!isRecord(body) || body.state !== 'PENDING') return { kind: 'unconfirmed', message };
+      if (!statusPath) {
+        const href = cleanBoundedText(body.href, 1024);
+        // Only the public request-status route may receive the device bearer token. Do not
+        // follow redirects or arbitrary same-origin plugin paths supplied by an untrusted ack.
+        if (!href || !isSameOriginPath(href) || !/^\/signalk\/v1\/requests\/[^/?#]+$/.test(href)) {
+          return { kind: 'unconfirmed' };
+        }
+        statusPath = href;
+      }
+      await waitForRunPoll(controller.signal);
+      response = await fetch(
+        `${origin}${statusPath}`,
+        withTimeout(
+          authInit(token, {
+            signal: controller.signal,
+            cache: 'no-store',
+            redirect: 'error',
+          }),
+        ),
+      );
+    }
+    return { kind: 'unconfirmed' };
   } catch {
-    body = undefined;
+    return { kind: 'unconfirmed' };
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', cancel);
   }
-  const message = isRecord(body)
-    ? cleanBoundedText(body.message, MAX_ACK_MESSAGE_LENGTH)
-    : undefined;
-  if (response.status === 401 || response.status === 403) return { kind: 'access-denied', message };
-  if (response.status === 404 || response.status === 405) return { kind: 'unavailable', message };
-  if (!response.ok) return { kind: 'refused', message };
-  const state = isRecord(body) ? body.state : undefined;
-  return state === 'PENDING' ? { kind: 'started', message } : { kind: 'completed', message };
+}
+
+function waitForRunPoll(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, RUN_POLL_INTERVAL_MS);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }

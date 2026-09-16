@@ -153,7 +153,7 @@ export function createRouteEditor(opts: {
   let anyNamed = false;
   const remember = (waypoints: RouteWaypoint[]): void => {
     remembered = waypoints;
-    anyNamed = waypoints.some((w) => w.name != null);
+    anyNamed = waypoints.some((w) => w.name != null || w.metadata !== undefined);
   };
 
   // While a fresh route is being drawn, Terra Draw keeps a trailing "ghost" coordinate on the line
@@ -181,8 +181,7 @@ export function createRouteEditor(opts: {
       for (let i = 0; i < remembered.length; i += 1) {
         if (nameConsumed[i] || !positionsMatch(remembered[i].position, waypoint.position)) continue;
         nameConsumed[i] = true;
-        const name = remembered[i].name;
-        return name == null ? waypoint : { ...waypoint, name };
+        return { ...remembered[i], position: waypoint.position };
       }
       return waypoint;
     });

@@ -11,6 +11,7 @@ afterEach(() => {
 });
 
 function mountControls(store: MarineRadarStore, onSetControl = vi.fn()) {
+  const onSetPower = vi.fn();
   const target = document.createElement('div');
   document.body.append(target);
   let component!: ReturnType<typeof mount>;
@@ -25,7 +26,8 @@ function mountControls(store: MarineRadarStore, onSetControl = vi.fn()) {
         onSetAreaDraft: vi.fn(),
         onStartAreaChartEdit: vi.fn(),
         onStopAreaChartEdit: vi.fn(),
-        onSetPower: vi.fn(),
+        onSetPower,
+        onSelectRadar: (id: string) => store.select(id),
         echoShown: true,
         onToggleEcho: vi.fn(),
         unitsMode: 'metric' as UnitsMode,
@@ -36,7 +38,7 @@ function mountControls(store: MarineRadarStore, onSetControl = vi.fn()) {
     void unmount(component);
     target.remove();
   });
-  return { target, onSetControl };
+  return { target, onSetControl, onSetPower };
 }
 
 function discoverRadar(store: MarineRadarStore, controls: Record<string, { value: number }> = {}) {
@@ -99,6 +101,31 @@ describe('RadarControls enum values', () => {
 });
 
 describe('RadarControls status', () => {
+  it.each(['selection', 'access', 'capabilities', 'power'])(
+    'disarms scanner-bound transmit when %s changes',
+    (change) => {
+      const store = new MarineRadarStore();
+      discoverRadar(store);
+      const original = store.selected;
+      if (!original) throw new Error('Missing radar fixture');
+      store.setDiscovered([original, { ...original, id: 'backup', name: 'Backup' }]);
+      const { target, onSetPower } = mountControls(store);
+      const transmit = [...target.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Transmit',
+      );
+      flushSync(() => transmit?.click());
+      expect(target.textContent).toContain('Start transmitting radar energy from Radar?');
+      flushSync(() => {
+        if (change === 'selection') store.select('backup');
+        if (change === 'access') store.setControlsForbidden(true);
+        if (change === 'capabilities')
+          store.setCapabilities([{ id: 'power', name: 'Power', dialect: 'v5', type: 'boolean' }]);
+        if (change === 'power') store.setOperationalStatus('transmit');
+      });
+      expect(target.textContent).not.toContain('Start transmitting radar energy');
+      expect(onSetPower).not.toHaveBeenCalled();
+    },
+  );
   it('reports a live stream without claiming a spoke arrival time it cannot know', () => {
     const store = new MarineRadarStore();
     discoverRadar(store);

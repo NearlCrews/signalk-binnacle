@@ -2,7 +2,6 @@ export type {
   Assessment,
   CollisionContact,
   DangerContact,
-  NearestUnassessed,
   Severity,
   UnassessedContact,
   UnassessedReason,

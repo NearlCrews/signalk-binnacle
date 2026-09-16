@@ -34,8 +34,8 @@ const {
 
 function commit(event: Event): void {
   const input = event.currentTarget as HTMLInputElement;
-  const entered = Number(input.value);
-  if (Number.isFinite(entered)) onCommit(entered);
+  const entered = input.valueAsNumber;
+  if (Number.isFinite(entered) && input.validity.valid) onCommit(entered);
   // Snap the text back to the effective value after the caller has had its say.
   void tick().then(() => {
     input.value = String(value);

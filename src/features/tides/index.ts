@@ -6,7 +6,7 @@ export {
 } from './signalk-tides-client';
 export { createTidesController, type TidesController } from './tides-controller.svelte';
 export type { TideStationSelectionEvent } from './tides-hit-handlers';
-export { createTidesLoader, type TidesLoader } from './tides-loader';
+export { createTidesLoader } from './tides-loader';
 export { createTidesOverlay, TIDES_OVERLAY_ID } from './tides-overlay';
 
 const tidesPanelLoader = createRetryableLazyUiLoader(() => import('./TidesPanel.svelte'), {

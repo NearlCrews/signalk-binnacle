@@ -1,10 +1,5 @@
 import { createBusyGate } from '$shared/lib';
-import {
-  cleanTruncatedText,
-  createWriteBlockGuard,
-  createWriteOutcomeGate,
-  writeRefusedMessage,
-} from '$shared/signalk';
+import { cleanTruncatedText } from '$shared/signalk';
 import {
   createLogEntry,
   detectLogbook,
@@ -18,10 +13,10 @@ import {
 export interface LogbookDeps {
   origin: () => string;
   getToken: () => string | undefined;
-  writeBlocked: () => boolean;
-  // Ask the server for read and write access again after it refuses a write mid-session; the
-  // composer keeps the navigator's text while the request is outstanding.
-  requestWriteAccess: () => Promise<void>;
+  // Compatibility with callers sharing device-token dependencies. The admin-session plugin
+  // deliberately does not use that independent access gate.
+  writeBlocked?: () => boolean;
+  requestWriteAccess?: () => Promise<void>;
   now?: () => number;
 }
 
@@ -32,7 +27,7 @@ export interface LogbookSuggestion {
   offeredAt: number;
 }
 
-export type LogbookLoadState = 'idle' | 'loading' | 'ready' | 'error';
+type LogbookLoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface LogbookController {
   readonly availability: 'unknown' | LogbookAvailability;
@@ -69,15 +64,6 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
       busy = value;
     },
   );
-  const blockedWrite = createWriteBlockGuard(deps.writeBlocked, (message) => {
-    error = message;
-  });
-  const accepted = createWriteOutcomeGate({
-    report: (message) => {
-      error = message;
-    },
-    requestWriteAccess: deps.requestWriteAccess,
-  });
 
   async function refresh(): Promise<void> {
     const generation = ++loadGeneration;
@@ -124,13 +110,6 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
 
   const addEntry = withBusy(async (text: string): Promise<boolean> => {
     error = undefined;
-    if (
-      blockedWrite(
-        'Read-only access: the entry was not logged. Request read and write access to continue.',
-      )
-    ) {
-      return false;
-    }
     const cleaned = cleanTruncatedText(text, MAX_LOGBOOK_TEXT_LENGTH);
     if (!cleaned) {
       error = 'Enter the log text first.';
@@ -144,13 +123,14 @@ export function createLogbookController(deps: LogbookDeps): LogbookController {
       error = 'The logbook is no longer available on the server, so the entry was not logged.';
       return false;
     }
-    if (
-      !accepted(
-        outcome,
-        writeRefusedMessage('log entry'),
-        'Could not log the entry. Check the connection.',
-      )
-    ) {
+    if (outcome === 'access-denied') {
+      availability = 'unauthorized';
+      error =
+        'The entry was not logged. Sign in to Signal K as an administrator, then check again.';
+      return false;
+    }
+    if (outcome !== 'ok') {
+      error = 'Could not log the entry. Check the connection.';
       return false;
     }
     // The accepted entry shows immediately; the follow-up refresh replaces it with the server's

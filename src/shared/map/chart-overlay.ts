@@ -27,6 +27,8 @@ const OPACITY_PROPERTY = {
 const RASTER_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
 const STYLE_CHART_UNAVAILABLE_HINT =
   'This chart is delivered as a map style document, a format Binnacle cannot display yet. It stays listed so you can see the server offers it.';
+const SCHEMA_UNAVAILABLE_HINT =
+  'This vector chart has no supported drawable layers. Choose a supported chart source or ask the provider for a compatible raster chart.';
 
 // The opacity paint property for a layer type, or undefined for a type the chart adapter never
 // emits (only fill, line, and raster are produced). setOpacity skips an undefined so an unexpected
@@ -48,6 +50,7 @@ function createUnsupportedStyleChartOverlay(
   chart: SignalKChart,
   band: ZBand,
   source: ChartLayerInfo['source'],
+  hint = STYLE_CHART_UNAVAILABLE_HINT,
 ): OverlayModule {
   const url = chart.url ?? chart.tilemapUrl;
   return {
@@ -61,11 +64,11 @@ function createUnsupportedStyleChartOverlay(
     supportsOpacity: false,
     layerIds: [],
     available: () => false,
-    unavailableHint: STYLE_CHART_UNAVAILABLE_HINT,
+    unavailableHint: hint,
     chart: {
       identifier: chart.identifier,
       source,
-      kind: 'style',
+      kind: chartKind(chart),
       type: chart.type,
       url,
       bounds: chart.bounds,
@@ -94,6 +97,9 @@ export function createChartOverlay(
     return createUnsupportedStyleChartOverlay(chart, band, source);
   }
   const specs = chartToSpecs(chart, serverBase);
+  if (specs.layers.length === 0) {
+    return createUnsupportedStyleChartOverlay(chart, band, source, SCHEMA_UNAVAILABLE_HINT);
+  }
   const sourceIds = Object.keys(specs.sources);
   // A lightweight view of just the fields the lifecycle methods touch, derived once from
   // specs.layers. add() works from the full specs, while remove, setVisible, setOpacity, applyTheme,
@@ -126,6 +132,7 @@ export function createChartOverlay(
   };
   const url = chart.url ?? chart.tilemapUrl;
   const kind = chartKind(chart);
+  let schemaSupported = true;
   const description =
     chart.description ??
     (source === 'user' ? 'User-added chart source' : 'Chart source from the Signal K server');
@@ -134,7 +141,14 @@ export function createChartOverlay(
   // only once it has loaded, so this is applied after the source is loaded. Each layer's
   // own minzoom is preserved (e.g. landuse is held back from low zoom for performance).
   const capToNativeZoom = (map: MapLibreMap, declaredMax?: number): boolean => {
-    const source = map.getSource(chartSource) as { maxzoom?: number } | undefined;
+    const source = map.getSource(chartSource) as
+      | { maxzoom?: number; vectorLayerIds?: string[] }
+      | undefined;
+    if (kind === 'vector' && source?.vectorLayerIds) {
+      schemaSupported =
+        chartToSpecs({ ...chart, layers: source.vectorLayerIds }, serverBase).layers.length > 0 &&
+        source.vectorLayerIds.length > 0;
+    }
     // MapLibre constructs tile sources with its default maxzoom before applying source options
     // asynchronously. Use a declared value directly so an explicit maxzoom cannot be mistaken for
     // the temporary default. URL-backed sources without one still wait for loaded metadata below.
@@ -154,8 +168,11 @@ export function createChartOverlay(
     description,
     band,
     supportsOpacity: true,
+    available: () => schemaSupported,
+    unavailableHint: SCHEMA_UNAVAILABLE_HINT,
     layerIds,
     chart: {
+      sourceIds,
       identifier: chart.identifier,
       source,
       kind,
@@ -167,6 +184,7 @@ export function createChartOverlay(
       format: chart.format,
     },
     add(ctx) {
+      schemaSupported = true;
       // A PMTiles archive registers a no-store source first so MapLibre resolves the
       // pmtiles:// url to it rather than the default cache-writing fetch source.
       for (const url of pmtilesUrls) {
@@ -194,7 +212,7 @@ export function createChartOverlay(
       const specSource = specs.sources[chartSource] as { maxzoom?: number } | undefined;
       if (specSource?.maxzoom !== undefined) {
         capToNativeZoom(ctx.map, specSource.maxzoom);
-        return;
+        if (kind !== 'vector') return;
       }
       // A URL-backed source's native maxzoom becomes authoritative when its metadata arrives, so
       // use the matching 'metadata' sourcedata event while still accepting a loaded event. The
@@ -205,7 +223,7 @@ export function createChartOverlay(
       const handler = (event: MapSourceDataEvent) => {
         if (event.sourceId !== chartSource) return;
         if (event.sourceDataType !== 'metadata' && !event.isSourceLoaded) return;
-        if (capToNativeZoom(ctx.map)) stopCapWait(ctx.map);
+        if (capToNativeZoom(ctx.map, specSource?.maxzoom)) stopCapWait(ctx.map);
       };
       onSourceData = handler;
       ctx.map.on('sourcedata', handler);

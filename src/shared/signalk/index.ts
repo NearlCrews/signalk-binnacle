@@ -1,4 +1,4 @@
-export { adminLoginUrl, fetchAdminSessionState } from './admin-session';
+export { adminLoginUrl, fetchAdminSessionState, isSameOriginPath } from './admin-session';
 export type { UpgradeOutcome } from './auth.svelte';
 export { AuthController } from './auth.svelte';
 export { fullJitterDelay } from './backoff';

@@ -102,6 +102,18 @@ describe('selectGenericAlarms', () => {
 });
 
 describe('GenericAlarm', () => {
+  it('returns only newly muted audible activations for the session chronology', () => {
+    const { control } = createFakeAlarmControl();
+    const alarm = new GenericAlarm(control);
+    const first = at('notifications.a', 1);
+    alarm.update([first, raised({ path: 'notifications.visual', method: ['visual'] })]);
+    expect(alarm.muteActiveHere()).toEqual([first]);
+    expect(alarm.muteActiveHere()).toEqual([]);
+    const next = at('notifications.a', 2);
+    alarm.update([next]);
+    expect(alarm.muteActiveHere()).toEqual([next]);
+    alarm.stop();
+  });
   it('sounds when an audible alarm arrives and stops when the last one clears', () => {
     const { control, events, lastTone } = createFakeAlarmControl();
     const alarm = new GenericAlarm(control);

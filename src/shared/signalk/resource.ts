@@ -76,13 +76,19 @@ export class SignalKResourceClient {
     }
   }
 
-  async sendJson(url: string, method: string, body?: unknown): Promise<Response | undefined> {
+  async sendJson(
+    url: string,
+    method: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<Response | undefined> {
     try {
       const response = await this.#fetch(
         url,
         withTimeout(
           authInit(this.#getToken(), {
             method,
+            ...(signal ? { signal } : {}),
             ...(body !== undefined
               ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
               : {}),
@@ -237,16 +243,16 @@ export async function fetchKeyedResource<T>(
   mapEntry: (id: string, raw: unknown) => T | undefined,
   onError?: (url: string, status: number) => void,
 ): Promise<T[] | undefined> {
-  let sawNotFound = false;
+  let allNotFound = paths.length > 0;
   for (const path of paths) {
     const out = await tryKeyedResource(`${base}${path}`, token, mapEntry, onError);
     if (out === 'not-found') {
-      sawNotFound = true;
       continue;
     }
     if (out) return out;
+    allNotFound = false;
   }
-  return sawNotFound ? [] : undefined;
+  return allNotFound ? [] : undefined;
 }
 
 async function tryKeyedResource<T>(
@@ -293,11 +299,12 @@ export async function sendJson(
   token: string | undefined,
   method: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<Response | undefined> {
   return new SignalKResourceClient({
     getToken: () => token,
     onWriteOutcome: (ok, status) => writeOutcomeListener?.(ok, status),
-  }).sendJson(url, method, body);
+  }).sendJson(url, method, body, signal);
 }
 
 // What a resource write actually did, for the callers that can recover from the specific cause

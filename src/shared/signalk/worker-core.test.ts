@@ -19,6 +19,67 @@ afterEach(() => {
 });
 
 describe('WorkerCore', () => {
+  it('retains old measurement times and distinct receipts for cached self and AIS replay', () => {
+    vi.setSystemTime(1_000_000);
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    const ws = FakeWebSocket.instances[0];
+    ws.open();
+    for (const context of ['vessels.self', 'vessels.other']) {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          context,
+          updates: [
+            {
+              timestamp: new Date(100_000).toISOString(),
+              values: [{ path: 'navigation.position', value: { latitude: 1, longitude: 2 } }],
+            },
+          ],
+        }),
+      });
+    }
+    vi.runAllTimers();
+    const frame = frames.at(-1);
+    expect(frame?.selfEpochs?.get('navigation.position')).toBe(100_000);
+    expect(frame?.selfReceipts?.get('navigation.position')).toBe(1_000_000);
+    expect(frame?.aisEpochs?.get('vessels.other')?.get('navigation.position')).toBe(100_000);
+    expect(frame?.aisReceipts?.get('vessels.other')?.get('navigation.position')).toBe(1_000_000);
+    core.disconnect();
+  });
+
+  it('rejects older same-source, malformed, and grossly future samples while preserving source switches', () => {
+    vi.setSystemTime(1_000_000);
+    const frames: SKFrame[] = [];
+    const core = new WorkerCore();
+    core.connect('ws://test', (frame) => frames.push(frame));
+    const ws = FakeWebSocket.instances[0];
+    ws.open();
+    const sample = (at: string | undefined, value: number, source = 'gps-a') => {
+      ws.onmessage?.({
+        data: JSON.stringify({
+          updates: [
+            { timestamp: at, $source: source, values: [{ path: 'navigation.headingTrue', value }] },
+          ],
+        }),
+      });
+      vi.runAllTimers();
+    };
+    sample(new Date(900_000).toISOString(), 1);
+    sample(new Date(800_000).toISOString(), 2);
+    sample('broken', 3);
+    sample(new Date(1_100_000).toISOString(), 4);
+    expect(frames.at(-1)?.self.get('navigation.headingTrue')).toBe(1);
+    sample(new Date(850_000).toISOString(), 5, 'gps-b');
+    expect(frames.at(-1)?.self.get('navigation.headingTrue')).toBe(5);
+    const futureReceivedAt = Date.now();
+    sample(new Date(1_010_000).toISOString(), 6);
+    expect(frames.at(-1)?.selfEpochs?.get('navigation.headingTrue')).toBe(futureReceivedAt);
+    const missingReceivedAt = Date.now();
+    sample(undefined, 7);
+    expect(frames.at(-1)?.selfEpochs?.get('navigation.headingTrue')).toBe(missingReceivedAt);
+    core.disconnect();
+  });
   it('batches incoming deltas into one frame of self values', () => {
     const frames: SKFrame[] = [];
     const core = new WorkerCore();

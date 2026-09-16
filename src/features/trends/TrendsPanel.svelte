@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { Snippet } from 'svelte';
 import { createMediaQuery, createRetryableLazyUiLoader, type UnitsSelection } from '$shared/lib';
 import type { Theme } from '$shared/ui';
 import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
@@ -12,9 +13,11 @@ interface Props {
   theme: Theme;
   onClose: () => void;
   onBack?: () => void;
+  emergencyAction?: Snippet;
 }
 
-const { controller, onRetryProvider, units, theme, onClose, onBack }: Props = $props();
+const { controller, onRetryProvider, units, theme, onClose, onBack, emergencyAction }: Props =
+  $props();
 let customizing = $state(false);
 const loadTrendCharts = createRetryableLazyUiLoader(() => import('./TrendCharts.svelte'));
 let chartsAttempt = $state(0);
@@ -81,6 +84,9 @@ const focused = $derived(controller.focusedId !== undefined);
   focusTrap={phone.matches}
 >
   {#snippet headerExtra()}
+    {#if phone.matches && emergencyAction}
+      {@render emergencyAction()}
+    {/if}
     {#if !focused}
       <CustomizeToggle
         object="trends"

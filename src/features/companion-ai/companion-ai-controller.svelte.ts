@@ -27,6 +27,7 @@ export interface CompanionAiController {
   ackNoteFor(analyzerId: string): string | undefined;
   start(): void;
   stop(): void;
+  dispose(): void;
   refresh(): Promise<void>;
   runNow(analyzerId: string): Promise<void>;
 }
@@ -50,7 +51,8 @@ function ackNoteText(ack: RunAnalyzerAck): string {
     case 'unavailable':
       return 'Run on demand is not enabled for this analyzer on the server.';
     case 'unreachable':
-      return 'The run request did not reach the server. Check the connection and try again.';
+    case 'unconfirmed':
+      return 'The run outcome could not be confirmed. It may still be running; check the report before trying again.';
   }
 }
 
@@ -75,10 +77,13 @@ export function createCompanionAiController(deps: CompanionAiDeps): CompanionAiC
   let ackNotes = $state<ReadonlyMap<string, string>>(new Map());
 
   let loadGeneration = 0;
+  let disposed = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const runs = new Map<string, AbortController>();
 
   async function refresh(): Promise<void> {
+    if (disposed) return;
     const generation = ++loadGeneration;
     loading = true;
     const result = await fetchReports(deps.origin(), deps.token());
@@ -105,52 +110,69 @@ export function createCompanionAiController(deps: CompanionAiDeps): CompanionAiC
       next.delete(analyzerId);
     } else {
       next.set(analyzerId, note);
-      ackTimers.set(
-        analyzerId,
-        setTimeout(() => {
-          ackTimers.delete(analyzerId);
-          const cleared = new Map(ackNotes);
-          cleared.delete(analyzerId);
-          ackNotes = cleared;
-        }, ACK_NOTE_MS),
-      );
+      if (timer !== undefined)
+        ackTimers.set(
+          analyzerId,
+          setTimeout(() => {
+            ackTimers.delete(analyzerId);
+            const cleared = new Map(ackNotes);
+            cleared.delete(analyzerId);
+            ackNotes = cleared;
+          }, ACK_NOTE_MS),
+        );
     }
     ackNotes = next;
   }
 
   async function runNow(analyzerId: string): Promise<void> {
-    if (busyAnalyzerIds.has(analyzerId)) return;
+    if (disposed || busyAnalyzerIds.has(analyzerId)) return;
     busyAnalyzerIds = new Set(busyAnalyzerIds).add(analyzerId);
+    const request = new AbortController();
+    runs.set(analyzerId, request);
     setAckNote(analyzerId, undefined);
     try {
-      const ack = await run(deps.origin(), deps.token(), analyzerId);
+      const ack = await run(deps.origin(), deps.token(), analyzerId, request.signal);
+      if (request.signal.aborted || runs.get(analyzerId) !== request) return;
       setAckNote(analyzerId, ackNoteText(ack));
-      // A synchronous completion may have published a fresh report; pull it now rather than
-      // waiting a cadence. A pending run lands through the ordinary cadence when it finishes.
+      // The client resolves only after a terminal acknowledgment or an explicit unknown outcome.
       if (ack.kind === 'completed') void refresh();
     } finally {
-      const next = new Set(busyAnalyzerIds);
-      next.delete(analyzerId);
-      busyAnalyzerIds = next;
+      if (runs.get(analyzerId) === request) {
+        runs.delete(analyzerId);
+        const next = new Set(busyAnalyzerIds);
+        next.delete(analyzerId);
+        busyAnalyzerIds = next;
+      }
     }
   }
 
   function start(): void {
-    if (timer !== undefined) return;
+    if (disposed || timer !== undefined) return;
     timer = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       void refresh();
     }, COMPANION_REFRESH_MS);
+    for (const [id, note] of ackNotes) setAckNote(id, note);
     void refresh();
   }
 
   function stop(): void {
+    loadGeneration += 1;
+    loading = false;
     if (timer !== undefined) {
       clearInterval(timer);
       timer = undefined;
     }
     for (const timeout of ackTimers.values()) clearTimeout(timeout);
     ackTimers.clear();
+  }
+
+  function dispose(): void {
+    disposed = true;
+    stop();
+    for (const request of runs.values()) request.abort();
+    runs.clear();
+    busyAnalyzerIds = new Set();
     ackNotes = new Map();
   }
 
@@ -172,6 +194,7 @@ export function createCompanionAiController(deps: CompanionAiDeps): CompanionAiC
     },
     start,
     stop,
+    dispose,
     refresh,
     runNow,
   };

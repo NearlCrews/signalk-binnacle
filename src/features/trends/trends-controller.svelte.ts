@@ -14,7 +14,7 @@ import type { TrendHistory, TrendHistoryState } from './trends-history';
 
 const loadTrendsHistory = createRetryableLazyUiLoader(() => import('./trends-history'));
 
-export type TrendProviderState = 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
+type TrendProviderState = 'checking' | 'retrying' | 'available' | 'absent' | 'failed';
 
 export interface TrendItem {
   id: string;

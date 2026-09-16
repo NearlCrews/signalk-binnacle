@@ -23,23 +23,26 @@ export function createSafetyAnnunciator() {
   // interrupt it and queues politely instead.
   let holderId: string | undefined;
   let holderRank = Number.POSITIVE_INFINITY;
-  const queue: string[] = [];
+  const queue: SafetyAnnouncement[] = [];
+  let politeId: string | undefined;
   let drainTimer: ReturnType<typeof setTimeout> | undefined;
 
   function scheduleDrain(): void {
     if (drainTimer !== undefined) return;
     drainTimer = setTimeout(() => {
       drainTimer = undefined;
-      const next = queue.shift();
+      let next = queue.shift();
+      while (next && lastTexts.get(next.id) !== next.text) next = queue.shift();
       if (next === undefined) return;
-      polite = next;
+      polite = next.text;
+      politeId = next.id;
       if (queue.length > 0) scheduleDrain();
     }, POLITE_GAP_MS);
   }
 
-  function enqueue(texts: readonly string[]): void {
-    for (const text of texts) {
-      if (text && !queue.includes(text)) queue.push(text);
+  function enqueue(items: readonly SafetyAnnouncement[]): void {
+    for (const item of items) {
+      if (item.text) queue.push(item);
     }
     if (queue.length > 0) scheduleDrain();
   }
@@ -50,11 +53,19 @@ export function createSafetyAnnunciator() {
       const last = lastTexts.get(item.id) ?? '';
       if (item.text === last) continue;
       lastTexts.set(item.id, item.text);
+      for (let index = queue.length - 1; index >= 0; index -= 1) {
+        if (queue[index].id === item.id) queue.splice(index, 1);
+      }
+      if (politeId === item.id) {
+        polite = '';
+        politeId = undefined;
+      }
       if (item.text) changed.push(item);
       else if (holderId === item.id) {
         // The holder resolved; the region stays quiet until the next change claims it.
         holderId = undefined;
         holderRank = Number.POSITIVE_INFINITY;
+        assertive = '';
       }
     }
     if (changed.length === 0) return;
@@ -64,9 +75,9 @@ export function createSafetyAnnunciator() {
       assertive = worst.text;
       holderId = worst.id;
       holderRank = worst.rank;
-      enqueue(changed.slice(1).map((item) => item.text));
+      enqueue(changed.slice(1));
     } else {
-      enqueue(changed.map((item) => item.text));
+      enqueue(changed);
     }
   }
 

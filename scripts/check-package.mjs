@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
+import { bundledNoticeFailures } from './bundled-notices.mjs';
 
 const proseOnly = process.argv.includes('--prose-only');
 const requireDatedChangelog = process.argv.includes('--release');
@@ -219,6 +220,8 @@ const required = [
   'public/index.html',
   'public/manifest.webmanifest',
   'public/sw.js',
+  'public/THIRD_PARTY_NOTICES.txt',
+  'public/THIRD_PARTY_NOTICES.json',
   appIcon,
   ...screenshots,
 ].filter((path) => path !== undefined);
@@ -244,3 +247,21 @@ if (missing.length > 0 || forbidden.length > 0 || !hasJavaScript || !hasCss) {
 }
 
 console.log(`Package contents verified: ${report.entryCount} files, ${report.unpackedSize} bytes.`);
+
+try {
+  const noticeFailures = bundledNoticeFailures(
+    JSON.parse(readFileSync('public/THIRD_PARTY_NOTICES.json', 'utf8')),
+    readFileSync('public/THIRD_PARTY_NOTICES.txt', 'utf8'),
+    paths,
+  );
+  if (noticeFailures.length) {
+    console.error(noticeFailures.join('\n'));
+    process.exit(1);
+  }
+} catch (error) {
+  console.error(
+    `Unable to verify bundled third-party notices: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
+console.log('Bundled third-party notices verified.');

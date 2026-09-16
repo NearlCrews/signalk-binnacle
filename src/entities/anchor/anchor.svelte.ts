@@ -118,6 +118,7 @@ export class AnchorWatch {
   // The notification state string the navigator acknowledged, so the sound stays off while the
   // server keeps reporting that same grade; an escalation (a new state) sounds again.
   #ackState = $state<string | undefined>(undefined);
+  #localAcknowledgeSequence = $state(0);
   // The navigator has acknowledged the current blind episode; re-arms once protection returns.
   #blindAcked = $state(false);
   // The server-stale grace, constructed with the clock; undefined without one.
@@ -341,6 +342,12 @@ export class AnchorWatch {
     );
   }
 
+  // An accepted client acknowledgment clears the latch, so observers need an action identity
+  // separate from dragging to distinguish that choice from a clear without acknowledgment.
+  get localAcknowledgeSequence(): number {
+    return this.#localAcknowledgeSequence;
+  }
+
   // Feed one reactive pass per position fix (and notification change). Client mode runs the drag
   // detection; server mode only reconciles local bookkeeping, since the plugin owns the alarm.
   updateFix(): void {
@@ -424,7 +431,10 @@ export class AnchorWatch {
     }
     this.#detector.reset();
     const local = this.#local;
-    if (local?.dragging) this.#setLocal({ ...local, dragging: false });
+    if (local?.dragging) {
+      this.#localAcknowledgeSequence += 1;
+      this.#setLocal({ ...local, dragging: false });
+    }
   }
 
   #setLocal(next: LocalAnchor | null): void {

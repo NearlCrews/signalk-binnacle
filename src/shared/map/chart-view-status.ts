@@ -1,4 +1,12 @@
-import { type Bbox4, bboxContainsPoint, type LatLon, wrapLongitude } from '$shared/geo';
+import {
+  type Bbox4,
+  bboxContainsPoint,
+  type LatLon,
+  splitAtAntimeridian,
+  unwrapEast,
+  wrapLongitude,
+} from '$shared/geo';
+import type { ChartReadiness } from './chart-readiness';
 import type { ChartCoverageInfo, ChartLayerInfo } from './types';
 
 // The ambient chart-trust grade for the current view: whether a usable nautical chart actually
@@ -11,9 +19,11 @@ export type ChartViewStatusKind =
   | 'reference-only'
   | 'out-of-coverage'
   | 'source-failed'
+  | 'source-loading'
   | 'base-unavailable';
 
 export interface ChartViewChart {
+  readiness?: ChartReadiness;
   visible: boolean;
   bounds?: Readonly<Bbox4>;
   minzoom?: number;
@@ -43,14 +53,19 @@ export function hasVisibleNavigationChart(
 export function chartViewCharts(
   items: readonly {
     visible: boolean;
-    chart?: Pick<ChartLayerInfo, 'bounds' | 'minzoom' | 'maxzoom'>;
+    chart?: Pick<ChartLayerInfo, 'bounds' | 'minzoom' | 'maxzoom' | 'sourceIds'>;
     chartCoverage?: ChartCoverageInfo;
   }[],
+  getReadiness?: (sourceIds: readonly string[] | undefined) => ChartReadiness,
 ): ChartViewChart[] {
   const charts: ChartViewChart[] = [];
   for (const item of items) {
+    const readiness = getReadiness
+      ? { readiness: getReadiness((item.chart ?? item.chartCoverage)?.sourceIds) }
+      : {};
     if (item.chart) {
       charts.push({
+        ...readiness,
         visible: item.visible,
         bounds: item.chart.bounds,
         minzoom: item.chart.minzoom,
@@ -61,11 +76,17 @@ export function chartViewCharts(
     const info = item.chartCoverage;
     if (!info) continue;
     if (info.coverage === undefined) {
-      charts.push({ visible: item.visible, minzoom: info.minzoom, maxzoom: info.maxzoom });
+      charts.push({
+        ...readiness,
+        visible: item.visible,
+        minzoom: info.minzoom,
+        maxzoom: info.maxzoom,
+      });
       continue;
     }
     for (const box of info.coverage) {
       charts.push({
+        ...readiness,
         visible: item.visible,
         bounds: box,
         minzoom: info.minzoom,
@@ -102,14 +123,27 @@ export function chartViewStatus(input: ChartViewInput): ChartViewStatusKind {
     longitude: wrapLongitude(input.center.longitude),
   };
   // Undeclared bounds mean worldwide coverage by the charts API contract.
-  const covering = visibleCharts.filter(
-    (chart) => chart.bounds === undefined || bboxContainsPoint(chart.bounds, center),
-  );
+  const covering = visibleCharts.filter((chart) => {
+    if (chart.bounds === undefined) return true;
+    const [west, south, east, north] = chart.bounds;
+    return splitAtAntimeridian([west, south, unwrapEast(west, east), north]).some((box) =>
+      bboxContainsPoint(box, center),
+    );
+  });
   if (covering.length === 0) return 'out-of-coverage';
   // Below every covering chart's minzoom nothing of them is drawn yet: coverage in the zoom
   // dimension is coverage too.
   const inRange = covering.filter((chart) => zoom >= (chart.minzoom ?? 0));
   if (inRange.length === 0) return 'out-of-coverage';
-  const overzoomed = inRange.every((chart) => chart.maxzoom !== undefined && zoom > chart.maxzoom);
+  const ready = inRange.filter(
+    (chart) => chart.readiness === undefined || chart.readiness === 'ready',
+  );
+  if (ready.length === 0)
+    return inRange.some((chart) => chart.readiness === 'error')
+      ? 'source-failed'
+      : inRange.some((chart) => chart.readiness === 'loading')
+        ? 'source-loading'
+        : 'out-of-coverage';
+  const overzoomed = ready.every((chart) => chart.maxzoom !== undefined && zoom > chart.maxzoom);
   return overzoomed ? 'active-overzoomed' : 'active';
 }

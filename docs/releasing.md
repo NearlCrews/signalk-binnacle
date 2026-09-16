@@ -35,10 +35,23 @@ npm pack --dry-run --ignore-scripts
 
 `verify:release` enforces formatting, lint, prose, architecture, dead code, type checks, coverage,
 the production build, bundle budgets, cross-browser behavior, publint, package contents, and the
-runtime dependency audit. Inspect the final pack output. It must contain the generated `public/`
-application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICENSE`, and the Markdown
-guides linked from the README. It must not contain source maps, source files, test artifacts, local
-configuration, or scratch files.
+runtime and full dependency audits. Inspect the final pack output. It must contain the generated
+`public/` application, the five App Store screenshots, `README.md`, `CHANGELOG.md`, `LICENSE`, and the
+Markdown guides linked from the README. It must not contain source maps, source files, test artifacts,
+local configuration, or scratch files.
+
+The build generates `public/THIRD_PARTY_NOTICES.txt` and its JSON inventory from emitted JavaScript
+modules and asset origins across the app, workers, and service worker. Both files must ship in the
+tarball. The package gate checks complete license text, the bundled font licenses, all three build
+scopes, and referenced output files. Installed build tools that contribute no shipped code or assets
+do not belong in that inventory. If an upstream package omits its license from npm, the build uses a
+version-specific supplement in `scripts/licenses/` tied to the package's published source commit.
+Recheck that source and update the supplement mapping when upgrading such a package. Do not replace
+full copyright and permission text with only a license identifier.
+
+Browser libraries are build dependencies: the installed webapp serves prebuilt assets and has no
+server-side module entry point. Confirm a clean production-only install still serves those assets
+without installing the source toolchain or requiring a build lifecycle script.
 
 Normal pull request CI runs `package:check`, which accepts the active version's explicit Unreleased
 heading. `verify:release` uses `package:check:release`, which requires the matching dated heading.

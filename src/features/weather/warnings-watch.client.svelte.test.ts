@@ -1,7 +1,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GatedAlarm } from '$shared/audio';
-import { WARNING_REFRESH_MS } from './point-conditions';
+import { WARNING_REFRESH_MS, type WarningAvailability } from './point-conditions';
 import type { WeatherWarning } from './signalk-weather';
 import { createWeatherWarningsWatch } from './warnings-watch.svelte';
 
@@ -17,7 +17,13 @@ function warning(type: string, hoursFromNow = -1, hoursActive = 6): WeatherWarni
   };
 }
 
-function setup(options: { warnings?: WeatherWarning[]; pluginAlertActive?: boolean } = {}) {
+function setup(
+  options: {
+    warnings?: WeatherWarning[];
+    pluginAlertActive?: boolean;
+    availability?: WarningAvailability;
+  } = {},
+) {
   const state = $state({
     now: NOW,
     provider: { id: 'accuweather', name: 'AccuWeather' } as
@@ -28,12 +34,12 @@ function setup(options: { warnings?: WeatherWarning[]; pluginAlertActive?: boole
       | undefined,
     pluginAlertActive: options.pluginAlertActive ?? false,
   });
-  const loadWarnings = vi.fn().mockResolvedValue({
+  const loadWarnings = vi.fn().mockImplementation(async () => ({
     requestKey: 'k',
     warnings: options.warnings ?? [],
-    warningAvailability: 'fresh' as const,
-    warningsFetchedAt: NOW,
-  });
+    warningAvailability: options.availability ?? 'fresh',
+    warningsFetchedAt: state.now,
+  }));
   const alarm = { update: vi.fn(), restart: vi.fn(), stop: vi.fn() };
   const announce = vi.fn();
   let watch!: ReturnType<typeof createWeatherWarningsWatch>;
@@ -98,7 +104,7 @@ describe('createWeatherWarningsWatch', () => {
       requestKey: 'k',
       warnings: [warning('Gale Warning'), warning('Storm Warning', 0)],
       warningAvailability: 'fresh' as const,
-      warningsFetchedAt: NOW,
+      warningsFetchedAt: NOW + 2 * WARNING_REFRESH_MS,
     });
     test.state.now += WARNING_REFRESH_MS;
     flushSync();
@@ -106,6 +112,30 @@ describe('createWeatherWarningsWatch', () => {
     expect(test.announce.mock.calls[1][0]).toContain('Storm Warning');
     // The severity sort puts the storm first for the chip.
     expect(test.watch.headline).toBe('Storm Warning');
+  });
+
+  it('waits ten minutes between successful background checks in the same warning region', async () => {
+    const test = setup();
+    await vi.waitFor(() => expect(test.loadWarnings).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    test.state.now = NOW + 599_999;
+    flushSync();
+    expect(test.loadWarnings).toHaveBeenCalledOnce();
+
+    test.state.now = NOW + 600_000;
+    flushSync();
+    await vi.waitFor(() => expect(test.loadWarnings).toHaveBeenCalledTimes(2));
+    expect(test.loadWarnings).toHaveBeenLastCalledWith(
+      'http://sk',
+      'accuweather',
+      42.35,
+      -71.05,
+      'tok',
+    );
+    await Promise.resolve();
+    test.state.now = NOW + 1_199_999;
+    flushSync();
+    expect(test.loadWarnings).toHaveBeenCalledTimes(2);
   });
 
   it('stands down to the chip while a plugin weather notification is active', async () => {
@@ -137,5 +167,61 @@ describe('createWeatherWarningsWatch', () => {
     absent.state.now += WARNING_REFRESH_MS;
     flushSync();
     expect(absent.loadWarnings).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not announce an old-location response after losing the fix', async () => {
+    const test = setup();
+    await vi.waitFor(() => expect(test.loadWarnings).toHaveBeenCalledOnce());
+    let complete!: (value: unknown) => void;
+    test.loadWarnings.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    test.state.now += WARNING_REFRESH_MS;
+    flushSync();
+    expect(test.loadWarnings).toHaveBeenCalledTimes(2);
+    test.state.position = undefined;
+    flushSync();
+    complete({
+      requestKey: 'k',
+      warnings: [warning('Gale Warning')],
+      warningAvailability: 'fresh',
+      warningsFetchedAt: test.state.now,
+    });
+    await Promise.resolve();
+    flushSync();
+    expect(test.watch.headline).toBeUndefined();
+    expect(test.announce).not.toHaveBeenCalled();
+    expect(test.alarm.restart).not.toHaveBeenCalled();
+  });
+
+  it('expires retained warnings without a successful refresh or a fresh fix', async () => {
+    const test = setup({ warnings: [warning('Gale Warning', 0, 1)] });
+    await vi.waitFor(() => expect(test.watch.headline).toBe('Gale Warning'));
+    test.state.position = undefined;
+    flushSync();
+    expect(test.watch.headline).toContain('last position; no fresh fix');
+    test.state.now += 2 * 3_600_000;
+    flushSync();
+    expect(test.watch.active).toEqual([]);
+    expect(test.watch.headline).toBeUndefined();
+  });
+
+  it('labels a cached first answer and waits for a fresh confirmation before sounding', async () => {
+    const test = setup({ warnings: [warning('Gale Warning')], availability: 'stale' });
+    await vi.waitFor(() => expect(test.watch.headline).toContain('unverified'));
+    expect(test.announce).not.toHaveBeenCalled();
+    expect(test.alarm.restart).not.toHaveBeenCalled();
+    test.loadWarnings.mockResolvedValue({
+      requestKey: 'k',
+      warnings: [warning('Gale Warning')],
+      warningAvailability: 'fresh',
+      warningsFetchedAt: NOW + 60_000,
+    });
+    test.state.now += 60_000;
+    flushSync();
+    await vi.waitFor(() => expect(test.announce).toHaveBeenCalledOnce());
   });
 });

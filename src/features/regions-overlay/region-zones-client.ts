@@ -19,7 +19,7 @@ import { asKeyedObject, cleanTruncatedText, fetchAuthedJsonOutcome } from '$shar
 export const REGION_ZONES_PATH = '/signalk/v2/api/resources/regions';
 export const REGION_ZONES_V1_PATH = '/signalk/v1/api/resources/regions';
 export const MAX_REGION_ZONES = 500;
-export const MAX_REGION_ZONE_VERTICES = 10_000;
+const MAX_REGION_ZONE_VERTICES = 10_000;
 const MAX_NAME_LENGTH = 256;
 const MAX_DESCRIPTION_LENGTH = 2_048;
 

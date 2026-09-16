@@ -1,4 +1,4 @@
-import type { Source } from 'pmtiles';
+import { EtagMismatch, type Source } from 'pmtiles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { failingIdbFactory, fakeIdbFactory } from '$shared/testing';
 import { BlockCachedSource, type BlockStore, createBlockStore } from './pmtiles-block-cache';
@@ -72,6 +72,92 @@ function memStore(): BlockStore {
 }
 
 describe('BlockCachedSource block alignment', () => {
+  it.each(['memory', 'indexeddb'])(
+    'does not serve expired tiles offline and refetches them online (%s)',
+    async (backend) => {
+      const store = createBlockStore({
+        factory: backend === 'indexeddb' ? fakeIdbFactory().factory : undefined,
+        ttlMs: 100,
+      });
+      const inner = fakeInner(pattern(64), { etag: 'v1' });
+      const source = cachedSource(inner, store);
+      await source.getBytes(20, 8);
+      await store.prune(clock + 101);
+      inner.options.failing = true;
+      await expect(source.getBytes(20, 8, undefined, 'v1')).rejects.toThrow('network down');
+      inner.options.failing = false;
+      expect(bytes((await source.getBytes(20, 8, undefined, 'v1')).data)).toEqual([
+        ...pattern(64).slice(20, 28),
+      ]);
+    },
+  );
+
+  it('does not commit partial tile blocks after an interrupted download', async () => {
+    const store = memStore();
+    const inner = fakeInner(pattern(64), { etag: 'v1' });
+    const source = cachedSource(inner, store);
+    await source.getBytes(0, 8);
+    let rejectRead!: (error: Error) => void;
+    const originalRead = inner.source.getBytes;
+    inner.source.getBytes = () =>
+      new Promise((_resolve, reject) => {
+        rejectRead = reject;
+      });
+    const interrupted = expect(source.getBytes(16, 32, undefined, 'v1')).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await vi.waitFor(() => expect(rejectRead).toBeDefined());
+    rejectRead(new DOMException('Interrupted', 'AbortError'));
+    await interrupted;
+    expect([...(await store.getBlocks(URL_A, [0, 1, 2])).keys()]).toEqual([0]);
+    inner.source.getBytes = originalRead;
+    expect((await source.getBytes(16, 32, undefined, 'v1')).data.byteLength).toBe(32);
+  });
+  it('purges a replaced archive on a non-header miss rather than mixing generations', async () => {
+    const inner = fakeInner(pattern(64), { etag: 'v1' });
+    const store = memStore();
+    const source = cachedSource(inner, store);
+    await source.getBytes(0, 8);
+    inner.options.etag = 'v2';
+    await expect(source.getBytes(20, 8, undefined, 'v1')).rejects.toBeInstanceOf(EtagMismatch);
+    expect(await store.getBlocks(URL_A, [0, 1])).toEqual(new Map());
+    expect(await store.getValidator(URL_A)).toBeUndefined();
+    expect((await source.getBytes(0, 8)).etag).toBe('v2');
+    expect((await source.getBytes(20, 8, undefined, 'v2')).etag).toBe('v2');
+  });
+
+  it('serializes an outstanding old write before a replacement header from another reader', async () => {
+    const store = memStore();
+    let resolveOld!: (value: { data: ArrayBuffer; etag: string }) => void;
+    const old: Source = {
+      getKey: () => URL_A,
+      getBytes: () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    };
+    const newer = fakeInner(pattern(64), { etag: 'v2' });
+    const pending = new BlockCachedSource(old, store, { blockSize: BS }).getBytes(16, 8);
+    await vi.waitFor(() => expect(resolveOld).toBeDefined());
+    const replacement = cachedSource(newer, store).getBytes(0, 8);
+    resolveOld({ data: block(1), etag: 'v1' });
+    await pending;
+    await replacement;
+    expect(await store.getValidator(URL_A)).toBe('v2');
+    expect((await store.getBlocks(URL_A, [1])).size).toBe(0);
+  });
+
+  it('does not fall back to a cached header after a validator mismatch', async () => {
+    const inner = fakeInner(pattern(64), { etag: 'v1' });
+    const store = memStore();
+    const source = cachedSource(inner, store);
+    await source.getBytes(0, 8);
+    inner.source.getBytes = async () => {
+      throw new EtagMismatch();
+    };
+    await expect(source.getBytes(0, 8, undefined, 'v1')).rejects.toBeInstanceOf(EtagMismatch);
+    expect((await store.getBlocks(URL_A, [0])).size).toBe(0);
+  });
   it.each([
     [-1, 4],
     [0, 0],
@@ -106,14 +192,14 @@ describe('BlockCachedSource block alignment', () => {
 
   it('forwards the abort signal and etag through to the inner source', async () => {
     const archive = pattern(64);
-    const inner = fakeInner(archive);
+    const inner = fakeInner(archive, { etag: '"v1"' });
     const source = cachedSource(inner, memStore());
     const controller = new AbortController();
 
-    await source.getBytes(20, 8, controller.signal, 'W/"v1"');
+    await source.getBytes(20, 8, controller.signal, '"v1"');
 
     expect(inner.calls[0].signal).toBe(controller.signal);
-    expect(inner.calls[0].etag).toBe('W/"v1"');
+    expect(inner.calls[0].etag).toBe('"v1"');
   });
 
   it('coalesces a read spanning two blocks into one aligned range', async () => {
@@ -270,7 +356,7 @@ describe('BlockCachedSource header revalidation', () => {
     // Block 1 was purged with the rest of the archive, so it refetches.
     expect(inner.calls).toEqual([
       { offset: 0, length: 16 },
-      { offset: 16, length: 16 },
+      { offset: 16, length: 16, etag: 'v2' },
     ]);
     expect(bytes(out.data)).toEqual([...replaced.slice(16, 32)]);
     expect(await store.getValidator(URL_A)).toBe('v2');
@@ -371,7 +457,9 @@ describe('BlockCachedSource offline behavior', () => {
     };
     const source = cachedSource(inner, store);
 
-    await expect(source.getBytes(0, 16, controller.signal)).rejects.toThrow('Aborted');
+    await expect(source.getBytes(0, 16, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
   });
 });
 

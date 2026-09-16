@@ -57,7 +57,7 @@ let {
   onDiscardResolved?: (discarded: boolean) => void;
 } = $props();
 
-let confirmingTransmit = $state(false);
+let confirmingTransmit = $state<{ context: string; name: string } | undefined>();
 let activeEditorId = $state<string | undefined>(undefined);
 let activeEditorDirty = $state(false);
 
@@ -121,6 +121,21 @@ const powerBusy = $derived(
 );
 const transmitDisabled = $derived(powerBusy || operational === 'warming');
 const isTransmitting = $derived(operational === 'transmit');
+const transmitContext = $derived(
+  JSON.stringify([
+    store.selectedId,
+    store.selected?.name,
+    operational,
+    store.controlsForbidden,
+    store.pendingControls.power,
+    store.capabilities,
+  ]),
+);
+$effect(() => {
+  if (confirmingTransmit && (transmitDisabled || confirmingTransmit.context !== transmitContext)) {
+    confirmingTransmit = undefined;
+  }
+});
 
 // The slider readout: the live value with its unit when the radar reports one, the shared placeholder
 // until a value arrives. Radar API controls stay in SI and convert at this display boundary.
@@ -386,6 +401,7 @@ function discardActiveDraft(): void {
       value={store.selectedId}
       onchange={(e) => {
         const requestedId = e.currentTarget.value;
+        confirmingTransmit = undefined;
         e.currentTarget.value = store.selectedId ?? '';
         onSelectRadar?.(requestedId);
       }}
@@ -430,7 +446,7 @@ function discardActiveDraft(): void {
           aria-pressed={operational === 'standby'}
           disabled={powerBusy}
           onclick={() => {
-            confirmingTransmit = false;
+            confirmingTransmit = undefined;
             onSetPower('standby');
           }}
         >
@@ -443,7 +459,9 @@ function discardActiveDraft(): void {
           aria-pressed={operational === 'transmit'}
           disabled={transmitDisabled}
           onclick={() => {
-            if (operational !== 'transmit') confirmingTransmit = true;
+            if (!transmitDisabled && operational !== 'transmit' && store.selected) {
+              confirmingTransmit = { context: transmitContext, name: store.selected.name };
+            }
           }}
         >
           Transmit
@@ -460,13 +478,14 @@ function discardActiveDraft(): void {
     </div>
     {#if confirmingTransmit}
       <InlineConfirm
-        question="Start transmitting radar energy?"
+        question={`Start transmitting radar energy from ${confirmingTransmit.name}?`}
         confirmLabel="Transmit"
         onConfirm={() => {
-          confirmingTransmit = false;
-          onSetPower('transmit');
+          const valid = !transmitDisabled && confirmingTransmit?.context === transmitContext;
+          confirmingTransmit = undefined;
+          if (valid) onSetPower('transmit');
         }}
-        onCancel={() => (confirmingTransmit = false)}
+        onCancel={() => (confirmingTransmit = undefined)}
       />
     {/if}
     <p class="muted-note">

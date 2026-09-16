@@ -3,6 +3,7 @@ export type { XyzCatalogSource } from './catalog';
 export { BASEMAP_SOURCE_ID, requireCatalogSource } from './catalog';
 export { chartSourceId } from './chart-adapter';
 export { createChartOverlay } from './chart-overlay';
+export { createChartReadinessTracker } from './chart-readiness';
 export type { SignalKChart } from './chart-types';
 export {
   type ChartViewStatusKind,

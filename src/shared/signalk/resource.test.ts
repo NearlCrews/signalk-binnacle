@@ -4,6 +4,7 @@ import {
   asKeyedObject,
   authInit,
   createWriteBlockGuard,
+  fetchKeyedResource,
   SignalKResourceClient,
   sendJson,
   setWriteOutcomeListener,
@@ -12,6 +13,38 @@ import {
 } from './resource';
 
 describe('asKeyedObject', () => {
+  it.each([
+    [500, 404],
+    [401, 404],
+    [404, 503],
+  ])('retains an unavailable collection for mixed failures %j', async (first, second) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: first }))
+      .mockResolvedValueOnce(new Response('', { status: second }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      expect(
+        await fetchKeyedResource('http://sk', ['/v2', '/v1'], undefined, (_id, raw) => raw),
+      ).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns an empty collection only when every fallback is not found', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 404 })),
+    );
+    try {
+      expect(
+        await fetchKeyedResource('http://sk', ['/v2', '/v1'], undefined, (_id, raw) => raw),
+      ).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('rejects error envelopes and unsafe collection keys', () => {
     expect(asKeyedObject({ state: 'FAILURE', statusCode: 500, message: 'nope' })).toBeUndefined();
     expect(Object.keys(asKeyedObject(JSON.parse('{"__proto__":{}}')) ?? {})).toEqual([]);

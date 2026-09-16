@@ -11,6 +11,7 @@ function renderPanel(overrides: Partial<HandoffController> = {}): string {
     create: vi.fn(),
     refresh: vi.fn(async () => undefined),
     syncDrafts: vi.fn(async () => undefined),
+    dispose: vi.fn(),
     ...overrides,
   };
   return render(HandoffPanel, { props: { controller, onClose: vi.fn() } }).body.replaceAll(

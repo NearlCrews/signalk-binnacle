@@ -49,7 +49,7 @@ export function parseIso8601DurationSeconds(value: unknown): number | undefined 
 // spelling the subscription wildcards use.
 export type AisTargetKind = 'vessel' | 'aton' | 'sar';
 
-export function aisTargetKind(id: string): AisTargetKind {
+function aisTargetKind(id: string): AisTargetKind {
   if (id.startsWith(ATONS_CONTEXT_PREFIX)) return 'aton';
   if (id.startsWith(SAR_CONTEXT_PREFIX)) return 'sar';
   return 'vessel';

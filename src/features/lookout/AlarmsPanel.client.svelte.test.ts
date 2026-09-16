@@ -2,6 +2,7 @@ import { type ComponentProps, flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { NotificationsStore } from '$entities/notifications';
 import type { UnitsStore } from '$entities/units';
+import { IMPERIAL_UNITS } from '$shared/lib';
 import { DEFAULT_THRESHOLDS, type PersistedValue, type Thresholds } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
 import AlarmsPanel from './AlarmsPanel.svelte';
@@ -90,6 +91,40 @@ describe('AlarmsPanel bulk actions', () => {
 });
 
 describe('AlarmsPanel threshold reset', () => {
+  it('never commits a blank collision or shallow threshold as zero', () => {
+    const panel = mountPanel();
+    for (const input of panel.target.querySelectorAll<HTMLInputElement>('input[type="number"]')) {
+      input.value = '';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    flushSync();
+    expect(panel.set).not.toHaveBeenCalled();
+  });
+
+  it('edits the off-course limit in feet while persisting SI', () => {
+    const setLimitMeters = vi.fn();
+    const panel = mountPanel({
+      units: { mode: 'imperial', profile: IMPERIAL_UNITS } as UnitsStore,
+      xte: {
+        muted: false,
+        setMuted: vi.fn(),
+        limitMeters: 100,
+        setLimitMeters,
+        standing: 'client',
+        alarming: false,
+      },
+    });
+    const input = panel.target.querySelector<HTMLInputElement>(
+      'input[aria-label="Off-course alarm limit"]',
+    );
+    if (!input) throw new Error('Missing off-course field');
+    expect(input.valueAsNumber).toBeCloseTo(100 / 0.3048);
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(setLimitMeters).toHaveBeenCalledWith(100);
+    input.value = '100';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(setLimitMeters).toHaveBeenLastCalledWith(30.48);
+  });
   it('discards tuned thresholds only after the confirm step', () => {
     const panel = mountPanel();
 

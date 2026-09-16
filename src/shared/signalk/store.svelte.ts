@@ -88,11 +88,13 @@ export function predatesReconnect(
 export class PathCell {
   value = $state<Value | undefined>(undefined);
   source = $state<PathSource | undefined>(undefined);
-  // The wall-clock epoch of the most recent stream update, for staleness checks. Zero until the
+  // The measurement epoch of the most recent stream update, for staleness checks. Zero until the
   // first value arrives. Reactive so a consumer comparing it against a ticking clock re-renders
   // when a fresh value lands. Seeded cells (the course REST hydration writes value directly, not
   // through applyFrame) leave this at zero, which is correct: those are not stream-aged.
   epoch = $state(0);
+  // Transport receipt is separate: replaying a cached sample must not refresh measurement age.
+  receivedAt = $state(0);
   generation = $state(0);
   // True only when the current value came from the delta stream. REST hydration uses the same cell
   // but must not make a same-millisecond later hydration look like a competing stream write.
@@ -255,6 +257,7 @@ export class SignalKStore {
       const at = frame.selfEpochs?.get(path) ?? frame.epoch;
       if (this.#tracedPaths.has(path)) this.#recordTraced(cell, source, value, at);
       cell.epoch = at;
+      cell.receivedAt = frame.selfReceipts?.get(path) ?? frame.epoch;
       cell.generation = generation;
       cell.streamed = true;
       // Any accepted value clears a server stale declaration, null included: the server clears
@@ -278,8 +281,9 @@ export class SignalKStore {
           target = {
             values: new Map(),
             epochs: new Map(),
+            receipts: new Map(),
             generations: new Map(),
-            lastUpdate: frame.epoch,
+            lastUpdate: 0,
             revision: 0,
           };
           this.#aisTargets.set(context, target);
@@ -298,6 +302,7 @@ export class SignalKStore {
             !sameJsonValue(previous, value);
           target.values.set(path, value);
           target.epochs.set(path, receivedAt);
+          target.receipts?.set(path, frame.aisReceipts?.get(context)?.get(path) ?? frame.epoch);
           target.generations.set(path, generation);
           target.lastUpdate = Math.max(target.lastUpdate, receivedAt);
         }
@@ -498,7 +503,7 @@ export class SignalKStore {
   // the restored value, mirroring how the deletion pass writes the clearing null.
   upsertReconciledNotification(path: string, value: Value, snapshotEpoch: number): void {
     const cell = this.#cells.get(path);
-    if (cell?.streamed && cell.epoch >= snapshotEpoch) return;
+    if (cell?.streamed && cell.receivedAt >= snapshotEpoch) return;
     this.#mirrorNotification(path, value);
     if (cell !== undefined) cell.value = value;
   }
@@ -511,7 +516,7 @@ export class SignalKStore {
       // snapshot is the stale party, and deleting the fresh raise would silently drop a live
       // alarm no later delta restores (transition-only producers never republish).
       const cell = this.#cells.get(path);
-      if (cell?.streamed && cell.epoch >= snapshotEpoch) continue;
+      if (cell?.streamed && cell.receivedAt >= snapshotEpoch) continue;
       this.#notifications.delete(path);
       changed = true;
       // The keyed cells feed their own consumers (the anchor drag grade reads the raw cell), so

@@ -32,6 +32,21 @@ function dangerStore(targetId: string): SignalKStore {
 }
 
 describe('assessContacts', () => {
+  it('assesses a stationary-status vessel without SOG when own vessel is closing', () => {
+    const result = assessContacts(
+      { ...ownStationary, sogMps: 5 },
+      [
+        target({
+          position: { latitude: 0.005, longitude: 0 },
+          navigationState: 'anchored',
+        }),
+      ],
+      DEFAULT_THRESHOLDS,
+    );
+    expect(result.worst).toBe('danger');
+    expect(result.contacts[0]?.cpaMeters).toBeLessThan(1);
+    expect(result.unassessed).toHaveLength(0);
+  });
   it('grades computed-only contacts unassessed with own-fix-lost when the own fix is absent', () => {
     // Silently dropping them would leave every AIS display reading healthy while the lookout is
     // blind. They surface as unassessed instead, with a reason naming the own vessel's degradation,
@@ -612,6 +627,30 @@ describe('CollisionAssessment hysteresis', () => {
 });
 
 describe('CollisionAssessment escalating', () => {
+  it('escalates an inner-ring contact even when an earlier wider pass sorts first', () => {
+    const store = dangerStore('vessels.inner');
+    store.applyFrame({
+      self: new Map(),
+      ais: new Map([
+        [
+          'vessels.earlier',
+          new Map<string, unknown>([
+            ['navigation.position', { latitude: 0.01, longitude: 0 }],
+            ['navigation.closestApproach', { distance: 300, timeTo: 30 }],
+          ]),
+        ],
+      ]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: Date.now(),
+    });
+    const collision = new CollisionAssessment(
+      new OwnVessel(store),
+      new AisTargets(store),
+      createThresholds(),
+    );
+    expect(collision.assessment.contacts[0]?.id).toBe('vessels.earlier');
+    expect(collision.escalating).toBe(true);
+  });
   it('escalates when the worst contact is inside the hard inner ring', () => {
     // dangerStore puts a contact at CPA 100 m, TCPA 60 s, inside the 185 m and 120 s inner ring.
     const store = dangerStore('vessels.a');

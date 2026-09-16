@@ -64,6 +64,16 @@ describe('createTidesLoader', () => {
     expect(d.tideEvents).not.toHaveBeenCalled();
   });
 
+  it('does not start unused plugin work on stationary successful refreshes', async () => {
+    const pluginTides = vi.fn(async () => undefined);
+    const loader = createTidesLoader(deps({ pluginAvailable: () => true, pluginTides }));
+    const store = new TidesStore();
+    await loader.load(store, 27.7, -82.7);
+    await loader.load(store, 27.7, -82.7);
+    expect(pluginTides).toHaveBeenCalledTimes(1);
+    expect(store.source).toBe('noaa-coops');
+  });
+
   it('keeps at most one active and only the newest queued position', async () => {
     let resolveFirst: ((value: typeof pluginReading) => void) | undefined;
     let resolveLatest: ((value: typeof pluginReading) => void) | undefined;
@@ -559,6 +569,25 @@ describe('createTidesLoader', () => {
     await loader.load(store, 27.8, -82.8, true);
     expect(tideEventsFetch).toHaveBeenCalledTimes(2);
     expect(store.status).toBe('ready');
+  });
+
+  it('retries a failed component after cooldown without movement and then deduplicates success', async () => {
+    let now = 1_000_000;
+    const tideEventsFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(tideEvents);
+    const loader = createTidesLoader(deps({ tideEvents: tideEventsFetch, now: () => now }));
+    const store = new TidesStore();
+    await loader.load(store, 27.7, -82.7);
+    await loader.load(store, 27.7, -82.7);
+    expect(tideEventsFetch).toHaveBeenCalledTimes(1);
+    now += 6 * 60_000;
+    await loader.load(store, 27.7, -82.7);
+    expect(tideEventsFetch).toHaveBeenCalledTimes(2);
+    expect(store.status).toBe('ready');
+    await loader.load(store, 27.7, -82.7);
+    expect(tideEventsFetch).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a manual selection and exact reading after panning beyond the nearby catalog', async () => {

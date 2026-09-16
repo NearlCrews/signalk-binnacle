@@ -164,7 +164,7 @@ const TREND_PARTIAL_BELOW = 0.9;
 // marked stale: the chart still shows history, but its right edge is not the present.
 export const TREND_STALE_AFTER_SEC = 600;
 
-export type TrendVerdict = 'steady' | 'rising' | 'falling';
+type TrendVerdict = 'steady' | 'rising' | 'falling';
 export type TrendDangerSide = 'min' | 'max' | 'both';
 
 // Which end of a charted series carries the risk, so the annotation line calls out the extreme a

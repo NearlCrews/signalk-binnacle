@@ -1,7 +1,7 @@
 import { hasControlCharacters } from '$shared/lib';
 
 export const MAX_TREND_INSTRUMENTS = 8;
-export const MAX_TREND_INSTRUMENT_ID_LENGTH = 256;
+const MAX_TREND_INSTRUMENT_ID_LENGTH = 256;
 export const DEFAULT_TREND_INSTRUMENT_IDS = ['depth', 'wind-apparent', 'pressure', 'sog'] as const;
 
 export type InstrumentTrendAggregate = 'average' | 'max' | 'last';

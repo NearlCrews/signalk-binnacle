@@ -14,6 +14,18 @@ function harness(startMs = Date.parse('2026-08-28T22:00:00')) {
 }
 
 describe('createAlarmLog', () => {
+  it('retains source and observation time for non-current monitoring status', () => {
+    const { clock, log } = harness();
+    log.record({
+      kind: 'status',
+      source: 'shallow',
+      label: 'Shallow water',
+      detail: 'Monitoring unavailable; last alarm state retained.',
+    });
+    expect(log.entries[0]).toMatchObject({ kind: 'status', source: 'shallow', timeMs: clock.now });
+    expect(alarmLogTail(log)[0]).toContain('Status: Shallow water, Monitoring unavailable');
+    expect(alarmChronologyFact(log)?.value).not.toContain('Cleared');
+  });
   it('records entries with the clock time, in order', () => {
     const { clock, log } = harness();
     log.record({ kind: 'raised', label: 'Shallow water', detail: 'depth 2.1 m' });

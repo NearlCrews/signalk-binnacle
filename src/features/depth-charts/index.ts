@@ -1,7 +1,5 @@
 export {
-  type EncPromptConditions,
   NOAA_ENC_SOURCE_ID,
-  noaaEncCoversPosition,
   shouldOfferNoaaEnc,
 } from './enc-coverage';
 export { createSeascapeDemOverlay } from './seascape-dem-overlay';

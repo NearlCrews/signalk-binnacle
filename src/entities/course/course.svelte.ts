@@ -95,7 +95,7 @@ export class CourseGuidance {
   // before the stream sends the first change. asOf is the wall clock when the hydrate began; a slow
   // REST response must not clobber fresher streamed deltas (activate, then skip twice before the
   // hydrate resolves), so the seed is dropped when any course cell took a stream write at or after
-  // that moment (each cell's epoch is the wall clock of its last stream write, zero until one lands).
+  // that moment (receivedAt is transport receipt time; epoch remains the measurement timestamp).
   seed(
     info: CourseInfo | undefined,
     calc: CourseCalculations | undefined,
@@ -108,7 +108,7 @@ export class CourseGuidance {
     // hydrate began, so a fresh streamed value is never clobbered by the slower REST snapshot.
     const seedCell = (path: string, value: unknown): void => {
       const cell = this.#store.cell(path);
-      if (cell.streamed && cell.epoch >= asOf) return;
+      if (cell.streamed && cell.receivedAt >= asOf) return;
       cell.value = value;
       cell.epoch = asOf;
       cell.generation = this.#store.generation;

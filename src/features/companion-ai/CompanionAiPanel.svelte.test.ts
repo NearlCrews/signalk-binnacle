@@ -27,6 +27,7 @@ function renderPanel(
     ackNoteFor: () => undefined,
     start: vi.fn(),
     stop: vi.fn(),
+    dispose: vi.fn(),
     refresh: vi.fn(async () => undefined),
     runNow: vi.fn(async () => undefined),
     ...overrides,

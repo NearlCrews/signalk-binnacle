@@ -21,7 +21,7 @@ export interface HandoffSnapshot {
 
 // Where a snapshot lives right now: on the server for every station, queued on this device until
 // the server accepts it, or on this device only because the server offers no shared store.
-export type HandoffSyncState = 'shared' | 'pending' | 'device-only';
+type HandoffSyncState = 'shared' | 'pending' | 'device-only';
 
 export interface HandoffRecord extends HandoffSnapshot {
   sync: HandoffSyncState;
@@ -39,7 +39,7 @@ function cleanShortText(value: unknown, maxLength: number): string | undefined {
   return text.length > maxLength ? undefined : text;
 }
 
-export function isHandoffFact(value: unknown): value is HandoffFact {
+function isHandoffFact(value: unknown): value is HandoffFact {
   if (!isRecord(value)) return false;
   const label = cleanShortText(value.label, MAX_HANDOFF_FACT_TEXT);
   const fact = cleanShortText(value.value, MAX_HANDOFF_FACT_TEXT);

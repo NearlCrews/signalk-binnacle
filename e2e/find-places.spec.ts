@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { expectNoHorizontalOverflow, stubVesselsSelf } from './helpers';
 
-test.use({ serviceWorkers: 'block' });
+test.use({ serviceWorkers: 'block', trace: 'retain-on-failure' });
 
 test('find places enables its layer, searches provider metadata, and keeps selection visible', async ({
   page,
@@ -71,9 +71,8 @@ test('find places enables its layer, searches provider metadata, and keeps selec
   await expect(placesToggle).toHaveAttribute('aria-pressed', 'false');
   await placesToggle.click();
   await expect.poll(() => listRequests, { timeout: 15_000 }).toBeGreaterThan(0);
-  // 30 s, not the suite's 15: the first notes paint sits behind the fetch, the merge, and a map
-  // idle on a Pi that may be running the whole gate; this step is the suite's one recurring
-  // load-flake and the generous bound only slows a genuinely broken run.
+  // Retain the existing 30-second paint bound across the fetch, merge, and overlay updates.
+  // Failure traces help distinguish delayed work from an inconsistent panel state.
   await expect(panel.getByText('Harbor Marina')).toBeVisible({ timeout: 30_000 });
   await expect(panel.getByText("Marina · Crow's Nest")).toBeVisible();
   await expect(panel.getByText('Distance and bearing need a fresh GPS fix.')).toBeVisible();

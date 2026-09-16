@@ -381,9 +381,6 @@ export class TrackRecorder {
 
   #queueRewrite(points: readonly TrackPoint[]): void {
     const snapshot = points.map((point) => ({ ...point }));
-    this.#writeQueue = this.#writeQueue.then(async () => {
-      await this.#store.clear();
-      for (const point of snapshot) await this.#store.append(point);
-    });
+    this.#writeQueue = this.#writeQueue.then(() => this.#store.replaceAll(snapshot));
   }
 }

@@ -1,3 +1,4 @@
+import { sameJsonValue } from '$shared/lib';
 import type { Route, RouteHighlight } from './route-types';
 
 function routesEqual(a: Route[], b: Route[]): boolean {
@@ -8,11 +9,15 @@ function routesEqual(a: Route[], b: Route[]): boolean {
       return (
         route.id === other.id &&
         route.name === other.name &&
+        sameJsonValue(route.resourceExtras, other.resourceExtras) &&
+        sameJsonValue(route.featureExtras, other.featureExtras) &&
+        sameJsonValue(route.properties, other.properties) &&
         route.waypoints.length === other.waypoints.length &&
         route.waypoints.every((waypoint, waypointIndex) => {
           const otherWaypoint = other.waypoints[waypointIndex];
           return (
             waypoint.name === otherWaypoint.name &&
+            sameJsonValue(waypoint.metadata, otherWaypoint.metadata) &&
             waypoint.position.latitude === otherWaypoint.position.latitude &&
             waypoint.position.longitude === otherWaypoint.position.longitude
           );

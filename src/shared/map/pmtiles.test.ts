@@ -37,6 +37,23 @@ function responseWithCancelableBody(
 }
 
 describe('NoStoreSource.getBytes', () => {
+  it.each(['remote', 'companion'])(
+    'signals a changed validator and 416 for %s ranges',
+    async (kind) => {
+      const source =
+        kind === 'remote'
+          ? new NoStoreSource('http://x/a.pmtiles')
+          : new CompanionSource('http://x/a.pmtiles', () => undefined);
+      const changed = response(206);
+      changed.headers.set('ETag', '"v2"');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValueOnce(changed).mockResolvedValueOnce(response(416)),
+      );
+      await expect(source.getBytes(0, 4, undefined, '"v1"')).rejects.toBeInstanceOf(EtagMismatch);
+      await expect(source.getBytes(100, 4, undefined, '"v1"')).rejects.toBeInstanceOf(EtagMismatch);
+    },
+  );
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -555,3 +572,5 @@ describe('archive registration reference counting', () => {
     expect(pmtilesArchiveReferences('https://charts.example/never-registered.pmtiles')).toBe(0);
   });
 });
+
+import { EtagMismatch } from 'pmtiles';

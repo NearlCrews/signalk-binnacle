@@ -1,8 +1,8 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-// Shared browser-test helpers. A spec's file-local helper is invisible to the other nine specs, so
+// Shared browser-test helpers. A spec's file-local helper is invisible to the other specs, so
 // each one re-rolled the same stubs and the same menu walk inline; when a menu label or a route
-// shape changes, one edit here beats twenty-five.
+// shape changes, one shared edit keeps the cases consistent.
 
 // The self-vessel document. Binnacle probes it on boot to learn its own context, and every spec
 // needs it to answer something rather than hang on a real server that is not running.
@@ -12,14 +12,22 @@ export async function stubVesselsSelf(page: Page): Promise<void> {
   );
 }
 
+// The visible stream phase proves the socket opened. Do not infer readiness from a tooltip or
+// from the shell being mounted: a one-shot fixture delta sent while connecting is lost.
+export async function waitForSignalKConnection(page: Page): Promise<void> {
+  await expect(page.locator('.status-strip .conn-live')).toHaveText('Connected', {
+    timeout: 20_000,
+  });
+}
+
 // Open the app menu and activate one of its tiles. Scoped to the launcher, because a menu label
 // usually also names a bar pill or a panel heading, and an unscoped match picks whichever the DOM
 // happens to hold first.
-export async function openMenuItem(page: Page, itemName: string): Promise<void> {
+export async function openMenuItem(page: Page, itemName: string | RegExp): Promise<void> {
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page
     .locator('#app-menu-launcher')
-    .getByRole('button', { name: itemName, exact: true })
+    .getByRole('button', { name: itemName, exact: typeof itemName === 'string' })
     .click();
 }
 
@@ -57,6 +65,26 @@ export async function expectInsideViewport(surface: Locator, page: Page): Promis
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+}
+
+// Safety chrome and its touch-lock holes update through layout observers. Visibility alone can
+// precede that update, so require the real 44 px hit target with the normal bounded expectation.
+export async function expectHelmHitTarget(control: Locator): Promise<void> {
+  await expect(control).toBeVisible();
+  await expect
+    .poll(() =>
+      control.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        if (box.width < 44 || box.height < 44) {
+          return `Target is ${box.width} by ${box.height} CSS px; at least 44 by 44 required`;
+        }
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return hit !== null && element.contains(hit)
+          ? null
+          : `Target center hits ${hit?.outerHTML.slice(0, 500) ?? 'nothing'}`;
+      }),
+    )
+    .toBeNull();
 }
 
 // Measure rendered text contrast against the first opaque ancestor surface. This is intentionally

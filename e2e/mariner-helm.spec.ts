@@ -6,6 +6,7 @@ import {
   FIXTURE_SERVER,
   openMenuItem,
   stubVesselsSelf,
+  waitForSignalKConnection,
 } from './helpers';
 
 // The mariner helm scenarios: emergency reachability, alarm pileups, and staleness honesty under
@@ -19,8 +20,6 @@ import {
 
 test.use({ serviceWorkers: 'block' });
 
-// A deterministic wall-clock stamp for every fixture delta; freshness derives from receipt time.
-const FIXED_TIMESTAMP = '2026-08-10T12:00:00.000Z';
 const TARGET_CONTEXT = 'vessels.urn:mrn:imo:mmsi:366123456';
 
 type DeltaValue = { path: string; value: unknown; state?: unknown };
@@ -30,6 +29,13 @@ async function fixturePost(page: Page, action: string, body?: unknown): Promise<
     data: body ?? {},
   });
   expect(response.ok()).toBe(true);
+  if (action === 'delta') {
+    const result = (await response.json()) as { delivered: number };
+    expect(
+      result.delivered,
+      'The fixture must have an open stream before sending telemetry',
+    ).toBeGreaterThan(0);
+  }
 }
 
 async function sendDelta(
@@ -37,13 +43,14 @@ async function sendDelta(
   values: DeltaValue[],
   context?: string,
   sourceRef?: string,
+  timestamp = new Date().toISOString(),
 ): Promise<void> {
   await fixturePost(page, 'delta', {
     ...(context === undefined ? {} : { context }),
     updates: [
       {
         ...(sourceRef === undefined ? {} : { $source: sourceRef }),
-        timestamp: FIXED_TIMESTAMP,
+        timestamp,
         values,
       },
     ],
@@ -57,7 +64,7 @@ function staleValue(path: string, lastValue: unknown): DeltaValue {
   return {
     path,
     value: null,
-    state: { timedOut: true, lastValue: { timestamp: FIXED_TIMESTAMP, value: lastValue } },
+    state: { timedOut: true, lastValue: { timestamp: new Date().toISOString(), value: lastValue } },
   };
 }
 
@@ -103,10 +110,10 @@ const CLOSING_TARGET: DeltaValue[] = [
 
 async function stubRestApis(page: Page): Promise<void> {
   await stubVesselsSelf(page);
-  // The weather panel's external providers: failed fetches leave the panel in its error state,
-  // which is all the layout scenarios need.
+  // Stub forecasts and the background warning fallback so live provider conditions cannot alter
+  // the fixture's safety layout. Weather request behavior has its own controlled scenario.
   await page.route(
-    /^https?:\/\/(?:[^/]+\.)?(?:open-meteo\.com|rainviewer\.com)(?:[/:?#]|$)/,
+    /^https?:\/\/(?:[^/]+\.)?(?:open-meteo\.com|rainviewer\.com|weather\.gov)(?:[/:?#]|$)/,
     (route) => route.fulfill({ status: 500 }),
   );
 }
@@ -116,9 +123,7 @@ async function openApp(page: Page): Promise<void> {
   await stubRestApis(page);
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
-  await expect(page.locator('.status-strip .conn')).toHaveAttribute('title', /Connected/, {
-    timeout: 20_000,
-  });
+  await waitForSignalKConnection(page);
 }
 
 async function raiseMob(page: Page): Promise<Locator> {
@@ -192,6 +197,38 @@ test('stream fixture feeds the worker: subscriptions arrive and deltas render', 
   const state = await page.request.get(`${FIXTURE_SERVER}/__fixture__/state`);
   const body = (await state.json()) as { received: Array<{ subscribe?: unknown }> };
   expect(body.received.some((message) => Array.isArray(message.subscribe))).toBe(true);
+});
+
+test('cached stream replay retains measurement age and cannot roll back a newer fix', async ({
+  page,
+}) => {
+  await openApp(page);
+  const cachedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+  await sendDelta(page, OWN_FIX, undefined, undefined, cachedAt);
+  const strip = page.locator('.status-strip');
+  await expect(strip).toContainText('Last fix');
+  await expect(strip).toContainText('SOG --');
+  await expect(strip).not.toContainText('5.8');
+
+  await sendDelta(page, OWN_FIX);
+  await expect(strip).toContainText('5.8');
+  await expect(strip).not.toContainText('Last fix');
+  await sendDelta(
+    page,
+    [
+      { path: 'navigation.position', value: { latitude: 10, longitude: 10 } },
+      { path: 'navigation.speedOverGround', value: 0 },
+    ],
+    undefined,
+    undefined,
+    cachedAt,
+  );
+  // A later, distinct measurement is a processing barrier: the old frame must have traversed the
+  // same ordered socket before this depth reaches the UI, so the assertions cannot race receipt.
+  await sendDelta(page, [{ path: 'environment.depth.belowTransducer', value: 12 }]);
+  await expect(strip.locator('.depth-readout')).toContainText('12');
+  await expect(strip).toContainText('5.8');
+  await expect(strip).not.toContainText('Last fix');
 });
 
 test('disconnected readouts retain AA contrast in day, dusk, and night-red', async ({ page }) => {
@@ -388,8 +425,8 @@ test('safe-area insets keep the safety strips clear of system chrome', async ({ 
 
 test('stale GPS stops presenting coordinates as a current position', async ({ page }) => {
   // DATA-01: a retained fix relabels as "Last fix" with its age. The staleness window runs in
-  // real time because the worker stamps delta receipt with its own clock, which a page-side fake
-  // clock cannot reach.
+  // real time because the fixture stamps each measurement with the real clock, and the worker
+  // validates it with its own clock, which a page-side fake clock cannot reach.
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
@@ -414,6 +451,7 @@ test('a server staleness declaration relabels the fix and names the quiet source
   await sendDelta(page, OWN_FIX);
   const cluster = page.locator('.center-cluster');
   await expect(cluster).toContainText('Vessel');
+  await expect(cluster).toContainText('27.7000');
 
   await sendDelta(
     page,
@@ -508,9 +546,7 @@ test('the first-run orientation is offered once, opens Help, and never nags agai
 
   // Dismissal persists on the device across a reload.
   await page.reload();
-  await expect(page.locator('.status-strip .conn')).toHaveAttribute('title', /Connected/, {
-    timeout: 20_000,
-  });
+  await waitForSignalKConnection(page);
   await expect(page.getByText('First time with Binnacle?')).toBeHidden();
 });
 

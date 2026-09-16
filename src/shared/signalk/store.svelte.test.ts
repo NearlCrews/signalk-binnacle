@@ -32,6 +32,25 @@ describe('predatesReconnect', () => {
 });
 
 describe('SignalKStore', () => {
+  it('keeps cached measurement age separate from receipt and prunes old AIS replay', () => {
+    const store = new SignalKStore();
+    store.applyFrame({
+      ...frame({ 'navigation.position': { latitude: 1, longitude: 2 } }),
+      epoch: 1_000_000,
+      generation: 2,
+      selfEpochs: new Map([['navigation.position', 100_000]]),
+      selfReceipts: new Map([['navigation.position', 999_990]]),
+      ais: aisMap({ 'vessels.a': { 'navigation.position': { latitude: 2, longitude: 3 } } }),
+      aisEpochs: new Map([['vessels.a', new Map([['navigation.position', 100_000]])]]),
+    });
+    expect(store.cell('navigation.position').epoch).toBe(100_000);
+    expect(store.cell('navigation.position').receivedAt).toBe(999_990);
+    expect(store.cell('navigation.position').generation).toBe(2);
+    expect(store.lastDataEpoch).toBe(1_000_000);
+    expect(store.aisTargets.get('vessels.a')?.lastUpdate).toBe(100_000);
+    store.pruneAis(1_000_000, 60_000);
+    expect(store.aisTargets.size).toBe(0);
+  });
   it('exposes the latest value of a path through its cell', () => {
     const store = new SignalKStore();
     store.applyFrame(frame({ 'navigation.speedOverGround': 5.1 }));

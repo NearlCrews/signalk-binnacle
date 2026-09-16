@@ -20,9 +20,8 @@ export interface RouteResourceBody {
   feature: {
     type: 'Feature';
     geometry: { type: 'LineString'; coordinates: LonLat[] };
-    // The Signal K route schema requires every coordinatesMeta entry to carry a name, so it is
-    // present only when at least one waypoint is named, and absent for a fully unnamed route.
-    properties: { coordinatesMeta?: Array<{ name: string }> };
+    // The Signal K route schema requires every coordinatesMeta entry to carry a name or href.
+    properties: Record<string, unknown> & { coordinatesMeta?: Array<Record<string, unknown>> };
   };
 }
 
@@ -33,19 +32,45 @@ export function routeToFeature(route: Route): RouteResourceBody {
   const names = route.waypoints.map((waypoint) =>
     cleanTruncatedText(waypoint.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH),
   );
-  const named = names.some(Boolean);
+  const named =
+    names.some(Boolean) || route.waypoints.some((waypoint) => waypoint.metadata !== undefined);
   const properties = named
-    ? { coordinatesMeta: names.map((name, index) => ({ name: name ?? `${index + 1}` })) }
-    : {};
+    ? {
+        ...route.properties,
+        coordinatesMeta: names.map((name, index) => {
+          const metadata = route.waypoints[index].metadata;
+          return {
+            ...metadata,
+            ...(name ? { name } : metadata?.href ? {} : { name: `${index + 1}` }),
+          };
+        }),
+      }
+    : { ...route.properties };
+  const coordinates = route.waypoints.map((waypoint) => latLonToLonLat(waypoint.position));
+  const featureExtras = { ...route.featureExtras };
+  if (Object.hasOwn(featureExtras, 'bbox')) {
+    // A supplied extent remains useful, but must follow moved or removed vertices.
+    featureExtras.bbox = coordinates.reduce(
+      ([west, south, east, north], [lon, lat]) => [
+        Math.min(west, lon),
+        Math.min(south, lat),
+        Math.max(east, lon),
+        Math.max(north, lat),
+      ],
+      [Infinity, Infinity, -Infinity, -Infinity],
+    );
+  }
   return {
+    ...route.resourceExtras,
     name:
       cleanTruncatedText(route.name, MAX_ROUTE_NAME_LENGTH) ?? cleanRouteId(route.id) ?? 'Route',
     distance: routeDistanceMeters(route.waypoints),
     feature: {
+      ...featureExtras,
       type: 'Feature',
       geometry: {
         type: 'LineString',
-        coordinates: route.waypoints.map((w) => latLonToLonLat(w.position)),
+        coordinates,
       },
       properties,
     },
@@ -74,10 +99,31 @@ export function featureToRoute(id: string, raw: unknown): Route | undefined {
   for (const [i, coord] of geom.coordinates.entries()) {
     if (!isLonLat(coord)) return undefined;
     const name = cleanTruncatedText(meta[i]?.name, MAX_ROUTE_WAYPOINT_NAME_LENGTH);
-    waypoints.push({ position: lonLatToLatLon(coord), ...(name ? { name } : {}) });
+    const metadata = extras(meta[i], ['name']);
+    waypoints.push({
+      position: lonLatToLatLon(coord),
+      ...(name ? { name } : {}),
+      ...(metadata ? { metadata } : {}),
+    });
   }
   const name = cleanTruncatedText(r.name, MAX_ROUTE_NAME_LENGTH) ?? safeId;
-  return { id: safeId, name, waypoints };
+  const resourceExtras = extras(raw, ['name', 'distance', 'feature']);
+  const featureExtras = extras(r.feature, ['type', 'geometry', 'properties']);
+  const properties = extras(r.feature?.properties, ['coordinatesMeta']);
+  return {
+    id: safeId,
+    name,
+    waypoints,
+    ...(resourceExtras ? { resourceExtras } : {}),
+    ...(featureExtras ? { featureExtras } : {}),
+    ...(properties ? { properties } : {}),
+  };
+}
+
+function extras(raw: unknown, excluded: readonly string[]): Record<string, unknown> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const entries = Object.entries(raw).filter(([key]) => !excluded.includes(key));
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 export function routeDistanceMeters(waypoints: readonly RouteWaypoint[]): number {

@@ -17,10 +17,10 @@ import {
   previousPlaybackSample,
 } from './time-travel-timeline';
 
-export type TimeTravelStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'no-provider' | 'failed';
-export type TimeTravelLoadErrorKind = 'failed' | 'empty' | 'no-provider';
+type TimeTravelStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'no-provider' | 'failed';
+type TimeTravelLoadErrorKind = 'failed' | 'empty' | 'no-provider';
 
-export interface TimeTravelLoadError {
+interface TimeTravelLoadError {
   kind: TimeTravelLoadErrorKind;
   rangeId: TimeTravelRangeId;
 }

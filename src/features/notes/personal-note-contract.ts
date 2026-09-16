@@ -3,11 +3,11 @@ import { isLatLon, type LatLon } from '$shared/geo';
 import { hasControlCharacters } from '$shared/lib';
 
 export const PERSONAL_NOTE_NAMESPACE = 'binnacle.signalk.org';
-export const PERSONAL_NOTE_KIND = 'personal-note';
-export const PERSONAL_NOTE_SCHEMA_VERSION = 1;
+const PERSONAL_NOTE_KIND = 'personal-note';
+const PERSONAL_NOTE_SCHEMA_VERSION = 1;
 export const MAX_PERSONAL_NOTE_NAME_LENGTH = 120;
 export const MAX_PERSONAL_NOTE_TEXT_LENGTH = 4_000;
-export const MAX_PERSONAL_NOTE_SYMBOL_LENGTH = 256;
+const MAX_PERSONAL_NOTE_SYMBOL_LENGTH = 256;
 const PERSONAL_NOTE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface PersonalNoteInput {

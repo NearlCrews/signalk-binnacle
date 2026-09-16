@@ -89,8 +89,16 @@ NOAA, EMODnet, GEBCO, NASA GIBS, OpenSeaMap, Open Waters' Seascape, and the VLIZ
 Regions service. Enabled online layers disclose the viewed tile area to their providers. Weather
 and tide requests disclose the viewed, selected, or vessel coordinates needed for the requested
 conditions. Providers also receive ordinary network metadata such as the public IP address and user
-agent. Binnacle does not intentionally send a Signal K access token to a cross-origin provider. If
-position disclosure is a concern, leave external weather, tide, and map layers closed.
+agent. Binnacle does not intentionally send a Signal K access token to a cross-origin provider.
+
+Background weather warnings are an exception to panel-driven requests. With a fresh vessel fix,
+Binnacle checks the detected Signal K weather provider and can fall back to NOAA's `api.weather.gov`
+point alerts even when the Weather panel and layers are closed. The fallback sends vessel latitude
+and longitude rounded to four decimal places. Checks normally repeat about every ten minutes, with
+additional requests after area or provider changes and retries after failures. There is no in-app
+opt-out for this background check. If this position disclosure is unacceptable, restrict external
+requests with browser or network policy; closing panels alone does not prevent it. Such restrictions
+also remove external warning coverage and may make other online data unavailable.
 
 Marine radar discovery and controls use the Signal K server origin. A provider-reported spoke-stream
 URL is resolved relative to that origin, and the Signal K token is appended only when the resolved

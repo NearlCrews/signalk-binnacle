@@ -280,6 +280,27 @@ describe('CourseGuidance', () => {
     expect(g.nextPointName).toBe('C');
   });
 
+  it('arbitrates a delayed measurement by receipt time rather than its older measurement clock', () => {
+    const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
+    const guidance = new CourseGuidance(store, new OwnVessel(store));
+    const path = 'navigation.course.nextPoint';
+    store.applyFrame({
+      self: new Map([[path, { position: { latitude: 1, longitude: 1 }, name: 'Streamed course' }]]),
+      selfEpochs: new Map([[path, 500]]),
+      selfReceipts: new Map([[path, 1_500]]),
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1_500,
+    });
+    guidance.seed(
+      { nextPoint: { position: { latitude: 0, longitude: 1 }, name: 'Old snapshot' } },
+      undefined,
+      1_000,
+    );
+    expect(guidance.nextPointName).toBe('Streamed course');
+    expect(store.cell(path).epoch).toBe(500);
+    expect(store.cell(path).receivedAt).toBe(1_500);
+  });
+
   it('seeds when the only course deltas predate the hydrate', () => {
     const store = storeWith({ 'navigation.position': { latitude: 0, longitude: 0 } });
     const g = new CourseGuidance(store, new OwnVessel(store));

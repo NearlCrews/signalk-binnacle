@@ -75,6 +75,8 @@ export {
   JOULES_PER_KWH,
   knotsToMetersPerSecond,
   landDistanceUnit,
+  lengthFromDisplay,
+  lengthToDisplay,
   lengthUnit,
   METERS_PER_FOOT,
   METERS_PER_MILE,

@@ -5,7 +5,7 @@ interface Props {
   label: string;
   // The text the field shows. A controlled value: the parent owns it and updates it on commit.
   value: string;
-  // 'inline' sets the label beside a growing input (the region name row); 'stacked' sets a caps
+  // 'inline' sets the label beside a growing input (the region name row); 'stacked' sets a field
   // label above a full-width input (the chart name and description rows).
   variant?: 'inline' | 'stacked';
   placeholder?: string;
@@ -52,9 +52,9 @@ function commit(event: Event): void {
 
 <!-- The labeled text-input row shared by the region name field and the chart name and description
      fields, so the labeled-text shape cannot drift per panel. The inline variant grows the input
-     beside its label; the stacked variant sets a caps label above a card-width input. -->
+     beside its label; the stacked variant sets a field label above a card-width input. -->
 <label class="text-field" class:stacked={variant === 'stacked'} class:large>
-  <span class="name" class:caps-label={variant === 'stacked'}>{label}</span>
+  <span class="name">{label}</span>
   <input
     class="input"
     {type}
@@ -92,7 +92,7 @@ function commit(event: Event): void {
   flex: 1;
   min-inline-size: 0;
 }
-/* Stacked: the caps label sits above a full-width input, for a card-width text row. */
+/* Stacked: the field label sits above a full-width input, for a card-width text row. */
 .text-field.stacked {
   flex-direction: column;
   align-items: stretch;

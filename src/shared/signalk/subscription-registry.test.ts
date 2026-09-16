@@ -5,6 +5,19 @@ import type { Context, Path } from './types';
 const path = (s: string) => s as Path;
 
 describe('SubscriptionRegistry', () => {
+  it('replaces the active set once when removing several paths and keeps releases idempotent', () => {
+    const sent: unknown[] = [];
+    const reg = new SubscriptionRegistry((message) => sent.push(message));
+    const release = reg.add([{ path: 'one' }, { path: 'two' }]);
+    reg.add([{ path: 'kept', context: 'vessels.*', policy: 'fixed', period: 2000 }]);
+    sent.length = 0;
+    release();
+    release();
+    expect(sent).toEqual([
+      { context: '*', unsubscribe: [{ path: '*' }] },
+      { context: 'vessels.*', subscribe: [{ path: 'kept', policy: 'fixed', period: 2000 }] },
+    ]);
+  });
   it('sends one subscribe on first demand for a path', () => {
     const sent: unknown[] = [];
     const reg = new SubscriptionRegistry((m) => sent.push(m));
@@ -34,8 +47,8 @@ describe('SubscriptionRegistry', () => {
     off2();
     expect(sent).toHaveLength(2);
     expect(sent[1]).toMatchObject({
-      context: 'vessels.self',
-      unsubscribe: [{ path: 'navigation.position' }],
+      context: '*',
+      unsubscribe: [{ path: '*' }],
     });
   });
 
@@ -81,8 +94,8 @@ describe('SubscriptionRegistry', () => {
     reg.remove([path('navigation.position')]);
     expect(sent).toHaveLength(2);
     expect(sent[1]).toMatchObject({
-      context: 'vessels.self',
-      unsubscribe: [{ path: 'navigation.position' }],
+      context: '*',
+      unsubscribe: [{ path: '*' }],
     });
     sent.length = 0;
     reg.resubscribeAll();

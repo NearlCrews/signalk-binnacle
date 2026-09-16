@@ -42,7 +42,11 @@ not have to be corrected after the fact.
 - Real-time: a dedicated Web Worker hosts the Signal K WebSocket client, bridged with Comlink,
   batching deltas into frame-rate flushes on a worker timer (never requestAnimationFrame, which
   a hidden tab suspends, so data and alarms keep flowing in a backgrounded tab), feeding a
-  path-keyed fine-grained runes store.
+  path-keyed fine-grained runes store. A reading's `epoch` is its Signal K measurement timestamp,
+  preserved through batching, so delayed measurements cannot look fresh merely because they just
+  arrived. `receivedAt` separately records transport receipt for reconnect snapshot arbitration.
+  Missing legacy timestamps use receipt time, while malformed, grossly future, and out-of-order
+  measurements must not renew a safety reading's freshness. Do not collapse those two clocks.
 - Fonts: Inter (UI) and JetBrains Mono (numeric readouts), self-hosted.
 - Icons: @lucide/svelte for app chrome. Chart symbols derive from the S-52 Presentation
   Library and OpenBridge, not from a UI icon set.
@@ -520,7 +524,8 @@ must not be repeatable.
   course. The course state machine is built into the server core (present on any 2.x server); the
   derived `calcValues` (XTE, VMG, DTW, BTW, ETA) come from a separate course-provider plugin that
   ships by default but can be absent, so compute them client-side as a fallback (the
-  `navigation.closestApproach` degrade pattern). Autopilot (v2) is still a later spec.
+  `navigation.closestApproach` degrade pattern). Autopilot uses the v2 API through a detected
+  provider; missing capabilities must remain unavailable rather than appearing controllable.
 - Bundle the app's own assets locally (fonts, icons, worker): no CDN for code. The MAP base is
   the deliberate exception: it is an online vector tile source (OpenFreeMap), because shipping a
   world basemap inline is not feasible. Offline operation is achieved by CACHING that source through
@@ -679,3 +684,15 @@ required, though it remains a harmless backstop on a memory-heavy run.
   repo. Each differentiator gets its own brainstorm, spec, and plan: active-safety CoPilot, weather
   and routing, anchor intelligence, the liveaboard dashboard, and multi-station watch handoff. The
   offline and PWA pipeline is the spec immediately after the foundation.
+
+## Shared skills
+
+Domain expertise for this repository lives in the shared skills installed for both Codex and Claude Code from `~/src/nearlcrews-agent-toolkit` (Claude Code: `/skill-name`; Codex: `$skill-name`; both hosts also select them from their descriptions). Load these before working here:
+
+- `svelte-maplibre-stack`: Svelte 5, Vite 8, MapLibre GL JS 6, PMTiles, Terra Draw, uPlot, Comlink workers, Serwist, Biome, Vitest, Playwright, and dependency-cruiser idioms and lifecycle rules.
+- `maritime-ui`: helm-facing presentation, alarms, routes, weather, AIS, and the operational safety contract.
+- `signalk-development`: Signal K plugin and webapp lifecycle, server APIs, deltas, route security, package metadata, App Store, registry score, plugin CI, and release readiness.
+- `standardize-project-toolchain`: toolchain audits, lint, type, test, and CI alignment, and Node or TypeScript floor decisions.
+- `better-accessibility, better-colors, better-layout, better-typography, and better-writing`: UI copy, layout, color, type, and accessibility.
+
+To delegate, spawn a general-purpose subagent and tell it which of these to load; there are no per-host agent definitions.

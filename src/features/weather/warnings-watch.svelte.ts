@@ -1,7 +1,8 @@
 import type { AlarmTone, GatedAlarm } from '$shared/audio';
 import type { LatLon } from '$shared/geo';
 import { quantizeLatLonKey } from '$shared/geo';
-import type { PointConditionsLoader } from './point-conditions';
+import { MINUTE_MS } from '$shared/lib';
+import type { PointConditionsLoader, WarningAvailability } from './point-conditions';
 import { WARNING_REFRESH_MS } from './point-conditions';
 import type { WeatherProvider, WeatherWarning } from './signalk-weather';
 import { normalizeWeatherWarnings, weatherWarningIdentity } from './signalk-weather';
@@ -57,8 +58,12 @@ const UNPRIMED_RETRY_MS = 60_000;
 // and a status chip. The open panel keeps its own richer list; this only covers the closed state.
 export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
   let active = $state<WeatherWarning[]>([]);
+  let confidence = $state<WarningAvailability>('unavailable');
+  let fetchedAt = $state<number | undefined>();
+  const current = $derived(activeWarnings(active, deps.clock.now));
   let generation = 0;
   let lastKey = '';
+  let lastToken: string | undefined;
   let lastAttemptMs = 0;
   let seen = new Set<string>();
   let sessionPrimed = false;
@@ -82,16 +87,24 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
         deps.token(),
       );
       if (disposed || mine !== generation) return;
-      const current = activeWarnings(
+      const received = activeWarnings(
         normalizeWeatherWarnings(point.warnings ?? []),
         deps.clock.now,
       );
-      const identities = new Set(current.map(weatherWarningIdentity));
-      const fresh = current.filter((warning) => !seen.has(weatherWarningIdentity(warning)));
+      confidence = point.warningAvailability;
+      fetchedAt = point.warningsFetchedAt;
+      const identities = new Set(received.map(weatherWarningIdentity));
+      const fresh = received.filter((warning) => !seen.has(weatherWarningIdentity(warning)));
       // Only currently active identities are remembered, so a warning that lapses and is later
       // reissued alerts again rather than being absorbed by a stale memory.
+      active = received;
+      if (
+        confidence !== 'fresh' ||
+        fetchedAt === undefined ||
+        deps.clock.now - fetchedAt > WARNING_REFRESH_MS
+      )
+        return;
       seen = identities;
-      active = current;
       if (fresh.length > 0 && !deps.pluginAlertActive()) {
         // The first answer of a session announces too: a gale already in effect when the app
         // opens is exactly what the watch exists to surface.
@@ -105,8 +118,8 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
       }
       sessionPrimed = true;
     } catch {
-      // A failed poll keeps the last list; the next tick retries. The panel owns richer
-      // stale-versus-unavailable messaging.
+      if (disposed || mine !== generation) return;
+      confidence = 'stale';
     }
   }
 
@@ -114,13 +127,32 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
     const now = deps.clock.now;
     const provider = deps.provider();
     const pos = deps.position();
+    const token = deps.token();
     // No provider still watches: the loader falls back to the free point-alert source, so a US
     // boat on a stock server hears about a gale too. A provider appearing or vanishing refetches.
-    if (!pos) return;
+    if (!pos) {
+      if (lastKey) {
+        generation += 1;
+        lastKey = '';
+        clearTimeout(chirpTimer);
+        deps.alarm.update(false);
+      }
+      return;
+    }
     const key = `${provider?.id ?? 'nws'} ${quantizeLatLonKey(pos, WATCH_CELL_DECIMALS)}`;
     const cadence = sessionPrimed ? WARNING_REFRESH_MS : UNPRIMED_RETRY_MS;
-    if (key === lastKey && now - lastAttemptMs < cadence) return;
+    if (key === lastKey && token === lastToken && now - lastAttemptMs < cadence) return;
+    if (key !== lastKey) {
+      active = [];
+      confidence = 'unavailable';
+      fetchedAt = undefined;
+      seen = new Set();
+      sessionPrimed = false;
+      clearTimeout(chirpTimer);
+      if (lastKey) deps.alarm.update(false);
+    }
     lastKey = key;
+    lastToken = token;
     lastAttemptMs = now;
     void refresh(provider?.id, pos, ++generation);
   });
@@ -128,10 +160,17 @@ export function createWeatherWarningsWatch(deps: WeatherWarningsWatchDeps) {
   return {
     // Active warnings, severity-sorted; the chip renders the first.
     get active(): WeatherWarning[] {
-      return active;
+      return current;
     },
     get headline(): string | undefined {
-      return active.length > 0 ? active[0].type : undefined;
+      const title = current[0]?.type;
+      if (!title) return undefined;
+      if (!deps.position()) return `${title} (last position; no fresh fix)`;
+      const age = fetchedAt === undefined ? undefined : Math.max(0, deps.clock.now - fetchedAt);
+      if (confidence !== 'fresh' || age === undefined || age > WARNING_REFRESH_MS) {
+        return `${title} (unverified${age === undefined ? '' : `, checked ${Math.floor(age / MINUTE_MS)} min ago`})`;
+      }
+      return title;
     },
     dispose(): void {
       disposed = true;

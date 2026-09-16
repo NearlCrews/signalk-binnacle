@@ -1,5 +1,35 @@
 import { expect, test } from '@playwright/test';
+import {
+  cachedArchive,
+  expectFixtureChart,
+  installChartFixture,
+  warmFixtureBaseStyle,
+} from './chart-fixtures';
 import { installMapLibreWorkerProof } from './maplibre-worker-proof';
+
+test('reloads real PMTiles chart data from IndexedDB with archive transport offline', async ({
+  page,
+  context,
+}) => {
+  const fixture = await installChartFixture(page);
+  await page.goto('./');
+  await expectFixtureChart(page);
+  await warmFixtureBaseStyle(page);
+  const cached = await cachedArchive(page);
+  expect(cached.blocks).toEqual(expect.arrayContaining([0, 1]));
+  fixture.offline = true;
+  fixture.baseOffline = true;
+  await context.setOffline(true);
+  try {
+    // Only chart descriptors remain a live fixture. The base style is served from its runtime
+    // cache, and the PMTiles transport is aborted so IndexedDB must supply the actual tile bytes.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expectFixtureChart(page);
+    expect(await cachedArchive(page)).toEqual(cached);
+  } finally {
+    await context.setOffline(false);
+  }
+});
 
 test('serves the application shell after the network goes offline', async ({ context, page }) => {
   const workerProof = await installMapLibreWorkerProof(page);

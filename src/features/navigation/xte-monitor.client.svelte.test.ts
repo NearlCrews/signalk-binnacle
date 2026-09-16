@@ -1,6 +1,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ActiveNotification } from '$entities/notifications';
+import type { UnitsSelection } from '$shared/lib';
 import { PersistedValue } from '$shared/settings';
 import { createFakeAlarmControl, createFakeStorage } from '$shared/testing';
 import { DEFAULT_XTE_LIMIT_METERS, XTE_TONE } from './xte-alarm';
@@ -25,6 +26,7 @@ function harness(options: Options) {
     xteStale: false,
     legKey: 'route-1:0' as string | undefined,
     notifications: [] as ActiveNotification[],
+    units: 'metric' as UnitsSelection,
   });
   const clock = $state({ now: 100_000 });
   const { control, events, lastTone } = createFakeAlarmControl();
@@ -43,6 +45,7 @@ function harness(options: Options) {
     muted,
     notifications: () => state.notifications,
     clock,
+    units: () => state.units,
     alarm: control,
   });
   return {
@@ -93,6 +96,14 @@ afterEach(() => {
 });
 
 describe('createXteMonitor', () => {
+  it('announces distances in the live server-selected length unit', () => {
+    const test = mountSounding();
+    expect(test.monitor.alert).toContain('150 m from the leg, past the 90 m limit');
+    test.state.units = 'imperial';
+    flushSync();
+    expect(test.monitor.alert).toContain('492 ft from the leg, past the 295 ft limit');
+  });
+
   it('lets a momentary swing pass and sounds only when the breach holds past the window', () => {
     const test = mount({ xteMeters: 0 });
     test.tick(XTE_LEG_GRACE_MS);
@@ -235,10 +246,12 @@ describe('createXteMonitor', () => {
     test.monitor.setLimitMeters(10_000);
     expect(test.monitor.limitMeters).toBe(2_000);
     test.monitor.setLimitMeters(250.4);
-    expect(test.monitor.limitMeters).toBe(250);
+    expect(test.monitor.limitMeters).toBe(250.4);
     // Garbage from a form field is dropped rather than persisted or thrown on.
     test.monitor.setLimitMeters(Number.NaN);
-    expect(test.monitor.limitMeters).toBe(250);
+    expect(test.monitor.limitMeters).toBe(250.4);
+    test.monitor.setLimitMeters(30.48);
+    expect(test.monitor.limitMeters).toBe(30.48);
   });
 
   it('silences the tone outright on stop', () => {

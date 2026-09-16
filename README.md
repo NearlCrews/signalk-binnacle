@@ -272,12 +272,19 @@ from OpenSeaMap, NASA GIBS, Open Waters Seascape, GEBCO, EMODnet, and NOAA servi
 BlueTopo, marine protected areas, and seabed infrastructure. The maritime-jurisdiction and UNESCO
 site overlays request VLIZ Marine Regions.
 
-Opening weather or enabling its optional layers can contact Open-Meteo and RainViewer. Opening tides
+Weather forecasts and optional layers can contact Open-Meteo and RainViewer. Opening tides
 can contact NOAA CO-OPS for automatic fallback, tidal-current predictions, or a manually selected
 station. These services can observe your public network address and the requested tile, map area, or
-forecast coordinates. Optional marine, weather, and tide requests are made only when the
-corresponding layer or feature is used, and cached results remain usable when a provider is
-unavailable.
+forecast coordinates. Cached results remain usable when a provider is unavailable.
+
+Weather warnings also run in the background whenever Binnacle has a fresh vessel position, even
+with the Weather panel and weather layers closed. The watch queries the detected Signal K weather
+provider and can fall back to NOAA's `api.weather.gov` point alerts. That fallback sends the vessel's
+latitude and longitude rounded to four decimal places, normally about every ten minutes, with
+additional requests after area or provider changes and retries after failures. Closing panels does
+not stop this check, and there is currently no in-app opt-out. Blocking external requests through
+your browser or network policy prevents this disclosure but also removes external warning coverage
+and can make other online charts, weather, and tide features unavailable.
 
 User-added URL charts are fetched by the browser. Binnacle rejects URLs with embedded usernames or
 passwords, removes URL fragments, redacts every query value in displays and errors, and keeps every
@@ -391,7 +398,7 @@ npm run verify     # complete non-browser local and CI gate
 npm run test:e2e:fast # Build, then run the Chromium browser checks only (no offline/PWA or WebKit coverage; use test:e2e:cross-browser or test:e2e:gate for the full spread)
 npm run test:e2e:cross-browser # Build, then run Chromium, PWA, and WebKit checks
 npm run verify:ci  # full pull request gate, including an Unreleased development version
-npm run verify:release # full gate, cross-browser E2E, package checks, and runtime audit
+npm run verify:release # full gate, cross-browser E2E, package checks, and both dependency audits
 ```
 
 After `npm run hooks`, git runs `verify:commit` before each commit and `verify:browser` before each

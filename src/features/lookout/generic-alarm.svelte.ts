@@ -108,11 +108,16 @@ export class GenericAlarm {
 
   // Silence the alarms sounding right now on this device only, leaving the alerts listed and other
   // stations sounding. The escape hatch for a chatty producer when the server cannot silence.
-  muteActiveHere(): void {
+  muteActiveHere(): readonly ActiveNotification[] {
+    const newlyMuted: ActiveNotification[] = [];
     for (const n of this.#last) {
-      if (isAudibleAlarmNotification(n)) this.#mutedAt.set(n.path, n.activation);
+      if (isAudibleAlarmNotification(n) && this.#mutedAt.get(n.path) !== n.activation) {
+        this.#mutedAt.set(n.path, n.activation);
+        newlyMuted.push(n);
+      }
     }
     this.update(this.#last);
+    return newlyMuted;
   }
 
   // Silence outright (teardown). The next update starts the tone again if an alarm is still up.

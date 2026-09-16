@@ -1,13 +1,9 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { AuthController } from '$shared/signalk';
 import LogbookPanel from './LogbookPanel.svelte';
 import type { LogbookController } from './logbook-controller.svelte';
 
-function renderPanel(
-  controllerOverrides: Partial<LogbookController> = {},
-  authOverrides: Partial<AuthController> = {},
-): string {
+function renderPanel(controllerOverrides: Partial<LogbookController> = {}): string {
   const controller: LogbookController = {
     availability: 'available',
     entries: [],
@@ -25,15 +21,8 @@ function renderPanel(
     clearError: vi.fn(),
     ...controllerOverrides,
   };
-  const auth = {
-    writeBlocked: false,
-    upgrading: false,
-    upgradeOutcome: undefined,
-    requestWriteAccess: vi.fn(async () => undefined),
-    ...authOverrides,
-  } as AuthController;
   return render(LogbookPanel, {
-    props: { controller, auth, onClose: vi.fn() },
+    props: { controller, origin: 'https://boat.test', onClose: vi.fn() },
   }).body.replaceAll(/\s+/g, ' ');
 }
 
@@ -56,8 +45,10 @@ describe('LogbookPanel', () => {
 
   it('separates refused access from a transport failure', () => {
     const refused = renderPanel({ availability: 'unauthorized' });
-    expect(refused).toContain('Reading the logbook needs read and write access');
-    expect(refused).toContain('Request read and write access');
+    expect(refused).toContain('requires a Signal K administrator browser session');
+    expect(refused).toContain('Sign in to Signal K');
+    expect(refused).toContain('/admin/#/login?redirect=');
+    expect(refused).not.toContain('Request read and write access');
 
     const failed = renderPanel({ availability: 'error' });
     expect(failed).toContain('Could not reach the logbook. Check the connection.');
@@ -125,10 +116,10 @@ describe('LogbookPanel', () => {
     expect(html).toContain('Engine on.');
   });
 
-  it('teaches the write gate through the shared access note', () => {
-    const html = renderPanel({}, { writeBlocked: true });
-    expect(html).toContain('new entries cannot be logged');
-    expect(html).toContain('Request read and write access');
+  it('does not imply device-token approval grants administrator access', () => {
+    const html = renderPanel();
+    expect(html).not.toContain('Request read and write access');
+    expect(html).toContain('Add entry');
   });
 
   it('states that the server captures conditions, so no one expects Binnacle to', () => {

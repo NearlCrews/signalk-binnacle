@@ -603,9 +603,15 @@ test('radar discovery opens a hydrated provider-driven controls panel', async ({
   });
   await expectInsideViewport(panel, page);
   await panel.getByRole('button', { name: 'Transmit', exact: true }).click();
-  const transmitConfirm = panel.getByRole('group', { name: 'Start transmitting radar energy?' });
+  const transmitConfirm = panel.getByRole('group', {
+    name: 'Start transmitting radar energy from Cabin Halo?',
+    exact: true,
+  });
   await expect(transmitConfirm).toBeVisible();
+  expect(radarWrites).toHaveLength(3);
   await transmitConfirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(transmitConfirm).toHaveCount(0);
+  expect(radarWrites).toHaveLength(3);
   await panel.getByRole('button', { name: 'Edit guard zone' }).click();
   const endAngle = panel.getByRole('spinbutton', { name: 'End angle' });
   await endAngle.fill('60');

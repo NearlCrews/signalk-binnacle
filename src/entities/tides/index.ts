@@ -15,7 +15,6 @@ export type {
   TideSelectionSnapshot,
   TideStation,
   TideStationKind,
-  TideStationLoadFailure,
   TideStationSelection,
   TidesSource,
 } from './tides-types';

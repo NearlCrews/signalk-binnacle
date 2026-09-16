@@ -523,36 +523,41 @@ describe('createMarineRadarController', () => {
     vi.useRealTimers();
   });
 
-  it('escalates a stale stream into a forced close and backed-off reopen', async () => {
-    vi.useFakeTimers();
-    const testDocument = new EventTarget();
-    Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
-    vi.stubGlobal('document', testDocument);
-    stubRadarFetch({ radars: [{ ...fakeRadar, status: 'transmit' }] });
-    const controller = makeController({ origin: 'http://pi' });
-    await controller.start();
-    controller.store.setOperationalStatus('transmit');
-    controller.layer.setVisible(fakeOverlayContext(createFakeMap()), true);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(workerMock.open).toHaveBeenCalledOnce();
+  it.each([true, false])(
+    'escalates a quiet stream, including before first spokes (previously live: %s)',
+    async (previouslyLive) => {
+      vi.useFakeTimers();
+      const testDocument = new EventTarget();
+      Object.defineProperty(testDocument, 'hidden', { configurable: true, value: false });
+      vi.stubGlobal('document', testDocument);
+      stubRadarFetch({ radars: [{ ...fakeRadar, status: 'transmit' }] });
+      const controller = makeController({ origin: 'http://pi' });
+      await controller.start();
+      controller.store.setOperationalStatus('transmit');
+      controller.layer.setVisible(fakeOverlayContext(createFakeMap()), true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(workerMock.open).toHaveBeenCalledOnce();
 
-    // A half-open socket: spokes flowed once, then stopped, and no close event ever fires.
-    controller.store.lastSpokeAt = Date.now();
-    controller.store.setStatus('live');
-    await vi.advanceTimersByTimeAsync(6_000);
-    expect(controller.store.status).toBe('stale');
+      // A half-open socket: spokes flowed once, then stopped, and no close event ever fires.
+      if (previouslyLive) {
+        controller.store.lastSpokeAt = Date.now();
+        controller.store.setStatus('live');
+      }
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(controller.store.status).toBe('stale');
 
-    // Past the escalation window the freshness watch forces the close the transport never
-    // signaled and hands the reopen to the backoff.
-    const closesBefore = workerMock.close.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(workerMock.close.mock.calls.length).toBeGreaterThan(closesBefore);
-    expect(controller.store.status).toBe('error');
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(workerMock.open.mock.calls.length).toBeGreaterThan(1);
-    await controller.dispose();
-    vi.useRealTimers();
-  });
+      // Past the escalation window the freshness watch forces the close the transport never
+      // signaled and hands the reopen to the backoff.
+      const closesBefore = workerMock.close.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(workerMock.close.mock.calls.length).toBeGreaterThan(closesBefore);
+      expect(controller.store.status).toBe('error');
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(workerMock.open.mock.calls.length).toBeGreaterThan(1);
+      await controller.dispose();
+      vi.useRealTimers();
+    },
+  );
 
   it('leaves the waiting status to its own label rather than repeating it as detail', async () => {
     const testDocument = new EventTarget();
@@ -683,7 +688,8 @@ describe('createMarineRadarController', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(workerMock.open).toHaveBeenCalledOnce();
 
-      await vi.advanceTimersByTimeAsync(30_000);
+      // Stay below the independent first-spoke watchdog, which now also recovers silent opens.
+      await vi.advanceTimersByTimeAsync(5_000);
       expect(workerMock.open).toHaveBeenCalledTimes(2);
     } finally {
       await controller.dispose();

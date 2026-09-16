@@ -1,7 +1,7 @@
 import { createRetryableLazyUiLoader } from '$shared/lib';
 
 export { default as AlarmStrip } from './AlarmStrip.svelte';
-export type { AlarmLog, AlarmLogEntry, AlarmLogKind } from './alarm-log.svelte';
+export type { AlarmLog, AlarmLogEntry, AlarmLogEvent, AlarmLogKind } from './alarm-log.svelte';
 export { alarmChronologyFact, alarmLogTail, createAlarmLog } from './alarm-log.svelte';
 export { type AlarmVolumeSetting, createAlarmVolume } from './alarm-volume';
 export { CollisionMute } from './collision-mute.svelte';

@@ -9,6 +9,7 @@ export interface TrackStore<T> {
   all(): Promise<T[]>;
   append(item: T): Promise<void>;
   clear(): Promise<void>;
+  replaceAll(items: readonly T[]): Promise<void>;
 }
 
 const DB_NAME = 'binnacle';
@@ -30,6 +31,9 @@ function memoryStore<T>(cap = Number.POSITIVE_INFINITY): TrackStore<T> {
     },
     clear: async () => {
       items = [];
+    },
+    replaceAll: async (next) => {
+      items = next.slice(-cap);
     },
   };
 }
@@ -70,5 +74,19 @@ export function createTrackStore<T>(
         () => run('readwrite', (s) => s.clear()),
         () => memory.clear(),
       ),
+    replaceAll: (items) => {
+      const snapshot = items.slice();
+      return idb.write(
+        () =>
+          run('readwrite', (s) => {
+            // Queue every request synchronously on one transaction. A failure or interrupted
+            // commit retains the old log instead of committing a cleared or partial history.
+            let request: IDBRequest = s.clear();
+            for (const item of snapshot) request = s.add(item);
+            return request;
+          }),
+        () => memory.replaceAll(snapshot),
+      );
+    },
   };
 }

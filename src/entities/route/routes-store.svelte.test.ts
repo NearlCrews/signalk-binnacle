@@ -12,6 +12,12 @@ const route = (id: string): Route => ({
 });
 
 describe('RouteStore', () => {
+  it('accepts a metadata-only refresh so a later edit cannot overwrite another client changes', () => {
+    const store = new RouteStore();
+    store.setRoutes([{ ...route('a'), resourceExtras: { description: 'Old' } }]);
+    store.setRoutes([{ ...route('a'), resourceExtras: { description: 'Updated' } }]);
+    expect(store.routeById('a')?.resourceExtras?.description).toBe('Updated');
+  });
   it('sets the loaded routes and bumps the version', () => {
     const s = new RouteStore();
     const v0 = s.version;

@@ -90,12 +90,12 @@ describe('logbook controller', () => {
     expect(controller.availability).toBe('unauthorized');
   });
 
-  it('refuses a write while blocked, without a request', async () => {
+  it('allows an administrator-session write regardless of device-token access', async () => {
     const mock = stubFetch({ ok: true, status: 201 });
     const { controller } = controllerWith({ writeBlocked: () => true });
-    await expect(controller.addEntry('Anchor down.')).resolves.toBe(false);
-    expect(controller.error).toContain('Read-only access');
-    expect(mock).not.toHaveBeenCalled();
+    await expect(controller.addEntry('Anchor down.')).resolves.toBe(true);
+    expect(controller.error).toBeUndefined();
+    expect(mock).toHaveBeenCalled();
   });
 
   it('refuses empty text with its own message', async () => {
@@ -117,13 +117,14 @@ describe('logbook controller', () => {
     expect(controller.suggestion).toBeUndefined();
   });
 
-  it('keeps the suggestion and asks for access again when the write is refused', async () => {
+  it('keeps the suggestion and requires administrator sign-in when the write is refused', async () => {
     stubFetch({ ok: false, status: 403 });
     const { controller, requestWriteAccess } = controllerWith();
     controller.offerEntry('Anchor down.');
     await expect(controller.addEntry('Anchor down.')).resolves.toBe(false);
-    expect(controller.error).toContain('Signal K refused the write');
-    expect(requestWriteAccess).toHaveBeenCalled();
+    expect(controller.error).toContain('Sign in to Signal K as an administrator');
+    expect(controller.availability).toBe('unauthorized');
+    expect(requestWriteAccess).not.toHaveBeenCalled();
     expect(controller.suggestion?.text).toBe('Anchor down.');
   });
 

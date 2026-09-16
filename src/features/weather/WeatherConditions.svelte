@@ -1,6 +1,6 @@
 <script lang="ts">
 import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-import { onDestroy } from 'svelte';
+import { onDestroy, onMount, untrack } from 'svelte';
 import type { UnitsStore } from '$entities/units';
 import type { WeatherStore } from '$entities/weather';
 import { quantizeLatLonKey } from '$shared/geo';
@@ -101,6 +101,29 @@ let seq = 0;
 let warningSeq = 0;
 let loadKey = '';
 let warningsAttemptedAt = 0;
+let conditionsAttemptedAt = 0;
+let conditionsPending = false;
+let acceptedToken: string | undefined;
+let foreground = $state(true);
+const CONDITIONS_REFRESH_MS = 10 * MINUTE_MS;
+const CONDITIONS_RETRY_MS = MINUTE_MS;
+
+onMount(() => {
+  const update = () => {
+    foreground = document.visibilityState !== 'hidden';
+    refreshConditions();
+  };
+  document.addEventListener('visibilitychange', update);
+  window.addEventListener('focus', update);
+  return () => {
+    document.removeEventListener('visibilitychange', update);
+    window.removeEventListener('focus', update);
+  };
+});
+onDestroy(() => {
+  seq += 1;
+  warningSeq += 1;
+});
 
 // providerName alone remains accepted while the host migrates from its former id-in-name contract.
 const effectiveProviderId = $derived(providerId ?? providerName);
@@ -120,11 +143,14 @@ const parsedPos = $derived<[number, number] | undefined>(
   posKey ? (posKey.split(',').map(Number) as [number, number]) : undefined,
 );
 
-// Provider data: fetch only when the rounded position or the provider changes, not on every scrub
-// or GPS jitter; the deriveds below re-pick the step for the selected time without a request.
+// Context changes fetch immediately. A stationary open panel refreshes on a bounded cadence;
+// focus is an opportunity to refresh, not permission to bypass that cadence.
 $effect(() => {
+  void clock.now;
+  void foreground;
   const pos = parsedPos;
   const provider = effectiveProviderId;
+  const currentToken = token;
   // Without a position there is nothing to ask for: clear any stale answers (a provider that
   // disappears at runtime must not keep its warnings on screen).
   if (!pos) {
@@ -133,14 +159,28 @@ $effect(() => {
   }
   const [lat, lon] = pos;
   const requestKey = pointConditionsKey(provider, lat, lon);
-  if (requestKey === loadKey) return;
+  if (requestKey === loadKey && currentToken === acceptedToken) {
+    untrack(refreshConditions);
+    return;
+  }
+  const changedLocation = requestKey !== loadKey;
   loadKey = requestKey;
-  clearForRequest(requestKey);
+  acceptedToken = currentToken;
+  if (changedLocation) clearForRequest(requestKey);
   // No provider still gets the free point-alert fallback: warnings alone ride the providerless
   // request while conditions stay with the grid.
-  if (provider) void loadProvider(provider, lat, lon);
+  if (provider) untrack(() => void loadProvider(provider, lat, lon));
   else void refreshWarnings(undefined, lat, lon, requestKey);
 });
+
+function refreshConditions(): void {
+  const pos = parsedPos;
+  const provider = effectiveProviderId;
+  if (!foreground || !pos || !provider || conditionsPending) return;
+  const interval = loadError ? CONDITIONS_RETRY_MS : CONDITIONS_REFRESH_MS;
+  if (Date.now() - conditionsAttemptedAt < interval) return;
+  void loadProvider(provider, pos[0], pos[1]);
+}
 
 function clearForRequest(requestKey: string): void {
   seq += 1;
@@ -154,6 +194,8 @@ function clearForRequest(requestKey: string): void {
   observationStatus = 'empty';
   forecastStatus = 'empty';
   warningsAttemptedAt = 0;
+  conditionsPending = false;
+  loading = false;
   loadError = undefined;
 }
 
@@ -166,6 +208,7 @@ function clear(): void {
   warningsFetchedAt = undefined;
   activeRequestKey = '';
   loadKey = '';
+  conditionsPending = false;
   observationStatus = 'empty';
   forecastStatus = 'empty';
   warningSeq += 1;
@@ -175,26 +218,46 @@ function clear(): void {
 
 async function loadProvider(provider: string, lat: number, lon: number): Promise<void> {
   const mine = ++seq;
+  const warningMine = ++warningSeq;
+  conditionsAttemptedAt = Date.now();
+  warningsAttemptedAt = conditionsAttemptedAt;
+  conditionsPending = true;
   loading = true;
   loadError = undefined;
   try {
     const point = await pointLoader.load(origin, provider, lat, lon, token);
     if (mine !== seq || point.requestKey !== activeRequestKey) return;
-    obsData = point.obs;
-    seriesData = point.series ? normalizeSignalKForecasts(point.series) : undefined;
+    if (point.observationStatus !== 'failure' || point.obs) obsData = point.obs;
+    if (point.forecastStatus !== 'failure' || point.series) {
+      seriesData = point.series ? normalizeSignalKForecasts(point.series) : undefined;
+    }
     observationStatus = point.observationStatus;
     forecastStatus = point.forecastStatus;
-    warnings = normalizeWeatherWarnings(point.warnings ?? []);
-    warningAvailability = point.warningAvailability;
-    warningsFetchedAt = point.warningsFetchedAt;
+    if (warningMine === warningSeq) {
+      warnings = normalizeWeatherWarnings(point.warnings ?? []);
+      warningAvailability = point.warningAvailability;
+      warningsFetchedAt = point.warningsFetchedAt;
+    }
+    const failed = [
+      point.observationStatus === 'failure' ? 'observations' : undefined,
+      point.forecastStatus === 'failure' ? 'forecasts' : undefined,
+    ].filter(Boolean);
+    if (failed.length > 0) {
+      loadError = `Weather ${failed.join(' and ')} could not refresh. Last accepted data, when available, stays visible. Check the connection or provider access, then retry.`;
+    }
   } catch {
     if (mine !== seq) return;
     observationStatus = 'failure';
     forecastStatus = 'failure';
-    warningAvailability = 'unavailable';
+    if (warningMine === warningSeq) {
+      warningAvailability = warnings.length > 0 ? 'stale' : 'unavailable';
+    }
     loadError = 'Weather conditions could not be loaded.';
   } finally {
-    if (mine === seq) loading = false;
+    if (mine === seq) {
+      loading = false;
+      conditionsPending = false;
+    }
   }
 }
 
@@ -203,8 +266,7 @@ function retryProvider(): void {
   const provider = effectiveProviderId;
   if (!pos || !provider) return;
   const [lat, lon] = pos;
-  const requestKey = pointConditionsKey(provider, lat, lon);
-  clearForRequest(requestKey);
+  if (conditionsPending) return;
   void loadProvider(provider, lat, lon);
 }
 
@@ -214,8 +276,8 @@ $effect(() => {
   const now = clock.now;
   const pos = parsedPos;
   const provider = effectiveProviderId;
-  if (!pos || !activeRequestKey || warningsFetchedAt === undefined) return;
-  if (now - Math.max(warningsFetchedAt, warningsAttemptedAt) < WARNING_REFRESH_MS) return;
+  if (!foreground || !pos || !activeRequestKey || conditionsPending) return;
+  if (now - Math.max(warningsFetchedAt ?? 0, warningsAttemptedAt) < WARNING_REFRESH_MS) return;
   const [lat, lon] = pos;
   warningsAttemptedAt = now;
   void refreshWarnings(provider, lat, lon, activeRequestKey);
@@ -228,6 +290,7 @@ async function refreshWarnings(
   requestKey: string,
 ): Promise<void> {
   const mine = ++warningSeq;
+  warningsAttemptedAt = Date.now();
   try {
     const point = await pointLoader.loadWarnings(origin, provider, lat, lon, token);
     if (mine !== warningSeq || requestKey !== activeRequestKey || point.requestKey !== requestKey)
@@ -330,7 +393,9 @@ const untilLabel = (endTime: string): string => formatDayClock(Date.parse(endTim
   {:else}
     {#if loadError}
       <p class="alert-note" role="alert">{loadError}</p>
-      <button type="button" class="btn btn-ghost" onclick={retryProvider}>Retry</button>
+      <button type="button" class="btn btn-ghost" disabled={loading} onclick={retryProvider}>
+        Retry
+      </button>
     {/if}
     {#if sortedWarnings.length > 0}
       <ul class="warnings bare-list" role="alert">

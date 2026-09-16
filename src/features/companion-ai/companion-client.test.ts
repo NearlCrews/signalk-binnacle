@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { expectBearerAuth, stubFetch } from '$shared/testing';
-import { fetchCompanionReports, MAX_COMPANION_ANALYZERS, runAnalyzer } from './companion-client';
+import {
+  COMPANION_RUN_TIMEOUT_MS,
+  fetchCompanionReports,
+  MAX_COMPANION_ANALYZERS,
+  runAnalyzer,
+} from './companion-client';
 
 const REPORT_TIME = '2026-08-28T10:00:00.000Z';
 
@@ -10,6 +15,7 @@ function reportNode(message: string, state = 'nominal', timestamp: string = REPO
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('fetchCompanionReports', () => {
@@ -90,10 +96,16 @@ describe('fetchCompanionReports', () => {
 });
 
 describe('runAnalyzer', () => {
-  it('PUTs the run path and maps a pending ack to started', async () => {
-    const mock = stubFetch({ ok: true, status: 202, body: { state: 'PENDING' } });
-    const ack = await runAnalyzer('http://sk', 'tok', 'maintenance');
-    expect(ack).toEqual({ kind: 'started', message: undefined });
+  it('PUTs once and follows a pending run through its terminal result', async () => {
+    vi.useFakeTimers();
+    const mock = stubFetch((url) =>
+      url.endsWith('/run')
+        ? { ok: true, status: 202, body: { state: 'PENDING', href: '/signalk/v1/requests/one' } }
+        : { ok: true, body: { state: 'COMPLETED', statusCode: 200, message: 'nothing to report' } },
+    );
+    const running = runAnalyzer('http://sk', 'tok', 'maintenance');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await running).toEqual({ kind: 'completed', message: 'nothing to report' });
     const [url, init] = mock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       'http://sk/signalk/v1/api/vessels/self/plugins/openrouter-companion/maintenance/run',
@@ -101,6 +113,55 @@ describe('runAnalyzer', () => {
     expect(init.method).toBe('PUT');
     expect(JSON.parse(init.body as string)).toEqual({ value: {} });
     expectBearerAuth(init, 'tok');
+    expect(mock.mock.calls[1]?.[0]).toBe('http://sk/signalk/v1/requests/one');
+    expect(mock.mock.calls[1]?.[1]).toMatchObject({ cache: 'no-store', redirect: 'error' });
+  });
+
+  it.each([429, 409, 503, 500])(
+    'surfaces terminal body status %i even when the polling HTTP response is 200',
+    async (statusCode) => {
+      vi.useFakeTimers();
+      stubFetch((url) =>
+        url.endsWith('/run')
+          ? { ok: true, body: { state: 'PENDING', href: '/signalk/v1/requests/one' } }
+          : { ok: true, body: { state: 'COMPLETED', statusCode, message: 'server explanation' } },
+      );
+      const running = runAnalyzer('http://sk', 'tok', 'maintenance');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await running).toEqual({ kind: 'refused', message: 'server explanation' });
+    },
+  );
+
+  it.each([
+    undefined,
+    '//attacker/steal',
+    '/plugins/unrelated',
+    '/signalk/v1/requests/one?redirect=evil',
+  ])('never forwards auth to an unsafe or missing status URL %s', async (href) => {
+    const mock = stubFetch({ ok: true, body: { state: 'PENDING', href } });
+    expect((await runAnalyzer('http://sk', 'tok', 'maintenance')).kind).toBe('unconfirmed');
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds a run that never completes and cleans up after cancellation', async () => {
+    vi.useFakeTimers();
+    const mock = stubFetch({
+      ok: true,
+      body: { state: 'PENDING', href: '/signalk/v1/requests/one' },
+    });
+    const running = runAnalyzer('http://sk', 'tok', 'maintenance');
+    await vi.advanceTimersByTimeAsync(COMPANION_RUN_TIMEOUT_MS);
+    expect((await running).kind).toBe('unconfirmed');
+    const calls = mock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mock).toHaveBeenCalledTimes(calls);
+
+    const controller = new AbortController();
+    const canceled = runAnalyzer('http://sk', 'tok', 'maintenance', controller.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    expect((await canceled).kind).toBe('unconfirmed');
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('carries the server ack message through completed and refused outcomes', async () => {

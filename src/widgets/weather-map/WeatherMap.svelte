@@ -143,6 +143,7 @@ const MAX_PIXEL_RATIO = 1.5;
 const STEP_MS = 3 * HOUR_MS;
 // Debounce the forecast refetch so a pan settles into one request, not one per moveend tick.
 const FETCH_DEBOUNCE_MS = 400;
+const REFRESH_CHECK_MS = 5 * MINUTE_MS;
 // How long the zoom-cap note stays up after a pinch into the resolution cap.
 const ZOOM_NOTE_DURATION_MS = 5000;
 
@@ -175,6 +176,7 @@ let zoomNoteShown = false;
 let zoomNoteTimer: ReturnType<typeof setTimeout> | undefined;
 
 let fetchTimer: ReturnType<typeof setTimeout> | undefined;
+let lastFetchAttemptAt = 0;
 
 // The point-tap readout cluster: owns the tapped-point conditions, the provider upgrade, and the
 // dismiss timer. The grid sample only shows when at least one layer is on.
@@ -311,6 +313,11 @@ const playback = createForecastPlayback(
 const FORECAST_OPTS = { maxCells: 200, forecastDays: 5 };
 function loadCurrentWeather(currentItems = items, force = false): void {
   if (destroyed || !getBounds || currentItems.every((item) => !item.visible)) return;
+  if (fetchTimer) {
+    clearTimeout(fetchTimer);
+    fetchTimer = undefined;
+  }
+  lastFetchAttemptAt = Date.now();
   const visible = (id: string) => currentItems.some((item) => item.id === id && item.visible);
   void loader.load(
     store,
@@ -357,9 +364,16 @@ $effect(() => {
   radarRequested = requestOnRisingEdge(radarActive, radarRequested);
 });
 
-// Fetch on first open if a layer is on but no grid is loaded yet.
+// Recheck current coverage periodically. The shared loader owns source-specific cache ages and
+// failure cooldowns, so a refresh check never forces an unnecessary provider request.
 $effect(() => {
-  if (activeCount > 0 && !store.grid) scheduleFetch();
+  const now = clock.now;
+  if (
+    activeCount > 0 &&
+    document.visibilityState !== 'hidden' &&
+    now - lastFetchAttemptAt >= REFRESH_CHECK_MS
+  )
+    scheduleFetch();
 });
 
 // Recolor when the theme prop or the paint variant changes; the initial recolor runs inline once
@@ -369,6 +383,15 @@ $effect(() => {
 });
 
 onMount(() => {
+  const onFocus = () => {
+    if (
+      document.visibilityState !== 'hidden' &&
+      Date.now() - lastFetchAttemptAt >= REFRESH_CHECK_MS
+    )
+      scheduleFetch();
+  };
+  window.addEventListener('focus', onFocus, { signal: mapKeyListeners.signal });
+  document.addEventListener('visibilitychange', onFocus, { signal: mapKeyListeners.signal });
   mapHandle = createThemedMap({
     container,
     accessibleName: 'Weather forecast map',
@@ -430,7 +453,7 @@ onMount(() => {
       // The mount effect can run before MapLibre has loaded and supplied getBounds. Load directly
       // from the registered snapshot so the first forecast never depends on an incidental pan or a
       // derived layer count settling after this callback.
-      if (!store.grid) loadCurrentWeather(view.items);
+      loadCurrentWeather(view.items);
       // Pinching into the cap reads as a broken map without a word of explanation, once per open.
       map.on('zoomend', () => {
         if (zoomNoteShown || map.getZoom() < MAX_ZOOM - 0.05) return;

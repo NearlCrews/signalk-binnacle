@@ -193,6 +193,11 @@ source, and surrounding traffic before relying on it.
   a wrapped row. One alarm sounds at
   a time through a single audio authority: man overboard and an escalating collision danger
   interleave at the top, lower alarms rotate with bounded reminders, and courtesy tones yield.
+  **Alarms this session** combines generic notifications with dedicated MOB, collision, anchor,
+  shallow-water, and off-course events. It retains source identity and observation time, and records
+  accepted acknowledgments and device mutes without inventing success for failed server requests.
+  Lost monitoring and a transfer to server-owned alarming are status events, not proof that a
+  hazard cleared. A handoff snapshot includes a bounded summary of the latest entries.
 - **Watch handoff** takes a timestamped review-status snapshot for the change of watch: fix and
   source age, course with cross-track error and a basis-qualified time to go, raised alarms and
   the collision mute expiry, the top CPA and TCPA contact with assessment health, depth watch
@@ -342,7 +347,7 @@ source, and surrounding traffic before relying on it.
   control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
   since tapping a tile is the pin control.
 - Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
-  chip, the depth chip, a radar-trouble chip, or either alarm-audio chip shows its explanation as a
+  chip, the depth chip, or a radar-trouble chip shows its explanation as a
   transient note above the strip. Waiting for GPS carries a Help action, and the anchor chip opens
   Anchor watch. A chip that carries an action keeps it on the same row as its label, never stacked
   beneath it, so one degraded state costs the chart one row and not two.

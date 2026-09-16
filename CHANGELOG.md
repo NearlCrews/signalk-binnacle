@@ -58,7 +58,11 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Changed
 
-- MapLibre GL moves to 6.6.0 and the toolchain to its current releases across the board.
+- MapLibre GL moves to 6.10.0, and compatible toolchain updates retain the Node 22.18 floor.
+- The static webapp keeps browser libraries in build dependencies, and distributed assets include
+  full third-party license notices for the app, fonts, workers, and service worker.
+- The network privacy guidance explicitly discloses background vessel-position requests for weather
+  warnings, including when the Weather panel and layers are closed.
 - The offline service worker is now built with Serwist instead of Workbox. Caching behavior,
   cache names, and the prompt-before-reload update flow are unchanged, cached charts and tiles
   survive the upgrade, the retired Workbox precache is cleaned up automatically, and the very
@@ -73,6 +77,29 @@ All notable changes to Binnacle are documented here. The format follows
 
 ### Fixed
 
+- Delayed and replayed telemetry retain their measurement time, so receiving old data cannot make a
+  safety reading look fresh. Reconnect arbitration uses a separate transport receipt time.
+- Connection details report Connecting until the Signal K stream actually opens.
+- Autopilot and radar confirmations stay tied to the device and command context they describe, and
+  an unknown or lost autopilot state no longer looks like a known standby state.
+- Collision assessment includes stationary-state AIS targets while underway and escalates across
+  every dangerous contact instead of considering only the nearest one.
+- Blank safety-field edits no longer become zero, navigation settings follow server units, and
+  route edits preserve server metadata and waypoint references.
+- Offline chart reads keep PMTiles archive revisions consistent, route coverage uses available
+  detail and invalidates on relevant changes, and unsupported vector charts do not appear active.
+- Weather and tide failures expose recovery, old warning and barometer data expire or are qualified,
+  and reopening Weather refreshes the current viewport.
+- Watch handoff synchronization no longer retries continuously after a failed save. Alarm history
+  records known outcomes and distinguishes lost monitoring from a cleared hazard. Accepted handoff
+  snapshots survive older in-flight reads, and cleared or superseded warnings leave the speech queue.
+- A close-quarters collision escalation exits history Playback even after an earlier acknowledgment.
+- The logbook follows its provider's authorization contract, retains the newest bounded entries,
+  and preserves edits made during a save. Advisor runs remain pending through asynchronous completion.
+- Operational controls retain their touch targets and hazard colors, and emergency actions remain
+  reachable while Data trends is open on a phone.
+- Compiler warnings now fail the quality gate, workflow checks enforce the npm bootstrap separately
+  in each job, and the development-only TOML parser uses a patched version.
 - The nautical-imperial-uk unit preset no longer renders Fahrenheit and inches of mercury, and
   psi and kilometers per hour are now expressible.
 - The dense-fog risk cue can actually fire on a stock server: the free forecast now requests

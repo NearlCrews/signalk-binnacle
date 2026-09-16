@@ -30,6 +30,37 @@ afterEach(() => {
 });
 
 describe('companion AI controller', () => {
+  it('cancels outstanding runs on disposal and ignores their late result', async () => {
+    let finish: ((ack: RunAnalyzerAck) => void) | undefined;
+    const run = vi.fn(
+      (
+        _origin: string,
+        _token: string | undefined,
+        _id: string,
+        _signal?: AbortSignal,
+      ): Promise<RunAnalyzerAck> =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const fetchReports = vi.fn(
+      async (): Promise<CompanionReportsResult> => ({ state: 'ok', reports: [] }),
+    );
+    const controller = createCompanionAiController({
+      origin: () => 'http://sk',
+      token: () => 'tok',
+      run,
+      fetchReports,
+    });
+    const pending = controller.runNow('health');
+    controller.dispose();
+    expect(run.mock.calls[0]?.[3]?.aborted).toBe(true);
+    finish?.({ kind: 'completed' });
+    await pending;
+    expect(controller.busyAnalyzerIds.size).toBe(0);
+    expect(controller.ackNoteFor('health')).toBeUndefined();
+    expect(fetchReports).not.toHaveBeenCalled();
+  });
   it('hydrates newest first and reports availability', async () => {
     const controller = controllerWith({
       fetchReports: async () => ({
@@ -106,6 +137,7 @@ describe('companion AI controller', () => {
         }),
     );
     const controller = controllerWith({ run });
+    controller.start();
     const running = controller.runNow('health');
     expect(controller.busyAnalyzerIds.has('health')).toBe(true);
     void controller.runNow('health');
@@ -119,6 +151,33 @@ describe('companion AI controller', () => {
     );
     await vi.advanceTimersByTimeAsync(ACK_NOTE_MS);
     expect(controller.ackNoteFor('health')).toBeUndefined();
+    controller.dispose();
+  });
+
+  it('keeps pending runs serialized across panel closes and shows the final result on reopening', async () => {
+    let finish!: (ack: RunAnalyzerAck) => void;
+    const run = vi.fn(
+      (): Promise<RunAnalyzerAck> =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const controller = controllerWith({ run });
+    controller.start();
+    const pending = controller.runNow('health');
+    controller.stop();
+    await controller.runNow('health');
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(controller.busyAnalyzerIds.has('health')).toBe(true);
+    finish({ kind: 'refused', message: 'daily budget exhausted' });
+    await pending;
+    await vi.advanceTimersByTimeAsync(ACK_NOTE_MS * 2);
+    expect(controller.ackNoteFor('health')).toContain('daily budget exhausted');
+    controller.start();
+    expect(controller.ackNoteFor('health')).toContain('daily budget exhausted');
+    await vi.advanceTimersByTimeAsync(ACK_NOTE_MS);
+    expect(controller.ackNoteFor('health')).toBeUndefined();
+    controller.dispose();
   });
 
   it('refreshes after a synchronously completed run so a fresh report lands now', async () => {

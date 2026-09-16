@@ -30,6 +30,33 @@ function wp(latitude: number, longitude: number, name?: string): RouteWaypoint {
 const equatorRoute = [wp(0, 0), wp(0, 1)];
 
 describe('checkRouteCoverage', () => {
+  it.each([
+    { sourceIds: ['depth-gebco'], unavailableSourceIds: [], detailShort: true },
+    {
+      sourceIds: [BASEMAP_SOURCE_ID],
+      unavailableSourceIds: [BASEMAP_SOURCE_ID],
+      detailShort: false,
+    },
+    {
+      sourceIds: ['depth-gebco', BASEMAP_SOURCE_ID],
+      unavailableSourceIds: [BASEMAP_SOURCE_ID],
+      detailShort: true,
+    },
+  ])(
+    'requires an available source at native harbor detail: %j',
+    ({ sourceIds, unavailableSourceIds, detailShort }) => {
+      const report = checkRouteCoverage({
+        waypoints: equatorRoute,
+        regions: [region([-1, -1, 2, 1], { sourceIds, unavailableSourceIds, maxzoom: 15 })],
+        corridorNm: 1,
+        detail: 'harbor',
+      });
+      expect(report.verdict).toBe('partial');
+      expect(detailShort ? report.detailShortCount : report.uncoveredCount).toBe(
+        report.sampleCount,
+      );
+    },
+  );
   it('reports complete when one ready area holds the whole corridor at the detail', () => {
     const report = checkRouteCoverage({
       waypoints: equatorRoute,

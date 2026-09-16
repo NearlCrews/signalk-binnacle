@@ -154,7 +154,9 @@ export function createRasterOverlay(source: RasterOverlaySource, band: ZBand): O
     supportsOpacity: true,
     defaultVisible: source.defaultVisible ?? false,
     defaultOpacity: source.defaultOpacity ?? 1,
-    chartCoverage: source.chartCoverage,
+    chartCoverage: source.chartCoverage
+      ? { ...source.chartCoverage, sourceIds: [sourceId] }
+      : undefined,
     layerIds: [layerId],
     add(ctx) {
       if (!ctx.map.getSource(sourceId)) {

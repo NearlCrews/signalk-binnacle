@@ -28,7 +28,7 @@ export default defineConfig({
     serviceWorkers: 'block',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
-    // Recording video for all 89 tests costs ffmpeg encoding on every green gate that then keeps
+    // Recording video for every test costs ffmpeg encoding on every green gate that then keeps
     // nothing; locally a failure still leaves a screenshot and can be re-run with --trace on.
     video: process.env.CI ? 'retain-on-failure' : 'off',
   },
@@ -80,6 +80,12 @@ export default defineConfig({
       name: 'webkit-ui',
       testMatch: /ui-quality\.spec\.ts/,
       use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'webkit-live-safety',
+      testMatch: [/mariner-helm\.spec\.ts/, /operational-ui\.spec\.ts/],
+      grep: /MOB actions stay reachable with Forecast|stale GPS stops|server staleness declaration|emergency action inside phone Trends|maximum dimming and touch lock/,
+      use: { ...devices['Desktop Safari'], baseURL: FIXTURE_ORIGIN },
     },
     {
       name: 'mobile-webkit-ui',

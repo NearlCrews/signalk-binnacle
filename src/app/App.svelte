@@ -228,7 +228,6 @@ import {
   fetchHistoryProviders,
   fetchServerFeatures,
   fetchSymbols,
-  isConnectionDown,
   isConnectionOpen,
   recentSourceRefs,
   SELF_CONTEXT,
@@ -254,12 +253,13 @@ import type { MapCommands } from '$widgets/chart-canvas';
 import { PlotterView } from '../views';
 import ChartLockerStatus from './ChartLockerStatus.svelte';
 import { resolveOrientation } from './chart-orientation';
+import { describeConnection } from './connection-description';
 import { createFollowController } from './follow-controller.svelte';
 import { collectHandoffFacts } from './handoff-facts';
 import LiveRegions from './LiveRegions.svelte';
 import { createNotificationsController } from './notifications-controller.svelte';
 import StatusStrip from './StatusStrip.svelte';
-import { createSafetyAnnunciator } from './safety-annunciator.svelte';
+import { createSafetyController } from './safety-controller.svelte';
 import { createStreamController } from './stream-controller.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
@@ -738,7 +738,11 @@ const savedView = isMapView(mapViewStore.value) ? mapViewStore.value : undefined
 // The live map view if one has been reported, else the persisted view: the fallback that the tides
 // load and the weather map's initial view share.
 const currentView = $derived(mapView ?? savedView);
-const tidesController = createTidesController(tidesStore, tidesLoader, () => currentView);
+const tidesController = createTidesController(tidesStore, tidesLoader, () => currentView, {
+  wanted: () => tidesWanted,
+  online: () => net.online,
+  token: () => chartsToken,
+});
 const layerSettings = new PersistedValue<LayerSettings>(
   binnacleStorageKey('layers'),
   {},
@@ -1540,6 +1544,7 @@ function onRouteCoverageReport(report: RouteCoverageReport | null): void {
 // stream keeps it live. Every command is write-guarded and confirm-armed in the panel.
 const autopilot = createAutopilotController({
   origin,
+  clock,
   getToken: () => authToken,
   apiAdvertised: () =>
     serverFeatures === undefined ? undefined : serverFeatures.apis.has('autopilot'),
@@ -1560,6 +1565,7 @@ logbook.start();
 
 const handoff = createHandoffController({
   client: () => handoffClient,
+  online: () => net.online,
   drafts: handoffDrafts,
   // The snapshot just taken sits at the tail of the draft queue (records lag the async sync).
   onCreated: () =>
@@ -1639,7 +1645,7 @@ const handoff = createHandoffController({
 // Reconnect synchronization: a draft taken offline reaches the other stations as soon as the
 // browser is back online, without a manual step.
 $effect(() => {
-  if (net.online) void handoff.syncDrafts();
+  if (net.online) untrack(() => void handoff.syncDrafts());
 });
 
 // Full-screen Instruments is a modal whose aria-modal removes the rest of the app, emergency rail
@@ -1699,16 +1705,80 @@ function enableNoaaEnc(): void {
 
 // The one spoken safety channel: structured events in fixed priority order, worst-first speech,
 // polite delivery for the rest. The per-channel alert strings stay owned by their controllers.
-const safetyAnnunciator = createSafetyAnnunciator();
-$effect(() => {
-  safetyAnnunciator.update([
-    { id: 'mob', rank: 0, text: mobController.mobAlert },
-    { id: 'collision', rank: 1, text: collisionAlert },
-    { id: 'anchor', rank: 2, text: anchorController.anchorAlert },
-    { id: 'shallow', rank: 3, text: shallowController.alert },
-    { id: 'xte', rank: 4, text: xteMonitor.alert },
+const safetyAnnunciator = createSafetyController({
+  record: (event) => alarmLog.record(event),
+  channels: () => [
+    {
+      id: 'mob',
+      rank: 0,
+      text: mobController.mobAlert,
+      history: { label: 'Man overboard', active: mob.active, acknowledged: mob.acknowledged },
+    },
+    {
+      id: 'collision',
+      rank: 1,
+      text: collisionAlert,
+      history: {
+        label: 'Collision danger',
+        active: collision.assessment.worst === 'danger',
+        acknowledged: collision.suppressed,
+        status:
+          collision.assessment.worst !== 'danger' &&
+          (collision.assessment.ownFixLost || collision.assessment.unassessed.length > 0)
+            ? 'unavailable'
+            : 'current',
+      },
+    },
+    {
+      id: 'anchor',
+      rank: 2,
+      text: anchorController.anchorAlert,
+      history: {
+        label: 'Anchor drag',
+        active: anchor.dragging,
+        acknowledged: anchor.acknowledged,
+        acknowledgeSequence: anchor.localAcknowledgeSequence,
+        status: anchor.degraded ? 'unavailable' : 'current',
+      },
+    },
+    {
+      id: 'anchor-blind',
+      rank: 2,
+      text: '',
+      history: {
+        label: 'Anchor watch blind',
+        active: anchor.blindAlarm,
+        acknowledged: anchor.blindAcknowledged,
+      },
+    },
+    {
+      id: 'shallow',
+      rank: 3,
+      text: shallowController.alert,
+      history: {
+        label: 'Shallow water',
+        active: shallowController.alarming,
+        status: shallowController.monitorState === 'monitoring' ? 'current' : 'unavailable',
+      },
+    },
+    {
+      id: 'xte',
+      rank: 4,
+      text: xteMonitor.alert,
+      history: {
+        label: 'Off course',
+        active: xteMonitor.alarming && xteMonitor.standing === 'client',
+        muted: xteMonitor.muted,
+        status:
+          xteMonitor.standing === 'server'
+            ? 'delegated'
+            : courseGuidance.active && courseGuidance.crossTrackErrorMeters === undefined
+              ? 'unavailable'
+              : 'current',
+      },
+    },
     { id: 'notification', rank: 5, text: genericNotificationAlert },
-  ]);
+  ],
 });
 
 // The app menu's options, grouped into helm-first intent groups: chart controls and navigation,
@@ -2223,7 +2293,8 @@ const xteMuted = new PersistedValue<boolean>(
   booleanPersistedCodec,
 );
 const xteMonitor = createXteMonitor({
-  courseActive: () => routeController.courseActive,
+  units: () => units.profile,
+  courseActive: () => courseGuidance.active,
   xteMeters: () => courseGuidance.crossTrackErrorMeters,
   // CourseGuidance already folds the provider TTL and the fresh-fix gate into an undefined
   // reading; the hook exists for any stricter staleness signal.
@@ -2568,13 +2639,7 @@ const connectionLabel = $derived(
 // The fuller explanation behind the conn chip's short label: the label also feeds the visible
 // stalled readout and the live announcement, so it must stay short, and this title carries the
 // diagnosis a hover or chip tap reveals.
-const connectionTitle = $derived(
-  dataStalled
-    ? "Connected to Signal K, but no data has arrived for 30 seconds; check the server's data sources."
-    : isConnectionDown(store.connection.phase)
-      ? 'The link to the Signal K server dropped. Binnacle retries by itself, and Reconnect retries now.'
-      : 'Connected to the Signal K server.',
-);
+const connectionTitle = $derived(describeConnection(store.connection.phase, dataStalled));
 // The own fix has aged out: the footer dashes SOG and COG and shows a calm "No GPS fix" note rather
 // than presenting a frozen speed and course as if they were live.
 const fixStale = $derived(vessel.positionStale);
@@ -2697,6 +2762,7 @@ $effect(() => {
   // seeds only at first connect, so mirror it here or every REST write keeps using the stale
   // read-only token and 401s.
   chartsToken = authToken;
+  untrack(() => void autopilot.rehydrate());
   // Saved tracks are HTTP resources, so load them even when the live WebSocket cannot connect.
   void trackController.refreshSavedTracks();
   // Routes are HTTP resources too. Course hydration remains tied to the stream lifecycle.
@@ -2734,6 +2800,7 @@ $effect(() => {
 const PROFILE_LOCAL_STARTUP_FALLBACK_MS = 8_000;
 
 onMount(() => {
+  tidesController.start();
   refreshCompanionProbe();
   companionStatus.start();
   window.addEventListener('pointerdown', primeAudio);
@@ -2836,6 +2903,10 @@ onDestroy(() => {
   companionStatus.stop();
   streamController.dispose();
   notificationsController.dispose();
+  autopilot.dispose();
+  handoff.dispose();
+  tidesController.stop();
+  companionAi.dispose();
   trends.dispose();
   timeTravel.dispose();
   if (viewSaveTimer) clearTimeout(viewSaveTimer);
@@ -3085,6 +3156,7 @@ const plotterActions = {
     </div>
   </header>
   <PlotterView
+    emergencyAction={instrumentsMobAction}
     services={plotterServices}
     controllers={plotterControllers}
     entities={plotterEntities}
@@ -3260,6 +3332,7 @@ const plotterActions = {
       onTrigger={mobController.onTrigger}
       onLocate={(position) => {
         instruments.setOpen(false);
+        closePanel();
         flyToPosition(position);
       }}
       writeBlocked={auth.writeBlocked}

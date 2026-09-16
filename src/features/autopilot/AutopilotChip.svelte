@@ -67,19 +67,17 @@ const title = $derived.by(() => {
 {/if}
 
 <style>
-/* The status strip's chip idiom, carried by the slice so the strip does not restyle it: UA button
-   chrome stripped, one no-wrap line at the strip's readout size, and the block padding grown
-   toward the compact-control size with a negative margin so the target costs the strip no
-   height (the strip's own .chip-btn technique). */
+/* Unlike explanation-only status chips, this opens steering controls and needs a full operational
+   target. Keep the target in layout so neighboring readouts never overlap its hit area. */
 .ap-chip {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.3rem;
   border: 0;
   background: none;
   padding: var(--space-2) var(--space-1);
-  margin-block: calc(-1 * var(--space-2));
-  margin-inline: calc(-1 * var(--space-1));
+  min-block-size: var(--control-size);
+  min-inline-size: var(--control-size);
   font: inherit;
   font-size: var(--text-md);
   color: var(--text-muted);

@@ -1,19 +1,27 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { formatClockTime, formatMonthDay } from '$shared/lib';
-import type { AuthController } from '$shared/signalk';
-import { SlideOver, WriteAccessNote } from '$shared/ui';
+import { adminLoginUrl } from '$shared/signalk';
+import { SlideOver } from '$shared/ui';
 import { type LogbookEntry, MAX_LOGBOOK_TEXT_LENGTH } from './logbook-client';
 import type { LogbookController } from './logbook-controller.svelte';
 
 interface Props {
   controller: LogbookController;
-  auth: AuthController;
+  origin: string;
   onClose: () => void;
   onBack?: () => void;
 }
 
-const { controller, auth, onClose, onBack }: Props = $props();
+const { controller, origin, onClose, onBack }: Props = $props();
+const loginUrl = $derived(
+  adminLoginUrl(
+    origin,
+    typeof location === 'undefined'
+      ? '/signalk-binnacle/'
+      : `${location.pathname}${location.search}${location.hash}`,
+  ),
+);
 
 let draft = $state('');
 let seededText = $state('');
@@ -39,13 +47,14 @@ $effect(() => {
   }
 });
 
-const writesDisabled = $derived(auth.writeBlocked || controller.busy);
+const writesDisabled = $derived(controller.busy);
 const offerInComposer = $derived(
   controller.suggestion !== undefined && draft === controller.suggestion.text,
 );
 
 async function submit(): Promise<void> {
-  if (await controller.addEntry(draft)) {
+  const submitted = draft;
+  if ((await controller.addEntry(submitted)) && draft === submitted) {
     draft = '';
     seededText = '';
   }
@@ -120,13 +129,12 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
   {:else if controller.availability === 'unauthorized'}
     <section class="panel-section" aria-label="Logbook access">
       <h3 class="caps-label">Access</h3>
-      <WriteAccessNote
-        message="Reading the logbook needs read and write access approved by the boat's Signal K admin."
-        requesting={auth.upgrading}
-        onRequest={() => void auth.requestWriteAccess()}
-        outcome={auth.upgradeOutcome}
-      />
+      <p class="muted-note">
+        This logbook requires a Signal K administrator browser session. Sign in to Signal K, then
+        check again.
+      </p>
       <div class="panel-controls">
+        <a class="btn" href={loginUrl}>Sign in to Signal K</a>
         <button
           type="button"
           class="btn btn-ghost"
@@ -156,14 +164,6 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
   {:else}
     <section class="panel-section" aria-label="New entry">
       <h3 class="caps-label">New entry</h3>
-      {#if auth.writeBlocked}
-        <WriteAccessNote
-          message="Read-only access: new entries cannot be logged until the boat's Signal K admin approves read and write access."
-          requesting={auth.upgrading}
-          onRequest={() => void auth.requestWriteAccess()}
-          outcome={auth.upgradeOutcome}
-        />
-      {/if}
       {#if controller.suggestion}
         <p class="muted-note" role="status">
           Suggested at {formatClockTime(controller.suggestion.offeredAt)}. Nothing is logged until

@@ -128,12 +128,19 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   border: 0;
   background: none;
   padding: 0;
+  min-block-size: var(--control-size);
+  min-inline-size: var(--control-size);
   font: inherit;
-  color: inherit;
   text-align: start;
   text-decoration: underline;
   text-underline-offset: 0.2em;
   cursor: pointer;
+}
+.name-btn.sev-danger {
+  color: var(--alarm);
+}
+.name-btn.sev-warning {
+  color: var(--warning);
 }
 .list {
   display: flex;

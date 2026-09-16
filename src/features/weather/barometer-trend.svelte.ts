@@ -124,6 +124,17 @@ export function createBarometerTrend(deps: BarometerTrendDeps) {
 
   return {
     get tendency(): BarometerTendency | undefined {
+      const pa = deps.pressurePa();
+      const latest = samples.at(-1);
+      if (
+        deps.stale() ||
+        pa === undefined ||
+        pa < MIN_PLAUSIBLE_PA ||
+        pa > MAX_PLAUSIBLE_PA ||
+        latest === undefined ||
+        deps.clock.now - latest.timeMs > 2 * SAMPLE_INTERVAL_MS
+      )
+        return undefined;
       return tendency;
     },
   };

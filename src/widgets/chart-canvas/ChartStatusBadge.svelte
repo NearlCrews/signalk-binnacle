@@ -41,6 +41,12 @@ const COPY: Record<
     title: 'The chart source could not be loaded. Tap to open Layers and charts and retry.',
     grade: 'alarm',
   },
+  'source-loading': {
+    label: 'Chart loading',
+    title:
+      'Chart tiles are not ready yet. Do not rely on this view for navigation. Tap to open Layers and charts.',
+    grade: 'warning',
+  },
   'base-unavailable': {
     label: 'Base map unavailable',
     title:

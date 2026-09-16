@@ -173,8 +173,9 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
     )}
 />
 <label class="departure">
-  <span class="caps-label">Departure</span>
+  <span>Departure</span>
   <input
+    class="input"
     type="datetime-local"
     bind:value={departureLocal}
     aria-label="Planned departure date and time, used for the arrival clock times"
@@ -309,6 +310,10 @@ const hasWindLines = $derived(legForecasts.some((cue) => cue.windLine !== undefi
 }
 .departure input {
   min-block-size: var(--control-size);
+}
+.departure > span {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 /* The route-edit working-plan stats use the global .stat-grid system in app.css. */
 </style>

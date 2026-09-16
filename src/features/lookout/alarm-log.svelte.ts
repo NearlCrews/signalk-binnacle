@@ -6,10 +6,12 @@ import { formatClockTime, type ReactiveClock } from '$shared/lib';
 // never persisted: it describes what THIS station heard and did, and a stale log surviving a
 // reload would read as the current watch's history.
 
-export type AlarmLogKind = 'raised' | 'cleared' | 'silenced' | 'acknowledged' | 'muted';
+export type AlarmLogKind = 'raised' | 'cleared' | 'silenced' | 'acknowledged' | 'muted' | 'status';
 
 export interface AlarmLogEvent {
   kind: AlarmLogKind;
+  // Stable local hazard id or Signal K notification path, independent of its display label.
+  source?: string;
   // What alarmed, in the words the navigator saw (the notification label, the mute's name).
   label: string;
   // Optional context: a depth, a remaining-mute duration, which station acted.
@@ -51,9 +53,10 @@ export const ALARM_LOG_KIND_LABELS: Record<AlarmLogKind, string> = {
   silenced: 'Silenced',
   acknowledged: 'Acknowledged',
   muted: 'Muted',
+  status: 'Status',
 };
 
-export function alarmLogLine(entry: AlarmLogEntry): string {
+function alarmLogLine(entry: AlarmLogEntry): string {
   const detail = entry.detail ? `, ${entry.detail}` : '';
   return `${formatClockTime(entry.timeMs)} ${ALARM_LOG_KIND_LABELS[entry.kind]}: ${entry.label}${detail}`;
 }

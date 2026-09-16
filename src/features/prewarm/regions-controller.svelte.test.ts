@@ -90,6 +90,35 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('RegionsController', () => {
+  it('invalidates checked coverage on saved-area refresh, route switch, and geometry edits', async () => {
+    const route = {
+      name: 'First',
+      waypoints: [
+        { position: { latitude: 0, longitude: 0 } },
+        { position: { latitude: 0, longitude: 1 } },
+      ],
+    };
+    const highlight = { set: vi.fn(), clear: vi.fn(), destroy: vi.fn() };
+    const { controller, cleanup } = setup(client(), {
+      getActiveRoute: () => route,
+      createHighlight: () => highlight,
+    });
+    controller.regions = [region('old')];
+    controller.runCoverageCheck();
+    expect(controller.coverageReport).not.toBeNull();
+    await controller.loadRegions();
+    expect(controller.coverageReport).toBeNull();
+    expect(highlight.clear).toHaveBeenCalled();
+    controller.runCoverageCheck();
+    route.name = 'Second';
+    expect(controller.coverageReport).toBeNull();
+    controller.syncCoverageContext();
+    controller.runCoverageCheck();
+    route.waypoints[1].position.longitude = 2;
+    expect(controller.coverageReport).toBeNull();
+    controller.syncCoverageContext();
+    cleanup();
+  });
   it('waits for one poll to complete before scheduling the next', async () => {
     const first = deferred<WarmStatus | null>();
     const getStatus = vi

@@ -48,7 +48,7 @@ interface NotificationsControllerDeps {
   selfContext: () => string | undefined;
   // The session alarm chronology; the controller records raise and clear edges plus every
   // silence, acknowledge, and mute it performs. Optional so tests without a log stay valid.
-  log?: (entry: { kind: AlarmLogKind; label: string; detail?: string }) => void;
+  log?: (entry: { kind: AlarmLogKind; label: string; detail?: string; source?: string }) => void;
   // The one depth notification path the shallow monitor currently sounds itself, or undefined. A
   // getter because the claim moves with the winning depth path and the server's zones.
   ownedDepthNotificationPath: () => string | undefined;
@@ -108,6 +108,7 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     ) => Promise<NotificationActionResult>,
     unsupportedMessage: string,
     failMessage: string,
+    logKind: 'silenced' | 'acknowledged',
   ): void {
     if (!notification.id) return;
     alarmActionError = undefined;
@@ -118,6 +119,12 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
     void action(deps.origin, deps.token(), notification.id).then((result) => {
       if (result === 'unsupported') alarmActionError = unsupportedMessage;
       else if (result === 'failed') alarmActionError = failMessage;
+      else
+        deps.log?.({
+          kind: logKind,
+          label: notificationLabel(notification),
+          source: notification.path,
+        });
     });
   }
 
@@ -133,13 +140,14 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
       alarmActionError = 'Server write access is needed for this alarm action.';
       return;
     }
-    deps.log?.({ kind: logKind, label: 'All active alarms' });
     void action(deps.origin, deps.token()).then((result) => {
       if (result === 'unsupported') {
         alarmActionError =
           'This server delegates notification management, so bulk actions are unavailable.';
       } else if (result === 'failed') {
         alarmActionError = failMessage;
+      } else {
+        deps.log?.({ kind: logKind, label: 'All active alarms' });
       }
     });
   }
@@ -161,22 +169,22 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
   }
 
   function onSilenceNotification(notification: ActiveNotification): void {
-    deps.log?.({ kind: 'silenced', label: notificationLabel(notification) });
     runNotificationAction(
       notification,
       silenceNotification,
       'This server delegates notification management, so silence is unavailable.',
       'Could not silence the alert. Check the connection and access.',
+      'silenced',
     );
   }
 
   function onAcknowledgeNotification(notification: ActiveNotification): void {
-    deps.log?.({ kind: 'acknowledged', label: notificationLabel(notification) });
     runNotificationAction(
       notification,
       acknowledgeNotification,
       'This server delegates notification management, so acknowledgment is unavailable.',
       'Could not acknowledge the alert. Check the connection and access.',
+      'acknowledged',
     );
   }
 
@@ -222,10 +230,11 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
       current.set(notification.path, notificationLabel(notification));
     }
     for (const [path, label] of current) {
-      if (!loggedRaised.has(path)) deps.log({ kind: 'raised', label });
+      if (!loggedRaised.has(path))
+        untrack(() => deps.log?.({ kind: 'raised', label, source: path }));
     }
     for (const [path, label] of loggedRaised) {
-      if (!current.has(path)) deps.log({ kind: 'cleared', label });
+      if (!current.has(path)) untrack(() => deps.log?.({ kind: 'cleared', label, source: path }));
     }
     loggedRaised = current;
   });
@@ -270,12 +279,21 @@ export function createNotificationsController(deps: NotificationsControllerDeps)
 
   $effect(() => {
     if (!deps.timeTravel.active) return;
-    const dangerNow = !deps.collision.suppressed && deps.collision.assessment.worst === 'danger';
+    const dangerNow =
+      deps.collision.assessment.worst === 'danger' &&
+      (!deps.collision.suppressed || deps.collision.escalating);
     if (deps.mob.active || dangerNow) untrack(() => deps.timeTravel.exit());
   });
 
   function muteGenericHere(): void {
-    deps.genericAlarm.muteActiveHere();
+    for (const notification of deps.genericAlarm.muteActiveHere()) {
+      deps.log?.({
+        kind: 'muted',
+        label: notificationLabel(notification),
+        source: notification.path,
+        detail: 'On this device only.',
+      });
+    }
   }
 
   // Repair the notifications mirror after a stream reopen: alarms cleared or reaped server-side

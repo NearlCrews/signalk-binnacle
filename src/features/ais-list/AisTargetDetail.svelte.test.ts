@@ -67,20 +67,17 @@ describe('AisTargetDetail', () => {
   });
 
   it('shows class, size, destination, and reported ETA when the target broadcast them', () => {
-    // Svelte's SSR comment markers land inside the rendered text, so they are stripped before the
-    // whitespace normalization.
     const html = detail(undefined, 'open', {
       aisClass: 'A',
       lengthMeters: 294,
       beamMeters: 32,
       destination: 'ROTTERDAM',
       destinationEtaMs: Date.parse('2026-09-02T06:00:00.000Z'),
-    })
-      .replace(/<!--.*?-->/g, '')
-      .replace(/\s+/g, ' ');
+    }).replace(/\s+/g, ' ');
     expect(html).toContain('AIS class');
     expect(html).toContain('<dd>A</dd>');
-    expect(html).toContain('294 by 32 m');
+    // Accept only the renderer's structural markers between the expected size and unit text.
+    expect(html).toContain('<dd>294 <!--[0-->by 32<!--]--> m</dd>');
     expect(html).toContain('ROTTERDAM');
     expect(html).toContain('Reported ETA');
   });

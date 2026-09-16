@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { matchesNodeFloor, parseWorkflow, workflowFailures } from './workflow-policy.mjs';
 
 const workflowDir = '.github/workflows';
 const workflowPaths = readdirSync(workflowDir)
   .filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'))
   .sort()
   .map((name) => `${workflowDir}/${name}`);
-const runnerTempWorkingDirectory = `working-directory: ${'$'}{{ runner.temp }}`;
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const packageManagerMatch = /^npm@(.+)$/u.exec(packageJson.packageManager ?? '');
 if (!packageManagerMatch) {
@@ -29,15 +29,15 @@ if (!enginesMatch) {
     );
   }
   const nodeVersionFile = readFileSync('.node-version', 'utf8').trim();
-  if (!nodeVersionFile.startsWith(nodeFloor)) {
+  if (!matchesNodeFloor(nodeVersionFile, nodeFloor)) {
     failures.push(
       `.node-version (${nodeVersionFile}) must pin the engines.node floor ${nodeFloor}.`,
     );
   }
   const webappCi = readFileSync(`${workflowDir}/signalk-webapp-ci.yml`, 'utf8');
-  const matrixMatch = /^\s*node: \[([^\]]+)\]/mu.exec(webappCi);
-  const matrixEntries = matrixMatch ? matrixMatch[1].split(',').map((entry) => entry.trim()) : [];
-  if (!matrixEntries.some((entry) => entry.startsWith(nodeFloor))) {
+  const matrixValues = parseWorkflow(webappCi).jobs?.['build-test-pack']?.strategy?.matrix?.node;
+  const matrixEntries = Array.isArray(matrixValues) ? matrixValues.map(String) : [];
+  if (!matrixEntries.some((entry) => matchesNodeFloor(entry, nodeFloor))) {
     failures.push(
       `signalk-webapp-ci.yml matrix must test the engines.node floor ${nodeFloor} (found: ${matrixEntries.join(', ') || 'none'}).`,
     );
@@ -45,50 +45,7 @@ if (!enginesMatch) {
 }
 
 for (const path of workflowPaths) {
-  const workflow = readFileSync(path, 'utf8');
-  const lines = workflow.split('\n');
-  const usesSetupNode = workflow.includes('uses: actions/setup-node@');
-  let npmInstallCount = 0;
-
-  lines.forEach((line, index) => {
-    if (line.includes('uses: actions/setup-node@')) {
-      const setupBlock = lines.slice(index, index + 8).join('\n');
-      if (!setupBlock.includes('package-manager-cache: false')) {
-        failures.push(`${path}:${index + 1} must disable setup-node package-manager caching.`);
-      }
-      if (/^\s+cache:\s*npm\s*$/mu.test(setupBlock)) {
-        failures.push(`${path}:${index + 1} must not inspect npm cache before the npm upgrade.`);
-      }
-    }
-
-    if (line.includes('npm install --global npm@')) {
-      npmInstallCount += 1;
-      const installBlock = lines.slice(Math.max(0, index - 4), index + 1).join('\n');
-      if (!installBlock.includes(runnerTempWorkingDirectory)) {
-        failures.push(`${path}:${index + 1} must install npm outside the repository checkout.`);
-      }
-      if (!line.includes(`npm@${supportedNpmVersion}`)) {
-        failures.push(
-          `${path}:${index + 1} must install packageManager npm ${supportedNpmVersion}.`,
-        );
-      }
-    }
-  });
-
-  // Any workflow that sets up Node runs npm against this repository, so it must bootstrap the
-  // pinned npm first. Workflows without setup-node (CodeQL and kin) are exempt by construction.
-  if (usesSetupNode && npmInstallCount === 0) {
-    failures.push(
-      `${path} must install the packageManager npm version before repository commands.`,
-    );
-  }
-
-  if (
-    path === `${workflowDir}/publish.yml` &&
-    !workflow.includes('npm publish ./artifacts/*.tgz --provenance --access public')
-  ) {
-    failures.push(`${path} must publish the downloaded tarball with an explicit relative path.`);
-  }
+  failures.push(...workflowFailures(readFileSync(path, 'utf8'), path, supportedNpmVersion));
 }
 
 if (failures.length > 0) {

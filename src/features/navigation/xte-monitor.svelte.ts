@@ -1,6 +1,13 @@
 import type { ActiveNotification } from '$entities/notifications';
 import { type AlarmControl, GatedAlarm } from '$shared/audio';
-import { clampInt, HeldFlag, type ReactiveClock } from '$shared/lib';
+import {
+  clamp,
+  formatLengthOr,
+  HeldFlag,
+  lengthUnit,
+  type ReactiveClock,
+  type UnitsSelection,
+} from '$shared/lib';
 import { steerSide } from '$shared/nav';
 import type { PersistedValue } from '$shared/settings';
 import {
@@ -47,6 +54,7 @@ interface XteMonitorDeps {
   muted: PersistedValue<boolean>;
   notifications: () => readonly ActiveNotification[];
   clock: ReactiveClock;
+  units?: () => UnitsSelection;
   alarm?: AlarmControl;
 }
 
@@ -63,9 +71,7 @@ export function createXteMonitor(deps: XteMonitorDeps) {
 
   // The stored limit is codec-bounded, but the read clamps anyway so an out-of-band value can
   // never widen the alarm past its documented range.
-  const limitMeters = $derived(
-    clampInt(deps.limit.value, XTE_LIMIT_MIN_METERS, XTE_LIMIT_MAX_METERS),
-  );
+  const limitMeters = $derived(clamp(deps.limit.value, XTE_LIMIT_MIN_METERS, XTE_LIMIT_MAX_METERS));
 
   // Grace bookkeeping is plain, not $state: the derived writes it to remember the leg it observed
   // (the HeldFlag memo pattern). An inactive course clears the memo, so the next activation
@@ -109,9 +115,8 @@ export function createXteMonitor(deps: XteMonitorDeps) {
 
   // Follows the tone, not the raw judgment: the announcement channel is audible delivery, so a
   // mute quiets it and a server-owned alarm leaves the announcing to the generic surface's own
-  // message. The strip's visual treatment reads `alarming` and stays up either way. Meters, not
-  // the strip's nautical miles: the limit is set in meters, and the sentence must name the same
-  // unit the crew configured.
+  // message. The strip's visual treatment reads `alarming` and stays up either way. The sentence
+  // uses the same server-selected length unit as the configured limit.
   const alert = $derived.by(() => {
     if (!sounding) return '';
     const xte = deps.xteMeters();
@@ -119,7 +124,9 @@ export function createXteMonitor(deps: XteMonitorDeps) {
     const side = steerSide(xte);
     const steer =
       side === null ? '' : side === 'port' ? ' Steer left to return.' : ' Steer right to return.';
-    return `Off course: ${Math.round(Math.abs(xte))} m from the leg, past the ${limitMeters} m limit.${steer}`;
+    const units = deps.units?.() ?? 'metric';
+    const unit = lengthUnit(units);
+    return `Off course: ${formatLengthOr(Math.abs(xte), units, 0)} ${unit} from the leg, past the ${formatLengthOr(limitMeters, units, 0)} ${unit} limit.${steer}`;
   });
 
   $effect(() => {
@@ -145,10 +152,10 @@ export function createXteMonitor(deps: XteMonitorDeps) {
       return limitMeters;
     },
     setLimitMeters(meters: number): void {
-      // A NaN would sail through clampInt and make the codec-backed set throw; a silent drop is
+      // A NaN would sail through clamp and make the codec-backed set throw; a silent drop is
       // the right answer to a garbage input from a form field.
       if (!Number.isFinite(meters)) return;
-      deps.limit.set(clampInt(meters, XTE_LIMIT_MIN_METERS, XTE_LIMIT_MAX_METERS));
+      deps.limit.set(clamp(meters, XTE_LIMIT_MIN_METERS, XTE_LIMIT_MAX_METERS));
     },
     get muted() {
       return deps.muted.value;

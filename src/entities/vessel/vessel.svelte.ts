@@ -10,7 +10,7 @@ const VESSEL_DATA_STALE_MS = 10_000;
 
 // The three references a Signal K sounder may publish a depth against. A depth number means nothing
 // without the reference it was measured from, so every reading carries its source.
-export type DepthSource = 'keel' | 'surface' | 'transducer';
+type DepthSource = 'keel' | 'surface' | 'transducer';
 
 export interface DepthReading {
   meters: number | undefined;

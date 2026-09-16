@@ -1,10 +1,9 @@
 import { clampInt, cleanBoundedText, isRecord, readBoundedJson, withTimeout } from '$shared/lib';
 import {
-  authInit,
+  adminSessionInit,
   cleanTruncatedText,
   mutationResultFor,
   type ResourceMutationResult,
-  sendJson,
 } from '$shared/signalk';
 
 // The Logbook plugin (npm package @meri-imperiumi/signalk-logbook, plugin id "signalk-logbook")
@@ -17,12 +16,11 @@ import {
 // heading, speed, wind, and barometer capture. Entry numerics are the plugin's own display units
 // (degrees, knots, hPa), not SI, so Binnacle reads only the datetime, text, category, author, and
 // origin fields and never lets the rest near the store.
-export const LOGBOOK_PLUGIN_ID = 'signalk-logbook';
+const LOGBOOK_PLUGIN_ID = 'signalk-logbook';
 
 export const MAX_LOGBOOK_TEXT_LENGTH = 2000;
 export const MAX_RECENT_ENTRIES = 400;
 const MAX_LOG_DAYS = 7;
-const MAX_DATES_SCANNED = 4000;
 const MAX_ENTRIES_PER_DAY = 200;
 const MAX_AUTHOR_LENGTH = 100;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,8 +29,8 @@ const logsUrl = (origin: string) => `${origin}/plugins/${LOGBOOK_PLUGIN_ID}/logs
 
 export type LogbookAvailability = 'available' | 'absent' | 'unauthorized' | 'error';
 
-export type LogbookCategory = 'navigation' | 'engine' | 'radio' | 'maintenance';
-export type LogbookOrigin = 'manual' | 'auto' | 'agent';
+type LogbookCategory = 'navigation' | 'engine' | 'radio' | 'maintenance';
+type LogbookOrigin = 'manual' | 'auto' | 'agent';
 
 const CATEGORIES: readonly LogbookCategory[] = ['navigation', 'engine', 'radio', 'maintenance'];
 const ORIGINS: readonly LogbookOrigin[] = ['manual', 'auto', 'agent'];
@@ -61,9 +59,9 @@ type ProbeResult =
 
 // A 404 on the mount is the Signal K server's answer for a plugin that is not installed or not
 // enabled, so it maps to absent rather than error.
-async function getLogsJson(url: string, token: string | undefined): Promise<ProbeResult> {
+async function getLogsJson(url: string): Promise<ProbeResult> {
   try {
-    const response = await fetch(url, withTimeout(authInit(token)));
+    const response = await fetch(url, withTimeout(adminSessionInit()));
     if (response.status === 404) return { state: 'absent' };
     if (response.status === 401 || response.status === 403) return { state: 'unauthorized' };
     if (!response.ok) return { state: 'error' };
@@ -75,9 +73,9 @@ async function getLogsJson(url: string, token: string | undefined): Promise<Prob
 
 export async function detectLogbook(
   origin: string,
-  token: string | undefined,
+  _token: string | undefined,
 ): Promise<LogbookAvailability> {
-  const result = await getLogsJson(logsUrl(origin), token);
+  const result = await getLogsJson(logsUrl(origin));
   return result.state === 'ok' ? 'available' : result.state;
 }
 
@@ -107,29 +105,32 @@ function parseEntry(raw: unknown): LogbookEntry | undefined {
 // The newest `days` logged days (not calendar days), all entries merged newest first and bounded.
 export async function fetchRecentEntries(
   origin: string,
-  token: string | undefined,
+  _token: string | undefined,
   days = 2,
 ): Promise<LogbookEntriesResult> {
-  const listed = await getLogsJson(logsUrl(origin), token);
+  const listed = await getLogsJson(logsUrl(origin));
   if (listed.state !== 'ok') return { state: listed.state };
   if (!Array.isArray(listed.body)) return { state: 'error' };
   const dates = listed.body
-    .slice(0, MAX_DATES_SCANNED)
     .filter((value): value is string => typeof value === 'string' && DATE_PATTERN.test(value))
     .sort()
     .slice(-clampInt(days, 1, MAX_LOG_DAYS));
   const entries: LogbookEntry[] = [];
   for (const date of dates) {
-    const day = await getLogsJson(`${logsUrl(origin)}/${date}`, token);
+    const day = await getLogsJson(`${logsUrl(origin)}/${date}`);
     // A day listed a moment ago can 404 when its file was just deleted; that is an empty day on a
     // reachable plugin, not a missing plugin.
     if (day.state === 'absent') continue;
     if (day.state !== 'ok') return { state: day.state };
     if (!Array.isArray(day.body)) return { state: 'error' };
-    for (const raw of day.body.slice(0, MAX_ENTRIES_PER_DAY)) {
-      const entry = parseEntry(raw);
-      if (entry) entries.push(entry);
-    }
+    // Bodies are byte-bounded before parsing. The plugin sorts ascending, so select the newest
+    // valid records before applying our display bound, regardless of the provider's order.
+    const recent = day.body
+      .map(parseEntry)
+      .filter((entry): entry is LogbookEntry => entry !== undefined)
+      .sort((a, b) => b.timeMs - a.timeMs)
+      .slice(0, MAX_ENTRIES_PER_DAY);
+    entries.push(...recent);
   }
   entries.sort((a, b) => b.timeMs - a.timeMs);
   return { state: 'ok', entries: entries.slice(0, MAX_RECENT_ENTRIES) };
@@ -139,11 +140,11 @@ export interface CreateLogEntryOptions {
   category?: LogbookCategory;
 }
 
-// Routes through sendJson so the app-wide write-outcome listener observes a 401 or 403, which is
-// how a read-only token reveals itself on a write.
+// This plugin's routes require an administrator browser session. Its refusal must not poison the
+// independent device-token write gate, and a device Authorization header can mask a valid cookie.
 export async function createLogEntry(
   origin: string,
-  token: string | undefined,
+  _token: string | undefined,
   text: string,
   options?: CreateLogEntryOptions,
 ): Promise<ResourceMutationResult> {
@@ -153,5 +154,20 @@ export async function createLogEntry(
     text: cleaned,
     ...(options?.category ? { category: options.category } : {}),
   };
-  return mutationResultFor(await sendJson(logsUrl(origin), token, 'POST', body));
+  try {
+    return mutationResultFor(
+      await fetch(
+        logsUrl(origin),
+        withTimeout(
+          adminSessionInit({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }),
+        ),
+      ),
+    );
+  } catch {
+    return 'failed';
+  }
 }

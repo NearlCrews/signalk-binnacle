@@ -79,8 +79,22 @@ describe('createBarometerTrend', () => {
     state.stale = false;
     // A barometer publishing hectopascals as Pascals must not poison the tendency.
     advance(state, 60, () => 1_013);
-    expect(trend.tendency).toMatchObject({ provisional: true, grade: 'steady' });
-    expect(trend.tendency?.spanMs).toBe(90 * MINUTE_MS);
+    expect(trend.tendency).toBeUndefined();
+    advance(state, 1, () => 101_300);
+    expect(trend.tendency).toBeDefined();
+  });
+
+  it('withdraws the measured tendency as soon as its source becomes stale', () => {
+    const { state, trend } = setup();
+    advance(state, 90, () => 101_300);
+    expect(trend.tendency).toBeDefined();
+    state.stale = true;
+    flushSync();
+    expect(trend.tendency).toBeUndefined();
+    state.now += 5 * MINUTE_MS;
+    state.stale = false;
+    flushSync();
+    expect(trend.tendency).toBeDefined();
   });
 
   it('restarts the history when the clock steps backward', () => {

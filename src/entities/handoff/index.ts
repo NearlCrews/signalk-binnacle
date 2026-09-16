@@ -2,7 +2,6 @@ export {
   type HandoffFact,
   type HandoffRecord,
   type HandoffSnapshot,
-  type HandoffSyncState,
   isHandoffSnapshot,
   MAX_HANDOFF_FACT_TEXT,
   MAX_HANDOFF_FACTS,

@@ -1,10 +1,15 @@
-import type { RangeResponse, Source } from 'pmtiles';
+import { EtagMismatch, type RangeResponse, type Source } from 'pmtiles';
 import { isAbort } from './abort';
 import type { BlockStore } from './block-store';
 import { requestedRangeEnd } from './pmtiles-range';
 
 const BLOCK_SIZE = 64 * 1024;
 const WRITES_PER_PRUNE = 16;
+
+// Serialize archive reads, including their cache commits, across sources sharing this store.
+// Metadata and tile readers can have separate Source instances. A purge must not race an older
+// request's pending write and resurrect blocks from the replaced archive.
+const archiveQueues = new WeakMap<BlockStore, Map<string, Promise<void>>>();
 
 export interface BlockCacheOptions {
   // Test seams: production uses the 64 KB block, a 16-write prune cadence, and Date.now.
@@ -34,8 +39,6 @@ export class BlockCachedSource implements Source {
   #pruneEvery: number;
   #now: () => number;
   #writesSincePrune = 0;
-  #etag: string | undefined;
-  #etagLoaded = false;
 
   constructor(inner: Source, store: BlockStore, options: BlockCacheOptions = {}) {
     this.#inner = inner;
@@ -56,6 +59,39 @@ export class BlockCachedSource implements Source {
     etag?: string,
   ): Promise<RangeResponse> {
     requestedRangeEnd(offset, length);
+    let queues = archiveQueues.get(this.#store);
+    if (!queues) {
+      queues = new Map();
+      archiveQueues.set(this.#store, queues);
+    }
+    const url = this.getKey();
+    const previous = queues.get(url) ?? Promise.resolve();
+    const result = previous.then(async () => {
+      signal?.throwIfAborted();
+      try {
+        return await this.#readBytes(offset, length, signal, etag);
+      } catch (error) {
+        if (error instanceof EtagMismatch) await this.#store.purgeArchive(url);
+        throw error;
+      }
+    });
+    const settled = result.then(
+      () => {},
+      () => {},
+    );
+    queues.set(url, settled);
+    void settled.then(() => {
+      if (queues.get(url) === settled) queues.delete(url);
+    });
+    return result;
+  }
+
+  async #readBytes(
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+    etag?: string,
+  ): Promise<RangeResponse> {
     const bs = this.#blockSize;
     const url = this.#inner.getKey();
     const first = Math.floor(offset / bs);
@@ -64,6 +100,9 @@ export class BlockCachedSource implements Source {
     for (let index = first; index <= last; index++) indexes.push(index);
 
     const cached = await this.#store.getBlocks(url, indexes);
+    let validator = await this.#store.getValidator(url);
+    if (etag !== undefined && validator !== undefined && etag !== validator)
+      throw new EtagMismatch();
     const fetched = new Map<number, ArrayBuffer>();
     let cacheControl: string | undefined;
     let expires: string | undefined;
@@ -73,18 +112,17 @@ export class BlockCachedSource implements Source {
       try {
         res = await this.#inner.getBytes(0, bs, signal, etag);
       } catch (error) {
-        if (!cached.has(0) || isAbort(error, signal)) throw error;
+        if (!cached.has(0) || isAbort(error, signal) || error instanceof EtagMismatch) throw error;
       }
       if (res) {
         const prior = await this.#store.getValidator(url);
+        if (etag !== undefined && res.etag !== etag) throw new EtagMismatch();
         if (res.etag === undefined) {
           // A successful header read without a validator cannot prove that any cached block belongs
           // to the current archive. Drop the old archive before caching the fresh header. A failed
           // header read still takes the offline fallback below and preserves the validated cache.
           await this.#store.purgeArchive(url);
           cached.clear();
-          this.#etag = undefined;
-          this.#etagLoaded = true;
         } else {
           if (prior !== undefined && prior !== res.etag) {
             // The archive was replaced: every cached block is from the old bytes.
@@ -92,9 +130,8 @@ export class BlockCachedSource implements Source {
             cached.clear();
           }
           if (prior !== res.etag) await this.#store.setValidator(url, res.etag);
-          this.#etag = res.etag;
-          this.#etagLoaded = true;
         }
+        validator = res.etag;
         fetched.set(0, res.data);
         cached.set(0, res.data);
         cacheControl = res.cacheControl;
@@ -112,9 +149,17 @@ export class BlockCachedSource implements Source {
     const missing = indexes.filter((index) => !cached.has(index) && index < tail);
     const runs = toRuns(missing);
     const responses = await Promise.all(
-      runs.map((run) => this.#inner.getBytes(run.start * bs, run.count * bs, signal, etag)),
+      runs.map((run) =>
+        this.#inner.getBytes(run.start * bs, run.count * bs, signal, etag ?? validator),
+      ),
     );
     responses.forEach((res, at) => {
+      const expected = etag ?? validator;
+      if (expected !== undefined && res.etag !== expected) throw new EtagMismatch();
+      if (validator === undefined && res.etag !== undefined) {
+        if (cached.size > 0) throw new EtagMismatch();
+        validator = res.etag;
+      }
       const run = runs[at];
       for (let k = 0; k < run.count; k++) {
         const from = k * bs;
@@ -131,6 +176,7 @@ export class BlockCachedSource implements Source {
 
     const now = this.#now();
     if (fetched.size > 0) {
+      if (validator !== undefined) await this.#store.setValidator(url, validator);
       await this.#store.putBlocks(url, fetched, now);
       this.#writesSincePrune += fetched.size;
       if (this.#writesSincePrune >= this.#pruneEvery) {
@@ -143,7 +189,7 @@ export class BlockCachedSource implements Source {
 
     return {
       data: this.#assemble(cached, first, last, offset, length),
-      etag: await this.#archiveEtag(url),
+      etag: validator,
       cacheControl,
       expires,
     };
@@ -175,18 +221,5 @@ export class BlockCachedSource implements Source {
       if (block.byteLength < bs) break;
     }
     return filled === length ? out.buffer : out.buffer.slice(0, filled);
-  }
-
-  async #archiveEtag(url: string): Promise<string | undefined> {
-    if (this.#etagLoaded) return this.#etag;
-    const stored = await this.#store.getValidator(url);
-    // Latch as loaded only once a validator is actually known. An undefined result means the header
-    // block has not been fetched yet, so leaving it unlatched lets a later block-0 header fetch
-    // populate the etag instead of pinning undefined for the life of the source.
-    if (stored !== undefined) {
-      this.#etag = stored;
-      this.#etagLoaded = true;
-    }
-    return stored;
   }
 }

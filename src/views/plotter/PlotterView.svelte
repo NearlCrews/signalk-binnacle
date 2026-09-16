@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import type { Snippet } from 'svelte';
 import type { AisTargets } from '$entities/ais';
 import type { AnchorWatch } from '$entities/anchor';
 import type { CollisionAssessment } from '$entities/collision';
@@ -103,6 +104,7 @@ type RadarController = ReturnType<
 >;
 
 interface FlatProps {
+  emergencyAction?: Snippet;
   // Core services
   origin: string;
   store: SignalKStore;
@@ -437,6 +439,7 @@ interface Props extends Omit<FlatProps, ServiceKey | ControllerKey | EntityKey |
 }
 
 let {
+  emergencyAction,
   services,
   controllers,
   entities,
@@ -1440,6 +1443,7 @@ $effect(() => {
           <ErrorBoundary>
             <module.default
               controller={trends}
+              {emergencyAction}
               onRetryProvider={onRetryHistoryProviders}
               units={units.profile}
               theme={theme.theme}
@@ -1530,7 +1534,12 @@ $effect(() => {
           />
         {:then module}
           <ErrorBoundary>
-            <module.default controller={logbook} {auth} onClose={closePanel} onBack={backToMenu} />
+            <module.default
+              controller={logbook}
+              {origin}
+              onClose={closePanel}
+              onBack={backToMenu}
+            />
 
             {#snippet fallback(_error, reset)}
               <LazyPanelState

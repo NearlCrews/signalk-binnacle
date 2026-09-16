@@ -61,7 +61,7 @@ export interface TileReading {
   activePath?: string;
 }
 
-export type TileCategory =
+type TileCategory =
   | 'navigation'
   | 'wind'
   | 'depth'

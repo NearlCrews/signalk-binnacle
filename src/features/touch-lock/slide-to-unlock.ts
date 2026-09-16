@@ -2,7 +2,7 @@
 // unlocking takes most of the track's travel, and the keyboard path takes a sustained hold.
 
 export const UNLOCK_DRAG_PX = 200;
-export const UNLOCK_DRAG_FRACTION = 0.8;
+const UNLOCK_DRAG_FRACTION = 0.8;
 export const HOLD_TO_UNLOCK_MS = 1500;
 
 // A track that has not yielded a measurable travel (a broken or unmounted layout) falls back to

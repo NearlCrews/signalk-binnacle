@@ -24,6 +24,23 @@ function setup(seed?: Record<string, string>) {
 }
 
 describe('AnchorWatch (client mode)', () => {
+  it('exposes one action sequence per accepted client drag acknowledgment', () => {
+    const { anchor } = setup({
+      'binnacle:anchor-watch': JSON.stringify({
+        position: ANCHOR,
+        radiusMeters: 50,
+        dragging: true,
+      }),
+    });
+    expect(anchor.localAcknowledgeSequence).toBe(0);
+    expect(anchor.dragging).toBe(true);
+    anchor.acknowledge();
+    expect(anchor.dragging).toBe(false);
+    expect(anchor.acknowledged).toBe(false);
+    expect(anchor.localAcknowledgeSequence).toBe(1);
+    anchor.acknowledge();
+    expect(anchor.localAcknowledgeSequence).toBe(1);
+  });
   it('starts off, drops at a position, and raises clean', () => {
     const { anchor } = setup();
     expect(anchor.mode).toBe('off');

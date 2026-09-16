@@ -8,16 +8,16 @@ export const MAX_RADAR_LEGEND_ENTRIES = 256;
 export const MAX_RADAR_ID_LENGTH = 128;
 export const MAX_RADAR_TEXT_LENGTH = 256;
 export const MAX_RADAR_URL_LENGTH = 2_048;
-export const MAX_SPOKES_PER_REVOLUTION = 8_192;
+const MAX_SPOKES_PER_REVOLUTION = 8_192;
 export const MAX_SPOKE_LENGTH = 4_096;
-export const MAX_RADAR_FRAME_BYTES = 16 * 1024 * 1024;
+const MAX_RADAR_FRAME_BYTES = 16 * 1024 * 1024;
 export const MAX_RADAR_MESSAGE_BYTES = 4 * 1024 * 1024;
 export const MAX_SPOKES_PER_MESSAGE = 8_192;
 export const MAX_RADAR_JSON_BYTES = 2 * 1024 * 1024;
 export const MAX_RADAR_TARGETS = 512;
 export const MAX_RADAR_TARGET_SPEED_MPS = 200;
 export const MAX_RADAR_TARGET_TCPA_SECONDS = 86_400;
-export const MAX_RADAR_COPY_BYTES_PER_SECOND = 32 * 1024 * 1024;
+const MAX_RADAR_COPY_BYTES_PER_SECOND = 32 * 1024 * 1024;
 
 export function isSafeRadarGeometry(spokesPerRev: number, maxSpokeLen: number): boolean {
   return (

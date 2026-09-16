@@ -6,14 +6,14 @@ import { haversineMeters } from '$shared/nav';
 // docked, or drifting, not making way. Legs are classified by distance over time rather than the
 // endpoints' SOG because the recorder's min-move veto turns a whole stop into one long leg whose
 // endpoints were both moving.
-export const UNDERWAY_FLOOR_MPS = 0.26;
+const UNDERWAY_FLOOR_MPS = 0.26;
 
 // The debrief card renders only once the recording is a passage rather than a maneuver: at least
 // ten minutes and a quarter of a nautical mile.
 export const DEBRIEF_MIN_DURATION_SECONDS = 600;
 export const DEBRIEF_MIN_DISTANCE_METERS = METERS_PER_NAUTICAL_MILE / 4;
 
-export interface DebriefLeg {
+interface DebriefLeg {
   startMs: number;
   endMs: number;
   distanceMeters: number;

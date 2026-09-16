@@ -68,7 +68,12 @@ export class SubscriptionRegistry {
     // The release closure is deliberate API surface for future per-feature subscriptions: today
     // only tests exercise it (Comlink cannot return a closure across the worker boundary, so
     // production removal flows through remove()).
-    return () => this.#release(keys);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#release(keys);
+    };
   }
 
   // Drop demand by path and context, the same refcounted accounting as the closure
@@ -76,7 +81,7 @@ export class SubscriptionRegistry {
   // path also leaves #demand and is not resurrected by resubscribeAll on reconnect.
   remove(paths: Path[], context?: Context): void {
     const ctx = context ?? SELF_CONTEXT;
-    for (const path of paths) this.#drop(`${ctx}|${path}`);
+    this.#release(paths.map((path) => `${ctx}|${path}`));
   }
 
   resubscribeAll(): void {
@@ -91,19 +96,22 @@ export class SubscriptionRegistry {
   }
 
   #release(keys: string[]): void {
-    for (const key of keys) this.#drop(key);
+    let removed = false;
+    for (const key of keys) removed = this.#drop(key) || removed;
+    if (!removed) return;
+    // Stock Signal K only supports removing every subscription on this socket. Replace the
+    // complete demand set once per release, preserving the surviving contexts and parameters.
+    this.#send({ context: '*', unsubscribe: [{ path: '*' }] });
+    this.resubscribeAll();
   }
 
-  #drop(key: string): void {
+  #drop(key: string): boolean {
     const demand = this.#demand.get(key);
-    if (!demand) return;
+    if (!demand) return false;
     demand.count -= 1;
-    if (demand.count > 0) return;
+    if (demand.count > 0) return false;
     this.#demand.delete(key);
-    this.#send({
-      context: demand.entry.context,
-      unsubscribe: [{ path: demand.entry.path }],
-    });
+    return true;
   }
 
   #resolve(entry: SubscribeEntry): Resolved {

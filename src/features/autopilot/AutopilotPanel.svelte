@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onDestroy } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { DEG_TO_RAD, formatBearingOr, formatSignedAngleOr, PLACEHOLDER } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
 import { ConfirmArm, SlideOver, WriteAccessNote } from '$shared/ui';
@@ -24,12 +24,24 @@ const arms = {
   tackStarboard: new ConfirmArm(),
   gybePort: new ConfirmArm(),
   gybeStarboard: new ConfirmArm(),
+  mode: new ConfirmArm(),
 };
+let armedContext: string | undefined;
+let armedToken: string | null | undefined;
+let pendingMode = $state<string | undefined>();
+function disarmAll(): void {
+  for (const arm of Object.values(arms)) arm.disarm();
+  pendingMode = undefined;
+  armedContext = undefined;
+}
 onDestroy(() => {
   for (const arm of Object.values(arms)) arm.disarm();
 });
 
 function tapArmed(key: keyof typeof arms, action: () => void): void {
+  if (armedContext !== controller.commandContext || armedToken !== auth.token) disarmAll();
+  armedContext = controller.commandContext;
+  armedToken = auth.token;
   if (arms[key].tap()) {
     action();
     return;
@@ -42,16 +54,20 @@ function tapArmed(key: keyof typeof arms, action: () => void): void {
 // A state flip from the pilot itself (another station engaged it, a seaway kicked it off) makes a
 // standing armed confirm stale, so it decays immediately rather than waiting out its window.
 $effect(() => {
-  void controller.engaged;
-  arms.engage.disarm();
-  arms.disengage.disarm();
+  void controller.commandContext;
+  void auth.token;
+  void auth.writeBlocked;
+  untrack(disarmAll);
 });
 
 const writesBlocked = $derived(auth.writeBlocked);
-const commandDisabled = $derived(writesBlocked || controller.busy);
+const releaseDisabled = $derived(writesBlocked || controller.busy);
+const commandDisabled = $derived(releaseDisabled || !controller.stateKnown);
+const maneuverDisabled = $derived(commandDisabled || !controller.engaged);
 const engagedModeName = $derived(
   controller.mode !== null ? `${autopilotModeLabel(controller.mode)} steering` : 'the autopilot',
 );
+const pilotName = $derived(controller.selectedId ?? 'the selected pilot');
 const windMode = $derived(controller.mode?.includes('wind') ?? false);
 const targetText = $derived.by(() => {
   if (controller.target === null) return PLACEHOLDER;
@@ -60,6 +76,28 @@ const targetText = $derived.by(() => {
 
 const canTack = $derived(controller.availableActionIds.has('tack'));
 const canGybe = $derived(controller.availableActionIds.has('gybe'));
+
+function chooseMode(next: string): void {
+  if (commandDisabled || next === controller.mode) return;
+  if (!controller.engaged) {
+    void controller.setMode(next);
+    return;
+  }
+  disarmAll();
+  armedContext = controller.commandContext;
+  armedToken = auth.token;
+  pendingMode = next;
+  arms.mode.tap();
+}
+
+function confirmMode(): void {
+  const next = pendingMode;
+  if (next !== undefined)
+    tapArmed('mode', () => {
+      pendingMode = undefined;
+      void controller.setMode(next);
+    });
+}
 
 function nudge(degrees: number): void {
   controller.adjustTarget(degrees * DEG_TO_RAD);
@@ -169,7 +207,15 @@ const NUDGES = [
           ><span class="unit">{controller.target !== null ? '°' : ''}</span>
         </dd>
       </dl>
-      {#if controller.engaged}
+      {#if !controller.stateKnown}
+        <p class="alert-note" role="status">
+          Autopilot state {controller.stateStatus}. The pilot may still be steering. Check the helm
+          before commanding it.
+        </p>
+        <button type="button" class="btn" onclick={() => void controller.rehydrate()}>
+          Refresh status
+        </button>
+      {:else if controller.engaged}
         <p class="muted-note" role="status">The autopilot is engaged and steering.</p>
       {:else}
         <p class="muted-note" role="status">The autopilot is on standby: hand steering.</p>
@@ -178,17 +224,17 @@ const NUDGES = [
 
     <section class="panel-section" aria-label="Steering">
       <h3 class="caps-label">Steering</h3>
-      {#if controller.engaged}
+      {#if controller.engaged || !controller.stateKnown}
         <button
           type="button"
           class="btn btn-danger"
-          disabled={commandDisabled}
+          disabled={releaseDisabled}
           onclick={() => tapArmed('disengage', () => void controller.disengage())}
         >
           {controller.pendingCommand === 'disengage'
             ? 'Disengaging…'
             : arms.disengage.armed
-              ? 'Tap again to disengage: take the helm'
+              ? `Tap again to disengage ${pilotName}: take the helm`
               : 'Disengage autopilot'}
         </button>
       {:else}
@@ -201,7 +247,7 @@ const NUDGES = [
           {controller.pendingCommand === 'engage'
             ? 'Engaging…'
             : arms.engage.armed
-              ? `Tap again to engage ${engagedModeName}`
+              ? `Tap again to engage ${pilotName}: ${engagedModeName}`
               : 'Engage autopilot'}
         </button>
       {/if}
@@ -215,7 +261,7 @@ const NUDGES = [
             type="button"
             class="btn btn--grow"
             aria-label={step.name}
-            disabled={!controller.engaged || writesBlocked}
+            disabled={!controller.engaged || commandDisabled}
             onclick={() => nudge(step.degrees)}
           >
             {step.label}
@@ -243,7 +289,7 @@ const NUDGES = [
                 class:is-on={controller.mode === option}
                 aria-pressed={controller.mode === option}
                 disabled={commandDisabled}
-                onclick={() => void controller.setMode(option)}
+                onclick={() => chooseMode(option)}
               >
                 {autopilotModeLabel(option)}
               </button>
@@ -256,13 +302,29 @@ const NUDGES = [
               class="input"
               value={controller.mode ?? ''}
               disabled={commandDisabled}
-              onchange={(event) => void controller.setMode(event.currentTarget.value)}
+              onchange={(event) => { chooseMode(event.currentTarget.value); event.currentTarget.value = controller.mode ?? ''; }}
             >
               {#each controller.modes as option (option)}
                 <option value={option}>{autopilotModeLabel(option)}</option>
               {/each}
             </select>
           </label>
+        {/if}
+        {#if pendingMode !== undefined && arms.mode.armed}
+          <p class="alert-note" role="status">
+            Change {pilotName}'s engaged steering from
+            {autopilotModeLabel(controller.mode ?? 'unknown')}
+            to {autopilotModeLabel(pendingMode)}?
+          </p>
+          <button
+            type="button"
+            class="btn btn-danger"
+            disabled={commandDisabled}
+            onclick={confirmMode}
+          >
+            Confirm steering mode change
+          </button>
+          <button type="button" class="btn" onclick={disarmAll}>Cancel mode change</button>
         {/if}
         <p class="muted-note muted-note--xs">
           What the pilot steers by: a compass heading, a GPS course, or the wind angle, as the
@@ -279,18 +341,18 @@ const NUDGES = [
             <button
               type="button"
               class="btn btn--grow"
-              disabled={commandDisabled}
+              disabled={maneuverDisabled}
               onclick={() => tapArmed('tackPort', () => void controller.tack('port'))}
             >
-              {arms.tackPort.armed ? 'Tap again to tack to port' : 'Tack port'}
+              {arms.tackPort.armed ? `Tap again to tack ${pilotName} to port` : 'Tack port'}
             </button>
             <button
               type="button"
               class="btn btn--grow"
-              disabled={commandDisabled}
+              disabled={maneuverDisabled}
               onclick={() => tapArmed('tackStarboard', () => void controller.tack('starboard'))}
             >
-              {arms.tackStarboard.armed ? 'Tap again to tack to starboard' : 'Tack starboard'}
+              {arms.tackStarboard.armed ? `Tap again to tack ${pilotName} to starboard` : 'Tack starboard'}
             </button>
           </div>
         {/if}
@@ -299,18 +361,18 @@ const NUDGES = [
             <button
               type="button"
               class="btn btn--grow"
-              disabled={commandDisabled}
+              disabled={maneuverDisabled}
               onclick={() => tapArmed('gybePort', () => void controller.gybe('port'))}
             >
-              {arms.gybePort.armed ? 'Tap again to gybe to port' : 'Gybe port'}
+              {arms.gybePort.armed ? `Tap again to gybe ${pilotName} to port` : 'Gybe port'}
             </button>
             <button
               type="button"
               class="btn btn--grow"
-              disabled={commandDisabled}
+              disabled={maneuverDisabled}
               onclick={() => tapArmed('gybeStarboard', () => void controller.gybe('starboard'))}
             >
-              {arms.gybeStarboard.armed ? 'Tap again to gybe to starboard' : 'Gybe starboard'}
+              {arms.gybeStarboard.armed ? `Tap again to gybe ${pilotName} to starboard` : 'Gybe starboard'}
             </button>
           </div>
         {/if}

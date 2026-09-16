@@ -2,6 +2,7 @@ import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CourseGuidance } from '$entities/course';
 import { OwnVessel } from '$entities/vessel';
+import type { UnitsSelection } from '$shared/lib';
 import { SignalKStore } from '$shared/signalk';
 import { createFrameFactory } from '$shared/testing';
 import NavStrip from './NavStrip.svelte';
@@ -23,7 +24,11 @@ function activeGuidance(extraSelf: Record<string, unknown> = {}): CourseGuidance
 
 const mounted: Array<() => void> = [];
 
-function mountStrip(extraSelf: Record<string, unknown> = {}, withSettings = false) {
+function mountStrip(
+  extraSelf: Record<string, unknown> = {},
+  withSettings = false,
+  units: UnitsSelection = 'metric',
+) {
   const onStop = vi.fn();
   const onSetArrivalCircle = vi.fn();
   const onRestartCourse = vi.fn();
@@ -36,7 +41,7 @@ function mountStrip(extraSelf: Record<string, unknown> = {}, withSettings = fals
       target,
       props: {
         guidance: activeGuidance(extraSelf),
-        units: 'metric',
+        units,
         onStop,
         ...(withSettings ? { onSetArrivalCircle, onRestartCourse, onSetTargetArrivalTime } : {}),
       },
@@ -131,6 +136,19 @@ describe('NavStrip stop', () => {
 });
 
 describe('NavStrip course settings', () => {
+  it('round trips the streamed SI arrival radius through feet', () => {
+    const strip = mountStrip({ 'navigation.course.arrivalCircle': 250 }, true, 'imperial');
+    strip.openSettings();
+    const field = strip.query<HTMLInputElement>('input[type="number"]');
+    expect(field.getAttribute('aria-label')).toBe('Arrival radius in ft');
+    expect(field.valueAsNumber).toBeCloseTo(250 / 0.3048);
+    strip.commitField('input[type="number"]', field.value);
+    expect(strip.onSetArrivalCircle).toHaveBeenCalledWith(250);
+    strip.commitField('input[type="number"]', '100');
+    expect(strip.onSetArrivalCircle).toHaveBeenLastCalledWith(30.48);
+    strip.commitField('input[type="number"]', '');
+    expect(strip.onSetArrivalCircle).toHaveBeenCalledTimes(2);
+  });
   it('shows the streamed arrival radius and commits an entered one', () => {
     const strip = mountStrip({ 'navigation.course.arrivalCircle': 250 }, true);
     strip.openSettings();

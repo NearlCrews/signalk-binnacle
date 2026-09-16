@@ -39,6 +39,7 @@ export interface OverlayContext {
 }
 
 export interface ChartLayerInfo {
+  sourceIds?: readonly string[];
   identifier: string;
   source: 'server' | 'user';
   kind: 'vector' | 'raster' | 'style' | 'unknown';
@@ -128,6 +129,7 @@ export interface OverlayModule {
 // near-worldwide service envelope, so a single bounds would read as a chart over the whole
 // planet); absent coverage means worldwide by the charts contract.
 export interface ChartCoverageInfo {
+  sourceIds?: readonly string[];
   coverage?: readonly Readonly<Bbox4>[];
   minzoom?: number;
   maxzoom?: number;

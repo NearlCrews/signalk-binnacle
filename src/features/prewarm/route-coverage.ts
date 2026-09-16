@@ -100,10 +100,16 @@ function classifyPoint(
   let best: SampleClass = UNCOVERED;
   for (const { region, parts } of regions) {
     if (!parts.some((part) => bboxContainsPoint(part, point))) continue;
-    if (!sourceCoversPoint(region.sourceIds, latitude, lon, [region.minzoom, region.maxzoom])) {
+    const available = region.sourceIds.filter((id) => !region.unavailableSourceIds?.includes(id));
+    if (!sourceCoversPoint(available, latitude, lon, [region.minzoom, region.maxzoom])) {
       continue;
     }
-    if (region.maxzoom >= requiredMaxzoom) return COVERED;
+    if (
+      region.minzoom <= requiredMaxzoom &&
+      region.maxzoom >= requiredMaxzoom &&
+      sourceCoversPoint(available, latitude, lon, [requiredMaxzoom, requiredMaxzoom])
+    )
+      return COVERED;
     best = DETAIL_SHORT;
   }
   return best;

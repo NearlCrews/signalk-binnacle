@@ -51,6 +51,7 @@ import {
   chartViewCharts,
   chartViewStatus,
   createChartOverlay,
+  createChartReadinessTracker,
   createMapTapRecognizer,
   createThemedMap,
   detectCompanion,
@@ -273,12 +274,13 @@ function emitChartsStatus(status: 'loading' | 'ready' | 'partial' | 'error'): vo
 let viewSnapshot = $state<{ center: LatLon; zoom: number } | undefined>();
 let layersRevision = $state(0);
 let managerRef = $state<LayerManager | undefined>();
+let chartReadiness: ReturnType<typeof createChartReadinessTracker> | undefined;
 const chartStatus = $derived.by<ChartViewStatusKind>(() => {
   void layersRevision;
   return chartViewStatus({
     baseStyleFallback,
     chartsLoadState: chartsLoadStateLocal,
-    charts: chartViewCharts(managerRef?.layers() ?? []),
+    charts: chartViewCharts(managerRef?.layers() ?? [], chartReadiness?.getState),
     center: viewSnapshot?.center,
     zoom: viewSnapshot?.zoom,
   });
@@ -457,6 +459,9 @@ onMount(async () => {
       };
     },
     onLoad: async ({ map, ctx, manager: mgr, recolor, isDestroyed, runTick }) => {
+      chartReadiness = createChartReadinessTracker(map, () => {
+        layersRevision += 1;
+      });
       // Chart tools can be opened while optional overlays are still registering. Expose the loaded
       // map immediately so their cursor and keyboard feedback do not wait on unrelated providers.
       mapRef = map;
@@ -894,6 +899,7 @@ onDestroy(() => {
   // layers in the right order (start -> stop, before map.remove()); the guard makes it a no-op when
   // editing never started. Then tear the map down.
   destroyed = true;
+  chartReadiness?.destroy();
   measureOverlay?.cancelInteraction();
   measureOverlay = undefined;
   routeEditor?.stop();

@@ -234,10 +234,8 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await panel.getByRole('button', { name: 'Minimize panel' }).click();
   await expect(panel.locator('.panel-body')).toHaveClass(/panel-body--collapsed/);
 
-  const canvas = page.locator('.maplibregl-canvas');
-  const canvasBox = await canvas.boundingBox();
-  if (!canvasBox) throw new Error('map canvas did not lay out');
-  await page.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+  const center = await waitForCenterStationHit(page);
+  await page.mouse.click(center.x, center.y);
 
   await expect(panel.locator('.panel-body')).not.toHaveClass(/panel-body--collapsed/);
   await expect(panel.getByRole('button', { name: /Harbor tide/ })).toHaveAttribute(
@@ -252,26 +250,19 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   // Keep the chart center clear of the phone-height Measure strip while proving that its delegated
   // marker gate consumes the exact Tide station tap.
   await page.setViewportSize({ width: 800, height: 700 });
+  const measurePoint = await waitForCenterStationHit(page);
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: 'Measure', exact: true }).click();
   const measure = page.getByRole('complementary', { name: 'Measure' });
   await expect(measure).toBeVisible();
   await expect(page.locator('#app-menu-launcher')).not.toBeVisible();
-  const measureCanvasBox = await canvas.boundingBox();
-  if (!measureCanvasBox) throw new Error('measure map canvas did not lay out');
-  await touchTap(page, {
-    x: measureCanvasBox.x + measureCanvasBox.width / 2,
-    y: measureCanvasBox.y + measureCanvasBox.height / 2,
-  });
+  await touchTap(page, measurePoint);
   await expect(measure.getByText('Tap the chart to set the next point')).toBeVisible();
   await expect(chartOpenedPanel).toHaveCount(0);
   await measure.getByRole('button', { name: 'Done' }).click();
 
-  const expandedCanvasBox = await canvas.boundingBox();
-  if (!expandedCanvasBox) throw new Error('expanded map canvas did not lay out');
-  await canvas.click({
-    position: { x: expandedCanvasBox.width / 2, y: expandedCanvasBox.height / 2 },
-  });
+  const expandedCenter = await waitForCenterStationHit(page);
+  await page.mouse.click(expandedCenter.x, expandedCenter.y);
   await expect(chartOpenedPanel).toBeVisible();
   await expect(chartOpenedPanel.getByRole('button', { name: 'Back to menu' })).toHaveCount(0);
   await page.setViewportSize({ width: 320, height: 568 });
