@@ -13,10 +13,10 @@ const DAY: Array<[number, Rgba]> = [
 // Night-red: a deep red band on black, brightness rising with speed, no blue and minimal green so
 // the hue stays pure red and the brightest pixel stays low to protect dark adaptation.
 const NIGHT: Array<[number, Rgba]> = [
-  [0, [0.3, 0.04, 0.03, 0.0]],
-  [7, [0.5, 0.06, 0.04, 0.85]],
-  [18, [0.68, 0.09, 0.05, 0.95]],
-  [26, [0.85, 0.13, 0.07, 1.0]],
+  [0, [0.3, 0.04, 0, 0.0]],
+  [7, [0.5, 0.06, 0, 0.85]],
+  [18, [0.68, 0.09, 0, 0.95]],
+  [26, [0.85, 0.13, 0, 1.0]],
 ];
 
 const EXPR_SPEEDS = [0, 3, 7, 12, 18, 26];

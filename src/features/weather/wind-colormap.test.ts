@@ -13,5 +13,6 @@ describe('windColor', () => {
   it('uses a red-band ramp at night, red above blue', () => {
     const c = windColor(20, 'night-red');
     expect(c[0]).toBeGreaterThan(c[2]);
+    expect(c[2]).toBe(0);
   });
 });

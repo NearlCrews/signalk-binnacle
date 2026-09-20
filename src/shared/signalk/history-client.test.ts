@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { jsonResponse, stubFetch } from '$shared/testing';
 import {
+  columnIndex,
   fetchHistoryPaths,
   fetchHistoryProviderPathCatalogs,
   fetchHistoryProviders,
@@ -72,6 +73,49 @@ describe('fetchHistoryProviders', () => {
 });
 
 describe('fetchHistoryValues', () => {
+  it('keeps source-split columns distinct and requires an unambiguous selection', async () => {
+    const mock = stubFetch({
+      ok: true,
+      body: {
+        range: RANGE,
+        values: [
+          { path: 'navigation.position', method: 'last', $source: 'gps.port' },
+          { path: 'navigation.position', method: 'last', $source: 'gps.starboard' },
+        ],
+        data: [[RANGE.from, { latitude: 1, longitude: 2 }, { latitude: 3, longitude: 4 }]],
+      },
+    });
+    const got = await fetchHistoryValues(BASE, undefined, {
+      paths: ['navigation.position:last'],
+      durationSeconds: 60,
+      sourcePolicy: 'all',
+    });
+    expect(String(mock.mock.calls[0][0])).toContain('sourcePolicy=all');
+    expect(got?.columns.map((c) => c.source)).toEqual(['gps.port', 'gps.starboard']);
+    if (!got) throw new Error('missing history');
+    expect(columnIndex(got, 'navigation.position', 'last')).toBe(-1);
+    expect(columnIndex(got, 'navigation.position', 'last', 'gps.starboard')).toBe(1);
+    expect(columnIndex(got, 'navigation.position', 'last', 'missing')).toBe(-1);
+    expect(
+      positionFromHistoryRow(
+        got.rows[0],
+        columnIndex(got, 'navigation.position', 'last', 'gps.port'),
+      ),
+    ).toEqual({ latitude: 1, longitude: 2 });
+  });
+
+  it.each(['', 'x'.repeat(513), 'bad\u0000source', 42])(
+    'rejects invalid history source %j',
+    async (source) => {
+      stubFetch({
+        ok: true,
+        body: { range: RANGE, values: [{ path: 'a', method: 'last', $source: source }], data: [] },
+      });
+      expect(
+        await fetchHistoryValues(BASE, undefined, { paths: ['a'], durationSeconds: 60 }),
+      ).toBeUndefined();
+    },
+  );
   it('parses the columnar response and keeps only well-shaped rows', async () => {
     const mock = stubFetch({
       ok: true,

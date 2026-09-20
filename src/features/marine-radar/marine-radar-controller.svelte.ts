@@ -665,7 +665,7 @@ export function createMarineRadarController(deps: MarineRadarDeps) {
     store.setControlPending(POWER_PENDING_KEY, false);
     markEchoGrace(POWER_PENDING_KEY);
     if (!result.ok) {
-      if (prior) store.setOperationalStatus(prior);
+      store.setOperationalStatus(prior);
       if (result.status === 401 || result.status === 403) store.setControlsForbidden(true);
       store.setControlError(POWER_PENDING_KEY, errorMessage(result.status));
       return false;

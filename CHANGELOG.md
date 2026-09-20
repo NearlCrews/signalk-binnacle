@@ -6,6 +6,18 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Support Radar API 3.4.0 discovery, capability geometry, color legends, and spoke streams while
+  preserving earlier radar providers. Failed control reads remain unknown instead of reporting Off,
+  and access and connection failures retain recovery guidance.
+- Correct wind particle blending and calm-field handling so forecast wind remains visible, and add
+  directional arrowheads to static wind and wave overlays. Explain blank pressure contours and keep
+  wind and pressure colors free of blue in night-red.
+- Preserve History API source identities and reject ambiguous sensor selection. The optional
+  `sourcePolicy=all` query is supported without changing older-server request defaults.
+- Update pinned GitHub Actions dependencies.
+
 <a id="v0220"></a>
 
 ## [0.22.0] - 2026-09-16

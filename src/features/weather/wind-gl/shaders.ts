@@ -49,7 +49,8 @@ void main() {
   vec2 pos = vec2(color.r / 255.0 + color.b, color.g / 255.0 + color.a);
   vec4 w = texture2D(u_wind, pos);
   vec2 velocity = w.a < 0.5 ? vec2(0.0) : mix(u_wind_min, u_wind_max, w.rg);
-  float speed_t = length(velocity) / length(u_wind_max);
+  vec2 max_abs = max(abs(u_wind_min), abs(u_wind_max));
+  float speed_t = clamp(length(velocity) / max(length(max_abs), 0.0001), 0.0, 1.0);
   vec2 offset = velocity * u_speed_factor;
   pos = fract(1.0 + pos + offset);
   vec2 seed = (pos + v_tex_pos) * u_rand_seed;

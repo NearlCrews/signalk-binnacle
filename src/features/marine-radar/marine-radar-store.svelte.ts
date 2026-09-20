@@ -11,6 +11,7 @@ import {
   type RadarInfo,
   type RadarStatus,
   type RadarTarget,
+  statusFromPower,
 } from './radar-types';
 
 // The stream connection state, distinct from the radar's own operational status (off/standby/transmit).
@@ -161,7 +162,7 @@ export class MarineRadarStore {
     }
   }
 
-  setOperationalStatus(status: RadarStatus): void {
+  setOperationalStatus(status: RadarStatus | undefined): void {
     this.operationalStatus = status;
   }
 
@@ -301,11 +302,4 @@ export class MarineRadarStore {
     this.areaDraft = draft;
     this.areaVersion += 1;
   }
-}
-
-function statusFromPower(value: unknown): RadarStatus | undefined {
-  if (value === 'off' || value === 'standby' || value === 'transmit' || value === 'warming')
-    return value;
-  if (typeof value !== 'number') return undefined;
-  return (['off', 'standby', 'transmit', 'warming'] as const)[value];
 }

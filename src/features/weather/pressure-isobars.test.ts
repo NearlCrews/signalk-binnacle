@@ -18,6 +18,16 @@ function rampGrid(): WeatherGrid {
 const bracket = { lo: 0, hi: 0, frac: 0 };
 
 describe('isobarFeatures', () => {
+  it.each([
+    [1015, 1015],
+    [1013, 1015],
+  ])('does not invent contours for a %s to %s hPa field', (low, high) => {
+    const grid = rampGrid();
+    grid.pressureMsl = [
+      grid.lats.flatMap(() => grid.lons.map((_, c) => (low + ((high - low) * c) / 4) * 100)),
+    ];
+    expect(isobarFeatures(grid, bracket).lines.features).toEqual([]);
+  });
   it('contours the field at the hPa interval', () => {
     const { lines, labels } = isobarFeatures(rampGrid(), bracket, 4);
     // Levels 1008, 1012, 1016 each cross both cell rows -> 2 segments each.

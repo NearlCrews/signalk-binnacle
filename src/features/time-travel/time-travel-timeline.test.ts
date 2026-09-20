@@ -29,6 +29,17 @@ function values(rows: HistoryValues['rows']): HistoryValues {
 }
 
 describe('toSamples', () => {
+  it('does not select a GPS by response order when history is split by source', () => {
+    const history = values([
+      ['2026-06-17T00:00:00.000Z', { latitude: 1, longitude: 2 }, { latitude: 3, longitude: 4 }],
+    ]);
+    history.columns = [
+      { path: SK_PATHS.position, method: 'last', source: 'gps.port' },
+      { path: SK_PATHS.position, method: 'last', source: 'gps.starboard' },
+    ];
+    const samples = toSamples(history);
+    expect(samples).toEqual([]);
+  });
   it('maps one row to one sample, resolving columns by path', () => {
     const samples = toSamples(
       values([

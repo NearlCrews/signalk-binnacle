@@ -6,18 +6,26 @@ instruments, especially after a provider restart, network interruption, heading 
 
 ## Provider contract
 
-Binnacle uses the Signal K v2 Radar API:
+Failed power reads display Unknown, never Off. Discovery retains access and connection failures
+with recovery guidance, including when one radar remains usable while another cannot be read.
 
-- `GET /signalk/v2/api/vessels/self/radars` discovers the current radars.
-- `GET /signalk/v2/api/vessels/self/radars/{id}/capabilities` describes available controls.
-- `GET /signalk/v2/api/vessels/self/radars/{id}/controls` hydrates their current values.
+Binnacle uses the Signal K v2 Radar API, version 3.4.0 or the shape that preceded it:
+
+- `GET /signalk/v2/api/vessels/self/radars` discovers the current radars. A 3.4.0 server answers
+  with a `{ version, radars }` envelope keyed by radar id whose entries carry identity only; an
+  older server answers with an array whose elements carry geometry, legend, status, and controls
+  inline.
+- `GET /signalk/v2/api/vessels/self/radars/{id}/capabilities` describes available controls, and on
+  a 3.4.0 server also the spoke geometry and the legend, which Binnacle reads at discovery.
+- `GET /signalk/v2/api/vessels/self/radars/{id}/controls` hydrates their current values, and on a
+  3.4.0 server also seeds the radar's power state and range at discovery.
 - `PUT /signalk/v2/api/vessels/self/radars/{id}/controls/{controlId}` writes a control.
 - `PUT /signalk/v2/api/vessels/self/radars/{id}` writes one complete structured area through the
   standard bulk-control envelope.
 - Signal K deltas at `radars.{radarId}.controls.{controlId}` reconcile live out-of-band changes for
   every discovered radar, not only the selected one, so switching radars seeds current values.
-- `RadarInfo.streamUrl`, or the built-in per-radar stream fallback, carries protobuf spokes over a
-  WebSocket.
+- `…/radars/{id}/spokes` carries protobuf spokes over a WebSocket on a 3.4.0 server; an older
+  server's `RadarInfo.streamUrl`, or its built-in per-radar `/stream` fallback, does the same.
 - `GET /signalk/v2/api/vessels/self/radars/{id}/targets` returns the provider's tracked ARPA
   targets: id, status, a position (bearing and distance, plus latitude and longitude when the
   provider has own-ship navigation data), optional motion (course and speed), and an optional
@@ -63,6 +71,11 @@ The spoke worker opens only when all of these are true:
 - the radar overlay is visible;
 - the browser document is visible; and
 - the Signal K radar capability is available.
+
+This is more than housekeeping. A provider counts every open spoke stream as someone watching the
+radar and keeps it transmitting for them, and Mayara lets a radar nobody has watched for a set time
+stand down. A stream held open while the overlay is hidden or the page is in the background could keep
+the transmitter active unnecessarily, so Binnacle releases it as soon as the picture is off screen.
 
 The worker integrates spokes in a bounded polar buffer and transfers a frame only after new spokes
 arrive. If no spoke arrives for five seconds, Binnacle clears the echo and range rings and reports the

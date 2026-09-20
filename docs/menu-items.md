@@ -262,6 +262,9 @@ source, and surrounding traffic before relying on it.
   fails. Returning to the page checks whether a refresh is due without bypassing that cadence.
   Forecast times are not observation or fetch times, and stale or unknown ages remain explicit.
   Animation pauses while hidden and cannot play without loaded grid frames.
+  Wind particles show flow direction; reduced motion uses static arrows with arrowheads. Pressure
+  contours are spaced every 4 hPa, so uniform pressure or a small pressure range can legitimately
+  show no lines. Zoom out to inspect a wider area; a blank contour layer is not a missing point reading.
   Provider point requests are time-bounded, warning intervals are validated, and
   missing optional warning labels receive bounded fallbacks. Open-Meteo marine fields are omitted
   when the provider's sea-snapped coordinate is too far from the requested grid cell. Provider

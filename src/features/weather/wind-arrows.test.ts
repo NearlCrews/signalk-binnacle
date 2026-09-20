@@ -24,6 +24,11 @@ describe('windArrowFeatures', () => {
     expect(coords[0]).toEqual([0, 0]);
     expect(coords[1][0]).toBeLessThan(0); // wind toward the west: endpoint lon decreases
     expect(coords[1][1]).toBeCloseTo(0, 6);
+    expect(coords).toHaveLength(5);
+    expect(coords[3]).toEqual(coords[1]);
+    expect(coords[2][0]).toBeGreaterThan(coords[1][0]);
+    expect(coords[4][0]).toBeGreaterThan(coords[1][0]);
+    expect(coords[2][1] * coords[4][1]).toBeLessThan(0);
     expect((fc.features[0].properties as { speed: number }).speed).toBeCloseTo(10, 4);
   });
 

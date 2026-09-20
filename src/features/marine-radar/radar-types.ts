@@ -6,6 +6,13 @@
 import type { LatLon } from '$shared/geo';
 
 export type RadarStatus = 'off' | 'standby' | 'transmit' | 'warming';
+export function statusFromPower(value: unknown): RadarStatus | undefined {
+  if (value === 'off' || value === 'standby' || value === 'transmit' || value === 'warming')
+    return value;
+  return typeof value === 'number'
+    ? (['off', 'standby', 'transmit', 'warming'] as const)[value]
+    : undefined;
+}
 export type RadarAvailability =
   | 'idle'
   | 'probing'
@@ -100,19 +107,21 @@ export interface LegendEntry {
   maxValue?: number;
 }
 
-// A radar as listed by GET /signalk/v2/api/vessels/self/radars (the array elements).
+// A radar as discovered from GET /signalk/v2/api/vessels/self/radars. On a Radar API 3.4.0 server the
+// list entry is identity only and the rest is gathered from /capabilities and /controls; before 3.4.0
+// the array element carried it all inline.
 export interface RadarInfo {
   id: string;
   name: string;
   brand?: string;
-  status: RadarStatus;
+  status?: RadarStatus;
   spokesPerRevolution: number;
   maxSpokeLen: number;
   range: number;
   controls: RadarControls;
   legend?: LegendEntry[];
-  // WebSocket URL for the protobuf spoke stream. When absent the built-in stream at
-  // `<radar>/stream` is used.
+  // WebSocket URL for the protobuf spoke stream: `<radar>/spokes` on a 3.4.0 server, a provider's
+  // own URL before that. When absent the pre-3.4.0 built-in stream at `<radar>/stream` is used.
   streamUrl?: string;
 }
 
@@ -146,9 +155,13 @@ export interface ControlDefinition {
   maxDistance?: number;
 }
 
-// The subset of GET /radars/{id}/capabilities Binnacle reads.
+// The subset of GET /radars/{id}/capabilities Binnacle reads. Geometry and legend are present on a
+// Radar API 3.4.0 manifest; pre-3.4.0 servers carry them on the discovery entry instead.
 export interface RadarCapabilities {
   controls: ControlDefinition[];
+  spokesPerRevolution?: number;
+  maxSpokeLength?: number;
+  legend?: LegendEntry[];
 }
 
 // A tracked ARPA or MARPA target from GET /radars/{id}/targets, reduced to what Binnacle consumes.

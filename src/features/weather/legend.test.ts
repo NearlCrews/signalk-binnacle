@@ -20,6 +20,7 @@ describe('weatherLegend', () => {
     const legend = weatherLegend('weather-pressure', 'day', 'metric');
     expect(legend?.swatches).toHaveLength(1);
     expect(legend?.gradient).toBeUndefined();
+    expect(legend?.note).toContain('may show no lines');
   });
 
   it('keeps the isobar legend in hPa under imperial: isobars are conventionally hectopascals', () => {

@@ -146,6 +146,151 @@ describe('discoverRadars', () => {
     expect((await discoverRadars('http://boat.local', undefined)).radars).toEqual([]);
   });
 
+  // Radar API 3.4.0: the list is a { version, radars } envelope of identity-only entries, and what
+  // the old array element carried inline comes from /capabilities and /controls.
+  describe('Radar API 3.4.0 envelope', () => {
+    const manifest = {
+      spokesPerRevolution: 2048,
+      maxSpokeLength: 1024,
+      legend: {
+        pixelColors: 2,
+        pixels: [
+          { type: 'normal', color: '#00000000' },
+          { type: 'normal', color: { r: 0, g: 255, b: 0, a: 255 } },
+        ],
+      },
+      controls: { gain: { name: 'Gain', dataType: 'number', minValue: 0, maxValue: 100 } },
+    };
+    const controls = { power: { value: 2 }, range: { value: 926 }, gain: { value: 50 } };
+
+    function stubEnvelope(radars: Record<string, unknown>, caps: unknown = manifest) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith('/capabilities')) return new Response(JSON.stringify(caps));
+          if (url.endsWith('/controls')) return new Response(JSON.stringify(controls));
+          return new Response(JSON.stringify({ version: '3.4.0', radars }));
+        }),
+      );
+    }
+
+    it('hydrates each radar from its manifest and control values', async () => {
+      stubEnvelope({ nav1034A: { name: 'Halo A', brand: 'Navico', model: 'HALO24' } });
+      const result = await discoverRadars('http://boat.local', undefined);
+      expect(result.availability).toBe('available');
+      const r = result.radars[0];
+      expect(r.id).toBe('nav1034A');
+      expect(r.name).toBe('Halo A');
+      expect(r.spokesPerRevolution).toBe(2048);
+      expect(r.maxSpokeLen).toBe(1024);
+      expect(r.status).toBe('transmit');
+      expect(r.range).toBe(926);
+      expect(r.controls.gain?.value).toBe(50);
+      expect(r.legend).toEqual([
+        { color: '#00000000', label: 'normal' },
+        { color: '#00ff00ff', label: 'normal' },
+      ]);
+    });
+
+    it('streams spokes from the /spokes convention', async () => {
+      stubEnvelope({ nav1034A: { name: 'Halo A' } });
+      const [r] = (await discoverRadars('http://boat.local', undefined)).radars;
+      expect(spokesUrl('http://boat.local', r)).toBe(
+        'ws://boat.local/signalk/v2/api/vessels/self/radars/nav1034A/spokes',
+      );
+    });
+
+    it('accepts the server-api manifest with nested characteristics and array controls', async () => {
+      stubEnvelope(
+        { a: { name: 'Radar A' } },
+        {
+          characteristics: { spokesPerRevolution: 2048, maxSpokeLength: 1024 },
+          controls: [{ id: 'gain', name: 'Gain', type: 'number', range: { min: 0, max: 100 } }],
+        },
+      );
+      const result = await discoverRadars('http://boat.local', undefined);
+      expect(result.availability).toBe('available');
+      expect(result.radars[0].spokesPerRevolution).toBe(2048);
+      expect(result.radars[0].maxSpokeLen).toBe(1024);
+    });
+
+    it('leaves out a radar whose manifest carries no geometry', async () => {
+      stubEnvelope({ nav1034A: { name: 'Halo A' } }, { controls: {} });
+      const result = await discoverRadars('http://boat.local', undefined);
+      expect(result.radars).toEqual([]);
+      expect(result.availability).toBe('invalid');
+    });
+
+    it('reports an empty envelope as absent', async () => {
+      stubEnvelope({});
+      expect((await discoverRadars('http://boat.local', undefined)).availability).toBe('absent');
+    });
+
+    it.each([401, 403, 500])(
+      'keeps failed control hydration unknown for HTTP %s',
+      async (status) => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/controls')) return new Response('', { status });
+            if (url.endsWith('/capabilities')) return new Response(JSON.stringify(manifest));
+            return new Response(
+              JSON.stringify({ version: '3.4.0', radars: { a: { name: 'Radar A' } } }),
+            );
+          }),
+        );
+        const result = await discoverRadars('http://boat.local', undefined);
+        expect(result.radars[0].status).toBeUndefined();
+        expect(result.availability).toBe('available');
+        expect(result.detail).toContain(`HTTP ${status}`);
+      },
+    );
+
+    it.each([
+      [401, 'auth-required'],
+      [403, 'auth-required'],
+      [500, 'unreachable'],
+    ])('preserves manifest failure %s as %s', async (status, availability) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith('/capabilities')) return new Response('', { status: Number(status) });
+          if (url.endsWith('/controls')) return new Response(JSON.stringify(controls));
+          return new Response(
+            JSON.stringify({ version: '3.4.0', radars: { a: { name: 'Radar A' } } }),
+          );
+        }),
+      );
+      const result = await discoverRadars('http://boat.local', undefined);
+      expect(result.radars).toEqual([]);
+      expect(result.availability).toBe(availability);
+      expect(result.detail).toContain(`HTTP ${status}`);
+    });
+
+    it.each([{}, { power: { value: 99 } }, { power: { value: 'broken' } }])(
+      'does not invent power state from %j',
+      async (snapshot) => {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/capabilities')) return new Response(JSON.stringify(manifest));
+            if (url.endsWith('/controls')) return new Response(JSON.stringify(snapshot));
+            return new Response(
+              JSON.stringify({ version: '3.4.0', radars: { a: { name: 'Radar A' } } }),
+            );
+          }),
+        );
+        expect(
+          (await discoverRadars('http://boat.local', undefined)).radars[0].status,
+        ).toBeUndefined();
+      },
+    );
+  });
+
   it('reports an oversized radar list distinctly from a non-array body', async () => {
     const body = Array.from({ length: MAX_RADARS + 1 }, (_, index) => ({
       ...radar,

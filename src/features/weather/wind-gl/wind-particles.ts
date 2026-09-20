@@ -350,6 +350,8 @@ export class WindParticles {
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
 
+    // MapLibre enables blending before custom rendering. State texels encode coordinates, not alpha.
+    gl.disable(gl.BLEND);
     this.#updateParticles();
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.#framebuffer);
@@ -364,14 +366,14 @@ export class WindParticles {
       this.#drawTexture(this.#screen0, this.#fadeOpacity);
     }
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.#drawParticles(matrix);
     gl.disable(gl.BLEND);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, widthPx, heightPx);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.#drawTexture(this.#screen1, this.#opacity);
     gl.disable(gl.BLEND);
 
@@ -392,7 +394,7 @@ export class WindParticles {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, widthPx, heightPx);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.#drawTexture(this.#screen0, this.#opacity);
     gl.disable(gl.BLEND);
   }

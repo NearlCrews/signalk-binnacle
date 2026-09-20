@@ -13,6 +13,8 @@ describe('isobarColors', () => {
     const { line } = isobarColors('night-red');
     const [r, , b] = parseRgb(line);
     expect(r).toBeGreaterThan(b);
+    expect(b).toBe(0);
+    expect(parseRgb(isobarColors('night-red').label)[2]).toBe(0);
   });
 });
 

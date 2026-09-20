@@ -102,7 +102,12 @@ const statusLabel = $derived.by(() => {
     case 'stale':
       return 'Radar picture is stale';
     case 'paused':
-      return operational === 'transmit' ? 'Radar picture paused' : 'Stream paused in standby';
+      if (operational === 'standby') return 'Stream paused in standby';
+      if (operational === 'off') return 'Stream paused while radar is off';
+      if (operational === 'warming') return 'Stream paused while radar warms up';
+      return operational === 'transmit'
+        ? 'Radar picture paused'
+        : 'Stream paused: radar power is unknown';
     default:
       return '';
   }
@@ -404,6 +409,8 @@ function discardActiveDraft(): void {
         {store.discoveryDetail}
       {/if}
     </p>
+  {:else if store.discoveryDetail}
+    <p class="muted-note" role="status">{store.discoveryDetail}</p>
   {/if}
   {#if store.radars.length > 1}
     <select

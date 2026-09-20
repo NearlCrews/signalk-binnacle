@@ -98,6 +98,7 @@ export function weatherLegend(
       return {
         id: layerId,
         title: 'Pressure',
+        note: `Contours every ${DEFAULT_INTERVAL_HPA} hPa. Uniform pressure or a small pressure range may show no lines; zoom out to see a wider area.`,
         swatches: [
           { color: isobarColors(theme).line, label: `isobars, ${DEFAULT_INTERVAL_HPA} hPa` },
         ],

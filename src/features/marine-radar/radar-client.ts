@@ -29,15 +29,15 @@ import type {
   RadarStatus,
   RadarStructuredValue,
 } from './radar-types';
+import { statusFromPower } from './radar-types';
 
-// The Signal K v2 radar API. The server serves a JSON ARRAY of RadarInfo objects here (each with its
-// own `id`); a Radar API provider populates it, and a stock server with no provider returns `[]`.
-// Note: the server's published OpenAPI doc models this as an id-keyed map, but the implementation and
-// the @signalk/server-api RadarInfo type return an array, which is what is verified against here. Do
-// not "correct" this to a map from the OpenAPI doc.
+// The Signal K v2 radar API. Radar API 3.4.0 serves a `{ version, radars }` envelope here with the
+// radars keyed by id and reduced to identity: geometry, legend, and live state live on
+// `/capabilities` and `/controls`, and the spoke stream is at `/spokes` by convention. Servers before
+// 3.4.0 serve a JSON ARRAY of RadarInfo objects carrying all of that inline, with the spoke stream at
+// `/stream`; both shapes are read. A stock server with no provider returns `[]` or an empty envelope.
 export const RADARS_PATH = '/signalk/v2/api/vessels/self/radars';
 
-const RADAR_STATUSES: ReadonlySet<string> = new Set(['off', 'standby', 'transmit', 'warming']);
 const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'boolean',
   'number',
@@ -193,6 +193,31 @@ function parseLegend(raw: unknown): LegendEntry[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+// The Radar API 3.4.0 legend: `pixels` is indexed by sample value, each with a color as `#rrggbbaa`
+// or an `{ r, g, b, a }` record. Reduced to the index-ordered legend the color table already reads.
+function parseLegendPixels(raw: unknown): LegendEntry[] | undefined {
+  if (!isRecord(raw) || !Array.isArray(raw.pixels) || raw.pixels.length > MAX_RADAR_LEGEND_ENTRIES)
+    return undefined;
+  const out: LegendEntry[] = [];
+  for (const e of raw.pixels) {
+    if (!isRecord(e)) return undefined;
+    const color = isRecord(e.color) ? rgbaToHex(e.color) : e.color;
+    if (typeof color !== 'string' || !/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color))
+      return undefined;
+    out.push({ color, label: boundedText(e.type) ?? '' });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function rgbaToHex(c: Record<string, unknown>): string | undefined {
+  const channel = (v: unknown): string | undefined =>
+    isFiniteNumber(v) && v >= 0 && v <= 255
+      ? Math.round(v).toString(16).padStart(2, '0')
+      : undefined;
+  const parts = [channel(c.r), channel(c.g), channel(c.b), channel(c.a ?? 255)];
+  return parts.every((p) => p !== undefined) ? `#${parts.join('')}` : undefined;
+}
+
 function toRadarInfo(raw: unknown): RadarInfo | undefined {
   if (!isRecord(raw)) return undefined;
   const id = safeStringId(raw.id);
@@ -214,7 +239,7 @@ function toRadarInfo(raw: unknown): RadarInfo | undefined {
     id,
     name: boundedText(raw.name) ?? id,
     brand: boundedText(raw.brand),
-    status: RADAR_STATUSES.has(raw.status as string) ? (raw.status as RadarStatus) : 'off',
+    status: statusFromPower(raw.status),
     spokesPerRevolution: raw.spokesPerRevolution,
     maxSpokeLen: raw.maxSpokeLen,
     range:
@@ -403,26 +428,130 @@ export async function discoverRadars(
       };
     }
     const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);
-    if (!Array.isArray(body))
-      return { radars: [], availability: 'invalid', detail: 'Radar discovery was not an array.' };
-    if (body.length > MAX_RADARS)
+    const envelope = isRecord(body) && isRecord(body.radars);
+    if (!Array.isArray(body) && !envelope)
+      return {
+        radars: [],
+        availability: 'invalid',
+        detail: 'Radar discovery was neither a radar array nor a { version, radars } envelope.',
+      };
+    const entries = envelope
+      ? Object.entries(body.radars as Record<string, unknown>).map(([id, info]) =>
+          isRecord(info) ? { ...info, id } : info,
+        )
+      : (body as unknown[]);
+    if (entries.length > MAX_RADARS)
       return {
         radars: [],
         availability: 'invalid',
         detail: `Radar discovery returned more than ${MAX_RADARS} radars.`,
       };
+    if (envelope) return hydrateLeanRadars(origin, token, entries);
     const radars = normalizeRadarIdentities(
-      body.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined),
+      entries.map(toRadarInfo).filter((r): r is RadarInfo => r !== undefined),
     );
     return {
       radars,
-      availability: radars.length > 0 ? 'available' : body.length > 0 ? 'invalid' : 'absent',
+      availability: radars.length > 0 ? 'available' : entries.length > 0 ? 'invalid' : 'absent',
     };
   } catch (error) {
     return {
       radars: [],
       availability: 'unreachable',
       detail: error instanceof Error ? error.message : 'Radar discovery failed.',
+    };
+  }
+}
+
+// A Radar API 3.4.0 discovery entry is identity only, so what the pre-3.4.0 entry carried inline is
+// read from the radar's capability manifest (geometry and legend, fixed for the session) and its
+// current control values (power, range, and the rest). A radar whose manifest cannot be read is left
+// out: without its geometry there is nothing to draw.
+async function hydrateLeanRadars(
+  origin: string,
+  token: string | undefined,
+  entries: unknown[],
+): Promise<RadarDiscovery> {
+  const failures: RadarReadFailure[] = [];
+  const radars = await Promise.all(
+    entries.map(async (raw) => {
+      if (!isRecord(raw)) return undefined;
+      const id = safeStringId(raw.id);
+      if (!id) return undefined;
+      const base = `${origin}${RADARS_PATH}/${encodeURIComponent(id)}`;
+      const [manifest, snapshot] = await Promise.all([
+        readRadarDocument(`${base}/capabilities`, token, 'Radar capabilities'),
+        readRadarDocument(`${base}/controls`, token, 'Radar controls'),
+      ]);
+      if (manifest.failure) failures.push(manifest.failure);
+      if (snapshot.failure) failures.push(snapshot.failure);
+      const caps = parseCapabilities(manifest.body);
+      const controls = controlsFromDocument(snapshot.body);
+      if (!caps?.spokesPerRevolution || !caps.maxSpokeLength) return undefined;
+      const power = controls?.power?.value;
+      const range = controls?.range?.value;
+      return toRadarInfo({
+        ...raw,
+        spokesPerRevolution: caps.spokesPerRevolution,
+        maxSpokeLen: caps.maxSpokeLength,
+        legend: caps.legend,
+        status: statusFromPower(power),
+        range: typeof range === 'number' ? range : undefined,
+        controls: controls ?? {},
+        streamUrl: `${RADARS_PATH}/${encodeURIComponent(id)}/spokes`,
+      });
+    }),
+  );
+  const accepted = normalizeRadarIdentities(radars.filter((r): r is RadarInfo => r !== undefined));
+  const failure = failures.find((f) => f.availability === 'auth-required') ?? failures[0];
+  return {
+    radars: accepted,
+    availability:
+      accepted.length > 0
+        ? 'available'
+        : (failure?.availability ?? (entries.length ? 'invalid' : 'absent')),
+    detail: failure?.detail,
+  };
+}
+
+interface RadarReadFailure {
+  availability: 'auth-required' | 'unreachable' | 'invalid';
+  detail: string;
+}
+
+async function readRadarDocument(
+  url: string,
+  token: string | undefined,
+  label: string,
+): Promise<{ body?: unknown; failure?: RadarReadFailure }> {
+  try {
+    const response = await fetch(url, withTimeout(authInit(token)));
+    if (!response.ok)
+      return {
+        failure: {
+          availability:
+            response.status === 401 || response.status === 403 ? 'auth-required' : 'unreachable',
+          detail: `${label} returned HTTP ${response.status}. Check access and refresh the radar list.`,
+        },
+      };
+    try {
+      const body = await readBoundedJson<unknown>(response, MAX_RADAR_JSON_BYTES);
+      if (isRecord(body)) return { body };
+    } catch {
+      /* A successful response still needs a bounded JSON document. */
+    }
+    return {
+      failure: {
+        availability: 'invalid',
+        detail: `${label} contained invalid data. Refresh the radar list.`,
+      },
+    };
+  } catch {
+    return {
+      failure: {
+        availability: 'unreachable',
+        detail: `${label} could not be reached. Check the connection and refresh the radar list.`,
+      },
     };
   }
 }
@@ -443,7 +572,22 @@ export async function fetchCapabilities(
     undefined,
     MAX_RADAR_JSON_BYTES,
   );
+  return parseCapabilities(body);
+}
+
+function parseCapabilities(body: unknown): RadarCapabilities | undefined {
   if (!isRecord(body)) return undefined;
+  const characteristics = isRecord(body.characteristics) ? body.characteristics : body;
+  const geometry =
+    isFiniteNumber(characteristics.spokesPerRevolution) &&
+    isFiniteNumber(characteristics.maxSpokeLength) &&
+    isSafeRadarGeometry(characteristics.spokesPerRevolution, characteristics.maxSpokeLength)
+      ? {
+          spokesPerRevolution: characteristics.spokesPerRevolution,
+          maxSpokeLength: characteristics.maxSpokeLength,
+        }
+      : {};
+  const legend = parseLegendPixels(body.legend);
   if (Array.isArray(body.controls)) {
     if (body.controls.length > MAX_RADAR_CONTROLS) return undefined;
     const controls = normalizeControlDefinitions(
@@ -451,7 +595,7 @@ export async function fetchCapabilities(
         .map(toControlDefinitionV5)
         .filter((c): c is ControlDefinition => c !== undefined),
     );
-    return { controls };
+    return { controls, legend, ...geometry };
   }
   if (isRecord(body.controls)) {
     const entries = Object.entries(body.controls);
@@ -459,7 +603,7 @@ export async function fetchCapabilities(
     const controls = entries
       .map(([id, raw]) => toControlDefinition(id, raw))
       .filter((c): c is ControlDefinition => c !== undefined);
-    return { controls };
+    return { controls, legend, ...geometry };
   }
   return undefined;
 }
@@ -504,6 +648,10 @@ export async function fetchRadarControls(
     undefined,
     MAX_RADAR_JSON_BYTES,
   );
+  return controlsFromDocument(body);
+}
+
+function controlsFromDocument(body: unknown): RadarControls | undefined {
   if (!isRecord(body)) return undefined;
   return parseRadarControls(isRecord(body.controls) ? body.controls : body);
 }
@@ -542,8 +690,8 @@ function isSameOrigin(streamUrl: string, origin: string): boolean {
   }
 }
 
-// The radar's protobuf spoke stream URL. A provider populates streamUrl in practice; the fallback is the
-// built-in per-radar stream endpoint. http(s) is
+// The radar's protobuf spoke stream URL: the `/spokes` convention on a Radar API 3.4.0 server, a
+// provider's streamUrl or the pre-3.4.0 `/stream` endpoint otherwise. http(s) is
 // rewritten to ws(s) for the WebSocket connect. The token is appended only for a same-origin stream (the
 // built-in endpoint, or a provider streamUrl on this origin); a cross-host provider URL is left untouched
 // so the device token is never leaked to another host.

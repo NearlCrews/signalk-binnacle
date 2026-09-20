@@ -101,6 +101,21 @@ describe('RadarControls enum values', () => {
 });
 
 describe('RadarControls status', () => {
+  it('shows unknown power and the read failure without claiming the radar is off', () => {
+    const store = new MarineRadarStore();
+    discoverRadar(store);
+    store.setOperationalStatus(undefined);
+    store.setStatus('paused');
+    store.setAvailability(
+      'available',
+      'Radar controls returned HTTP 403. Check access and refresh the radar list.',
+    );
+    const { target } = mountControls(store);
+    expect(target.textContent).toContain('Unknown');
+    expect(target.textContent).toContain('Stream paused: radar power is unknown');
+    expect(target.textContent).not.toContain('Stream paused in standby');
+    expect(target.textContent).toContain('Radar controls returned HTTP 403');
+  });
   it('returns focus to Transmit when its confirmation is canceled without sending power', async () => {
     const store = new MarineRadarStore();
     discoverRadar(store);

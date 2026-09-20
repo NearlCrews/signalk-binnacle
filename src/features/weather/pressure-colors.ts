@@ -21,8 +21,8 @@ const COLORS: Record<Theme, IsobarColors> = {
     halo: 'rgba(10, 14, 22, 0.9)',
   },
   'night-red': {
-    line: 'rgba(150, 30, 22, 0.85)',
-    label: 'rgba(190, 40, 28, 1)',
+    line: 'rgba(150, 30, 0, 0.85)',
+    label: 'rgba(190, 40, 0, 1)',
     halo: 'rgba(0, 0, 0, 0.95)',
   },
 };

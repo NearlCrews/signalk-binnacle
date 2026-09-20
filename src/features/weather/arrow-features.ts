@@ -28,13 +28,24 @@ export function cellArrowFeatures(
       if (!arrow) continue;
       const lon = grid.lons[c];
       const lat = grid.lats[r];
+      const tip = [lon + arrow.u * len, lat + arrow.v * len];
+      const head = len * 0.3;
       features.push({
         type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
             [lon, lat],
-            [lon + arrow.u * len, lat + arrow.v * len],
+            tip,
+            [
+              tip[0] - arrow.u * head - arrow.v * head * 0.5,
+              tip[1] - arrow.v * head + arrow.u * head * 0.5,
+            ],
+            tip,
+            [
+              tip[0] - arrow.u * head + arrow.v * head * 0.5,
+              tip[1] - arrow.v * head - arrow.u * head * 0.5,
+            ],
           ],
         },
         properties: arrow.props,
