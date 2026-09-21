@@ -171,7 +171,7 @@
     "@types/node": "22.20.3",
     "@types/ws": "^8.18.1",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "@vitest/browser-playwright": "4.1.11",
+    "@vitest/browser-playwright": "5.0.0",
     "@vitest/coverage-v8": "4.1.11",
     "cspell": "10.3.2",
     "dependency-cruiser": "^18.3.1",
