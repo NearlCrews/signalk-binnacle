@@ -168,7 +168,7 @@
     "@size-limit/file": "13.0.3",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/node": "22.20.3",
+    "@types/node": "26.5.1",
     "@types/ws": "^8.18.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vitest/browser-playwright": "4.1.11",
