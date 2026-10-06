@@ -16,21 +16,47 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # Size Limit 14 requires Node 22.19, above the supported Node 22.18 floor.
+      - dependency-name: size-limit
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "@size-limit/file"
+        update-types:
+          - version-update:semver-major
     groups:
       vitest:
         applies-to: version-updates
         patterns:
           - vitest
           - "@vitest/*"
+      size-limit:
+        applies-to: version-updates
+        patterns:
+          - size-limit
+          - "@size-limit/*"
       dev-dependencies:
         applies-to: version-updates
         dependency-type: development
+        patterns:
+          - "*"
+        exclude-patterns:
+          - vitest
+          - "@vitest/*"
+          - size-limit
+          - "@size-limit/*"
         update-types:
           - minor
           - patch
       production-dependencies:
         applies-to: version-updates
         dependency-type: production
+        patterns:
+          - "*"
+        exclude-patterns:
+          - vitest
+          - "@vitest/*"
+          - size-limit
+          - "@size-limit/*"
         update-types:
           - minor
           - patch

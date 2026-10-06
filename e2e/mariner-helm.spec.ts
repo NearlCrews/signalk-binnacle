@@ -232,6 +232,8 @@ test('cached stream replay retains measurement age and cannot roll back a newer 
 });
 
 test('disconnected readouts retain AA contrast in day, dusk, and night-red', async ({ page }) => {
+  // Audit each settled palette without sampling the button background transition between themes.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
   await fixturePost(page, 'close-streams');
