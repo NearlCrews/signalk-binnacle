@@ -17,6 +17,9 @@ All notable changes to Binnacle are documented here. The format follows
 - Preserve History API source identities and reject ambiguous sensor selection. The optional
   `sourcePolicy=all` query is supported without changing older-server request defaults.
 - Update pinned GitHub Actions dependencies.
+- Refresh compatible chart and build dependencies, including the js-yaml security fix, and
+  upgrade the Vitest packages together to prevent incompatible test installations.
+- Prevent duplicate chart actions from touch long presses after the MapLibre update.
 
 <a id="v0220"></a>
 

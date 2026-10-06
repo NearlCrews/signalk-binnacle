@@ -37,7 +37,13 @@ function setup() {
     clientY: 100,
     ...overrides,
   });
-  return { handle, emit, fire, touch };
+  const contextMenu = () => {
+    map.on.mock.calls.find(([event]) => event === 'contextmenu')?.[1]({
+      lngLat: { lng: 1, lat: 2 },
+      point: { x: 3, y: 4 },
+    });
+  };
+  return { handle, emit, fire, touch, contextMenu };
 }
 
 beforeEach(() => {
@@ -90,6 +96,46 @@ describe('installContextMenu long press', () => {
     fire('pointerdown', touch({}));
     vi.advanceTimersByTime(300);
     fire('pointerup', touch({}));
+    vi.advanceTimersByTime(600);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('emits once when MapLibre reports a contextmenu after the long press', () => {
+    const { emit, fire, touch, contextMenu } = setup();
+    fire('pointerdown', touch({}));
+    vi.advanceTimersByTime(500);
+    contextMenu();
+    fire('pointerup', touch({}));
+    contextMenu();
+    expect(emit).toHaveBeenCalledExactlyOnceWith({ lng: 10, lat: 10, x: 100, y: 100 });
+  });
+
+  it('accepts a mouse contextmenu immediately after touch', () => {
+    const { emit, fire, touch, contextMenu } = setup();
+    fire('pointerdown', touch({}));
+    vi.advanceTimersByTime(500);
+    fire('pointerup', touch({}));
+    fire('pointerdown', { pointerType: 'mouse' });
+    contextMenu();
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(emit).toHaveBeenLastCalledWith({ lng: 1, lat: 2, x: 3, y: 4 });
+  });
+
+  it('ignores a native contextmenu for a canceled touch gesture', () => {
+    const { handle, emit, fire, touch, contextMenu } = setup();
+    fire('pointerdown', touch({}));
+    handle.cancel();
+    contextMenu();
+    fire('pointercancel', touch({}));
+    contextMenu();
+    vi.advanceTimersByTime(600);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending long press when removed', () => {
+    const { handle, emit, fire, touch } = setup();
+    fire('pointerdown', touch({}));
+    handle.remove();
     vi.advanceTimersByTime(600);
     expect(emit).not.toHaveBeenCalled();
   });
