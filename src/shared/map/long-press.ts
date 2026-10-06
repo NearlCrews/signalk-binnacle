@@ -38,6 +38,7 @@ export function installContextMenu(
   let pressTimer = 0;
   let startX = 0;
   let startY = 0;
+  let touchOwnsContextMenu = false;
   // Live touch pointers on the canvas: a second finger means a pinch or two-finger gesture, which
   // must cancel the press and never arm one of its own.
   let touchCount = 0;
@@ -47,16 +48,18 @@ export function installContextMenu(
     pressTimer = 0;
   };
   const onContextMenu = (e: maplibregl.MapMouseEvent) => {
-    // Android Chrome fires the native contextmenu for a long press too; cancel the synthesized
-    // timer so a single press cannot emit twice.
+    // MapLibre and browsers can emit another contextmenu during or after the same touch.
+    // Keep our glove-tolerant recognizer authoritative until a mouse or pen starts a new press.
+    if (touchOwnsContextMenu) return;
     cancel();
     emit({ lng: e.lngLat.lng, lat: e.lngLat.lat, x: e.point.x, y: e.point.y });
   };
   map.on('contextmenu', onContextMenu);
   const onPointerDown = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch') return;
-    touchCount += 1;
+    touchOwnsContextMenu = e.pointerType === 'touch';
     cancel();
+    if (!touchOwnsContextMenu) return;
+    touchCount += 1;
     if (touchCount > 1) return;
     startX = e.clientX;
     startY = e.clientY;
@@ -95,6 +98,7 @@ export function installContextMenu(
   };
   canvas.addEventListener('keydown', onKeyDown);
   const remove = () => {
+    cancel();
     map.off('contextmenu', onContextMenu);
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointermove', onPointerMove);

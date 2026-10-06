@@ -1,13 +1,5 @@
 {
-  "config": {
-    "default": true,
-    "MD013": false,
-    "MD024": {
-      "siblings_only": true
-    },
-    "MD033": false
-  },
-  // File selection lives here so the CLI gate and the VS Code extension agree on scope.
+  // The editor extension uses CLI2 options; both CLIs load rules from .markdownlint.jsonc.
   "globs": ["*.md", ".github/*.md", "docs/*.md"],
   "ignores": ["docs/superpowers/**", "public/**"]
 }

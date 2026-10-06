@@ -24,6 +24,11 @@ const supplements = {
     source:
       'https://github.com/JamesLMilner/terra-draw/blob/b6d0c18779b204b054a99d5a6cc1906f95fb3503/LICENSE',
   },
+  'terra-draw@1.35.0': {
+    file: 'terra-draw.txt',
+    source:
+      'https://github.com/JamesLMilner/terra-draw/blob/92799f6df7191672e39e8a58fb42ccba6a24d02a/LICENSE',
+  },
   'terra-draw-maplibre-gl-adapter@1.4.1': {
     file: 'terra-draw.txt',
     source:

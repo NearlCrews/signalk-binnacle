@@ -31,6 +31,7 @@ playwright-results/
 test-results/
 .playwright-mcp/
 .vitest-attachments/
+.vitest/
 
 # Tooling caches
 .cache/

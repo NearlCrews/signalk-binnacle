@@ -11,7 +11,17 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    ignore:
+      # Node types follow the lowest supported runtime, currently Node 22.18.
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
+      vitest:
+        applies-to: version-updates
+        patterns:
+          - vitest
+          - "@vitest/*"
       dev-dependencies:
         applies-to: version-updates
         dependency-type: development

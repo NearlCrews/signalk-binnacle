@@ -474,17 +474,16 @@ describe('createThemedMap long-press', () => {
     expect(onContextMenu).toHaveBeenCalledWith({ lng: 10, lat: 20, x: 10, y: 20 });
   });
 
-  it('a native contextmenu during the press cancels the timer so one press emits once', async () => {
+  it('keeps the touch recognizer authoritative when a native contextmenu arrives first', async () => {
     vi.useFakeTimers();
     const onContextMenu = vi.fn();
     createThemedMap({ container, onContextMenu, onLoad: () => {} });
     const map = await lastMap();
     map.canvas.dispatch('pointerdown', { pointerType: 'touch', clientX: 10, clientY: 20 });
-    // Android Chrome fires the native contextmenu mid-press; the synthesized timer must die.
     map.fire('contextmenu', { lngLat: { lng: 1, lat: 2 }, point: { x: 3, y: 4 } });
     vi.advanceTimersByTime(600);
     expect(onContextMenu).toHaveBeenCalledTimes(1);
-    expect(onContextMenu).toHaveBeenCalledWith({ lng: 1, lat: 2, x: 3, y: 4 });
+    expect(onContextMenu).toHaveBeenCalledWith({ lng: 10, lat: 20, x: 10, y: 20 });
   });
 
   it('opens chart actions at the center for the keyboard context-menu shortcut', async () => {
