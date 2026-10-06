@@ -181,7 +181,7 @@
     "markdownlint-cli": "0.49.1",
     "publint": "0.3.24",
     "serwist": "^9.5.12",
-    "size-limit": "13.0.3",
+    "size-limit": "14.1.0",
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
