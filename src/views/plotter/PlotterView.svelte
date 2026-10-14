@@ -74,6 +74,7 @@ import {
   dialog,
   ErrorBoundary,
   LazyPanelState,
+  LoadNote,
   observeClientHeight,
   type PanelId,
   registerDismiss,
@@ -2266,7 +2267,7 @@ $effect(() => {
         footer={marineRadar.store.areaDraft?.chartEditing ? radarPlacementFooter : undefined}
       >
         {#await forAttempt(loadRadarControls)}
-          <div class="panel-loading" role="status">Loading radar controls…</div>
+          <LoadNote state="loading" message="Loading radar controls…" />
         {:then module}
           <ErrorBoundary>
             <module.default
@@ -2294,17 +2295,19 @@ $effect(() => {
               _error,
               reset,
             )}
-              <div class="panel-load-error" role="alert">
-                Radar controls stopped unexpectedly.
-                <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
-              </div>
+              <LoadNote
+                state="error"
+                message="Radar controls stopped unexpectedly."
+                onRetry={reset}
+              />
             {/snippet}
           </ErrorBoundary>
         {:catch}
-          <div class="panel-load-error" role="alert">
-            Radar controls could not load.
-            <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-          </div>
+          <LoadNote
+            state="error"
+            message="Radar controls could not load."
+            onRetry={retryLazyPanel}
+          />
         {/await}
       </SlideOver>
     </div>
@@ -2351,11 +2354,10 @@ $effect(() => {
         )}
           <div
             class="panel-load-error panel-load-error--cover"
-            role="alert"
             tabindex="-1"
             use:dialog={closeWeatherPanel}
           >
-            Weather view stopped unexpectedly.
+            <p role="alert">Weather view stopped unexpectedly.</p>
             <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
             <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
               Back to menu
@@ -2367,11 +2369,10 @@ $effect(() => {
     {:catch}
       <div
         class="panel-load-error panel-load-error--cover"
-        role="alert"
         tabindex="-1"
         use:dialog={closeWeatherPanel}
       >
-        Weather view could not load.
+        <p role="alert">Weather view could not load.</p>
         <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
         <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
           Back to menu

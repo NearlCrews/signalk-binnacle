@@ -36,6 +36,12 @@ function clear(): void {
   value = '';
   input?.focus();
 }
+
+// Lets a panel return focus here after it clears the query itself (an empty state's Clear search),
+// so focus never falls to the document when the control that cleared it unmounts.
+export function focus(): void {
+  input?.focus();
+}
 </script>
 
 <!-- The panel search field: the full-width .input box plus a control-size clear button, because the

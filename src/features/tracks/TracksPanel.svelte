@@ -207,12 +207,12 @@ const savedCards = $derived(
 // read from, or genuinely nothing saved yet.
 function savedEmptyMessage(state: TrackLoadState, missingStorage: boolean): SavedListEmpty {
   if (state === 'loading') return { kind: 'loading', message: 'Loading saved tracks…' };
-  if (state === 'error') return { kind: 'unavailable', message: 'Saved tracks are unavailable.' };
   if (missingStorage)
     return {
       kind: 'unavailable',
       message: 'Saved tracks are unavailable until this server has track storage.',
     };
+  if (state === 'error') return { kind: 'unavailable', message: 'Saved tracks are unavailable.' };
   return {
     kind: 'empty',
     title: 'No saved tracks',
@@ -549,7 +549,8 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     {/if}
   </Disclosure>
 
-  {#if loadState === 'error'}
+  <!-- The storage note above already explains a failed read on a server without track storage. -->
+  {#if loadState === 'error' && !storageMissing}
     <LoadNote
       state="error"
       message={saved.length > 0

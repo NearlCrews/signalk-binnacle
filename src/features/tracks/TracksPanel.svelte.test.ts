@@ -163,6 +163,13 @@ describe('TracksPanel', () => {
     expect(body).toMatch(/disabled[^>]*>[^<]*<svg[^>]*>[\s\S]*?Retrace track/);
   });
 
+  it('shows one storage note, not a second load failure, when the server has no track storage', () => {
+    const body = renderPanel({ provisioning: 'unprovisioned', loadState: 'error' });
+    expect(body.match(/role="alert"/g)).toHaveLength(1);
+    expect(body).not.toContain('Could not load saved tracks.');
+    expect(body).toContain('until this server has track storage');
+  });
+
   it('names the admin step and offers a re-check when the server has no track storage', () => {
     const body = renderPanel({ provisioning: 'unprovisioned' });
     expect(body).toContain('This Signal K server has no track storage');

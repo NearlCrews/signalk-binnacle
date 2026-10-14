@@ -178,6 +178,9 @@
 .panel-load-error {
   color: var(--alarm);
 }
+.panel-load-error p {
+  margin: 0;
+}
 .panel-loading--cover,
 .panel-load-error--cover {
   position: absolute;

@@ -19,7 +19,9 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
 }
+/* The lowest raised grade still outranks normal text, so its border follows its full text color. */
 .badge--strong {
+  border-color: currentColor;
   color: var(--text);
 }
 .badge--accent {

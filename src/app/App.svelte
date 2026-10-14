@@ -243,6 +243,7 @@ import {
   dialog,
   ErrorBoundary,
   LazyPanelState,
+  LoadNote,
   PanelHeader,
   type PanelId,
   type Theme,
@@ -3321,16 +3322,7 @@ const plotterActions = {
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Safari requires this scroll region in the tab order. -->
       <div class="panel-body panel-body--flex" tabindex="0">
-        <div
-          class:panel-loading={!onRetry}
-          class:panel-load-error={onRetry !== undefined}
-          role={onRetry ? 'alert' : 'status'}
-        >
-          <span>{message}</span>
-          {#if onRetry}
-            <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
-          {/if}
-        </div>
+        <LoadNote state={onRetry ? 'error' : 'loading'} {message} {onRetry} />
       </div>
     </div>
   {/snippet}

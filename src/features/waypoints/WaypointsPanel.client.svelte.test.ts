@@ -139,6 +139,22 @@ describe('WaypointsPanel search', () => {
     expect(panel.target.textContent).toContain('No matching waypoints');
   });
 
+  it('clears a search with no matches and keeps focus on the search field', () => {
+    const panel = mountPanel();
+    panel.type('nothing here');
+    const clear = [...panel.target.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Clear search',
+    );
+    if (!clear) throw new Error('Clear search action missing');
+    clear.focus();
+    clear.click();
+    flushSync();
+    expect(panel.names().length).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(
+      panel.target.querySelector('input[aria-label="Search waypoints by name or description"]'),
+    );
+  });
+
   it('closes an armed delete when the search hides its card', () => {
     const panel = mountPanel();
     panel.type('cove');

@@ -92,6 +92,7 @@ const armedDelete = new ArmedRow((id) => {
 
 let confirmingNavigate = $state<Waypoint | undefined>();
 let query = $state('');
+let searchField = $state<SearchInput>();
 let sortState = $state<NavSortState>(defaultNavSort(false));
 let sortTouched = $state(false);
 const minimize = createPanelMinimize();
@@ -163,7 +164,13 @@ function emptyText(
       kind: 'empty',
       title: 'No matching waypoints',
       message: 'Clear the search to see all saved waypoints.',
-      action: { label: 'Clear search', run: () => (query = '') },
+      action: {
+        label: 'Clear search',
+        run: () => {
+          query = '';
+          searchField?.focus();
+        },
+      },
     };
   return {
     kind: 'empty',
@@ -280,6 +287,7 @@ $effect(() => {
   <!-- No marks means nothing to search or order, so the controls stay out of the empty locker. -->
   {#if waypoints.length > 0}
     <SearchInput
+      bind:this={searchField}
       bind:value={query}
       placeholder="Search name or description"
       ariaLabel="Search waypoints by name or description"

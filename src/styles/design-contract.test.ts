@@ -109,3 +109,22 @@ describe('design contract: load and retry copy', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('design contract: state colors hold through every interaction', () => {
+  const buttons = sources['/src/styles/buttons.css'] ?? '';
+  const badges = sources['/src/styles/badges.css'] ?? '';
+
+  it('keeps a destructive strip action apart by its alarm border at rest', () => {
+    expect(buttons).toMatch(/\.btn-strip\.btn-danger \{[^}]*border-color: var\(--alarm\)/);
+  });
+
+  it('keeps a warning button amber on hover instead of taking the accent border', () => {
+    expect(buttons).toMatch(
+      /\.btn-warning:hover:not\(:disabled\) \{[^}]*border-color: var\(--warning\)/,
+    );
+  });
+
+  it('keeps the lowest raised alarm grade bordered in its full text color', () => {
+    expect(badges).toMatch(/\.badge--strong \{[^}]*border-color: currentColor/);
+  });
+});

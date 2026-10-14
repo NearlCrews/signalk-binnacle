@@ -72,6 +72,9 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+.bottom-strip .actions .btn-strip {
+  margin-inline-start: 0;
+}
 /* A wide gutter between paired safety buttons (Mute/Acknowledge, Acknowledge/Raise) so they do
    not read as twins and a wrong tap in a seaway is less likely. */
 .bottom-strip .actions--safety {

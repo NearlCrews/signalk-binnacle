@@ -78,9 +78,6 @@
   font-size: var(--text-base);
   color: var(--accent);
 }
-.bottom-strip .actions .btn-strip {
-  margin-inline-start: 0;
-}
 .btn-primary {
   background: var(--accent-fill);
   border-color: var(--accent-fill);
@@ -101,6 +98,11 @@
 }
 .btn-danger {
   color: var(--alarm);
+}
+/* In a strip's action cluster the destructive action must stand apart at arm's length, so it
+   carries the alarm border at rest, not only on hover. */
+.btn-strip.btn-danger {
+  border-color: var(--alarm);
 }
 /* A danger button tints with the alarm token on hover, not the accent, so a destructive control does
    not flash an accent (blue by day) fill under its red text. */
@@ -125,6 +127,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-warning:hover:not(:disabled) {
+    border-color: var(--warning);
     background: var(--warning-tint);
   }
 }
