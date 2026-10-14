@@ -106,7 +106,7 @@ describe('Trends UI', () => {
         onClose: () => {},
       },
     }).body;
-    expect(body).toContain('No trends are selected for this profile.');
+    expect(body).toContain('No trends selected');
     expect(body).toContain('Customize trends');
   });
 

@@ -5,6 +5,7 @@ import { MAX_TREND_INSTRUMENTS } from '$entities/instrument-trend';
 import {
   CustomizeCategory,
   createReorder,
+  EmptyState,
   LayerToggle,
   ReorderActions,
   UnavailableHint,
@@ -153,7 +154,12 @@ function statusText(item: TrendItem): string | undefined {
     </CustomizeCategory>
   {/each}
   {#if groups.length === 0}
-    <p class="muted-note empty-note">No other trendable instruments found yet.</p>
+    <div class="empty-note">
+      <EmptyState
+        title="No other trendable instruments"
+        message="Instruments appear here as the server publishes their readings."
+      />
+    </div>
   {/if}
 </div>
 <span class="visually-hidden" role="status">{reorder.reorderAnnouncement}</span>

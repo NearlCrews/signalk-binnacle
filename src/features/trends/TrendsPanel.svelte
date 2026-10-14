@@ -8,7 +8,7 @@ import {
   type UnitsSelection,
 } from '$shared/lib';
 import type { Theme } from '$shared/ui';
-import { CustomizeToggle, ErrorBoundary, SlideOver } from '$shared/ui';
+import { CustomizeToggle, EmptyState, ErrorBoundary, SlideOver } from '$shared/ui';
 import TrendsCustomize from './TrendsCustomize.svelte';
 import type { TrendsController } from './trends-controller.svelte';
 
@@ -143,12 +143,11 @@ const focused = $derived(controller.focusedId !== undefined);
     {/if}
 
     {#if !focused && controller.selected.length === 0}
-      <div class="empty-state">
-        <p class="muted-note">No trends are selected for this profile.</p>
-        <button type="button" class="btn btn-primary" onclick={() => (customizing = true)}>
-          Customize trends
-        </button>
-      </div>
+      <EmptyState
+        title="No trends selected"
+        message="Choose which readings this profile charts."
+        action={{ label: 'Customize trends', run: () => (customizing = true), primary: true }}
+      />
     {:else}
       {#await trendChartsForAttempt()}
         <p class="muted-note" role="status">Loading trend charts…</p>
@@ -179,19 +178,12 @@ const focused = $derived(controller.focusedId !== undefined);
 </SlideOver>
 
 <style>
-.chart-error,
-.empty-state {
+.chart-error {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-}
-.empty-state {
-  padding-block: var(--space-3);
-}
-.empty-state p {
-  margin: 0;
 }
 .customize-copy {
   padding-inline: var(--space-3);

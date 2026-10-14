@@ -102,7 +102,11 @@ function chartList(region: SavedRegionDto): string {
   {:else}
     <SavedList
       items={regions}
-      empty="No saved areas yet. Save a chart area before leaving internet coverage."
+      empty={{
+        kind: 'empty',
+        title: 'No saved areas',
+        message: 'Save a chart area before leaving internet coverage.',
+      }}
       key={(region) => region.id}
     >
       {#snippet card(

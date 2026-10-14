@@ -76,7 +76,7 @@ describe('WaypointsPanel', () => {
     expect(renderPanel({ loadState: 'loading', waypoints: [waypoint] })).toContain(
       'Refreshing waypoints…',
     );
-    expect(renderPanel()).toContain('No waypoints yet.');
+    expect(renderPanel()).toContain('No saved waypoints');
   });
 
   it('disables server writes and navigation without write access', () => {

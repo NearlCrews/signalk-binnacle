@@ -8,7 +8,7 @@ import type { Bbox4 } from '$shared/geo';
 import { hasVisibleNavigationChart, type LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
-import { createPanelMinimize, SlideOver, WriteAccessNote } from '$shared/ui';
+import { createPanelMinimize, EmptyState, SlideOver, WriteAccessNote } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
 import LayerRow from './LayerRow.svelte';
 import { CATEGORY_DEFAULT_OPEN, CATEGORY_ORDER, layerCategory } from './layer-category';
@@ -233,7 +233,12 @@ const reorder = createLayerReorder(
           <span class="pill-count category-count" aria-hidden="true">{chartRows.length}</span>
         </h3>
         {#if chartRows.length === 0}
-          <p class="muted-note empty-note">No chart sources yet.</p>
+          <div class="empty-note">
+            <EmptyState
+              title="No chart sources"
+              message="Add a chart below, or install a chart plugin on the Signal K server."
+            />
+          </div>
         {:else}
           <ul class="category-rows bare-list chart-source-rows">
             {#each chartRows as { item, i } (item.id)}

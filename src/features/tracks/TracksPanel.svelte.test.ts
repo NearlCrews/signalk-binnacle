@@ -78,7 +78,7 @@ describe('TracksPanel', () => {
   it('distinguishes loading, failure, and genuinely empty saved lists', () => {
     expect(renderPanel({ loadState: 'loading' })).toContain('Loading saved tracks…');
     expect(renderPanel({ loadState: 'error' })).toContain('Could not load saved tracks.');
-    expect(renderPanel()).toContain('No saved tracks yet.');
+    expect(renderPanel()).toContain('No saved tracks');
   });
 
   it('says Recording only while fresh GPS is feeding the armed recorder', () => {

@@ -21,6 +21,7 @@ import {
   NavSortControl,
   restoreFocusAfterCancel,
   SavedList,
+  type SavedListEmpty,
   SearchInput,
   SlideOver,
   WriteAccessNote,
@@ -148,12 +149,26 @@ function emptyText(
   state: WaypointLoadState,
   hasWaypoints: boolean,
   missingStorage: boolean,
-): string {
-  if (state === 'loading') return 'Loading waypoints…';
-  if (missingStorage) return 'Waypoints are unavailable until this server has waypoint storage.';
-  if (state === 'error') return 'Waypoints are unavailable.';
-  if (hasWaypoints) return 'No waypoints match your search. Clear it to see all saved waypoints.';
-  return 'No waypoints yet. Press and hold the chart to drop one.';
+): SavedListEmpty {
+  if (state === 'loading') return { kind: 'loading', message: 'Loading waypoints…' };
+  if (missingStorage)
+    return {
+      kind: 'unavailable',
+      message: 'Waypoints are unavailable until this server has waypoint storage.',
+    };
+  if (state === 'error') return { kind: 'unavailable', message: 'Waypoints are unavailable.' };
+  if (hasWaypoints)
+    return {
+      kind: 'empty',
+      title: 'No matching waypoints',
+      message: 'Clear the search to see all saved waypoints.',
+      action: { label: 'Clear search', run: () => (query = '') },
+    };
+  return {
+    kind: 'empty',
+    title: 'No saved waypoints',
+    message: 'Press and hold the chart to drop one.',
+  };
 }
 
 const emptyMessage = $derived(emptyText(loadState, waypoints.length > 0, storageMissing));

@@ -292,7 +292,11 @@ function useProfile(id: string): void {
   <SavedList
     heading="Saved profiles"
     items={profiles}
-    empty="No profiles yet. Configure the helm, then select Save current as profile."
+    empty={{
+      kind: 'empty',
+      title: 'No profiles',
+      message: 'Configure the helm, then select Save current as profile.',
+    }}
     key={(profile) => profile.id}
     isActive={(profile) => profile.id === activeId}
   >

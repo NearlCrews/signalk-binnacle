@@ -1,12 +1,15 @@
 <script lang="ts" generics="T">
 import type { Snippet } from 'svelte';
+import EmptyState from './EmptyState.svelte';
+import type { SavedListEmpty } from './empty-state';
 
 interface Props {
   // The caps-label heading above the list. Omit to let the parent own the heading.
   heading?: string;
   items: T[];
-  // The message shown in place of the list when there are no items.
-  empty: string;
+  // What shows in place of the list when there are no items: a load in flight, an unavailable
+  // list, or a real empty state.
+  empty: SavedListEmpty;
   ariaLabel?: string;
   // The stable identity per item, so the keyed each reconciles cards in place across reorders.
   key: (item: T) => string;
@@ -28,7 +31,13 @@ const headingId = $props.id();
     <span class="caps-label" id={headingId}>{heading}</span>
   {/if}
   {#if items.length === 0}
-    <p class="empty">{empty}</p>
+    {#if empty.kind === 'loading'}
+      <p class="muted-note" role="status">{empty.message}</p>
+    {:else if empty.kind === 'unavailable'}
+      <p class="muted-note">{empty.message}</p>
+    {:else}
+      <EmptyState title={empty.title} message={empty.message} action={empty.action} />
+    {/if}
   {:else}
     <ul
       class="bare-list"

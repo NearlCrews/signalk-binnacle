@@ -8,7 +8,9 @@ export { restoreFocusAfterCancel } from './cancel-focus';
 export { ConfirmArm } from './confirm-arm.svelte';
 export { default as Disclosure } from './Disclosure.svelte';
 export { dialog, registerDismiss } from './dialog';
+export { default as EmptyState } from './EmptyState.svelte';
 export { default as ErrorBoundary } from './ErrorBoundary.svelte';
+export type { SavedListEmpty } from './empty-state';
 export { pickTextFile, readErrorMessage } from './file-pick';
 export {
   focusOnMount,

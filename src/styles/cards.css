@@ -240,3 +240,22 @@
 .list-row:last-child {
   border-block-end: none;
 }
+
+/* The empty state: a soft dashed block that orients (title), explains (one sentence), and offers
+   one next step, so an empty panel reads as a place to start rather than as dead space. */
+.empty-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.empty-state p {
+  margin: 0;
+}
+.empty-state-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}

@@ -136,7 +136,7 @@ describe('WaypointsPanel search', () => {
     const panel = mountPanel();
     panel.type('nothing here');
     expect(panel.names()).toEqual([]);
-    expect(panel.target.textContent).toContain('No waypoints match your search.');
+    expect(panel.target.textContent).toContain('No matching waypoints');
   });
 
   it('closes an armed delete when the search hides its card', () => {

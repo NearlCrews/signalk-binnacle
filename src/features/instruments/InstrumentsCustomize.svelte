@@ -4,6 +4,7 @@ import RotateCw from '@lucide/svelte/icons/rotate-cw';
 import {
   CustomizeCategory,
   createReorder,
+  EmptyState,
   LayerToggle,
   ReorderActions,
   UnavailableHint,
@@ -188,7 +189,12 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
       </CustomizeCategory>
     {/each}
   {:else}
-    <p class="muted-note empty-note">No other instruments found yet.</p>
+    <div class="empty-note">
+      <EmptyState
+        title="No other instruments"
+        message="Instruments appear here as the server publishes their readings."
+      />
+    </div>
   {/if}
 </div>
 <span class="visually-hidden" role="status">{reorder.reorderAnnouncement}</span>

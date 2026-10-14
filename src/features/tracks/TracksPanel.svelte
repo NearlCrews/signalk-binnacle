@@ -38,6 +38,7 @@ import {
   resolveSaveName,
   restoreFocusAfterCancel,
   SavedList,
+  type SavedListEmpty,
   SlideOver,
   VisibilityToggle,
   WriteAccessNote,
@@ -203,11 +204,19 @@ const savedCards = $derived(
 
 // An empty saved list means something different in each state: still reading, failed, nowhere to
 // read from, or genuinely nothing saved yet.
-function savedEmptyMessage(state: TrackLoadState, missingStorage: boolean): string {
-  if (state === 'loading') return 'Loading saved tracks…';
-  if (state === 'error') return 'Saved tracks are unavailable.';
-  if (missingStorage) return 'Saved tracks are unavailable until this server has track storage.';
-  return 'No saved tracks yet. Record a track, then tap Save to keep it.';
+function savedEmptyMessage(state: TrackLoadState, missingStorage: boolean): SavedListEmpty {
+  if (state === 'loading') return { kind: 'loading', message: 'Loading saved tracks…' };
+  if (state === 'error') return { kind: 'unavailable', message: 'Saved tracks are unavailable.' };
+  if (missingStorage)
+    return {
+      kind: 'unavailable',
+      message: 'Saved tracks are unavailable until this server has track storage.',
+    };
+  return {
+    kind: 'empty',
+    title: 'No saved tracks',
+    message: 'Record a track, then tap Save to keep it.',
+  };
 }
 
 const savedEmptyText = $derived(savedEmptyMessage(loadState, storageMissing));

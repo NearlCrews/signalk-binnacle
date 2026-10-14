@@ -1,6 +1,6 @@
 <script lang="ts">
 import { type Snippet, untrack } from 'svelte';
-import { CustomizeToggle, dialog, PanelHeader, trapFocus } from '$shared/ui';
+import { CustomizeToggle, dialog, EmptyState, PanelHeader, trapFocus } from '$shared/ui';
 import InstrumentDetail from './InstrumentDetail.svelte';
 import InstrumentsCustomize from './InstrumentsCustomize.svelte';
 import type { InstrumentsController } from './instruments-controller.svelte';
@@ -127,7 +127,9 @@ $effect(() => {
   {:else}
     <div class="tiles">
       {#if tiles.length === 0}
-        <p class="muted-note empty">No instruments shown. Use Customize to add one.</p>
+        <div class="empty">
+          <EmptyState title="No instruments shown" message="Use Customize to add one." />
+        </div>
       {/if}
       {#each tiles as def (def.id)}
         {@const reading = def.read(deps)}

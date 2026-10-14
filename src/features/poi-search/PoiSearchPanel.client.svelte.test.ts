@@ -65,7 +65,7 @@ function mountPanel(overrides: Partial<ComponentProps<typeof PoiSearchPanel>> = 
       notes = next;
     },
     toggle: () => {
-      target.querySelector<HTMLButtonElement>('.show-on-chart')?.click();
+      target.querySelector<HTMLInputElement>('.show-on-chart input[role="switch"]')?.click();
       flushSync();
     },
     rowNames: () => [...target.querySelectorAll('.nav-name')].map((row) => row.textContent),
@@ -96,7 +96,7 @@ describe('PoiSearchPanel reactive results', () => {
     await tick();
     await tick();
     expect(target.querySelector('[role="complementary"]')).not.toBeNull();
-    const toggle = target.querySelector<HTMLButtonElement>('.show-on-chart');
+    const toggle = target.querySelector<HTMLInputElement>('.show-on-chart input[role="switch"]');
     if (!toggle) throw new Error('Missing places toggle');
     toggle.click();
     flushSync();

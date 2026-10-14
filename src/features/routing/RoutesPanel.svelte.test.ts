@@ -67,7 +67,7 @@ describe('RoutesPanel', () => {
 
   it('distinguishes the loading state from a genuinely empty route list', () => {
     expect(renderPanel({ refreshing: true, loadState: 'loading' })).toContain('Loading routes…');
-    expect(renderPanel()).toContain('No routes yet.');
+    expect(renderPanel()).toContain('No saved routes');
   });
 
   it('threads the weather grid through to the plan wind lines', () => {
