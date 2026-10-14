@@ -309,15 +309,18 @@ const depthWatchPaused = $derived(
           : 'Anchor watch: distance from the anchor over the watch radius. Opens Anchor watch.'}
         onclick={onOpenAnchor}
       >
-        {#if anchor.fixLost}
-          Anchor <b>no GPS</b>
-        {:else}
-          Anchor <b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>/<b
-            class="num"
-            >{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b
-          >
-          {lengthUnit(units.mode)}
-        {/if}
+        <!-- One flex item, so the spaces between the label, values, and unit survive the flex box. -->
+        <span>
+          {#if anchor.fixLost}
+            Anchor <b>no GPS</b>
+          {:else}
+            Anchor <b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>/<b
+              class="num"
+              >{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b
+            >
+            {lengthUnit(units.mode)}
+          {/if}
+        </span>
       </button>
     {/if}
     <span
@@ -541,10 +544,10 @@ const depthWatchPaused = $derived(
 .conn--down .status-dot {
   --dot-color: var(--warning);
 }
-/* Interactive chips: a tap shows the chip's title explanation as a visible note (or opens the
-   panel the chip monitors), with the UA button chrome stripped so a chip-button reads exactly
-   like its span siblings. The block padding grows the touch target toward the compact-control
-   size, and the negative block margin cancels it out of the strip's height. */
+/* Interactive chips: a tap shows the chip's title explanation as a visible note, with the UA button
+   chrome stripped so a chip-button reads exactly like its span siblings. The block padding grows
+   the touch target toward the compact-control size, and the negative block margin cancels it out
+   of the strip's height. The anchor chip opens a panel instead, so it overrides both below. */
 .chip-btn {
   border: 0;
   background: none;
@@ -585,8 +588,15 @@ const depthWatchPaused = $derived(
   color: var(--text-muted);
 }
 /* The anchor chip confirms the watch is live (distance over radius) as quiet chrome, and turns to
-   the alarm color while the boat is dragging so the state reads even with the strip dismissed. */
+   the alarm color while the boat is dragging so the state reads even with the strip dismissed.
+   Unlike the explain-tap chips it opens Anchor watch, so like the autopilot chip it keeps a full
+   operational target in layout rather than the compact box and its cancelling margin. */
 .anchor-chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-size);
+  min-inline-size: var(--control-size);
+  margin-block: 0;
   color: var(--text-muted);
 }
 .anchor-chip--alarm {

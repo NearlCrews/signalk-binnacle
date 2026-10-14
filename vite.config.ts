@@ -99,9 +99,9 @@ export default defineConfig({
   test: {
     // Vitest stubs CSS imports as empty modules by default (real CSS processing is wasted work for
     // most tests); map-theme.test.ts needs the real tokens.css text to cross-check its hand-copied
-    // colors, and the tile tests need instruments.css for the hero-scaling contract, so opt those
-    // files back in.
-    css: { include: [/tokens\.css/, /styles\/instruments\.css/] },
+    // colors, the tile tests need instruments.css for the hero-scaling contract, and the safe-area
+    // test needs panels.css for the docked panel insets, so opt those files back in.
+    css: { include: [/tokens\.css/, /styles\/instruments\.css/, /styles\/panels\.css/] },
     // ICU warm-up for every worker; see the file's comment.
     setupFiles: ['./vitest.setup.ts'],
     // Headroom for oversubscribed CI runners (the v0.6.0 Windows Node 22 machine spent 63 s just

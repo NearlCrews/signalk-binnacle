@@ -10,7 +10,14 @@ const THEME_COLORS: Record<Theme, string> = {
   'night-red': '#000000',
 };
 
-function isTheme(value: unknown): value is Theme {
+// The short name every theme control shows: the toolbar toggle adds "theme", Display shows it bare.
+export const THEME_LABELS: Record<Theme, string> = {
+  day: 'Day',
+  dusk: 'Dusk',
+  'night-red': 'Night',
+};
+
+export function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
 }
 

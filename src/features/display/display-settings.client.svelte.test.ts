@@ -211,6 +211,30 @@ describe('createDisplaySettingsController: automatic theme', () => {
   });
 });
 
+describe('createDisplaySettingsController: theme choice', () => {
+  // A phone top bar hides its theme toggle when another chip needs the room, so Display carries a
+  // direct choice through the same theme authority; auto reads it as a manual choice.
+  it('reads the live theme and sets a choice through the shared theme authority', () => {
+    const { controller, setTheme, state } = setup({ mode: 'day', theme: 'day' });
+    expect(controller.theme).toBe('day');
+    controller.setAutoTheme(true);
+    flushSync();
+
+    controller.setTheme('night-red');
+    flushSync();
+    expect(setTheme).toHaveBeenLastCalledWith('night-red');
+    expect(state.theme).toBe('night-red');
+    expect(controller.theme).toBe('night-red');
+    expect(controller.autoThemeSuspended).toBe(true);
+  });
+
+  it('ignores a value that is not a theme', () => {
+    const { controller, setTheme } = setup();
+    controller.setTheme('sepia' as Theme);
+    expect(setTheme).not.toHaveBeenCalled();
+  });
+});
+
 describe('createDisplaySettingsController: sunset offer', () => {
   it('offers once at the dark edge with auto off, and accepting switches to night-red', () => {
     const { state, controller, setTheme } = setup({ position: EQUATOR, now: NOON_UTC });

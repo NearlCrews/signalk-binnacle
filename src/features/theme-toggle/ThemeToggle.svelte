@@ -102,7 +102,7 @@ import type { Component } from 'svelte';
 import { onDestroy } from 'svelte';
 import { scale } from 'svelte/transition';
 import { prefersReducedMotion } from '$shared/lib';
-import type { Theme, ThemeController } from '$shared/ui';
+import { THEME_LABELS, type Theme, type ThemeController } from '$shared/ui';
 
 interface Props {
   controller: ThemeController;
@@ -116,14 +116,8 @@ const ICONS: Record<Theme, Component> = {
   'night-red': Moon,
 };
 
-const LABELS: Record<Theme, string> = {
-  day: 'Day theme',
-  dusk: 'Dusk theme',
-  'night-red': 'Night theme',
-};
-
 const Icon = $derived(ICONS[controller.theme]);
-const label = $derived(LABELS[controller.theme]);
+const label = $derived(`${THEME_LABELS[controller.theme]} theme`);
 // On night-red the hold has nothing left to jump to, so neither string may promise it.
 const onNight = $derived(controller.theme === 'night-red');
 const ariaLabel = $derived(

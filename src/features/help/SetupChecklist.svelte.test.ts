@@ -45,10 +45,12 @@ describe('SetupChecklist', () => {
     expect(renderChecklist({ gpsSeen: true, audioState: 'ready' })).toContain('Get set up');
   });
 
-  it('surfaces the HTTPS row and keeps the checklist visible over plain HTTP', () => {
+  // A stock Signal K server serves plain HTTP, so HTTPS is an optional upgrade rather than a setup
+  // stall: counting it toward retirement would pin the card to the top of Help on most boats.
+  it('explains HTTPS while visible but retires over plain HTTP once the durable rows pass', () => {
     const durableDone = { chartOn: true, writeAllowed: true, savedDataProvisioned: true };
-    const insecure = renderChecklist({ ...durableDone, secureContext: false });
-    expect(insecure).toContain('Get set up');
+    expect(renderChecklist({ ...durableDone, secureContext: false })).not.toContain('Get set up');
+    const insecure = renderChecklist({ secureContext: false });
     expect(insecure).toContain('Serve over HTTPS for browser offline caching');
     expect(insecure).toContain('the browser disables offline caching');
     const secure = renderChecklist({ secureContext: true });

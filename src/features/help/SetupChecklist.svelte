@@ -40,10 +40,10 @@ const {
 // Visibility is decided by the durable rows only. GPS and alarm sound are session state (audio
 // priming resets on every load, and a fix arrives seconds in), so gating on them would render the
 // checklist at the top of Help on every visit of a fully set-up boat and then have it vanish
-// mid-read. They still render, with live checks.
-const durableDone = $derived(
-  chartOn && writeAllowed && savedDataProvisioned === true && secureContext,
-);
+// mid-read. HTTPS is an optional upgrade, since a stock server serves plain HTTP, so it explains
+// itself while the checklist shows but never keeps it showing. They all still render, with live
+// checks.
+const durableDone = $derived(chartOn && writeAllowed && savedDataProvisioned === true);
 const rows = $derived([
   {
     id: 'chart',

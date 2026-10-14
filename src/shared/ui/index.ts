@@ -48,7 +48,13 @@ export { default as SubViewHeader } from './SubViewHeader.svelte';
 export { default as TextField } from './TextField.svelte';
 export { default as TransientNote } from './TransientNote.svelte';
 export type { Theme } from './theme.svelte';
-export { createThemeController, THEMES, ThemeController } from './theme.svelte';
+export {
+  createThemeController,
+  isTheme,
+  THEME_LABELS,
+  THEMES,
+  ThemeController,
+} from './theme.svelte';
 export { PANEL_TRANSITION_MS } from './transitions';
 export { default as UnavailableHint } from './UnavailableHint.svelte';
 export { default as UnitField } from './UnitField.svelte';

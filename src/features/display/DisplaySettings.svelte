@@ -1,5 +1,6 @@
 <script lang="ts">
 import { formatPercent } from '$shared/lib';
+import { THEME_LABELS, THEMES } from '$shared/ui';
 import type { DisplaySettingsController } from './display-settings.svelte';
 import { MAX_DISPLAY_DIM, TEXT_SCALES } from './display-settings.svelte';
 
@@ -34,6 +35,27 @@ const dimPercent = $derived(`${formatPercent(controller.dim)}%`);
   <p class="muted-note muted-note--xs">
     Darkens the screen below the display's lowest backlight for a night watch. It never reaches full
     black, so alarms stay visible.
+  </p>
+</section>
+
+<section class="panel-section" aria-label="Theme">
+  <h3 class="caps-label">Theme</h3>
+  <div class="segmented" role="group" aria-label="Theme">
+    {#each THEMES as theme (theme)}
+      <button
+        type="button"
+        class="btn"
+        class:is-on={controller.theme === theme}
+        aria-pressed={controller.theme === theme}
+        onclick={() => controller.setTheme(theme)}
+      >
+        {THEME_LABELS[theme]}
+      </button>
+    {/each}
+  </div>
+  <p class="muted-note muted-note--xs">
+    Night shows red on black to protect night vision. The toolbar theme button switches the same
+    setting.
   </p>
 </section>
 

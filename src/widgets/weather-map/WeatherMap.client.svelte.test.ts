@@ -139,3 +139,34 @@ describe('WeatherMap viewport ownership', () => {
     expect(store.grid).not.toBe(retained);
   });
 });
+
+describe('WeatherMap header', () => {
+  // WCAG 2.5.3: a speech-input user says the visible word, so the accessible name must contain it.
+  it('names the conditions toggle by its visible label first', async () => {
+    mapFactory.mockImplementation(() => ({ destroy: vi.fn() }));
+    const target = document.createElement('div');
+    document.body.append(target);
+    const component = mount(WeatherMap, {
+      target,
+      props: {
+        store: new WeatherStore(),
+        loader: { load: vi.fn<WeatherLoader['load']>(async () => undefined) },
+        origin: 'https://boat.test',
+        theme: 'day',
+        units: { mode: 'metric', profile: METRIC_UNITS } as UnitsStore,
+        initialView: { lon: -70.5, lat: 42.5, zoom: 6 },
+        onClose: vi.fn(),
+      },
+    });
+    cleanup.push(async () => {
+      await unmount(component);
+      target.remove();
+    });
+    flushSync();
+    const toggle = target.querySelector<HTMLButtonElement>('button.here-btn');
+    if (!toggle) throw new Error('Conditions toggle did not render');
+    const visible = toggle.textContent?.trim() ?? '';
+    expect(visible).toBe('Here');
+    expect(toggle.getAttribute('aria-label') ?? visible).toMatch(new RegExp(`^${visible}\\b`));
+  });
+});

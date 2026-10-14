@@ -13,6 +13,8 @@ function fakeController(
     setAutoTheme: vi.fn(),
     autoThemeSuspended: false,
     recommendedTheme: undefined,
+    theme: 'day',
+    setTheme: vi.fn(),
     textScale: 100,
     setTextScale: vi.fn(),
     ...overrides,
@@ -37,6 +39,16 @@ describe('DisplaySettings', () => {
     expect(body).toContain('aria-valuetext="40%"');
     expect(body).toContain('>40%</span>');
     expect(body).toContain('never reaches');
+  });
+
+  it('offers a direct theme choice with the current theme lit', () => {
+    const body = renderSettings({ theme: 'dusk' });
+    expect(body).toContain('aria-label="Theme"');
+    const group = body.slice(body.indexOf('aria-label="Theme"'));
+    const segments = group.slice(0, group.indexOf('</div>'));
+    for (const name of ['Day', 'Dusk', 'Night']) expect(segments).toContain(name);
+    expect(segments).toMatch(/aria-pressed="true"[^>]*>\s*Dusk/);
+    expect(segments.match(/aria-pressed="true"/g)).toHaveLength(1);
   });
 
   it('marks the active auto-theme segment and explains the manual hold', () => {

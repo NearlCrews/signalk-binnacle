@@ -20,6 +20,14 @@ All notable changes to Binnacle are documented here. The format follows
 - Refresh compatible chart and build dependencies, including the js-yaml security fix, and
   upgrade the Vitest packages together to prevent incompatible test installations.
 - Prevent duplicate chart actions from touch long presses after the MapLibre update.
+- Keep the top bar, docked panels, and full-screen instrument dock clear of a phone's notch in
+  landscape, where the wide layout applies.
+- Add a Day, Dusk, and Night theme choice to Display, so the theme stays reachable when a phone top
+  bar hides its theme button to make room for an Update or collision mute chip.
+- Give the status strip's anchor chip a full 44 px target, since it opens Anchor watch.
+- Retire the Get set up checklist on a plain HTTP server once the chart, access, and saved-data rows
+  pass. The HTTPS row still explains browser offline caching while the checklist shows.
+- Name the Weather panel's Here button by its visible label, so speech input can activate it.
 - Update MapLibre GL JS to 6.14, Terra Draw to 1.37, and the chart source catalog to 0.9, which
   credits EMODnet, Marine Regions, and OpenSeaMap layers under the terms each upstream now
   states, along with current build and test tooling.

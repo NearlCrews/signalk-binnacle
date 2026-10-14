@@ -744,7 +744,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   44 px is NOT an improvement: `.strip-start` wraps with a 12 px row gap (8 px under 600 px), so a
   44 px box would reach about 13 px past its own text on each side and overlap the neighboring
   row's target, turning a near miss into a tap on the wrong chip. Every real action in the strip
-  (Retry, Reconnect, Help, N up) keeps the full 44 px target.
+  (Retry, Reconnect, Help, N up) keeps the full 44 px target, and so does a chip that opens a panel
+  (the autopilot and anchor chips), which keeps that target in layout rather than cancelling it with
+  a negative margin.
 - A chip does not carry both an explain-tap and an action that already routes to the same
   explanation. The link chips sit beside the connection dot, whose tap states the connection
   diagnosis; Waiting for GPS carries Help, which opens the GPS readiness section; the orientation

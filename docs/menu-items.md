@@ -360,10 +360,12 @@ source, and surrounding traffic before relying on it.
 ## Settings
 
 - **Display** groups the helm display environment: a true-black screen dim that stays pointer
-  transparent and never exceeds the alarm-distinguishable floor, the opt-in automatic day and
+  transparent and never exceeds the alarm-distinguishable floor, a direct Day, Dusk, and Night
+  theme choice that stays reachable when a phone top bar hides its theme button to make room for an
+  Update or collision mute chip, the opt-in automatic day and
   night theme (from the boat's day and night signal with a solar fallback, paused by a manual
   choice until the next boundary), the bright-sun chart contrast for direct sunlight, and the
-  interface text size from 100 to 130 percent with controls no smaller than 44 px. All four travel
+  interface text size from 100 to 130 percent with controls no smaller than 44 px. All five travel
   with the active profile. With auto theme off, sunset raises a one-time offer to switch to the
   night theme.
 - **Profiles** (tile subtitle: units, sync, and privacy) saves portable chart, weather, threshold,
@@ -391,7 +393,8 @@ source, and surrounding traffic before relying on it.
 - **Help** opens the permanent help panel: the safe-use framing (an advisory chartplotter, not a
   navigation chart), a live Get set up checklist (nautical chart on, GPS position seen, read and
   write access, alarm sound, and server saved-data storage, each with one action, retiring itself
-  once the durable rows pass), the reference-map-versus-charts distinction, Signal K access and
+  once the durable rows pass, plus an informational HTTPS row that explains browser offline caching
+  but never keeps the checklist open on a plain HTTP server), the reference-map-versus-charts distinction, Signal K access and
   alarm-sound setup with direct actions, what each connection state means, a When something looks
   wrong section covering staleness and unassessed AIS targets, a marine glossary including the
   Keel, Surface, and Xducer depth datums and Signal K itself, operating-context checklists for a

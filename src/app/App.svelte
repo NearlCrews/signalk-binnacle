@@ -3564,11 +3564,20 @@ const plotterActions = {
   /* Fallback standard padding */
   padding: var(--space-2) var(--space-4);
 
-  /* Window Controls Overlay alignment */
+  /* Window Controls Overlay alignment. A landscape phone also lays out with these wide rules, so
+     the inline edges reserve the notch side as well. */
   padding-block-start: max(var(--space-2), env(titlebar-area-y, 0px));
   min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));
-  padding-inline-start: max(var(--space-4), env(titlebar-area-x, 0px));
-  padding-inline-end: calc(100% - env(titlebar-area-width, 100%) + var(--space-4));
+  padding-inline-start: max(
+    calc(var(--space-4) + env(safe-area-inset-left, 0px)),
+    env(titlebar-area-x, 0px)
+  );
+  padding-inline-end: calc(
+    100% -
+    env(titlebar-area-width, 100%) +
+    var(--space-4) +
+    env(safe-area-inset-right, 0px)
+  );
 
   border-block-end: 1px solid var(--border);
 
@@ -3640,6 +3649,8 @@ const plotterActions = {
   .topbar-action--profile {
     display: none;
   }
+  /* At large text sizes only one chip fits beside MOB on a phone, so the theme button yields to a
+     collision mute or an update; Display keeps the same theme choice reachable from the menu. */
   .topbar-actions:has(.topbar-action--collision) .topbar-action--update,
   .topbar-actions:has(.topbar-action--collision) .topbar-action--theme,
   .topbar-actions:has(.topbar-action--update) .topbar-action--theme,
@@ -3659,6 +3670,8 @@ const plotterActions = {
   display: flex;
   flex-direction: column;
   inline-size: clamp(20rem, 28vw, 24rem);
+  /* Docked on the trailing edge of a landscape phone wider than 900px, so it clears the notch. */
+  padding-inline-end: env(safe-area-inset-right, 0px);
   border-inline-start: 1px solid var(--border);
   /* The dock scrolls its own tiles; without this a long tile list would stretch the shell row. */
   min-block-size: 0;
@@ -3669,6 +3682,8 @@ const plotterActions = {
     inset: 0;
     z-index: var(--z-panel);
     inline-size: auto;
+    /* Full screen on a landscape phone, so both inline edges clear the notch. */
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
     background: var(--surface);
   }
 }

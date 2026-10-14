@@ -10,7 +10,7 @@ import {
   PersistedValue,
   type StorageLike,
 } from '$shared/settings';
-import type { Theme } from '$shared/ui';
+import { isTheme, type Theme } from '$shared/ui';
 
 // The dim ceiling is the alarm floor: the overlay may never take more than 85 percent of the
 // screen's luminance, so the chart, the safety strips, and a sounding alarm stay readable behind a
@@ -49,6 +49,11 @@ export interface DisplaySettingsController {
   // The dim layer's opacity, 0 (off) to MAX_DISPLAY_DIM.
   readonly dim: number;
   setDim(value: number): void;
+  // The live theme and a direct choice through the shared theme authority. A phone top bar hides
+  // its theme toggle when another chip needs the room, so Display always offers this path; auto
+  // reads a choice made here as a manual one.
+  readonly theme: Theme;
+  setTheme(theme: Theme): void;
   readonly autoTheme: boolean;
   setAutoTheme(on: boolean): void;
   // True while a manual theme choice holds automatic switching until the next day-night change.
@@ -189,6 +194,12 @@ export function createDisplaySettingsController(
     setDim(value: number): void {
       if (!Number.isFinite(value)) return;
       dim.set(clamp(value, 0, MAX_DISPLAY_DIM));
+    },
+    get theme(): Theme {
+      return deps.getTheme();
+    },
+    setTheme(theme: Theme): void {
+      if (isTheme(theme)) deps.setTheme(theme);
     },
     get autoTheme(): boolean {
       return autoTheme.value;
