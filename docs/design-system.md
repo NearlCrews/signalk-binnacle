@@ -60,7 +60,10 @@ condition, and one used there drops the whole block.
   because some Android and Samsung shells report zero while the system bar still overlays the app.
   Bottom controls add the clearance in normal layout flow so the chart shrinks above them. They do
   not use device detection, fixed positioning, or a second viewport-height calculation. Bottom and
-  landscape-edge chrome must also include the appropriate `safe-area-inset-*` value.
+  landscape-edge chrome must also include the appropriate `safe-area-inset-*` value. A landscape
+  phone is wider than the 600 px phone breakpoint, so it lays out with the wide rules: the top bar,
+  the docked `.panel-slot`, and the instrument dock reserve the inline insets there too, not only in
+  the phone branch.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
   0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
 - Component dimensions no scale covers live in `tokens.css` when the value is shared across
@@ -147,6 +150,11 @@ that matter when you do touch this:
   nonzero green against an AA contrast need in `tokens.css`.
 - Danger and caution must stay distinguishable in every theme. `--alarm` is the brighter, `--warning`
   the dimmer; that brightness gap is the contract.
+- The theme has two controls on one `ThemeController`: the toolbar button (tap to cycle, hold for
+  night) and Display's Day, Dusk, and Night choice. At large text sizes a phone top bar fits only one
+  chip beside MOB, so the toolbar button yields to an Update or collision mute chip. Display is the
+  path that is always reachable; keep it when changing either control. Both read their names from
+  `THEME_LABELS`.
 
 ## 4. The modular CSS architecture
 
@@ -546,7 +554,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `pickTextFile` and `readErrorMessage` for file import; `defaultSaveName` to seed a save name, and
   `resolveSaveName(value, kind)` to fall a blank entry back to that default. The old `window.prompt`
   wrappers were removed; collect or rename a name with the `NameEntry` primitive.
-- `THEMES`, `ThemeController`, `createThemeController` for the theme switch.
+- `THEMES`, `ThemeController`, `createThemeController` for the theme switch, `THEME_LABELS` for each
+  theme's short display name, and `isTheme` to validate an untrusted theme value.
 
 `IconPicker` is exported from `$entities/icon-picker`, not `$shared/ui`. It is the waypoint and note
 symbol chooser. Pass `disabled` with the enclosing mutation state so a pending dialog cannot change

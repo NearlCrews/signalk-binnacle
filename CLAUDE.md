@@ -205,7 +205,7 @@ not have to be corrected after the fact.
   The compiler API now lives behind `./unstable/*` (`unstable/ast`, `unstable/sync`, and kin) next
   to twenty platform Go binaries. So `createProgram`, the `TypeChecker`, the language service, and
   `tsserver` are all unreachable from `typescript@7`, which is why every type-reading tool peer-caps
-  below it. The installed typescript-eslint 8.70.0 peers `>=4.8.4 <6.1.0`, and svelte-check 4.7.6 peers
+  below it. The installed typescript-eslint 8.71.2 peers `>=4.8.4 <6.1.0`, and svelte-check 4.7.6 peers
   `^5.0.0 || ^6.0.0`. Replacing typescript-eslint does NOT unblock it, so do not go
   down that road: svelte-check is the binding cap and has no substitute, since `sv` is a scaffolding
   CLI and `svelte-language-server` is an editor LSP with the same dependency. Nor is anything being
