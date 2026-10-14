@@ -2,6 +2,7 @@
 import type { Snippet } from 'svelte';
 import EmptyState from './EmptyState.svelte';
 import type { SavedListEmpty } from './empty-state';
+import LoadNote from './LoadNote.svelte';
 
 interface Props {
   // The caps-label heading above the list. Omit to let the parent own the heading.
@@ -32,7 +33,7 @@ const headingId = $props.id();
   {/if}
   {#if items.length === 0}
     {#if empty.kind === 'loading'}
-      <p class="muted-note" role="status">{empty.message}</p>
+      <LoadNote state="loading" message={empty.message} />
     {:else if empty.kind === 'unavailable'}
       <p class="muted-note">{empty.message}</p>
     {:else}

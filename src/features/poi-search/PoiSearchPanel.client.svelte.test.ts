@@ -76,8 +76,8 @@ describe('PoiSearchPanel reactive results', () => {
   it('retries failed current-view results without requiring chart movement', () => {
     const onRetry = vi.fn();
     const panel = mountPanel({ viewState: { phase: 'error', offline: false }, onRetry });
-    const retry = [...panel.target.querySelectorAll('button')].find(
-      (button) => button.textContent?.trim() === 'Retry places',
+    const retry = panel.target.querySelector<HTMLButtonElement>(
+      'button[aria-label="Retry places"]',
     );
     expect(retry).toBeDefined();
     retry?.click();

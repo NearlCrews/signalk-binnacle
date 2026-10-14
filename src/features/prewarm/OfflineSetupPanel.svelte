@@ -44,7 +44,9 @@ const { state, accessUrl, onRetry, onClose, onBack }: Props = $props();
       </p>
     {/if}
     <div class="panel-controls">
-      <button type="button" class="btn" onclick={onRetry}>Retry offline chart setup</button>
+      <button type="button" class="btn" onclick={onRetry} aria-label="Retry offline chart setup">
+        Retry
+      </button>
       <a class="btn btn-ghost" href={accessUrl}>Open Signal K administration</a>
     </div>
   </section>

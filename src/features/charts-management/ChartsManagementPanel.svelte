@@ -139,8 +139,14 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
 
     {#if loadError !== null}
       <p class="alert-note" role="alert">{loadError}</p>
-      <button type="button" class="btn" disabled={refreshing} onclick={() => void loadCharts(true)}>
-        Retry chart list
+      <button
+        type="button"
+        class="btn"
+        disabled={refreshing}
+        onclick={() => void loadCharts(true)}
+        aria-label="Retry chart list"
+      >
+        Retry
       </button>
     {/if}
     {#if data === null}

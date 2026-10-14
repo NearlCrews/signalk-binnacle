@@ -18,6 +18,7 @@ import {
   ArmedRow,
   createPanelMinimize,
   InlineConfirm,
+  LoadNote,
   NavSortControl,
   restoreFocusAfterCancel,
   SavedList,
@@ -248,22 +249,26 @@ $effect(() => {
   {#if storageMissing}
     <!-- A stock server ships the Resources Provider disabled, so the first open fails for a
          reason no connection copy could name. The probe distinguishes the two. -->
-    <p class="alert-note" role="alert">
-      {resourcesProviderNote(
+    <LoadNote
+      state="error"
+      message={resourcesProviderNote(
         'This Signal K server has no waypoint storage, so waypoints cannot be saved to it.',
         'enable waypoints under Resources',
       )}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+      {onRetry}
+      retryKind="probe"
+    />
   {:else if loadState === 'error'}
-    <p class="alert-note" role="alert">
-      {waypoints.length > 0
+    <LoadNote
+      state="error"
+      message={waypoints.length > 0
         ? 'Could not refresh waypoints. Showing the last loaded waypoints.'
         : 'Could not load waypoints. Check the connection, then retry.'}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry waypoints</button>
+      {onRetry}
+      retryName="waypoints"
+    />
   {:else if loadState === 'loading' && waypoints.length > 0}
-    <p class="muted-note" role="status">Refreshing waypoints…</p>
+    <LoadNote state="refreshing" message="Refreshing waypoints…" />
   {/if}
 
   {#if waypoints.length > 0 && vesselPosition === undefined}

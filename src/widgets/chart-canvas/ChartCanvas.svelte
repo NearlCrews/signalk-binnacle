@@ -254,7 +254,7 @@ const {
 let container: HTMLDivElement;
 let mapHandle: ThemedMapHandle | undefined;
 // True from mount until the companion probe and map construction settle, so the surface says
-// "Loading chart" instead of sitting blank through the bounded Chart Locker probe. The
+// "Loading chart…" instead of sitting blank through the bounded Chart Locker probe. The
 // cannot-start notice (WebGL2, style failure) replaces it on the failure paths.
 let chartBooting = $state(true);
 

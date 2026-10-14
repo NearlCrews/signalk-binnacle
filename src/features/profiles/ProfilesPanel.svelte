@@ -185,17 +185,38 @@ function useProfile(id: string): void {
       {MAX_PROFILES.toLocaleString('en-US')}-profile limit. Delete at least one profile, then retry
       profile sync.
     </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+    <button
+      type="button"
+      class="btn btn-ghost"
+      onclick={onRetrySync}
+      aria-label="Retry profile sync"
+    >
+      Retry
+    </button>
   {:else if syncState === 'conflict'}
     <p class="alert-note" role="alert">
       Another station changed these profiles. Binnacle could not finish merging the changes.
     </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+    <button
+      type="button"
+      class="btn btn-ghost"
+      onclick={onRetrySync}
+      aria-label="Retry profile sync"
+    >
+      Retry
+    </button>
   {:else if syncState === 'error'}
     <p class="alert-note" role="alert">
       Profiles are saved on this device. Server profile data could not be read safely.
     </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetrySync}>Retry profile sync</button>
+    <button
+      type="button"
+      class="btn btn-ghost"
+      onclick={onRetrySync}
+      aria-label="Retry profile sync"
+    >
+      Retry
+    </button>
   {:else if syncState === 'syncing'}
     <p class="muted-note" role="status">Syncing profiles with this Signal K account…</p>
   {:else if auth.writeBlocked}

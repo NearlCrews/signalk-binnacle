@@ -34,6 +34,7 @@ import {
   Disclosure,
   defaultSaveName,
   InlineConfirm,
+  LoadNote,
   NameEntry,
   resolveSaveName,
   restoreFocusAfterCancel,
@@ -294,13 +295,15 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     />
   {/if}
   {#if storageMissing}
-    <p class="alert-note" role="alert">
-      {resourcesProviderNote(
+    <LoadNote
+      state="error"
+      message={resourcesProviderNote(
         'This Signal K server has no track storage, so tracks cannot be saved to it.',
         'add tracks under Resources (custom)',
       )}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+      {onRetry}
+      retryKind="probe"
+    />
   {/if}
   {#if persistenceDegraded}
     <p class="alert-note" role="alert">
@@ -547,14 +550,16 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
   </Disclosure>
 
   {#if loadState === 'error'}
-    <p class="alert-note" role="alert">
-      {saved.length > 0
+    <LoadNote
+      state="error"
+      message={saved.length > 0
         ? 'Could not refresh saved tracks. Showing the last loaded tracks.'
         : 'Could not load saved tracks. Check the connection, then retry.'}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry saved tracks</button>
+      {onRetry}
+      retryName="saved tracks"
+    />
   {:else if loadState === 'loading' && saved.length > 0}
-    <p class="muted-note" role="status">Refreshing saved tracks…</p>
+    <LoadNote state="refreshing" message="Refreshing saved tracks…" />
   {/if}
   <SavedList
     heading="Saved tracks"

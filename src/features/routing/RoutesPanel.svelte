@@ -26,6 +26,7 @@ import {
   createPanelMinimize,
   defaultSaveName,
   InlineConfirm,
+  LoadNote,
   NameEntry,
   OverflowActions,
   pickTextFile,
@@ -502,22 +503,26 @@ const emptyMessage = $derived(emptyReason());
   {#if storageMissing}
     <!-- A stock server ships the Resources Provider disabled, so the first open fails for a
          reason no connection copy could name. The probe distinguishes the two. -->
-    <p class="alert-note" role="alert">
-      {resourcesProviderNote(
+    <LoadNote
+      state="error"
+      message={resourcesProviderNote(
         'This Signal K server has no route storage, so routes cannot be saved to it.',
         'enable routes under Resources',
       )}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Check again</button>
+      {onRetry}
+      retryKind="probe"
+    />
   {:else if loadState === 'error'}
-    <p class="alert-note" role="alert">
-      {routes.length > 0
+    <LoadNote
+      state="error"
+      message={routes.length > 0
         ? 'Could not refresh routes. Showing the last loaded routes.'
         : 'Could not load routes. Check the connection, then retry.'}
-    </p>
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry routes</button>
+      {onRetry}
+      retryName="routes"
+    />
   {:else if loadState === 'loading' && routes.length > 0}
-    <p class="muted-note" role="status">Refreshing routes…</p>
+    <LoadNote state="refreshing" message="Refreshing routes…" />
   {/if}
 
   <SavedList

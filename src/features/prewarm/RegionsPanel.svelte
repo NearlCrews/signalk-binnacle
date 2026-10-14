@@ -575,7 +575,7 @@ function chartLabel(id: string): string {
           <p class="alert-note" role="alert">{statsError}</p>
           <button type="button" class="btn btn-ghost" onclick={() => void loadStats()}>
             <RefreshCw size={16} aria-hidden="true" />
-            Retry storage check
+            Check again
           </button>
         {:else if stats === null}
           <p class="muted-note" role="status">Checking storage…</p>
@@ -656,7 +656,7 @@ function chartLabel(id: string): string {
             <p class="alert-note" role="alert">{estimateError}</p>
             <button type="button" class="btn btn-ghost" onclick={() => void loadStats()}>
               <RefreshCw size={16} aria-hidden="true" />
-              Retry storage check
+              Check again
             </button>
           {:else if gateReason === 'administrator-access'}
             <p class="muted-note" role="status">

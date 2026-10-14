@@ -72,8 +72,14 @@ function cancelClear(): void {
   {#if loadError !== null}
     <p class="alert-note" role="alert">{loadError}</p>
     {#if onRetryLoad}
-      <button type="button" class="btn btn-ghost" disabled={loading} onclick={onRetryLoad}>
-        Retry storage
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={loading}
+        onclick={onRetryLoad}
+        aria-label="Retry storage"
+      >
+        Retry
       </button>
     {/if}
   {/if}

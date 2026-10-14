@@ -214,7 +214,7 @@ describe('NoteDetailPanel recovery', () => {
     });
 
     await vi.waitFor(() => {
-      expect(target.textContent).toContain('Retry place details');
+      expect(target.querySelector('button[aria-label="Retry place details"]')).not.toBeNull();
     });
 
     const dismiss = target.querySelector<HTMLButtonElement>('button[aria-label="Dismiss error"]');

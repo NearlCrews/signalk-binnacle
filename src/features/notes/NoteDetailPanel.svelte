@@ -283,8 +283,13 @@ function measure(item: NormalizedItem): string {
         ? 'Could not refresh place details. Showing retained information; provider changes may be missing.'
         : 'Could not load the details for this place.'}
     </p>
-    <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>
-      Retry place details
+    <button
+      type="button"
+      class="btn btn-ghost"
+      onclick={() => (attempt += 1)}
+      aria-label="Retry place details"
+    >
+      Retry
     </button>
   {/if}
   {#if sections}

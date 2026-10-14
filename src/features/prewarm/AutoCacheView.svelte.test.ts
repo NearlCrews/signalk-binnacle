@@ -42,7 +42,7 @@ describe('Automatic-cache policy readiness', () => {
 
   it('offers a local retry without controls after an initial failure', () => {
     const html = body({ loading: false, loadError: 'Could not load automatic-caching settings.' });
-    expect(html).toContain('Retry settings');
+    expect(html).toContain('aria-label="Retry automatic-caching settings"');
     expect(html).toContain('Load the current policy before changing');
     expect(html).not.toContain('Enable automatic caching');
     expect(html).not.toContain('Loading automatic-caching settings');

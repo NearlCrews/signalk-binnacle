@@ -86,8 +86,14 @@ function chartList(region: SavedRegionDto): string {
   {#if loadError !== null}
     <p class="alert-note" role="alert">{loadError}</p>
     {#if onRetryLoad}
-      <button type="button" class="btn btn-ghost" disabled={loading} onclick={onRetryLoad}>
-        Retry saved areas
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={loading}
+        onclick={onRetryLoad}
+        aria-label="Retry saved areas"
+      >
+        Retry
       </button>
     {/if}
   {/if}
@@ -148,9 +154,10 @@ function chartList(region: SavedRegionDto): string {
               class="btn btn-ghost"
               disabled={!adminAccess || submitting || pendingRegion[region.id]}
               onclick={() => onRetryStatus(region.id)}
+              aria-label="Retry area status"
             >
               <RefreshCw size={16} aria-hidden="true" />
-              Retry status
+              Retry
             </button>
           </div>
         {:else if region.status === 'downloading' && live && live.total > 0}

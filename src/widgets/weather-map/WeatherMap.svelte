@@ -231,7 +231,7 @@ const statusNote = $derived.by<string>(() => {
   const wavesNote = wavesMissing ? ' (waves unavailable)' : '';
   switch (store.status) {
     case 'loading':
-      return store.grid ? '' : 'Loading forecast';
+      return store.grid ? '' : 'Loading forecast…';
     case 'error':
       return 'Weather unavailable: offline or rate limited';
     case 'stale': {

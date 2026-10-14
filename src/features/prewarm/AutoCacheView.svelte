@@ -71,8 +71,14 @@ const unavailable = $derived(!adminAccess || !settingsReady || loading);
   {#if loadError !== null}
     <div class="save-error" role="alert">
       <p class="alert-note">{loadError}</p>
-      <button type="button" class="btn btn-ghost" disabled={loading} onclick={onRetryLoad}>
-        Retry settings
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={loading}
+        onclick={onRetryLoad}
+        aria-label="Retry automatic-caching settings"
+      >
+        Retry
       </button>
     </div>
   {/if}

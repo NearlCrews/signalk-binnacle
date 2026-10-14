@@ -66,7 +66,7 @@ describe('SavedRegionsView', () => {
   it('offers a status retry after a recovery poll loses contact', () => {
     const html = body(savedRegion, true);
     expect(html).toContain('Download status is unavailable');
-    expect(html).toContain('Retry status');
+    expect(html).toContain('aria-label="Retry area status"');
     expect(html).not.toContain('Starting download');
   });
 

@@ -23,6 +23,7 @@ export {
 export { default as InlineConfirm } from './InlineConfirm.svelte';
 export { default as LayerToggle } from './LayerToggle.svelte';
 export { default as LazyPanelState } from './LazyPanelState.svelte';
+export { default as LoadNote } from './LoadNote.svelte';
 export {
   createMenuFocusMachine,
   initializeMenuFocus,

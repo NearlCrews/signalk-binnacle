@@ -1,5 +1,6 @@
 <script lang="ts">
 import { dialog } from './dialog';
+import LoadNote from './LoadNote.svelte';
 import PanelHeader from './PanelHeader.svelte';
 
 interface Props {
@@ -29,15 +30,6 @@ const { title, closeLabel, state, message, onClose, onBack, backLabel, onRetry }
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: Safari requires this scroll region in the tab order. -->
   <div class="panel-body panel-body--flex" tabindex="0">
-    {#if state === 'loading'}
-      <div class="panel-loading" role="status">{message}</div>
-    {:else}
-      <div class="panel-load-error" role="alert">
-        <span>{message}</span>
-        {#if onRetry}
-          <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry</button>
-        {/if}
-      </div>
-    {/if}
+    <LoadNote state={state === 'loading' ? 'loading' : 'error'} {message} {onRetry} />
   </div>
 </aside>

@@ -161,15 +161,22 @@ const focused = $derived(controller.focusedId !== undefined);
           )}
             <div class="chart-error" role="alert">
               <p class="muted-note">Trend charts stopped unexpectedly.</p>
-              <button type="button" class="btn" onclick={reset}>Retry charts</button>
+              <button type="button" class="btn" onclick={reset} aria-label="Retry trend charts">
+                Retry
+              </button>
             </div>
           {/snippet}
         </ErrorBoundary>
       {:catch}
         <div class="chart-error" role="alert">
           <p class="muted-note">Could not open the trend charts.</p>
-          <button type="button" class="btn" onclick={() => (chartsAttempt += 1)}>
-            Retry charts
+          <button
+            type="button"
+            class="btn"
+            onclick={() => (chartsAttempt += 1)}
+            aria-label="Retry trend charts"
+          >
+            Retry
           </button>
         </div>
       {/await}

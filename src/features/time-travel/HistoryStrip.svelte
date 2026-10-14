@@ -95,7 +95,7 @@ const liveMessage = $derived.by(() => {
   }
   if (errorText) return errorText;
   if (controller.status === 'ready') return valueText;
-  if (controller.status === 'loading') return 'Loading history';
+  if (controller.status === 'loading') return 'Loading history…';
   if (controller.status === 'no-provider') {
     return 'Playback needs a history provider on the server';
   }

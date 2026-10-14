@@ -62,9 +62,7 @@ describe('Installed charts refresh', () => {
       target.querySelector<HTMLInputElement>('input[aria-label="Display name for coastal.pmtiles"]')
         ?.value,
     ).toBe('Coastal');
-    const retry = [...target.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Retry chart list'),
-    );
+    const retry = target.querySelector<HTMLButtonElement>('button[aria-label="Retry chart list"]');
     retry?.click();
     await vi.waitFor(() => expect(fetchManagedCharts).toHaveBeenCalledTimes(3));
     await vi.waitFor(() =>

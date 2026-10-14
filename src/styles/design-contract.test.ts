@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 // Every stylesheet and component as text. A design rule that drifted twice is guarded here rather
 // than reviewed again: each assertion names the rule it holds.
-const sources = import.meta.glob<string>(['/src/**/*.{css,svelte}'], {
+const sources = import.meta.glob<string>(['/src/**/*.{css,svelte,ts}'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -75,5 +75,37 @@ describe('design contract: one badge', () => {
       ([path, text]) => path.endsWith('.svelte') && /<style>[\s\S]*\n\.badge[\s[{]/.test(text),
     );
     expect(scopedBadge.map(([path]) => path)).toEqual([]);
+  });
+});
+
+// Product source only: test files quote user strings in their own words, and a test harness is a
+// fixture, not product copy.
+const product = Object.entries(sources).filter(
+  ([path]) => !/\.test\.ts$|TestHarness\.svelte$/.test(path),
+);
+
+describe('design contract: load and retry copy', () => {
+  it('ends every loading string with an ellipsis', () => {
+    const offenders = product.flatMap(([path, text]) =>
+      [...text.matchAll(/(?:>|'|"|`)(Loading [^<'"`…]+?)(?:<|'|"|`)/g)]
+        .filter(
+          (match) =>
+            !/aria-label=$/.test(text.slice(Math.max(0, (match.index ?? 0) - 11), match.index)),
+        )
+        .map((match) => match[1] ?? '')
+        .filter((phrase) => !/[.…]$/.test(phrase))
+        .map((phrase) => `${path}: ${phrase}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('labels every retry button Retry or Check again', () => {
+    const offenders = product.flatMap(([path, text]) =>
+      [...text.matchAll(/>\s*(Retry[^<{]*?)\s*</g)]
+        .map((match) => match[1] ?? '')
+        .filter((label) => label !== 'Retry')
+        .map((label) => `${path}: ${label}`),
+    );
+    expect(offenders).toEqual([]);
   });
 });

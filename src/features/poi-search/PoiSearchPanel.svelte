@@ -137,8 +137,14 @@ onDestroy(() => onHover(undefined));
     </p>
   {/if}
   {#if onRetry && (viewState.phase === 'error' || viewState.offline)}
-    <button type="button" class="btn" onclick={onRetry} disabled={viewState.phase === 'loading'}>
-      Retry places
+    <button
+      type="button"
+      class="btn"
+      onclick={onRetry}
+      disabled={viewState.phase === 'loading'}
+      aria-label="Retry places"
+    >
+      Retry
     </button>
   {/if}
   {#if pois.length > 0 && vesselPosition === undefined}

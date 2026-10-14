@@ -36,7 +36,9 @@ const canRetry = $derived(state === 'access-error' || state === 'offline' || sta
   {#if canSignIn}
     <a class="btn btn-ghost" href={accessUrl}>{accessLabel}</a>
   {:else if canRetry}
-    <button type="button" class="btn btn-ghost" onclick={onRetry}>Retry access</button>
+    <button type="button" class="btn btn-ghost" onclick={onRetry} aria-label="Retry access">
+      Retry
+    </button>
   {/if}
 </div>
 
