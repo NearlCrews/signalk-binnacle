@@ -40,7 +40,10 @@ function toggle(value: boolean): void {
         onHover={() => {}}
         onClose={() => (opened = false)}
       />
-      {#snippet fallback(error, _reset)}
+      {#snippet fallback(
+        error,
+        _reset,
+      )}
         <p role="alert">{String(error)}</p>
       {/snippet}
     </ErrorBoundary>

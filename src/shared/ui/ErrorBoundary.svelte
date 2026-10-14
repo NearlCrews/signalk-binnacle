@@ -12,7 +12,10 @@ const { children, fallback }: Props = $props();
 <svelte:boundary>
   {@render children()}
 
-  {#snippet failed(error: unknown, reset: () => void)}
+  {#snippet failed(
+    error: unknown,
+    reset: () => void,
+  )}
     {@render fallback(error, reset)}
   {/snippet}
 </svelte:boundary>

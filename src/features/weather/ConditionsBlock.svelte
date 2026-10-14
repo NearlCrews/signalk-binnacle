@@ -183,7 +183,12 @@ function ageLabel(ageMs: number | undefined): string | undefined {
       <dd><b class="num">{formatPercent(current.cloudFraction)}</b>%</dd>
     </div>
   {/if}
-  {#snippet waveBlock(label: string, heightM: number, periodS: number | undefined, fromRad: number | undefined)}
+  {#snippet waveBlock(
+    label: string,
+    heightM: number,
+    periodS: number | undefined,
+    fromRad: number | undefined,
+  )}
     <div>
       <dt>{label}</dt>
       <dd>
@@ -207,7 +212,12 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     {@render waveBlock('Waves', current.waveHeightM, current.wavePeriodS, current.waveFromRad)}
   {/if}
   {#if current.windWaveHeightM !== undefined}
-    {@render waveBlock('Wind waves', current.windWaveHeightM, current.windWavePeriodS, current.windWaveFromRad)}
+    {@render waveBlock(
+      'Wind waves',
+      current.windWaveHeightM,
+      current.windWavePeriodS,
+      current.windWaveFromRad,
+    )}
   {/if}
   {#if current.swellHeightM !== undefined}
     {@render waveBlock('Swell', current.swellHeightM, current.swellPeriodS, current.swellFromRad)}

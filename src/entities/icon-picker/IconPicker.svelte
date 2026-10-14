@@ -189,7 +189,9 @@ $effect(() => {
 });
 </script>
 
-{#snippet iconGlyph(opt: IconOption)}
+{#snippet iconGlyph(
+  opt: IconOption,
+)}
   {#if opt.kind === 'poi'}
     {#if poiOverrides.has(opt.category)}
       <img src={poiOverrides.get(opt.category)} width="20" height="20" alt="">

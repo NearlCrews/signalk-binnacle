@@ -553,7 +553,13 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
     empty={savedEmptyText}
     key={({ track }) => track.id}
   >
-    {#snippet card({ track, distanceNm, durationText, spanText, span })}
+    {#snippet card({
+      track,
+      distanceNm,
+      durationText,
+      spanText,
+      span,
+    })}
       <div class="card-head">
         <span class="name" title={track.name}>{track.name}</span>
       </div>

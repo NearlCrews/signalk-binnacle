@@ -134,7 +134,11 @@ const focused = $derived(controller.focusedId !== undefined);
         disabled={controller.loading}
         onclick={() => controller.refreshHistory()}
       >
-        {controller.loading ? 'Refreshing history…' : controller.historyState === 'failed' || controller.historyState === 'partial' ? 'Retry history' : 'Refresh history'}
+        {controller.loading
+          ? 'Refreshing history…'
+          : controller.historyState === 'failed' || controller.historyState === 'partial'
+            ? 'Retry history'
+            : 'Refresh history'}
       </button>
     {/if}
 
@@ -152,7 +156,10 @@ const focused = $derived(controller.focusedId !== undefined);
         <ErrorBoundary>
           <charts.default {controller} {units} {theme} />
 
-          {#snippet fallback(_error, reset)}
+          {#snippet fallback(
+            _error,
+            reset,
+          )}
             <div class="chart-error" role="alert">
               <p class="muted-note">Trend charts stopped unexpectedly.</p>
               <button type="button" class="btn" onclick={reset}>Retry charts</button>

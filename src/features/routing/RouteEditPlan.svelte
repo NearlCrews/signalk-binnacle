@@ -196,7 +196,9 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
     aria-label="Planned departure date and time, used for the arrival clock times"
   >
 </label>
-{#snippet legBody(leg: (typeof workingLegs)[number])}
+{#snippet legBody(
+  leg: (typeof workingLegs)[number],
+)}
   {@const seconds = etaSeconds(leg.cumulativeMeters, planSpeedMps)}
   {@const forecast = legForecasts[leg.fromIndex]}
   <span class="leg-line">
@@ -215,7 +217,8 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
       Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
     </span>
   </span>
-  {#if forecast !== undefined && (forecast.afterDark || forecast.windLine !== undefined || forecast.windUnavailable)}
+  {#if forecast !== undefined &&
+    (forecast.afterDark || forecast.windLine !== undefined || forecast.windUnavailable)}
     <span class="leg-line leg-line--metrics">
       {#if forecast.afterDark}
         <span

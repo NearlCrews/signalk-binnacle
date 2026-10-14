@@ -20,6 +20,9 @@ All notable changes to Binnacle are documented here. The format follows
 - Refresh compatible chart and build dependencies, including the js-yaml security fix, and
   upgrade the Vitest packages together to prevent incompatible test installations.
 - Prevent duplicate chart actions from touch long presses after the MapLibre update.
+- Update MapLibre GL JS to 6.14, Terra Draw to 1.37, and the chart source catalog to 0.9, which
+  credits EMODnet, Marine Regions, and OpenSeaMap layers under the terms each upstream now
+  states, along with current build and test tooling.
 
 <a id="v0220"></a>
 

@@ -296,7 +296,9 @@ function useProfile(id: string): void {
     key={(profile) => profile.id}
     isActive={(profile) => profile.id === activeId}
   >
-    {#snippet card(profile)}
+    {#snippet card(
+      profile,
+    )}
       {@const isActive = profile.id === activeId}
       {@const isDefault = profile.id === defaultId}
       <div class="card-head">

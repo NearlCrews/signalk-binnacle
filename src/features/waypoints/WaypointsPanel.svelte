@@ -289,7 +289,9 @@ $effect(() => {
     key={(row) => row.id}
     isActive={(row) => row.id === selectedId}
   >
-    {#snippet card(row)}
+    {#snippet card(
+      row,
+    )}
       {@const waypoint = row.waypoint}
       <div class="card-head">
         <button

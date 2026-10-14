@@ -412,7 +412,13 @@ function chartLabel(id: string): string {
     >
       <span class="subview-link-label">Automatic caching</span>
       <span class="subview-link-value"
-        >{controller.positionLoading ? 'Checking…' : !controller.positionSettingsReady ? 'Unavailable' : positionEnabled ? 'On' : 'Off'}</span
+        >{controller.positionLoading
+          ? 'Checking…'
+          : !controller.positionSettingsReady
+            ? 'Unavailable'
+            : positionEnabled
+              ? 'On'
+              : 'Off'}</span
       >
       <ChevronRight class="subview-link-chevron" size={18} aria-hidden="true" />
     </button>
@@ -472,7 +478,12 @@ function chartLabel(id: string): string {
           Area set. Adjust the bounds, use the current view, or draw again to change it.
         </p>
         <Disclosure label="Adjust area coordinates">
-          {#each [{ label: 'West longitude', index: 0, limit: 180 }, { label: 'South latitude', index: 1, limit: 85 }, { label: 'East longitude', index: 2, limit: 180 }, { label: 'North latitude', index: 3, limit: 85 }] as coordinate (coordinate.index)}
+          {#each [
+            { label: 'West longitude', index: 0, limit: 180 },
+            { label: 'South latitude', index: 1, limit: 85 },
+            { label: 'East longitude', index: 2, limit: 180 },
+            { label: 'North latitude', index: 3, limit: 85 },
+          ] as coordinate (coordinate.index)}
             <UnitField
               label={coordinate.label}
               unit="°"
@@ -481,7 +492,8 @@ function chartLabel(id: string): string {
               max={coordinate.limit}
               step={0.001}
               disabled={!adminAccess}
-              onCommit={(value) => controller.commitAreaBound(coordinate.index as 0 | 1 | 2 | 3, value)}
+              onCommit={(value) =>
+                controller.commitAreaBound(coordinate.index as 0 | 1 | 2 | 3, value)}
             />
           {/each}
           <p class="muted-note">

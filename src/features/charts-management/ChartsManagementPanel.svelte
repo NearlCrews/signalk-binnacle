@@ -85,7 +85,11 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
 }
 </script>
 
-{#snippet saveIndicator(key: string, errorMessage: string, onRetry: () => void)}
+{#snippet saveIndicator(
+  key: string,
+  errorMessage: string,
+  onRetry: () => void,
+)}
   {#if saveStates[key] === 'saving'}
     <p class="muted-note" role="status">Saving…</p>
   {:else if saveStates[key] === 'saved'}
@@ -190,7 +194,8 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
             onCommit={(value) => saveOverride(chart, 'name', value)}
           />
           {@render saveIndicator(nameKey, 'Could not save the name. Check access.', () =>
-            overrideController.retry(chart.identifier, 'name'))}
+            overrideController.retry(chart.identifier, 'name'),
+          )}
           <TextField
             variant="stacked"
             label="Description"
@@ -200,7 +205,8 @@ function saveOverride(chart: ManagedChart, field: 'name' | 'description', value:
             onCommit={(value) => saveOverride(chart, 'description', value)}
           />
           {@render saveIndicator(descKey, 'Could not save the description. Check access.', () =>
-            overrideController.retry(chart.identifier, 'description'))}
+            overrideController.retry(chart.identifier, 'description'),
+          )}
         </div>
       {/each}
     {/if}

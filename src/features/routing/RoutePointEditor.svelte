@@ -155,7 +155,8 @@ function undo(): void {
       type="button"
       class="btn"
       disabled={disabled || selected === undefined || selected === 0}
-      onclick={() => selected !== undefined && apply({ kind: 'reorder', index: selected, direction: -1 })}
+      onclick={() =>
+        selected !== undefined && apply({ kind: 'reorder', index: selected, direction: -1 })}
     >
       Move point earlier
     </button>
@@ -163,7 +164,8 @@ function undo(): void {
       type="button"
       class="btn"
       disabled={disabled || selected === undefined || selected === working.waypoints.length - 1}
-      onclick={() => selected !== undefined && apply({ kind: 'reorder', index: selected, direction: 1 })}
+      onclick={() =>
+        selected !== undefined && apply({ kind: 'reorder', index: selected, direction: 1 })}
     >
       Move point later
     </button>

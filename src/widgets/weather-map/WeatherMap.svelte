@@ -495,7 +495,11 @@ onDestroy(() => {
   aria-label="Weather"
   tabindex="-1"
   use:dialog={onClose}
-  transition:fly={{ y: 20, duration: prefersReducedMotion() ? 0 : PANEL_TRANSITION_MS, opacity: 0.3 }}
+  transition:fly={{
+    y: 20,
+    duration: prefersReducedMotion() ? 0 : PANEL_TRANSITION_MS,
+    opacity: 0.3,
+  }}
 >
   <PanelHeader
     title="Weather"
@@ -593,7 +597,9 @@ onDestroy(() => {
                 from <b class="num">{formatBearingOr(readout.waveFromRad)}</b>&deg;T
               {/if}
             {/if}
-            {#if showPrecipOrRadar && readout.precipitationMm !== undefined && readout.precipitationMm >= RAIN_VISIBLE_MM_H}
+            {#if showPrecipOrRadar &&
+              readout.precipitationMm !== undefined &&
+              readout.precipitationMm >= RAIN_VISIBLE_MM_H}
               &middot; rain
               <b class="num">{formatPrecipRateOr(readout.precipitationMm, units.profile)}</b>
               {precipUnitLabel(readout.precipIsRate, units.profile)}

@@ -200,7 +200,9 @@ const liveMessage = $derived.by(() => {
           class="icon-btn step"
           aria-label={controller.playing ? 'Pause history playback' : 'Play history'}
           aria-describedby={controller.reducedMotion ? MOTION_NOTE_ID : undefined}
-          disabled={controller.samples.length < 2 || controller.reducedMotion || controller.refreshing}
+          disabled={controller.samples.length < 2 ||
+            controller.reducedMotion ||
+            controller.refreshing}
           onclick={() => (controller.playing ? controller.pause() : controller.play())}
         >
           {#if controller.playing}

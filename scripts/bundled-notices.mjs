@@ -29,10 +29,20 @@ const supplements = {
     source:
       'https://github.com/JamesLMilner/terra-draw/blob/92799f6df7191672e39e8a58fb42ccba6a24d02a/LICENSE',
   },
+  'terra-draw@1.37.0': {
+    file: 'terra-draw.txt',
+    source:
+      'https://github.com/JamesLMilner/terra-draw/blob/e83ff43fdaf90f65d946ac656d6d93b945fd677a/LICENSE',
+  },
   'terra-draw-maplibre-gl-adapter@1.4.1': {
     file: 'terra-draw.txt',
     source:
       'https://github.com/JamesLMilner/terra-draw/blob/569659537f827bf887027e1be25127f4009e96e7/LICENSE',
+  },
+  'terra-draw-maplibre-gl-adapter@1.5.0': {
+    file: 'terra-draw.txt',
+    source:
+      'https://github.com/JamesLMilner/terra-draw/blob/8757783af8faf3cb75555a9a9b646c72b01a1d43/LICENSE',
   },
 };
 

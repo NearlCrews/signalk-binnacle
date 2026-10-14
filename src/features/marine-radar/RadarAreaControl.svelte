@@ -465,9 +465,9 @@ onDestroy(() => {
           class="btn btn-ghost"
           disabled={busy}
           onclick={() => {
-          cancel();
-          void restoreFocusAfterCancel(() => editTrigger);
-        }}
+            cancel();
+            void restoreFocusAfterCancel(() => editTrigger);
+          }}
         >
           {saveFailed ? 'Discard draft' : 'Cancel'}
         </button>

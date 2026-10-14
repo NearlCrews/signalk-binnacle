@@ -518,7 +518,10 @@ const emptyMessage = $derived(emptyReason());
     key={({ route }) => route.id}
     isActive={({ route }) => route.id === activeId}
   >
-    {#snippet card({ route, distanceNm })}
+    {#snippet card({
+      route,
+      distanceNm,
+    })}
       <div class="card-head">
         <button
           type="button"

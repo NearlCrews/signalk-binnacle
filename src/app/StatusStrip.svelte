@@ -289,7 +289,10 @@ const depthWatchPaused = $derived(
         class="readout chip-btn"
         title={`Weather warning: ${weatherWarning}. Open Weather for details.`}
         onclick={() =>
-          chipNote.show(`Weather warning: ${weatherWarning}. Open Weather for details.`, CHIP_NOTE_MS)}
+          chipNote.show(
+            `Weather warning: ${weatherWarning}. Open Weather for details.`,
+            CHIP_NOTE_MS,
+          )}
       >
         <span class="sev-warning">{weatherWarning}</span>
       </button>

@@ -18,7 +18,10 @@ function content(): string {
 <ErrorBoundary>
   <p>{content()}</p>
 
-  {#snippet fallback(error, reset)}
+  {#snippet fallback(
+    error,
+    reset,
+  )}
     <p role="alert">{error instanceof Error ? error.message : 'Unknown render failure'}</p>
     <button
       type="button"

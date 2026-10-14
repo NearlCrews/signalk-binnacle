@@ -76,6 +76,12 @@ not have to be corrected after the fact.
   changing this division of ownership.
 - Biome's `.svelte` support is experimental (it formats and lints the script and style blocks,
   not the control-flow template syntax). It is enabled via `html.experimentalFullSupportEnabled`.
+  Biome 2.5.15 also began wrapping long template expressions: attribute values, `{#if}`
+  conditions, and `{#snippet}` parameter lists, and it reflows prose text nodes. Its first pass
+  over 33 files compiled to identical Svelte output in all but one, where only collapsible line
+  breaks inside a paragraph moved. Before accepting such a pass, compare the compiled output of
+  each changed file and check any file that differs for `white-space: pre*` styling, where moved
+  line breaks would render.
   Re-verify it round-trips Svelte files cleanly whenever `{#if}`, `{#each}`, or other control
   flow is added; if it ever mangles a `.svelte` file, exclude `.svelte` from
   Biome and rely on `svelte-check` for correctness. Because Biome cannot see a `{#snippet}`

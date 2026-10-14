@@ -246,7 +246,9 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
         <button
           type="button"
           class="nav-row"
-          aria-current={isSelected(store.requestedCurrent, candidate.station.id) ? 'true' : undefined}
+          aria-current={isSelected(store.requestedCurrent, candidate.station.id)
+            ? 'true'
+            : undefined}
           onclick={() => select('current', candidate)}
         >
           <span class="nav-name">{candidate.station.name}</span>
@@ -279,10 +281,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
             {#if nextHigh}
               <span class="num"
                 >{formatTideEventTime(nextHigh.timeMs)},
-                {formatTideHeight(
-                  nextHigh.heightMeters,
-                  units.profile,
-                )}</span
+                {formatTideHeight(nextHigh.heightMeters, units.profile)}</span
               >
               <span class="unit">
                 {formatTideHeightSecondary(nextHigh.heightMeters, units.profile)}
@@ -296,10 +295,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
             {#if nextLow}
               <span class="num"
                 >{formatTideEventTime(nextLow.timeMs)},
-                {formatTideHeight(
-                  nextLow.heightMeters,
-                  units.profile,
-                )}</span
+                {formatTideHeight(nextLow.heightMeters, units.profile)}</span
               >
               <span class="unit">
                 {formatTideHeightSecondary(nextLow.heightMeters, units.profile)}
@@ -342,9 +338,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
       {:else}
         <dl class="stat-grid">
           <dt>
-            {nextCurrent
-                ? `Next ${nextCurrent.kind}`
-                : 'Next current'}
+            {nextCurrent ? `Next ${nextCurrent.kind}` : 'Next current'}
           </dt>
           <dd>
             {#if nextCurrent}
@@ -360,11 +354,11 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
               <span class="num"
                 >{formatTideEventTime(followingFlow.timeMs)},
                 {formatCurrentRate(
-                    followingFlow.velocityMps,
-                    units.profile,
-                  )}{followingFlow.directionRad !== undefined
-                    ? `, toward ${formatBearingOr(followingFlow.directionRad, 0)}°T`
-                    : ''}</span
+                  followingFlow.velocityMps,
+                  units.profile,
+                )}{followingFlow.directionRad !== undefined
+                  ? `, toward ${formatBearingOr(followingFlow.directionRad, 0)}°T`
+                  : ''}</span
               >
               <span class="unit"></span>
             </dd>

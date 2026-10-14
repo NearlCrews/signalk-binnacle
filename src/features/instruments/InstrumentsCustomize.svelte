@@ -155,10 +155,10 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
         <ul class="tile-list bare-list">
           {#each group.rows as def (def.id)}
             {@const title = optionTitle(def)}
-            {@const historicalOnly = controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
-            {@const unavailable = neverReported(def.paths) &&
-              !controller.isLiveDiscovered(def.id) &&
-              !historicalOnly}
+            {@const historicalOnly =
+              controller.isHistoricalOnly(def.id) && neverReported(def.paths)}
+            {@const unavailable =
+              neverReported(def.paths) && !controller.isLiveDiscovered(def.id) && !historicalOnly}
             {@const unavailableHint = historicalOnly
               ? 'Seen in history, but not reporting live now'
               : 'No data received from this sensor yet'}

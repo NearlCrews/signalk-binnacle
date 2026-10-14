@@ -244,7 +244,9 @@ function discardActiveDraft(): void {
      control beneath, so sliders and selects line up in a single column rather than at ragged offsets.
      A read-only control (diagnostics, info) renders as a value readout, never an inert widget. The
      visible name is associated with the control via aria-labelledby across all widget kinds. -->
-{#snippet control(def: ControlDefinition)}
+{#snippet control(
+  def: ControlDefinition,
+)}
   {@const kind = widgetKind(def)}
   {@const labelId = controlLabelId(def)}
   {@const value = store.controlValues[def.id]}
@@ -274,7 +276,7 @@ function discardActiveDraft(): void {
       </div>
     </div>
     {#if def.readOnly && kind !== 'structured'}
-    <!-- Nothing more: the readout above is the whole control. -->
+      <!-- Nothing more: the readout above is the whole control. -->
     {:else if kind === 'slider'}
       <input
         type="range"
@@ -284,7 +286,9 @@ function discardActiveDraft(): void {
         max={displayBound(def, def.range?.max ?? 100)}
         step={displayBound(def, def.range?.step ?? 1)}
         disabled={controlDisabled(def)}
-        value={typeof value === 'number' ? displayNumber(def, value) : displayBound(def, def.range?.min ?? 0)}
+        value={typeof value === 'number'
+          ? displayNumber(def, value)
+          : displayBound(def, def.range?.min ?? 0)}
         aria-labelledby={labelId}
         aria-valuetext={value === undefined ? 'No value reported' : readout(def)}
         onchange={(e) => onSetControl(def.id, siNumber(def, Number(e.currentTarget.value)))}
@@ -449,7 +453,9 @@ function discardActiveDraft(): void {
     access requests, then reconnect.
   </p>
 {/if}
-{#if store.rendererStatus === 'error' || store.rendererStatus === 'context-lost' || store.rendererStatus === 'blocked'}
+{#if store.rendererStatus === 'error' ||
+  store.rendererStatus === 'context-lost' ||
+  store.rendererStatus === 'blocked'}
   <p class="control-error" role="alert">
     Radar rendering is unavailable. {store.rendererDetail ?? 'Reload the chart to try again.'}
   </p>

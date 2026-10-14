@@ -671,9 +671,7 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
               <span class="num log-time">{formatClockTime(entry.timeMs)}</span>
               <span class="log-text">
                 {ALARM_LOG_KIND_LABELS[entry.kind]}: {entry.label}
-                {entry.detail
-                  ? `, ${entry.detail}`
-                  : ''}
+                {entry.detail ? `, ${entry.detail}` : ''}
               </span>
             </li>
           {/each}

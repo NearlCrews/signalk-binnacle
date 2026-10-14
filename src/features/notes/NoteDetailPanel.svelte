@@ -279,7 +279,9 @@ function measure(item: NormalizedItem): string {
   {/if}
   {#if failed}
     <p class="alert-note" role="alert">
-      {detail ? 'Could not refresh place details. Showing retained information; provider changes may be missing.' : 'Could not load the details for this place.'}
+      {detail
+        ? 'Could not refresh place details. Showing retained information; provider changes may be missing.'
+        : 'Could not load the details for this place.'}
     </p>
     <button type="button" class="btn btn-ghost" onclick={() => (attempt += 1)}>
       Retry place details
@@ -297,7 +299,11 @@ function measure(item: NormalizedItem): string {
           <div
             class="alert-note alert"
             class:alert-note--filled={danger.value === true}
-            data-danger={danger.value === true ? 'true' : danger.value === false ? 'false' : 'unknown'}
+            data-danger={danger.value === true
+              ? 'true'
+              : danger.value === false
+                ? 'false'
+                : 'unknown'}
           >
             {dangerFlagText(danger.value)}
           </div>

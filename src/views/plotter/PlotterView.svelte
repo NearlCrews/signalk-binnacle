@@ -1027,7 +1027,10 @@ $effect(() => {
           <ErrorBoundary>
             <module.default controller={timeTravel} {units} onExit={() => timeTravel.exit()} />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <div class="bottom-strip bottom-strip--accent" role="alert">
                 <div class="row">
                   <span class="alert-note">Playback controls stopped unexpectedly.</span>
@@ -1086,7 +1089,10 @@ $effect(() => {
               {getChartCenter}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
                 <div class="row">
                   <span class="alert-note">Measure controls stopped unexpectedly.</span>
@@ -1158,9 +1164,11 @@ $effect(() => {
             onClose={closeNote}
             onBack={onBackFromNote}
             onLocate={() => selectedNote && flyToPosition(selectedNote.position)}
-            onNavigateHere={() => selectedNote && void routeController.onGoToHere(selectedNote.position)}
+            onNavigateHere={() =>
+              selectedNote && void routeController.onGoToHere(selectedNote.position)}
             onSaveWaypoint={() =>
-              selectedNote && waypointsController.onDropWaypoint(selectedNote.position, selectedNote.name)}
+              selectedNote &&
+              waypointsController.onDropWaypoint(selectedNote.position, selectedNote.name)}
             onEdit={selectedNote.ownedByBinnacle
               ? () => selectedNote && personalNotesController.openEdit(selectedNote)
               : undefined}
@@ -1175,7 +1183,10 @@ $effect(() => {
             mutationError={personalNotesController.error}
             onDismissMutationError={personalNotesController.clearError}
           />
-          {#snippet fallback(_error, reset)}
+          {#snippet fallback(
+            _error,
+            reset,
+          )}
             <LazyPanelState
               title={`Details for ${selectedNote.name}`}
               closeLabel="Close place details"
@@ -1239,7 +1250,10 @@ $effect(() => {
               }}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Layers and charts"
                 closeLabel="Close layers and charts"
@@ -1322,7 +1336,10 @@ $effect(() => {
               onBack={backFromRoutesPanel}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Routes"
                 closeLabel="Close routes panel"
@@ -1385,7 +1402,10 @@ $effect(() => {
               onBack={backFromTracksPanel}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Tracks"
                 closeLabel="Close tracks panel"
@@ -1440,7 +1460,10 @@ $effect(() => {
               onBack={backFromWaypointsPanel}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Waypoints"
                 closeLabel="Close waypoints panel"
@@ -1485,7 +1508,10 @@ $effect(() => {
               onBack={tidesOpenedFrom === 'menu' ? backToMenu : undefined}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Tides and currents"
                 closeLabel="Close tides panel"
@@ -1533,7 +1559,10 @@ $effect(() => {
               onBack={backFromTrendsPanel}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Data trends"
                 closeLabel="Close trends, return to chart"
@@ -1581,7 +1610,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Autopilot"
                 closeLabel="Close autopilot panel"
@@ -1623,7 +1655,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Logbook"
                 closeLabel="Close logbook panel"
@@ -1667,7 +1702,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="AI advisor"
                 closeLabel="Close AI advisor"
@@ -1716,7 +1754,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Nearby vessels (AIS)"
                 closeLabel="Close nearby vessels"
@@ -1766,7 +1807,10 @@ $effect(() => {
               onBack={backFromPoiSearch}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Find places"
                 closeLabel="Close find places"
@@ -1819,7 +1863,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Anchor watch"
                 closeLabel="Close anchor watch"
@@ -1885,7 +1932,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Alarms"
                 closeLabel="Close alarms panel"
@@ -1944,7 +1994,10 @@ $effect(() => {
               onBack={backToMenu}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Help and helm setup"
                 closeLabel="Close help"
@@ -1981,7 +2034,10 @@ $effect(() => {
           <ErrorBoundary>
             <module.default controller={handoff} onClose={closePanel} onBack={backToMenu} />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Watch handoff"
                 closeLabel="Close watch handoff"
@@ -2023,7 +2079,10 @@ $effect(() => {
               onClose={closePanel}
               onBack={backToMenu}
             />
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Offline charts"
                 closeLabel="Close offline charts"
@@ -2074,7 +2133,10 @@ $effect(() => {
               onRetryAccess={onRetryChartLocker}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Offline charts"
                 closeLabel="Close offline charts"
@@ -2120,7 +2182,10 @@ $effect(() => {
               onRetryAccess={onRetryChartLocker}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <LazyPanelState
                 title="Installed charts"
                 closeLabel="Close installed charts panel"
@@ -2189,7 +2254,10 @@ $effect(() => {
                 : undefined}
             />
 
-            {#snippet fallback(_error, reset)}
+            {#snippet fallback(
+              _error,
+              reset,
+            )}
               <div class="panel-load-error" role="alert">
                 Radar controls stopped unexpectedly.
                 <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
@@ -2241,7 +2309,10 @@ $effect(() => {
           onBack={backFromWeatherPanel}
         />
 
-        {#snippet fallback(_error, reset)}
+        {#snippet fallback(
+          _error,
+          reset,
+        )}
           <div
             class="panel-load-error panel-load-error--cover"
             role="alert"

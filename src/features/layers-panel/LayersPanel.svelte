@@ -251,9 +251,7 @@ const reorder = createLayerReorder(
                 onHandlePointerDown={noopHandle}
                 onHandleKeydown={noopHandle}
                 manageLabel={item.chart ? `Open ${item.title} chart details` : undefined}
-                onManage={item.chart
-                  ? () => (detailId = item.id)
-                  : undefined}
+                onManage={item.chart ? () => (detailId = item.id) : undefined}
               />
             {/each}
           </ul>

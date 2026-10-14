@@ -76,7 +76,10 @@ function windRangeText(day: DayOutlook): string {
 }
 </script>
 
-{#snippet waveSpan(label: string, heightM: number | undefined)}
+{#snippet waveSpan(
+  label: string,
+  heightM: number | undefined,
+)}
   {#if heightM !== undefined}
     <span
       >{label} <b class="num">{formatLengthOr(heightM, units.profile)}</b>

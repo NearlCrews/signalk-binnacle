@@ -69,7 +69,9 @@ let confirmingGoTo = $state(false);
   focusTrap={confirmingGoTo}
   {anchor}
   bind:surfaceRef={surface}
-  onPositioned={() => { if (!confirmingGoTo) initializeMenuFocus(surface); }}
+  onPositioned={() => {
+    if (!confirmingGoTo) initializeMenuFocus(surface);
+  }}
   preferredPlacement="above"
   onFocusLeft={close}
 >

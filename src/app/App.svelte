@@ -3192,7 +3192,11 @@ const plotterActions = {
     {chartLockerAccessUrl}
     chartLockerState={companionStatus.state}
     chartLockerAdminAccess={companionStatus.state === 'serving'}
-    offlineSetupState={companionProbe?.state === 'access-refused' ? 'access-refused' : companionBase !== null || companionProbe?.state === 'present' ? 'chart-loading' : companionProbe?.state ?? 'checking'}
+    offlineSetupState={companionProbe?.state === 'access-refused'
+      ? 'access-refused'
+      : companionBase !== null || companionProbe?.state === 'present'
+        ? 'chart-loading'
+        : (companionProbe?.state ?? 'checking')}
     pwaStatus={pwa.status}
     {arrivalBanner}
     toastMessage={toast.message}
@@ -3263,7 +3267,10 @@ const plotterActions = {
             onBack={backToMenu}
           />
 
-          {#snippet fallback(_error, reset)}
+          {#snippet fallback(
+            _error,
+            reset,
+          )}
             <LazyPanelState
               title="Profiles"
               closeLabel="Close profiles panel"
@@ -3289,7 +3296,10 @@ const plotterActions = {
     </div>
   {/if}
 
-  {#snippet instrumentsState(message: string, onRetry?: () => void)}
+  {#snippet instrumentsState(
+    message: string,
+    onRetry?: () => void,
+  )}
     <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the dynamic role is always complementary or dialog, and aria-modal is present only for dialog. -->
     <div
       class="instruments"
@@ -3357,7 +3367,10 @@ const plotterActions = {
           onTrendFocusRestored={() => (trendReturnInstrumentId = undefined)}
         />
 
-        {#snippet fallback(_error, reset)}
+        {#snippet fallback(
+          _error,
+          reset,
+        )}
           {@render instrumentsState('Instruments controls stopped unexpectedly.', reset)}
         {/snippet}
       </ErrorBoundary>
@@ -3465,7 +3478,10 @@ const plotterActions = {
           onProbe={() => void personalNotesController.probe()}
         />
 
-        {#snippet fallback(_error, reset)}
+        {#snippet fallback(
+          _error,
+          reset,
+        )}
           <dialog
             class="modal-card lazy-note-dialog"
             aria-label="Personal note editor unavailable"

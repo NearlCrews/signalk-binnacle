@@ -105,7 +105,9 @@ function chartList(region: SavedRegionDto): string {
       empty="No saved areas yet. Save a chart area before leaving internet coverage."
       key={(region) => region.id}
     >
-      {#snippet card(region)}
+      {#snippet card(
+        region,
+      )}
         {@const live = regionStatus[region.id]}
         {@const savedBytes =
           region.status === 'downloading' && live ? live.bytes : region.cachedBytes}

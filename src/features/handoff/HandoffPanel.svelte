@@ -85,9 +85,9 @@ const SYNC_LABELS = {
             void restoreFocusAfterCancel(() => discardTrigger);
           }}
           onConfirm={() => {
-          controller.draft = '';
-          discardArmed = false;
-        }}
+            controller.draft = '';
+            discardArmed = false;
+          }}
         />
       {:else}
         <button
@@ -111,7 +111,9 @@ const SYNC_LABELS = {
     {#if controller.pendingCount > 0}
       <p class="muted-note" role="status">
         {controller.pendingCount}
-        of 10 offline queue slots used.{controller.queueFull ? ' Sync queued snapshots before taking another. No queued records have been removed.' : ''}
+        of 10 offline queue slots used.{controller.queueFull
+          ? ' Sync queued snapshots before taking another. No queued records have been removed.'
+          : ''}
       </p>
       <button
         type="button"

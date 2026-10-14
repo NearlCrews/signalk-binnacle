@@ -192,7 +192,9 @@ const NUDGES = [
         <dt>State</dt>
         <dd>
           <span class="num"
-            >{controller.pilotState !== null ? autopilotModeLabel(controller.pilotState) : PLACEHOLDER}</span
+            >{controller.pilotState !== null
+              ? autopilotModeLabel(controller.pilotState)
+              : PLACEHOLDER}</span
           ><span class="unit"></span>
         </dd>
         <dt>Mode</dt>
@@ -302,7 +304,10 @@ const NUDGES = [
               class="input"
               value={controller.mode ?? ''}
               disabled={commandDisabled}
-              onchange={(event) => { chooseMode(event.currentTarget.value); event.currentTarget.value = controller.mode ?? ''; }}
+              onchange={(event) => {
+                chooseMode(event.currentTarget.value);
+                event.currentTarget.value = controller.mode ?? '';
+              }}
             >
               {#each controller.modes as option (option)}
                 <option value={option}>{autopilotModeLabel(option)}</option>
@@ -352,7 +357,9 @@ const NUDGES = [
               disabled={maneuverDisabled}
               onclick={() => tapArmed('tackStarboard', () => void controller.tack('starboard'))}
             >
-              {arms.tackStarboard.armed ? `Tap again to tack ${pilotName} to starboard` : 'Tack starboard'}
+              {arms.tackStarboard.armed
+                ? `Tap again to tack ${pilotName} to starboard`
+                : 'Tack starboard'}
             </button>
           </div>
         {/if}
@@ -372,7 +379,9 @@ const NUDGES = [
               disabled={maneuverDisabled}
               onclick={() => tapArmed('gybeStarboard', () => void controller.gybe('starboard'))}
             >
-              {arms.gybeStarboard.armed ? `Tap again to gybe ${pilotName} to starboard` : 'Gybe starboard'}
+              {arms.gybeStarboard.armed
+                ? `Tap again to gybe ${pilotName} to starboard`
+                : 'Gybe starboard'}
             </button>
           </div>
         {/if}

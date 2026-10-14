@@ -133,10 +133,10 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
           void restoreFocusAfterCancel(() => discardTrigger);
         }}
         onConfirm={() => {
-        controller.draft = '';
-        controller.seededText = controller.suggestion?.text ?? '';
-        discardArmed = false;
-      }}
+          controller.draft = '';
+          controller.seededText = controller.suggestion?.text ?? '';
+          discardArmed = false;
+        }}
       />
     {:else}
       <button

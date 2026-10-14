@@ -346,11 +346,7 @@ const tideFailure = $derived(tides?.failure('tide'));
   <Disclosure label="Suggest a radius from the rode">
     <p class="muted-note muted-note--xs">
       Horizontal swing from the rode and depth, plus the boat length and a
-      {formatLengthOr(
-        RODE_GPS_MARGIN_M,
-        mode,
-        0,
-      )}
+      {formatLengthOr(RODE_GPS_MARGIN_M, mode, 0)}
       {unit}
       GPS margin, rounded up.
     </p>
@@ -486,7 +482,10 @@ const tideFailure = $derived(tides?.failure('tide'));
           <PositionFields
             position={positionDraft}
             disabled={busy || positionSaving || serverWritesBlocked}
-            onChange={(position) => { positionDraft = position; positionArmed = false; }}
+            onChange={(position) => {
+              positionDraft = position;
+              positionArmed = false;
+            }}
           />
           {#if positionConflict}
             <p class="alert-note" role="alert">
@@ -526,7 +525,11 @@ const tideFailure = $derived(tides?.failure('tide'));
                 bind:this={positionTrigger}
                 onclick={() => (positionArmed = true)}
               >
-                {positionSaving ? 'Saving…' : positionFailed ? 'Retry position' : 'Apply anchor position'}
+                {positionSaving
+                  ? 'Saving…'
+                  : positionFailed
+                    ? 'Retry position'
+                    : 'Apply anchor position'}
               </button>
               <button
                 type="button"
@@ -561,7 +564,9 @@ const tideFailure = $derived(tides?.failure('tide'));
         <p class="tide-station">
           <span class="truncate">{tideReading.station.name}</span>
           <span class="muted-note"
-            >{tideDistanceText ? `${tideDistanceText} from ${tideReferenceLabel}` : 'Distance unavailable'}</span
+            >{tideDistanceText
+              ? `${tideDistanceText} from ${tideReferenceLabel}`
+              : 'Distance unavailable'}</span
           >
         </p>
         {#if tideFailure}
@@ -576,7 +581,9 @@ const tideFailure = $derived(tides?.failure('tide'));
         {/if}
         <p class="muted-note muted-note--xs">
           {formatTideDatum(tideReading)}.
-          {tideReading.fetchedAtMs === undefined ? 'Prediction fetch time is unknown.' : `Predictions fetched ${formatTideEventTime(tideReading.fetchedAtMs)}.`}
+          {tideReading.fetchedAtMs === undefined
+            ? 'Prediction fetch time is unknown.'
+            : `Predictions fetched ${formatTideEventTime(tideReading.fetchedAtMs)}.`}
         </p>
         {#if tideReading.events.length === 0}
           <p class="muted-note" role="status">No predictions in this window.</p>
@@ -587,11 +594,7 @@ const tideFailure = $derived(tides?.failure('tide'));
               {#if tideExtremes?.high}
                 <span class="num"
                   >{formatTideEventTime(tideExtremes.high.timeMs)},
-                  {formatLengthOr(
-                    tideExtremes.high.heightMeters,
-                    mode,
-                    1,
-                  )}</span
+                  {formatLengthOr(tideExtremes.high.heightMeters, mode, 1)}</span
                 ><span class="unit">{unit}</span>
               {:else}
                 <span class="num">{PLACEHOLDER}</span><span class="unit"></span>
@@ -602,11 +605,7 @@ const tideFailure = $derived(tides?.failure('tide'));
               {#if tideExtremes?.low}
                 <span class="num"
                   >{formatTideEventTime(tideExtremes.low.timeMs)},
-                  {formatLengthOr(
-                    tideExtremes.low.heightMeters,
-                    mode,
-                    1,
-                  )}</span
+                  {formatLengthOr(tideExtremes.low.heightMeters, mode, 1)}</span
                 ><span class="unit">{unit}</span>
               {:else}
                 <span class="num">{PLACEHOLDER}</span><span class="unit"></span>
@@ -616,9 +615,10 @@ const tideFailure = $derived(tides?.failure('tide'));
         {/if}
         <p class="muted-note muted-note--xs">
           Predictions come from
-          {tideReading.station.name}{tideDistanceText ? `, ${tideDistanceText} from ${tideReferenceLabel}` : ''},
-          not from this anchorage. The tide here can differ, and the depth under the boat moves with
-          it.
+          {tideReading.station.name}{tideDistanceText
+            ? `, ${tideDistanceText} from ${tideReferenceLabel}`
+            : ''}, not from this anchorage. The tide here can differ, and the depth under the boat
+          moves with it.
         </p>
       {:else if tides.status === 'loading'}
         <p class="muted-note" role="status">Loading tide predictions…</p>
