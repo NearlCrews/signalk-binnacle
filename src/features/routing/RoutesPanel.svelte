@@ -536,7 +536,7 @@ const emptyMessage = $derived(emptyReason());
           {route.name}
         </button>
         {#if route.id === activeId}
-          <span class="badge">Active</span>
+          <span class="badge badge--accent badge--caps">Active</span>
         {/if}
       </div>
       <dl class="card-stats">

@@ -1,0 +1,43 @@
+/* The status pill: one shape for every small label that states a condition (Active, Stale, Alarm,
+   a region, a hazard flag), so the same idea reads the same in every panel. Colors come only from
+   tokens, which keeps every variant inside the night-red band. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0.1rem var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.badge--caps {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+.badge--strong {
+  color: var(--text);
+}
+.badge--accent {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent-tint-text);
+}
+.badge--warning {
+  border-color: var(--warning);
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+.badge--alarm {
+  border-color: var(--alarm);
+  background: var(--alarm-tint);
+  color: var(--alarm);
+}
+.badge--select {
+  border-color: var(--select);
+  color: var(--select);
+}

@@ -312,7 +312,13 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
       {@const time = localTime(n.timestamp)}
       {@const acknowledgedTime = localTime(n.acknowledgedAt)}
       <div class="alert-row card-frame">
-        <span class="state-tag caps-label {n.state}">{stateLabel(n.state)}</span>
+        <span
+          class="badge badge--caps"
+          class:badge--alarm={n.state === 'emergency' || n.state === 'alarm'}
+          class:badge--warning={n.state === 'warn'}
+          class:badge--strong={n.state === 'alert'}
+          >{stateLabel(n.state)}</span
+        >
         <div class="alert-main">
           <span class="alert-message">{notificationLabel(n)}</span>
           {#if time}
@@ -697,25 +703,6 @@ async function runBulkAction(kind: 'silence-all' | 'acknowledge-all'): Promise<v
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
-}
-.state-tag {
-  padding: 0.1rem var(--space-2);
-  border: 1px solid currentColor;
-  border-radius: var(--radius-pill);
-}
-/* Severity colors reuse the alarm and warning tokens, so the tags hold in night-red. */
-.state-tag.emergency,
-.state-tag.alarm {
-  color: var(--alarm);
-  background: var(--alarm-tint);
-}
-.state-tag.warn {
-  color: var(--warning);
-}
-.state-tag.alert {
-  /* The lowest raised grade still outranks normal text in the severity ladder, so it keeps the
-     full text color; muted is reserved for cleared states. */
-  color: var(--text);
 }
 .alert-main {
   display: flex;

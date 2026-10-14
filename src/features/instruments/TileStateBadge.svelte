@@ -36,9 +36,9 @@ const grade = $derived(
 
 {#if label}
   <span
-    class="tile-state caps-label"
-    class:tile-state--alarm={grade === 'alarm'}
-    class:tile-state--caution={grade === 'caution'}
+    class="badge badge--caps"
+    class:badge--alarm={grade === 'alarm'}
+    class:badge--warning={grade === 'caution'}
     >{label}</span
   >
 {/if}

@@ -326,11 +326,20 @@ function measure(item: NormalizedItem): string {
                 <dt>{item.label}</dt>
                 <dd>
                   {#if item.kind === 'availability'}
-                    <span class="badge" data-value={String(item.value).toLowerCase()}
+                    {@const value = String(item.value).toLowerCase()}
+                    <span
+                      class="badge"
+                      class:badge--accent={value === 'yes'}
+                      class:badge--select={value === 'nearby'}
                       >{item.value}</span
                     >
                   {:else if item.kind === 'flag'}
-                    <span class="badge" data-value={flagText(item.value).toLowerCase()}>
+                    {@const flag = flagText(item.value).toLowerCase()}
+                    <span
+                      class="badge"
+                      class:badge--accent={flag === 'yes'}
+                      class:badge--select={flag === 'nearby'}
+                    >
                       {flagText(item.value)}
                     </span>
                   {:else if linkUrl}
@@ -425,24 +434,6 @@ function measure(item: NormalizedItem): string {
   border-color: var(--border);
   color: var(--text-muted);
   font-weight: 400;
-}
-/* POI hazard badges intentionally use their own pill shape and the --select token so they stay
-   in the night-red band. Do not unify with other badge vocabulary. */
-.badge {
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-}
-.badge[data-value="yes"] {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.badge[data-value="nearby"] {
-  color: var(--select);
-  border-color: var(--select);
 }
 .prose {
   white-space: pre-line;

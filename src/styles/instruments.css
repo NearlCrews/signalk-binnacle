@@ -52,26 +52,6 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
-/* The state badge is a chip, not a third muted caps line: at arm's length Stale, Warning, and
-   Alarm must read as STATUS beside the label, and the chip colors itself by what it says (a Stale
-   chip stays caution-amber inside a warning-tinted tile; see TileStateBadge). */
-.tile-state {
-  padding: 0.1rem var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-}
-.tile-state--caution {
-  border-color: var(--warning);
-  background: var(--warning-tint);
-  color: var(--warning);
-}
-.tile-state--alarm {
-  border-color: var(--alarm);
-  background: var(--alarm-tint);
-  color: var(--alarm);
-}
 .tile--warning {
   border-color: var(--warning);
   background: var(--warning-tint);

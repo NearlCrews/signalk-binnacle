@@ -210,7 +210,7 @@ $effect(() => {
 
 {#snippet regionTag()}
   {#if item.region}
-    <span class="region-tag">{item.region}</span>
+    <span class="badge region-tag">{item.region}</span>
   {/if}
 {/snippet}
 
@@ -369,17 +369,9 @@ $effect(() => {
   min-block-size: var(--row-size);
   padding-inline-start: var(--space-3);
 }
-/* The region tag: a quiet bordered pill (US, EU, Global) so a navigator sees at a glance which waters an
-   overlay covers. It is metadata, not a control, so it stays muted and sits before the action rail. */
+/* The region tag (US, EU, Global), a muted .badge so a navigator sees at a glance which waters an
+   overlay covers; it is metadata, not a control, and sits before the action rail. */
 .region-tag {
-  flex-shrink: 0;
   align-self: center;
-  padding-inline: var(--space-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: 1.7;
 }
 </style>

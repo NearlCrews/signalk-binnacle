@@ -307,7 +307,7 @@ function useProfile(id: string): void {
           <span class="caps-label tag">Default</span>
         {/if}
         {#if isActive}
-          <span class="badge">Active here</span>
+          <span class="badge badge--accent badge--caps">Active here</span>
         {/if}
       </div>
       {#if naming?.mode === 'rename' && naming.id === profile.id}

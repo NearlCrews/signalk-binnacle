@@ -66,3 +66,14 @@ describe('design contract: one button system', () => {
     );
   });
 });
+
+describe('design contract: one badge', () => {
+  it('draws status pills from the shared badge module only', () => {
+    expect(hits(/\.(tile-state|state-tag)(--[a-z]+)?\s*\{/)).toEqual([]);
+    expect(hits(/\.saved \.badge\s*\{/)).toEqual([]);
+    const scopedBadge = Object.entries(sources).filter(
+      ([path, text]) => path.endsWith('.svelte') && /<style>[\s\S]*\n\.badge[\s[{]/.test(text),
+    );
+    expect(scopedBadge.map(([path]) => path)).toEqual([]);
+  });
+});
