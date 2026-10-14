@@ -856,8 +856,8 @@ test('style-document charts stay visible and explain that they are unsupported',
   const panel = page.locator('#layers-panel');
   const row = panel.locator('[data-layer-row="chart-provider-style"]');
   await expect(row).toBeVisible();
-  await expect(row.getByRole('checkbox', { name: 'Provider style' })).toBeDisabled();
-  await expect(row.getByRole('checkbox', { name: 'Provider style' })).not.toBeChecked();
+  await expect(row.getByRole('switch', { name: 'Provider style' })).toBeDisabled();
+  await expect(row.getByRole('switch', { name: 'Provider style' })).not.toBeChecked();
   await row.getByRole('button', { name: 'Open Provider style chart details' }).click();
 
   await expect(panel.getByText('cannot display yet')).toBeVisible();
@@ -1084,14 +1084,14 @@ test('data trends discovers instruments independently and enforces the profile s
   await panel.getByRole('button', { name: 'Customize trends' }).click();
 
   await expect.poll(() => batteryRequests).toBeGreaterThan(0);
-  await expect(panel.getByRole('checkbox', { name: 'Voltage · House battery' })).toBeVisible();
+  await expect(panel.getByRole('switch', { name: 'Voltage · House battery' })).toBeVisible();
   await expect(panel.getByText('4 of 8 selected')).toBeVisible();
   for (const label of ['Water speed', 'True wind', 'Water temp', 'Air temp']) {
-    await panel.getByRole('checkbox', { name: label, exact: true }).check();
+    await panel.getByRole('switch', { name: label, exact: true }).check();
   }
 
   await expect(panel.getByText('8 of 8 selected')).toBeVisible();
-  const ninth = panel.getByRole('checkbox', { name: 'Satellites', exact: true });
+  const ninth = panel.getByRole('switch', { name: 'Satellites', exact: true });
   await expect(ninth).toBeVisible();
   await expect(ninth).toBeDisabled();
   await expect(panel.getByText('Remove a trend before adding another.').first()).toBeVisible();
@@ -1219,9 +1219,9 @@ test('history-only engine readings stay identifiable through selection and detai
     resolution: String(historyWindowSeconds),
     provider: 'signalk-questdb',
   });
-  const portEngine = dock.getByRole('checkbox', { name: 'RPM · Port engine' });
-  await expect(dock.getByRole('checkbox', { name: 'Temperature · Port engine' })).toBeVisible();
-  await expect(dock.getByRole('checkbox', { name: 'Load · Port engine' })).toBeVisible();
+  const portEngine = dock.getByRole('switch', { name: 'RPM · Port engine' });
+  await expect(dock.getByRole('switch', { name: 'Temperature · Port engine' })).toBeVisible();
+  await expect(dock.getByRole('switch', { name: 'Load · Port engine' })).toBeVisible();
   await expect(portEngine).toHaveAttribute(
     'aria-describedby',
     'instrument-history-prop-rpm%3Aport',
@@ -1257,7 +1257,7 @@ test('focused trends return to instrument detail without changing the saved over
   await openMenuItem(page, 'Instrument dock');
   let dock = page.getByRole('complementary', { name: 'Instruments' });
   await dock.getByRole('button', { name: 'Customize instruments' }).click();
-  await dock.getByRole('checkbox', { name: 'Water speed', exact: true }).check();
+  await dock.getByRole('switch', { name: 'Water speed', exact: true }).check();
   await dock.getByRole('button', { name: 'Done' }).click();
   await dock.getByRole('button', { name: /Water speed.*Open details/ }).click();
   const trendAction = dock.getByRole('button', { name: 'View recent trend' });
@@ -1286,7 +1286,7 @@ test('focused trends return to instrument detail without changing the saved over
   await overview.getByRole('button', { name: 'Customize trends' }).click();
   await expect(overview.getByText('4 of 8 selected')).toBeVisible();
   await expect(
-    overview.getByRole('checkbox', { name: 'Water speed', exact: true }),
+    overview.getByRole('switch', { name: 'Water speed', exact: true }),
   ).not.toBeChecked();
 });
 
@@ -1559,8 +1559,9 @@ test('forecast keeps the shown route as read-only context', async ({ page }) => 
   await page.getByRole('button', { name: 'Routes' }).click();
   const routesPanel = page.getByRole('complementary', { name: 'Routes' });
   await expect(routesPanel.getByText('Harbor passage')).toBeVisible();
-  await routesPanel.getByRole('button', { name: 'Show on chart' }).click();
-  await expect(routesPanel.getByRole('button', { name: 'Hide on chart' })).toBeVisible();
+  const showRoute = routesPanel.getByRole('switch', { name: 'Show Harbor passage on chart' });
+  await showRoute.check();
+  await expect(showRoute).toBeChecked();
   await routesPanel.getByRole('button', { name: 'Close routes panel' }).click();
 
   await page.getByRole('button', { name: 'Menu', exact: true }).click();

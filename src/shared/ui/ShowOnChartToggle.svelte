@@ -1,39 +1,24 @@
 <script lang="ts">
-import { resolveToggleDescription, type VisibilityToggleProps } from './visibility-toggle';
+import LayerToggle from './LayerToggle.svelte';
+import type { VisibilityToggleProps } from './visibility-toggle';
 
-// A full-width "Show X on chart" toggle: the in-panel control that mirrors a layer's visibility (the
-// Layers eye stays the source of truth). Shared so every panel that surfaces its own layer reads
-// identically. Reuses the .btn lit-state vocabulary, so it themes correctly with no extra styling.
+// A full-width "Show X on chart" row that mirrors a layer's visibility (Layers stays the source of
+// truth). It renders LayerToggle, so every visibility control in the app is one switch.
 interface Props extends VisibilityToggleProps {
   label: string;
 }
 
-const { visible, label, onToggle, disabled = false, description, describedBy }: Props = $props();
-
-const ownDescriptionId = $props.id();
-const described = $derived(
-  resolveToggleDescription({ description, describedBy }, ownDescriptionId),
-);
+const props: Props = $props();
 </script>
 
-<button
-  type="button"
-  class="btn show-on-chart"
-  class:is-on={visible}
-  aria-pressed={visible}
-  aria-describedby={described.describedBy}
-  title={description ?? label}
-  {disabled}
-  onclick={() => onToggle(!visible)}
->
-  {label}
-</button>
-{#if described.ownText}
-  <span id={described.describedBy} class="visually-hidden">{described.ownText}</span>
-{/if}
+<div class="show-on-chart">
+  <LayerToggle {...props} />
+</div>
 
 <style>
 .show-on-chart {
+  display: flex;
   inline-size: 100%;
+  min-block-size: var(--control-size);
 }
 </style>

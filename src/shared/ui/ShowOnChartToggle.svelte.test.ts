@@ -5,7 +5,7 @@ import ShowOnChartToggle from './ShowOnChartToggle.svelte';
 
 const DESCRIPTION = 'Markers for places in the current chart view';
 
-const toggle = (html: string): string => tag(html, /<button[^>]*show-on-chart[^>]*>/, 'toggle');
+const toggle = (html: string): string => tag(html, /<input[^>]*role="switch"[^>]*>/, 'toggle');
 
 describe('ShowOnChartToggle', () => {
   it('associates a supplied description with the control, not only its tooltip', () => {
@@ -25,7 +25,7 @@ describe('ShowOnChartToggle', () => {
     expect(body).toContain('visually-hidden');
   });
 
-  it('keeps its own description out of the button, so the accessible name stays the label', () => {
+  it('keeps its own description out of the label, so the accessible name stays the label', () => {
     const { body } = render(ShowOnChartToggle, {
       props: {
         visible: true,
@@ -34,11 +34,22 @@ describe('ShowOnChartToggle', () => {
         description: DESCRIPTION,
       },
     });
-    const start = body.indexOf('>', body.indexOf('<button')) + 1;
-    const content = body.slice(start, body.indexOf('</button>'));
+    const label = body.slice(body.indexOf('<label'), body.indexOf('</label>'));
+    // The name comes from the label's text; a title attribute does not contribute to it.
+    const content = label.replace(/<[^>]*>/g, '');
 
     expect(content).not.toContain(DESCRIPTION);
     expect(content).toContain('Show places on chart');
+  });
+
+  it('is one switch that carries its state as checked', () => {
+    for (const visible of [true, false]) {
+      const { body } = render(ShowOnChartToggle, {
+        props: { visible, label: 'Show places on chart', onToggle: () => {} },
+      });
+      expect(toggle(body).includes('checked')).toBe(visible);
+      expect(body).not.toContain('aria-pressed');
+    }
   });
 
   it('defers to a caller-owned description element', () => {
@@ -63,6 +74,6 @@ describe('ShowOnChartToggle', () => {
 
     const control = toggle(body);
     expect(control).not.toContain('aria-describedby');
-    expect(attribute(control, 'title')).toBe('Show places on chart');
+    expect(body).toContain('title="Show places on chart"');
   });
 });

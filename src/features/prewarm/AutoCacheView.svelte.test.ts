@@ -51,6 +51,6 @@ describe('Automatic-cache policy readiness', () => {
   it('shows the actual accepted enabled state only when ready', () => {
     const html = body({ loading: false, settingsReady: true, enabled: true });
     expect(html).toContain('Enable automatic caching');
-    expect(html).toContain('aria-pressed="true"');
+    expect(html).toMatch(/<input[^>]*role="switch"[^>]*checked/);
   });
 });

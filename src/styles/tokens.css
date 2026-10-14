@@ -92,6 +92,11 @@
      draggable beside the step controls. */
   --scrubber-track-min-width: 4rem;
   --checkbox-size: 1.25rem;
+  --switch-width: 2.75rem;
+  --switch-height: 1.6rem;
+  --switch-on-track: var(--accent-fill);
+  --switch-on-border: var(--accent-fill);
+  --switch-on-thumb: var(--accent-contrast);
   /* The stat-grid unit column's floor, so short and empty units keep the values in one column. */
   --stat-unit-min-width: 1.25rem;
 
@@ -252,6 +257,11 @@
   --border: #5a1900;
   /* Deliberately dim: about 2:1, the value the prefers-contrast block already trusts for --border. */
   --border-control: #7a2200;
+  /* A column of lit switches must not paint a block of bright red at night: the track stays a
+     tint and only the thumb carries the accent. */
+  --switch-on-track: var(--accent-tint);
+  --switch-on-border: var(--accent);
+  --switch-on-thumb: var(--accent);
   /* Brightened from #c8362a to clear WCAG AA (4.5:1) on all three surfaces; the owner chose
      readability over the last fraction of dark-adaptation headroom for body text specifically.
      The green (G:R 0.32) is what carries that AA on true black. */

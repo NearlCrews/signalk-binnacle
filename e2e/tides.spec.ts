@@ -150,7 +150,7 @@ test('opens Tides from a station enabled only through Layers and charts', async 
   await layers.getByRole('button', { name: /Chart overlays and marks/ }).click();
   const tideLayer = layers
     .locator('[data-layer-row="tides"]')
-    .getByRole('checkbox', { name: 'Tide stations' });
+    .getByRole('switch', { name: 'Tide stations' });
   const prediction = page.waitForResponse(
     (response) =>
       response.url().includes('/api/prod/datagetter') &&
@@ -230,7 +230,7 @@ test('selects stations by keyboard and marker tap on a narrow chart', async ({ p
   await expect(passTide).toHaveAttribute('aria-current', 'true');
   await expect(panel.getByText('Pass tide', { exact: true }).last()).toBeVisible();
 
-  await panel.getByRole('button', { name: 'Show stations on chart' }).click();
+  await panel.getByRole('switch', { name: 'Show stations on chart' }).click();
   await panel.getByRole('button', { name: 'Minimize panel' }).click();
   await expect(panel.locator('.panel-body')).toHaveClass(/panel-body--collapsed/);
 

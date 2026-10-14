@@ -526,6 +526,7 @@ function chartLabel(id: string): string {
             {#each group.sources as source (source.id)}
               <div class="list-row">
                 <LayerToggle
+                  kind="checkbox"
                   label={source.id === BASEMAP_SOURCE_ID
                     ? 'Base map: land, roads, and place names'
                     : source.title}

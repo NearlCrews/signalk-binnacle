@@ -3,11 +3,22 @@ import { resolveToggleDescription, type VisibilityToggleProps } from './visibili
 
 interface Props extends VisibilityToggleProps {
   label: string;
+  // A switch acts immediately (a layer, a tile); a checkbox selects for a later action (the
+  // charts an offline area will download).
+  kind?: 'switch' | 'checkbox';
 }
 
 // disabled: a sub-layer toggle is disabled while its parent is off, so a facet cannot be enabled
 // without the chart it annotates. description falls back to the visible title.
-const { label, visible, onToggle, disabled = false, description, describedBy }: Props = $props();
+const {
+  label,
+  visible,
+  onToggle,
+  disabled = false,
+  description,
+  describedBy,
+  kind = 'switch',
+}: Props = $props();
 
 const ownDescriptionId = $props.id();
 const described = $derived(
@@ -17,9 +28,11 @@ const described = $derived(
 
 <label class="layer-toggle" class:disabled>
   <!-- The accessible name comes from the wrapping label's visible title text, so the on-screen word
-       and the spoken name match exactly (WCAG 2.5.3). The checkbox role and its state carry the rest. -->
+       and the spoken name match exactly (WCAG 2.5.3). The switch or checkbox role and its state carry
+       the rest. -->
   <input
     type="checkbox"
+    role={kind === 'switch' ? 'switch' : undefined}
     checked={visible}
     {disabled}
     aria-describedby={described.describedBy}
@@ -47,20 +60,18 @@ const described = $derived(
   font-size: var(--text-md);
   cursor: pointer;
 }
+/* The global input:disabled rule already dims the control; dimming the whole label too would
+   stack to about 0.2, nearly invisible at night, so only the title dims (below). */
 .layer-toggle.disabled {
   cursor: default;
-  opacity: var(--disabled-opacity);
-}
-.layer-toggle input[type="checkbox"] {
-  inline-size: var(--checkbox-size);
-  block-size: var(--checkbox-size);
-  /* Never let a long layer name shrink the box: the title ellipsizes, the checkbox stays square. */
-  flex-shrink: 0;
 }
 .layer-toggle .title {
   min-inline-size: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.layer-toggle.disabled .title {
+  opacity: var(--disabled-opacity);
 }
 </style>

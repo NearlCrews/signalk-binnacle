@@ -48,4 +48,18 @@ describe('LayerToggle', () => {
     expect(checkbox(body)).not.toContain('aria-describedby');
     expect(body).not.toContain('visually-hidden');
   });
+
+  it('renders a switch by default and names it by the visible title', () => {
+    const body = renderToggle({ label: 'Seascape contours' });
+
+    expect(attribute(checkbox(body), 'role')).toBe('switch');
+    expect(checkbox(body)).toContain('checked');
+    expect(body).toContain('>Seascape contours</span>');
+  });
+
+  it('renders a plain checkbox for a selection list', () => {
+    const body = renderToggle({ visible: false, kind: 'checkbox' });
+
+    expect(checkbox(body)).not.toContain('role=');
+  });
 });

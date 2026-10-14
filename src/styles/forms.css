@@ -97,6 +97,39 @@ input[type="radio"]:disabled {
   opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
+/* The on/off switch for anything that acts immediately (a layer, a tile, a chart overlay). A
+   selection that waits for a later action stays a checkbox. The control is the drawn checkbox
+   with role="switch", so Space, checked state, and the label's accessible name all stay native. */
+input[type="checkbox"][role="switch"] {
+  position: relative;
+  display: inline-block;
+  inline-size: var(--switch-width);
+  block-size: var(--switch-height);
+  border-radius: var(--radius-pill);
+}
+input[type="checkbox"][role="switch"]::before {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: calc(var(--switch-height) - 8px);
+  block-size: calc(var(--switch-height) - 8px);
+  border-radius: 50%;
+  background: var(--border-control);
+  -webkit-mask: none;
+  mask: none;
+  transform: none;
+  transition:
+    translate var(--transition-fast),
+    background-color var(--transition-fast);
+}
+input[type="checkbox"][role="switch"]:checked {
+  border-color: var(--switch-on-border);
+  background: var(--switch-on-track);
+}
+input[type="checkbox"][role="switch"]:checked::before {
+  translate: calc(var(--switch-width) - var(--switch-height)) 0;
+  background: var(--switch-on-thumb);
+}
 /* Windows high contrast replaces author colors; the native control is the one that still shows
    its state there, at the square checkbox size even where a switch drew it wider. */
 @media (forced-colors: active) {

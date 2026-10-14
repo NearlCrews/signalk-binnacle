@@ -593,6 +593,7 @@ const emptyMessage = $derived(emptyReason());
       {:else}
         <div class="actions" id={`${panelId}-actions-${encodeURIComponent(route.id)}`}>
           <VisibilityToggle
+            itemName={route.name}
             visible={shownIds.has(route.id)}
             onToggle={(v) => onToggleShown(route.id, v)}
           />

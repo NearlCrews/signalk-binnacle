@@ -65,10 +65,10 @@ test('find places enables its layer, searches provider metadata, and keeps selec
 
   const panel = page.getByRole('complementary', { name: 'Find places' });
   await expect(panel).toBeVisible();
-  const placesToggle = panel.getByRole('button', { name: 'Show places on chart' });
-  await expect(placesToggle).toHaveAttribute('aria-pressed', 'true');
+  const placesToggle = panel.getByRole('switch', { name: 'Show places on chart' });
+  await expect(placesToggle).toBeChecked();
   await placesToggle.click();
-  await expect(placesToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(placesToggle).not.toBeChecked();
   await placesToggle.click();
   await expect.poll(() => listRequests, { timeout: 15_000 }).toBeGreaterThan(0);
   // Retain the existing 30-second paint bound across the fetch, merge, and overlay updates.

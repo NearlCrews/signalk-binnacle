@@ -585,6 +585,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
       {:else}
         <div class="actions" id={`${panelId}-actions-${encodeURIComponent(track.id)}`}>
           <VisibilityToggle
+            itemName={track.name}
             visible={shown.has(track.id)}
             onToggle={(v) => onToggleSaved(track.id, v)}
           />

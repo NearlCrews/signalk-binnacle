@@ -527,7 +527,7 @@ test('keeps long battery readings distinguishable in a night-red tablet dock', a
     'Current · Very Long House Battery Bank',
   ];
   for (const label of labels) {
-    const checkbox = dock.getByRole('checkbox', { name: label, exact: true });
+    const checkbox = dock.getByRole('switch', { name: label, exact: true });
     await expect(checkbox).toBeVisible();
     await checkbox.check();
   }
