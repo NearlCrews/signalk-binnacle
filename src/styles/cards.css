@@ -25,7 +25,7 @@
    and any active-state accent (which outranks this base). */
 .card-frame {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
 }
 /* The border, radius, and raised fill come from the shared .card-frame (set on the li in SavedList);
@@ -124,8 +124,8 @@
   inset-block: 0;
   inset-inline-start: 0;
   inline-size: var(--active-bar-width);
-  border-start-start-radius: var(--radius-sm);
-  border-end-start-radius: var(--radius-sm);
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
   background: var(--accent);
 }
 /* The filled accent "Active" pill on the active card. */

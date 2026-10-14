@@ -81,7 +81,7 @@
 }
 .panel-body::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .panel-body--flex {
   display: flex;

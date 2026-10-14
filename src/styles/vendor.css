@@ -76,8 +76,8 @@
 .maplibregl-ctrl-scale {
   border: 1px solid var(--text-muted);
   border-block-start: none;
-  border-end-start-radius: var(--radius-sm);
-  border-end-end-radius: var(--radius-sm);
+  border-end-start-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-overlay) 55%, transparent);
   color: var(--text);
   font-family: var(--font-mono);

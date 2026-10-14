@@ -463,7 +463,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
   inline-size: 100%;
   block-size: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .curve-line {

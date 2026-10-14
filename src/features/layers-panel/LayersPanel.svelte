@@ -418,7 +418,7 @@ const reorder = createLayerReorder(
   align-items: center;
   gap: var(--space-2);
   padding-inline: var(--space-1);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .category-toggle :global(.chev) {
   flex-shrink: 0;

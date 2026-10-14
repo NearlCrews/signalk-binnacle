@@ -753,7 +753,7 @@ function chartLabel(id: string): string {
   inline-size: 100%;
   min-block-size: var(--control-size);
   padding-inline: var(--space-1);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 .subview-link-label {
   flex: 1;

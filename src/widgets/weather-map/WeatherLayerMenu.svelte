@@ -114,7 +114,7 @@ const groups = $derived(
   gap: var(--space-2);
   padding: 0 0.6rem;
   border-width: 1px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
   text-align: start;
 }

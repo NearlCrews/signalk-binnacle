@@ -34,7 +34,7 @@
   margin: 0;
   padding: 0.4rem var(--space-2);
   border: 1px solid var(--alarm);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--alarm);
   font-size: var(--text-sm);
 }

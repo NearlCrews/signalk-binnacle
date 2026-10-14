@@ -77,7 +77,7 @@ const { legends, radarNote }: Props = $props();
 .legend-chip {
   inline-size: 0.85rem;
   block-size: 0.85rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 .legend-scale {

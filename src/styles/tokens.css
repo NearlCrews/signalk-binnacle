@@ -11,7 +11,6 @@
 
   /* Geometry and type scales (theme-independent), so radii, type sizes, z-order, the touch
      target, caps tracking, and the disabled dim are one vocabulary across every component. */
-  --radius-sm: 0.3rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-pill: 999px;

@@ -298,7 +298,7 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
   gap: 0.15rem;
   padding: var(--space-1) var(--space-2);
   border-width: 1px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   text-align: start;
 }
 .leg-row.is-on {

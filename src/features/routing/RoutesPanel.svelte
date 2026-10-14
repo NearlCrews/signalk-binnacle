@@ -759,7 +759,7 @@ const emptyMessage = $derived(emptyReason());
   padding: 0.6rem;
   border: 1px solid var(--accent);
   border-inline-start-width: var(--active-bar-width);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--accent-tint);
   box-shadow: var(--shadow-overlay);
 }

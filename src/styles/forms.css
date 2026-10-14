@@ -8,7 +8,7 @@
   min-block-size: var(--control-size);
   padding-inline: var(--space-2);
   border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text);
   font: inherit;

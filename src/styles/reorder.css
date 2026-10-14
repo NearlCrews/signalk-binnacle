@@ -10,7 +10,7 @@
 .reorder-row.dragging {
   background: var(--surface-raised);
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-overlay);
   opacity: 0.9;
 }

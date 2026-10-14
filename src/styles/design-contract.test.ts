@@ -37,3 +37,9 @@ describe('design contract: form controls', () => {
     expect(restored.filter((path) => path !== '/src/styles/forms.css')).toEqual([]);
   });
 });
+
+describe('design contract: corners', () => {
+  it('uses three radii: md for panel controls, lg for dialogs, and pill for chrome', () => {
+    expect(hits(/--radius-sm/)).toEqual([]);
+  });
+});

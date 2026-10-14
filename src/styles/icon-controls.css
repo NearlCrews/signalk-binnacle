@@ -18,7 +18,7 @@
   min-inline-size: var(--control-size);
   padding: var(--space-1);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;

@@ -145,7 +145,7 @@ function handleKeydown(id: string, event: KeyboardEvent): void {
   gap: var(--space-1);
   min-block-size: var(--row-size);
   padding: 0 0 0 var(--space-2);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
 }
 .toolbar-row-main {

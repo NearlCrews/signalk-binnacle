@@ -2504,6 +2504,6 @@ $effect(() => {
 }
 .safety-rail::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 </style>

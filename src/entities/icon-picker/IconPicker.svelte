@@ -283,7 +283,7 @@ $effect(() => {
   font-size: var(--text-md);
   text-align: start;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text);
   cursor: pointer;

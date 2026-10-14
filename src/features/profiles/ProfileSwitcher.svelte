@@ -143,7 +143,7 @@ function manage(): void {
 :global(.profile-switcher-menu .manage) {
   margin-block-start: var(--space-1);
   border-block-start: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 @media (max-width: 600px) {

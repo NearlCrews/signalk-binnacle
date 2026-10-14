@@ -86,7 +86,7 @@ dialog.editor-dialog[open] {
    keep only their own position, padding, sizing, and z-index. */
 .popover-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-overlay);
   box-shadow: var(--shadow-overlay);
 }
@@ -143,7 +143,7 @@ dialog.editor-dialog[open] {
   min-block-size: var(--control-size);
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   font: inherit;

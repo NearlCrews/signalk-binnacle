@@ -18,12 +18,12 @@
   border-radius: 0;
 }
 .segmented .btn:first-child {
-  border-start-start-radius: var(--radius-sm);
-  border-end-start-radius: var(--radius-sm);
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
 }
 .segmented .btn:last-child {
-  border-start-end-radius: var(--radius-sm);
-  border-end-end-radius: var(--radius-sm);
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
 }
 .segmented .btn + .btn {
   border-inline-start: 0;
@@ -43,7 +43,7 @@
   gap: 0.3rem;
   padding: 0.3rem var(--space-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text);
   font: inherit;
