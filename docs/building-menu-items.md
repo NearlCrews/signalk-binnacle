@@ -142,7 +142,8 @@ level. Inside, in this order:
 3. A one-line teach intro in plain helm voice: `<p class="muted-note">...</p>`.
 4. One or more `<section aria-label="...">` blocks, each led by an `<h3 class="caps-label">` heading,
    then its control primitives and readouts. A sub-heading is `<h4 class="caps-label">`.
-5. A list of saved records uses `<SavedList>` with a next-step `empty` message. A destructive action
+5. A list of saved records uses `<SavedList>` with an `empty` value that says whether the list is
+   loading, unavailable, or truly empty (a title and a next step). A destructive action
    on a card arms an `<InlineConfirm>` first. When a card needs more than one primary and two secondary
    actions, keep the primary visible and put the rest in `OverflowActions` with plain text labels.
    Its shared anchored surface follows panel scrolling, flips above or below, and clamps to the
@@ -245,7 +246,11 @@ let error = $state<string | null>(null);
 
   <section class="panel-section" aria-label="My records">
     <h3 class="caps-label">My records</h3>
-    <SavedList items={[]} empty="No records yet. Tap Add to create one." key={(r) => r.id}>
+    <SavedList
+      items={[]}
+      empty={{ kind: 'empty', title: 'No records', message: 'Tap Add to create one.' }}
+      key={(r) => r.id}
+    >
       {#snippet card(record)}
         <!-- card body; arm an InlineConfirm before any destructive action -->
       {/snippet}
@@ -349,6 +354,8 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | Top-level slide-in panel | `SlideOver` | a bespoke panel shell |
 | In-panel sub-view back header | `SubViewHeader` | a second panel-level back |
 | A list of saved items | `SavedList` (with `empty` and a `card` snippet) | a hand-rolled `<ul>` of cards |
+| An empty list or panel | `EmptyState` (title, message, optional action) | a bare muted line over empty space |
+| A load, refresh, or failure note | `LoadNote` (Retry, or Check again for a probe) | a hand-built alert and retry button |
 | A labeled text field | `TextField` | a raw `<input type="text">` |
 | A numeric setting with a unit | `UnitField` | a raw `<input type="number">` |
 | Decimal-degree point entry | `PositionFields` | a map gesture as the only way to add the first point |
@@ -357,9 +364,12 @@ Everything below is exported from `$shared/ui`. The standing rule is to hoist a 
 | Confirm a destructive or immediate navigation action in a panel | `InlineConfirm` | `window.confirm` |
 | Confirm a destructive one-tap strip action | `ConfirmArm` | an unguarded one-tap delete |
 | Collapse advanced or optional content | `Disclosure` (prop `expanded`) | a hand-rolled toggle, or the prop name `open` |
-| A layer or chart toggle row | `LayerToggle` with `description` | a bare checkbox row |
+| An on/off row that acts immediately | `LayerToggle` with `description` (a switch) | a bare checkbox row |
+| A selection a later action uses | `LayerToggle kind="checkbox"` with `description` | a switch, which implies it acts now |
 | An in-panel "show on chart" control | `ShowOnChartToggle` with `description` | a bespoke toggle button |
-| A compact per-card show or hide | `VisibilityToggle` | a re-styled icon button |
+| A compact per-card show or hide | `VisibilityToggle` with `itemName` | a re-styled icon button |
+| A small status label | `.badge` with a color modifier | a status pill in scoped styles |
+| A strip action | `.btn .btn-pill .btn-strip` (plus a color modifier) | a strip-only button class |
 | A map-anchored menu or popover | `AnchoredMenu` with `onFocusLeft` | a bespoke backdrop, Escape handler, or focus-out check |
 | A toolbar menu with a trigger button | `createMenuFocusMachine` | a bespoke Tab redirect and close-focus protocol |
 | Explain why a control is grayed | `UnavailableHint` plus a matching `title` | a `title` alone, silent to assistive tech |
@@ -488,13 +498,17 @@ and guides.
   flood to "seaward" and "landward", degrees true to a "Degrees true, measured clockwise from true
   north" tooltip. Never ship a bare ZOC, MPA, AIS, or MLLW with no gloss anywhere on the panel.
   Tide copy also asks the navigator to check chart-datum compatibility before combining heights.
-- Write guiding empty states with a next step, never a dead "No data": "No X yet. <do Y> to ...".
-  Use the `SavedList` `empty` prop rather than a hand-rolled `<p>`.
+- Write guiding empty states with a next step, never a dead "No data": a short title ("No saved
+  routes") and one sentence on how to get one. Use `EmptyState`, or the `SavedList` `empty` prop,
+  rather than a hand-rolled `<p>`.
 - Voice: second person, imperative for actions, present tense, short sentences. No marketing tone, no
   exclamation except a true alarm.
 - Progress uses the single ellipsis character `…`. **Retry** repeats a failed network or provider
-  operation, **Refresh list** manually reloads an already usable collection, and **Rescan** repeats
-  local sensor discovery. Do not use these verbs interchangeably.
+  operation, **Check again** repeats a capability probe (does the server store routes at all),
+  **Refresh list** manually reloads an already usable collection, and **Rescan** repeats local sensor
+  discovery. Do not use these verbs interchangeably. A retry button's visible label is the one word
+  Retry; name its object in the accessible name, starting with the visible word ("Retry loading
+  routes", "Retry profile sync").
 - Use `.alert-note` with `role="alert"` only for actionable failure or safety state. Write-access
   teaching and optional-capability explanations use `.muted-note`; add `role="status"` only when a
   state change should be announced politely.
@@ -545,8 +559,8 @@ House writing rules, mandatory in UI text, labels, commit messages, PR bodies, c
   rejection, set `aria-invalid`, associate the message with `aria-describedby`, and state the allowed
   range or increment. Never silently replace an invalid entry with a different active value.
   `UnitField` defaults to `step="any"`; a numeric increment must match the displayed unit's contract.
-- Pointer dragging has a single-tap alternative as well as a keyboard path. Native checkbox labels
-  provide a full 44 px row, and primary actions such as Use profile have visible words. Preserve
+- Pointer dragging has a single-tap alternative as well as a keyboard path. Checkbox and switch
+  labels provide a full 44 px row, and primary actions such as Use profile have visible words. Preserve
   meaningful accessible names when compact visual labels are necessary.
 - At 320 px and enlarged text, reflow panel headers and action rows instead of clipping them.
   Dialog content scrolls while confirmation and dismissal controls remain reachable. Test actual
@@ -573,7 +587,7 @@ Tick all of these before you commit a new menu item.
       headings.
 - [ ] Every control is a shared primitive (section 4), every row and section uses a shared class
       (section 5), and no global class name is reused for a different shape.
-- [ ] Every toggle row sets a `description`; every saved list uses `SavedList` with a next-step
+- [ ] Every toggle row sets a `description`; every saved list uses `SavedList` with a typed
       `empty`; every destructive action or immediate navigation handoff arms an `InlineConfirm` or
       `ConfirmArm`.
 - [ ] A user-relevant optional provider stays visible with an actionable explanation or persistent

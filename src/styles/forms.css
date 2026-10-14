@@ -134,6 +134,7 @@ input[type="checkbox"][role="switch"]:checked::before {
    its state there, at the square checkbox size even where a switch drew it wider. */
 @media (forced-colors: active) {
   input[type="checkbox"],
+  input[type="checkbox"][role="switch"],
   input[type="radio"] {
     appearance: auto;
     -webkit-appearance: auto;

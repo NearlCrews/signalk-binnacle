@@ -33,7 +33,10 @@ condition, and one used there drops the whole block.
 
 ### Geometry and type (theme-independent)
 
-- Radii: `--radius-sm` 0.3rem, `--radius-md` 0.5rem, `--radius-lg` 0.75rem, `--radius-pill` 999px.
+- Radii: three, by role. `--radius-md` 0.5rem (8 px) for panel controls and cards (buttons,
+  inputs, segmented ends, saved cards, popovers, menu tiles), `--radius-lg` 0.75rem for dialogs and
+  menu surfaces, and `--radius-pill` 999px for chrome and toggles. There is no smaller panel tier;
+  a fourth radius is what made panels read as older than the chrome around them.
 - Spacing (4px-based): `--space-1` 0.25rem, `--space-2` 0.5rem, `--space-3` 0.75rem, `--space-4` 1rem,
   `--space-5` 1.5rem, `--space-6` 2rem.
 - Type scale: `--text-xs` 0.72, `--text-sm` 0.8, `--text-base` 0.85, `--text-md` 0.9, `--text-lg` 1,
@@ -74,7 +77,8 @@ condition, and one used there drops the whole block.
   8rem (a panel's loading and error block), `--strip-max-width` 28rem (the centered bottom strips),
   `--tile-min-height` 4rem (the instrument tile floor), `--btn-compact-min-width` 3rem
   (`.btn-compact`), `--scrubber-track-min-width` 4rem (the scrubber track once its narrow-container
-  grid takes over), `--checkbox-size` 1.25rem (the native checkbox box), `--stat-unit-min-width`
+  grid takes over), `--checkbox-size` 1.25rem (the drawn checkbox box), `--switch-width` 2.75rem and `--switch-height`
+  1.6rem (the switch track), `--stat-unit-min-width`
   1.25rem (the stat-grid unit column), and `--weather-panel-height` (the Forecast panel, composed by
   both the panel and the bottom stack that clears it).
 - Viewport height goes through `--dvh`, one percent of the viewport height: `1dvh` where the browser
@@ -122,8 +126,12 @@ change, and that conversation happens here, not in the component.
 Use the role, never the hex. The roles: `--text`, `--text-muted`, `--accent`, `--accent-contrast`
 (text on a filled accent button), `--accent-tint` and `--accent-tint-strong` (active or lit fills),
 `--select` (the highlight/picked token), `--ok` (healthy dot), `--alarm` (danger), `--warning`
-(caution, one step below alarm), `--border`, `--surface` (the app base), `--surface-raised` (cards,
-inputs), `--surface-overlay` (floating panels). Tints are defined per theme, never as a global
+(caution, one step below alarm), `--border` (dividers and cards), `--border-control` (the boundary of
+every interactive control: inputs, selects, checkboxes, switches, and slider rails, at least 3:1 in
+day and dusk and deliberately dim at night), `--surface` (the app base), `--surface-raised` (cards,
+inputs), `--surface-overlay` (floating panels). The switch reads `--switch-on-track`,
+`--switch-on-border`, and `--switch-on-thumb`, which night-red sets to a tint, an accent border, and
+an accent thumb so a column of lit switches never paints a block of bright red. Tints are defined per theme, never as a global
 `color-mix`, so night-red never drifts toward blue or green.
 
 Depth: `--shadow-overlay` (small floating cards), `--shadow-lg` plus `--edge-light` (the largest
@@ -161,7 +169,7 @@ that matter when you do touch this:
 `src/app.css` is only an ordered `@import` manifest over `src/styles/` modules, and the import order IS
 the cascade order. Do not reorder it blindly: the order keeps `.is-on` (in `icon-controls.css`) able to
 light the bases that precede it, and keeps `overlays.css` and `panels.css` after the bases they extend.
-The order is: maplibre, tokens, base, text, buttons, forms, cards, instruments, icon-controls,
+The order is: maplibre, tokens, base, text, buttons, forms, cards, badges, instruments, icon-controls,
 scrubber, overlays, reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so
 the dragging state wins over a lit `.row-interactive.is-on` row at equal specificity.)
 
@@ -222,7 +230,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   border, accent-tint fill) that lights any composing control.
 - Forms (`forms.css`): `.control-error` (a control's own validation message, the alarm-voiced
   counterpart to `.muted-note--xs`, sitting directly under the field it refuses), `.input` (text
-  inputs and selects, 44px, raised fill), `.range` (the live
+  inputs and selects, 44px, raised fill, `--border-control` boundary; `select.input` draws its own
+  token chevron), the drawn checkbox and radio (no browser control, so night-red never shows a gray
+  box), the switch (`input[type="checkbox"][role="switch"]`), the Windows high-contrast fallback to
+  the native control, `.range` (the live
   slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header),
   and `.search-input` (the full-width search field with its 44px clear affordance, applied through
   the `SearchInput` primitive in the AIS, Find places, and Waypoints panels).
@@ -250,8 +261,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   (kn, °T, ft, m) stays outside the `.num` span as plain text. The Time readout uses local time, and
   any qualifier that is part of reading a value itself, such as AM or PM, stays inside the `.num` span
   with that value.
-- Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-sm +
-  surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.stat-grid`
+- Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-md +
+  surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.empty-state`
+  (the dashed empty-list block, used through the EmptyState primitive), `.stat-grid`
   (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
   `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS, POI, and Waypoints two-line sortable lists.
   POI search and Waypoints also share the `$shared/nav` list core behind that presentation
@@ -260,6 +272,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   selected
   row uses `aria-current="true"`, an accent border, an accent tint, and a leading inset accent line;
   hover or keyboard preview alone must not claim selection.
+- Badges (`badges.css`): `.badge`, the one status pill for any small label that states a condition
+  (Active, Stale, Warning, Alarm, an alarm grade, a layer region, a place hazard flag), with
+  `--accent`, `--warning`, `--alarm`, `--select`, and `--strong` color modifiers and `--caps` for
+  uppercase. Colors come only from tokens, so every variant stays in the night-red band. Never draw
+  a status pill in a component's scoped style.
 - Instruments (`instruments.css`): the `.tile` vocabulary on the `.card-frame` surface, shared by
   NumericTile and WindTile: the `--text-readout-lg` hero `.num`, the `--text-xs` `.unit`, and the
   loud leading `.abbr` (the abbreviation is the tile's scanned name: SOG, HDG, AWS at `--text-sm`
@@ -282,8 +299,8 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   customize order only where a hole would otherwise sit. Instrument tiles are buttons: selecting one
   opens an in-dock detail view with value, status, zone, source, update age, and the Signal K paths
   behind the reading. The button's accessible name includes the value, unit, freshness, alarm zone,
-  and action. Warning, Alarm, and Stale render as tinted chips (`.tile-state--caution`,
-  `.tile-state--alarm`), never color alone and never a third muted caps line; the chip colors
+  and action. Warning, Alarm, and Stale render as tinted badges (`.badge--warning`,
+  `.badge--alarm`), never color alone and never a third muted caps line; the chip colors
   itself by what it says, Alarm outranks Stale, and Stale outranks Warning, since a zone verdict
   computed from an untrusted value is not a live warning. A stale tile keeps its retained value at
   muted contrast WITH its age in the secondary line: the tile has a badge channel, so a retained
@@ -364,11 +381,13 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by nine strips:
   Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Alarm, Route edit, History
   playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
-  (a strip whose controls need the room, Measure's leg table among them) as modifiers. The trailing
-  action is one shared `.ack` pill, accent-colored by default; its `.ack--warning` caution variant
-  turns a consequence-bearing tap warning-colored (the anchor Raise, the MOB and route-edit
-  Cancels), and its `.ack--primary` variant is alarm-colored and bold for the strip's one obvious
-  next action (Steer to MOB). `.actions` clusters a strip's trailing buttons, and `.actions--safety`
+  (a strip whose controls need the room, Measure's leg table among them) as modifiers. Strip
+  actions are the shared button system: `.btn .btn-pill .btn-strip` (the strip's larger text and
+  accent color, pushed to the trailing edge), with `.btn-warning` for a consequence-bearing tap (the
+  anchor Raise, the MOB and route-edit Cancels), `.btn-danger` for a destructive one, and
+  `.btn-alarm` (alarm-colored and bold) for the strip's one obvious next action (Steer to MOB). An
+  acknowledged strip (`.is-ack`) keeps its color and full contrast and steps down to a dashed
+  border; never dim a live condition with opacity. `.actions` clusters a strip's trailing buttons, and `.actions--safety`
   widens the gutter between a paired safety pair so a wrong tap in a seaway is less likely.
 
 ## 6. Shared UI primitives (`$shared/ui`)
@@ -516,11 +535,21 @@ Shared behavior lives here. Compose these; do not re-implement them.
   after a successful action.
 - `Disclosure`: the labeled collapsible section for a "Customize" or "Advanced" group. The prop is
   `expanded` (bindable), never `open` (which collides with `window.open`).
-- `LayerToggle`: the layer or chart toggle row, with a `description` that becomes the hover and focus
-  tooltip. Set a plain-language `description` on every toggle row.
-- `VisibilityToggle`: the show/hide eye toggle for a saved overlay item.
-- `ShowOnChartToggle`: the full-width "Show X on chart" `.btn` toggle in a panel body that mirrors a
-  layer's visibility, with the Layers eye as the source of truth.
+- `LayerToggle`: the toggle row, with a `description` that becomes the hover and focus tooltip. Set a
+  plain-language `description` on every toggle row. It renders a switch by default; pass
+  `kind="checkbox"` only for a selection a later action uses (the charts an offline area will
+  download). The rule: a control that acts immediately is a switch, a selection is a checkbox.
+- `VisibilityToggle`: the compact switch that shows a saved route or track on the chart. Pass
+  `itemName` so each row's switch is named "Show {name} on chart"; the name never flips with state.
+- `ShowOnChartToggle`: the full-width "Show X on chart" row in a panel body, rendering `LayerToggle`
+  so every visibility control is one switch; Layers stays the source of truth.
+- `EmptyState`: an empty list or panel: a short title, one sentence on what goes here and how to get
+  one, and an optional action. `SavedList`'s `empty` prop takes a `SavedListEmpty`: `loading`,
+  `unavailable` (the panel states the cause above the list), or `empty` with EmptyState props.
+- `LoadNote`: a load, refresh, or failure note. Loading and refreshing are a polite status; a failure
+  is an alert on the message alone, with **Retry** for a failed request (`retryName` names the
+  object for assistive technology as "Retry loading {name}") or **Check again** for a capability
+  probe. `LazyPanelState` renders through it.
 - `UnavailableHint`: the grayed hover tooltip and screen-reader text for a capability whose provider
   is absent (used by the app menu, the status strip, and the layer rows).
 - `createReorder`: the pointer-and-keyboard drag-reorder controller (the layer rows and the
@@ -785,8 +814,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
   pattern). Do not lean on a redundant `aria-label` when a visible label exists.
-- A primary action has a visible verb, not only an icon and tooltip. Native checkbox labels provide
-  the full control-height touch row. Modal content scrolls within a usable viewport budget while its
+- A primary action has a visible verb, not only an icon and tooltip. Checkbox and switch labels
+  provide the full control-height touch row. Modal content scrolls within a usable viewport budget while its
   confirmation and dismissal controls stay reachable at 320 px and 200% text.
 - A deep-linked Help action focuses and reveals the named section. A confirmation or replacement
   control receives focus after it is revealed; cancel and close restore a meaningful trigger without
@@ -872,6 +901,9 @@ These apply to UI text, headings, labels, comments, commits, and docs.
 - No "&" in human-readable text; write "and". The "&" is fine only where syntax requires it (URL query
   separators, HTML entities, code operators).
 - American English (color, behavior, center, gray).
+- An empty state orients, explains, and offers one next step (EmptyState). A retry button's visible
+  label is the one word **Retry** (or **Check again** for a capability probe); its accessible name
+  adds the object, starting with the visible word. Loading text ends with an ellipsis.
 - Default to no comments. Keep only non-obvious why-comments; delete comments that restate what the code
   does.
 - Never describe the AI or review process in any user-facing or repo-facing writing (changelogs,

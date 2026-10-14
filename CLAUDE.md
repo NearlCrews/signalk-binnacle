@@ -344,7 +344,7 @@ root. App and PlotterView own the explicit construction and wiring between those
   equivalent to `eslint-plugin-boundaries`.
 - The global stylesheet is modular too (user rule, keep this style for everything going forward):
   `src/app.css` is only an ordered `@import` manifest over `src/styles/` modules (tokens, base, text,
-  buttons, forms, cards, instruments, icon-controls, scrubber, overlays, reorder, panels, strips, a11y, vendor), and the import order IS
+  buttons, forms, cards, badges, instruments, icon-controls, scrubber, overlays, reorder, panels, strips, a11y, vendor), and the import order IS
   the cascade order. The utility vocabularies are split one concern per module (text helpers, the button
   system, form controls, the saved-card, stat grid, and `.nav-*` sortable two-line row list, the icon controls plus the lit `.is-on` state, the
   popover and modal backdrop styles) and the shell into panels and strips; the order keeps `.is-on` after the
@@ -353,7 +353,9 @@ root. App and PlotterView own the explicit construction and wiring between those
   the `$shared/ui` primitives (SlideOver, PanelHeader, AnchoredMenu, InlineConfirm, UnitField,
   PositionFields, ConfirmArm, SavedList,
   VisibilityToggle, ShowOnChartToggle, and LayerToggle (the three share one VisibilityToggleProps
-  contract), CustomizeToggle, the dialog dismiss stack, the createReorder controller with
+  contract and render one drawn switch; LayerToggle's `kind="checkbox"` is for a selection a later action
+  uses), EmptyState and the SavedList `empty` union, LoadNote (Retry for a failed request, Check again
+  for a capability probe), CustomizeToggle, the dialog dismiss stack, the createReorder controller with
   ReorderActions, rovingFocus (with Home and End support), focusOnMount, trapFocus,
   restoreFocusAfterCancel, observeClientHeight, and the createMenuFocusMachine toolbar-menu keyboard
   machine (one
@@ -369,7 +371,9 @@ root. App and PlotterView own the explicit construction and wiring between those
   search, and Waypoints panels), WriteAccessNote (the write-blocked notice plus request-access button
   shared by the waypoints, tracks, and note-detail panels), and the
   PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
-  global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.pill-count` (the small count
+  global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.badge` (the one status pill, with accent, warning, alarm, select, and
+  strong modifiers; never a scoped status pill), `.empty-state` (rendered through EmptyState), `.btn-strip` and
+  `.btn-alarm` (strip actions are the shared button system), `.pill-count` (the small count
   chip shared by the toolbar's collapsed More pill and a menu item's live count), `.popover-card`,
   `.menu-surface` (the anchored toolbar-menu surface layered on `.popover-card`, shared by the
   overflow menu, the bottom-bar More menu, and the profile switcher; consumers declare only

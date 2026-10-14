@@ -6,6 +6,20 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Draw checkboxes, selects, and switches from the theme instead of the browser's own controls,
+  with a 3:1 control border in day and dusk. Night-red no longer shows gray checkbox boxes.
+- Show and hide map layers, instrument tiles, trend charts, chart overlays, and saved routes and
+  tracks with one switch everywhere. The offline area chart picker stays a checkbox, since it
+  selects charts for a later download.
+- Round buttons, inputs, and cards with one 8 px corner, and draw strip actions and status badges
+  with the same shared styles as panels. An acknowledged alarm strip keeps its color and full
+  contrast and shows a dashed border instead of dimming.
+- Show a short title, explanation, and next step in empty lists and panels, and use one load and
+  retry treatment across panels: Retry for a failed request and Check again for a server capability
+  check.
+
 ### Fixed
 
 - Support Radar API 3.4.0 discovery, capability geometry, color legends, and spoke streams while

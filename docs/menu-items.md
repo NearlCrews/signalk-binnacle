@@ -59,7 +59,7 @@ source, and surrounding traffic before relying on it.
   Return to Binnacle after signing in; Chart Locker retries automatically. If Signal K already reports
   an administrator session, a Chart Locker refusal is shown as an access error with retry instead.
   Accepted saved-area downloads recover by area identifier when the immediate job response is lost.
-  Repeated status failures offer Retry status without starting another download. Removed chart
+  Repeated status failures offer a Retry for the area status without starting another download. Removed chart
   sources are labeled, existing cached coverage is preserved, and re-download stays blocked until an
   adjusted copy uses available sources. Saved-area cards lead with an at-a-glance summary: plain
   detail level, chart count with any unavailable ones, and the approximate span in nautical miles.
