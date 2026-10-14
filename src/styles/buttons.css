@@ -67,6 +67,20 @@
   opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
+/* The strip action: a pill at the strip's larger text with accent text on the raised surface, so a
+   strip's actions read as siblings of every panel button. It stays inline and pushes to the
+   trailing edge on its own, as the old strip action did; an .actions cluster owns the push. It
+   sits before the color variants so a warning, danger, or alarm action keeps its own color. */
+.btn-strip {
+  display: inline-flex;
+  margin-inline-start: auto;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--accent);
+}
+.bottom-strip .actions .btn-strip {
+  margin-inline-start: 0;
+}
 .btn-primary {
   background: var(--accent-fill);
   border-color: var(--accent-fill);
@@ -112,6 +126,23 @@
 @media (hover: hover) and (pointer: fine) {
   .btn-warning:hover:not(:disabled) {
     background: var(--warning-tint);
+  }
+}
+/* A pressed caution toggle (a strip's mute) fills with the warning tint to match its border. */
+.btn-warning[aria-pressed="true"] {
+  background: var(--warning-tint);
+}
+/* The alarm-colored primary of an emergency strip (Steer to MOB): alarm text and border, bold, so
+   the obvious next action reads apart from its Acknowledge and Cancel peers. */
+.btn-alarm {
+  border-color: var(--alarm);
+  color: var(--alarm);
+  font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-alarm:hover:not(:disabled) {
+    border-color: var(--alarm);
+    background: var(--alarm-tint);
   }
 }
 /* A fully rounded variant for the chrome toggles (Update, Forecast) that read as pills. */

@@ -43,3 +43,26 @@ describe('design contract: corners', () => {
     expect(hits(/--radius-sm/)).toEqual([]);
   });
 });
+
+describe('design contract: one button system', () => {
+  it('has no parallel strip button class', () => {
+    expect(hits(/class="[^"]*\back(--[a-z]+)?\b(?!-)/)).toEqual([]);
+    expect(hits(/\.ack(--[a-z]+)?(?![\w-])/)).toEqual([]);
+  });
+
+  it('lets warning, danger, and alarm colors win over the strip action accent', () => {
+    const buttons = sources['/src/styles/buttons.css'] ?? '';
+    const strip = buttons.indexOf('.btn-strip {');
+    expect(strip).toBeGreaterThan(-1);
+    expect(strip).toBeLessThan(buttons.indexOf('.btn-danger {'));
+    expect(strip).toBeLessThan(buttons.indexOf('.btn-warning {'));
+    expect(buttons.indexOf('.btn-alarm {')).toBeGreaterThan(buttons.indexOf('.btn-warning {'));
+  });
+
+  it('never dims an acknowledged alarm with opacity', () => {
+    expect(hits(/(is-ack|acked)[^{]*\{[^}]*opacity/)).toEqual([]);
+    expect(sources['/src/styles/strips.css']).toMatch(
+      /\.bottom-strip\.is-ack \{[^}]*border-style: dashed/,
+    );
+  });
+});

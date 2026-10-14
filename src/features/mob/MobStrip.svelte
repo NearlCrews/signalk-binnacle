@@ -91,7 +91,7 @@ const steerWarning = $derived(
       <div class="actions actions--safety">
         <button
           type="button"
-          class="ack ack--primary"
+          class="btn btn-pill btn-strip btn-alarm"
           disabled={!mob.position}
           onclick={tapSteer}
           onkeydown={disarmSteerOnEscape}
@@ -99,9 +99,11 @@ const steerWarning = $derived(
           {steerArm.armed ? 'Confirm steer?' : 'Steer to MOB'}
         </button>
         {#if !mob.acknowledged}
-          <button type="button" class="ack" onclick={() => mob.acknowledge()}>Acknowledge</button>
+          <button type="button" class="btn btn-pill btn-strip" onclick={() => mob.acknowledge()}>
+            Acknowledge
+          </button>
         {/if}
-        <button type="button" class="ack ack--warning" onclick={tapCancel}>
+        <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapCancel}>
           {cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}
         </button>
       </div>

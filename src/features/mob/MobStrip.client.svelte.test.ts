@@ -85,7 +85,7 @@ describe('MobStrip steer arming', () => {
     harness.mob.actionContext = 'activation-one';
     flushSync();
     const cancel = (): HTMLButtonElement => {
-      const button = harness.target.querySelector<HTMLButtonElement>('.ack--warning');
+      const button = harness.target.querySelector<HTMLButtonElement>('.btn-warning');
       if (!button) throw new Error('Missing cancel');
       return button;
     };

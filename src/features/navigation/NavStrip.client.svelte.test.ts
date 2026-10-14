@@ -60,7 +60,7 @@ function mountStrip(
   };
   mounted.push(remove);
   const stop = (): HTMLButtonElement => {
-    const button = target.querySelector<HTMLButtonElement>('button.ack');
+    const button = target.querySelector<HTMLButtonElement>('button.btn-strip');
     if (!button) throw new Error('the stop control is not rendered');
     return button;
   };

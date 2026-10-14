@@ -56,11 +56,20 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
         <div class="actions actions--safety">
           <!-- A stable "Mute" label with aria-pressed carrying the on state: a label that flips to
                "Unmute" reads as a different action mid-incident, and a mute toggle is not
-               destructive, so it stays a plain .ack rather than the warning variant. -->
-          <button type="button" class="ack" aria-pressed={muted} onclick={onToggleMute}>
+               destructive, so it stays a plain .btn-strip rather than the warning variant. -->
+          <button
+            type="button"
+            class="btn btn-pill btn-strip"
+            aria-pressed={muted}
+            onclick={onToggleMute}
+          >
             Mute
           </button>
-          <button type="button" class="ack" onclick={() => collision.acknowledge()}>
+          <button
+            type="button"
+            class="btn btn-pill btn-strip"
+            onclick={() => collision.acknowledge()}
+          >
             Acknowledge
           </button>
         </div>
@@ -118,7 +127,7 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
 
 <style>
 /* The pressed visual carries the muted state, since the label stays a stable "Mute". */
-.bottom-strip .ack[aria-pressed="true"] {
+.bottom-strip .btn-strip[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--accent-tint);
 }

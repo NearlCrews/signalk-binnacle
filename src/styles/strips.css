@@ -62,82 +62,27 @@
 .bottom-strip--wide {
   --strip-max-width: 48rem;
 }
-.bottom-strip .ack {
-  margin-inline-start: auto;
-  font: inherit;
-  font-size: var(--text-base);
-  padding: var(--space-2) var(--space-3);
-  min-block-size: var(--control-size);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface-raised);
-  color: var(--accent);
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
-}
-@media (hover: hover) and (pointer: fine) {
-  .bottom-strip .ack:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-tint);
-  }
-}
-.bottom-strip .ack:active:not(:disabled) {
-  filter: brightness(var(--brightness-press));
-}
-/* A disabled strip action (Steer to MOB with no fix, an empty Undo or Clear) dims through the shared
-   token rather than the browser default, so it reads as inert in every theme and gives no hover lift. */
-.bottom-strip .ack:disabled {
-  opacity: var(--disabled-opacity);
-  cursor: default;
-}
-/* A caution variant of the strip action for consequence-bearing taps (the anchor Raise, the MOB
-   and route-edit Cancels), warning-colored so they read apart from the plain actions beside them.
-   The collision Mute deliberately stays a plain .ack: a mute toggle is not destructive
-   (DangerStrip records the reason at its markup). The pressed state tints with the warning token
-   so the fill matches the amber border and text. */
-.bottom-strip .ack--warning {
-  color: var(--warning);
-  border-color: var(--warning);
-}
-.bottom-strip .ack--warning[aria-pressed="true"] {
-  background: var(--warning-tint);
-}
-/* A primary variant of the strip action (Steer to MOB), alarm-colored and bold to match the header
-   MOB button's own styling, so the strip's obvious next action reads as such next to its peer
-   Acknowledge and Cancel buttons rather than looking like just another pill. */
-.bottom-strip .ack--primary {
-  color: var(--alarm);
-  border-color: var(--alarm);
-  font-weight: 600;
-}
-@media (hover: hover) and (pointer: fine) {
-  .bottom-strip .ack--primary:hover:not(:disabled) {
-    background: var(--alarm-tint);
-  }
-}
-/* The trailing action cluster shared by the alarm and tool strips. The shared .ack pill carries its
-   own auto margin for single-action strips, so the cluster neutralizes it and owns the push; the
-   safety strips widen the gap locally so paired safety buttons do not read as twins. */
+/* The trailing action cluster shared by the alarm and tool strips. A strip action (.btn-strip in
+   buttons.css) carries its own auto margin for single-action strips, so the cluster neutralizes it
+   and owns the push; the safety strips widen the gap locally so paired safety buttons do not read
+   as twins. */
 .bottom-strip .actions {
   margin-inline-start: auto;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.bottom-strip .actions .ack {
-  margin-inline-start: 0;
-}
 /* A wide gutter between paired safety buttons (Mute/Acknowledge, Acknowledge/Raise) so they do
    not read as twins and a wrong tap in a seaway is less likely. */
 .bottom-strip .actions--safety {
   gap: var(--space-4);
 }
-/* Acknowledged: the alarm is silenced and the operator has it in hand, so the strip dims but keeps
-   its readouts on screen while the condition persists. */
+/* Acknowledged: the operator has it in hand, but the condition persists, so the strip keeps its
+   alarm or warning color and full text contrast and steps down to a dashed border; the ack tag
+   says it in words. Opacity would also dim the readouts the condition still needs, and a neutral
+   color would make a live hazard look resolved. */
 .bottom-strip.is-ack {
-  opacity: 0.62;
+  border-style: dashed;
 }
 .bottom-strip .ack-tag {
   margin-inline-start: auto;

@@ -80,13 +80,13 @@ function acknowledge(): void {
       {/if}
       <div class="actions actions--safety">
         {#if silenceOffered}
-          <button type="button" class="ack" onclick={silence}>Silence</button>
+          <button type="button" class="btn btn-pill btn-strip" onclick={silence}>Silence</button>
         {/if}
         <!-- Local relief stays available while a server action is pending or unsupported. -->
         {#if sounding}
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             title="Stop the sound on this device only"
             onclick={onMuteHere}
           >
@@ -94,9 +94,13 @@ function acknowledge(): void {
           </button>
         {/if}
         {#if onAcknowledge && canAcknowledge && !writeBlocked}
-          <button type="button" class="ack" onclick={acknowledge}>Acknowledge</button>
+          <button type="button" class="btn btn-pill btn-strip" onclick={acknowledge}>
+            Acknowledge
+          </button>
         {/if}
-        <button type="button" class="ack" onclick={onOpenAlarms}>Open Alarms</button>
+        <button type="button" class="btn btn-pill btn-strip" onclick={onOpenAlarms}>
+          Open Alarms
+        </button>
       </div>
     </div>
     <div class="row">

@@ -117,7 +117,7 @@ const liveMessage = $derived.by(() => {
         {#if controller.samples.length > 0}
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             disabled={controller.refreshing}
             onclick={() => void controller.reload()}
           >
@@ -125,9 +125,15 @@ const liveMessage = $derived.by(() => {
           </button>
           <!-- "Latest", not "Now": this jumps to the newest loaded sample and stays in time
                travel, so naming it for the current time would promise live data. -->
-          <button type="button" class="ack" onclick={() => controller.goToLatest()}>Latest</button>
+          <button
+            type="button"
+            class="btn btn-pill btn-strip"
+            onclick={() => controller.goToLatest()}
+          >
+            Latest
+          </button>
         {/if}
-        <button type="button" class="ack" onclick={onExit}>Exit</button>
+        <button type="button" class="btn btn-pill btn-strip" onclick={onExit}>Exit</button>
       </div>
     </div>
 
@@ -182,7 +188,13 @@ const liveMessage = $derived.by(() => {
     {:else if controller.status === 'failed' && controller.samples.length === 0}
       <div class="row load-failed">
         <span class="alert-note" role="alert">Could not load history.</span>
-        <button type="button" class="ack" onclick={() => void controller.retry()}>Retry</button>
+        <button
+          type="button"
+          class="btn btn-pill btn-strip"
+          onclick={() => void controller.retry()}
+        >
+          Retry
+        </button>
       </div>
     {:else if controller.samples.length > 0}
       <div class="scrubber" role="group" aria-label="History playback">

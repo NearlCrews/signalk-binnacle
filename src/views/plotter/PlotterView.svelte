@@ -1017,7 +1017,13 @@ $effect(() => {
           <div class="bottom-strip bottom-strip--accent">
             <div class="head">
               <span class="title">Playback</span>
-              <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+              <button
+                type="button"
+                class="btn btn-pill btn-strip"
+                onclick={() => timeTravel.exit()}
+              >
+                Exit
+              </button>
             </div>
             <div class="row">
               <span class="muted-note" role="status">Loading time travel controls…</span>
@@ -1034,8 +1040,16 @@ $effect(() => {
               <div class="bottom-strip bottom-strip--accent" role="alert">
                 <div class="row">
                   <span class="alert-note">Playback controls stopped unexpectedly.</span>
-                  <button type="button" class="ack" onclick={reset}>Retry</button>
-                  <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+                  <button type="button" class="btn btn-pill btn-strip" onclick={reset}>
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-pill btn-strip"
+                    onclick={() => timeTravel.exit()}
+                  >
+                    Exit
+                  </button>
                 </div>
               </div>
             {/snippet}
@@ -1044,8 +1058,16 @@ $effect(() => {
           <div class="bottom-strip bottom-strip--accent" role="alert">
             <div class="row">
               <span class="alert-note">Playback controls could not load.</span>
-              <button type="button" class="ack" onclick={retryLazyPanel}>Retry</button>
-              <button type="button" class="ack" onclick={() => timeTravel.exit()}>Exit</button>
+              <button type="button" class="btn btn-pill btn-strip" onclick={retryLazyPanel}>
+                Retry
+              </button>
+              <button
+                type="button"
+                class="btn btn-pill btn-strip"
+                onclick={() => timeTravel.exit()}
+              >
+                Exit
+              </button>
             </div>
           </div>
         {/await}
@@ -1077,7 +1099,9 @@ $effect(() => {
             <div class="head">
               <span class="title">Measure</span>
               <span class="note" role="status">Loading Measure controls…</span>
-              <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+              <button type="button" class="btn btn-pill btn-strip" onclick={() => measure.stop()}>
+                Done
+              </button>
             </div>
           </aside>
         {:then module}
@@ -1096,8 +1120,16 @@ $effect(() => {
               <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
                 <div class="row">
                   <span class="alert-note">Measure controls stopped unexpectedly.</span>
-                  <button type="button" class="ack" onclick={reset}>Retry</button>
-                  <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+                  <button type="button" class="btn btn-pill btn-strip" onclick={reset}>
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-pill btn-strip"
+                    onclick={() => measure.stop()}
+                  >
+                    Done
+                  </button>
                 </div>
               </div>
             {/snippet}
@@ -1106,8 +1138,12 @@ $effect(() => {
           <div class="bottom-strip bottom-strip--accent" aria-label="Measure" role="alert">
             <div class="row">
               <span class="alert-note">Measure controls could not load.</span>
-              <button type="button" class="ack" onclick={retryLazyPanel}>Retry</button>
-              <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+              <button type="button" class="btn btn-pill btn-strip" onclick={retryLazyPanel}>
+                Retry
+              </button>
+              <button type="button" class="btn btn-pill btn-strip" onclick={() => measure.stop()}>
+                Done
+              </button>
             </div>
           </div>
         {/await}

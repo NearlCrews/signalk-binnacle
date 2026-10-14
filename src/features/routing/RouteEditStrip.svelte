@@ -42,10 +42,14 @@ function tapCancel(): void {
     <span class="note" role="status">{count} {count === 1 ? 'point' : 'points'}. {nextStep}</span>
     <div class="actions">
       {#if !editorOpen}
-        <button type="button" class="ack" onclick={onOpenEditor}>Open editor</button>
+        <button type="button" class="btn btn-pill btn-strip" onclick={onOpenEditor}>
+          Open editor
+        </button>
       {/if}
-      <button type="button" class="ack" disabled={!canSave} onclick={onSave}>Save</button>
-      <button type="button" class="ack ack--warning" onclick={tapCancel}>
+      <button type="button" class="btn btn-pill btn-strip" disabled={!canSave} onclick={onSave}>
+        Save
+      </button>
+      <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapCancel}>
         {cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}
       </button>
     </div>

@@ -29,7 +29,7 @@ function renderStrip(xteAlarming = false): string {
 describe('NavStrip', () => {
   it('starts the stop control unarmed and labels it by its visible text', () => {
     const body = renderStrip();
-    expect(body).toMatch(/<button[^>]*class="ack"[^>]*>\s*Stop\s*<\/button>/);
+    expect(body).toMatch(/<button[^>]*class="btn btn-pill btn-strip"[^>]*>\s*Stop\s*<\/button>/);
     expect(body).not.toContain('Confirm stop?');
     // A fixed aria-label would keep saying "Stop navigation" while the visible text reads
     // "Confirm stop?", which contradicts the label-in-name rule.

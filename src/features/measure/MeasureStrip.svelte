@@ -111,7 +111,7 @@ $effect(() => {
       <div class="actions">
         <button
           type="button"
-          class="ack"
+          class="btn btn-pill btn-strip"
           disabled={!measure.canUndo || measure.moveArmed}
           onclick={() => measure.undo()}
         >
@@ -119,14 +119,16 @@ $effect(() => {
         </button>
         <button
           type="button"
-          class="ack"
+          class="btn btn-pill btn-strip"
           disabled={measure.isEmpty || measure.moveArmed}
           bind:this={clearTrigger}
           onclick={() => (clearArmed = true)}
         >
           Clear
         </button>
-        <button type="button" class="ack" onclick={() => measure.stop()}>Done</button>
+        <button type="button" class="btn btn-pill btn-strip" onclick={() => measure.stop()}>
+          Done
+        </button>
       </div>
     </div>
 
@@ -139,7 +141,7 @@ $effect(() => {
       <div class="actions">
         <button
           type="button"
-          class="ack"
+          class="btn btn-pill btn-strip"
           disabled={measure.atLimit || measure.moveArmed}
           onclick={() => addPoint(position)}
         >
@@ -148,7 +150,7 @@ $effect(() => {
         {#if getChartCenter}
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             disabled={measure.atLimit || measure.moveArmed}
             onclick={addCenter}
           >
@@ -157,7 +159,7 @@ $effect(() => {
         {/if}
         <button
           type="button"
-          class="ack"
+          class="btn btn-pill btn-strip"
           disabled={measure.selectedId === undefined}
           onclick={moveToCoordinates}
         >
@@ -188,7 +190,7 @@ $effect(() => {
         <div class="point-actions">
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             aria-label="Previous measurement point"
             disabled={measure.selectedIndex === undefined || measure.selectedIndex === 0}
             onclick={() => measure.selectPrevious()}
@@ -197,7 +199,7 @@ $effect(() => {
           </button>
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             aria-label="Next measurement point"
             disabled={measure.selectedIndex === undefined ||
               measure.selectedIndex === measure.vertices.length - 1}
@@ -207,7 +209,7 @@ $effect(() => {
           </button>
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             disabled={measure.selectedId === undefined}
             aria-pressed={measure.moveArmed}
             onclick={() => (measure.moveArmed ? measure.cancelMove() : measure.armMove())}
@@ -215,13 +217,13 @@ $effect(() => {
             {measure.moveArmed ? 'Cancel move' : 'Move point'}
           </button>
           {#if measure.moveArmed && onMoveSelectedToCenter}
-            <button type="button" class="ack" onclick={onMoveSelectedToCenter}>
+            <button type="button" class="btn btn-pill btn-strip" onclick={onMoveSelectedToCenter}>
               Move to chart center
             </button>
           {/if}
           <button
             type="button"
-            class="ack ack--danger"
+            class="btn btn-pill btn-strip btn-danger"
             disabled={!measure.canDeleteSelected || measure.moveArmed}
             aria-label={selectedNumber === undefined
               ? 'Delete selected measurement point'
@@ -299,17 +301,8 @@ $effect(() => {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.point-actions .ack {
+.point-actions .btn-strip {
   margin-inline-start: 0;
-}
-.point-actions .ack--danger {
-  color: var(--alarm);
-  border-color: var(--alarm);
-}
-@media (hover: hover) and (pointer: fine) {
-  .point-actions .ack--danger:hover:not(:disabled) {
-    background: var(--alarm-tint);
-  }
 }
 .selected-readout {
   border-block-start: 1px solid var(--border);
@@ -320,7 +313,7 @@ $effect(() => {
   .point-actions {
     inline-size: 100%;
   }
-  .point-actions .ack {
+  .point-actions .btn-strip {
     flex: 1 1 auto;
   }
 }

@@ -243,8 +243,10 @@ function chipDescription(condition: ChipCondition): string {
   color: var(--warning);
   border-color: var(--warning);
 }
-/* Acknowledged conditions dim the same way an acknowledged strip does. */
+/* Acknowledged conditions step down by a dashed border and plain weight, as an acknowledged strip
+   does, never by opacity. */
 .chip--acked {
-  opacity: 0.62;
+  border-style: dashed;
+  font-weight: 400;
 }
 </style>

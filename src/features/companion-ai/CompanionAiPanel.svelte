@@ -111,7 +111,7 @@ onDestroy(() => {
                 </button>
               </div>
               {#if note}
-                <p class="muted-note ack" role="status">{note}</p>
+                <p class="muted-note ack-note" role="status">{note}</p>
               {/if}
             </li>
           {/each}
@@ -161,7 +161,7 @@ onDestroy(() => {
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
-.ack {
+.ack-note {
   margin: 0;
 }
 </style>

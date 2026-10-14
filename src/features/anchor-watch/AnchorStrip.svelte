@@ -51,13 +51,13 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
                not silently disarm the alarm the grace is still counting toward. -->
           <button
             type="button"
-            class="ack"
+            class="btn btn-pill btn-strip"
             disabled={!anchor.dragging && !anchor.blindAlarm}
             onclick={() => anchor.acknowledge()}
           >
             Acknowledge
           </button>
-          <button type="button" class="ack ack--warning" onclick={tapRaise}>
+          <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapRaise}>
             {raiseArm.armed ? 'Confirm raise?' : 'Raise anchor'}
           </button>
         </div>
