@@ -26,13 +26,13 @@ During edits, the fast per-file loop:
 2. `npm run check` (svelte-check plus the tsgo TypeScript passes)
 3. `npx @biomejs/biome ci <files>` (no-write verify, the same engine the commit hook runs)
 
-Then run `npm run verify:commit` before committing. The pre-push hook runs
-`npm run verify:browser`, including type checks, coverage, a production build, bundle budgets, and
-every project in `playwright.config.ts` without a duplicate build: Chromium, PWA, desktop and mobile
-WebKit UI, and focused live safety scenarios. CI runs `npm run verify:ci`, which adds package integrity
-and both runtime and development dependency audits. `npm run verify:release` adds the release-specific
-package checks. Standalone `test:e2e:gate` expects an existing production build; `test:e2e:fast` builds
-and runs Chromium only, while `test:e2e:cross-browser` builds and runs all projects.
+Then run `npm run verify:commit` before committing. The pre-push hook runs `npm run verify`, including
+type checks, coverage, a production build, and bundle budgets. Run `npm run verify:browser` before
+pushing UI work. It adds every project in `playwright.config.ts` without a duplicate build: Chromium,
+PWA, desktop and mobile WebKit UI, and focused live safety scenarios. CI runs `npm run verify:ci`,
+which adds package integrity and both runtime and development dependency audits to that browser gate.
+`npm run verify:release` adds the release-specific package checks. Standalone `test:e2e:gate` expects an existing production build; `test:e2e:fast` builds and
+runs Chromium only, while `test:e2e:cross-browser` builds and runs all projects.
 
 Tooling traps, each of which has bitten us:
 

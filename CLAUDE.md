@@ -111,10 +111,17 @@ not have to be corrected after the fact.
 - Other owners: dependency-cruiser enforces Feature-Sliced Design and cycles, Knip owns unused
   files, exports, and dependencies, markdownlint and cspell own maintained prose, Vitest V8 owns
   the coverage floor, Size Limit owns built asset budgets, and publint plus
-  `scripts/check-package.mjs` own package integrity.
+  `scripts/check-package.mjs` own package integrity. `scripts/check-prose.mjs` (`npm run
+  lint:prose`) owns the em dash, ampersand, and chartplotter spelling rules across the working tree,
+  plus the App Store link rule for `README.md` and `CHANGELOG.md` (`scripts/store-links.mjs`): only
+  http, https, mailto, and `#anchor` link targets, while relative image paths stay allowed.
 - Workflow gates are split by what they can prove. `scripts/check-workflows.mjs` (`npm run
   ci:workflows`) owns this repository's own CI invariants: the pinned npm bootstrap, its location
-  outside the checkout, and setup-node's disabled package-manager cache. zizmor owns generic GitHub
+  outside the checkout, setup-node's disabled package-manager cache, a Playwright browser install
+  before every browser suite covering each engine that `playwright.config.ts` projects and the Vitest
+  browser instances launch (derived from those configs, so a new WebKit or Firefox project fails
+  until every workflow running it installs the engine), and the dependency audit gates below.
+  zizmor owns generic GitHub
   Actions security (token persistence, injection through untrusted expressions, unpinned action
   references) and runs as its own `workflow-security` job in `ci.yml` at a medium severity floor.
   Every action reference is pinned to an immutable commit SHA with a version comment, and every
@@ -124,7 +131,11 @@ not have to be corrected after the fact.
   at the step.
 - Dependency audits are two distinct gates and stay that way: `npm run audit:runtime`
   (`--omit=dev`) is what the community registry scores, and `npm run audit:full` covers the build
-  and test toolchain a maintainer still has to keep clean. `verify:release` runs both.
+  and test toolchain plus the browser libraries bundled into the shipped assets. Both gate CI on
+  every push and pull request (`verify:ci`) and every publish (`verify:release`), and
+  `check-workflows.mjs` enforces that. Binnacle differs from the sibling plugins, which run the full
+  audit only on a schedule: its shipped code is bundled from devDependencies, so the full audit is
+  its real runtime audit.
 - `signalk-chart-sources` is the single upstream authority for a raster overlay's service URL, layer
   name, zoom range, bounds, coverage, and attribution. A feature declares only what the catalog
   deliberately does not carry: the plain-language description, the region tag, the panel category,
@@ -245,28 +256,33 @@ not have to be corrected after the fact.
 
 Never commit or push on a red gate. A commit message must never claim "green" before the gate
 has actually run and passed. This was violated repeatedly early on, so it is now enforced by git
-hooks in `.githooks/`, wired via `npm run hooks` (a non-lifecycle script, never a `prepare` hook,
-per the SignalK pack-banner caveat above):
+hooks in `.githooks/`, wired via `npm run hooks`. That is a non-lifecycle script, never a `prepare`
+hook: npm 10, which Node 22 bundles, runs `prepare` even under `npm pack --ignore-scripts` and
+writes its output into the pack output CI captures.
 
-- `pre-commit` runs `npm run verify:commit`, the shared formatting, lint, prose, architecture, and
-  dead-code gate.
-- `pre-push` runs `npm run verify:browser`, the full type, coverage, build, size, and browser gate.
-  Every project in `playwright.config.ts` participates: Chromium, PWA, WebKit smoke, desktop and mobile
-  WebKit UI, and focused WebKit live safety scenarios. Playwright reuses the production build from
-  `verify`, without a duplicate build.
-  A failure blocks the push.
+- `pre-commit` runs `npm run verify:commit`, the shared workflow policy, formatting, lint, prose,
+  architecture, and dead-code gate.
+- `pre-push` runs `npm run verify`: `verify:commit` again, then type checks, coverage (including the
+  Vitest `client-svelte` project in headless Chromium), the production build, and size budgets. A
+  failure blocks the push. The Playwright suite is not part of it: CI runs every project in
+  `playwright.config.ts` (Chromium, PWA, WebKit smoke, desktop and mobile WebKit UI, and focused
+  WebKit live safety scenarios) through `verify:ci`. Run `npm run verify:browser` locally before
+  pushing a change to the app shell, layout, map, or browser behavior; it reuses the production
+  build from `verify`, without a duplicate build.
 - `pre-push` also prints a non-blocking drift report: any uncommitted tracked changes and any
   local branch besides `main`. This exists so stray work is seen at the moment of pushing, not
   rediscovered later with unknown provenance. When it fires, commit, discard, or stash the
   changes and delete merged branches before moving on; do not let the tree drift.
 
-Follow `AGENTS.md` for commit and publishing authority. Keep significant work verified and
-review-ready, but do not push, publish, tag, or release without the authorization that guide requires.
+Commit and publishing authority is in `AGENTS.md`: the owner has given standing authorization to
+commit and push gate-green work to `main`, while a version change, tag, GitHub release, or npm
+publication still needs the owner's explicit go immediately before that step.
 
 The full command hierarchy lives in `package.json`: `verify:fast` adds type checks to `verify:commit`,
 `verify` adds coverage, build, and size budgets, and `verify:browser` adds the existing-build browser
-matrix. `verify:ci` also checks package integrity and both dependency audits. `verify:release` uses
-the release-specific package checks. `test:e2e:fast` builds and runs Chromium only;
+matrix. `verify:ci` is `verify:browser` plus package integrity and both dependency audits.
+`verify:release` uses the release-specific package checks and also runs both dependency audits.
+`test:e2e:fast` builds and runs Chromium only;
 `test:e2e:cross-browser` builds and runs all projects. Do not start competing Playwright suites on
 their shared preview and fixture ports.
 
@@ -281,17 +297,17 @@ are copied into the generated `public/` build output.
 
 The working rhythm: write every file, run the gate capturing each result to a file and reading it
 back (shell output on this Pi intermittently truncates, so trust the file, not a glanced line),
-confirm all green, and only then commit and push. Swap covers concurrent heavy commands now, so
-running several gate steps at once is fine (see "Pi memory" below).
+confirm all green, and only then commit and push. Run at most two heavy commands at once, and
+never two browser suites or two gates in the same checkout (see "Pi memory" below).
 
-Agent teams are allowed for Binnacle work, including `TeamCreate` (per the global rules), as are
-parallel Agent-tool subagents scoped to disjoint files. Whatever the mechanism, the lead (main
-thread) owns `package.json`, all git commits, and all heavy commands, and teammates are laned to
-non-overlapping files so a shared file never has two editors. The lead integrates the shared and
-wiring files itself, runs the gate, commits in logical chunks, and runs review subagents
-(code-reviewer, silent-failure-hunter) on the integrated diff, fixing every finding. When using
-`TeamCreate`, follow the global rules for the structured `shutdown_request` and verifying the tmux
-panes actually closed before `TeamDelete`.
+Work solo by default. Use subagents only for genuinely independent fan-out, and an agent team only
+for multi-hypothesis debugging or competing designs, never for routine review. Teammates are
+background Agent spawns; there is no `TeamCreate` and no tmux pane. Read-only review lanes run on
+sonnet. Whatever the mechanism, the lead (main thread) owns `package.json`, all git commits, and
+all heavy commands, and helpers are laned to non-overlapping files so a shared file never has two
+editors. The lead integrates the shared and wiring files itself, runs the gate, and commits in
+logical chunks. Helpers record findings in their task descriptions and send the lead a
+self-contained summary with SendMessage.
 
 ## Modularity is a first-class rule
 
@@ -685,34 +701,39 @@ last year, and a stable API surface.
 ## Release policy: version changes are the owner's call
 
 Do not change the package version, publish to npm, create a release, or tag a commit without explicit
-owner approval. The owner chooses whether a release is a patch, minor, or major version. The full
-release verification checklist applies regardless of version size.
+owner approval. Propose the next version with a one-line reason instead of asking which one; the
+owner approves it, and the tag and publish still need the owner's go. The full release verification
+checklist applies regardless of version size.
 
 `docs/releasing.md` is the operational checklist. Release preparation may update metadata, notes,
 documentation, tests, and workflows, but it never authorizes the final tag, published GitHub release,
 or npm publication. The npm workflow runs only when a GitHub release is intentionally published.
 
-## Build policy (every major step)
+## Review and build policy
 
-- Agent team: each major step may use an agent team of up to 6 expert agents, with at least one
-  Signal K expert on steps that touch the integration. Give each a distinct, non-overlapping
-  lens to avoid file conflicts.
-- Cleanup gate: each major step finishes with the `/cleanup` skill.
-- Fix everything: fix every finding from review, cleanup, linters, and human review, including
-  low and nit. The only acceptable skip is factually refuted or by-design after honest
-  scrutiny, with a one-line reason.
-- Verification: after fixing, run type-check, tests, lint, and build, and confirm green before
-  claiming a step done.
-- Each numbered step in the spec's build order is a major step under this policy.
+- One review pass per push: `/code-review` on the diff. Skip it for docs-only, dependency-only, and
+  release-prep pushes. `/simplify` and `/cleanup` run only when the owner asks.
+- Fix high and medium findings. Fix a low only when it sits in lines the diff already touches and
+  the fix is local; otherwise list it. Drop nits. Linter and type errors are always fixed, and
+  every human maintainer comment on a pull request is addressed. A refuted or by-design finding is
+  stated with its reason, never skipped silently.
+- One round: re-review only the fix diff, and only when a fix changed behavior. A round that yields
+  only lows ends the loop. A finding class flagged twice becomes a deterministic guard (a script,
+  lint rule, or test) instead of another review.
+- Steps that touch the Signal K integration load the `signalk-development` skill; that replaces a
+  dedicated Signal K reviewer.
+- Verification: after fixing, run `npm run verify` (plus `npm run verify:browser` when browser
+  behavior changed) and confirm green before claiming a step done.
 
-## Pi memory: swap covers concurrent heavy commands
+## Pi memory: at most two heavy commands at once
 
-This runs on a Raspberry Pi 5 (8 GB RAM, 4 cores) with 9 GB of swap configured, so concurrent
-heavy verification commands (type-check, lint, test, build) no longer OOM-kill the session: the
-earlier one-heavy-command-at-a-time restriction is lifted. Running several at once is fine when it
-saves wall-clock; expect swap to slow each one under memory pressure, so do not fan out so wide
-that thrashing costs more than it saves. `NODE_OPTIONS="--max-old-space-size=2048"` is no longer
-required, though it remains a harmless backstop on a memory-heavy run.
+This runs on a Raspberry Pi 5 (8 GB RAM, 4 cores) with 15 GB of swap, so a second concurrent heavy
+command (type checks, full lint, test runners, builds, and browser suites) no longer OOM-kills the
+session. Keep at most two heavy commands running at once across all sessions and agents, and never
+two browser suites at once: earlyoom prefers browsers and reaps the browser together with the Vite
+preview and fixture servers. Never run two gates in the same checkout either, because both write
+`coverage/.tmp/` and the second run's cleanup fails the first. `NODE_OPTIONS="--max-old-space-size=2048"`
+is not required, though it remains a harmless backstop on a memory-heavy run.
 
 ## Style rules (override defaults)
 

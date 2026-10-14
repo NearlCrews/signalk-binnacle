@@ -415,14 +415,16 @@ npm run size       # compressed production bundle budgets
 npm run verify     # complete non-browser local and CI gate
 npm run test:e2e:fast # Build, then run the Chromium browser checks only (no offline/PWA or WebKit coverage; use test:e2e:cross-browser or test:e2e:gate for the full spread)
 npm run test:e2e:cross-browser # Build, then run Chromium, PWA, and WebKit checks
+npm run verify:browser # verify plus the existing-build browser matrix
 npm run verify:ci  # full pull request gate, including an Unreleased development version
 npm run verify:release # full gate, cross-browser E2E, package checks, and both dependency audits
 ```
 
-After `npm run hooks`, git runs `verify:commit` before each commit and `verify:browser` before each
-push. The hooks live in `.githooks/` and are opt-in via `core.hooksPath`, never a package lifecycle
-script. The E2E commands build first, while the pre-push
-`test:e2e:gate` reuses the existing `public/` build from `verify` so a push does not rebuild.
+After `npm run hooks`, git runs `verify:commit` before each commit and `verify` before each push.
+The hooks live in `.githooks/` and are opt-in via `core.hooksPath`, never a package lifecycle
+script. CI runs the browser suites on every push and pull request; run `npm run verify:browser`
+locally when a change affects browser behavior. Its `test:e2e:gate` step reuses the `public/` build
+from `verify` instead of rebuilding, while the E2E commands above build first.
 
 Maintainers preparing a version should follow the release checklist in `docs/releasing.md`.
 Preparation does not authorize a tag, GitHub release, or npm publication.

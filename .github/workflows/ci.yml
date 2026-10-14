@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -31,6 +32,9 @@ jobs:
           # would need security-events: write on a job that reads workflow files.
           advanced-security: false
 
+  # The one full gate per push: the Node-independent checks, unit and Playwright browser tests,
+  # package integrity, and both dependency audits. The full audit gates every push because the
+  # shipped browser code is bundled from devDependencies.
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45

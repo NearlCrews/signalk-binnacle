@@ -1,5 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { matchesNodeFloor, parseWorkflow, workflowFailures } from './workflow-policy.mjs';
+import { devices } from '@playwright/test';
+import {
+  browserInstallFailures,
+  isFullAudit,
+  leafCommands,
+  matchesNodeFloor,
+  parseWorkflow,
+  playwrightProjectEngines,
+  vitestBrowserEngines,
+  workflowFailures,
+} from './workflow-policy.mjs';
 
 const workflowDir = '.github/workflows';
 const workflowPaths = readdirSync(workflowDir)
@@ -44,8 +54,37 @@ if (!enginesMatch) {
   }
 }
 
+// Browser engines come from the suite configs themselves, so adding a WebKit or Firefox project
+// fails here until every workflow that runs the suite installs that engine.
+const scripts = packageJson.scripts ?? {};
+const e2e = playwrightProjectEngines(readFileSync('playwright.config.ts', 'utf8'), devices);
+const vitest = vitestBrowserEngines(readFileSync('vite.config.ts', 'utf8'));
+failures.push(...e2e.failures, ...vitest.failures);
+
 for (const path of workflowPaths) {
-  failures.push(...workflowFailures(readFileSync(path, 'utf8'), path, supportedNpmVersion));
+  const source = readFileSync(path, 'utf8');
+  failures.push(...workflowFailures(source, path, supportedNpmVersion));
+  failures.push(
+    ...browserInstallFailures(source, path, scripts, { e2e: e2e.engines, vitest: vitest.engines }),
+  );
+}
+
+// verify is the pre-push gate: no Playwright suite and no network audit. The browser libraries ship
+// bundled from devDependencies, so the full audit is this webapp's real runtime audit and gates both
+// CI (verify:ci) and publication (verify:release).
+const pushGate = leafCommands('npm run verify', scripts);
+if (pushGate.some((command) => /\bplaywright\s+test\b/u.test(command))) {
+  failures.push(
+    'package.json verify must not run the Playwright suite; that belongs in verify:browser.',
+  );
+}
+if (pushGate.some(isFullAudit)) {
+  failures.push('package.json verify must not run the full dependency audit; verify:ci does.');
+}
+for (const name of ['verify:ci', 'verify:release']) {
+  if (!leafCommands(`npm run ${name}`, scripts).some(isFullAudit)) {
+    failures.push(`package.json ${name} must run the full dependency audit.`);
+  }
 }
 
 if (failures.length > 0) {
@@ -53,4 +92,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('Workflow package-manager bootstrap verified.');
+console.log('Workflow bootstrap, browser installs, and gate composition verified.');

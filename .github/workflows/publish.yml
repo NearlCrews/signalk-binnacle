@@ -2,8 +2,8 @@ name: Publish to npm
 
 # Fires when a GitHub release is published (the v<version> tag). Builds the production webapp into
 # public/ and publishes the tarball to npm with a provenance attestation. Binnacle has no prepare
-# or prepack lifecycle script (per the Signal K pack-banner caveat), so the build is an explicit
-# step before publish rather than a lifecycle hook.
+# or prepack lifecycle script (npm 10 runs prepare even under npm pack --ignore-scripts), so the
+# build is an explicit step before publish rather than a lifecycle hook.
 
 on:
   release:

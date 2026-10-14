@@ -1,6 +1,6 @@
 #!/bin/sh
-# Fast gate on every commit: format, lint, module-boundary, and dead-code checks.
-# Heavier gates (type-check, tests, build, e2e) run in pre-push.
+# Fast gate on every commit: workflow policy, format, lint, prose, module-boundary, and dead-code
+# checks. Type checks, tests, the build, and size budgets run in pre-push; Playwright runs in CI.
 set -e
 
 echo "[pre-commit] commit verification"

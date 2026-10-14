@@ -32,13 +32,14 @@ serves, and any implementation ideas you have.
 2. Follow the [Development section of the README](../README.md#development)
    for setup, build, and test commands. `npm install` provides the repository-local tools; install
    the browser binaries with `npx playwright install chromium webkit` before browser tests.
-3. Run `npm run hooks` once so the git pre-commit and pre-push gates run for you.
+3. Run `npm run hooks` once so the git hooks run `npm run verify:commit` before each commit and
+   `npm run verify` before each push.
 4. Make focused commits with clear messages (see below).
 5. Add tests for any new functionality and keep the existing suite green.
 6. Run `npm run verify`. Run `npm run verify:browser` when browser behavior is affected. CI runs
-   `npm run verify:ci`, including Chromium, WebKit, package, runtime dependency, and full dependency
-   audit checks. `test:e2e:gate` uses the existing production build and runs every configured browser
-   project.
+   `npm run verify:ci`, which adds the Chromium and WebKit browser suites, package integrity, and the
+   runtime and full dependency audits. `test:e2e:gate` uses the existing production build and runs
+   every configured browser project.
 7. Update documentation (`README.md`, `CHANGELOG.md`) as needed.
 8. Open a pull request with a clear description of the change.
 

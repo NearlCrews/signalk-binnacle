@@ -76,7 +76,8 @@ Both audits matter for this static webapp. `audit:runtime` checks the production
 which has no runtime npm dependencies. `audit:full` also checks the browser libraries and build
 toolchain in `devDependencies`; those browser libraries can still contribute code to the shipped
 assets. A clean production-only audit does not establish that the bundled browser code is free of
-known dependency vulnerabilities.
+known dependency vulnerabilities. That is why CI runs both audits on every push and pull request,
+not only at release time.
 
 The build generates `public/THIRD_PARTY_NOTICES.txt` and its JSON inventory from emitted JavaScript
 modules and asset origins across the app, workers, and service worker. Both files must ship in the
@@ -101,7 +102,8 @@ GitHub workflows disable `setup-node` package-manager caching until the pinned n
 installed from the runner's temporary directory. Keep that bootstrap order when changing the Node
 matrix or npm requirement. `devEngines` rejects an unsupported bundled npm before a command run from
 the repository can upgrade it. The commit gate runs `ci:workflows` to enforce this ordering across
-the CI, compatibility-matrix, and publication workflows.
+every workflow. It also checks the Playwright browser installs and that `verify:ci` and
+`verify:release` run both dependency audits.
 
 Before requesting publication approval, also confirm:
 

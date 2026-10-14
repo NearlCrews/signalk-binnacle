@@ -58,7 +58,7 @@ Dependency-cruiser enforces the rule.
 
 - No em dashes in committed text, docs, code comments, commit messages, or PR text.
 - Use Oxford commas in lists of three or more.
-- Do not use `and` as `&` in human-readable text. Use `&` only where syntax or a proper noun requires it.
+- Write `and`, not `&`, in human-readable text. Use `&` only where syntax or a proper noun requires it.
 - Do not mention AI process, agent passes, or review mechanics in changelogs, commits, PR text, or docs.
 - Use American English.
 
@@ -87,9 +87,12 @@ For substantial changes, run the full gate before claiming done:
 
 `npm run verify`
 
-Run `npm run verify:browser` when the app shell, layout, instruments, chart lifecycle, or browser
-behavior is touched. The preview server may require approval to bind localhost in sandboxed Codex
-sessions.
+The git hooks enforce the same split after `npm run hooks`: pre-commit runs `verify:commit` and
+pre-push runs `verify`. CI runs `verify:ci`, which adds the Playwright suite. Run
+`npm run verify:browser` before pushing when the app shell, layout, instruments, chart lifecycle, or
+browser behavior is touched. The preview server may require approval to bind localhost in sandboxed
+Codex sessions. On the development Pi, run at most two heavy commands at once and never two browser
+suites at once.
 
 The layered gates are `verify:commit` (workflow policy, lint, prose, boundaries, and dead code),
 `verify:fast` (adds type checks), `verify` (adds coverage, build, and sizes), and `verify:browser`
@@ -102,7 +105,7 @@ answered), `openMenuItem` (open the app menu and activate one tile, scoped to th
 label that also names a bar pill cannot match the wrong control), and `expectInsideViewport`. Reach
 for those before writing a file-local copy, because a file-local helper is invisible to the other
 specs and each one ends up re-rolling it. `test:e2e:gate` runs every project in
-`playwright.config.ts`, so new browser projects participate in both the local push gate and CI.
+`playwright.config.ts`, so new browser projects participate in both `verify:browser` and CI.
 For interaction assertions, test the action directly: a preliminary visibility or geometry wait can
 mask a focus-before-layout defect. For layout assertions, wait for the explicit data state under test
 before measuring controls; connection, GPS, and retained-data notices can legitimately resize chrome.
@@ -129,8 +132,10 @@ which does see template usage, is the real backstop.
 - The repo normally works directly on `main`.
 - Do not revert user changes unless explicitly asked.
 - Keep scratch files in `tmp/`.
-- After significant green work, commit and push to `main` only when the user has asked for that flow or
-  the active task clearly includes publishing the local changes.
+- The owner has given standing authorization to commit and push gate-green work to `main` when a task
+  finishes, so significant work does not linger uncommitted. A session instruction such as local-only
+  or no-push overrides it. It never covers a version change, tag, GitHub release, or npm publication;
+  those need the owner's explicit go immediately before the step.
 
 ## Shared skills
 

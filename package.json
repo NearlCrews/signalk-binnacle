@@ -89,7 +89,7 @@
     "lint:docs": "markdownlint --dot \"*.md\" \".github/*.md\" \"docs/*.md\"",
     "lint:fix": "biome lint --write . && npm run lint:code -- --fix",
     "spellcheck": "cspell --no-progress --show-suggestions --cache --cache-location .cache/cspell",
-    "lint:prose": "node scripts/check-package.mjs --prose-only",
+    "lint:prose": "node scripts/check-prose.mjs",
     "ci:biome": "biome ci .",
     "ci:workflows": "node --test scripts/*.test.mjs && node scripts/check-workflows.mjs",
     "cruise": "depcruise src --config .dependency-cruiser.cjs --cache",
