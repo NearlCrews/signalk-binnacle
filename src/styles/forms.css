@@ -7,7 +7,7 @@
 .input {
   min-block-size: var(--control-size);
   padding-inline: var(--space-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text);
@@ -33,11 +33,101 @@
   appearance: none;
 }
 
-/* Theme native checkboxes and radios so they match the accent color in every theme, instead of
-   the user-agent default blue. */
+/* Drawn checkboxes and radios: the browser control draws a gray unchecked box in a dark color
+   scheme, which breaks night-red's red-on-black contract and reads as an OS default beside the
+   rest of the chrome. Half the panel corner keeps a 20 px box from reading as a circle. The check
+   is a mask, so it takes the accent-contrast token in every theme. */
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: var(--accent-fill);
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex-shrink: 0;
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  margin: 0;
+  border: 2px solid var(--border-control);
+  border-radius: calc(var(--radius-md) / 2);
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+input[type="radio"] {
+  border-radius: 50%;
+}
+input[type="checkbox"]::before {
+  content: "";
+  inline-size: 0.8rem;
+  block-size: 0.8rem;
+  background: var(--accent-contrast);
+  -webkit-mask:
+    url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>')
+    center / contain no-repeat;
+  mask:
+    url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>')
+    center / contain no-repeat;
+  transform: scale(0);
+}
+input[type="checkbox"]:checked {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+}
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+input[type="radio"]::before {
+  content: "";
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  transform: scale(0);
+}
+input[type="radio"]:checked {
+  border-color: var(--accent-fill);
+}
+input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: not-allowed;
+}
+/* Windows high contrast replaces author colors; the native control is the one that still shows
+   its state there, at the square checkbox size even where a switch drew it wider. */
+@media (forced-colors: active) {
+  input[type="checkbox"],
+  input[type="radio"] {
+    appearance: auto;
+    -webkit-appearance: auto;
+    inline-size: var(--checkbox-size);
+    block-size: var(--checkbox-size);
+  }
+  input[type="checkbox"]::before,
+  input[type="radio"]::before {
+    content: none;
+  }
+}
+
+/* The select box: the .input boundary plus a chevron drawn from two gradient triangles in the
+   muted text token, so it follows every theme with no browser chrome. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: calc(var(--space-2) + 1.1rem);
+  background-color: var(--surface-raised);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--space-2) - 0.5rem) 52%,
+    calc(100% - var(--space-2) - 0.15rem) 52%;
+  background-size: 0.35rem 0.35rem;
+  background-repeat: no-repeat;
 }
 
 /* A row of action buttons under a panel header (New route, Save and Cancel), shared so the panels do
@@ -61,12 +151,12 @@ input[type="radio"] {
 .range::-webkit-slider-runnable-track {
   block-size: var(--range-track-h);
   border-radius: var(--radius-pill);
-  background: var(--border);
+  background: var(--border-control);
 }
 .range::-moz-range-track {
   block-size: var(--range-track-h);
   border-radius: var(--radius-pill);
-  background: var(--border);
+  background: var(--border-control);
 }
 .range::-webkit-slider-thumb {
   -webkit-appearance: none;

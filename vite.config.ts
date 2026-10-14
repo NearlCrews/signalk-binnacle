@@ -98,10 +98,9 @@ export default defineConfig({
   },
   test: {
     // Vitest stubs CSS imports as empty modules by default (real CSS processing is wasted work for
-    // most tests); map-theme.test.ts needs the real tokens.css text to cross-check its hand-copied
-    // colors, the tile tests need instruments.css for the hero-scaling contract, and the safe-area
-    // test needs panels.css for the docked panel insets, so opt those files back in.
-    css: { include: [/tokens\.css/, /styles\/instruments\.css/, /styles\/panels\.css/] },
+    // most tests). The design contract, token, tile, and safe-area tests read the real stylesheet
+    // text, so every stylesheet under src/styles is processed rather than stubbed.
+    css: { include: [/src\/styles\/[^?]+\.css/] },
     // ICU warm-up for every worker; see the file's comment.
     setupFiles: ['./vitest.setup.ts'],
     // Headroom for oversubscribed CI runners (the v0.6.0 Windows Node 22 machine spent 63 s just

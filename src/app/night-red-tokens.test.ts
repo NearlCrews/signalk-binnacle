@@ -42,6 +42,7 @@ const TOKEN_NAMES = [
   '--surface-raised',
   '--surface-overlay',
   '--border',
+  '--border-control',
   '--text',
   '--text-muted',
   '--accent',

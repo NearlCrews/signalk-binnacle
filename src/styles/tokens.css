@@ -99,6 +99,10 @@
   --surface-raised: #ffffff;
   --surface-overlay: var(--surface-raised);
   --border: #aac3d6;
+  /* The boundary of every interactive control (inputs, selects, checkboxes, switches, slider
+     rails): at least 3:1 against the surfaces controls sit on, so a field reads as a field in
+     sunlight. --border stays for dividers and cards. */
+  --border-control: #5c7d94;
   --text: #0b2233;
   --text-muted: #3f586b;
   /* Degraded readouts stay secondary by color, not opacity, so they retain measured contrast. */
@@ -198,6 +202,7 @@
   --surface-raised: #10212e;
   --surface-overlay: #0d1821;
   --border: #233646;
+  --border-control: #4f7391;
   --text: #bcd2e4;
   --text-muted: #8aa6bd;
   /* Brightened from #2c6da3 to clear WCAG AA (4.5:1) as text/border on every dark surface (was
@@ -245,6 +250,8 @@
   /* A deeper red border than near-black, so panel and card separation stays visible at night where
      --shadow-overlay is dropped, while keeping the pixel dark. */
   --border: #5a1900;
+  /* Deliberately dim: about 2:1, the value the prefers-contrast block already trusts for --border. */
+  --border-control: #7a2200;
   /* Brightened from #c8362a to clear WCAG AA (4.5:1) on all three surfaces; the owner chose
      readability over the last fraction of dark-adaptation headroom for body text specifically.
      The green (G:R 0.32) is what carries that AA on true black. */
@@ -300,6 +307,7 @@
   :root {
     --text-muted: #253d4f;
     --border: #5c7d94;
+    --border-control: var(--text-muted);
     /* Disabled controls stay visibly disabled, just no longer near-invisible. */
     --disabled-opacity: 0.6;
   }
@@ -307,6 +315,7 @@
   :root[data-theme="dusk"] {
     --text-muted: #a3bcd1;
     --border: #3a5670;
+    --border-control: #8aa6bd;
   }
 
   :root[data-theme="night-red"] {
@@ -314,5 +323,6 @@
        raise is collapsing the muted tier into body text rather than inventing a brighter red. */
     --text-muted: var(--text);
     --border: #7a2200;
+    --border-control: #a23500;
   }
 }
