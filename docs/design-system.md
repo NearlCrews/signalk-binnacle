@@ -153,8 +153,9 @@ The chart follows the theme too. Every theme recolors the OpenFreeMap base map f
 `src/shared/map/map-theme.ts`: day is a paper chart whose land and shallow water match the NOAA chart
 overlay, dusk and night-red are dark charts, and the bright-sun variant is day's high-contrast cream
 palette. The base layers take the palette the moment the style arrives, so the first frame never
-shows the source style's own colors. A new base-map color goes into those palettes, never into a
-layer by id.
+shows the source style's own colors. A new base-map color goes into those palettes, and the recolor
+maps each base layer to a palette key by its source layer, never a color to a layer id. The one
+synthetic layer, the offline fallback, maps to the water key.
 
 You almost never write theme-specific CSS. You write tokens, and the theme carries the value. The rules
 that matter when you do touch this:

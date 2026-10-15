@@ -85,8 +85,9 @@ p,
 /* An inline note led by a status icon, with the text wrapping under itself rather than under the
    icon: the weather warning banners and the degraded-monitor notes both read this way. The 0.15rem
    icon nudge is the settled offset that sits a 14px glyph on the first line's cap height at the
-   --text-sm body size both notes use; one rule so the two cannot drift apart. Composed over the
-   note's own look (.alert-note, .muted-note) and its severity color. */
+   --text-sm body size both notes use; the prose leading moves that first line down by half its
+   extra height over Inter's own 1.21em, so the nudge adds the same. One rule so the two cannot
+   drift apart. Composed over the note's own look (.alert-note, .muted-note) and its severity color. */
 .icon-note {
   display: flex;
   align-items: start;
@@ -94,7 +95,7 @@ p,
 }
 .icon-note svg {
   flex: 0 0 auto;
-  margin-block-start: 0.15rem;
+  margin-block-start: calc(0.15rem + (1lh - 1.21em) / 2);
 }
 
 /* A note or readout chip that carries its own action inline: the label and its control share one

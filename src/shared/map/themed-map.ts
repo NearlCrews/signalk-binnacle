@@ -105,10 +105,6 @@ const MAP_CONTEXT_ATTRIBUTES = {
 } satisfies WebGLContextAttributes;
 const mapContextSupport = new WeakMap<Document, boolean>();
 
-// The default canvas ratio is the device pixel ratio capped at 2: past 2x a high-DPI helm display
-// roughly quadruples the fragment work over 1x for no chart detail the eye can use, and holding
-// frame rate on Pi-class helms matters more. An explicit pixelRatio option still wins, and an
-// environment without a window keeps MapLibre's own default.
 function themeBase(map: maplibregl.Map, paint: MapThemePaint): void {
   // The three base passes filter the style to the same themable layers; compute that list once.
   const layers = themableBaseLayers(map);
@@ -117,6 +113,10 @@ function themeBase(map: maplibregl.Map, paint: MapThemePaint): void {
   applyBaseRasterVisibility(map, paint, layers);
 }
 
+// The default canvas ratio is the device pixel ratio capped at 2: past 2x a high-DPI helm display
+// roughly quadruples the fragment work over 1x for no chart detail the eye can use, and holding
+// frame rate on Pi-class helms matters more. An explicit pixelRatio option still wins, and an
+// environment without a window keeps MapLibre's own default.
 function defaultPixelRatio(): number | undefined {
   if (typeof window === 'undefined') return undefined;
   return Math.min(window.devicePixelRatio || 1, 2);
