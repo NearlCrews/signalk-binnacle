@@ -638,9 +638,12 @@ test('paints the day chart in the paper chart palette', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'day');
   const canvas = page.locator('.maplibregl-canvas').first();
   await expect(canvas).toBeVisible();
+  // A Desktop Safari canvas at 2x is software-rendered here and its first frame can take several
+  // seconds under a full suite, so allow the same 30 s the chart fixtures give a chart.
   await expect
     .poll(async () => colorShare(page, await canvas.screenshot(), [0xf4, 0xe8, 0xc1]), {
       message: 'the day base map should paint the paper chart land color',
+      timeout: 30_000,
     })
     .toBeGreaterThan(0.5);
   // The stub's own color must be gone, so a match proves the recolor ran.
