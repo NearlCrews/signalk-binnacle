@@ -210,7 +210,12 @@ source, and surrounding traffic before relying on it.
   dedicated hazards sounds a shared tone and raises a safety strip offering Silence, Acknowledge,
   Mute here, and Open Alarms; within those two grades the notification method field is honored with
   an audible-safe default, warn and alert grades stay visual by design, and a device-local mute
-  never swallows a newly raised alarm. Silence and Acknowledge require a server-actionable
+  never swallows a newly raised alarm. Warn and alert grades show on the status strip as a count
+  ("3 alerts") that opens Alarms. A shoaling depth raises a Shallow water strip in the safety
+  rail with the depth, the limit, and its datum; its Acknowledge quiets this display only and names
+  the depth it sounds again below, and the acknowledgment lapses once the water clears the limit or
+  the watch has been paused for a minute. The rail notes when the shown alarm was raised and, while
+  this display cannot sound alarms, says so. Silence and Acknowledge require a server-actionable
   notification and write access. A pending row action does not disable unrelated alarms. Server
   acceptance alone is not confirmation: Binnacle waits for a matching state update, checks the
   server after a bounded wait, and offers retry if status remains unconfirmed. **Mute here** stays
@@ -419,6 +424,14 @@ source, and surrounding traffic before relying on it.
   Anchor watch. Labels and their actions stay grouped where space permits and wrap within the
   available width when text or the viewport requires it. Short screens use compact spacing without
   shrinking the 44 px controls.
+- Two conditional chips are the only strip content that is not a helm reading, and both are doors
+  at the full control size: the alerts count (warn and alert grades, which sound nothing and raise
+  no strip) opens Alarms, and **Sound off** appears while a watch is armed (anchor, shallow water,
+  AIS targets in range, an active route, or a raised alarm) on a display whose alarm sound is
+  blocked, failed, or unsupported; a tap explains, and a blocked gate clears on it. A calm chart
+  shows neither.
+- On displays wider than 900 px every instrument value in the strip rises to the readout size
+  together; labels, units, and the trailing position and time stay at the strip size.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
-  course, heading, and the depth watch) are subordinated so the strip presents one failure with
-  one action. Radar health is excluded: it rides the radar provider's own stream, not this link.
+  course, heading, and the depth watch) are subordinated, with a dashed underline on any held value,
+  so the strip presents one failure with one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

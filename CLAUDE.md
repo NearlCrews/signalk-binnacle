@@ -389,7 +389,8 @@ root. App and PlotterView own the explicit construction and wiring between those
   `.alert-note` and its `.alert-note--filled` tinted-banner modifier, `.muted-note`,
   `.sev-danger` and `.sev-warning`, `.segmented`, `.caps-label`, `.panel-*` (including `.panel-slot`
   and its `--end` modifier), `.saved`, `.stat-grid`,
-  `.num`, `.truncate` (single-line ellipsis truncation; the span still owns its width bound), and
+  `.num`, `.stale-cue` (a dashed underline on the `.num` numerals of a value that is no longer live),
+  `.truncate` (single-line ellipsis truncation; the span still owns its width bound), and
   the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`, `.nav-name`, `.nav-metrics`,
   `.nav-metric`) shared by the AIS targets, POI search, and Waypoints panels)
   before any panel grows a scoped duplicate. Lay a panel's body out with SlideOver's `bodyFlex` prop

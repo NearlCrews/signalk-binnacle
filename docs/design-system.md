@@ -112,12 +112,12 @@ Pick the token by role, never by eye:
 | `--text-xs` | 0.75 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts (`.readout`: one size, no hierarchy) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts below 901 px (`.readout`: one size per width, no hierarchy) |
 | `--text-input` | adaptive | ordinary text-entry controls: `--text-sm` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-input-large` | adaptive | stepped-up text-entry controls such as `UnitField` numerals and `.text-field.large`: `--text-md` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg` with its grade word at `--text-base` weight 700, since the top alert's decision numbers outrank an ordinary numeral |
+| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`), the position tile's two-line coordinates, and the status strip's instrument values above 900 px (`.strip-start .readout b`, all together so the row stays uniform); the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
 | `--text-readout-lg` | 1.75 | instrument tile hero values, and the collision strip's decision numbers above |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -266,9 +266,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   `vertical-align: middle` instead), `.sev-danger` and
   `.sev-warning` (severity text coloring),
   `.panel-title` and `.panel-title--sub` (the panel header title and subtitle), `.num` (mono tabular
-  numerals for any aligned readout), and `.truncate` (single-line ellipsis truncation; the span still
-  owns its width bound, a `max-inline-size` or a flex `min-inline-size: 0`, or the clip never
-  engages). The status strip's own `.readout` spans (StatusStrip.svelte,
+  numerals for any aligned readout), `.stale-cue` (on a readout or tile holding a value that is no
+  longer live: a dashed underline on its `.num` numerals, so staleness reads by shape and not only by
+  the muted or warning color, which night-red cannot separate by brightness), and `.truncate`
+  (single-line ellipsis truncation; the span still owns its width bound, a `max-inline-size` or a flex
+  `min-inline-size: 0`, or the clip never engages). The status strip's own `.readout` spans (StatusStrip.svelte,
   component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
   (SOG, COG, HDG, Depth, Vessel, Time), then the value wrapped in `.num`. A trailing physical unit
   (kn, °T, ft, m) stays outside the `.num` span as plain text. The Time readout uses local time, and
@@ -391,16 +393,20 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   editor frame replaces the browser's font-relative dialog size cap with a viewport bound; the
   editor's body scrolls while its header and wrapping action footer remain in the flex layout. Fields
   and buttons may shrink and wrap inside the body instead of widening it at enlarged text.
-- Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by nine strips:
-  Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Alarm, Route edit, History
-  playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
+- Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by ten strips:
+  Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Shallow water, Alarm, Route
+  edit, History playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`
   (a strip whose controls need the room, Measure's leg table among them) as modifiers. Strip
   actions are the shared button system: `.btn .btn-pill .btn-strip` (the strip's larger text and
   accent color, pushed to the trailing edge), with `.btn-warning` for a consequence-bearing tap (the
   anchor Raise, the MOB and route-edit Cancels), `.btn-danger` for a destructive one, and
   `.btn-alarm` (alarm-colored and bold) for the strip's one obvious next action (Steer to MOB). An
   acknowledged strip (`.is-ack`) keeps its color and full contrast and steps down to a dashed
-  border; never dim a live condition with opacity. `.actions` clusters a strip's trailing buttons, and `.actions--safety`
+  border and the plain surface; never dim a live condition with opacity. Alarm and caution strips
+  (`.bottom-strip--alarm`, `.bottom-strip--warning`) outweigh the informational ones: a 2 px border,
+  a 10 percent wash of the grade color over the strip surface (`--strip-fill`), and the
+  `--text-base` weight-700 title. Night-red keeps the plain overlay surface, because night body
+  text falls under AA on any red wash. `.actions` clusters a strip's trailing buttons, and `.actions--safety`
   widens the gutter between a paired safety pair so a wrong tap in a seaway is less likely.
 
 ## 6. Shared UI primitives (`$shared/ui`)
@@ -617,8 +623,17 @@ Alarm readiness has four states: ready, blocked, failed, and unsupported. Pass t
 Only ready may say alarms can sound. Failed offers a retry; unsupported explains visual-only alerts
 without promising that a gesture can enable audio. Help and Alarms are the sound-readiness surfaces.
 
-`AlarmStrip` (`features/lookout`, composed by `PlotterView`) is the fourth bottom-strip in the safety
-tier, alongside `AnchorStrip`, `DangerStrip`, and `MobStrip`: the generic channel for any inbound alarm
+`ShallowStrip` (`features/lookout`, composed by the safety rail) shows the depth, the governing limit
+(or the server's depth alarm zone when that is what fires), and the depth datum, with one Acknowledge.
+Acknowledging is device-local: the tone returns if the water shoals past the acknowledged depth by the
+larger of 0.3 m or 10 percent, and the acknowledgment lapses once a fresh reading clears the limit by
+the larger of 0.2 m or 5 percent, or after the watch has been paused for a minute. The safety rail
+renders one note under whichever strip it shows: when this display raised it (generic alarms use the
+server's own raise time; MOB keeps its Elapsed timer), and "No sound on this display." while the
+audio gate is not ready and the strip is unacknowledged.
+
+`AlarmStrip` (`features/lookout`, composed by `PlotterView`) is one of five bottom-strips in the
+safety tier, alongside `AnchorStrip`, `DangerStrip`, `MobStrip`, and `ShallowStrip`: the generic channel for any inbound alarm
 or emergency grade notification outside the four dedicated hazards (MOB, anchor drag, collision
 danger, and shallow water), with the same worst-first ordering, quieted-dims state, and a device-local
 Mute here fallback for when the server cannot silence it.

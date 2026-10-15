@@ -6,8 +6,23 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Raise a shallow-water strip in the safety rail with the depth, the limit, and its datum.
+  Acknowledge quiets it on this display and names the depth it sounds again below: further
+  shoaling by the larger of 0.3 m or 10 percent sounds it again, and the acknowledgment lapses once
+  the water clears the limit or the depth watch has been paused for a minute.
+- Show caution-grade alerts on the status strip as a count that opens Alarms, and say "Sound off"
+  there while a watch is armed on a display that cannot sound alarms.
+
 ### Changed
 
+- Draw every alarm and caution strip with a heavier border, a light wash of its grade color, and
+  one title size, and note when the shown alarm was raised and whether this display can sound it.
+- Raise the status strip's instrument readouts to the readout size on screens wider than 900 px, and
+  underline stale numbers with a dashed line so they read as stale in night-red too.
+- Close the full-screen instrument dock on a phone when shallow water raises an alarm, as the other
+  alarms already do.
 - Draw checkboxes, selects, and switches from the theme instead of the browser's own controls,
   with a 3:1 control border in day and dusk. Night-red no longer shows gray checkbox boxes.
 - Show and hide map layers, instrument tiles, trend charts, chart overlays, and saved routes and
