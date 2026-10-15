@@ -50,6 +50,7 @@ const accessibleLabel = $derived(tileAccessibleLabel(labelText, reading, zone, s
   class:tile--warning={zone === 'warning'}
   class:tile--alarm={zone === 'alarm'}
   class:tile--stale={reading.state === 'stale'}
+  class:stale-cue={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--position={kind === 'position'}
   aria-label={accessibleLabel}

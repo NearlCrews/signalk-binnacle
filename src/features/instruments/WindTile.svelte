@@ -35,6 +35,7 @@ const deg = $derived((reading.angleRad ?? 0) * RAD_TO_DEG);
   class:tile--warning={zone === 'warning'}
   class:tile--alarm={zone === 'alarm'}
   class:tile--stale={reading.state === 'stale'}
+  class:stale-cue={reading.state === 'stale'}
   class:tile--empty={reading.state === 'never'}
   class:tile--wide={kind === 'wind'}
   aria-label={accessibleLabel}

@@ -137,6 +137,15 @@ p,
   font-variant-numeric: tabular-nums;
 }
 
+/* A held value that is no longer live: a dashed underline, so staleness reads by shape as well as
+   by the muted or warning color, which night-red cannot separate by brightness. Put the class on
+   the readout or tile; the cue lands on its numerals. */
+.stale-cue .num {
+  text-decoration: underline dashed;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.18em;
+}
+
 /* Single-line truncation with a trailing ellipsis. The span still owns its width bound (a
    max-inline-size, or min-inline-size: 0 in a flex row) or the clip never engages. The saved-card,
    nav-row, and bottom-strip name selectors join this one definition instead of re-spelling the

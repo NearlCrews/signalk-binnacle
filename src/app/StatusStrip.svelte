@@ -366,6 +366,7 @@ const depthWatchPaused = $derived(
       class="readout sog-readout"
       class:fix-lost={fixStale || vessel.sogStale}
       class:subordinate={linkDown}
+      class:stale-cue={linkDown}
       title="Speed over ground"
       >SOG
       <b class="num"
@@ -374,7 +375,11 @@ const depthWatchPaused = $derived(
       {speedUnit(units.profile)}</span
     >
     {#if showCog}
-      <span class="readout cog-readout" class:subordinate={linkDown} title="Course over ground"
+      <span
+        class="readout cog-readout"
+        class:subordinate={linkDown}
+        class:stale-cue={linkDown}
+        title="Course over ground"
         >COG
         <b class="num"
           >{formatBearingOr(
@@ -390,6 +395,7 @@ const depthWatchPaused = $derived(
         class="readout hdg-readout"
         class:fix-lost={vessel.headingStale}
         class:subordinate={linkDown}
+        class:stale-cue={linkDown}
         title="Heading, true"
         >HDG
         <b class="num">{formatBearingOr(vessel.headingStale ? undefined : vessel.headingRad)}</b
@@ -402,6 +408,7 @@ const depthWatchPaused = $derived(
       class:depth-alarm={shallowAlarming}
       class:fix-lost={depth.stale || shallowState !== 'monitoring'}
       class:subordinate={linkDown && !shallowAlarming}
+      class:stale-cue={linkDown && !shallowAlarming}
       title={depthTitle(depth, shallowAlarming)}
       onclick={() => chipNote.show(depthTitle(depth, shallowAlarming), CHIP_NOTE_MS)}
     >
@@ -670,10 +677,20 @@ const depthWatchPaused = $derived(
 .readout {
   white-space: nowrap;
 }
-/* One size for every readout value, so the whole strip reads as one quiet instrument row.
-   --text-md matches the base strip font, so labels and values share a size too. */
+/* One size for every readout value at each width, so the whole strip reads as one quiet instrument
+   row: the base strip font below 901px, where labels and values share a size, and the readout size
+   on helm displays (below). */
 .readout b {
   color: var(--text);
+}
+/* On a helm display the values are read from arm's length: every instrument readout value rises
+   together, so the strip stays one uniform row, just larger. Labels and units keep the strip's own
+   size, and the trailing position and time readouts stay quiet. 901px, because the stacked phone
+   layout's max-width: 900px also matches at exactly 900. */
+@media (min-width: 901px) {
+  .strip-start .readout b {
+    font-size: var(--text-readout);
+  }
 }
 /* Subordinated consequence chips while the link itself is the failure remain readable. This sits
    after the warning and value rules so color, rather than opacity, preserves contrast for both the

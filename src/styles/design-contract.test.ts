@@ -202,3 +202,23 @@ describe('design contract: alarm strips', () => {
     );
   });
 });
+
+describe('design contract: helm readouts', () => {
+  const strip = sources['/src/app/StatusStrip.svelte'] ?? '';
+
+  it('raises every instrument readout value together on helm displays', () => {
+    expect(strip).toMatch(
+      /@media \(min-width: 901px\) \{\s*\.strip-start \.readout b \{\s*font-size: var\(--text-readout\);/,
+    );
+  });
+
+  it('marks stale numerals by shape in every theme, not by color alone', () => {
+    const text = sources['/src/styles/text.css'] ?? '';
+    expect(text).toMatch(/\.stale-cue \.num \{[^}]*text-decoration: underline dashed;/);
+    for (const tile of ['NumericTile', 'WindTile'])
+      expect(sources[`/src/features/instruments/${tile}.svelte`] ?? '').toContain(
+        "class:stale-cue={reading.state === 'stale'}",
+      );
+    expect(strip.match(/class:stale-cue=/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+  });
+});
