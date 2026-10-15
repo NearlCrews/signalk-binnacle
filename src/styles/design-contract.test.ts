@@ -145,3 +145,28 @@ describe('design contract: one visually-hidden rule', () => {
     );
   });
 });
+
+describe('design contract: reading rhythm', () => {
+  const text = sources['/src/styles/text.css'] ?? '';
+
+  it('keeps the smallest text at 12px or larger in every theme', () => {
+    const sizes = [...tokens.matchAll(/--text-xs:\s*([\d.]+)rem/g)].map((match) =>
+      Number(match[1]),
+    );
+    expect(sizes.length).toBeGreaterThanOrEqual(2);
+    for (const size of sizes) expect(size).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it('gives running text the prose line spacing and avoids orphaned last words', () => {
+    expect(tokens).toMatch(/:root \{[^}]*?--leading-prose: 1\.4;/);
+    expect(text).toMatch(
+      /p,\s*\.muted-note,\s*\.alert-note \{[^}]*line-height: var\(--leading-prose\);[^}]*text-wrap: pretty;/,
+    );
+  });
+
+  it('balances panel, dialog, and empty-state titles', () => {
+    expect(text).toMatch(
+      /\.panel-title,\s*\.dialog-header h2,\s*\.empty-state-title \{[^}]*text-wrap: balance;/,
+    );
+  });
+});

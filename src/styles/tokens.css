@@ -23,11 +23,14 @@
   --space-4: 1rem;
   --space-5: 1.5rem;
   --space-6: 2rem;
-  --text-xs: 0.72rem;
+  --text-xs: 0.75rem;
   --text-sm: 0.8rem;
   --text-base: 0.85rem;
   --text-md: 0.9rem;
   --text-lg: 1rem;
+  /* Line spacing for running text (paragraphs and notes). Controls, readouts, and single-line
+     labels keep the font's own tighter spacing. */
+  --leading-prose: 1.4;
   /* The title and readout tiers above the body sizes. Role-to-token pairings live in the
      type-role table in docs/design-system.md; edit them there, not here. */
   --text-xl: 1.15rem;

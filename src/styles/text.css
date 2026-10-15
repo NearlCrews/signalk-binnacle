@@ -1,6 +1,22 @@
 /* Shared text helpers: the panel titles, the uppercase caps sub-label, the inline alarm and muted
    notes, and the tabular-numeral span. Components layer only their own box (margins, flex) on top. */
 
+/* Running text: paragraphs and the shared notes read at prose line spacing, and their last line
+   never strands a single word. */
+p,
+.muted-note,
+.alert-note {
+  line-height: var(--leading-prose);
+  text-wrap: pretty;
+}
+
+/* A wrapped title splits into even lines instead of leaving one word on the second. */
+.panel-title,
+.dialog-header h2,
+.empty-state-title {
+  text-wrap: balance;
+}
+
 /* The heading shared by the slide-over and overlay panels, so every panel title reads the same.
    overflow-wrap lets a single long word (a panel named with one unbreakable word, or a narrower
    header than usual) break onto a new line inside its own flex box instead of the default visual
