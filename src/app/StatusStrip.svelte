@@ -1,4 +1,5 @@
 <script lang="ts">
+import VolumeX from '@lucide/svelte/icons/volume-x';
 import { onDestroy } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { UnitsStore } from '$entities/units';
@@ -10,6 +11,7 @@ import {
 } from '$entities/vessel';
 import { AutopilotChip } from '$features/autopilot';
 import { type MenuItem, PinnedActions } from '$features/menu';
+import { type AlarmAudioState, alarmAudioNote } from '$shared/audio';
 import {
   createMediaQuery,
   formatBearingOr,
@@ -51,6 +53,9 @@ let {
   autopilotChip = undefined,
   onOpenAutopilot = undefined,
   weatherWarning = undefined,
+  alertCount = 0,
+  onOpenAlarms = undefined,
+  soundOff = undefined,
   orientation = undefined,
   onResetOrientation = undefined,
   pinnedActions,
@@ -96,6 +101,14 @@ let {
   // The worst active provider weather warning (for example "Gale Warning"), the closed-panel cue;
   // a tap explains and points at the weather panel. Absent when no warning is in effect.
   weatherWarning?: string;
+  // Raised alerts below the alarm grades, which sound nothing and raise no strip: the count is the
+  // only chart-screen trace of them. A door to the Alarms panel.
+  alertCount?: number;
+  onOpenAlarms?: () => void;
+  // The alarm audio gate while a watch is armed and this display cannot sound it; undefined hides
+  // the chip. App's global listener primes audio on any tap, so this tap only explains; a blocked
+  // gate clears on it and the chip leaves once the gate reads ready.
+  soundOff?: AlarmAudioState;
   // The chart orientation while a rotating mode is chosen: its live label (including a fallback to
   // north when the reference is stale) stays visible, and one tap returns to north-up. Absent in
   // the default north-up mode, where an unrotated chart speaks for itself.
@@ -126,6 +139,11 @@ onDestroy(() => chipNote.dispose());
 const linkDown = $derived(connectionDown || dataStalled || streamError);
 
 const connTitle = $derived(connectionTitle || connectionLabel);
+
+function tapSoundOff(): void {
+  const note = soundOff === undefined ? undefined : alarmAudioNote(soundOff);
+  if (note) chipNote.show(note, CHIP_NOTE_MS);
+}
 const aisTitle = $derived.by(() => {
   if (aisUnassessed === 0) return 'AIS targets being watched for collision risk';
   const cause = aisOwnFixLost
@@ -297,12 +315,33 @@ const depthWatchPaused = $derived(
         <span class="sev-warning">{weatherWarning}</span>
       </button>
     {/if}
+    {#if soundOff}
+      <button
+        type="button"
+        class="readout chip-btn door-chip sound-off-chip"
+        title={alarmAudioNote(soundOff)}
+        onclick={tapSoundOff}
+      >
+        <VolumeX size={16} aria-hidden="true" />
+        <span class="sev-warning">Sound off</span>
+      </button>
+    {/if}
+    {#if alertCount > 0 && onOpenAlarms}
+      <button
+        type="button"
+        class="readout chip-btn door-chip alerts-chip"
+        aria-label="{alertCount} {alertCount === 1 ? 'alert' : 'alerts'}, open Alarms"
+        onclick={onOpenAlarms}
+      >
+        <span class="sev-warning">{alertCount} {alertCount === 1 ? 'alert' : 'alerts'}</span>
+      </button>
+    {/if}
     {#if anchor.watching}
       <!-- Named by its content, never a masking label: the alarm cue ("Anchor no GPS", distance
            over radius) must reach assistive tech; the open-panel action lives in the title. -->
       <button
         type="button"
-        class="readout anchor-chip chip-btn"
+        class="readout anchor-chip chip-btn door-chip"
         class:anchor-chip--alarm={anchor.dragging || anchor.fixLost}
         title={anchor.fixLost
           ? 'Anchor watch: no GPS fix, drag detection degraded. Opens Anchor watch.'
@@ -587,16 +626,20 @@ const depthWatchPaused = $derived(
 .lookout {
   color: var(--text-muted);
 }
-/* The anchor chip confirms the watch is live (distance over radius) as quiet chrome, and turns to
-   the alarm color while the boat is dragging so the state reads even with the strip dismissed.
-   Unlike the explain-tap chips it opens Anchor watch, so like the autopilot chip it keeps a full
-   operational target in layout rather than the compact box and its cancelling margin. */
-.anchor-chip {
+/* A chip that opens a panel, or that answers a safety question on a tap, is an action door rather
+   than an explain-tap, so like the autopilot chip it keeps a full operational target in layout
+   instead of the compact box and its cancelling margin: the anchor, alerts, and Sound off chips. */
+.door-chip {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-block-size: var(--control-size);
   min-inline-size: var(--control-size);
   margin-block: 0;
+}
+/* The anchor chip confirms the watch is live (distance over radius) as quiet chrome, and turns to
+   the alarm color while the boat is dragging so the state reads even with the strip dismissed. */
+.anchor-chip {
   color: var(--text-muted);
 }
 .anchor-chip--alarm {

@@ -88,6 +88,7 @@ import {
   createAlarmVolume,
   createShallowController,
   GenericAlarm,
+  isCautionNotification,
   isRaisedNotification,
   LookoutAlarm,
   SHALLOW_DEGRADE_TONE,
@@ -261,6 +262,7 @@ import { createNotificationsController } from './notifications-controller.svelte
 import { createRouteCoverageState } from './route-coverage-state.svelte';
 import StatusStrip from './StatusStrip.svelte';
 import { createSafetyController } from './safety-controller.svelte';
+import { soundOffState, watchArmed } from './sound-off';
 import { createStreamController } from './stream-controller.svelte';
 
 // serverOrigin reads location, fixed for the page lifetime: capture once, not at every call site.
@@ -2659,6 +2661,21 @@ const gpsNeverReceived = new HeldFlag(
 // and receiving traffic, rather than leaving the navigator to wonder whether an empty danger strip
 // means "all clear" or "not working". list() reads aisVersion, so the derived stays reactive.
 const aisCount = $derived(aisTargets.list().length);
+// Caution-grade alerts carry no sound and no strip, so the status strip counts them.
+const alertCount = $derived(genericAlarms.filter(isCautionNotification).length);
+// Sound off shows only while something this display would sound for is armed.
+const soundOff = $derived(
+  soundOffState(
+    audioState,
+    watchArmed({
+      anchorWatching: anchor.watching,
+      shallowMonitoring: shallowController.monitorState === 'monitoring',
+      aisTargets: aisCount,
+      routeActive: courseGuidance.active,
+      alarmRaised: emergencySafetyActive,
+    }),
+  ),
+);
 
 // AIS markers are immediately tappable when the first target arrives. Warm their small detail panel
 // at that point so a chart selection cannot become the first request for its UI chunk.
@@ -3400,6 +3417,9 @@ const plotterActions = {
     autopilotChip={autopilot.chip}
     onOpenAutopilot={() => openPanel('autopilot')}
     weatherWarning={weatherWarnings.headline}
+    {alertCount}
+    onOpenAlarms={() => openPanel('alarms')}
+    {soundOff}
     orientation={chartOrientation.value !== 'north'
       ? { label: orientation.label, active: orientation.active }
       : undefined}

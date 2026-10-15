@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import {
   contrastRatio,
+  expectHelmHitTarget,
   expectNoHorizontalOverflow,
   FIXTURE_SERVER,
   nightRedOffendingPixels,
@@ -721,4 +722,20 @@ test('a raised alarm strip keeps AA text in day, dusk, and night-red', async ({ 
     expect(await contrastRatio(strip.locator('.title'))).toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(strip.locator('.metric b').first())).toBeGreaterThanOrEqual(4.5);
   }
+});
+
+test('a caution-grade alert shows on the strip and opens Alarms', async ({ page }) => {
+  await openApp(page);
+  await sendDelta(page, [
+    ...OWN_FIX,
+    {
+      path: 'notifications.electrical.batteries.house.voltage',
+      value: { state: 'warn', method: ['visual'], message: 'House battery low' },
+    },
+  ]);
+  const chip = page.getByRole('button', { name: '1 alert, open Alarms' });
+  await expect(chip).toBeVisible();
+  await expectHelmHitTarget(chip);
+  await chip.click();
+  await expect(page.getByRole('heading', { name: 'Alarms', exact: true })).toBeVisible();
 });

@@ -14,6 +14,7 @@ export { LookoutAlarm } from './lookout-alarm';
 export {
   canAcknowledgeNotification,
   canSilenceNotification,
+  isCautionNotification,
   isRaisedNotification,
   notificationGrade,
   notificationLabel,

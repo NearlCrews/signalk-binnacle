@@ -45,12 +45,9 @@ function body(props: ComponentProps<typeof StatusStrip>): string {
 }
 
 describe('StatusStrip depth alarm', () => {
-  it('carries no alarm-audio chip: a browser-permission condition is not a helm readout', () => {
-    // The Alarms and Anchor panels state the grade instead, so the readout row is not spent on a
-    // silence that a boat with nothing audible armed could not have anyway.
-    const html = body(baseProps());
-    expect(html).not.toContain('Sound off');
-    expect(html).not.toContain('Sound unavailable');
+  it('carries no Sound off chip unless App reports an armed watch that cannot sound', () => {
+    expect(body(baseProps())).not.toContain('Sound off');
+    expect(body({ ...baseProps(), soundOff: 'blocked' })).toContain('Sound off');
   });
 
   it('shows the toolbar clock as local time, not UTC', () => {
@@ -252,5 +249,18 @@ describe('StatusStrip depth alarm', () => {
     expect(html.slice(html.lastIndexOf('<button', ais), ais)).toContain('chip-btn');
     // The conn dot keeps its single live region inside the button.
     expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
+  });
+});
+
+describe('StatusStrip alerts chip', () => {
+  it('stays hidden with no caution-grade alerts', () => {
+    expect(body(baseProps())).not.toContain('alerts-chip');
+  });
+
+  it('counts alerts in words and names its door, the visible words leading the name', () => {
+    expect(body({ ...baseProps(), alertCount: 1, onOpenAlarms: () => {} })).toContain('1 alert<');
+    const html = body({ ...baseProps(), alertCount: 3, onOpenAlarms: () => {} });
+    expect(html).toContain('3 alerts<');
+    expect(html).toContain('aria-label="3 alerts, open Alarms"');
   });
 });

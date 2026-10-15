@@ -14,6 +14,11 @@ export const notificationLabel = (n: ActiveNotification): string =>
 export const isRaisedNotification = (n: ActiveNotification): boolean =>
   n.state === 'alarm' || n.state === 'emergency';
 
+// The grades below alarm: a caution the chart must still show (a low house battery, a bilge pump
+// running long), which sounds nothing and raises no strip.
+export const isCautionNotification = (n: ActiveNotification): boolean =>
+  n.state === 'warn' || n.state === 'alert';
+
 // The alert a surface speaks for: worst first by grade, never by list order, so neither the strip
 // nor the announcement can be captured by whichever alert the caller sorted to the front. Takes a
 // raw or an already-filtered list, since both callers hold one or the other.

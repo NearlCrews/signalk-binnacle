@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ActiveNotification } from '$entities/notifications';
+import { selectGenericAlarms } from './generic-alarm.svelte';
 import {
   canAcknowledgeNotification,
   canSilenceNotification,
+  isCautionNotification,
   notificationLabel,
 } from './notification-actions';
 
@@ -71,5 +73,26 @@ describe('canAcknowledgeNotification', () => {
     expect(canAcknowledgeNotification(notification({ canAcknowledge: undefined }))).toBe(false);
     expect(canAcknowledgeNotification(notification({ canAcknowledge: false }))).toBe(false);
     expect(canAcknowledgeNotification(notification({ acknowledged: true }))).toBe(false);
+  });
+});
+
+describe('isCautionNotification', () => {
+  it('takes the warn and alert grades and leaves alarm-grade states to the strips', () => {
+    expect(isCautionNotification(notification({ state: 'warn' }))).toBe(true);
+    expect(isCautionNotification(notification({ state: 'alert' }))).toBe(true);
+    expect(isCautionNotification(notification({ state: 'alarm' }))).toBe(false);
+    expect(isCautionNotification(notification({ state: 'emergency' }))).toBe(false);
+  });
+
+  it('counts nothing the generic list already drops: acknowledged and strip-covered paths', () => {
+    const list = [
+      notification({ path: 'notifications.electrical.batteries.house', state: 'warn' }),
+      notification({ path: 'notifications.bilge', state: 'warn', acknowledged: true }),
+      notification({ path: 'notifications.environment.depth.belowKeel', state: 'warn' }),
+    ];
+    const counted = selectGenericAlarms(list, {
+      ownedDepthPath: 'notifications.environment.depth.belowKeel',
+    }).filter(isCautionNotification);
+    expect(counted.map((n) => n.path)).toEqual(['notifications.electrical.batteries.house']);
   });
 });
