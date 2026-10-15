@@ -4,7 +4,7 @@
 .bottom-strip {
   inline-size: min(var(--strip-max-width), calc(100% - var(--space-5)));
   padding: var(--space-2) var(--space-3);
-  background: var(--surface-overlay);
+  background: var(--strip-fill, var(--surface-overlay));
   border: 1px solid var(--strip-accent);
   border-radius: var(--radius-md);
   color: var(--text);
@@ -20,6 +20,25 @@
    warning-only contact does not paint the strip in the strongest red. */
 .bottom-strip--warning {
   --strip-accent: var(--warning);
+}
+/* Alarm-grade strips outweigh the informational route strip: a heavier border, a light wash of the
+   grade color, and the larger title. The wash is 10 percent over the strip's own surface, which
+   keeps the grade-colored title at 5:1 in dusk; the shared 18 percent tints fall under 4.5:1
+   there. */
+.bottom-strip--alarm,
+.bottom-strip--warning {
+  border-width: 2px;
+  --strip-fill: color-mix(in srgb, var(--strip-accent) 10%, var(--surface-overlay));
+}
+.bottom-strip--alarm .title,
+.bottom-strip--warning .title {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+/* Night-red body text measures about 3.6:1 on any red wash, under AA, so night strips keep the
+   near-black surface and carry their weight in the border and the title. */
+:root[data-theme="night-red"] .bottom-strip {
+  --strip-fill: var(--surface-overlay);
 }
 .bottom-strip .head {
   display: flex;
@@ -82,10 +101,12 @@
 }
 /* Acknowledged: the operator has it in hand, but the condition persists, so the strip keeps its
    alarm or warning color and full text contrast and steps down to a dashed border; the ack tag
-   says it in words. Opacity would also dim the readouts the condition still needs, and a neutral
-   color would make a live hazard look resolved. */
+   says it in words, and the grade wash drops back to the plain surface. Opacity would also dim the
+   readouts the condition still needs, and a neutral color would make a live hazard look
+   resolved. */
 .bottom-strip.is-ack {
   border-style: dashed;
+  --strip-fill: var(--surface-overlay);
 }
 .bottom-strip .ack-tag {
   margin-inline-start: auto;

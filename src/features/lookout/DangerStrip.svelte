@@ -160,13 +160,8 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   margin-block-start: 0.3rem;
   font-size: var(--text-xs);
 }
-/* The top alert's decision numbers outrank an ordinary instrument numeral, and the grade word
-   outranks body text: these are what the helm acts on. Applies to Danger and Caution alike; the
-   route strip keeps the calm shared sizing. */
-.title {
-  font-size: var(--text-base);
-  font-weight: 700;
-}
+/* The top alert's decision numbers outrank an ordinary instrument numeral: these are what the helm
+   acts on. Applies to Danger and Caution alike; the title size is the shared alarm-strip one. */
 .metric b {
   font-size: var(--text-readout-lg);
 }

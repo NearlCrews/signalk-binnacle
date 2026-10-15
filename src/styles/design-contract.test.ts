@@ -170,3 +170,35 @@ describe('design contract: reading rhythm', () => {
     );
   });
 });
+
+describe('design contract: alarm strips', () => {
+  const strips = sources['/src/styles/strips.css'] ?? '';
+
+  it('draws alarm and warning strips with a 2px border and a light grade wash', () => {
+    expect(strips).toMatch(
+      /\n\.bottom-strip \{[^}]*background: var\(--strip-fill, var\(--surface-overlay\)\);/,
+    );
+    expect(strips).toMatch(
+      /\.bottom-strip--alarm,\s*\.bottom-strip--warning \{[^}]*border-width: 2px;[^}]*--strip-fill: color-mix\(in srgb, var\(--strip-accent\) 10%, var\(--surface-overlay\)\);/,
+    );
+  });
+
+  it('keeps night-red strips on the overlay surface so body text holds AA', () => {
+    expect(strips).toMatch(
+      /:root\[data-theme="night-red"\] \.bottom-strip \{[^}]*--strip-fill: var\(--surface-overlay\);/,
+    );
+  });
+
+  it('sizes every alarm strip title alike, with no scoped copy', () => {
+    expect(strips).toMatch(
+      /\.bottom-strip--alarm \.title,\s*\.bottom-strip--warning \.title \{[^}]*font-size: var\(--text-base\);[^}]*font-weight: 700;/,
+    );
+    expect(sources['/src/features/lookout/DangerStrip.svelte'] ?? '').not.toMatch(/\n\.title \{/);
+  });
+
+  it('drops the wash once acknowledged', () => {
+    expect(strips).toMatch(
+      /\.bottom-strip\.is-ack \{[^}]*border-style: dashed;[^}]*--strip-fill: var\(--surface-overlay\);/,
+    );
+  });
+});

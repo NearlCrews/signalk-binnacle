@@ -709,3 +709,16 @@ test('a night-red shallow strip carries no gray or blue pixels', async ({ page }
   });
   expect(await nightRedOffendingPixels(page, png)).toEqual([]);
 });
+
+test('a raised alarm strip keeps AA text in day, dusk, and night-red', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openApp(page);
+  await sendDelta(page, [...OWN_FIX, { path: DEPTH, value: 2.5 }]);
+  const strip = page.getByRole('complementary', { name: 'Shallow water' });
+  for (const theme of ['day', 'dusk', 'night-red'] as const) {
+    await switchToTheme(page, theme);
+    await expect(strip).toBeVisible();
+    expect(await contrastRatio(strip.locator('.title'))).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(strip.locator('.metric b').first())).toBeGreaterThanOrEqual(4.5);
+  }
+});
