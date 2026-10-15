@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { GatedAlarm } from '$shared/audio';
 import { DEFAULT_THRESHOLDS } from '$shared/settings';
 import { createFakeAlarmControl } from '$shared/testing';
-import { defaultShallowLimitMeters, isShallowAlarmActive, SHALLOW_TONE } from './shallow-alarm';
+import {
+  defaultShallowLimitMeters,
+  isShallowAlarmActive,
+  SHALLOW_TONE,
+  shallowClearMargin,
+  shallowRearmMargin,
+} from './shallow-alarm';
 
 describe('shallow-water alarm', () => {
   it('sounds below the threshold, then stops for stale, cleared, or safe depth data', () => {
@@ -48,5 +54,17 @@ describe('shallow-water alarm', () => {
     alarm.stop();
 
     expect(events).toEqual(['start', 'stop']);
+  });
+});
+
+describe('shallow acknowledge margins', () => {
+  it('re-arms past the larger of 0.3 m or ten percent of the acknowledged depth', () => {
+    expect(shallowRearmMargin(2.5)).toBeCloseTo(0.3);
+    expect(shallowRearmMargin(8)).toBeCloseTo(0.8);
+  });
+
+  it('clears past the larger of 0.2 m or five percent of the limit', () => {
+    expect(shallowClearMargin(3)).toBeCloseTo(0.2);
+    expect(shallowClearMargin(10)).toBeCloseTo(0.5);
   });
 });

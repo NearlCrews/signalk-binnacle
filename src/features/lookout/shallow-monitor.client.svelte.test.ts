@@ -515,3 +515,112 @@ describe('createShallowController', () => {
     expect(test.fetchMock.mock.calls.length).toBe(callsBefore);
   });
 });
+
+describe('shallow acknowledge', () => {
+  it('silences the tone, keeps alarming, and names the re-arm depth', async () => {
+    const test = mount({ depth: reading({ meters: 10 }) });
+    await flushPromises();
+    test.setDepth(reading({ meters: 2.5 }));
+    expect(test.events).toEqual(['start']);
+    test.controller.acknowledge();
+    flushSync();
+    expect(test.controller.acknowledged).toBe(true);
+    expect(test.controller.alarming).toBe(true);
+    expect(test.controller.rearmBelowMeters).toBeCloseTo(2.2);
+    expect(test.events).toEqual(['start', 'stop']);
+  });
+
+  it('sounds again and drops the acknowledgment once the water shoals past the margin', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 2.3 }));
+    expect(test.controller.acknowledged).toBe(true);
+    expect(test.events).toEqual(['start', 'stop']);
+    test.setDepth(reading({ meters: 2.1 }));
+    expect(test.controller.acknowledged).toBe(false);
+    expect(test.events).toEqual(['start', 'stop', 'start']);
+  });
+
+  it('lapses only once a fresh reading clears the limit by the margin', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 3.1 }));
+    expect(test.controller.acknowledged).toBe(true);
+    test.setDepth(reading({ meters: 3.2 }));
+    expect(test.controller.acknowledged).toBe(false);
+    test.setDepth(reading({ meters: 2.5 }));
+    expect(test.events).toEqual(['start', 'stop', 'start']);
+  });
+
+  it('keeps the acknowledgment through a short stale gap', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 6, stale: true }));
+    expect(test.controller.acknowledged).toBe(true);
+    test.setDepth(reading({ meters: 2.5 }));
+    expect(test.controller.acknowledged).toBe(true);
+    expect(test.events).toEqual(['start', 'stop']);
+  });
+
+  it('holds the acknowledgment while a server zone keeps alarming above the local limit', async () => {
+    // An open-topped alarm band: no upper bound, so the local 3 m limit stays the displayed one.
+    const test = mount({
+      depth: reading({ meters: 2.5 }),
+      zones: [{ lower: 0, state: 'alarm' }],
+    });
+    await flushPromises();
+    test.setDepth(reading({ meters: 2.5 }));
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 4 }));
+    expect(test.controller.alarming).toBe(true);
+    expect(test.controller.acknowledged).toBe(true);
+    expect(test.controller.insideServerZone).toBe(true);
+  });
+
+  it('lets an acknowledgment lapse once the watch has been paused for a minute', async () => {
+    // A long sounder gap means the boat may be somewhere else entirely by the time depth returns,
+    // so the acknowledgment given before the gap must not vouch for the new water.
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      test.controller.acknowledge();
+      flushSync();
+      test.setDepth(reading({ meters: 2.5, stale: true }));
+      vi.advanceTimersByTime(59_000);
+      flushSync();
+      expect(test.controller.acknowledged).toBe(true);
+      vi.advanceTimersByTime(2_000);
+      flushSync();
+      expect(test.controller.acknowledged).toBe(false);
+      test.setDepth(reading({ meters: 2.7 }));
+      expect(test.events).toEqual(['start', 'stop', 'start']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores acknowledge while the watch is not alarming', async () => {
+    const test = mount({ depth: reading({ meters: 10 }) });
+    await flushPromises();
+    test.controller.acknowledge();
+    flushSync();
+    expect(test.controller.acknowledged).toBe(false);
+  });
+
+  it('exposes the governing depth and its datum for the strip', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    expect(test.controller.depthMeters).toBe(2.5);
+    expect(test.controller.depthSource).toBe('keel');
+    test.setDepth(reading({ meters: 2.5, stale: true }));
+    expect(test.controller.depthMeters).toBeUndefined();
+  });
+});

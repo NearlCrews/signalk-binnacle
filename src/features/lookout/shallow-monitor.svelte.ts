@@ -14,6 +14,8 @@ import {
   isShallowAlarmActive,
   SHALLOW_DEGRADE_TONE,
   SHALLOW_TONE,
+  shallowClearMargin,
+  shallowRearmMargin,
 } from './shallow-alarm';
 import { publishShallowZones, type ShallowPublishOutcome } from './zone-publish';
 
@@ -51,6 +53,9 @@ interface ShallowControllerDeps {
 const DEGRADE_CHIRP_MS = 2 * SHALLOW_DEGRADE_TONE.periodMs;
 // How long the transient stand-down announcement stays up for the live region.
 const DEGRADE_NOTICE_MS = 12_000;
+// A watch paused this long has lost track of where the boat went, so an acknowledgment given
+// before the pause cannot vouch for the water when depth returns.
+const ACK_LAPSE_WHILE_PAUSED_MS = 60_000;
 
 const DEGRADE_NOTICES: Record<Exclude<ShallowMonitorState, 'monitoring'>, string> = {
   stale: 'Shallow water watch paused: depth data lost.',
@@ -225,8 +230,49 @@ export function createShallowController(deps: ShallowControllerDeps) {
     if (winningPath !== undefined) metaCache.load(winningPath);
   });
 
+  // The skipper's acknowledgment, device-local and never written to the server. It records the
+  // depth it was given at: the tone returns if the water shoals past that by the re-arm margin, and
+  // the acknowledgment lapses only once a fresh reading clears the limit by the clear margin with
+  // the watch no longer alarming, so neither a hovering depth, a short stale gap, nor a server zone
+  // that keeps alarming above the local limit can bounce it.
+  let ackDepth = $state<number | undefined>(undefined);
+  const rearmBelowMeters = $derived(
+    ackDepth === undefined ? undefined : ackDepth - shallowRearmMargin(ackDepth),
+  );
+  const shoaledPastAck = $derived(
+    rearmBelowMeters !== undefined &&
+      !depth.stale &&
+      depth.meters !== undefined &&
+      depth.meters < rearmBelowMeters,
+  );
+  const acknowledged = $derived(ackDepth !== undefined && !shoaledPastAck);
+
   $effect(() => {
-    alarm.update(alarming);
+    if (ackDepth === undefined) return;
+    if (shoaledPastAck) {
+      ackDepth = undefined;
+      return;
+    }
+    const { meters, stale } = depth;
+    if (
+      !alarming &&
+      !stale &&
+      meters !== undefined &&
+      meters >= effectiveLimitMeters + shallowClearMargin(effectiveLimitMeters)
+    )
+      ackDepth = undefined;
+  });
+
+  $effect(() => {
+    if (ackDepth === undefined || monitorState === 'monitoring') return;
+    const timer = setTimeout(() => {
+      ackDepth = undefined;
+    }, ACK_LAPSE_WHILE_PAUSED_MS);
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() => {
+    alarm.update(alarming && !acknowledged);
   });
 
   return {
@@ -243,6 +289,26 @@ export function createShallowController(deps: ShallowControllerDeps) {
     refreshMeta: () => metaCache.refresh(),
     get alarming() {
       return alarming;
+    },
+    get acknowledged() {
+      return acknowledged;
+    },
+    get rearmBelowMeters() {
+      return rearmBelowMeters;
+    },
+    get depthMeters() {
+      return depth.stale ? undefined : depth.meters;
+    },
+    get depthSource() {
+      return depth.source;
+    },
+    // Alarming on a server zone band while the depth is not under the displayed limit (an
+    // open-topped band), so the strip names the zone instead of a limit the depth already clears.
+    get insideServerZone() {
+      return alarming && !isShallowAlarmActive(depth.meters, depth.stale, localLimit);
+    },
+    acknowledge: () => {
+      if (alarming && depth.meters !== undefined && !depth.stale) ackDepth = depth.meters;
     },
     get alert() {
       return alert;
@@ -292,6 +358,19 @@ export interface ShallowZonePublish {
   busy: boolean;
   outcome: 'idle' | ShallowPublishOutcome;
   publish: () => Promise<void>;
+}
+
+// What the shallow-water strip reads and the one action it takes. The controller satisfies it, so
+// App hands the controller itself across the view layer and every read stays reactive.
+export interface ShallowAlarmView {
+  readonly alarming: boolean;
+  readonly acknowledged: boolean;
+  readonly rearmBelowMeters: number | undefined;
+  readonly depthMeters: number | undefined;
+  readonly depthSource: DepthReading['source'];
+  readonly effectiveLimitMeters: number;
+  readonly insideServerZone: boolean;
+  acknowledge(): void;
 }
 
 // The slice of the controller the panel actually renders, grouped so one prop carries it across

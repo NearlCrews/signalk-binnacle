@@ -21,6 +21,7 @@ export {
 } from './notification-actions';
 export { isShallowAlarmActive, SHALLOW_DEGRADE_TONE, SHALLOW_TONE } from './shallow-alarm';
 export type {
+  ShallowAlarmView,
   ShallowMonitorSnapshot,
   ShallowMonitorState,
   ShallowThresholdSource,

@@ -29,6 +29,18 @@ export function isShallowAlarmActive(
   );
 }
 
+// After an acknowledgment the tone returns if the water shoals this much further: a fixed floor for
+// a shallow harbor, a proportion for deeper water, so running further aground is never silent.
+export function shallowRearmMargin(ackDepthMeters: number): number {
+  return Math.max(0.3, 0.1 * ackDepthMeters);
+}
+
+// An acknowledgment lapses only once the depth clears the limit by this much, so a reading
+// hovering at the limit cannot flap the alarm on and off.
+export function shallowClearMargin(limitMeters: number): number {
+  return Math.max(0.2, 0.05 * limitMeters);
+}
+
 // A three-beep burst pitched between the anchor drag (660 Hz) and the collision danger (880 Hz)
 // alarms, so a half-asleep navigator can tell a shoaling depth from those two by ear. The app
 // sounds it through a GatedAlarm while the depth is below the configured threshold.
