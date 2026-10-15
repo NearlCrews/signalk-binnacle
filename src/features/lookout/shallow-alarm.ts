@@ -30,9 +30,10 @@ export function isShallowAlarmActive(
 }
 
 // After an acknowledgment the tone returns if the water shoals this much further: a fixed floor for
-// a shallow harbor, a proportion for deeper water, so running further aground is never silent.
+// a shallow harbor, a proportion for deeper water, and never more than half the acknowledged depth,
+// so the re-arm depth stays above the ground and running further aground is never silent.
 export function shallowRearmMargin(ackDepthMeters: number): number {
-  return Math.max(0.3, 0.1 * ackDepthMeters);
+  return Math.min(Math.max(0.3, 0.1 * ackDepthMeters), ackDepthMeters / 2);
 }
 
 // An acknowledgment lapses only once the depth clears the limit by this much, so a reading

@@ -739,3 +739,22 @@ test('a caution-grade alert shows on the strip and opens Alarms', async ({ page 
   await chip.click();
   await expect(page.getByRole('heading', { name: 'Alarms', exact: true })).toBeVisible();
 });
+
+test('acknowledging shallow water keeps keyboard focus in the safety rail when another alarm takes its place', async ({
+  page,
+}) => {
+  await openApp(page);
+  await sendDelta(page, [...OWN_FIX, GENERIC_ALARM, { path: DEPTH, value: 2.5 }]);
+  const strip = page.getByRole('complementary', { name: 'Shallow water' });
+  await expect(strip).toBeVisible();
+  await strip.getByRole('button', { name: 'Acknowledge' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(strip).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.querySelector('.rail')?.contains(document.activeElement) ?? false,
+      ),
+    )
+    .toBe(true);
+});

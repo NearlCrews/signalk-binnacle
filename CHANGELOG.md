@@ -11,7 +11,7 @@ All notable changes to Binnacle are documented here. The format follows
 - Raise a shallow-water strip in the safety rail with the depth, the limit, and its datum.
   Acknowledge quiets it on this display and names the depth it sounds again below: further
   shoaling by the larger of 0.3 m or 10 percent sounds it again, and the acknowledgment lapses once
-  the water clears the limit or the depth watch has been paused for a minute.
+  the water clears the limit by a margin or the watch goes a minute without alarming or monitoring.
 - Show caution-grade alerts on the status strip as a count that opens Alarms, and say "Sound off"
   there while a watch is armed on a display that cannot sound alarms.
 

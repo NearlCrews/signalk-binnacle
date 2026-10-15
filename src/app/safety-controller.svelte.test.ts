@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSafetyHistory, type SafetyChannel } from './safety-controller.svelte';
 
 describe('dedicated safety chronology', () => {
+  it('records a new raise when an acknowledged alarm sounds again while still active', () => {
+    const record = vi.fn();
+    const history = createSafetyHistory(record);
+    const channel = (acknowledged: boolean): SafetyChannel => ({
+      id: 'shallow',
+      rank: 3,
+      text: '',
+      history: { label: 'Shallow water', active: true, acknowledged },
+    });
+    history.update([channel(false)]);
+    history.update([channel(true)]);
+    history.update([channel(false)]);
+    expect(record.mock.calls.map(([event]) => event.kind)).toEqual([
+      'raised',
+      'acknowledged',
+      'raised',
+    ]);
+  });
+
   it('retains the last alarm through lost monitoring and only clears after a current observation', () => {
     const record = vi.fn();
     const history = createSafetyHistory(record);

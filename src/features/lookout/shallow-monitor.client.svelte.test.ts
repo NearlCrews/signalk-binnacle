@@ -624,3 +624,63 @@ describe('shallow acknowledge', () => {
     expect(test.controller.depthMeters).toBeUndefined();
   });
 });
+
+describe('shallow acknowledge review fixes', () => {
+  it('goes quiet in the live region once acknowledged and speaks again on further shoaling', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    expect(test.controller.alert).not.toBe('');
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 2.4 }));
+    expect(test.controller.alert).toBe('');
+    test.setDepth(reading({ meters: 2.1 }));
+    expect(test.controller.alert).not.toBe('');
+  });
+
+  it('lapses once the water has stayed above the limit for a minute, even inside the margin', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      test.controller.acknowledge();
+      flushSync();
+      test.setDepth(reading({ meters: 3.1 }));
+      vi.advanceTimersByTime(61_000);
+      flushSync();
+      expect(test.controller.acknowledged).toBe(false);
+      test.setDepth(reading({ meters: 2.9 }));
+      expect(test.events).toEqual(['start', 'stop', 'start']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps counting the pause across a change between paused states', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      test.controller.acknowledge();
+      flushSync();
+      test.setDepth(reading({ meters: 2.5, stale: true }));
+      vi.advanceTimersByTime(30_000);
+      test.setDepth(reading({ meters: undefined }));
+      vi.advanceTimersByTime(31_000);
+      flushSync();
+      expect(test.controller.acknowledged).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts a re-sound after further shoaling as a new raise', async () => {
+    const test = mount({ depth: reading({ meters: 2.5 }) });
+    await flushPromises();
+    expect(test.controller.reraiseCount).toBe(0);
+    test.controller.acknowledge();
+    flushSync();
+    test.setDepth(reading({ meters: 2.1 }));
+    expect(test.controller.reraiseCount).toBe(1);
+  });
+});

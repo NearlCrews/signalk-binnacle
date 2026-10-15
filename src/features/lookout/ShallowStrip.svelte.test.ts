@@ -20,6 +20,7 @@ function view(overrides: Partial<ShallowAlarmView> = {}): ShallowAlarmView {
     depthSource: 'keel',
     effectiveLimitMeters: 3,
     insideServerZone: false,
+    reraiseCount: 0,
     acknowledge: () => {},
     ...overrides,
   };

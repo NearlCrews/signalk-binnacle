@@ -62,6 +62,17 @@ export function createSafetyHistory(record: (event: AlarmLogEvent) => void) {
           ) {
             record({ kind: 'acknowledged', label: history.label, source: id });
           }
+          // An acknowledged alarm that is no longer acknowledged while still active has been raised
+          // again (a shoaling past the acknowledged depth, a collision escalating), which the watch
+          // record must show as its own raise.
+          if (
+            history.active &&
+            before?.active &&
+            before.acknowledged === true &&
+            history.acknowledged === false
+          ) {
+            record({ kind: 'raised', label: history.label, source: id });
+          }
         }
         if (history.muted && !before?.muted && (before !== undefined || history.active)) {
           record({ kind: 'muted', label: history.label, source: id });

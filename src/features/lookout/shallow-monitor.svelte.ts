@@ -53,9 +53,8 @@ interface ShallowControllerDeps {
 const DEGRADE_CHIRP_MS = 2 * SHALLOW_DEGRADE_TONE.periodMs;
 // How long the transient stand-down announcement stays up for the live region.
 const DEGRADE_NOTICE_MS = 12_000;
-// A watch paused this long has lost track of where the boat went, so an acknowledgment given
-// before the pause cannot vouch for the water when depth returns.
-const ACK_LAPSE_WHILE_PAUSED_MS = 60_000;
+// How long the watch must go without alarming, or stay paused, before an acknowledgment lapses.
+const ACK_LAPSE_MS = 60_000;
 
 const DEGRADE_NOTICES: Record<Exclude<ShallowMonitorState, 'monitoring'>, string> = {
   stale: 'Shallow water watch paused: depth data lost.',
@@ -146,12 +145,63 @@ export function createShallowController(deps: ShallowControllerDeps) {
       : undefined,
   );
 
+  // The skipper's acknowledgment, device-local and never written to the server. It records the
+  // depth it was given at: the tone returns if the water shoals past that by the re-arm margin, and
+  // the acknowledgment lapses only once a fresh reading clears the limit by the clear margin with
+  // the watch no longer alarming, so neither a hovering depth, a short stale gap, nor a server zone
+  // that keeps alarming above the local limit can bounce it.
+  let ackDepth = $state<number | undefined>(undefined);
+  const rearmBelowMeters = $derived(
+    ackDepth === undefined ? undefined : ackDepth - shallowRearmMargin(ackDepth),
+  );
+  const shoaledPastAck = $derived(
+    rearmBelowMeters !== undefined &&
+      !depth.stale &&
+      depth.meters !== undefined &&
+      depth.meters < rearmBelowMeters,
+  );
+  const acknowledged = $derived(ackDepth !== undefined && !shoaledPastAck);
+
+  // Re-sounds after further shoaling, counted so the rail and the watch record treat each as a new
+  // raise.
+  let reraises = $state(0);
+  $effect(() => {
+    if (ackDepth === undefined) return;
+    if (shoaledPastAck) {
+      ackDepth = undefined;
+      reraises += 1;
+      return;
+    }
+    const { meters, stale } = depth;
+    if (
+      !alarming &&
+      !stale &&
+      meters !== undefined &&
+      meters >= effectiveLimitMeters + shallowClearMargin(effectiveLimitMeters)
+    )
+      ackDepth = undefined;
+  });
+
+  // The acknowledgment covers one shoaling. Once the watch has gone a minute without both monitoring
+  // and alarming, that episode is over: the water stayed above the limit, or the watch was paused
+  // long enough that the boat may be somewhere else. Keyed on the one boolean, so moving between
+  // paused states does not restart the minute.
+  const ackHeld = $derived(monitorState === 'monitoring' && alarming);
+  $effect(() => {
+    if (ackDepth === undefined || ackHeld) return;
+    const timer = setTimeout(() => {
+      ackDepth = undefined;
+    }, ACK_LAPSE_MS);
+    return () => clearTimeout(timer);
+  });
+
   const alert = $derived.by(() => {
     if (monitorState === 'stale')
       return 'Depth data lost. Shallow-water monitoring is unavailable.';
     if (monitorState === 'no-reading')
       return 'Depth reading unavailable. Shallow-water monitoring is paused.';
-    if (!alarming) return '';
+    // An acknowledged shoaling is in hand: the live region speaks again only when it re-sounds.
+    if (!alarming || acknowledged) return '';
     const unit = lengthUnit(deps.units.mode);
     const shown = formatLengthOr(depth.meters, deps.units.mode);
     // A server zone (an open-topped band, most often) can fire while the depth is not under the
@@ -230,47 +280,6 @@ export function createShallowController(deps: ShallowControllerDeps) {
     if (winningPath !== undefined) metaCache.load(winningPath);
   });
 
-  // The skipper's acknowledgment, device-local and never written to the server. It records the
-  // depth it was given at: the tone returns if the water shoals past that by the re-arm margin, and
-  // the acknowledgment lapses only once a fresh reading clears the limit by the clear margin with
-  // the watch no longer alarming, so neither a hovering depth, a short stale gap, nor a server zone
-  // that keeps alarming above the local limit can bounce it.
-  let ackDepth = $state<number | undefined>(undefined);
-  const rearmBelowMeters = $derived(
-    ackDepth === undefined ? undefined : ackDepth - shallowRearmMargin(ackDepth),
-  );
-  const shoaledPastAck = $derived(
-    rearmBelowMeters !== undefined &&
-      !depth.stale &&
-      depth.meters !== undefined &&
-      depth.meters < rearmBelowMeters,
-  );
-  const acknowledged = $derived(ackDepth !== undefined && !shoaledPastAck);
-
-  $effect(() => {
-    if (ackDepth === undefined) return;
-    if (shoaledPastAck) {
-      ackDepth = undefined;
-      return;
-    }
-    const { meters, stale } = depth;
-    if (
-      !alarming &&
-      !stale &&
-      meters !== undefined &&
-      meters >= effectiveLimitMeters + shallowClearMargin(effectiveLimitMeters)
-    )
-      ackDepth = undefined;
-  });
-
-  $effect(() => {
-    if (ackDepth === undefined || monitorState === 'monitoring') return;
-    const timer = setTimeout(() => {
-      ackDepth = undefined;
-    }, ACK_LAPSE_WHILE_PAUSED_MS);
-    return () => clearTimeout(timer);
-  });
-
   $effect(() => {
     alarm.update(alarming && !acknowledged);
   });
@@ -306,6 +315,9 @@ export function createShallowController(deps: ShallowControllerDeps) {
     // open-topped band), so the strip names the zone instead of a limit the depth already clears.
     get insideServerZone() {
       return alarming && !isShallowAlarmActive(depth.meters, depth.stale, localLimit);
+    },
+    get reraiseCount() {
+      return reraises;
     },
     acknowledge: () => {
       if (alarming && depth.meters !== undefined && !depth.stale) ackDepth = depth.meters;
@@ -370,6 +382,8 @@ export interface ShallowAlarmView {
   readonly depthSource: DepthReading['source'];
   readonly effectiveLimitMeters: number;
   readonly insideServerZone: boolean;
+  // Re-sounds after further shoaling, each a new raise for the rail's raised time.
+  readonly reraiseCount: number;
   acknowledge(): void;
 }
 

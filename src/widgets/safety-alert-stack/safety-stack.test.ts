@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveRank, SafetyStack } from './safety-stack.svelte';
+import { effectiveRank, railNoteText, SafetyStack, serverRaisedAt } from './safety-stack.svelte';
 
 interface Shape {
   id: string;
@@ -181,5 +181,45 @@ describe('SafetyStack raised time', () => {
     stack.update(conditions({ id: 'mob', rank: 0 }), 1_000);
     stack.update(conditions({ id: 'mob', rank: 0, active: false }), 2_000);
     expect(stack.raisedAt('mob')).toBeUndefined();
+  });
+});
+
+describe('serverRaisedAt', () => {
+  const now = Date.UTC(2026, 9, 15, 12, 0, 0);
+
+  it('takes a full timestamp at or before now', () => {
+    expect(serverRaisedAt('2026-10-15T11:30:00Z', now)).toBe(Date.UTC(2026, 9, 15, 11, 30, 0));
+  });
+
+  it('rejects a date without a time, a time in the future, and garbage', () => {
+    expect(serverRaisedAt('2026-10-15', now)).toBeUndefined();
+    expect(serverRaisedAt('2026-10-15T13:00:00Z', now)).toBeUndefined();
+    expect(serverRaisedAt('not a time', now)).toBeUndefined();
+    expect(serverRaisedAt(undefined, now)).toBeUndefined();
+  });
+});
+
+describe('railNoteText', () => {
+  const base = {
+    raisedLabel: '14:32',
+    audioReady: true,
+    grade: 'alarm' as const,
+    acknowledged: false,
+  };
+
+  it('states the raised time', () => {
+    expect(railNoteText(base)).toBe('Raised 14:32.');
+  });
+
+  it('adds the no-sound line only under an unacknowledged alarm-grade strip', () => {
+    expect(railNoteText({ ...base, audioReady: false })).toBe(
+      'Raised 14:32. No sound on this display.',
+    );
+    expect(railNoteText({ ...base, audioReady: false, acknowledged: true })).toBe('Raised 14:32.');
+    expect(railNoteText({ ...base, audioReady: false, grade: 'warning' })).toBe('Raised 14:32.');
+  });
+
+  it('says nothing when there is nothing to say', () => {
+    expect(railNoteText({ ...base, raisedLabel: undefined })).toBeUndefined();
   });
 });

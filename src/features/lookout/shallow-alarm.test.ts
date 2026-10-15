@@ -68,3 +68,11 @@ describe('shallow acknowledge margins', () => {
     expect(shallowClearMargin(10)).toBeCloseTo(0.5);
   });
 });
+
+describe('shallow re-arm margin near the ground', () => {
+  it('never re-arms at or below zero: the margin is capped at half the acknowledged depth', () => {
+    expect(shallowRearmMargin(0.25)).toBeCloseTo(0.125);
+    expect(shallowRearmMargin(0.5)).toBeCloseTo(0.25);
+    expect(shallowRearmMargin(2.5)).toBeCloseTo(0.3);
+  });
+});

@@ -213,8 +213,9 @@ source, and surrounding traffic before relying on it.
   never swallows a newly raised alarm. Warn and alert grades show on the status strip as a count
   ("3 alerts") that opens Alarms. A shoaling depth raises a Shallow water strip in the safety
   rail with the depth, the limit, and its datum; its Acknowledge quiets this display only and names
-  the depth it sounds again below, and the acknowledgment lapses once the water clears the limit or
-  the watch has been paused for a minute. The rail notes when the shown alarm was raised and, while
+  the depth it sounds again below. The acknowledgment lapses at once when the water clears the limit
+  by the larger of 0.2 m or 5 percent, or once the watch has gone a minute without alarming or has
+  been paused for a minute; a re-sound after further shoaling is logged as a new raise. The rail notes when the shown alarm was raised and, while
   this display cannot sound alarms, says so. Silence and Acknowledge require a server-actionable
   notification and write access. A pending row action does not disable unrelated alarms. Server
   acceptance alone is not confirmation: Binnacle waits for a matching state update, checks the

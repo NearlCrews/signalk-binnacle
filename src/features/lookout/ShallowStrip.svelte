@@ -7,9 +7,11 @@ import type { ShallowAlarmView } from './shallow-monitor.svelte';
 interface Props {
   shallow: ShallowAlarmView;
   units: UnitsStore;
+  // Called after Acknowledge, so the rail can keep focus if another condition replaces this strip.
+  onAcknowledged?: () => void;
 }
 
-const { shallow, units }: Props = $props();
+const { shallow, units, onAcknowledged }: Props = $props();
 const unit = $derived(lengthUnit(units.mode));
 let strip = $state<HTMLElement | undefined>();
 
@@ -18,6 +20,7 @@ let strip = $state<HTMLElement | undefined>();
 function acknowledge(): void {
   shallow.acknowledge();
   strip?.focus();
+  onAcknowledged?.();
 }
 </script>
 

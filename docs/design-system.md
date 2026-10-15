@@ -626,11 +626,14 @@ without promising that a gesture can enable audio. Help and Alarms are the sound
 `ShallowStrip` (`features/lookout`, composed by the safety rail) shows the depth, the governing limit
 (or the server's depth alarm zone when that is what fires), and the depth datum, with one Acknowledge.
 Acknowledging is device-local: the tone returns if the water shoals past the acknowledged depth by the
-larger of 0.3 m or 10 percent, and the acknowledgment lapses once a fresh reading clears the limit by
-the larger of 0.2 m or 5 percent, or after the watch has been paused for a minute. The safety rail
+larger of 0.3 m or 10 percent (never more than half the acknowledged depth), and the acknowledgment
+lapses at once when a fresh reading clears the limit by the larger of 0.2 m or 5 percent, or after the
+watch has gone a minute without both monitoring and alarming. While acknowledged the strip leaves the
+live region quiet; a re-sound is a new raise for the rail and the watch record. The safety rail
 renders one note under whichever strip it shows: when this display raised it (generic alarms use the
-server's own raise time; MOB keeps its Elapsed timer), and "No sound on this display." while the
-audio gate is not ready and the strip is unacknowledged.
+server's own raise time when it is a full timestamp no later than now; MOB keeps its Elapsed timer),
+and "No sound on this display." while the audio gate is not ready under an unacknowledged
+alarm-grade strip.
 
 `AlarmStrip` (`features/lookout`, composed by `PlotterView`) is one of five bottom-strips in the
 safety tier, alongside `AnchorStrip`, `DangerStrip`, `MobStrip`, and `ShallowStrip`: the generic channel for any inbound alarm

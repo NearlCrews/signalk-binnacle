@@ -94,3 +94,30 @@ export class SafetyStack {
     this.#shownId = best?.id;
   }
 }
+
+// The server's own raise time, when it is a full timestamp no later than now (with a minute's grace
+// for clock skew). A date without a time, a time in the future, or an unparsable value says nothing
+// true about how long the alarm has been up, so the caller falls back to this display's own time.
+export function serverRaisedAt(timestamp: string | undefined, nowMs: number): number | undefined {
+  if (timestamp === undefined || !/T\d/.test(timestamp)) return undefined;
+  const at = Date.parse(timestamp);
+  return Number.isFinite(at) && at <= nowMs + 60_000 ? at : undefined;
+}
+
+export interface RailNoteInput {
+  raisedLabel: string | undefined;
+  audioReady: boolean;
+  grade: 'alarm' | 'warning';
+  acknowledged: boolean;
+}
+
+// The one line under the shown strip: when it was raised, and, under an alarm still calling for
+// attention, that this display cannot sound it. A caution or an acknowledged alarm is not expected to
+// sound, so the second line would be noise there.
+export function railNoteText(input: RailNoteInput): string | undefined {
+  const parts: string[] = [];
+  if (input.raisedLabel) parts.push(`Raised ${input.raisedLabel}.`);
+  if (!input.audioReady && input.grade === 'alarm' && !input.acknowledged)
+    parts.push('No sound on this display.');
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}

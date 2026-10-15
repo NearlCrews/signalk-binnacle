@@ -1,4 +1,5 @@
 <script lang="ts">
+import { tick } from 'svelte';
 import type { AnchorWatch } from '$entities/anchor';
 import type { CollisionAssessment } from '$entities/collision';
 import type { MobStore } from '$entities/mob';
@@ -15,7 +16,12 @@ import {
 } from '$features/lookout';
 import { MobStrip } from '$features/mob';
 import { formatClockTime } from '$shared/lib';
-import { type SafetyCondition, SafetyStack } from './safety-stack.svelte';
+import {
+  railNoteText,
+  type SafetyCondition,
+  SafetyStack,
+  serverRaisedAt,
+} from './safety-stack.svelte';
 
 interface ChipCondition extends SafetyCondition {
   label: string;
@@ -126,6 +132,8 @@ const conditions = $derived<ChipCondition[]>([
     id: 'shallow',
     active: shallow.alarming,
     rank: 3,
+    // A re-sound after further shoaling is a new raise for the rail's raised time.
+    raiseKey: `shallow-${shallow.reraiseCount}`,
     acknowledged: shallow.acknowledged,
     label: 'Shallow',
     chipAria: 'Shallow water',
@@ -148,25 +156,34 @@ $effect(() => {
   stack.update(conditions);
 });
 
-// One line under the shown strip: when this display raised it (MOB keeps its own Elapsed timer), and
-// whether this display can sound it at all. Generic alarms prefer the server's own raise time, which
-// survives a reload of this display.
+// One line under the shown strip: when this display raised it (MOB keeps its own Elapsed timer; a
+// generic alarm prefers the server's own raise time, which survives a reload), and whether this
+// display can sound it.
 const railNote = $derived.by(() => {
-  const id = stack.shownId;
-  if (id === undefined) return undefined;
-  const parts: string[] = [];
-  if (id !== 'mob') {
-    const serverAt =
-      id === 'generic' ? Date.parse(worstRaisedNotification(genericAlarms)?.timestamp ?? '') : NaN;
-    const at = Number.isFinite(serverAt) ? serverAt : stack.raisedAt(id);
-    if (at !== undefined) parts.push(`Raised ${formatClockTime(at)}.`);
-  }
-  // Only under a strip still calling for attention: an acknowledged or silenced alarm is not
-  // expected to sound, so the note would be noise there.
-  const shown = conditions.find((condition) => condition.id === id);
-  if (!audioReady && shown && !shown.acknowledged) parts.push('No sound on this display.');
-  return parts.length > 0 ? parts.join(' ') : undefined;
+  const shown = conditions.find((condition) => condition.id === stack.shownId);
+  if (!shown) return undefined;
+  const at =
+    shown.id === 'mob'
+      ? undefined
+      : ((shown.id === 'generic'
+          ? serverRaisedAt(worstRaisedNotification(genericAlarms)?.timestamp, Date.now())
+          : undefined) ?? stack.raisedAt(shown.id));
+  return railNoteText({
+    raisedLabel: at === undefined ? undefined : formatClockTime(at),
+    audioReady,
+    grade: shown.grade,
+    acknowledged: shown.acknowledged,
+  });
 });
+
+// Acknowledging a strip can lower it below another raised condition, which then takes its place and
+// unmounts it. Keep keyboard focus in the rail rather than letting it fall to the page.
+function keepFocusInRail(): void {
+  void tick().then(() => {
+    const focused = document.activeElement;
+    if (focused === null || focused === document.body) railRoot?.focus();
+  });
+}
 
 const chips = $derived(
   conditions.filter((condition) => condition.active && condition.id !== stack.shownId),
@@ -207,7 +224,7 @@ function chipDescription(condition: ChipCondition): string {
 </script>
 
 {#if stack.shownId !== undefined}
-  <div class="rail" bind:this={railRoot}>
+  <div class="rail" bind:this={railRoot} tabindex="-1">
     {#if chips.length > 0}
       <div class="chips" role="group" aria-label="Other active alerts">
         {#each chips as condition (condition.id)}
@@ -244,7 +261,7 @@ function chipDescription(condition: ChipCondition): string {
     {:else if stack.shownId === 'anchor'}
       <AnchorStrip {anchor} {units} onRaise={onAnchorRaise} />
     {:else if stack.shownId === 'shallow'}
-      <ShallowStrip {shallow} {units} />
+      <ShallowStrip {shallow} {units} onAcknowledged={keepFocusInRail} />
     {:else if stack.shownId === 'generic'}
       <AlarmStrip
         notifications={genericAlarms}
