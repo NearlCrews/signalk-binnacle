@@ -854,6 +854,30 @@ describe('createThemedMap style watchdog', () => {
 });
 
 describe('createThemedMap recolor', () => {
+  it('themes the base style the moment it arrives, before load', async () => {
+    createThemedMap({
+      container,
+      basePaint: () => mapThemePaint('night-red'),
+      onLoad: () => {},
+    });
+    const map = await lastMap();
+    const layers = [{ id: 'bg', type: 'background' }];
+    const painted: Array<[string, string, unknown]> = [];
+    Object.assign(map, {
+      getStyle: () => ({ layers }),
+      getLayer: (id: string) => layers.find((layer) => layer.id === id),
+      setPaintProperty: (id: string, property: string, value: unknown) => {
+        painted.push([id, property, value]);
+      },
+    });
+    map.fire('style.load');
+    expect(painted).toContainEqual([
+      'bg',
+      'background-color',
+      mapThemePaint('night-red').background,
+    ]);
+  });
+
   it('recolors the base from the palette for standard day, the sun variant, and back', async () => {
     let api: ThemedMapApi | undefined;
     createThemedMap({

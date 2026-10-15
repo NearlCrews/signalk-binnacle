@@ -3214,6 +3214,7 @@ const plotterActions = {
     {showHelpWelcome}
     {showEncPrompt}
     insecureNoteDismissed={insecureNoteSeen.value}
+    paintVariant={chartPaintVariant}
     {weatherProvider}
     {collisionMute}
     collisionMuteRemainingMin={collisionMute.active ? muteRemainingMin : undefined}

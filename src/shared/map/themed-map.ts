@@ -11,7 +11,7 @@ import {
 import { LayerManager, type LayerManagerOptions } from './layer-manager';
 import { installContextMenu } from './long-press';
 import { createMapTapRecognizer } from './map-tap';
-import { type MapPaintVariant, mapThemePaint } from './map-theme';
+import { type MapPaintVariant, type MapThemePaint, mapThemePaint } from './map-theme';
 import { createOverlayTick, type OverlaySyncStatus, type Syncable } from './overlay-tick';
 import { beforeIdFor, installSentinels } from './sentinels';
 import type { OverlayContext } from './types';
@@ -74,6 +74,10 @@ export interface ThemedMapOptions {
   // Every base-style attempt failed and the one-layer offline fallback is standing in, so the
   // chart-trust surface can say the base map is unavailable rather than showing a silent void.
   onBaseStyleFallback?: () => void;
+  // The current palette, read when the base style arrives (and again if the offline fallback
+  // replaces it), so the first frame already wears the theme instead of the source style's own
+  // colors. The full recolor, overlays included, still runs at load.
+  basePaint?: () => MapThemePaint;
   onLoad: (api: ThemedMapApi) => void | Promise<void>;
 }
 
@@ -105,6 +109,14 @@ const mapContextSupport = new WeakMap<Document, boolean>();
 // roughly quadruples the fragment work over 1x for no chart detail the eye can use, and holding
 // frame rate on Pi-class helms matters more. An explicit pixelRatio option still wins, and an
 // environment without a window keeps MapLibre's own default.
+function themeBase(map: maplibregl.Map, paint: MapThemePaint): void {
+  // The three base passes filter the style to the same themable layers; compute that list once.
+  const layers = themableBaseLayers(map);
+  applyBaseTheme(map, paint, layers);
+  applyBaseIconVisibility(map, paint, layers);
+  applyBaseRasterVisibility(map, paint, layers);
+}
+
 function defaultPixelRatio(): number | undefined {
   if (typeof window === 'undefined') return undefined;
   return Math.min(window.devicePixelRatio || 1, 2);
@@ -282,6 +294,11 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
     'bottom-right',
   );
   let destroyed = false;
+  const basePaint = opts.basePaint;
+  if (basePaint)
+    mapInstance.on('style.load', () => {
+      if (!destroyed) themeBase(mapInstance, basePaint());
+    });
   // Teardown for the sync wiring runTick installs (the 'render' listener, the interval, and the
   // visibilitychange listener). A no-op until the overlay tick is built on 'load', then it delegates
   // to the controller's live teardown; invoked once on destroy.
@@ -419,11 +436,7 @@ export function createThemedMap(opts: ThemedMapOptions): ThemedMapHandle {
 
     const recolor = (theme: Theme, variant: MapPaintVariant = 'standard') => {
       const paint = mapThemePaint(theme, variant);
-      // The base passes filter the style to the same themable layers; compute that list once.
-      const layers = themableBaseLayers(mapInstance);
-      applyBaseTheme(mapInstance, paint, layers);
-      applyBaseIconVisibility(mapInstance, paint, layers);
-      applyBaseRasterVisibility(mapInstance, paint, layers);
+      themeBase(mapInstance, paint);
       loadedManager.applyTheme(paint);
     };
 

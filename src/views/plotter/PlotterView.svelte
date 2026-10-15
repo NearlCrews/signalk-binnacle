@@ -59,7 +59,7 @@ import { loadWaypointsPanel } from '$features/waypoints';
 import type { WeatherProvider } from '$features/weather';
 import type { Bbox4, LatLon } from '$shared/geo';
 import { idlePrefetch } from '$shared/lib';
-import { hasVisibleNavigationChart, type LayerSettings } from '$shared/map';
+import { hasVisibleNavigationChart, type LayerSettings, type MapPaintVariant } from '$shared/map';
 import { etaSeconds } from '$shared/nav';
 import type { OnlineStatus, PwaStatus } from '$shared/pwa';
 import type {
@@ -223,6 +223,8 @@ interface FlatProps {
   showHelpWelcome?: boolean;
   showEncPrompt?: boolean;
   insecureNoteDismissed?: boolean;
+  // The chart palette variant (bright sun applies only to day), shared by the nav and forecast maps.
+  paintVariant: MapPaintVariant;
   weatherProvider: WeatherProvider | undefined;
   collisionMute: { active: boolean };
   collisionMuteRemainingMin: number | undefined;
@@ -497,6 +499,7 @@ let {
   showHelpWelcome = false,
   showEncPrompt = false,
   insecureNoteDismissed = false,
+  paintVariant,
   weatherProvider,
   collisionMute,
   collisionMuteRemainingMin,
@@ -913,6 +916,7 @@ $effect(() => {
     tides={tidesStore}
     {regionZones}
     theme={theme.theme}
+    {paintVariant}
     {trackSettings}
     savedTracks={trackController.savedSource}
     {userCharts}
@@ -2342,7 +2346,7 @@ $effect(() => {
           positionStale={vessel.positionStale}
           pointLoader={pointConditionsLoader}
           measuredTendency={barometer.tendency}
-          paintVariant={display.sunMode && theme.theme === 'day' ? 'sun' : 'standard'}
+          {paintVariant}
           online={net.online}
           onClose={closeWeatherPanel}
           onBack={backFromWeatherPanel}

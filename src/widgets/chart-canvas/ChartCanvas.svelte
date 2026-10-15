@@ -59,6 +59,7 @@ import {
   type LayerSettings,
   type MapPaintVariant,
   type MapTapEvent,
+  mapThemePaint,
   proxiedSources,
   type ThemedMapHandle,
 } from '$shared/map';
@@ -113,6 +114,8 @@ interface Props {
   symbols?: SymbolsStore;
   // The active theme, so the on-chart route editor restyles its draw layers per theme.
   theme: Theme;
+  // The bright-sun variant, so the base map's first frame already wears the current palette.
+  paintVariant?: MapPaintVariant;
   trackSettings: PersistedValue<TrackSettings>;
   // Saved tracks to draw, pulled each frame so show/hide and edits reflect without a remount.
   savedTracks?: SavedTracksSource;
@@ -210,6 +213,7 @@ const {
   tides,
   regionZones,
   theme,
+  paintVariant = 'standard',
   trackSettings,
   savedTracks,
   userCharts,
@@ -415,6 +419,7 @@ onMount(async () => {
   mapHandle = createThemedMap({
     container,
     accessibleName: 'Navigation chart',
+    basePaint: () => mapThemePaint(theme, paintVariant),
     companionBase,
     getToken: () => chartsToken,
     view: initialView,
