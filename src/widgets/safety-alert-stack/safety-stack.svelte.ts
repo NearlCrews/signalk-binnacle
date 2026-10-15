@@ -1,3 +1,5 @@
+import { SvelteMap } from 'svelte/reactivity';
+
 // The emergency rail's promotion model. One condition renders as the full strip (the primary);
 // every other active condition is a compact chip. Default primacy follows urgency, the operator
 // may inspect a lower-priority condition, and only a newly raised (or re-raised) more-urgent
@@ -10,6 +12,9 @@ export interface SafetyCondition {
   // Lower is more urgent; ties break by array order.
   rank: number;
   acknowledged: boolean;
+  // Distinguishes raises that share an id (a collision warning escalating to danger); defaults to
+  // the id.
+  raiseKey?: string;
 }
 
 // Acknowledged conditions sort after every unacknowledged one, whatever their base rank.
@@ -25,10 +30,17 @@ export class SafetyStack {
   // Last pass's effective rank per active condition, for rising-edge detection. A plain map:
   // written and read only inside update().
   #previousRanks = new Map<string, number>();
+  // When this display raised each active condition, keyed by its raise key, for the rail's raised
+  // time. Reactive so a template reading it updates on a re-raise.
+  readonly #raised = new SvelteMap<string, { key: string; at: number }>();
 
   // The condition to render as the full strip, or undefined when nothing is active.
   get shownId(): string | undefined {
     return this.#shownId;
+  }
+
+  raisedAt(id: string): number | undefined {
+    return this.#raised.get(id)?.at;
   }
 
   // The operator taps a chip to promote its condition.
@@ -36,7 +48,16 @@ export class SafetyStack {
     this.#inspectedId = id;
   }
 
-  update(conditions: readonly SafetyCondition[]): void {
+  update(conditions: readonly SafetyCondition[], nowMs = Date.now()): void {
+    for (const condition of conditions) {
+      if (!condition.active) {
+        this.#raised.delete(condition.id);
+        continue;
+      }
+      const key = condition.raiseKey ?? condition.id;
+      if (this.#raised.get(condition.id)?.key !== key)
+        this.#raised.set(condition.id, { key, at: nowMs });
+    }
     const active = conditions.filter((condition) => condition.active);
     const ranks = new Map(active.map((condition) => [condition.id, effectiveRank(condition)]));
     if (active.length === 0) {

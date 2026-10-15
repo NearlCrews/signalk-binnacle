@@ -110,3 +110,76 @@ describe('SafetyStack', () => {
     expect(stack.shownId).toBe('mob');
   });
 });
+
+describe('SafetyStack raised time', () => {
+  it('records when each condition turns active and forgets it once it clears', () => {
+    const stack = new SafetyStack();
+    stack.update(conditions({ id: 'anchor', rank: 2 }), 1_000);
+    stack.update(conditions({ id: 'anchor', rank: 2 }, { id: 'mob', rank: 0 }), 5_000);
+    expect(stack.raisedAt('anchor')).toBe(1_000);
+    expect(stack.raisedAt('mob')).toBe(5_000);
+    stack.update(
+      conditions({ id: 'anchor', rank: 2, active: false }, { id: 'mob', rank: 0 }),
+      9_000,
+    );
+    expect(stack.raisedAt('anchor')).toBeUndefined();
+    stack.update(conditions({ id: 'anchor', rank: 2 }, { id: 'mob', rank: 0 }), 12_000);
+    expect(stack.raisedAt('anchor')).toBe(12_000);
+  });
+
+  it('keeps the raised time through an acknowledgment', () => {
+    const stack = new SafetyStack();
+    stack.update(conditions({ id: 'shallow', rank: 3 }), 2_000);
+    stack.update(conditions({ id: 'shallow', rank: 3, acknowledged: true }), 4_000);
+    expect(stack.raisedAt('shallow')).toBe(2_000);
+  });
+
+  it('re-stamps a condition whose raise key changes while active, as an escalation does', () => {
+    const stack = new SafetyStack();
+    stack.update(
+      [
+        {
+          id: 'collision',
+          active: true,
+          rank: 5,
+          acknowledged: false,
+          raiseKey: 'collision-warning',
+        },
+      ],
+      1_000,
+    );
+    stack.update(
+      [
+        {
+          id: 'collision',
+          active: true,
+          rank: 5,
+          acknowledged: false,
+          raiseKey: 'collision-warning',
+        },
+      ],
+      2_000,
+    );
+    expect(stack.raisedAt('collision')).toBe(1_000);
+    stack.update(
+      [
+        {
+          id: 'collision',
+          active: true,
+          rank: 1,
+          acknowledged: false,
+          raiseKey: 'collision-danger',
+        },
+      ],
+      3_000,
+    );
+    expect(stack.raisedAt('collision')).toBe(3_000);
+  });
+
+  it('clears every raised time when nothing is active', () => {
+    const stack = new SafetyStack();
+    stack.update(conditions({ id: 'mob', rank: 0 }), 1_000);
+    stack.update(conditions({ id: 'mob', rank: 0, active: false }), 2_000);
+    expect(stack.raisedAt('mob')).toBeUndefined();
+  });
+});
