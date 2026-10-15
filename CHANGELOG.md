@@ -13,6 +13,14 @@ All notable changes to Binnacle are documented here. The format follows
 - Show and hide map layers, instrument tiles, trend charts, chart overlays, and saved routes and
   tracks with one switch everywhere. The offline area chart picker stays a checkbox, since it
   selects charts for a later download.
+- Draw the day chart as a paper chart: buff land and pale blue water matched to the NOAA chart
+  overlay, quiet tan roads in place of orange highways, and softer relief at ocean zoom. Without a
+  network connection the fallback base map reads as water in every theme.
+- Theme the chart from its first frame. Starting the app no longer shows the stock map colors for a
+  moment, which was a bright flash in night-red.
+- Give the chart more room: the top bar drops the app name and is 8 px shorter on tablets and
+  desktops. The app name and version now sit at the foot of the menu, on phones too.
+- Space running text at 1.4 lines, balance wrapped titles, and raise the smallest text to 12 px.
 - Round buttons, inputs, and cards with one 8 px corner, and draw strip actions and status badges
   with the same shared styles as panels. An acknowledged alarm strip keeps its color and full
   contrast and shows a dashed border instead of dimming.

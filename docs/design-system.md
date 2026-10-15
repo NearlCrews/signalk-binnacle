@@ -39,7 +39,7 @@ condition, and one used there drops the whole block.
   a fourth radius is what made panels read as older than the chrome around them.
 - Spacing (4px-based): `--space-1` 0.25rem, `--space-2` 0.5rem, `--space-3` 0.75rem, `--space-4` 1rem,
   `--space-5` 1.5rem, `--space-6` 2rem.
-- Type scale: `--text-xs` 0.72, `--text-sm` 0.8, `--text-base` 0.85, `--text-md` 0.9, `--text-lg` 1,
+- Type scale: `--text-xs` 0.75, `--text-sm` 0.8, `--text-base` 0.85, `--text-md` 0.9, `--text-lg` 1,
   `--text-xl` 1.15, `--text-readout` 1.25, `--text-readout-lg` 1.75 (rem). Night-red floors the two
   smallest at 0.8 and 0.85: dim red on black needs larger glyphs. Fonts: `--font-ui` (Inter)
   for chrome, `--font-mono` (JetBrains Mono) for numeric readouts. Every size pairs with a role in the
@@ -47,6 +47,9 @@ condition, and one used there drops the whole block.
   per-component decision. Text-entry controls use the adaptive aliases `--text-input` and
   `--text-input-large`; both resolve to at least 1rem on phone-width or coarse-pointer displays to
   prevent focus zoom on iOS.
+- Line spacing: running text (paragraphs, `.muted-note`, `.alert-note`) uses `--leading-prose` 1.4
+  and `text-wrap: pretty`; panel, dialog, and empty-state titles use `text-wrap: balance`. Controls,
+  readouts, and single-line labels keep the font's own spacing.
 - Targets: `--control-size` defaults to 2.75rem for action tap targets (buttons, pills, icon buttons);
   `--row-size` is the list-row height (menu items, layer toggles) and is defined as
   `var(--control-size)` at the root, where both default to 2.75rem. WCAG 2.5.5 sets 44px as the
@@ -106,7 +109,7 @@ Pick the token by role, never by eye:
 
 | Token | rem | Roles |
 | --- | --- | --- |
-| `--text-xs` | 0.72 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
+| `--text-xs` | 0.75 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
 | `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts (`.readout`: one size, no hierarchy) |
@@ -146,6 +149,13 @@ channel (blue luminance is folded into green so the WCAG contrast ratios hold ex
 minimized: the only nonzero green channels are the bounded ones AA contrast requires, each documented
 in `tokens.css` with its rationale and pinned by the night-red token test.
 
+The chart follows the theme too. Every theme recolors the OpenFreeMap base map from its palette in
+`src/shared/map/map-theme.ts`: day is a paper chart whose land and shallow water match the NOAA chart
+overlay, dusk and night-red are dark charts, and the bright-sun variant is day's high-contrast cream
+palette. The base layers take the palette the moment the style arrives, so the first frame never
+shows the source style's own colors. A new base-map color goes into those palettes, never into a
+layer by id.
+
 You almost never write theme-specific CSS. You write tokens, and the theme carries the value. The rules
 that matter when you do touch this:
 
@@ -163,6 +173,8 @@ that matter when you do touch this:
   chip beside MOB, so the toolbar button yields to an Update or collision mute chip. Display is the
   path that is always reachable; keep it when changing either control. Both read their names from
   `THEME_LABELS`.
+- The top bar shows no brand at any width; the `h1` stays for assistive technology, and the app name
+  and version live in the menu footer.
 
 ## 4. The modular CSS architecture
 
