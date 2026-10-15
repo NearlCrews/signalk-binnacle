@@ -646,3 +646,24 @@ test('paints the day chart in the paper chart palette', async ({ page }) => {
   // The stub's own color must be gone, so a match proves the recolor ran.
   expect(await colorShare(page, await canvas.screenshot(), [0xf8, 0xf4, 0xf0])).toBeLessThan(0.01);
 });
+
+test('keeps a slim top bar with MOB centered and the brand for assistive tech only', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.addInitScript(() => localStorage.setItem('binnacle:help-orientation', 'true'));
+  await stubVesselsSelf(page);
+  await page.goto('/');
+
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading).toHaveCount(1);
+  await expect(heading).toHaveAccessibleName('Binnacle Chartplotter');
+  expect((await heading.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
+
+  const bar = await page.locator('header.topbar').boundingBox();
+  const mob = await page.getByRole('button', { name: 'Mark man overboard here' }).boundingBox();
+  if (!bar || !mob) throw new Error('top bar or MOB not laid out');
+  // 44px controls, 4px above and below, and the 1px bottom border.
+  expect(Math.round(bar.height)).toBe(Math.round(mob.height) + 9);
+  expect(Math.abs(mob.x + mob.width / 2 - 512)).toBeLessThanOrEqual(1);
+});

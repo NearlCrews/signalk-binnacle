@@ -3096,7 +3096,7 @@ const plotterActions = {
         {onReorderPinned}
         {onResetPinned}
       />
-      <h1 class="brand">Binnacle Chartplotter <span class="version">v{__APP_VERSION__}</span></h1>
+      <h1 class="brand visually-hidden">Binnacle Chartplotter</h1>
     </div>
     <MobButton
       {mob}
@@ -3554,12 +3554,12 @@ const plotterActions = {
   align-items: center;
   gap: var(--space-2);
 
-  /* Fallback standard padding */
-  padding: var(--space-2) var(--space-4);
+  /* One --space-1 above and below the 44px controls at every width. */
+  padding: var(--space-1) var(--space-4);
 
   /* Window Controls Overlay alignment. A landscape phone also lays out with these wide rules, so
      the inline edges reserve the notch side as well. */
-  padding-block-start: max(var(--space-2), env(titlebar-area-y, 0px));
+  padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));
   min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));
   padding-inline-start: max(
     calc(var(--space-4) + env(safe-area-inset-left, 0px)),
@@ -3598,22 +3598,6 @@ const plotterActions = {
 .topbar-action {
   display: contents;
 }
-.brand {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.version {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 400;
-  color: var(--text-muted);
-}
-/* On a phone the brand leaves the visual layout while remaining as the page heading for assistive
-   technology, so safety and status controls keep enough room. */
 @media (max-width: 600px) {
   .topbar {
     gap: var(--space-1);
@@ -3624,19 +3608,6 @@ const plotterActions = {
   }
   .topbar-actions {
     gap: var(--space-1);
-  }
-  .brand {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    border: 0;
-  }
-  .version {
-    display: none;
   }
   .topbar-action--companion,
   .topbar-action--profile {

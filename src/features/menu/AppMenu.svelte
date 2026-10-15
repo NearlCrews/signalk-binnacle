@@ -246,6 +246,7 @@ function onCardFocusOut(event: FocusEvent): void {
           </div>
         </section>
       {/each}
+      <p class="muted-note muted-note--xs menu-version">Binnacle Chartplotter {__APP_VERSION__}</p>
     </div>
   {/if}
 </AnchoredMenu>
@@ -476,6 +477,10 @@ function onCardFocusOut(event: FocusEvent): void {
   color: var(--text-muted);
   font-size: var(--text-xs);
   line-height: 1.2;
+  text-align: center;
+}
+.menu-version {
+  padding-block-start: var(--space-2);
   text-align: center;
 }
 </style>

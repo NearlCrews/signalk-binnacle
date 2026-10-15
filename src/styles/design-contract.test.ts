@@ -128,3 +128,20 @@ describe('design contract: state colors hold through every interaction', () => {
     expect(badges).toMatch(/\.badge--strong \{[^}]*border-color: currentColor/);
   });
 });
+
+describe('design contract: one visually-hidden rule', () => {
+  it('hides text from view only through the shared a11y class', () => {
+    const copies = hits(/clip-path:\s*inset\(50%\)/);
+    expect(copies.filter((path) => path !== '/src/styles/a11y.css')).toEqual([]);
+  });
+
+  it('keeps the top bar aligned with the installed app title bar', () => {
+    const app = sources['/src/app/App.svelte'] ?? '';
+    // The unindented rule is the base one; the phone block nests its own .topbar rule.
+    const base = app.match(/\n\.topbar \{([^}]*)\}/)?.[1] ?? '';
+    expect(base).toContain('padding-block-start: max(var(--space-1), env(titlebar-area-y, 0px));');
+    expect(base).toContain(
+      'min-block-size: max(var(--control-size), env(titlebar-area-height, 0px));',
+    );
+  });
+});

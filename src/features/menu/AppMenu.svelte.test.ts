@@ -122,3 +122,21 @@ describe('AppMenu bar-only actions', () => {
     expect(without).not.toContain('aria-label="Menu"');
   });
 });
+
+describe('AppMenu version footer', () => {
+  it('names the app and its version at the foot of the menu', () => {
+    const body = renderMenu([item('alarms', { label: 'Alarms' })]);
+    expect(body).toMatch(
+      new RegExp(
+        `<p class="[^"]*menu-version[^"]*">Binnacle Chartplotter ${__APP_VERSION__.replaceAll('.', '\\.')}</p>`,
+      ),
+    );
+  });
+
+  it('keeps the footer in toolbar edit mode', () => {
+    const body = render(AppMenu, {
+      props: { items: [item('alarms')], open: true, onOpenChange: () => {}, editing: true },
+    }).body;
+    expect(body).toContain(`Binnacle Chartplotter ${__APP_VERSION__}`);
+  });
+});
