@@ -431,8 +431,9 @@ source, and surrounding traffic before relying on it.
   AIS targets in range, an active route, or a raised alarm) on a display whose alarm sound is
   blocked, failed, or unsupported; a tap explains, and a blocked gate clears on it. A calm chart
   shows neither.
-- On displays wider than 900 px every instrument value in the strip rises to the readout size
-  together; labels, units, and the trailing position and time stay at the strip size.
+- On helm-width displays (about 900 px and wider at the default text size) every instrument value
+  in the strip rises to the readout size together; labels, units, and the trailing position and
+  time stay at the strip size. Enlarged text keeps one size, since it already enlarges them.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
   course, heading, and the depth watch) are subordinated, with a dashed underline on any held value,
   so the strip presents one failure with one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

@@ -112,12 +112,12 @@ Pick the token by role, never by eye:
 | `--text-xs` | 0.75 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts below 901 px (`.readout`: one size per width, no hierarchy) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts on narrower strips (`.readout`: one size per width, no hierarchy) |
 | `--text-input` | adaptive | ordinary text-entry controls: `--text-sm` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-input-large` | adaptive | stepped-up text-entry controls such as `UnitField` numerals and `.text-field.large`: `--text-md` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`), the position tile's two-line coordinates, and the status strip's instrument values above 900 px (`.strip-start .readout b`, all together so the row stays uniform); the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
+| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`), the position tile's two-line coordinates, and the status strip's instrument values on a helm-width strip (`.strip-start .readout b` under `@container status-strip (min-width: 62em)`, about 900 px at the default text size, measured in the strip's own em so enlarged text does not stack the strip taller; all together so the row stays uniform); the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
 | `--text-readout-lg` | 1.75 | instrument tile hero values, and the collision strip's decision numbers above |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's

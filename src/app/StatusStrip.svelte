@@ -478,6 +478,8 @@ const depthWatchPaused = $derived(
    middle, and the trailing position cluster. The action area is real grid content, not an absolute
    overlay, so it can never paint over or steal taps from the readouts at any width. */
 .status-strip {
+  /* The query container for the helm-display readout size below. */
+  container: status-strip / inline-size;
   display: grid;
   /* The two flanking columns share the leftover space equally (1fr each) and the middle column
      sizes to the pinned pills' own content, so the pills sit at the true midpoint of the strip.
@@ -685,9 +687,11 @@ const depthWatchPaused = $derived(
 }
 /* On a helm display the values are read from arm's length: every instrument readout value rises
    together, so the strip stays one uniform row, just larger. Labels and units keep the strip's own
-   size, and the trailing position and time readouts stay quiet. 901px, because the stacked phone
-   layout's max-width: 900px also matches at exactly 900. */
-@media (min-width: 901px) {
+   size, and the trailing position and time readouts stay quiet. The condition is in the strip's own
+   em, about 900px at the default text size, so a reader who has already enlarged the text keeps one
+   size rather than having the strip outgrow a tablet's height, and the stacked layout at 900px and
+   below never matches. */
+@container status-strip (min-width: 62em) {
   .strip-start .readout b {
     font-size: var(--text-readout);
   }

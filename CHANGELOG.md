@@ -19,7 +19,7 @@ All notable changes to Binnacle are documented here. The format follows
 
 - Draw every alarm and caution strip with a heavier border, a light wash of its grade color, and
   one title size, and note when the shown alarm was raised and whether this display can sound it.
-- Raise the status strip's instrument readouts to the readout size on screens wider than 900 px, and
+- Raise the status strip's instrument readouts to the readout size on helm-width displays, and
   underline stale numbers with a dashed line so they read as stale in night-red too.
 - Close the full-screen instrument dock on a phone when shallow water raises an alarm, as the other
   alarms already do.

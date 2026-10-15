@@ -208,7 +208,7 @@ describe('design contract: helm readouts', () => {
 
   it('raises every instrument readout value together on helm displays', () => {
     expect(strip).toMatch(
-      /@media \(min-width: 901px\) \{\s*\.strip-start \.readout b \{\s*font-size: var\(--text-readout\);/,
+      /@container status-strip \(min-width: 62em\) \{\s*\.strip-start \.readout b \{\s*font-size: var\(--text-readout\);/,
     );
   });
 
