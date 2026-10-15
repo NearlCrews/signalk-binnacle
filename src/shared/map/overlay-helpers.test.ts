@@ -5,7 +5,6 @@ import {
   ensureGeoJsonSource,
   ensureGeoJsonSources,
   ensureSource,
-  getPaintProp,
   overlayInteractive,
   removeLayersAndSources,
   removeSharedSourceIfOrphaned,
@@ -111,7 +110,7 @@ describe('removeLayersAndSources', () => {
   });
 });
 
-describe('setPaintProp and getPaintProp', () => {
+describe('setPaintProp', () => {
   it('passes a dynamically named property straight through to the map', () => {
     const map = { ...fakeMap(), getLayer: () => ({}) } as unknown as MapLibreMap;
     setPaintProp(map, 'a', 'line-color', '#ff0000');
@@ -122,13 +121,6 @@ describe('setPaintProp and getPaintProp', () => {
     const map = fakeMap();
     expect(() => setPaintProp(map, 'gone', 'line-color', '#ff0000')).not.toThrow();
     expect(map.setPaintProperty).not.toHaveBeenCalled();
-  });
-
-  it('reads a dynamically named property back', () => {
-    const getPaintProperty = vi.fn(() => '#00ff00');
-    const map = { ...fakeMap(), getPaintProperty } as unknown as MapLibreMap;
-    expect(getPaintProp(map, 'a', 'line-color')).toBe('#00ff00');
-    expect(getPaintProperty).toHaveBeenCalledWith('a', 'line-color');
   });
 });
 

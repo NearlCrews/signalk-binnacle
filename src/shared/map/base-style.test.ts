@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseStyleUrl, fallbackBaseStyle } from './base-style';
+import { baseStyleUrl, FALLBACK_WATER_LAYER_ID, fallbackBaseStyle } from './base-style';
 import { BASEMAP_SOURCE_ID, requireCatalogSource } from './catalog';
 
 describe('fallbackBaseStyle', () => {
@@ -8,7 +8,7 @@ describe('fallbackBaseStyle', () => {
     expect(style.version).toBe(8);
     expect(style.sources).toEqual({});
     expect(style.layers).toHaveLength(1);
-    expect(style.layers[0]).toMatchObject({ id: 'background', type: 'background' });
+    expect(style.layers[0]).toMatchObject({ id: FALLBACK_WATER_LAYER_ID, type: 'background' });
   });
 
   it('declares glyphs from the base host so symbol layers with text can still be added', () => {

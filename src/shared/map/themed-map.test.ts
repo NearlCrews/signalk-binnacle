@@ -854,7 +854,7 @@ describe('createThemedMap style watchdog', () => {
 });
 
 describe('createThemedMap recolor', () => {
-  it('recolors the base for the day sun variant and restores the source style for standard day', async () => {
+  it('recolors the base from the palette for standard day, the sun variant, and back', async () => {
     let api: ThemedMapApi | undefined;
     createThemedMap({
       container,
@@ -878,17 +878,21 @@ describe('createThemedMap recolor', () => {
     map.fire('load');
     if (!api) throw new Error('onLoad did not run');
 
+    const day = mapThemePaint('day');
     const sun = mapThemePaint('day', 'sun');
+    api.recolor('day');
+    expect(painted).toContainEqual(['bg', 'background-color', day.background]);
+    expect(painted).toContainEqual(['place-labels', 'text-color', day.label]);
+    expect(painted).toContainEqual(['place-labels', 'text-halo-color', day.background]);
+
+    painted.length = 0;
     api.recolor('day', 'sun');
     expect(painted).toContainEqual(['bg', 'background-color', sun.background]);
-    expect(painted).toContainEqual(['place-labels', 'text-color', sun.label]);
-    expect(painted).toContainEqual(['place-labels', 'text-halo-color', sun.background]);
 
-    // Standard day restores the paint captured at load (undefined in this fake), never the
-    // palette, so the real source style comes back when the sun variant is switched off.
     painted.length = 0;
+    api.recolor('night-red');
     api.recolor('day');
-    expect(painted).toContainEqual(['bg', 'background-color', undefined]);
-    expect(painted).not.toContainEqual(['bg', 'background-color', sun.background]);
+    expect(painted.at(-2)).toEqual(['place-labels', 'text-color', day.label]);
+    expect(painted).toContainEqual(['bg', 'background-color', day.background]);
   });
 });

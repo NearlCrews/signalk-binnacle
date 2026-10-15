@@ -412,11 +412,11 @@ root. App and PlotterView own the explicit construction and wiring between those
   emptyFeatureCollection, setSourceData, iconOffsetExpression with CENTERED_OFFSET, severityMatchExpression for a
     collision-graded paint value, removeLayersAndSources,
   setLayersVisibility, createSafetyOverlay for safety-band rasters, ensureSource and removeSharedSourceIfOrphaned
-  for a MapLibre source two overlays share, the guarded setPaintProp (a no-op on an absent layer,
-  since one throw inside a recolor pass used to abort the theme for every later overlay) and
-  getPaintProp for a dynamically-computed
-  paint property name (casts once through MapLibre's keyed paint types instead of re-spelling `as
-  keyof AllPaintProperties` / `as never` at each call site), overlayInteractive (the shared
+  for a MapLibre source two overlays share, the guarded setPaintProp for a dynamically-computed
+  paint property name (a no-op on an absent layer, since one throw inside a recolor pass used to
+  abort the theme for every later overlay; it casts once through MapLibre's keyed paint types
+  instead of re-spelling `as keyof AllPaintProperties` / `as never` at each call site),
+  overlayInteractive (the shared
   interaction gate: visible, not fully transparent, and any declared app-level gate all pass),
   rgbaCss), `$shared/geo`
   (latLonToLonLat and the single lat/lon-to-GeoJSON-order crossing, the Bbox4 bounding-box tuple,

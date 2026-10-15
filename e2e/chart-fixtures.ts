@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib';
 import { expect, type Page } from '@playwright/test';
-import { stubVesselsSelf } from './helpers';
+import { colorShare, stubVesselsSelf } from './helpers';
 
 const ARCHIVE_PATH = '/test-chart.pmtiles';
 const BASE_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
@@ -168,33 +168,7 @@ export async function expectFixtureChart(page: Page, version = 1): Promise<void>
   // of the composited canvas so the assertion also proves this generation's raster was drawn.
   await expect
     .poll(
-      async () => {
-        const screenshot = await canvas.screenshot();
-        return page.evaluate(
-          async ({ bytes, red }) => {
-            const bitmap = await createImageBitmap(
-              new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
-            );
-            const surface = new OffscreenCanvas(bitmap.width, bitmap.height);
-            const context = surface.getContext('2d');
-            if (!context) throw new Error('Could not decode the chart screenshot');
-            context.drawImage(bitmap, 0, 0);
-            bitmap.close();
-            const pixels = context.getImageData(0, 0, surface.width, surface.height).data;
-            let matching = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-              if (
-                Math.abs(pixels[i] - red) <= 3 &&
-                Math.abs(pixels[i + 1] - 110) <= 3 &&
-                Math.abs(pixels[i + 2] - 150) <= 3
-              )
-                matching++;
-            }
-            return matching / (surface.width * surface.height);
-          },
-          { bytes: [...screenshot], red: version === 1 ? 35 : 90 },
-        );
-      },
+      async () => colorShare(page, await canvas.screenshot(), [version === 1 ? 35 : 90, 110, 150]),
       { message: 'the fixture chart pixels should be drawn in the current viewport' },
     )
     .toBeGreaterThan(0.1);

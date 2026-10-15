@@ -82,10 +82,6 @@ export function setPaintProp(
   map.setPaintProperty(layerId, property as keyof AllPaintProperties, value as never);
 }
 
-export function getPaintProp(map: MapLibreMap, layerId: string, property: string): unknown {
-  return map.getPaintProperty(layerId, property as keyof AllPaintProperties);
-}
-
 // Guard-add a source only if absent, so two OverlayModules that share one MapLibre source can
 // both call this from their own add() without caring which one runs first.
 export function ensureSource(map: MapLibreMap, sourceId: string, spec: SourceSpecification): void {

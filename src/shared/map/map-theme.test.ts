@@ -171,3 +171,34 @@ describe('colorProperty', () => {
     expect(colorProperty('raster')).toBe('fill-color');
   });
 });
+
+describe('mapThemePaint day chart', () => {
+  const day = mapThemePaint('day');
+
+  // Sampled from the NOAA Chart Display overlay's day tiles on 2026-10-15. Matching them keeps the
+  // map one look where a NOAA chart ends or is switched off.
+  it('takes its land and shallow water from the NOAA chart overlay', () => {
+    expect(day.background).toBe('#f4e8c1');
+    expect(day.water).toBe('#afcde1');
+  });
+
+  it('keeps labels readable on land and on water', () => {
+    expect(contrast(day.label, day.background)).toBeGreaterThanOrEqual(7);
+    expect(contrast(day.label, day.water)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps roads quiet against the land', () => {
+    expect(contrast(day.road, day.background)).toBeLessThan(1.5);
+  });
+
+  it('dims the low-zoom relief by day, keeps it for dusk and sun, and hides it at night', () => {
+    const relief = (paint: ReturnType<typeof mapThemePaint>) => [
+      paint.reliefOpacity,
+      paint.reliefSaturation,
+    ];
+    expect(relief(day)).toEqual([0.35, -1]);
+    expect(relief(mapThemePaint('day', 'sun'))).toEqual([1, 0]);
+    expect(relief(mapThemePaint('dusk'))).toEqual([1, 0]);
+    expect(mapThemePaint('night-red').reliefOpacity).toBe(0);
+  });
+});

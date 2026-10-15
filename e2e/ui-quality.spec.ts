@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 import {
+  colorShare,
   contrastRatio,
   expectHelmHitTarget,
   expectInsideViewport,
@@ -612,4 +613,36 @@ test('keeps major overlay states accessibility-clean', async ({ page, browserNam
   const mobDialog = page.getByRole('alertdialog', { name: 'Man overboard' });
   await expect(mobDialog).toBeVisible();
   await expectRelevantAxeClean(page, 'MOB confirmation dialog');
+});
+
+test('paints the day chart in the paper chart palette', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('binnacle:help-orientation', 'true');
+    localStorage.setItem('binnacle:theme', 'day');
+  });
+  await page.context().route(/^https:\/\/tiles\.openfreemap\.org\/styles\/liberty/, (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        version: 8,
+        sources: {},
+        layers: [
+          { id: 'background', type: 'background', paint: { 'background-color': '#f8f4f0' } },
+        ],
+      }),
+    }),
+  );
+  await stubVesselsSelf(page);
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'day');
+  const canvas = page.locator('.maplibregl-canvas').first();
+  await expect(canvas).toBeVisible();
+  await expect
+    .poll(async () => colorShare(page, await canvas.screenshot(), [0xf4, 0xe8, 0xc1]), {
+      message: 'the day base map should paint the paper chart land color',
+    })
+    .toBeGreaterThan(0.5);
+  // The stub's own color must be gone, so a match proves the recolor ran.
+  expect(await colorShare(page, await canvas.screenshot(), [0xf8, 0xf4, 0xf0])).toBeLessThan(0.01);
 });

@@ -65,6 +65,11 @@ export interface MapThemePaint {
   // keep the brightest pixel low. This is an approximation, not true night-red color.
   rasterSaturation: number;
   rasterBrightnessMax: number;
+  // The base style's own low-zoom shaded-relief raster. Day dims and grays it so it reads as chart
+  // shading rather than terrain color; dusk and the sun variant keep it as served; night-red hides
+  // it, since its colors cannot be recolored into the red band.
+  reliefOpacity: number;
+  reliefSaturation: number;
 }
 
 // The base-map color keys a vector chart's source-layer can be themed to. The other color keys
@@ -74,16 +79,16 @@ export type MapColorKey = 'background' | 'water' | 'land' | 'landcover' | 'road'
 
 const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
   day: {
-    // The base map renders land and empty areas as the background layer, so this is the land
-    // tone, not a water tone. A warm light neutral (close to the source style's cream) keeps the
-    // map from taking on a blue cast once the theme recolor runs over the warm default.
-    background: '#f2efe8',
-    water: '#a8c9e0',
-    land: '#eae6dd',
-    landcover: '#d6e6c8',
-    road: '#c9c2b6',
-    boundary: '#b6a98f',
-    label: '#33414c',
+    // The paper chart palette. The base map renders land and empty areas as the background layer,
+    // so background is the land tone. Land and water are the NOAA chart overlay's own day colors, so
+    // the map keeps one look where a chart ends; roads sit one quiet step darker than the land.
+    background: '#f4e8c1',
+    water: '#afcde1',
+    land: '#eee0b4',
+    landcover: '#ece3b8',
+    road: '#dccb9f',
+    boundary: '#b49a6a',
+    label: '#4b3f2a',
     danger: '#a9361a',
     warning: '#e0a020',
     note: '#7a3fa0',
@@ -104,6 +109,8 @@ const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
     aisTarget: { r: 0xe0, g: 0xa0, b: 0x20, a: 0xff },
     rasterSaturation: 0,
     rasterBrightnessMax: 1,
+    reliefOpacity: 0.35,
+    reliefSaturation: -1,
   },
   dusk: {
     background: '#0a151f',
@@ -133,6 +140,8 @@ const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
     aisTarget: { r: 0xd9, g: 0xa4, b: 0x41, a: 0xff },
     rasterSaturation: 0,
     rasterBrightnessMax: 1,
+    reliefOpacity: 1,
+    reliefSaturation: 0,
   },
   'night-red': {
     background: '#000000',
@@ -164,6 +173,8 @@ const PAINT: Record<Theme, Omit<MapThemePaint, 'theme'>> = {
     aisTarget: { r: 0xb0, g: 0x2e, b: 0x00, a: 0xff },
     rasterSaturation: -1,
     rasterBrightnessMax: 0.45,
+    reliefOpacity: 0,
+    reliefSaturation: 0,
   },
 };
 
@@ -202,6 +213,9 @@ const SUN_PAINT: Omit<MapThemePaint, 'theme'> = {
   scrubMarker: '#e05f00',
   ownVessel: { r: 0x14, g: 0x54, b: 0x92, a: 0xff },
   aisTarget: { r: 0xb0, g: 0x76, b: 0x00, a: 0xff },
+  // Sun keeps the low-zoom relief as served; only the standard day palette dims it.
+  reliefOpacity: 1,
+  reliefSaturation: 0,
 };
 
 export function mapThemePaint(theme: Theme, variant: MapPaintVariant = 'standard'): MapThemePaint {

@@ -1,13 +1,13 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
+import { FALLBACK_WATER_LAYER_ID } from './base-style';
 import { CHART_SOURCE_PREFIX } from './chart-adapter';
 import { colorProperty, type MapThemePaint } from './map-theme';
-import { getPaintProp, setPaintProp } from './overlay-helpers';
+import { setPaintProp } from './overlay-helpers';
 import { RASTER_ID_PREFIX } from './raster-overlay';
 
-// The base map is the OpenFreeMap "liberty" style (OpenMapTiles schema). Its default
-// palette is a light day theme, so on dusk and night-red the roads stayed white and the
-// landcover green. We recolor it per theme from each layer's source-layer, which is a far
-// more stable key than the individual layer ids.
+// The base map is the OpenFreeMap "liberty" style (OpenMapTiles schema). Every theme recolors it
+// from each layer's source-layer, which is a far more stable key than the individual layer ids: day
+// as a paper chart, dusk and night-red as dark charts.
 
 // Every binnacle-owned overlay layer id starts with this, so the base recolor can tell them apart
 // from the base-style layers it may touch. Shared with the overlay id builders.
@@ -87,7 +87,11 @@ export function baseLayerPaint(
   layer: BaseLayer,
   paint: MapThemePaint,
 ): { property: string; color: string } | null {
-  if (layer.type === 'background') return { property: 'background-color', color: paint.background };
+  if (layer.type === 'background')
+    return {
+      property: 'background-color',
+      color: layer.id === FALLBACK_WATER_LAYER_ID ? paint.water : paint.background,
+    };
   // Every text label (place, road, water names) takes the theme label color.
   if (layer.type === 'symbol') return { property: 'text-color', color: paint.label };
   const property = paintProperty(layer.type);
@@ -168,115 +172,22 @@ export function applyBaseIconVisibility(
   }
 }
 
-// The base style's raster layers (Natural Earth's shaded relief, visible at low zoom) have no
-// sensible single recolor (baseLayerPaint leaves raster untouched), so they keep their real terrain
-// colors under every theme unless hidden separately. Hide them at night-red to keep the map pure
-// red on black, mirroring applyBaseIconVisibility. Other themes show them normally.
+// The base style's raster layers (Natural Earth's shaded relief, visible at low zoom) have no single
+// recolor, so each theme carries its own treatment: dimmed and grayed by day, as served at dusk and
+// in the sun variant, hidden at night-red to keep the map pure red on black.
 // Accepts a precomputed layer list (same contract as applyBaseTheme).
 export function applyBaseRasterVisibility(
   map: MapLibreMap,
   paint: MapThemePaint,
   layers?: BaseLayer[],
 ): void {
-  const opacity = paint.theme === 'night-red' ? 0 : 1;
   for (const layer of layers ?? themableBaseLayers(map)) {
     if (layer.type !== 'raster') continue;
     try {
-      map.setPaintProperty(layer.id, 'raster-opacity', opacity);
+      map.setPaintProperty(layer.id, 'raster-opacity', paint.reliefOpacity);
+      map.setPaintProperty(layer.id, 'raster-saturation', paint.reliefSaturation);
     } catch {
-      // A raster layer without this property is fine; skip it.
-    }
-  }
-}
-
-// The source style's own paint, captured per base layer so the day theme can restore the real
-// map colors exactly rather than approximate them. Each entry keeps the property the theme would
-// recolor, its original color, the original text-halo (labels), and whether a fill pattern was
-// present. Capture once before the first recolor, while the layers still hold their source paint.
-export type BaseSnapshot = Array<{
-  id: string;
-  property: string;
-  color: unknown;
-  halo?: unknown;
-  pattern?: unknown;
-  outline?: unknown;
-  isFill?: boolean;
-  isSymbol?: boolean;
-}>;
-
-// Accepts a precomputed layer list (same contract as applyBaseTheme).
-export function captureBaseTheme(
-  map: MapLibreMap,
-  paint: MapThemePaint,
-  layers?: BaseLayer[],
-): BaseSnapshot {
-  const snapshot: BaseSnapshot = [];
-  for (const layer of layers ?? themableBaseLayers(map)) {
-    const themed = baseLayerPaint(layer, paint);
-    if (!themed) continue;
-    const isFill = layer.type === 'fill';
-    // Capture the themed color first and on its own; a failure reading an optional field (halo,
-    // pattern) must never drop the whole entry, or the day theme cannot restore that layer.
-    let color: unknown;
-    try {
-      color = getPaintProp(map, layer.id, themed.property);
-    } catch {
-      continue;
-    }
-    const isSymbol = layer.type === 'symbol';
-    const entry: BaseSnapshot[number] = {
-      id: layer.id,
-      property: themed.property,
-      color,
-      isFill,
-      isSymbol,
-    };
-    if (isSymbol) {
-      // Capture the source halo even when it is absent (undefined): the theme adds a halo to
-      // every label, so the restore must put back exactly what was there, including nothing.
-      try {
-        entry.halo = map.getPaintProperty(layer.id, 'text-halo-color');
-      } catch {
-        // No halo to read; restore resets it to the style default either way.
-      }
-    }
-    if (isFill) {
-      // fill-pattern is a paint property in MapLibre, not a layout one.
-      try {
-        entry.pattern = map.getPaintProperty(layer.id, 'fill-pattern');
-      } catch {
-        // No pattern on this fill; restore clears it to undefined either way.
-      }
-      // The theme aligns fill-outline-color with the fill, so the source outline (often absent,
-      // sometimes an explicit green) must be captured, undefined included, for the day restore.
-      try {
-        entry.outline = map.getPaintProperty(layer.id, 'fill-outline-color');
-      } catch {
-        // No outline to read; restore resets it to the style default either way.
-      }
-    }
-    snapshot.push(entry);
-  }
-  return snapshot;
-}
-
-// Restore the source style's captured colors, halos, and fill patterns, so the day theme shows
-// the real map instead of the recolor approximation.
-export function restoreBaseTheme(map: MapLibreMap, snapshot: BaseSnapshot): void {
-  for (const entry of snapshot) {
-    try {
-      setPaintProp(map, entry.id, entry.property, entry.color);
-      // Restore the label halo for every symbol, including back to undefined (the style default),
-      // so the theme's added halo does not linger as a dark outline on the day map.
-      if (entry.isSymbol) setPaintProp(map, entry.id, 'text-halo-color', entry.halo);
-      // fill-pattern is a paint property in MapLibre; restoring it (often undefined) brings back
-      // the source style's hatch where the recolor had cleared it.
-      if (entry.isFill) {
-        setPaintProp(map, entry.id, 'fill-pattern', entry.pattern);
-        setPaintProp(map, entry.id, 'fill-outline-color', entry.outline);
-      }
-    } catch {
-      // A layer that no longer exists or lacks the property is fine; skip it.
+      // A raster layer without these properties is fine; skip it.
     }
   }
 }

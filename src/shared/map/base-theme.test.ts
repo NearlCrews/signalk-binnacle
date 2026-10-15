@@ -1,19 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { FALLBACK_WATER_LAYER_ID } from './base-style';
 import {
   applyBaseIconVisibility,
+  applyBaseRasterVisibility,
   applyBaseTheme,
   baseLayerPaint,
-  captureBaseTheme,
-  restoreBaseTheme,
 } from './base-theme';
 import { mapThemePaint } from './map-theme';
 
 const paint = mapThemePaint('night-red');
 
-// A minimal MapLibre-shaped stub: it stores paint and layout values so capture and restore can
-// round-trip them. Crucially, MapLibre treats fill-pattern as a PAINT property and throws if you
-// reach it through the layout API, so the stub does too. That faithfulness is what makes these
-// tests catch the layout-vs-paint mistake that once dropped every fill from the snapshot.
+// A minimal MapLibre-shaped stub that stores paint and layout values. MapLibre treats fill-pattern
+// as a PAINT property and throws if it is reached through the layout API, so the stub does too.
 function fakeStyleMap(layers: Array<Record<string, unknown>>) {
   const paintStore = new Map<string, unknown>();
   const layoutStore = new Map<string, unknown>();
@@ -90,6 +88,16 @@ describe('baseLayerPaint', () => {
     ).toEqual({ property: 'text-color', color: paint.label });
   });
 
+  it('paints the offline fallback layer as water in every theme', () => {
+    for (const theme of ['day', 'dusk', 'night-red'] as const) {
+      const themed = mapThemePaint(theme);
+      expect(baseLayerPaint({ id: FALLBACK_WATER_LAYER_ID, type: 'background' }, themed)).toEqual({
+        property: 'background-color',
+        color: themed.water,
+      });
+    }
+  });
+
   it('leaves rasters and unknown source layers untouched', () => {
     expect(baseLayerPaint({ id: 'natural_earth', type: 'raster' }, paint)).toBeNull();
     expect(
@@ -98,67 +106,27 @@ describe('baseLayerPaint', () => {
   });
 });
 
-describe('captureBaseTheme and restoreBaseTheme', () => {
+describe('applyBaseTheme', () => {
   const night = mapThemePaint('night-red');
 
-  it('restores the source colors after a recolor (day shows the real map)', () => {
-    const layers = [
+  it('recolors by source layer, clears fill patterns, and halos every label', () => {
+    const map = fakeStyleMap([
       { id: 'background', type: 'background' },
       { id: 'water', type: 'fill', 'source-layer': 'water' },
-      // A label that defines its own halo, and one that relies on the style default (no halo).
-      { id: 'label_city', type: 'symbol', 'source-layer': 'place' },
       { id: 'road_label', type: 'symbol', 'source-layer': 'transportation_name' },
       { id: 'mystery', type: 'fill', 'source-layer': 'who_knows' },
-    ];
-    const map = fakeStyleMap(layers);
-    // Seed the source-style values. fill-pattern is a paint property, like MapLibre treats it.
-    map.setPaintProperty('background', 'background-color', '#f8f4f0');
-    map.setPaintProperty('water', 'fill-color', 'rgb(158,189,255)');
-    map.setPaintProperty('water', 'fill-pattern', 'wetland');
-    map.setPaintProperty('label_city', 'text-color', '#333333');
-    map.setPaintProperty('label_city', 'text-halo-color', '#ffffff');
-    map.setPaintProperty('road_label', 'text-color', '#666');
-
-    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
-    const snapshot = captureBaseTheme(map as any, mapThemePaint('day'));
-    // Every base layer the recolor touches must be captured, fills included (the layout-vs-paint
-    // bug once dropped all of them, leaving water and land stuck dark after switching to day).
-    expect(snapshot.map((e) => e.id).sort()).toEqual([
-      'background',
-      'label_city',
-      'road_label',
-      'water',
     ]);
+    map.setPaintProperty('water', 'fill-pattern', 'wetland');
+    map.setPaintProperty('mystery', 'fill-color', 'rgb(1,2,3)');
 
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
     applyBaseTheme(map as any, night);
     expect(map.getPaintProperty('background', 'background-color')).toBe(night.background);
+    expect(map.getPaintProperty('water', 'fill-color')).toBe(night.water);
     expect(map.getPaintProperty('water', 'fill-pattern')).toBeUndefined();
-    // The theme gives every label a background-colored halo, even the one with none of its own.
+    // The theme gives every label a background-colored halo, even one with none of its own.
     expect(map.getPaintProperty('road_label', 'text-halo-color')).toBe(night.background);
-
-    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
-    restoreBaseTheme(map as any, snapshot);
-    expect(map.getPaintProperty('background', 'background-color')).toBe('#f8f4f0');
-    expect(map.getPaintProperty('water', 'fill-color')).toBe('rgb(158,189,255)');
-    expect(map.getPaintProperty('water', 'fill-pattern')).toBe('wetland');
-    expect(map.getPaintProperty('label_city', 'text-halo-color')).toBe('#ffffff');
-    // The label with no source halo must lose the theme's added halo, not keep it dark.
-    expect(map.getPaintProperty('road_label', 'text-halo-color')).toBeUndefined();
-  });
-
-  it('keeps an entry even when an optional getter throws', () => {
-    const map = fakeStyleMap([{ id: 'water', type: 'fill', 'source-layer': 'water' }]);
-    map.setPaintProperty('water', 'fill-color', 'rgb(1,2,3)');
-    // Simulate a map where reading the optional fill-pattern throws; the color must still capture.
-    map.getPaintProperty = (id: string, prop: string) => {
-      if (prop === 'fill-pattern') throw new Error('boom');
-      return id === 'water' && prop === 'fill-color' ? 'rgb(1,2,3)' : undefined;
-    };
-    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
-    const snapshot = captureBaseTheme(map as any, mapThemePaint('day'));
-    expect(snapshot).toHaveLength(1);
-    expect(snapshot[0]).toMatchObject({ id: 'water', property: 'fill-color', color: 'rgb(1,2,3)' });
+    expect(map.getPaintProperty('mystery', 'fill-color')).toBe('rgb(1,2,3)');
   });
 });
 
@@ -201,5 +169,33 @@ describe('applyBaseIconVisibility', () => {
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
     applyBaseIconVisibility(map as any, mapThemePaint('dusk'));
     expect(map.getPaintProperty('poi_r1', 'icon-opacity')).toBe(0.4);
+  });
+});
+
+describe('applyBaseRasterVisibility', () => {
+  it('applies each theme relief treatment to base rasters and leaves overlay rasters alone', () => {
+    const map = fakeStyleMap([
+      { id: 'natural_earth', type: 'raster' },
+      { id: 'binnacle-depth', type: 'raster' },
+      { id: 'water', type: 'fill', 'source-layer': 'water' },
+    ]);
+    const relief = () => [
+      map.getPaintProperty('natural_earth', 'raster-opacity'),
+      map.getPaintProperty('natural_earth', 'raster-saturation'),
+    ];
+
+    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
+    applyBaseRasterVisibility(map as any, mapThemePaint('day'));
+    expect(relief()).toEqual([0.35, -1]);
+    expect(map.getPaintProperty('binnacle-depth', 'raster-opacity')).toBeUndefined();
+    expect(map.getPaintProperty('water', 'raster-opacity')).toBeUndefined();
+
+    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
+    applyBaseRasterVisibility(map as any, mapThemePaint('night-red'));
+    expect(relief()[0]).toBe(0);
+
+    // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for the test
+    applyBaseRasterVisibility(map as any, mapThemePaint('dusk'));
+    expect(relief()).toEqual([1, 0]);
   });
 });

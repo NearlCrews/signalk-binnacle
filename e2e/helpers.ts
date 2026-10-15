@@ -141,3 +141,37 @@ export async function contrastRatio(target: Locator): Promise<number> {
     return (light + 0.05) / (dark + 0.05);
   });
 }
+
+// The share of a PNG's pixels within `tolerance` of one RGB color, decoded in the page. Proves a
+// canvas actually painted a color rather than that a style merely asked for it.
+export async function colorShare(
+  page: Page,
+  png: Buffer,
+  rgb: readonly [number, number, number],
+  tolerance = 3,
+): Promise<number> {
+  return page.evaluate(
+    async ({ bytes, rgb: [red, green, blue], tolerance: within }) => {
+      const bitmap = await createImageBitmap(
+        new Blob([new Uint8Array(bytes)], { type: 'image/png' }),
+      );
+      const surface = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = surface.getContext('2d');
+      if (!context) throw new Error('Could not decode the screenshot');
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const pixels = context.getImageData(0, 0, surface.width, surface.height).data;
+      let matching = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (
+          Math.abs(pixels[i] - red) <= within &&
+          Math.abs(pixels[i + 1] - green) <= within &&
+          Math.abs(pixels[i + 2] - blue) <= within
+        )
+          matching++;
+      }
+      return matching / (surface.width * surface.height);
+    },
+    { bytes: [...png], rgb, tolerance },
+  );
+}

@@ -27,14 +27,18 @@ export function baseStyleUrl(companionBase?: string | null): string {
   return companionBase ? `${companionBase}/style/basemap` : vectorStyleUrl();
 }
 
+// The fallback's one layer stands for open water, so the theme recolor paints it with the water
+// color rather than the land-toned background every other base background layer takes.
+export const FALLBACK_WATER_LAYER_ID = 'fallback-water';
+
 // The last-resort base when the style JSON itself is unreachable (plain http at sea, where no
 // service worker can cache it): one water-colored background so the map can finish its first
 // render and fire 'load', which is what mounts every overlay, including the charts served from
 // the IndexedDB block cache. This is a runtime fallback for a failed fetch, not a replacement
 // for the vector base (see above). The glyphs URL must be declared even though it is unreachable
 // here: adding any symbol layer with a text-field throws without one, while a failed glyph fetch
-// just renders no text. The background color matches the day theme's water; the recolor pass
-// themes it like any base background layer.
+// just renders no text. The background starts as the day theme's water, and the recolor pass
+// keeps it the water color of every theme.
 export function fallbackBaseStyle(): StyleSpecification {
   return {
     version: 8,
@@ -43,7 +47,7 @@ export function fallbackBaseStyle(): StyleSpecification {
     sources: {},
     layers: [
       {
-        id: 'background',
+        id: FALLBACK_WATER_LAYER_ID,
         type: 'background',
         paint: { 'background-color': mapThemePaint('day').water },
       },
