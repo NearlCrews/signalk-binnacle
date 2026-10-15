@@ -4,8 +4,10 @@ import {
   contrastRatio,
   expectNoHorizontalOverflow,
   FIXTURE_SERVER,
+  nightRedOffendingPixels,
   openMenuItem,
   stubVesselsSelf,
+  switchToTheme,
   waitForSignalKConnection,
 } from './helpers';
 
@@ -646,4 +648,64 @@ test('watch handoff keeps an offline snapshot on the device and says so', async 
   await expect(panel.getByText('Wind building.')).toBeVisible();
   await expect(panel.getByText('On this device only')).toBeVisible();
   await expect(panel.getByText('GPS fix', { exact: true })).toBeVisible();
+});
+
+const DEPTH = 'environment.depth.belowTransducer';
+
+test('a shoaling depth raises a strip that acknowledges and re-arms on further shoaling', async ({
+  page,
+}) => {
+  await openApp(page);
+  await sendDelta(page, [...OWN_FIX, { path: DEPTH, value: 12 }]);
+  await sendDelta(page, [{ path: DEPTH, value: 2.5 }]);
+  const strip = page.getByRole('complementary', { name: 'Shallow water' });
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText('2.5');
+  await expect(page.locator('.rail-note')).toContainText(/Raised \d/);
+  await strip.getByRole('button', { name: 'Acknowledge' }).click();
+  await expect(strip).toHaveClass(/is-ack/);
+  await expect(strip).toContainText('Sounds again below 2.2');
+  await sendDelta(page, [{ path: DEPTH, value: 2.0 }]);
+  await expect(strip).not.toHaveClass(/is-ack/);
+  await expect(strip.getByRole('button', { name: 'Acknowledge' })).toBeVisible();
+});
+
+test('collision danger outranks shallow water, which waits as a chip', async ({ page }) => {
+  await openApp(page);
+  await sendDelta(page, [...OWN_FIX, { path: DEPTH, value: 2.5 }]);
+  await sendDelta(page, CLOSING_TARGET, TARGET_CONTEXT);
+  await expect(page.getByRole('complementary', { name: /Collision|Danger/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Shallow water/ })).toBeVisible();
+});
+
+test('a shallow alarm closes the full-screen instrument dock on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await sendDelta(page, [...OWN_FIX, { path: DEPTH, value: 12 }]);
+  await openMenuItem(page, /^Instrument dock/);
+  const dock = page.getByRole('dialog', { name: 'Instruments' });
+  await expect(dock).toBeVisible();
+  await sendDelta(page, [{ path: DEPTH, value: 2.5 }]);
+  await expect(dock).toBeHidden();
+  const strip = page.getByRole('complementary', { name: 'Shallow water' });
+  // Actionability fails if anything still covers the strip.
+  await strip.getByRole('button', { name: 'Acknowledge' }).click();
+  await expect(strip).toHaveClass(/is-ack/);
+});
+
+test('a night-red shallow strip carries no gray or blue pixels', async ({ page }) => {
+  await openApp(page);
+  await switchToTheme(page, 'night-red');
+  await sendDelta(page, [...OWN_FIX, { path: DEPTH, value: 2.5 }]);
+  const strip = page.getByRole('complementary', { name: 'Shallow water' });
+  await expect(strip).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const box = await strip.boundingBox();
+  if (!box) throw new Error('the shallow strip is not laid out');
+  // Inset past the rounded corners and the half-pixel edge rows, so the audit reads the strip's own
+  // pixels rather than the chart showing around its corners.
+  const png = await page.screenshot({
+    clip: { x: box.x + 3, y: box.y + 3, width: box.width - 6, height: box.height - 6 },
+  });
+  expect(await nightRedOffendingPixels(page, png)).toEqual([]);
 });

@@ -1658,6 +1658,7 @@ const emergencySafetyActive = $derived(
     (collision.assessment.worst === 'danger' && (!collision.suppressed || collision.escalating)) ||
     anchor.dragging ||
     anchor.blindAlarm ||
+    (shallowController.alarming && !shallowController.acknowledged) ||
     genericAlarms.some(
       (notification) => notification.state === 'emergency' || notification.state === 'alarm',
     ),
@@ -1758,6 +1759,7 @@ const safetyAnnunciator = createSafetyController({
       history: {
         label: 'Shallow water',
         active: shallowController.alarming,
+        acknowledged: shallowController.acknowledged,
         status: shallowController.monitorState === 'monitoring' ? 'current' : 'unavailable',
       },
     },
@@ -3222,6 +3224,7 @@ const plotterActions = {
     {genericAlarms}
     genericSounding={notificationsController.genericSounding}
     genericLocallyMuted={notificationsController.genericLocallyMuted}
+    shallowAlarm={shallowController}
     shallowMonitor={{
       monitorState: shallowController.monitorState,
       serverLimitMeters: shallowController.serverLimitMeters,

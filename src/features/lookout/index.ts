@@ -19,6 +19,7 @@ export {
   notificationLabel,
   worstRaisedNotification,
 } from './notification-actions';
+export { default as ShallowStrip } from './ShallowStrip.svelte';
 export { isShallowAlarmActive, SHALLOW_DEGRADE_TONE, SHALLOW_TONE } from './shallow-alarm';
 export type {
   ShallowAlarmView,

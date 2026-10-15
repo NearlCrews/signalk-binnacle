@@ -233,6 +233,8 @@ interface FlatProps {
   genericSounding: boolean;
   genericLocallyMuted: boolean;
   shallowMonitor: ShallowMonitorSnapshot;
+  // The shallow-water alarm the safety rail renders; App passes the controller itself.
+  shallowAlarm: import('$features/lookout').ShallowAlarmView;
   arrivalMuted: import('$shared/settings').PersistedValue<boolean>;
   alarmVolume: import('$features/lookout').AlarmVolumeSetting;
   alarmLog: import('$features/lookout').AlarmLog;
@@ -508,6 +510,7 @@ let {
   genericSounding,
   genericLocallyMuted,
   shallowMonitor,
+  shallowAlarm,
   actions,
 }: Props = $props();
 
@@ -1175,6 +1178,8 @@ $effect(() => {
         ? (courseGuidance.nextPointName ?? 'the current destination')
         : undefined}
       mobActiveCourseContext={courseGuidance.actionContext}
+      shallow={shallowAlarm}
+      audioReady={audioState === 'ready'}
       {genericAlarms}
       {genericSounding}
       {genericLocallyMuted}

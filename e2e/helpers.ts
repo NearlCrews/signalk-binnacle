@@ -175,3 +175,44 @@ export async function colorShare(
     { bytes: [...png], rgb, tolerance },
   );
 }
+
+// The active starter profile applies its own theme on boot, so switch through the toolbar button,
+// which cycles day, dusk, and night-red.
+export async function switchToTheme(
+  page: Page,
+  theme: 'day' | 'dusk' | 'night-red',
+): Promise<void> {
+  for (let i = 0; i < 3; i += 1) {
+    if ((await page.evaluate(() => document.documentElement.dataset.theme)) === theme) break;
+    await page.getByRole('button', { name: /^Switch theme/ }).click();
+  }
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+}
+
+// Counts pixels that carry blue or read as neutral gray. Antialiased red on black stays red, so
+// the blue rule has a small tolerance for compression noise only.
+export async function nightRedOffendingPixels(page: Page, png: Buffer): Promise<string[]> {
+  return page.evaluate(async (base64) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${base64}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('no 2d context');
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, image.width, image.height);
+    const bad: string[] = [];
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b] = [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0];
+      const blue = b > 12;
+      const gray = r > 24 && Math.abs(r - g) < 12 && Math.abs(r - b) < 12;
+      if ((blue || gray) && bad.length < 10) {
+        const pixel = i / 4;
+        bad.push(`${pixel % image.width},${Math.floor(pixel / image.width)} rgb(${r} ${g} ${b})`);
+      }
+    }
+    return bad;
+  }, png.toString('base64'));
+}
