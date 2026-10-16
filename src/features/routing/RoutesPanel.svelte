@@ -18,7 +18,7 @@ import {
 } from '$entities/route';
 import type { WeatherGrid, WeatherStatus } from '$entities/weather';
 import type { LatLon } from '$shared/geo';
-import { createMediaQuery, formatNm, type UnitsSelection } from '$shared/lib';
+import { createMediaQuery, formatNm, NARROW_QUERY, type UnitsSelection } from '$shared/lib';
 import type { PersistedValue } from '$shared/settings';
 import { type AuthController, resourcesProviderNote } from '$shared/signalk';
 import {
@@ -336,8 +336,7 @@ const savedCards = $derived(
 const minimize = createPanelMinimize();
 // Matches the shell's narrow breakpoint: under it the panel behaves as a phone sheet over the
 // chart, so point placement needs the sheet out of the way.
-const PHONE_SHEET_BREAKPOINT_PX = 600;
-const phoneLayout = createMediaQuery(`(max-width: ${PHONE_SHEET_BREAKPOINT_PX}px)`);
+const phoneLayout = createMediaQuery(NARROW_QUERY);
 // A non-reactive edge sentinel, tracked by hand so the effect fires only on the false to true edit
 // transition; deliberately not $state, so writing it does not re-trigger the effect.
 let wasEditing = false;

@@ -5,109 +5,88 @@ import PinnedActions from './PinnedActions.svelte';
 
 afterEach(() => vi.unstubAllGlobals());
 
+const FOUR_ACTIONS = ['Menu', 'Center', 'Follow', 'AIS'].map((label) => ({
+  id: label,
+  label,
+  onSelect: () => {},
+}));
+
+interface CapacityHarness {
+  target: HTMLElement;
+  // Wait out animation frames, flushing after each, so a resize measurement lands.
+  settle: (frames?: number) => Promise<void>;
+}
+
+// A stacked-strip toolbar column at large text in a portrait phone viewport: the bar measures the
+// column it is given, with just enough pill styling for real control sizes. The viewport, root
+// style, and mount are restored afterward.
+async function withCapacityHarness(
+  columnWidth: number,
+  controlSize: string,
+  run: (harness: CapacityHarness) => Promise<void>,
+): Promise<void> {
+  const previousViewport = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(320, 568);
+  const rootStyle = document.documentElement.style;
+  const previousRootStyle = rootStyle.cssText;
+  rootStyle.fontSize = '24px';
+  rootStyle.setProperty('--control-size', '2.75rem');
+  const target = document.createElement('div');
+  target.dataset.pinnedCapacityTest = '';
+  target.style.cssText = `display:grid;grid-template-columns:1fr;justify-items:center;width:${columnWidth}px;--control-size:${controlSize};--space-1:4px;--space-2:4px;`;
+  const style = document.createElement('style');
+  style.textContent = `
+    [data-pinned-capacity-test] .btn-pill { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
+    [data-pinned-capacity-test] .visually-hidden { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
+  `;
+  document.head.append(style);
+  document.body.append(target);
+  const component = mount(PinnedActions, { target, props: { actions: FOUR_ACTIONS } });
+  flushSync();
+  const settle = async (frames = 4): Promise<void> => {
+    for (let frame = 0; frame < frames; frame += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      flushSync();
+    }
+  };
+  try {
+    await run({ target, settle });
+  } finally {
+    await unmount(component);
+    target.remove();
+    style.remove();
+    rootStyle.cssText = previousRootStyle;
+    await page.viewport(previousViewport.width, previousViewport.height);
+  }
+}
+
 describe('pinned action availability and resize lifecycle', () => {
   it.each([
     ['44px', 4],
     ['2.75rem', 3],
   ] as const)(
     'fits inherited %s controls without shrinking the available toolbar column',
-    async (controlSize, expectedPills) => {
-      const previousViewport = { width: window.innerWidth, height: window.innerHeight };
-      // Portrait: the stacked strip's single toolbar column. A phone held sideways sizes the bar to
-      // its own pills instead (the next case).
-      await page.viewport(320, 568);
-      const rootStyle = document.documentElement.style;
-      const previousRootStyle = rootStyle.cssText;
-      rootStyle.fontSize = '24px';
-      rootStyle.setProperty('--control-size', '2.75rem');
-      const target = document.createElement('div');
-      target.dataset.pinnedCapacityTest = '';
-      target.style.cssText = `display:grid;grid-template-columns:1fr;justify-items:center;width:220px;--control-size:${controlSize};--space-1:4px;--space-2:4px;`;
-      const style = document.createElement('style');
-      style.textContent = `
-      [data-pinned-capacity-test] .btn-pill { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
-      [data-pinned-capacity-test] .visually-hidden { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
-    `;
-      document.head.append(style);
-      document.body.append(target);
-      const component = mount(PinnedActions, {
-        target,
-        props: {
-          actions: ['Menu', 'Center', 'Follow', 'AIS'].map((label) => ({
-            id: label,
-            label,
-            onSelect: () => {},
-          })),
-        },
-      });
-      flushSync();
-      try {
+    (controlSize, expectedPills) =>
+      withCapacityHarness(220, controlSize, async ({ target, settle }) => {
         for (let frame = 0; frame < 4; frame += 1) {
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-          flushSync();
+          await settle(1);
           expect(target.querySelector<HTMLElement>('.pinned-actions')?.clientWidth).toBe(220);
           expect(target.querySelectorAll('.btn-pill')).toHaveLength(expectedPills);
           expect(target.querySelector('.pinned-actions > button')?.textContent).toContain('Menu');
         }
-      } finally {
-        await unmount(component);
-        target.remove();
-        style.remove();
-        rootStyle.cssText = previousRootStyle;
-        await page.viewport(previousViewport.width, previousViewport.height);
-      }
-    },
+      }),
   );
 
-  it('regains its full pill count at large text when a phone turns sideways', async () => {
-    const previousViewport = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(320, 568);
-    const rootStyle = document.documentElement.style;
-    const previousRootStyle = rootStyle.cssText;
-    rootStyle.fontSize = '24px';
-    const target = document.createElement('div');
-    target.dataset.pinnedCapacityTest = '';
-    // A 100px stacked column fits two 44px pills; sideways the bar is sized to its own pills, so a
-    // capacity measured from it would hold at two.
-    target.style.cssText =
-      'display:grid;grid-template-columns:1fr;justify-items:center;width:100px;--control-size:44px;--space-1:4px;--space-2:4px;';
-    const style = document.createElement('style');
-    style.textContent = `
-      [data-pinned-capacity-test] .btn-pill { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
-      [data-pinned-capacity-test] .visually-hidden { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
-    `;
-    document.head.append(style);
-    document.body.append(target);
-    const component = mount(PinnedActions, {
-      target,
-      props: {
-        actions: ['Menu', 'Center', 'Follow', 'AIS'].map((label) => ({
-          id: label,
-          label,
-          onSelect: () => {},
-        })),
-      },
-    });
-    const settle = async (): Promise<void> => {
-      for (let frame = 0; frame < 4; frame += 1) {
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        flushSync();
-      }
-    };
-    try {
+  it('regains its full pill count at large text when a phone turns sideways', () =>
+    // A 100px column fits two 44px pills; sideways the bar is sized to its own pills, so a capacity
+    // measured from it would hold at two.
+    withCapacityHarness(100, '44px', async ({ target, settle }) => {
       await settle();
       expect(target.querySelectorAll('.btn-pill')).toHaveLength(2);
       await page.viewport(568, 320);
       await settle();
       expect(target.querySelectorAll('.btn-pill')).toHaveLength(4);
-    } finally {
-      await unmount(component);
-      target.remove();
-      style.remove();
-      rootStyle.cssText = previousRootStyle;
-      await page.viewport(previousViewport.width, previousViewport.height);
-    }
-  });
+    }));
 
   it('lets a blocked action explain itself without invoking it', async () => {
     const target = document.createElement('div');

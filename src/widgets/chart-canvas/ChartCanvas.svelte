@@ -144,6 +144,9 @@ interface Props {
   onServerChartsStatus?: (status: 'loading' | 'ready' | 'partial' | 'error') => void;
   // Opens Layers and charts in chart mode: the ambient chart-trust badge's recovery route.
   onOpenChartLayers?: () => void;
+  // The host has a banner or safety strip where the first-run hint sits; the hint waits, without
+  // being dismissed, until they clear.
+  hintSuppressed?: boolean;
   // Critical navigation overlays failed to mount. The host surfaces this instead of leaving a
   // navigator with an apparently healthy chart that is missing the vessel or a safety mark.
   onCriticalOverlayError?: (overlayIds: string[]) => void;
@@ -231,6 +234,7 @@ const {
   onServerChartsReady,
   onServerChartsStatus,
   onOpenChartLayers,
+  hintSuppressed = false,
   onCriticalOverlayError,
   onViewChange,
   onNoteSelect,
@@ -919,7 +923,7 @@ onDestroy(() => {
          is starting rather than sitting blank through the companion probe. -->
     <div class="chart-booting" role="status">Loading chart…</div>
   {/if}
-  {#if showContextHint}
+  {#if showContextHint && !hintSuppressed}
     <div class="context-hint popover-card action-note" role="status">
       <span>Press and hold the chart for actions.</span>
       <button type="button" class="btn btn-ghost" onclick={dismissContextHint}>Got it</button>

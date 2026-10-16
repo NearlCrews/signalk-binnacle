@@ -1,7 +1,7 @@
 <script lang="ts">
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy, onMount } from 'svelte';
-import { createMediaQuery, LANDSCAPE_SHORT_QUERY, Toast } from '$shared/lib';
+import { createMediaQuery, LANDSCAPE_SHORT_QUERY, NARROW_QUERY, Toast } from '$shared/lib';
 import {
   AnchoredMenu,
   createMenuFocusMachine,
@@ -14,7 +14,6 @@ import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import {
   barCapacity,
-  effectiveBarCapacity,
   MAX_BAR_PILLS,
   MAX_COMPACT_BAR_PILLS,
   splitBarActions,
@@ -25,7 +24,7 @@ interface Props {
 }
 
 const { actions }: Props = $props();
-const compactPhone = createMediaQuery('(max-width: 600px)');
+const compactPhone = createMediaQuery(NARROW_QUERY);
 // Below 480px the four default pills exceed the strip's width with labels on, so the pills go
 // icon-only: the label collapses to visually-hidden, keeping the accessible name and the 44px
 // target while all pinned actions stay one tap away.
@@ -52,8 +51,13 @@ const machine = createMenuFocusMachine({
   includeAriaDisabled: true,
 });
 const responsiveMaximum = $derived(compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS);
+// Sideways the bar is sized to its own pills, so a width measured from it would only confirm the
+// pills already shown; the icon-only pills fit the responsive maximum there at any text size,
+// because a screen that short pins controls to 44px.
 const capacity = $derived(
-  effectiveBarCapacity(responsiveMaximum, measuredCapacity, landscapeShort.matches),
+  landscapeShort.matches
+    ? responsiveMaximum
+    : Math.min(responsiveMaximum, measuredCapacity ?? responsiveMaximum),
 );
 const iconOnly = $derived(iconOnlyPills.matches || landscapeShort.matches || largeText);
 const split = $derived(splitBarActions(actions, capacity));
@@ -67,6 +71,8 @@ onMount(() => {
   const element = bar;
   if (!element) return;
   const measure = () => {
+    // Sideways the capacity ignores the measurement; rotating back resizes the root and re-measures.
+    if (landscapeShort.matches) return;
     const rootStyle = getComputedStyle(document.documentElement);
     const barStyle = getComputedStyle(element);
     const rootSize = Number.parseFloat(rootStyle.fontSize) || 16;
@@ -112,7 +118,14 @@ $effect(() => machine.syncOpen(moreOpen));
 
 <div class="pinned-actions strip-center" bind:this={bar}>
   {#if !moreOpen}
-    <TransientNote message={blockedNote.message} noteClass="blocked-pill-note" />
+    <!-- Sideways the bar sits flush at the trailing edge, where a centered note would shrink into half
+         its width, so the note anchors to the bar's end. -->
+    <TransientNote
+      message={blockedNote.message}
+      noteClass={landscapeShort.matches
+        ? 'blocked-pill-note transient-note--end'
+        : 'blocked-pill-note'}
+    />
   {/if}
   {#each split.visible as action (action.id)}
     <button
@@ -261,18 +274,12 @@ $effect(() => machine.syncOpen(moreOpen));
   }
 }
 /* One strip row on a phone held sideways: the pills sit at the trailing edge at their own width
-   instead of stretching across the stacked strip's single column. A note centered on that narrow bar
-   would shrink into half its width, so a blocked pill's note anchors to the bar's end instead. */
+   instead of stretching across the stacked strip's single column. */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .pinned-actions {
     margin-inline-start: auto;
     inline-size: auto;
     flex-wrap: nowrap;
-  }
-  :global(.blocked-pill-note) {
-    inset-inline-start: auto;
-    inset-inline-end: 0;
-    transform: none;
   }
 }
 @media (max-width: 480px) {

@@ -15,4 +15,5 @@ export { fakeVesselFix } from './fake-vessel';
 export { FakeWebSocket } from './fake-websocket';
 export { expectBearerAuth, jsonResponse, stubFetch } from './fetch-stub';
 export { attribute, tag } from './markup';
+export { stubMatchMedia } from './match-media';
 export { createFrameFactory } from './sk-frame';

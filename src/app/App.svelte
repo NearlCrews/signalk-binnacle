@@ -183,10 +183,12 @@ import {
 } from '$shared/geo';
 import {
   Clock,
+  COMPACT_QUERY,
   createMediaQuery,
   HeldFlag,
   hasControlCharacters,
   isRecord,
+  NARROW_QUERY,
   Toast,
 } from '$shared/lib';
 import type { CompanionProbeResult, LayerSettings, MapPaintVariant } from '$shared/map';
@@ -589,16 +591,15 @@ function instrumentsPanelForAttempt() {
 }
 const openInstalledCharts = (): void => openPanel('charts-management');
 const backToOfflineCharts = (): void => openPanel('regions');
-// The phone breakpoint, in CSS pixels. A media query cannot reference this constant, so the same
-// 600px literal is mirrored in the `@media (max-width: 600px)` blocks in styles/panels.css and the
-// scoped styles of ChartLockerStatus, WeatherMap, AppMenu, WeatherConditions, and the
-// scoped CSS below. This const is the source of truth; retune all of them together.
-const NARROW_BREAKPOINT_PX = 600;
-const INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX = 900;
+// NARROW_QUERY and COMPACT_QUERY in $shared/lib are the source of truth for the phone and compact
+// breakpoints. A media query cannot reference them, so their 600px and 900px literals are mirrored
+// in the `@media` blocks of styles/panels.css, the scoped styles of ChartLockerStatus, WeatherMap,
+// AppMenu, WeatherConditions, StatusStrip, PinnedActions, and the scoped CSS below; retune all of
+// them together.
 // On a phone the note detail and a leading panel both collapse to bottom sheets and would overlap,
 // so at narrow widths opening one closes the other. On a wide screen they dock to opposite edges and
 // coexist, so this exclusion only applies while the phone query matches.
-const narrowQuery = createMediaQuery(`(max-width: ${NARROW_BREAKPOINT_PX}px)`);
+const narrowQuery = createMediaQuery(NARROW_QUERY);
 const narrow = $derived(narrowQuery.matches);
 let instrumentsFullScreen = $state(false);
 // The safety rail's measured clearance, bound out of PlotterView so App-level fixed overlays (the
@@ -2846,9 +2847,7 @@ onMount(() => {
   // Every write flows through sendJson, so this one hook lets a refused write (read-only token) raise
   // the read-only banner app-wide, and a later successful write clears it.
   setWriteOutcomeListener((ok, status) => auth.reportWriteOutcome(ok, status));
-  const instrumentsFullScreenQuery = window.matchMedia(
-    `(max-width: ${INSTRUMENTS_FULLSCREEN_BREAKPOINT_PX}px)`,
-  );
+  const instrumentsFullScreenQuery = window.matchMedia(COMPACT_QUERY);
   const syncInstrumentsFullScreen = (): void => {
     const next = instrumentsFullScreenQuery.matches;
     instrumentsFullScreen = next;

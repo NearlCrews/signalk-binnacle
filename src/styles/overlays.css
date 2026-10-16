@@ -104,6 +104,13 @@ dialog.editor-dialog[open] {
   padding: var(--space-2) var(--space-3);
   text-align: center;
 }
+/* A host flush at a screen edge anchors the note to its own end instead of centering it, so the note
+   keeps the host's full width rather than the half that centering leaves. */
+.transient-note--end {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  transform: none;
+}
 .transient-note p {
   margin: 0;
 }

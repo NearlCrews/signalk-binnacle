@@ -61,17 +61,23 @@ condition, and one used there drops the whole block.
   the same density, and dependent tokens such as `--row-size` and `--system-bar-fallback` resolve
   from those values. Use these tokens rather than shrinking type or adding a separate compact
   target size inside a feature.
-- A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY` in `$shared/lib`,
-  `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. CSS cannot import it, so each stylesheet
-  repeats that exact literal and the design contract fails on any other spelling. Under it the
-  status strip keeps one row: the readouts take the leading space (and still wrap rather than run
-  under the pills; they claim a 22em share in their own text size, so at very large text the pills
-  wrap onto their own line instead), the pinned pills sit icon-only at the trailing edge with their accessible names
-  and 44px targets, and the position cluster hides, including the last-fix coordinates and age, as
-  it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity there is the
-  responsive maximum (`effectiveBarCapacity`), because the bar is sized to its own pills. The width
-  bound keeps a wide, short window or bar-type helm display on the desktop strip, with position,
-  time, and labeled pills.
+- Script asks layout questions through the named queries in `$shared/lib`: `NARROW_QUERY`
+  (600px, where panels become bottom sheets), `COMPACT_QUERY` (900px, where the status strip stacks,
+  the app menu becomes a bottom sheet, and the instrument dock goes full screen), and
+  `LANDSCAPE_SHORT_QUERY`. CSS cannot import them, so stylesheets repeat the literals; the design
+  contract fails on a breakpoint literal in script and on any other spelling of the landscape one.
+  `createMediaQuery` shares one list and one change listener per query across every caller.
+- A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY`,
+  `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. Under it the status
+  strip keeps one row: the readouts take the leading space (and still wrap rather than run under the
+  pills; they claim a 22em share in their own text size, so at very large text the pills wrap onto
+  their own line instead), the pinned pills sit icon-only at the trailing edge with their accessible
+  names and 44px targets, and the position cluster hides, including the last-fix coordinates and
+  age, as it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity
+  there is the responsive maximum, because the bar is sized to its own pills, and a blocked pill's
+  note anchors to the bar's end with the shared `.transient-note--end` modifier. The width bound
+  keeps a wide, short window or bar-type helm display on the desktop strip, with position, time,
+  and labeled pills.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.
@@ -459,7 +465,7 @@ Shared behavior lives here. Compose these; do not re-implement them.
   successful import cannot leave the surrounding workflow trapped after a render or effect failure.
 - `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with the shared surface
   transition and the dismiss-stack registration). Its `motion` prop is `grow` by default (the
-  dropdown grows from its anchor corner) or `rise` for a full-width bottom sheet, which the app menu
+  dropdown grows from its anchor corner) or `below` for a full-width bottom sheet, which the app menu
   passes at 900px and under. Use it for any anchored menu (the app-menu launcher, the
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
@@ -901,7 +907,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   applies `:active` only when one exists. Never draw a grab handle on a sheet that has no drag
   gesture.
 - The first-run chart hint waits while a top-of-chart banner or a safety strip shows, since both
-  land where the hint sits; it is not dismissed, so it returns once they clear.
+  land where the hint sits: PlotterView measures both and passes ChartCanvas `hintSuppressed`. The
+  hint is not dismissed, so it returns once they clear.
 
 ## 10. Icons
 

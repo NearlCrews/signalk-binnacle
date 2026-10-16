@@ -4,7 +4,7 @@ import { registerDismiss } from './dialog';
 import { type FloatingAlign, type FloatingPlacement, floatingPosition } from './floating-position';
 import { onKeydownAction, trapFocus } from './focus';
 import { menuFocusLeft } from './menu-focus';
-import { surfaceTransition } from './transitions';
+import { type SurfaceMotion, surfaceTransition } from './transitions';
 
 interface Props {
   open: boolean;
@@ -48,7 +48,7 @@ interface Props {
   onClick?: (event: MouseEvent) => void;
   // How the surface arrives: a dropdown grows from its anchor corner, a full-width bottom sheet
   // rises from below.
-  motion?: 'grow' | 'rise';
+  motion?: Extract<SurfaceMotion, 'grow' | 'below'>;
   children: Snippet;
 }
 
@@ -211,7 +211,7 @@ $effect(() => {
     use:trapFocus={focusTrap}
     onfocusout={handleFocusOut}
     onclick={onClick}
-    transition:surfaceTransition={motion === 'rise' ? 'below' : 'grow'}
+    transition:surfaceTransition={motion}
   >
     {@render children()}
   </div>

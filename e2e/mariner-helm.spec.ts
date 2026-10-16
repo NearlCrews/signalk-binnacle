@@ -8,6 +8,8 @@ import {
   FIXTURE_SERVER,
   nightRedOffendingPixels,
   openMenuItem,
+  requireBox,
+  setRootFontSize,
   stubVesselsSelf,
   switchToTheme,
   waitForSignalKConnection,
@@ -340,11 +342,7 @@ for (const width of [320, 360]) {
     // earlier check began with an active MOB and could not catch a profile control overlapping the
     // topbar trigger at large text.
     await page.setViewportSize({ width, height: 800 });
-    await page.addInitScript(() => {
-      document.addEventListener('DOMContentLoaded', () => {
-        document.documentElement.style.fontSize = '200%';
-      });
-    });
+    await setRootFontSize(page, 200);
     await openApp(page);
 
     const trigger = page.locator('header').getByRole('button', { name: 'Mark man overboard here' });
@@ -763,75 +761,86 @@ test('acknowledging shallow water keeps keyboard focus in the safety rail when a
 test.describe('a phone held sideways', () => {
   test.use({ hasTouch: true, isMobile: true });
 
-  async function boxOf(
-    locator: Locator,
-  ): Promise<{ x: number; y: number; width: number; height: number }> {
-    const box = await locator.boundingBox();
-    if (!box) throw new Error('Expected a laid-out element');
-    return box;
+  const menuPill = (page: Page): Locator =>
+    page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true });
+
+  async function openPhone(
+    page: Page,
+    { width, height, textPercent, fix = true }: PhoneSetup,
+  ): Promise<void> {
+    await page.setViewportSize({ width, height });
+    if (textPercent !== undefined) await setRootFontSize(page, textPercent);
+    await openApp(page);
+    if (fix) await sendDelta(page, OWN_FIX);
+  }
+
+  async function stripBoxes(page: Page) {
+    const [readouts, bar] = await Promise.all([
+      requireBox(page.locator('.status-strip .strip-start')),
+      requireBox(page.locator('.status-strip .pinned-actions')),
+    ]);
+    return { readouts, bar };
   }
 
   // The stacked strip puts the pills on a row below the readouts; one row puts them beside it.
   async function expectPillsBesideReadouts(page: Page): Promise<void> {
-    const readouts = await boxOf(page.locator('.status-strip .strip-start'));
-    const bar = await boxOf(page.locator('.status-strip .pinned-actions'));
+    const { readouts, bar } = await stripBoxes(page);
     expect(bar.y).toBeLessThan(readouts.y + readouts.height);
     expect(bar.x).toBeGreaterThan(readouts.x);
   }
 
-  for (const [width, height] of [
-    [852, 393],
-    [932, 430],
-  ] as const) {
-    test(`the strip keeps one row and the chart most of the height at ${width}x${height}`, async ({
-      page,
-    }) => {
+  test('the strip keeps one row sideways and the desktop strip on a wide, short display', async ({
+    page,
+  }) => {
+    await openPhone(page, { width: 852, height: 393 });
+    const strip = page.locator('.status-strip');
+    await expect(strip.getByText('SOG')).toBeVisible();
+    for (const [width, height] of [
+      [852, 393],
+      [932, 430],
+    ] as const) {
       await page.setViewportSize({ width, height });
-      await openApp(page);
-      await sendDelta(page, OWN_FIX);
-      const strip = page.locator('.status-strip');
-      await expect(strip.getByText('SOG')).toBeVisible();
-      const bar = strip.locator('.pinned-actions');
-      for (const name of ['Menu', 'Center', 'Follow']) {
-        const pill = bar.getByRole('button', { name, exact: true });
-        await expectHelmHitTarget(pill);
-        expect((await pill.boundingBox())?.width ?? 0).toBeLessThanOrEqual(48);
-      }
-      await expectHelmHitTarget(bar.getByRole('button', { name: /^AIS/ }));
-      await expectPillsBesideReadouts(page);
       // Calm data only (no depth, no AIS, no alarm), so no door chip can add a readout row.
-      expect((await boxOf(strip)).height).toBeLessThanOrEqual(60);
-      expect((await boxOf(page.locator('.chart-host'))).height / height).toBeGreaterThanOrEqual(
-        0.7,
+      await expect(async () => {
+        expect((await requireBox(menuPill(page))).width).toBeLessThanOrEqual(48);
+        expect((await requireBox(strip)).height).toBeLessThanOrEqual(60);
+        const chart = await requireBox(page.locator('.chart-host'));
+        expect(chart.height / height).toBeGreaterThanOrEqual(0.7);
+        await expectPillsBesideReadouts(page);
+      }).toPass({ timeout: 10_000 });
+      for (const name of ['Menu', 'Center', 'Follow'])
+        await expectHelmHitTarget(
+          page.locator('.pinned-actions').getByRole('button', { name, exact: true }),
+        );
+      await expectHelmHitTarget(
+        page.locator('.pinned-actions').getByRole('button', { name: /^AIS/ }),
       );
-    });
-  }
+    }
 
-  test('a small phone sideways keeps icon pills without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 740, height: 360 });
-    await openApp(page);
-    await sendDelta(page, OWN_FIX);
-    const menu = page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true });
-    await expectHelmHitTarget(menu);
-    expect((await menu.boundingBox())?.width ?? 0).toBeLessThanOrEqual(48);
-    await expectPillsBesideReadouts(page);
+    await expect(async () => {
+      expect((await requireBox(menuPill(page))).width).toBeLessThanOrEqual(48);
+      await expectPillsBesideReadouts(page);
+    }).toPass({ timeout: 10_000 });
+    await expectHelmHitTarget(menuPill(page));
     await expectNoHorizontalOverflow(page.locator('body'));
+
+    // A bar-type helm display or a short desktop window is wide enough for the desktop strip. A
+    // fresh fix, since the boot's fix has aged into a last-fix readout by now.
+    await page.setViewportSize({ width: 1280, height: 480 });
+    await sendDelta(page, OWN_FIX);
+    await expect(strip.getByTitle('Vessel position')).toBeVisible();
+    await expect(strip.getByTitle('Local time')).toBeVisible();
+    await expect(async () => {
+      expect((await requireBox(menuPill(page))).width).toBeGreaterThan(48);
+    }).toPass({ timeout: 10_000 });
   });
 
   test('large text sideways wraps readouts beside the pills without overflowing', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 852, height: 393 });
-    await page.addInitScript(() => {
-      document.addEventListener('DOMContentLoaded', () => {
-        document.documentElement.style.fontSize = '150%';
-      });
-    });
-    await openApp(page);
-    await sendDelta(page, OWN_FIX);
-    await expectHelmHitTarget(
-      page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true }),
-    );
+    await openPhone(page, { width: 852, height: 393, textPercent: 150 });
+    await expectHelmHitTarget(menuPill(page));
     await expectPillsBesideReadouts(page);
     await expectNoHorizontalOverflow(page.locator('body'));
   });
@@ -839,51 +848,25 @@ test.describe('a phone held sideways', () => {
   test('very large text sideways gives the readouts the full width and wraps the pills', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 568, height: 320 });
-    await page.addInitScript(() => {
-      document.addEventListener('DOMContentLoaded', () => {
-        document.documentElement.style.fontSize = '200%';
-      });
-    });
-    await openApp(page);
-    await sendDelta(page, OWN_FIX);
-    const readouts = await boxOf(page.locator('.status-strip .strip-start'));
-    const bar = await boxOf(page.locator('.status-strip .pinned-actions'));
+    await openPhone(page, { width: 568, height: 320, textPercent: 200 });
+    const { readouts, bar } = await stripBoxes(page);
     expect(bar.y).toBeGreaterThanOrEqual(readouts.y + readouts.height - 1);
     expect(readouts.width).toBeGreaterThan(568 * 0.8);
-    await expectHelmHitTarget(
-      page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true }),
-    );
+    await expectHelmHitTarget(menuPill(page));
     await expectNoHorizontalOverflow(page.locator('body'));
-  });
-
-  test('a wide, short helm display keeps position, time, and labeled pills', async ({ page }) => {
-    // A bar-type helm display or a short desktop window is wide enough for the desktop strip.
-    await page.setViewportSize({ width: 1280, height: 480 });
-    await openApp(page);
-    await sendDelta(page, OWN_FIX);
-    const strip = page.locator('.status-strip');
-    await expect(strip.getByTitle('Vessel position')).toBeVisible();
-    await expect(strip.getByTitle('Local time')).toBeVisible();
-    const menu = strip
-      .locator('.pinned-actions')
-      .getByRole('button', { name: 'Menu', exact: true });
-    await expect(menu).toContainText('Menu');
-    expect((await boxOf(menu)).width).toBeGreaterThan(48);
   });
 
   test('the first-run chart hint waits for the welcome and yields to a safety strip', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 852, height: 393 });
-    await openApp(page);
+    // No fix: a fix inside NOAA coverage would raise the chart offer, another top banner.
+    await openPhone(page, { width: 852, height: 393, fix: false });
     const hint = page.getByText('Press and hold the chart for actions.');
     const welcome = page.getByRole('status').filter({ hasText: 'First time with Binnacle?' });
     await expect(welcome).toBeVisible({ timeout: 20_000 });
     await expect(hint).toBeHidden();
     await welcome.getByRole('button', { name: 'Dismiss' }).click();
     await expect(hint).toBeVisible();
-    // Depth only: a fix inside NOAA coverage would raise the chart offer, another top banner.
     await sendDelta(page, [{ path: DEPTH, value: 12 }]);
     await sendDelta(page, [{ path: DEPTH, value: 2.5 }]);
     const strip = page.getByRole('complementary', { name: 'Shallow water' });
@@ -895,10 +878,9 @@ test.describe('a phone held sideways', () => {
   });
 
   test('a blocked pill explains itself across the bar at the trailing edge', async ({ page }) => {
-    await page.setViewportSize({ width: 852, height: 393 });
-    await openApp(page);
     // No fix yet, so Center is blocked (aria-disabled, which Playwright's actionability check
     // refuses) and its tap shows the reason.
+    await openPhone(page, { width: 852, height: 393, fix: false });
     await page
       .locator('.pinned-actions')
       .getByRole('button', { name: 'Center', exact: true })
@@ -916,3 +898,10 @@ test.describe('a phone held sideways', () => {
     await expectInsideViewport(note, page);
   });
 });
+
+interface PhoneSetup {
+  width: number;
+  height: number;
+  textPercent?: number;
+  fix?: boolean;
+}

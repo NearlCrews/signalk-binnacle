@@ -5,6 +5,7 @@ import {
   createRetryableLazyUiLoader,
   formatDayClock,
   formatMonthDay,
+  NARROW_QUERY,
   type UnitsSelection,
 } from '$shared/lib';
 import type { Theme } from '$shared/ui';
@@ -28,7 +29,7 @@ let customizing = $state(false);
 const loadTrendCharts = createRetryableLazyUiLoader(() => import('./TrendCharts.svelte'));
 let chartsAttempt = $state(0);
 // The panel fills a phone screen, so it traps focus there and does not on a wider window.
-const phone = createMediaQuery('(max-width: 600px)');
+const phone = createMediaQuery(NARROW_QUERY);
 
 function trendChartsForAttempt() {
   void chartsAttempt;

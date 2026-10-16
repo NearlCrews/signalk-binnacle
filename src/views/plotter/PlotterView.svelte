@@ -664,6 +664,9 @@ function retryLazyPanel(): void {
 // The secondary bottom stack sits directly above the emergency rail, whose height depends on the
 // active conditions, so the stack's bottom offset tracks the measured rail height.
 let railHeight = $state(0);
+// The first-run chart hint sits where the top banners and, on a short screen, a tall safety rail
+// also land, so it waits while either shows.
+let bannerHeight = $state(0);
 let chartHeight = $state(0);
 let panelHeight = $state(0);
 let coverageRouteId = $state<string>();
@@ -887,12 +890,12 @@ $effect(() => {
   bind:clientHeight={chartHeight}
   style:--chart-height={`${chartHeight}px`}
   class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
-  class:chart-host--safety-up={railHeight > 0}
   style:--rail-clearance={railClearance}
   style:--editing-panel-clearance={editingPanelClearance}
   aria-label="Chart"
 >
   <ChartCanvas
+    hintSuppressed={railHeight > 0 || bannerHeight > 0}
     {origin}
     {units}
     waypoints={waypointsStore}
@@ -969,7 +972,7 @@ $effect(() => {
       onDismissInsecure={onDismissInsecureNote}
     />
   </div>
-  <div class="top-banner-stack">
+  <div class="top-banner-stack" bind:clientHeight={bannerHeight}>
     {#if criticalOverlayError}
       <div class="alert-note alert-note--filled toast-banner" role="alert">
         {criticalOverlayError}
@@ -2552,11 +2555,5 @@ $effect(() => {
 .safety-rail::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: var(--radius-md);
-}
-/* The first-run chart hint sits where the top banners and, on a short screen, a tall safety rail
-   also land, so it waits while either shows. It is not dismissed, so it returns once they clear. */
-.chart-host--safety-up :global(.context-hint),
-.chart-host:has(.top-banner-stack > :global(*)) :global(.context-hint) {
-  display: none;
 }
 </style>

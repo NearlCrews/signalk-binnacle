@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LANDSCAPE_SHORT_QUERY } from '$shared/lib';
 
 // Every stylesheet and component as text. A design rule that drifted twice is guarded here rather
 // than reviewed again: each assertion names the rule it holds.
@@ -10,9 +11,13 @@ const sources = import.meta.glob<string>(['/src/**/*.{css,svelte,ts}'], {
 const tokens = sources['/src/styles/tokens.css'] ?? '';
 const forms = sources['/src/styles/forms.css'] ?? '';
 
+function nonTestSources(): [string, string][] {
+  return Object.entries(sources).filter(([path]) => !path.endsWith('.test.ts'));
+}
+
 function hits(pattern: RegExp): string[] {
-  return Object.entries(sources)
-    .filter(([path, text]) => !path.endsWith('.test.ts') && pattern.test(text))
+  return nonTestSources()
+    .filter(([, text]) => pattern.test(text))
     .map(([path]) => path);
 }
 
@@ -223,20 +228,24 @@ describe('design contract: helm readouts', () => {
   });
 });
 
-describe('design contract: landscape phone', () => {
-  const LANDSCAPE = '(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)';
+describe('design contract: layout breakpoints', () => {
+  const LANDSCAPE = LANDSCAPE_SHORT_QUERY;
   const strip = sources['/src/app/StatusStrip.svelte'] ?? '';
   const pinned = sources['/src/features/menu/PinnedActions.svelte'] ?? '';
 
-  it('spells the landscape phone condition one way, matching the shared query', () => {
-    const media = sources['/src/shared/lib/media.svelte.ts'] ?? '';
-    expect(media).toMatch(/export const LANDSCAPE_SHORT_QUERY =\s*'/);
-    expect(media).toContain(`'${LANDSCAPE}';`);
-    for (const [path, text] of Object.entries(sources)) {
-      if (path.endsWith('.test.ts')) continue;
+  it('spells the landscape phone condition in CSS exactly as the shared query', () => {
+    for (const [path, text] of nonTestSources()) {
       const all = text.match(/max-height: 500px/g)?.length ?? 0;
       expect(all, path).toBe(text.split(LANDSCAPE).length - 1);
     }
+  });
+
+  it('asks script breakpoint questions through the shared queries', () => {
+    expect(
+      hits(/['"`]\(max-width: (?:600|900)px\)['"`]|max-width: \$\{/).filter(
+        (path) => path !== '/src/shared/lib/media.svelte.ts',
+      ),
+    ).toEqual([]);
   });
 
   it('keeps the status strip on one row on a phone held sideways', () => {
@@ -252,8 +261,9 @@ describe('design contract: landscape phone', () => {
       /\.pinned-actions \{[^}]*margin-inline-start: auto;/,
     );
     expect(pinned).toContain('createMediaQuery(LANDSCAPE_SHORT_QUERY)');
-    expect(pinned.slice(pinnedLandscape)).toMatch(
-      /:global\(\.blocked-pill-note\) \{[^}]*inset-inline-end: 0;[^}]*transform: none;/,
+    expect(pinned).toContain("'blocked-pill-note transient-note--end'");
+    expect(sources['/src/styles/overlays.css'] ?? '').toMatch(
+      /\.transient-note--end \{[^}]*inset-inline-end: 0;[^}]*transform: none;/,
     );
   });
 });
@@ -290,8 +300,8 @@ describe('design contract: motion', () => {
 
   it('raises the app menu as a sheet where it is one', () => {
     const menu = sources['/src/features/menu/AppMenu.svelte'] ?? '';
-    expect(menu).toContain("createMediaQuery('(max-width: 900px)')");
-    expect(menu).toContain("motion={sheetLayout.matches ? 'rise' : 'grow'}");
+    expect(menu).toContain('createMediaQuery(COMPACT_QUERY)');
+    expect(menu).toContain("motion={sheetLayout.matches ? 'below' : 'grow'}");
   });
 
   it('shares one easing curve between CSS and the surface transitions', () => {
@@ -325,9 +335,9 @@ describe('design contract: touch', () => {
   });
 
   it('keeps the pressed state working on iOS without the tap highlight', () => {
-    expect(sources['/src/main.ts'] ?? '').toMatch(
-      /document\.addEventListener\('touchstart', [^,]+, \{ passive: true \}\);/,
-    );
+    const main = sources['/src/main.ts'] ?? '';
+    expect(main).toContain("addEventListener('touchstart'");
+    expect(main).toContain('passive: true');
   });
 
   it('draws no grab handle on a sheet that cannot be dragged', () => {

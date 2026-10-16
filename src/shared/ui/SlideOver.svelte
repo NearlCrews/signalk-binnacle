@@ -1,6 +1,6 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import { createMediaQuery } from '$shared/lib';
+import { createMediaQuery, NARROW_QUERY } from '$shared/lib';
 import { dialog } from './dialog';
 import { trapFocus } from './focus';
 import PanelHeader from './PanelHeader.svelte';
@@ -8,7 +8,7 @@ import { surfaceTransition } from './transitions';
 
 // On a phone the panel is a bottom sheet (panels.css, 600px), so it rises instead of sliding in from
 // its dock edge.
-const sheet = createMediaQuery('(max-width: 600px)');
+const sheet = createMediaQuery(NARROW_QUERY);
 
 interface Props {
   // The panel heading, and the default accessible name for the panel landmark.

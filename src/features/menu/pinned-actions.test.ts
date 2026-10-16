@@ -3,7 +3,6 @@ import type { MenuItem } from './menu-item';
 import {
   barCapacity,
   DEFAULT_PINNED,
-  effectiveBarCapacity,
   MAX_BAR_PILLS,
   MAX_COMPACT_BAR_PILLS,
   reorderPinned,
@@ -151,16 +150,5 @@ describe('reorderPinned', () => {
   it('returns the same array when the id is not pinned', () => {
     const ids = ['center', 'follow'];
     expect(reorderPinned(ids, 'layers', 0)).toBe(ids);
-  });
-});
-
-describe('effectiveBarCapacity', () => {
-  it('trusts the measured width on an ordinary strip', () => {
-    expect(effectiveBarCapacity(MAX_BAR_PILLS, 3, false)).toBe(3);
-    expect(effectiveBarCapacity(MAX_BAR_PILLS, undefined, false)).toBe(MAX_BAR_PILLS);
-  });
-
-  it('uses the responsive maximum on a phone held sideways, where the bar is sized to its pills', () => {
-    expect(effectiveBarCapacity(MAX_BAR_PILLS, 4, true)).toBe(MAX_BAR_PILLS);
   });
 });

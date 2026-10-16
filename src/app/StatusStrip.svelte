@@ -22,6 +22,7 @@ import {
   formatMetersOrNm,
   formatSpeedOr,
   lengthUnit,
+  NARROW_QUERY,
   type ReactiveClock,
   speedUnit,
   Toast,
@@ -167,7 +168,7 @@ const radarTitle = $derived.by(() => {
 // heading, and AIS with fixed CSS: underway or navigating, COG is the course reference; a boat
 // with only a compass shows HDG; and the AIS chip stays whenever assessment is degraded, because
 // that state must never disappear just because the screen is narrow. Wide layouts show everything.
-const compactQuery = createMediaQuery('(max-width: 600px)');
+const compactQuery = createMediaQuery(NARROW_QUERY);
 const compact = $derived(compactQuery.matches);
 const underway = $derived(!vessel.sogStale && (vessel.sogMps ?? 0) >= COG_MIN_SOG_MPS);
 const showCog = $derived(!compact || navigating || underway);

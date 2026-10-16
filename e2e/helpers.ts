@@ -51,6 +51,24 @@ export async function expectNoHorizontalOverflow(surface: Locator): Promise<void
 // rather than restating pixels, so a spec that sets its own viewport cannot leave a stale bound
 // asserting against a size the page no longer has. clientWidth and clientHeight, not viewportSize:
 // they exclude a scrollbar, which a surface pinned to the trailing edge sits inside of.
+// A laid-out element's box, failing loudly rather than reading a missing box as zero.
+export async function requireBox(
+  locator: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error('Expected a laid-out element');
+  return box;
+}
+
+// Scale the root font before the app boots, the way an enlarged text setting does.
+export async function setRootFontSize(page: Page, percent: number): Promise<void> {
+  await page.addInitScript((value) => {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.documentElement.style.fontSize = `${value}%`;
+    });
+  }, percent);
+}
+
 export async function expectInsideViewport(surface: Locator, page: Page): Promise<void> {
   await expect(surface).toBeVisible();
   await expect

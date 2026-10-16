@@ -8,6 +8,7 @@ import {
   expectNoHorizontalOverflow,
   FIXTURE_ORIGIN,
   openMenuItem,
+  requireBox,
   stubVesselsSelf,
   waitForSignalKConnection,
 } from './helpers';
@@ -356,8 +357,7 @@ test('keeps a status-strip action chip on one control row', async ({ page }) => 
   const chip = page.locator('.status-strip .orientation-chip');
   await expect(chip).toBeVisible();
   const action = chip.getByRole('button', { name: 'N up' });
-  const [chipBox, actionBox] = await Promise.all([chip.boundingBox(), action.boundingBox()]);
-  if (!chipBox || !actionBox) throw new Error('The orientation chip did not lay out.');
+  const [chipBox, actionBox] = await Promise.all([requireBox(chip), requireBox(action)]);
   // The action keeps its full touch target, and the chip is that one row rather than a label line
   // with the target stacked beneath it, which used to cost the chart an extra row per chip.
   expect(actionBox.height).toBeGreaterThanOrEqual(44);
