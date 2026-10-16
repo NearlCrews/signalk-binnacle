@@ -62,14 +62,15 @@ condition, and one used there drops the whole block.
   from those values. Use these tokens rather than shrinking type or adding a separate compact
   target size inside a feature.
 - A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY` in `$shared/lib`,
-  `(orientation: landscape) and (max-height: 500px)`. CSS cannot import it, so each stylesheet
+  `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. CSS cannot import it, so each stylesheet
   repeats that exact literal and the design contract fails on any other spelling. Under it the
   status strip keeps one row: the readouts take the leading space (and still wrap rather than run
   under the pills), the pinned pills sit icon-only at the trailing edge with their accessible names
   and 44px targets, and the position cluster hides, including the last-fix coordinates and age, as
   it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity there is the
-  responsive maximum (`effectiveBarCapacity`), because the bar is sized to its own pills. A short
-  desktop window matches the same condition and gets the same strip.
+  responsive maximum (`effectiveBarCapacity`), because the bar is sized to its own pills. The width
+  bound keeps a wide, short window or bar-type helm display on the desktop strip, with position,
+  time, and labeled pills.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.

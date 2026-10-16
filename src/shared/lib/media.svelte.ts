@@ -1,8 +1,10 @@
 import { createSubscriber } from 'svelte/reactivity';
 
-// A phone held sideways: wide enough for one strip row, too short for two. CSS cannot import this,
-// so each stylesheet repeats the literal; the design contract holds every copy to it.
-export const LANDSCAPE_SHORT_QUERY = '(orientation: landscape) and (max-height: 500px)';
+// A phone held sideways: wide enough for one strip row, too short for two. The width bound keeps a
+// wide, short helm display on the desktop strip, which has room for position and labeled pills. CSS
+// cannot import this, so each stylesheet repeats the literal; the design contract holds every copy.
+export const LANDSCAPE_SHORT_QUERY =
+  '(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)';
 
 export interface ReactiveMediaQuery {
   readonly matches: boolean;

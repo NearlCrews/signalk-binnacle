@@ -263,7 +263,7 @@ $effect(() => machine.syncOpen(moreOpen));
 /* One strip row on a phone held sideways: the pills sit at the trailing edge at their own width
    instead of stretching across the stacked strip's single column. A note centered on that narrow bar
    would shrink into half its width, so a blocked pill's note anchors to the bar's end instead. */
-@media (orientation: landscape) and (max-height: 500px) {
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .pinned-actions {
     justify-self: end;
     inline-size: auto;

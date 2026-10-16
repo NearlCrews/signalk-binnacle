@@ -224,14 +224,14 @@ describe('design contract: helm readouts', () => {
 });
 
 describe('design contract: landscape phone', () => {
-  const LANDSCAPE = '(orientation: landscape) and (max-height: 500px)';
+  const LANDSCAPE = '(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)';
   const strip = sources['/src/app/StatusStrip.svelte'] ?? '';
   const pinned = sources['/src/features/menu/PinnedActions.svelte'] ?? '';
 
   it('spells the landscape phone condition one way, matching the shared query', () => {
-    expect(sources['/src/shared/lib/media.svelte.ts'] ?? '').toContain(
-      `export const LANDSCAPE_SHORT_QUERY = '${LANDSCAPE}';`,
-    );
+    const media = sources['/src/shared/lib/media.svelte.ts'] ?? '';
+    expect(media).toMatch(/export const LANDSCAPE_SHORT_QUERY =\s*'/);
+    expect(media).toContain(`'${LANDSCAPE}';`);
     for (const [path, text] of Object.entries(sources)) {
       if (path.endsWith('.test.ts')) continue;
       const all = text.match(/max-height: 500px/g)?.length ?? 0;

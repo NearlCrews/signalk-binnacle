@@ -836,6 +836,21 @@ test.describe('a phone held sideways', () => {
     await expectNoHorizontalOverflow(page.locator('body'));
   });
 
+  test('a wide, short helm display keeps position, time, and labeled pills', async ({ page }) => {
+    // A bar-type helm display or a short desktop window is wide enough for the desktop strip.
+    await page.setViewportSize({ width: 1280, height: 480 });
+    await openApp(page);
+    await sendDelta(page, OWN_FIX);
+    const strip = page.locator('.status-strip');
+    await expect(strip.getByTitle('Vessel position')).toBeVisible();
+    await expect(strip.getByTitle('Local time')).toBeVisible();
+    const menu = strip
+      .locator('.pinned-actions')
+      .getByRole('button', { name: 'Menu', exact: true });
+    await expect(menu).toContainText('Menu');
+    expect((await boxOf(menu)).width).toBeGreaterThan(48);
+  });
+
   test('the first-run chart hint waits for the welcome and yields to a safety strip', async ({
     page,
   }) => {
