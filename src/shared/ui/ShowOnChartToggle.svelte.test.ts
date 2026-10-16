@@ -36,7 +36,7 @@ describe('ShowOnChartToggle', () => {
     });
     const label = body.slice(body.indexOf('<label'), body.indexOf('</label>'));
     // The name comes from the label's text; a title attribute does not contribute to it.
-    const content = label.replace(/<[^>]*>/g, '');
+    const content = label.split(/<[^>]*>/).join('');
 
     expect(content).not.toContain(DESCRIPTION);
     expect(content).toContain('Show places on chart');
