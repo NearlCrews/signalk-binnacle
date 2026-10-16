@@ -3,6 +3,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import {
   contrastRatio,
   expectHelmHitTarget,
+  expectInsideViewport,
   expectNoHorizontalOverflow,
   FIXTURE_SERVER,
   nightRedOffendingPixels,
@@ -757,4 +758,103 @@ test('acknowledging shallow water keeps keyboard focus in the safety rail when a
       ),
     )
     .toBe(true);
+});
+
+test.describe('a phone held sideways', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  async function boxOf(
+    locator: Locator,
+  ): Promise<{ x: number; y: number; width: number; height: number }> {
+    const box = await locator.boundingBox();
+    if (!box) throw new Error('Expected a laid-out element');
+    return box;
+  }
+
+  // The stacked strip puts the pills on a row below the readouts; one row puts them beside it.
+  async function expectPillsBesideReadouts(page: Page): Promise<void> {
+    const readouts = await boxOf(page.locator('.status-strip .strip-start'));
+    const bar = await boxOf(page.locator('.status-strip .pinned-actions'));
+    expect(bar.y).toBeLessThan(readouts.y + readouts.height);
+    expect(bar.x).toBeGreaterThan(readouts.x);
+  }
+
+  for (const [width, height] of [
+    [852, 393],
+    [932, 430],
+  ] as const) {
+    test(`the strip keeps one row and the chart most of the height at ${width}x${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      await openApp(page);
+      await sendDelta(page, OWN_FIX);
+      const strip = page.locator('.status-strip');
+      await expect(strip.getByText('SOG')).toBeVisible();
+      const bar = strip.locator('.pinned-actions');
+      for (const name of ['Menu', 'Center', 'Follow']) {
+        const pill = bar.getByRole('button', { name, exact: true });
+        await expectHelmHitTarget(pill);
+        expect((await pill.boundingBox())?.width ?? 0).toBeLessThanOrEqual(48);
+      }
+      await expectHelmHitTarget(bar.getByRole('button', { name: /^AIS/ }));
+      await expectPillsBesideReadouts(page);
+      // Calm data only (no depth, no AIS, no alarm), so no door chip can add a readout row.
+      expect((await boxOf(strip)).height).toBeLessThanOrEqual(60);
+      expect((await boxOf(page.locator('.chart-host'))).height / height).toBeGreaterThanOrEqual(
+        0.7,
+      );
+    });
+  }
+
+  test('a small phone sideways keeps icon pills without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 740, height: 360 });
+    await openApp(page);
+    await sendDelta(page, OWN_FIX);
+    const menu = page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true });
+    await expectHelmHitTarget(menu);
+    expect((await menu.boundingBox())?.width ?? 0).toBeLessThanOrEqual(48);
+    await expectPillsBesideReadouts(page);
+    await expectNoHorizontalOverflow(page.locator('body'));
+  });
+
+  test('large text sideways wraps readouts beside the pills without overflowing', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 852, height: 393 });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement.style.fontSize = '150%';
+      });
+    });
+    await openApp(page);
+    await sendDelta(page, OWN_FIX);
+    await expectHelmHitTarget(
+      page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true }),
+    );
+    await expectPillsBesideReadouts(page);
+    await expectNoHorizontalOverflow(page.locator('body'));
+  });
+
+  test('a blocked pill explains itself across the bar at the trailing edge', async ({ page }) => {
+    await page.setViewportSize({ width: 852, height: 393 });
+    await openApp(page);
+    // No fix yet, so Center is blocked (aria-disabled, which Playwright's actionability check
+    // refuses) and its tap shows the reason.
+    await page
+      .locator('.pinned-actions')
+      .getByRole('button', { name: 'Center', exact: true })
+      .click({ force: true });
+    const note = page.locator('.blocked-pill-note');
+    await expect(note).toContainText('Center');
+    // A note centered on the narrow icon bar shrinks into half its width and wraps the reason down a
+    // thin column; anchored to the bar's end it gets the bar's full width. Read both boxes at once:
+    // the note is transient.
+    const widths = await page.evaluate(() => ({
+      note: document.querySelector('.blocked-pill-note')?.getBoundingClientRect().width ?? 0,
+      bar: document.querySelector('.pinned-actions')?.getBoundingClientRect().width ?? 0,
+    }));
+    expect(widths.note).toBeGreaterThan(widths.bar / 2 + 1);
+    await expectInsideViewport(note, page);
+  });
 });

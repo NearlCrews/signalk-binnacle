@@ -570,6 +570,21 @@ const depthWatchPaused = $derived(
     gap: var(--space-2);
   }
 }
+/* A phone held sideways has the width for one row but not the height for two: the readouts take the
+   leading space and the icon-only pills the trailing edge, so the chart keeps the height a stacked
+   strip would spend. Readouts still wrap rather than run under the pills. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .status-strip {
+    grid-template-columns: minmax(0, 1fr) auto;
+    justify-items: stretch;
+  }
+  .strip-start {
+    justify-content: flex-start;
+  }
+  .center-cluster {
+    display: none;
+  }
+}
 .offline {
   color: var(--alarm);
 }

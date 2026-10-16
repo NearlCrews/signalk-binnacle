@@ -222,3 +222,35 @@ describe('design contract: helm readouts', () => {
     expect(strip.match(/class:stale-cue=/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
   });
 });
+
+describe('design contract: landscape phone', () => {
+  const LANDSCAPE = '(orientation: landscape) and (max-height: 500px)';
+  const strip = sources['/src/app/StatusStrip.svelte'] ?? '';
+  const pinned = sources['/src/features/menu/PinnedActions.svelte'] ?? '';
+
+  it('spells the landscape phone condition one way, matching the shared query', () => {
+    expect(sources['/src/shared/lib/media.svelte.ts'] ?? '').toContain(
+      `export const LANDSCAPE_SHORT_QUERY = '${LANDSCAPE}';`,
+    );
+    for (const [path, text] of Object.entries(sources)) {
+      if (path.endsWith('.test.ts')) continue;
+      const all = text.match(/max-height: 500px/g)?.length ?? 0;
+      expect(all, path).toBe(text.split(LANDSCAPE).length - 1);
+    }
+  });
+
+  it('keeps the status strip on one row on a phone held sideways', () => {
+    const landscape = strip.indexOf(`@media ${LANDSCAPE} {`);
+    expect(landscape).toBeGreaterThan(strip.indexOf('@media (max-width: 900px) {'));
+    expect(strip.slice(landscape)).toMatch(
+      /\.status-strip \{\s*grid-template-columns: minmax\(0, 1fr\) auto;/,
+    );
+    const pinnedLandscape = pinned.indexOf(`@media ${LANDSCAPE} {`);
+    expect(pinnedLandscape).toBeGreaterThan(pinned.indexOf('@media (max-width: 900px) {'));
+    expect(pinned.slice(pinnedLandscape)).toMatch(/\.pinned-actions \{[^}]*justify-self: end;/);
+    expect(pinned).toContain('createMediaQuery(LANDSCAPE_SHORT_QUERY)');
+    expect(pinned.slice(pinnedLandscape)).toMatch(
+      /:global\(\.blocked-pill-note\) \{[^}]*inset-inline-end: 0;[^}]*transform: none;/,
+    );
+  });
+});

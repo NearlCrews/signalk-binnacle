@@ -1,7 +1,7 @@
 <script lang="ts">
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import { onDestroy, onMount } from 'svelte';
-import { createMediaQuery, Toast } from '$shared/lib';
+import { createMediaQuery, LANDSCAPE_SHORT_QUERY, Toast } from '$shared/lib';
 import {
   AnchoredMenu,
   createMenuFocusMachine,
@@ -14,6 +14,7 @@ import MenuItemIcon from './MenuItemIcon.svelte';
 import { blockedReason, itemBlocked, type MenuItem } from './menu-item';
 import {
   barCapacity,
+  effectiveBarCapacity,
   MAX_BAR_PILLS,
   MAX_COMPACT_BAR_PILLS,
   splitBarActions,
@@ -29,6 +30,8 @@ const compactPhone = createMediaQuery('(max-width: 600px)');
 // icon-only: the label collapses to visually-hidden, keeping the accessible name and the 44px
 // target while all pinned actions stay one tap away.
 const iconOnlyPills = createMediaQuery('(max-width: 480px)');
+// A phone held sideways keeps the strip on one row, so the pills go icon-only there too.
+const landscapeShort = createMediaQuery(LANDSCAPE_SHORT_QUERY);
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
@@ -49,8 +52,10 @@ const machine = createMenuFocusMachine({
   includeAriaDisabled: true,
 });
 const responsiveMaximum = $derived(compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS);
-const capacity = $derived(Math.min(responsiveMaximum, measuredCapacity ?? responsiveMaximum));
-const iconOnly = $derived(iconOnlyPills.matches || largeText);
+const capacity = $derived(
+  effectiveBarCapacity(responsiveMaximum, measuredCapacity, landscapeShort.matches, largeText),
+);
+const iconOnly = $derived(iconOnlyPills.matches || landscapeShort.matches || largeText);
 const split = $derived(splitBarActions(actions, capacity));
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
@@ -253,6 +258,21 @@ $effect(() => machine.syncOpen(moreOpen));
   .pinned-actions {
     flex-wrap: nowrap;
     gap: var(--space-1);
+  }
+}
+/* One strip row on a phone held sideways: the pills sit at the trailing edge at their own width
+   instead of stretching across the stacked strip's single column. A note centered on that narrow bar
+   would shrink into half its width, so a blocked pill's note anchors to the bar's end instead. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .pinned-actions {
+    justify-self: end;
+    inline-size: auto;
+    flex-wrap: nowrap;
+  }
+  :global(.blocked-pill-note) {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    transform: none;
   }
 }
 @media (max-width: 480px) {

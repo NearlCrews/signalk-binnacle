@@ -27,7 +27,7 @@ export {
   nearestBy,
   nearestBySorted,
 } from './math';
-export { createMediaQuery, type ReactiveMediaQuery } from './media.svelte';
+export { createMediaQuery, LANDSCAPE_SHORT_QUERY, type ReactiveMediaQuery } from './media.svelte';
 export { prefersReducedMotion } from './motion';
 export { evictOldestKey, isRecord, sameJsonValue } from './object';
 export { withPromiseTimeout } from './promise-timeout';
