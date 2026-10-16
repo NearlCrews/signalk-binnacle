@@ -6,6 +6,14 @@ All notable changes to Binnacle are documented here. The format follows
 
 ## [Unreleased]
 
+<a id="v0230"></a>
+
+## [0.23.0] - Unreleased
+
+A shallow-water alarm and clearer alarms at the helm, a phone layout that works held sideways, and
+one current visual standard: themed controls, a paper chart by day, and shared empty and retry
+states.
+
 ### Added
 
 - Raise a shallow-water strip in the safety rail with the depth, the limit, and its datum.

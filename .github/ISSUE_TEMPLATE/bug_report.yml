@@ -54,7 +54,7 @@ body:
     attributes:
       label: Binnacle Version
       description: Which version of signalk-binnacle are you using?
-      placeholder: Current version shown in the Binnacle header
+      placeholder: Version shown at the foot of the Binnacle menu
     validations:
       required: true
 

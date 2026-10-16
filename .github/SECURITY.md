@@ -2,8 +2,6 @@
 
 ## Supported Versions
 
-We actively support the following versions with security updates:
-
 Only the latest published version receives security fixes. Upgrade before reporting or validating a
 security issue so the result reflects the supported code.
 

@@ -16,22 +16,23 @@ A WebGL chartplotter for [Signal K](https://signalk.org).
 
 ![The Binnacle chart in the day theme, centered on Boston Harbor, with the MOB button and theme control in the top bar and the live status strip along the bottom](https://raw.githubusercontent.com/NearlCrews/signalk-binnacle/main/static/screenshots/01-chart.png)
 
-## What's new in 0.22.0
+## What's new in 0.23.0
 
-- **Helm controls:** an optional Autopilot panel, off-course alarms, alarm self-test and volume,
-  and a screen lock that leaves emergency controls available.
-- **Passage context:** forecast wind and after-dark arrivals in route plans, measured barometer
-  tendency, multi-day weather, and provider or NOAA weather warnings even when Weather is closed.
-- **Keyboard and touch workflows:** coordinate entry for routes, measurements, and anchor
-  corrections, tap-based reordering, and controls that remain reachable with enlarged text.
-- **Recovery without lost work:** retained logbook and handoff drafts, retryable radar-area edits,
-  explicit refresh actions, and offline coverage tied to the route and saved charts actually checked.
-- **Data confidence:** press-time MOB marks remain unchanged across stations and reconnects;
-  stale telemetry, tide datums, unknown hazard assessments, and unconfirmed actions stay explicit.
-- **Watchkeeping tools:** optional ship's logbook and AI advisor integrations, display dimming,
-  automatic themes, and per-category Signal K unit preferences.
+- **Shallow-water alarm:** a safety strip with the depth, the limit, and its datum. Acknowledge
+  quiets this display and names the depth it sounds again below, so further shoaling is never
+  hidden.
+- **Alarms at a glance:** caution-grade alerts show as a count on the status strip, "Sound off"
+  shows while a watch is armed on a display that cannot sound alarms, and alarm strips carry a
+  heavier border, a light grade wash, and the time they were raised.
+- **Helm readability:** larger strip readouts on helm displays, stale numbers underlined so they
+  read as stale in night-red too, and running text spaced for reading at arm's length.
+- **A phone held sideways:** the status strip keeps one row with icon actions, so the chart keeps
+  most of the screen. Panels and the menu rise from the bottom, and touch behaves like a native app.
+- **One visual standard:** themed checkboxes and switches, one corner radius, shared empty and retry
+  states, and a paper-chart day palette that is themed from the first frame.
+- **Compatibility:** Radar API 3.4.0, MapLibre GL JS 6.14, and current chart sources and tooling.
 
-See the [0.22.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0220)
+See the [0.23.0 changelog](https://github.com/NearlCrews/signalk-binnacle/blob/main/CHANGELOG.md#v0230)
 for the full list.
 
 ## What it does
@@ -100,6 +101,8 @@ Binnacle ships its full feature set as a Signal K webapp:
   collects every active alert on the boat. One audio authority coordinates audible alarms.
   Supported Silence and Acknowledge actions propagate through Signal K; acknowledgment means
   seen, not resolved. Device-local mute remains distinct and available after a boat-wide action fails.
+  A shallow-water strip raises in the same safety rail, and the status strip counts caution-grade
+  alerts and says when this display cannot sound an armed watch.
 - **Anchor watch:** drop the anchor at the boat, set the swing radius, and get a drag alarm that
   latches until acknowledged. It drives the signalk-anchoralarm-plugin when installed, so the alarm
   keeps running with the browser closed, and falls back to a fully in-browser watch when it is not.
@@ -143,8 +146,9 @@ Binnacle ships its full feature set as a Signal K webapp:
   preferences, with the profile's preference as fallback. Navigation-specific fields such as track
   distance and route plan speed retain their labeled nautical-mile and knot conventions. Stored
   values remain SI.
-- **Display:** day, dusk, and night-red themes, a dimmer, a bright-sun chart palette, automatic
-  theme switching, and interface text sizing. Night-red stays red on black for a dark-adapted watch.
+- **Display:** day, dusk, and night-red themes with a paper-chart day palette, a dimmer, a
+  bright-sun chart palette, automatic theme switching, and interface text sizing. Night-red stays
+  red on black for a dark-adapted watch.
 
 Each feature's full behavior, availability, and recovery states are documented in the guides in
 the repository's docs directory, which also ship inside the installed package.
