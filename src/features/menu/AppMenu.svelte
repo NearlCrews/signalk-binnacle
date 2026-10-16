@@ -1,7 +1,7 @@
 <script lang="ts">
 import Menu from '@lucide/svelte/icons/menu';
 import { onDestroy, tick } from 'svelte';
-import { Toast, vibrate } from '$shared/lib';
+import { createMediaQuery, Toast, vibrate } from '$shared/lib';
 import {
   AnchoredMenu,
   CustomizeToggle,
@@ -55,6 +55,8 @@ const pinnedSet = $derived(new Set(pinnedIds));
 const pinnedItems = $derived(resolvePinned(items, pinnedIds));
 
 let trigger = $state<HTMLButtonElement>();
+// At 900px and under the launcher is a full-width bottom sheet (the style block below), so it rises.
+const sheetLayout = createMediaQuery('(max-width: 900px)');
 let card = $state<HTMLElement>();
 let opener: HTMLElement | undefined;
 let openerFallback: HTMLElement | undefined;
@@ -196,6 +198,7 @@ function onCardFocusOut(event: FocusEvent): void {
   surfaceClass={editing ? 'launcher surface-elevated editing' : 'launcher surface-elevated'}
   ariaLabel={label}
   id="app-menu-launcher"
+  motion={sheetLayout.matches ? 'rise' : 'grow'}
   bind:surfaceRef={card}
   onKeydown={onCardKeydown}
   onFocusOut={onCardFocusOut}

@@ -1,11 +1,10 @@
 <script lang="ts">
 import { onDestroy, type Snippet, tick } from 'svelte';
-import { scale } from 'svelte/transition';
-import { prefersReducedMotion } from '$shared/lib';
 import { registerDismiss } from './dialog';
 import { type FloatingAlign, type FloatingPlacement, floatingPosition } from './floating-position';
 import { onKeydownAction, trapFocus } from './focus';
 import { menuFocusLeft } from './menu-focus';
+import { surfaceTransition } from './transitions';
 
 interface Props {
   open: boolean;
@@ -47,6 +46,9 @@ interface Props {
   // placement in the browser as well as the DOM style update.
   onPositioned?: () => void;
   onClick?: (event: MouseEvent) => void;
+  // How the surface arrives: a dropdown grows from its anchor corner, a full-width bottom sheet
+  // rises from below.
+  motion?: 'grow' | 'rise';
   children: Snippet;
 }
 
@@ -69,6 +71,7 @@ let {
   onFocusLeft,
   onPositioned,
   onClick,
+  motion = 'grow',
   children,
 }: Props = $props();
 
@@ -208,11 +211,7 @@ $effect(() => {
     use:trapFocus={focusTrap}
     onfocusout={handleFocusOut}
     onclick={onClick}
-    transition:scale={{
-      start: 0.92,
-      duration: prefersReducedMotion() ? 0 : 140,
-      opacity: 0.5,
-    }}
+    transition:surfaceTransition={motion === 'rise' ? 'below' : 'grow'}
   >
     {@render children()}
   </div>

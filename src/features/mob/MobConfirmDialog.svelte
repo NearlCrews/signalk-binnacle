@@ -110,18 +110,6 @@ function confirm(): void {
   border: 2px solid var(--alarm);
   /* Clips the header band to the radius. */
   overflow: hidden;
-  animation: mob-dialog-in var(--transition-fast);
-}
-@keyframes mob-dialog-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .mob-dialog {
-    animation: none;
-  }
 }
 .head {
   display: flex;

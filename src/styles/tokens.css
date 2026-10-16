@@ -73,7 +73,9 @@
      so a press reads the same depth across the chrome. */
   --brightness-press: 0.94;
   /* One hover and press timing for the whole UI, so interactive feedback feels uniform. */
-  --transition-fast: 0.12s ease;
+  /* Svelte's cubicOut, so CSS state changes and the surface transitions share one curve. */
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --transition-fast: 120ms var(--ease-out);
   --range-track-h: 6px;
   --range-thumb-size: 22px;
   --active-bar-width: 3px;

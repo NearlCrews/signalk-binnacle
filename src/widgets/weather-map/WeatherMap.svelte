@@ -5,7 +5,6 @@ import Layers from '@lucide/svelte/icons/layers';
 import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import X from '@lucide/svelte/icons/x';
 import { onDestroy, onMount, untrack } from 'svelte';
-import { fly } from 'svelte/transition';
 import type { RouteStore } from '$entities/route';
 import type { UnitsStore } from '$entities/units';
 import { type Bbox, boundsToBbox, type WeatherStore } from '$entities/weather';
@@ -49,7 +48,6 @@ import {
   HOUR_MS,
   lengthUnit,
   MINUTE_MS,
-  prefersReducedMotion,
   pressureUnit,
   speedUnit,
 } from '$shared/lib';
@@ -61,7 +59,7 @@ import {
   type ThemedMapHandle,
 } from '$shared/map';
 import type { MapView } from '$shared/settings';
-import { dialog, PANEL_TRANSITION_MS, PanelHeader, type Theme } from '$shared/ui';
+import { dialog, PanelHeader, surfaceTransition, type Theme } from '$shared/ui';
 import { createForecastPlayback } from './playback.svelte';
 import WeatherLayerMenu from './WeatherLayerMenu.svelte';
 import WeatherLegendBar from './WeatherLegendBar.svelte';
@@ -497,11 +495,7 @@ onDestroy(() => {
   aria-label="Weather"
   tabindex="-1"
   use:dialog={onClose}
-  transition:fly={{
-    y: 20,
-    duration: prefersReducedMotion() ? 0 : PANEL_TRANSITION_MS,
-    opacity: 0.3,
-  }}
+  transition:surfaceTransition={'below'}
 >
   <PanelHeader
     title="Weather"

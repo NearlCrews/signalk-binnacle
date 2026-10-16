@@ -254,3 +254,46 @@ describe('design contract: landscape phone', () => {
     );
   });
 });
+
+describe('design contract: motion', () => {
+  it('moves every arriving surface through the shared surface transition', () => {
+    expect(hits(/transition:(fly|scale)\b/)).toEqual([]);
+    for (const path of [
+      '/src/shared/ui/SlideOver.svelte',
+      '/src/shared/ui/AnchoredMenu.svelte',
+      '/src/widgets/weather-map/WeatherMap.svelte',
+    ])
+      expect(sources[path] ?? '', path).toContain('transition:surfaceTransition=');
+  });
+
+  it('never animates a safety surface in', () => {
+    // An entrance on an alarm or on the MOB flow delays the moment it can be read and acted on.
+    for (const path of [
+      '/src/features/anchor-watch/AnchorStrip.svelte',
+      '/src/features/lookout/AlarmStrip.svelte',
+      '/src/features/lookout/DangerStrip.svelte',
+      '/src/features/lookout/ShallowStrip.svelte',
+      '/src/features/mob/MobStrip.svelte',
+      '/src/features/mob/MobButton.svelte',
+      '/src/features/mob/MobConfirmDialog.svelte',
+      '/src/widgets/safety-alert-stack/SafetyAlertStack.svelte',
+    ]) {
+      const text = sources[path];
+      expect(text, path).toBeDefined();
+      expect(text, path).not.toMatch(/\s(transition|in|out|animate):[a-zA-Z]/);
+      expect(text, path).not.toMatch(/animation(-name)?:\s*(?!none\b)[a-z]/);
+    }
+  });
+
+  it('raises the app menu as a sheet where it is one', () => {
+    const menu = sources['/src/features/menu/AppMenu.svelte'] ?? '';
+    expect(menu).toContain("createMediaQuery('(max-width: 900px)')");
+    expect(menu).toContain("motion={sheetLayout.matches ? 'rise' : 'grow'}");
+  });
+
+  it('shares one easing curve between CSS and the surface transitions', () => {
+    expect(tokens).toContain('--ease-out: cubic-bezier(0.33, 1, 0.68, 1);');
+    expect(tokens).toContain('--transition-fast: 120ms var(--ease-out);');
+    expect(sources['/src/shared/ui/transitions.ts'] ?? '').toContain('easing: cubicOut');
+  });
+});

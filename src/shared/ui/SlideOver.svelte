@@ -1,15 +1,14 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import { fly } from 'svelte/transition';
-import { prefersReducedMotion } from '$shared/lib';
+import { createMediaQuery } from '$shared/lib';
 import { dialog } from './dialog';
 import { trapFocus } from './focus';
 import PanelHeader from './PanelHeader.svelte';
-import { PANEL_TRANSITION_MS } from './transitions';
+import { surfaceTransition } from './transitions';
 
-// The panel slides in from the edge it docks to, with a zero duration when the system reduced-motion
-// preference is set, so a helm with reduce-motion sees no movement.
-const reduceMotion = prefersReducedMotion();
+// On a phone the panel is a bottom sheet (panels.css, 600px), so it rises instead of sliding in from
+// its dock edge.
+const sheet = createMediaQuery('(max-width: 600px)');
 
 interface Props {
   // The panel heading, and the default accessible name for the panel landmark.
@@ -75,11 +74,7 @@ const bodyClass = $derived(
   tabindex="-1"
   use:dialog={onClose}
   use:trapFocus={focusTrap}
-  transition:fly={{
-    x: dock === 'right' ? 24 : -24,
-    duration: reduceMotion ? 0 : PANEL_TRANSITION_MS,
-    opacity: 0.3,
-  }}
+  transition:surfaceTransition={sheet.matches ? 'below' : dock}
 >
   <PanelHeader
     {title}
