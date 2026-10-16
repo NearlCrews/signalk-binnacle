@@ -8,7 +8,7 @@ All notable changes to Binnacle are documented here. The format follows
 
 <a id="v0230"></a>
 
-## [0.23.0] - Unreleased
+## [0.23.0] - 2026-10-16
 
 A shallow-water alarm and clearer alarms at the helm, a phone layout that works held sideways, and
 one current visual standard: themed controls, a paper chart by day, and shared empty and retry
@@ -60,6 +60,7 @@ states.
 - Show a short title, explanation, and next step in empty lists and panels, and use one load and
   retry treatment across panels: Retry for a failed request and Check again for a server capability
   check.
+- Replace the App Store hero screenshot with the current day chart and status strip.
 
 ### Fixed
 
@@ -82,7 +83,8 @@ states.
 - Give the status strip's anchor chip a full 44 px target, since it opens Anchor watch.
 - Retire the Get set up checklist on a plain HTTP server once the chart, access, and saved-data rows
   pass. The HTTPS row still explains browser offline caching while the checklist shows.
-- Name the Weather panel's Here button by its visible label, so speech input can activate it.
+- Name the Weather panel's Here button, the MOB button, and the chart status chip by their visible
+  labels, so speech input can activate them.
 - Update MapLibre GL JS to 6.14, Terra Draw to 1.37, and the chart source catalog to 0.9, which
   credits EMODnet, Marine Regions, and OpenSeaMap layers under the terms each upstream now
   states, along with current build and test tooling.
