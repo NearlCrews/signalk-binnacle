@@ -283,6 +283,7 @@ function onCardFocusOut(event: FocusEvent): void {
   gap: var(--space-2);
   min-block-size: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   /* Scroll-edge shadows (the local-attachment technique): a soft cue that a tile row continues
      past the cap, gone when the edge is reached because the surface-colored cover scrolls over
      it. Effectively invisible at night-red on the near-black surface, where the heavier group
@@ -302,8 +303,8 @@ function onCardFocusOut(event: FocusEvent): void {
   background-attachment: local, local, scroll, scroll;
 }
 /* Matches the StatusStrip's own 900px stack breakpoint, so a landscape tablet never lands in the
-   gap where the menu is still a corner dropdown but the status strip below it has already
-   stacked to a single column. */
+   gap where the menu is still a corner dropdown but the status strip below it has already stacked
+   to a single column. A phone held sideways keeps the strip on one row and the menu as a sheet. */
 @media (max-width: 900px) {
   :global(.launcher) {
     position: fixed;
@@ -321,19 +322,6 @@ function onCardFocusOut(event: FocusEvent): void {
     border-inline: 0;
     border-block-end: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  }
-  /* A grab-handle affordance, the standard mobile cue that this surface is a dismissible sheet
-     rather than a fixed panel; purely decorative, so aria-hidden via ::before's default absence
-     from the accessibility tree. */
-  :global(.launcher)::before {
-    content: "";
-    display: block;
-    inline-size: 2.5rem;
-    block-size: 0.25rem;
-    border-radius: var(--radius-pill);
-    background: var(--text-muted);
-    margin: 0 auto var(--space-2);
-    opacity: 0.5;
   }
 }
 /* Edit mode is a distinct interaction (tapping a tile pins or unpins it rather than opening it),

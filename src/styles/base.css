@@ -12,10 +12,29 @@ body {
   /* The app is a fixed-viewport shell (a viewport-height grid; panels scroll internally), so the
      document itself never scrolls. Locking it prevents a stray scrollbar from sub-pixel overflow. */
   overflow: hidden;
+  /* No pull-to-refresh or bounce: a reload mid-passage drops the stream and the open panel. */
+  overscroll-behavior: none;
+  /* The browser's rectangular tap flash ignores rounded controls and is gray in night-red; each
+     control's own pressed state is the feedback. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
   block-size: calc(100 * var(--dvh));
+}
+
+/* A quick second tap on a control is a second tap, never a double-tap zoom; pinch zoom stays.
+   Class-level touch-action (reorder handles, slide to unlock, trend charts) outranks this. */
+a,
+button,
+input,
+label,
+select,
+summary,
+textarea,
+[role="button"],
+[role="switch"] {
+  touch-action: manipulation;
 }
 
 /* A bare list with no markers, margin, or padding. Compose on any <ul> or <ol> that is a layout

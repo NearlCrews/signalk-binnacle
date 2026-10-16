@@ -9,6 +9,10 @@ import App from './app/App.svelte';
 // than from a component body. The registration is idempotent, so this is the single canonical call.
 registerPmtilesProtocol();
 
+// iOS Safari applies :active only when a touch listener sits on an ancestor; with the tap highlight
+// off, the pressed state is the only tap feedback.
+document.addEventListener('touchstart', () => undefined, { passive: true });
+
 const target = document.getElementById('app');
 if (!target) throw new Error('Missing #app mount element');
 

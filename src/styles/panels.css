@@ -71,6 +71,7 @@
   min-block-size: 0;
   min-inline-size: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-2) var(--space-3) var(--space-3);
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;

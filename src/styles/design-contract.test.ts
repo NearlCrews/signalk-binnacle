@@ -297,3 +297,37 @@ describe('design contract: motion', () => {
     expect(sources['/src/shared/ui/transitions.ts'] ?? '').toContain('easing: cubicOut');
   });
 });
+
+describe('design contract: touch', () => {
+  const base = sources['/src/styles/base.css'] ?? '';
+  const menu = sources['/src/features/menu/AppMenu.svelte'] ?? '';
+
+  it('never lets a pull reload the app or flash a gray tap box', () => {
+    expect(base).toMatch(
+      /html,\s*body \{[^}]*overscroll-behavior: none;[^}]*-webkit-tap-highlight-color: transparent;/,
+    );
+  });
+
+  it('keeps a scroll inside its panel or sheet', () => {
+    expect(sources['/src/styles/panels.css'] ?? '').toMatch(
+      /\.panel-body \{[^}]*overscroll-behavior: contain;/,
+    );
+    expect(menu).toMatch(/\.launcher-scroll \{[^}]*overscroll-behavior: contain;/);
+  });
+
+  it('makes a quick second tap on a control a tap, not a zoom', () => {
+    expect(base).toMatch(
+      /a,\s*button,\s*input,\s*label,\s*select,\s*summary,\s*textarea,\s*\[role="button"\],\s*\[role="switch"\] \{\s*touch-action: manipulation;/,
+    );
+  });
+
+  it('keeps the pressed state working on iOS without the tap highlight', () => {
+    expect(sources['/src/main.ts'] ?? '').toMatch(
+      /document\.addEventListener\('touchstart', [^,]+, \{ passive: true \}\);/,
+    );
+  });
+
+  it('draws no grab handle on a sheet that cannot be dragged', () => {
+    expect(menu).not.toContain('.launcher)::before');
+  });
+});
