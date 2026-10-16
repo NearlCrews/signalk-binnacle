@@ -369,8 +369,9 @@ root. App and PlotterView own the explicit construction and wiring between those
   control over `$shared/nav`'s NavSortState, shared by the POI search and Waypoints panels), SearchInput
   (the filter-as-you-type field with a 44px clear button and Escape-to-clear, shared by the AIS, POI
   search, and Waypoints panels), WriteAccessNote (the write-blocked notice plus request-access button
-  shared by the waypoints, tracks, and note-detail panels), and the
-  PANEL_TRANSITION_MS shared panel-transition-duration constant) and the
+  shared by the waypoints, tracks, and note-detail panels), and surfaceTransition (the one arrival
+  motion for panels, sheets, and menus: from the dock edge, rising from below, or growing from the
+  anchor; zero under reduced motion; never a hand-rolled fly or scale on a surface)) and the
   global utility classes (the `.btn` system, `.icon-btn`, `.icon-pill`, `.badge` (the one status pill, with accent, warning, alarm, select, and
   strong modifiers; never a scoped status pill), `.empty-state` (rendered through EmptyState), `.btn-strip` and
   `.btn-alarm` (strip actions are the shared button system), `.pill-count` (the small count
@@ -396,7 +397,8 @@ root. App and PlotterView own the explicit construction and wiring between those
   before any panel grows a scoped duplicate. Lay a panel's body out with SlideOver's `bodyFlex` prop
   rather than a hand-rolled flex column, so the section rhythm matches across panels. When the same
   markup or CSS appears in a second place, hoist it; a third copy is a review failure.
-- Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (isRecord, formatPercent,
+- Reuse the shared non-UI helpers before re-implementing them: `$shared/lib` (LANDSCAPE_SHORT_QUERY,
+  the phone-held-sideways condition every CSS copy must spell identically, isRecord, formatPercent,
   formatFixed, formatBytes and the unit formatters including lengthUnit, formatMonthDay, and the SI
   converters with CUBIC_METERS_TO_US_GALLONS and JOULES_PER_KWH, cleanBoundedText (trim and REJECT an
   oversized provider string, the validators' form; $shared/signalk's cleanTruncatedText is the

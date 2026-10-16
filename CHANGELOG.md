@@ -23,6 +23,16 @@ All notable changes to Binnacle are documented here. The format follows
   underline stale numbers with a dashed line so they read as stale in night-red too.
 - Close the full-screen instrument dock on a phone when shallow water raises an alarm, as the other
   alarms already do.
+- Keep the status strip on one row on a phone held sideways: the readouts lead and the pinned
+  actions sit at the trailing edge as icons, so the chart keeps most of the screen.
+- Bring panel sheets and the menu up from the bottom on phones instead of in from the side, with
+  one timing and curve for every panel and menu.
+- Stop a pull at the top of a panel from reloading the app, a quick second tap on a button from
+  zooming, and the browser's gray tap flash. The menu sheet no longer draws a grab handle it cannot
+  honor.
+- Hold the first-run chart hint while a banner or a safety strip shows, so it never prints over
+  the welcome banner or a safety strip on a short screen.
+- Show the man overboard confirmation at once, without its brief fade and zoom.
 - Draw checkboxes, selects, and switches from the theme instead of the browser's own controls,
   with a 3:1 control border in day and dusk. Night-red no longer shows gray checkbox boxes.
 - Show and hide map layers, instrument tiles, trend charts, chart overlays, and saved routes and

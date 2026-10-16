@@ -61,6 +61,15 @@ condition, and one used there drops the whole block.
   the same density, and dependent tokens such as `--row-size` and `--system-bar-fallback` resolve
   from those values. Use these tokens rather than shrinking type or adding a separate compact
   target size inside a feature.
+- A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY` in `$shared/lib`,
+  `(orientation: landscape) and (max-height: 500px)`. CSS cannot import it, so each stylesheet
+  repeats that exact literal and the design contract fails on any other spelling. Under it the
+  status strip keeps one row: the readouts take the leading space (and still wrap rather than run
+  under the pills), the pinned pills sit icon-only at the trailing edge with their accessible names
+  and 44px targets, and the position cluster hides, including the last-fix coordinates and age, as
+  it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity there is the
+  responsive maximum (`effectiveBarCapacity`), because the bar is sized to its own pills. A short
+  desktop window matches the same condition and gets the same strip.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.
@@ -71,7 +80,9 @@ condition, and one used there drops the whole block.
   the docked `.panel-slot`, and the instrument dock reserve the inline insets there too, not only in
   the phone branch.
 - `--tracking-caps` 0.06em for uppercase labels, `--disabled-opacity` 0.45, `--transition-fast`
-  0.12s ease for every hover and press, `--active-bar-width` 3px for the lit-row inline-start bar.
+  `120ms var(--ease-out)` for every hover and press, where `--ease-out` is
+  `cubic-bezier(0.33, 1, 0.68, 1)`, the CSS form of Svelte's `cubicOut` that every surface
+  transition uses, and `--active-bar-width` 3px for the lit-row inline-start bar.
 - Component dimensions no scale covers live in `tokens.css` when the value is shared across
   components, so a size used in more than one place stays visible in one token rather than repeated
   as a literal at each site. A dimension only one component ever uses, such as a dialog's own
@@ -444,8 +455,10 @@ Shared behavior lives here. Compose these; do not re-implement them.
   controls as the import-failure state, plus Retry. Update any local state that caused the failure
   before calling reset. Use it for nested lazy charts and dialogs as well as docked panels so a
   successful import cannot leave the surrounding workflow trapped after a render or effect failure.
-- `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with a scale transition
-  and the dismiss-stack registration). Use it for any anchored menu (the app-menu launcher, the
+- `AnchoredMenu`: the popover primitive (a backdrop plus a positioned surface with the shared surface
+  transition and the dismiss-stack registration). Its `motion` prop is `grow` by default (the
+  dropdown grows from its anchor corner) or `rise` for a full-width bottom sheet, which the app menu
+  passes at 900px and under. Use it for any anchored menu (the app-menu launcher, the
   bottom-bar More menu, the opacity popover). Pass it a `surfaceClass` to position and frame the
   surface, a `role` (`group` by default, `menu` for a true menu with roving focus), and a `surfaceStyle`
   for a bespoke coordinate system. Pass `anchor`, `preferredPlacement`, and `anchorAlign` for shared
@@ -584,9 +597,14 @@ Shared behavior lives here. Compose these; do not re-implement them.
   a scroll and the drag never fires. Also provide `ReorderActions` with Move up and Move down for
   single-tap operation without dragging. Those actions and Arrow keys use the same bounded order
   mutation and announcement as drag; unavailable boundary moves stay disabled.
-- `PANEL_TRANSITION_MS`: the shared panel fly and slide duration in milliseconds, used by SlideOver
-  and the weather panel so the two transitions stay in sync. JS transition timings sit outside the
-  CSS token contract.
+- `surfaceTransition`: the one arrival motion for every surface over the chart, a Svelte transition
+  taking a `SurfaceMotion`: `left` and `right` slide a docked panel 24px in from its edge, `below`
+  raises a phone sheet or the floating weather panel 32px, each over 180ms with a fade from 0.3, and
+  `grow` scales an anchored dropdown from 0.92 over 140ms with a fade from 0.5. All use `cubicOut`
+  and run at zero duration under reduced motion. SlideOver picks `below` at 600px and under, where it
+  is a bottom sheet. JS transition timings sit outside the CSS token contract, so they live in
+  `transitions.ts`; never hand-roll a `fly` or `scale` on a surface (the design contract fails on
+  one).
 - Focus and dialog helpers: `rovingFocus`, `focusOnMount`, `trapFocus`, `isTabKey`, `nextRovingIndex`,
   `dialog`, and `registerDismiss` (the Escape dismiss stack that peels the topmost surface first).
 - `createMenuFocusMachine` and `initializeMenuFocus`: the toolbar-menu keyboard machine shared by
@@ -863,10 +881,25 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   ever a live emergency, and the instrument tile's zone tint, `.tile--warning` and `.tile--alarm`
   from the global `styles/instruments.css` vocabulary driven by Signal K meta.zones and raised
   notifications, are the two sanctioned exceptions).
-- Reduced motion is honored: SlideOver and AnchoredMenu zero their transitions under
-  `prefers-reduced-motion`, and Playback disables automatic advance while keeping manual
+- Reduced motion is honored: every surface transition (`surfaceTransition`) runs at zero duration
+  under `prefers-reduced-motion`, and Playback disables automatic advance while keeping manual
   stepping and scrubbing available. The global transition reset is `0s`, not a small nonzero duration
   that can introduce a visibility transition on an element whose default transition property is all.
+- Safety surfaces never animate in: the safety rail strips, the MOB button, strip, and confirmation
+  dialog, and the status strip's alarm chips appear at once, because an entrance delays the moment an
+  alarm can be read and acted on. The design contract fails on a transition directive or a CSS
+  animation in those components. Panels such as Alarms and Anchor watch are not safety surfaces for
+  this rule and keep the shared panel motion.
+- Touch behaves like a native app: the document has no overscroll (no pull-to-refresh or bounce
+  reload mid-passage), panel bodies and the menu sheet contain their own scroll, and controls carry
+  `touch-action: manipulation` so a quick second tap is a tap, never a double-tap zoom, while pinch
+  zoom stays. A class-level `touch-action` (reorder handles, slide to unlock, trend charts) outranks
+  that element rule. The browser's tap highlight is off, so each control's pressed state is the only
+  tap feedback; `main.ts` registers a passive document `touchstart` listener because iOS Safari
+  applies `:active` only when one exists. Never draw a grab handle on a sheet that has no drag
+  gesture.
+- The first-run chart hint waits while a top-of-chart banner or a safety strip shows, since both
+  land where the hint sits; it is not dismissed, so it returns once they clear.
 
 ## 10. Icons
 
