@@ -69,7 +69,7 @@ function onTimeout(): void {
   class:is-on={mob.active}
   aria-pressed={mob.active}
   aria-haspopup={mob.position ? undefined : 'dialog'}
-  aria-label={mob.position ? 'Fly to the man overboard mark' : 'Mark man overboard here'}
+  aria-label={mob.position ? 'MOB: fly to the man overboard mark' : 'MOB: mark man overboard here'}
   title={mob.position
     ? 'Fly to the MOB mark'
     : 'Mark man overboard at the boat position (asks to confirm)'}

@@ -64,7 +64,6 @@ const copy = $derived(COPY[status]);
   class:chart-status--warning={copy.grade === 'warning'}
   class:chart-status--alarm={copy.grade === 'alarm'}
   title={copy.title}
-  aria-label={copy.title}
   onclick={onOpenLayers}
 >
   {copy.label}

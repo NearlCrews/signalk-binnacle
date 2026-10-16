@@ -870,7 +870,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   panels.
 - A visible label must be associated with its control: a `<label for>` for a single control, or
   `aria-labelledby` pointing at the label span for a control or a `role="group"` (the radar field
-  pattern). Do not lean on a redundant `aria-label` when a visible label exists.
+  pattern). Do not lean on a redundant `aria-label` when a visible label exists. When a control
+  with visible text needs a longer name, the name starts with that text ("MOB: mark man overboard
+  here"), so speech input can say what it sees; a longer explanation goes in `title`, which becomes
+  the description.
 - A primary action has a visible verb, not only an icon and tooltip. Checkbox and switch labels
   provide the full control-height touch row. Modal content scrolls within a usable viewport budget while its
   confirmation and dismissal controls stay reachable at 320 px and 200% text.

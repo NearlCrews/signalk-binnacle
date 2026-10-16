@@ -122,7 +122,7 @@ for (const viewport of [
           await expectHelmHitTarget(
             page
               .locator('header')
-              .getByRole('button', { name: 'Mark man overboard here', exact: true }),
+              .getByRole('button', { name: 'MOB: mark man overboard here', exact: true }),
           );
         } else {
           const instrument = panel.locator('.tiles button').first();
@@ -130,7 +130,7 @@ for (const viewport of [
           await expectHelmHitTarget(instrument);
           await expectHelmHitTarget(
             (viewport.width <= 600 ? panel : page.locator('header')).getByRole('button', {
-              name: 'Mark man overboard here',
+              name: 'MOB: mark man overboard here',
               exact: true,
             }),
           );
@@ -292,7 +292,7 @@ test('keeps the MOB key and active controls contrast-safe in the marine palettes
   });
   await page.reload();
 
-  const mob = page.locator('header').getByRole('button', { name: 'Mark man overboard here' });
+  const mob = page.locator('header').getByRole('button', { name: 'MOB: mark man overboard here' });
   await expect(mob).toBeVisible({ timeout: 20_000 });
   expect(await contrastRatio(mob)).toBeGreaterThanOrEqual(4.5);
 
@@ -609,7 +609,10 @@ test('keeps major overlay states accessibility-clean', async ({ page, browserNam
   await expectRelevantAxeClean(page, 'full-screen Data trends');
   await trends.getByRole('button', { name: 'Close trends, return to chart' }).click();
 
-  await page.locator('header').getByRole('button', { name: 'Mark man overboard here' }).click();
+  await page
+    .locator('header')
+    .getByRole('button', { name: 'MOB: mark man overboard here' })
+    .click();
   const mobDialog = page.getByRole('alertdialog', { name: 'Man overboard' });
   await expect(mobDialog).toBeVisible();
   await expectRelevantAxeClean(page, 'MOB confirmation dialog');
@@ -664,7 +667,9 @@ test('keeps a slim top bar with MOB centered and the brand for assistive tech on
   expect((await heading.boundingBox())?.width ?? 0).toBeLessThanOrEqual(1);
 
   const bar = await page.locator('header.topbar').boundingBox();
-  const mob = await page.getByRole('button', { name: 'Mark man overboard here' }).boundingBox();
+  const mob = await page
+    .getByRole('button', { name: 'MOB: mark man overboard here' })
+    .boundingBox();
   if (!bar || !mob) throw new Error('top bar or MOB not laid out');
   // 44px controls, 4px above and below, and the 1px bottom border.
   expect(Math.round(bar.height)).toBe(Math.round(mob.height) + 9);

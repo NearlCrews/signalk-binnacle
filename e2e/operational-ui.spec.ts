@@ -147,7 +147,7 @@ test('exposes the emergency action inside phone Trends keyboard scope', async ({
   const panel = page
     .locator('.slide-over')
     .filter({ has: page.getByRole('heading', { name: 'Data trends', exact: true }) });
-  const mob = panel.getByRole('button', { name: 'Mark man overboard here' });
+  const mob = panel.getByRole('button', { name: 'MOB: mark man overboard here' });
   await expectInsideViewport(mob, page);
   await expectHelmHitTarget(mob);
   await mob.focus();

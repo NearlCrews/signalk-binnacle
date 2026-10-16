@@ -345,7 +345,9 @@ for (const width of [320, 360]) {
     await setRootFontSize(page, 200);
     await openApp(page);
 
-    const trigger = page.locator('header').getByRole('button', { name: 'Mark man overboard here' });
+    const trigger = page
+      .locator('header')
+      .getByRole('button', { name: 'MOB: mark man overboard here' });
     await expectActionReachable(trigger);
     for (const control of await page.locator('header button:visible').all()) {
       await expectActionReachable(control);
@@ -375,7 +377,7 @@ test('full-screen Instruments keeps MOB initiation and response reachable', asyn
   await expect(dialog).toBeVisible();
 
   // The MOB trigger lives inside the modal focus scope, at full touch size.
-  const trigger = dialog.getByRole('button', { name: 'Mark man overboard here' });
+  const trigger = dialog.getByRole('button', { name: 'MOB: mark man overboard here' });
   await expect(trigger).toBeVisible();
   const triggerBox = await trigger.boundingBox();
   if (!triggerBox) throw new Error('MOB trigger did not lay out');
