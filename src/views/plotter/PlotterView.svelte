@@ -887,6 +887,7 @@ $effect(() => {
   bind:clientHeight={chartHeight}
   style:--chart-height={`${chartHeight}px`}
   class:chart-host--end-panel={selectedNote !== undefined && noteLoader !== undefined}
+  class:chart-host--safety-up={railHeight > 0}
   style:--rail-clearance={railClearance}
   style:--editing-panel-clearance={editingPanelClearance}
   aria-label="Chart"
@@ -2551,5 +2552,11 @@ $effect(() => {
 .safety-rail::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: var(--radius-md);
+}
+/* The first-run chart hint sits where the top banners and, on a short screen, a tall safety rail
+   also land, so it waits while either shows. It is not dismissed, so it returns once they clear. */
+.chart-host--safety-up :global(.context-hint),
+.chart-host:has(.top-banner-stack > :global(*)) :global(.context-hint) {
+  display: none;
 }
 </style>

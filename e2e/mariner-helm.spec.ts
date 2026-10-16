@@ -836,6 +836,28 @@ test.describe('a phone held sideways', () => {
     await expectNoHorizontalOverflow(page.locator('body'));
   });
 
+  test('the first-run chart hint waits for the welcome and yields to a safety strip', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 852, height: 393 });
+    await openApp(page);
+    const hint = page.getByText('Press and hold the chart for actions.');
+    const welcome = page.getByRole('status').filter({ hasText: 'First time with Binnacle?' });
+    await expect(welcome).toBeVisible();
+    await expect(hint).toBeHidden();
+    await welcome.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(hint).toBeVisible();
+    // Depth only: a fix inside NOAA coverage would raise the chart offer, another top banner.
+    await sendDelta(page, [{ path: DEPTH, value: 12 }]);
+    await sendDelta(page, [{ path: DEPTH, value: 2.5 }]);
+    const strip = page.getByRole('complementary', { name: 'Shallow water' });
+    await expect(strip).toBeVisible();
+    await expect(hint).toBeHidden();
+    await sendDelta(page, [{ path: DEPTH, value: 12 }]);
+    await expect(strip).toBeHidden();
+    await expect(hint).toBeVisible();
+  });
+
   test('a blocked pill explains itself across the bar at the trailing edge', async ({ page }) => {
     await page.setViewportSize({ width: 852, height: 393 });
     await openApp(page);
