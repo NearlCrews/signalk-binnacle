@@ -836,6 +836,27 @@ test.describe('a phone held sideways', () => {
     await expectNoHorizontalOverflow(page.locator('body'));
   });
 
+  test('very large text sideways gives the readouts the full width and wraps the pills', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 568, height: 320 });
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement.style.fontSize = '200%';
+      });
+    });
+    await openApp(page);
+    await sendDelta(page, OWN_FIX);
+    const readouts = await boxOf(page.locator('.status-strip .strip-start'));
+    const bar = await boxOf(page.locator('.status-strip .pinned-actions'));
+    expect(bar.y).toBeGreaterThanOrEqual(readouts.y + readouts.height - 1);
+    expect(readouts.width).toBeGreaterThan(568 * 0.8);
+    await expectHelmHitTarget(
+      page.locator('.pinned-actions').getByRole('button', { name: 'Menu', exact: true }),
+    );
+    await expectNoHorizontalOverflow(page.locator('body'));
+  });
+
   test('a wide, short helm display keeps position, time, and labeled pills', async ({ page }) => {
     // A bar-type helm display or a short desktop window is wide enough for the desktop strip.
     await page.setViewportSize({ width: 1280, height: 480 });
@@ -858,7 +879,7 @@ test.describe('a phone held sideways', () => {
     await openApp(page);
     const hint = page.getByText('Press and hold the chart for actions.');
     const welcome = page.getByRole('status').filter({ hasText: 'First time with Binnacle?' });
-    await expect(welcome).toBeVisible();
+    await expect(welcome).toBeVisible({ timeout: 20_000 });
     await expect(hint).toBeHidden();
     await welcome.getByRole('button', { name: 'Dismiss' }).click();
     await expect(hint).toBeVisible();

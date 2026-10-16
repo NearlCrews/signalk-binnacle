@@ -265,7 +265,7 @@ $effect(() => machine.syncOpen(moreOpen));
    would shrink into half its width, so a blocked pill's note anchors to the bar's end instead. */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .pinned-actions {
-    justify-self: end;
+    margin-inline-start: auto;
     inline-size: auto;
     flex-wrap: nowrap;
   }

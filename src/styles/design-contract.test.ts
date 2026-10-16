@@ -242,12 +242,15 @@ describe('design contract: landscape phone', () => {
   it('keeps the status strip on one row on a phone held sideways', () => {
     const landscape = strip.indexOf(`@media ${LANDSCAPE} {`);
     expect(landscape).toBeGreaterThan(strip.indexOf('@media (max-width: 900px) {'));
-    expect(strip.slice(landscape)).toMatch(
-      /\.status-strip \{\s*grid-template-columns: minmax\(0, 1fr\) auto;/,
-    );
+    // A wrapping row: the readouts claim a share in their own em, so very large text wraps the
+    // pills onto their own line instead of squeezing the readouts into a tall column.
+    expect(strip.slice(landscape)).toMatch(/\.status-strip \{\s*display: flex;\s*flex-wrap: wrap;/);
+    expect(strip.slice(landscape)).toMatch(/\.strip-start \{\s*flex: 1 1 \d+em;/);
     const pinnedLandscape = pinned.indexOf(`@media ${LANDSCAPE} {`);
     expect(pinnedLandscape).toBeGreaterThan(pinned.indexOf('@media (max-width: 900px) {'));
-    expect(pinned.slice(pinnedLandscape)).toMatch(/\.pinned-actions \{[^}]*justify-self: end;/);
+    expect(pinned.slice(pinnedLandscape)).toMatch(
+      /\.pinned-actions \{[^}]*margin-inline-start: auto;/,
+    );
     expect(pinned).toContain('createMediaQuery(LANDSCAPE_SHORT_QUERY)');
     expect(pinned.slice(pinnedLandscape)).toMatch(
       /:global\(\.blocked-pill-note\) \{[^}]*inset-inline-end: 0;[^}]*transform: none;/,

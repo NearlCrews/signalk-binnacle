@@ -572,13 +572,16 @@ const depthWatchPaused = $derived(
 }
 /* A phone held sideways has the width for one row but not the height for two: the readouts take the
    leading space and the icon-only pills the trailing edge, so the chart keeps the height a stacked
-   strip would spend. Readouts still wrap rather than run under the pills. */
+   strip would spend. Readouts still wrap rather than run under the pills. The readouts claim a share
+   in their own em, so at very large text the pills wrap onto their own line and the readouts keep the
+   full width instead of stacking into a tall, narrow column. */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .status-strip {
-    grid-template-columns: minmax(0, 1fr) auto;
-    justify-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
   }
   .strip-start {
+    flex: 1 1 22em;
     justify-content: flex-start;
   }
   .center-cluster {

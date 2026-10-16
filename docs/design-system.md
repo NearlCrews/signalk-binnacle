@@ -65,7 +65,8 @@ condition, and one used there drops the whole block.
   `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. CSS cannot import it, so each stylesheet
   repeats that exact literal and the design contract fails on any other spelling. Under it the
   status strip keeps one row: the readouts take the leading space (and still wrap rather than run
-  under the pills), the pinned pills sit icon-only at the trailing edge with their accessible names
+  under the pills; they claim a 22em share in their own text size, so at very large text the pills
+  wrap onto their own line instead), the pinned pills sit icon-only at the trailing edge with their accessible names
   and 44px targets, and the position cluster hides, including the last-fix coordinates and age, as
   it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity there is the
   responsive maximum (`effectiveBarCapacity`), because the bar is sized to its own pills. The width
