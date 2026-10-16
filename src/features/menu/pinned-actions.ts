@@ -57,15 +57,13 @@ export function barCapacity(
 
 // On a phone held sideways the bar is sized to its own pills, so a width measured from it would only
 // confirm the pills already shown and a newly pinned action would land in More. The icon-only pills
-// fit the responsive maximum there, except at large text, where the measured cap still governs.
+// fit the responsive maximum there at any text size: a screen that short pins controls to 44px.
 export function effectiveBarCapacity(
   maximum: number,
   measured: number | undefined,
   landscapeShort: boolean,
-  largeText: boolean,
 ): number {
-  if (landscapeShort && !largeText) return maximum;
-  return Math.min(maximum, measured ?? maximum);
+  return landscapeShort ? maximum : Math.min(maximum, measured ?? maximum);
 }
 
 export function splitBarActions(

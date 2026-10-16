@@ -13,7 +13,9 @@ describe('pinned action availability and resize lifecycle', () => {
     'fits inherited %s controls without shrinking the available toolbar column',
     async (controlSize, expectedPills) => {
       const previousViewport = { width: window.innerWidth, height: window.innerHeight };
-      await page.viewport(568, 320);
+      // Portrait: the stacked strip's single toolbar column. A phone held sideways sizes the bar to
+      // its own pills instead (the next case).
+      await page.viewport(320, 568);
       const rootStyle = document.documentElement.style;
       const previousRootStyle = rootStyle.cssText;
       rootStyle.fontSize = '24px';
@@ -56,6 +58,56 @@ describe('pinned action availability and resize lifecycle', () => {
       }
     },
   );
+
+  it('regains its full pill count at large text when a phone turns sideways', async () => {
+    const previousViewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(320, 568);
+    const rootStyle = document.documentElement.style;
+    const previousRootStyle = rootStyle.cssText;
+    rootStyle.fontSize = '24px';
+    const target = document.createElement('div');
+    target.dataset.pinnedCapacityTest = '';
+    // A 100px stacked column fits two 44px pills; sideways the bar is sized to its own pills, so a
+    // capacity measured from it would hold at two.
+    target.style.cssText =
+      'display:grid;grid-template-columns:1fr;justify-items:center;width:100px;--control-size:44px;--space-1:4px;--space-2:4px;';
+    const style = document.createElement('style');
+    style.textContent = `
+      [data-pinned-capacity-test] .btn-pill { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
+      [data-pinned-capacity-test] .visually-hidden { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
+    `;
+    document.head.append(style);
+    document.body.append(target);
+    const component = mount(PinnedActions, {
+      target,
+      props: {
+        actions: ['Menu', 'Center', 'Follow', 'AIS'].map((label) => ({
+          id: label,
+          label,
+          onSelect: () => {},
+        })),
+      },
+    });
+    const settle = async (): Promise<void> => {
+      for (let frame = 0; frame < 4; frame += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        flushSync();
+      }
+    };
+    try {
+      await settle();
+      expect(target.querySelectorAll('.btn-pill')).toHaveLength(2);
+      await page.viewport(568, 320);
+      await settle();
+      expect(target.querySelectorAll('.btn-pill')).toHaveLength(4);
+    } finally {
+      await unmount(component);
+      target.remove();
+      style.remove();
+      rootStyle.cssText = previousRootStyle;
+      await page.viewport(previousViewport.width, previousViewport.height);
+    }
+  });
 
   it('lets a blocked action explain itself without invoking it', async () => {
     const target = document.createElement('div');

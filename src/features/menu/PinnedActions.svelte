@@ -53,7 +53,7 @@ const machine = createMenuFocusMachine({
 });
 const responsiveMaximum = $derived(compactPhone.matches ? MAX_COMPACT_BAR_PILLS : MAX_BAR_PILLS);
 const capacity = $derived(
-  effectiveBarCapacity(responsiveMaximum, measuredCapacity, landscapeShort.matches, largeText),
+  effectiveBarCapacity(responsiveMaximum, measuredCapacity, landscapeShort.matches),
 );
 const iconOnly = $derived(iconOnlyPills.matches || landscapeShort.matches || largeText);
 const split = $derived(splitBarActions(actions, capacity));
