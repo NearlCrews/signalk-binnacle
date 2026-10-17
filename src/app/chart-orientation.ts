@@ -38,11 +38,16 @@ export interface OrientationResult {
   fallback?: OrientationFallback;
   // The helm label: the mode, or the mode plus its fallback, always naming the reference.
   label: string;
+  // What the chart is doing right now, for the status strip's Chart cell: the mode while it is
+  // active, north up while it has fallen back.
+  shown: 'North up' | 'Heading up' | 'Course up';
+  // The reference driving an active rotation, for the cell's label line.
+  reference?: 'True' | 'COG';
 }
 
 export function resolveOrientation(inputs: OrientationInputs): OrientationResult {
   if (inputs.mode === 'north') {
-    return { bearingDeg: 0, active: true, label: 'North up' };
+    return { bearingDeg: 0, active: true, label: 'North up', shown: 'North up' };
   }
   if (inputs.mode === 'heading') {
     if (inputs.headingRad === undefined) {
@@ -51,6 +56,7 @@ export function resolveOrientation(inputs: OrientationInputs): OrientationResult
         active: false,
         fallback: 'no-heading',
         label: 'North up (no true heading)',
+        shown: 'North up',
       };
     }
     if (inputs.headingStale) {
@@ -59,19 +65,34 @@ export function resolveOrientation(inputs: OrientationInputs): OrientationResult
         active: false,
         fallback: 'stale-heading',
         label: 'North up (true heading stale)',
+        shown: 'North up',
       };
     }
     return {
       bearingDeg: radiansToBearing(inputs.headingRad) ?? 0,
       active: true,
       label: 'Heading up (true)',
+      shown: 'Heading up',
+      reference: 'True',
     };
   }
   if (inputs.cogRad === undefined) {
-    return { bearingDeg: 0, active: false, fallback: 'no-cog', label: 'North up (no COG)' };
+    return {
+      bearingDeg: 0,
+      active: false,
+      fallback: 'no-cog',
+      label: 'North up (no COG)',
+      shown: 'North up',
+    };
   }
   if (inputs.cogStale) {
-    return { bearingDeg: 0, active: false, fallback: 'stale-cog', label: 'North up (COG stale)' };
+    return {
+      bearingDeg: 0,
+      active: false,
+      fallback: 'stale-cog',
+      label: 'North up (COG stale)',
+      shown: 'North up',
+    };
   }
   if (inputs.sogMps === undefined || inputs.sogStale || inputs.sogMps < ORIENTATION_MIN_SOG_MPS) {
     return {
@@ -79,11 +100,14 @@ export function resolveOrientation(inputs: OrientationInputs): OrientationResult
       active: false,
       fallback: 'low-speed',
       label: 'North up (too slow for course up)',
+      shown: 'North up',
     };
   }
   return {
     bearingDeg: radiansToBearing(inputs.cogRad) ?? 0,
     active: true,
     label: 'Course up (COG)',
+    shown: 'Course up',
+    reference: 'COG',
   };
 }

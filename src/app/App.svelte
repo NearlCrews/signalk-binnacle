@@ -2607,7 +2607,7 @@ function backFromPoiSearch(): void {
 // running. Keydown is included so keyboard-only operators get audible alarms too. Pointerup is
 // included because pointerdown carries user activation only for a mouse: on a touchscreen the
 // activation arrives on release, so a helm tablet's first tap would otherwise be rejected, which
-// matters now that the strip states the blocked condition instead of carrying an Enable button.
+// matters because the strip's Enable is this tap: its button needs no handler of its own.
 const primeAudio = () => {
   if (alarmAudioPrimed()) {
     removePrimeListeners();
@@ -2664,7 +2664,7 @@ const gpsNeverReceived = new HeldFlag(
 const aisCount = $derived(aisTargets.list().length);
 // Caution-grade alerts carry no sound and no strip, so the status strip counts them.
 const alertCount = $derived(genericAlarms.filter(isCautionNotification).length);
-// Sound off shows only while something this display would sound for is armed.
+// The sound-off notice shows only while something this display would sound for is armed.
 const soundOff = $derived(
   soundOffState(
     audioState,
@@ -3420,7 +3420,12 @@ const plotterActions = {
     onOpenAlarms={() => openPanel('alarms')}
     {soundOff}
     orientation={chartOrientation.value !== 'north'
-      ? { label: orientation.label, active: orientation.active }
+      ? {
+          label: orientation.label,
+          active: orientation.active,
+          shown: orientation.shown,
+          reference: orientation.reference,
+        }
       : undefined}
     onResetOrientation={() => chartOrientation.set('north')}
     pinnedActions={resolvedPinned}

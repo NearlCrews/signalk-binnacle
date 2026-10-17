@@ -210,11 +210,34 @@ describe('design contract: alarm strips', () => {
 
 describe('design contract: helm readouts', () => {
   const strip = sources['/src/app/StatusStrip.svelte'] ?? '';
+  const cells = sources['/src/styles/data-cells.css'] ?? '';
+  const pinned = sources['/src/features/menu/PinnedActions.svelte'] ?? '';
 
-  it('raises every instrument readout value together on helm displays', () => {
-    expect(strip).toMatch(
-      /@container status-strip \(min-width: 62em\) \{\s*\.strip-start \.readout b \{\s*font-size: var\(--text-readout\);/,
+  it('sets every bar value at one size on one shared baseline', () => {
+    expect(cells).toMatch(/\.data-cell-value \.num \{\s*font-size: var\(--text-data\);/);
+    // The numeral strut that puts a word value, and a tile's label, on the numerals' baseline.
+    expect(cells).toMatch(
+      /\.data-baseline::before,\s*\.data-cell-value::before \{[^}]*font-family: var\(--font-mono\);[^}]*font-size: var\(--text-data\);/,
     );
+    expect(pinned).toContain('class="tile-label data-baseline"');
+    // No component sizes a bar value on its own.
+    expect(strip).not.toMatch(/\.num \{[^}]*font-size/);
+    expect(strip).not.toContain('--text-readout');
+  });
+
+  it('derives the helm row from fourteen bar columns and the two gutters', () => {
+    const rem = (pattern: RegExp, text: string): number => {
+      const match = text.match(pattern);
+      if (!match?.[1]) throw new Error(`No ${pattern}`);
+      return Number.parseFloat(match[1]);
+    };
+    const column = rem(/--data-cell-min: ([\d.]+)rem;/, tokens);
+    const gutter = rem(/\.status-strip \{[^}]*--strip-gutter: ([\d.]+)rem;/, strip);
+    const row = rem(
+      /@container status-strip \(min-width: ([\d.]+)rem\) \{\s*\.strip-grid \{\s*grid-template-columns: var\(--strip-gutter\) repeat\(14, minmax\(0, 1fr\)\) var\(--strip-gutter\);/,
+      strip,
+    );
+    expect(row).toBeCloseTo(14 * column + 2 * gutter, 5);
   });
 
   it('marks stale numerals by shape in every theme, not by color alone', () => {
@@ -224,7 +247,9 @@ describe('design contract: helm readouts', () => {
       expect(sources[`/src/features/instruments/${tile}.svelte`] ?? '').toContain(
         "class:stale-cue={reading.state === 'stale'}",
       );
-    expect(strip.match(/class:stale-cue=/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    // The motion readouts share one snippet; it and the depth cell both carry the cue.
+    expect(strip).toMatch(/\{#snippet motionCell\([\s\S]*?class:stale-cue=\{linkDown\}/);
+    expect(strip).toContain('class:stale-cue={linkDown && !shallowAlarming}');
   });
 });
 
@@ -251,12 +276,14 @@ describe('design contract: layout breakpoints', () => {
   it('keeps the status strip on one row on a phone held sideways', () => {
     const landscape = strip.indexOf(`@media ${LANDSCAPE} {`);
     expect(landscape).toBeGreaterThan(strip.indexOf('@media (max-width: 900px) {'));
-    // A wrapping row: the readouts claim a share in their own em, so very large text wraps the
-    // pills onto their own line instead of squeezing the readouts into a tall column.
-    expect(strip.slice(landscape)).toMatch(/\.status-strip \{\s*display: flex;\s*flex-wrap: wrap;/);
-    expect(strip.slice(landscape)).toMatch(/\.strip-start \{\s*flex: 1 1 \d+em;/);
+    // One row only while three readout columns fit beside the tiles, in rem, so very large text
+    // drops the tiles back onto their own row instead of squeezing the readouts into one column.
+    expect(strip.slice(landscape)).toMatch(
+      /@container status-strip \(min-width: \d+rem\) \{\s*\.strip-grid \{\s*grid-template-columns: var\(--strip-gutter\) minmax\(0, 1fr\) auto;/,
+    );
     const pinnedLandscape = pinned.indexOf(`@media ${LANDSCAPE} {`);
-    expect(pinnedLandscape).toBeGreaterThan(pinned.indexOf('@media (max-width: 900px) {'));
+    // The tiles' sideways rule follows their base rule, so it wins the cascade.
+    expect(pinnedLandscape).toBeGreaterThan(pinned.indexOf('.pinned-actions {'));
     expect(pinned.slice(pinnedLandscape)).toMatch(
       /\.pinned-actions \{[^}]*margin-inline-start: auto;/,
     );

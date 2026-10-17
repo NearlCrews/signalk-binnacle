@@ -36,6 +36,14 @@
   --text-xl: 1.15rem;
   --text-readout: 1.25rem;
   --text-readout-lg: 1.75rem;
+  /* The status bar's one value size, and the two fixed line heights shared by every data cell and
+     bar tile, so labels sit on one line and values on one baseline across the whole bar. */
+  --text-data: 1.125rem;
+  --data-label-line: 0.875rem;
+  --data-value-line: 1.5rem;
+  /* The narrowest bar column: two of them hold the vessel position at --text-data. The status
+     strip's helm-row container query is fourteen of these plus its gutters; change them together. */
+  --data-cell-min: 6.9rem;
   /* Text-entry controls use adaptive semantic aliases. On small or coarse-pointer displays they
      rise to 1rem so iOS does not zoom the viewport when a field receives focus. */
   --text-input: var(--text-sm);

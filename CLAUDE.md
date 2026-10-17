@@ -706,6 +706,13 @@ last year, and a stable API surface.
   to install, including when charts and tiles are served by another plugin. Repeat visits and
   offline-degraded operation must be seamless for every tile and data source Binnacle renders
   (base map, plugin-served charts, weather, tides, notes), within sensible quotas and expiry.
+- Equal, aligned, and consistent (owner rule, 2026-10-17): repeated items in one row or grid are the
+  same size (a wider item takes a whole multiple), labels and values sit on shared lines across the
+  whole surface, related rows snap to the same column edges, a row never changes shape to report a
+  problem, and when space runs out a whole item gives way, never a squeezed or clipped one.
+  `docs/design-system.md` section 1 states the rule; the status bar's data-cell grid is the
+  reference implementation. Check alignment against drawn guides or measured boxes in a browser,
+  not by eye.
 - One coherent design system, not disjointed widgets: every new surface uses the shared tokens
   (src/styles/), the shared UI primitives ($shared/ui), the established interaction patterns
   (SlideOver, InlineConfirm, armed confirms, the dismiss stack, 44px targets), and the same API

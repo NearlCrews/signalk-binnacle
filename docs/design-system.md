@@ -21,6 +21,30 @@ number not its label, a night mode that does not wreck dark adaptation, and a UI
 looks like it was drawn by the same hand. A feature that looks or behaves differently from its siblings
 is not done.
 
+### Equal, aligned, and consistent
+
+The owner's standing layout rule, and the test every surface is judged by: things that repeat are the
+same size, sit on shared lines, and look the same.
+
+- **Equal.** Repeated items in one row or grid share one module. Every cell, tile, or button in it is
+  the same width, and an item that needs more takes a whole multiple (the vessel position takes two
+  status-bar columns), never an odd size of its own.
+- **Aligned.** Lines run across the whole surface, not per item: every label on one line, every value
+  on one baseline, and every related row (a caution line, a wrapped second row) snapped to the same
+  column edges as the row it belongs to.
+- **Consistent.** The same kind of thing gets the same treatment everywhere on the surface: one value
+  size, one label style, a qualifier (unit, datum, reference) in the same slot, and one divider rule.
+- **Stable.** A row never changes shape to report a problem. A problem that belongs to one item shows
+  inside that item; anything else goes on a separate line that appears only while something is wrong.
+  Spare slots stay reserved, so an optional item appears without shifting its neighbors.
+- **Whole items give way.** When space runs out, a whole item moves (into More, or onto a wrapped row
+  of whole cells on the same columns), never a squeezed, clipped, or misaligned one.
+- **Proved with guides.** Alignment is checked against drawn guides or measured boxes in a real
+  browser, not by eye: a mockup draws its grid and shared lines, and a browser check measures that
+  nothing overflows its column.
+
+The status bar (section 5, Data cells) is the reference implementation.
+
 ## 2. Design tokens are the only vocabulary
 
 All geometry, type, color, depth, and timing come from CSS custom properties defined in
@@ -69,15 +93,16 @@ condition, and one used there drops the whole block.
   `createMediaQuery` shares one list and one change listener per query across every caller.
 - A phone held sideways is the one height-keyed layout: `LANDSCAPE_SHORT_QUERY`,
   `(orientation: landscape) and (max-height: 500px) and (max-width: 1000px)`. Under it the status
-  strip keeps one row: the readouts take the leading space (and still wrap rather than run under the
-  pills; they claim a 22em share in their own text size, so at very large text the pills wrap onto
-  their own line instead), the pinned pills sit icon-only at the trailing edge with their accessible
-  names and 44px targets, and the position cluster hides, including the last-fix coordinates and
-  age, as it already does under 900px; the No GPS fix chip stays in the readouts. Pill capacity
-  there is the responsive maximum, because the bar is sized to its own pills, and a blocked pill's
-  note anchors to the bar's end with the shared `.transient-note--end` modifier. The width bound
-  keeps a wide, short window or bar-type helm display on the desktop strip, with position, time,
-  and labeled pills.
+  strip keeps one row while three readout columns fit beside the pinned tiles (a 34rem container
+  query, in rem, so at very large text the tiles drop back onto their own row and the readouts keep
+  the full width): the readouts take the leading space on their own equal-column grid (wrapping whole
+  cells onto a second line of the same columns rather than running under the tiles), the pinned tiles
+  sit icon-only at the trailing edge with their accessible names and 44px targets, and the position
+  and time cells hide, including the last-fix coordinates and age, as they already do under 900px;
+  the No GPS fix notice stays on the caution line above. Tile capacity there is the responsive
+  maximum, because the bar is sized to its own tiles, and a blocked tile's note anchors to the bar's
+  end with the shared `.transient-note--end` modifier. The width bound keeps a wide, short window or
+  bar-type helm display on the desktop strip, with position, time, and labeled tiles.
 - System chrome: `--system-bar-clearance` follows the browser's bottom safe area. An installed PWA
   with a coarse primary pointer keeps at least `--system-bar-fallback` below the status-strip content
   because some Android and Samsung shells report zero while the system bar still overlays the app.
@@ -95,7 +120,9 @@ condition, and one used there drops the whole block.
   components, so a size used in more than one place stays visible in one token rather than repeated
   as a literal at each site. A dimension only one component ever uses, such as a dialog's own
   inline-size, can stay a scoped literal with a why comment beside it instead: `tokens.css` is for
-  what is shared, not every non-scale size in the UI. Shared so far: `--panel-width` 22rem (the docked slide-over), `--panel-state-min-height`
+  what is shared, not every non-scale size in the UI. Shared so far: `--data-cell-min` 6.9rem (the
+  narrowest status-bar column, shared by the strip's grid and the pinned tiles), `--data-label-line`
+  0.875rem and `--data-value-line` 1.5rem (the bar's two shared line heights), `--panel-width` 22rem (the docked slide-over), `--panel-state-min-height`
   8rem (a panel's loading and error block), `--strip-max-width` 28rem (the centered bottom strips),
   `--tile-min-height` 4rem (the instrument tile floor), `--btn-compact-min-width` 3rem
   (`.btn-compact`), `--scrubber-track-min-width` 4rem (the scrubber track once its narrow-container
@@ -128,15 +155,16 @@ Pick the token by role, never by eye:
 
 | Token | rem | Roles |
 | --- | --- | --- |
-| `--text-xs` | 0.75 | caps labels (`.caps-label`), units (`.tile .unit`, `.stat-grid .unit`), badges, panel footers |
+| `--text-xs` | 0.75 | caps labels (`.caps-label`, `.data-cell-label`), units (`.tile .unit`, `.stat-grid .unit`, the status bar's units and datums), the bar's tile labels, badges, panel footers |
 | `--text-sm` | 0.8 | button labels (`.btn`), per-field labels, `.muted-note`, `.alert-note`, menu tile labels, panel subtitles, and the instrument tile's loud abbreviation (`.abbr`, bold at body contrast) |
 | `--text-base` | 0.85 | panel body baseline (`.slide-over`), strip body text |
-| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and all status-strip readouts on narrower strips (`.readout`: one size per width, no hierarchy) |
+| `--text-md` | 0.9 | card names (`.saved .name`), nested-detail titles (`.panel-title--sub`), toggle-row and picker labels, and the status bar's caution line |
 | `--text-input` | adaptive | ordinary text-entry controls: `--text-sm` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
 | `--text-input-large` | adaptive | stepped-up text-entry controls such as `UnitField` numerals and `.text-field.large`: `--text-md` on precise desktop layouts and `--text-lg` on phone-width or coarse-pointer displays |
-| `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout) |
+| `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout), and a status bar word value (Paused, Standby, Course up), set on the numerals' baseline |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
-| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`), the position tile's two-line coordinates, and the status strip's instrument values on a helm-width strip (`.strip-start .readout b` under `@container status-strip (min-width: 62em)`, about 900 px at the default text size, measured in the strip's own em so enlarged text does not stack the strip taller; all together so the row stays uniform); the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
+| `--text-data` | 1.125 | every status bar value (`.data-cell-value .num`) at every width: one size across the whole bar, instruments, position, and time alike, so the bar reads as one instrument row |
+| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
 | `--text-readout-lg` | 1.75 | instrument tile hero values, and the collision strip's decision numbers above |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -201,8 +229,8 @@ that matter when you do touch this:
 `src/app.css` is only an ordered `@import` manifest over `src/styles/` modules, and the import order IS
 the cascade order. Do not reorder it blindly: the order keeps `.is-on` (in `icon-controls.css`) able to
 light the bases that precede it, and keeps `overlays.css` and `panels.css` after the bases they extend.
-The order is: maplibre, tokens, base, text, buttons, forms, cards, badges, instruments, icon-controls,
-scrubber, overlays, reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so
+The order is: maplibre, tokens, base, text, buttons, forms, cards, badges, instruments, data-cells,
+icon-controls, scrubber, overlays, reorder, panels, strips, a11y, vendor. (`reorder.css` follows `overlays.css` so
 the dragging state wins over a lit `.row-interactive.is-on` row at equal specificity.)
 
 Rules:
@@ -276,11 +304,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   `.alert-note--filled` tinted variant, `.icon-note` (a note led by a status icon, with the text
   wrapping under itself rather than under the icon; composed over the note's own look and severity
   color by the weather warning banners and the degraded-monitor notes), `.action-note` plus its
-  `--wrap` modifier (a note or readout chip that carries its own action inline, so the label and its
-  control share one row: a `.btn` is a block-level flex box, so a control set beside inline text
-  otherwise stacks a full 44px target under its own label, which costs the status strip an entire
-  row off the chart and stretches a banner's buttons to the banner's width; apply it per element and
-  never to a family like `.readout`, whose chips would get the gap between their own words, and note
+  `--wrap` modifier (a note that carries its own action inline, so the label and its control share
+  one row: a `.btn` is a block-level flex box, so a control set beside inline text otherwise stacks a
+  full 44px target under its own label, which costs a strip an entire row off the chart and stretches
+  a banner's buttons to the banner's width; apply it per element and never to a family of elements
+  whose words are separate text runs, which would get the gap between their own words, and note
   that a control living inside flowing prose uses AuthBanner's scoped `inline-flex` with
   `vertical-align: middle` instead), `.sev-danger` and
   `.sev-warning` (severity text coloring),
@@ -289,12 +317,47 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   longer live: a dashed underline on its `.num` numerals, so staleness reads by shape and not only by
   the muted or warning color, which night-red cannot separate by brightness), and `.truncate`
   (single-line ellipsis truncation; the span still owns its width bound, a `max-inline-size` or a flex
-  `min-inline-size: 0`, or the clip never engages). The status strip's own `.readout` spans (StatusStrip.svelte,
-  component-scoped, not a global class) follow one idiom throughout: a bare-word label with no colon
-  (SOG, COG, HDG, Depth, Vessel, Time), then the value wrapped in `.num`. A trailing physical unit
-  (kn, °T, ft, m) stays outside the `.num` span as plain text. The Time readout uses local time, and
-  any qualifier that is part of reading a value itself, such as AM or PM, stays inside the `.num` span
-  with that value.
+  `min-inline-size: 0`, or the clip never engages). The status bar's readouts are data cells, below.
+- Data cells (`data-cells.css`): the status bar's readout vocabulary, composed by the status strip
+  and the autopilot cell. A `.data-cell` is one bar column, the control size tall, holding two fixed
+  lines at the shared `--data-label-line` and `--data-value-line` heights: a `.data-cell-label`
+  (bare caps words, no colon: SOG, COG, HDG, Depth, Vessel, Time, Chart · COG, AP · Auto) over a
+  `.data-cell-value` (the value in `.num` at `--text-data`, then the unit, datum, or hemisphere as
+  plain text at the label size; a word value in `.word` at `--text-lg`). Time uses local time, and a
+  qualifier that is part of reading the value itself, such as AM or PM, stays inside its `.num`. A
+  zero-width numeral strut leads every value line (`.data-baseline` gives a tile label the same
+  line), so words and numbers share one baseline across the bar. `.data-cell--warning` and
+  `.data-cell--alarm` recolor the whole cell and pair with a warning icon in the label, so a grade
+  never rests on color alone; `.data-cell--wide` spans two columns (the vessel position, set close as
+  42.6154°N so it fits). The value and its unit never shrink; a trailing `.data-cell-qualifier` (a
+  datum, an unassessed count) is the one part that may, and it and an overlong label end in an
+  ellipsis, never a silent cut. Neighboring cells are divided by a hairline, which the host clears
+  beside an empty column. The status strip lays the cells on one grid of equal columns, in four
+  layouts:
+  - Stacked by default: a wrapping grid of equal columns at least `--data-cell-min` wide (5.75rem at
+    900 px and below, where the position leaves and no two-column cell remains), the pinned tiles on
+    their own row beneath.
+  - The helm row once the strip holds fourteen columns (`@container status-strip (min-width:
+    98.6rem)`, derived from `--data-cell-min` and the gutters and pinned by the design contract): five
+    instrument columns, four tile columns at the true center (fewer tiles start at the first tile
+    column, so every edge stays on the grid), two spare columns, two for the position, and one for
+    the time. The optional cells own fixed columns so one appearing never moves another: chart
+    orientation the first spare, the anchor watch the second, and the autopilot the second unless the
+    anchor holds it, when it takes the time column and Time steps aside. `reading-flow: grid-rows`
+    keeps focus order in the visual order.
+  - The sideways phone row (section 2).
+  - Very large text on a narrow phone, where not even two columns fit (`max-width: 13rem`, in rem so
+    it never applies at the default size): the cells set their label beside the value at the
+    physical 44 px floor and wrap as whole items, so the strip never stacks one readout per row and
+    pushes a safety strip off the screen.
+
+  A problem that belongs to one readout shows inside its cell (dashed SOG and COG in the caution
+  voice, Depth Paused, Chart north up); every other problem goes on the caution line above, which
+  appears only while something is wrong and snaps each notice to whole columns of the same grid
+  through the `spanColumns` action. A phone carries no AIS cell, so degraded AIS assessment there is a
+  caution-line notice rather than an inserted cell. The alarm-sound notice offers an action only where
+  a tap can help: Enable while the browser blocks audio, Try again after the device failed, and no
+  action at all where Web Audio is unsupported. Every tappable cell and notice is a full 44px target.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-md +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.empty-state`
   (the dashed empty-list block, used through the EmptyState primitive), `.stat-grid`
@@ -342,7 +405,7 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   channel, dashes the same value; that divergence is deliberate and the Help panel's "When
   something looks wrong" section explains it in prose, since no tooltip reaches a gloved hand.
   While the Signal K link itself is down or silent, the strip subordinates its downstream
-  consequence chips (fix, speed, course, heading, depth) to a dimmed treatment so one failure with
+  consequence readouts (fix, speed, course, heading, depth) to a dimmed treatment so one failure with
   one action does not read as five, without ever hiding or recoloring them. Radar health is
   excluded from that rule: it rides the radar provider's own stream, not the Signal K link. The wind tile's angle freshness
   folds into the same chip line (Angle stale, Angle unavailable) rather than stacking a second
@@ -561,7 +624,8 @@ Shared behavior lives here. Compose these; do not re-implement them.
 - `TransientNote`: the timed explanatory note a tap on a blocked or informational control shows,
   since the title tooltip such a control also carries is mouse-hover-only. Backed by a `Toast`, it
   is absolutely positioned by the host's own class so it never contributes layout height. Shared
-  by the menu's blocked tiles, the bar's blocked pills, and the status strip's degraded chips; the
+  by the menu's blocked tiles, the bar's blocked tiles, and the status strip's explanatory cells and
+  notices; the
   strip's copy layers below `--z-safety-strips` and lifts by `--rail-clearance` so it can never
   cover a safety card.
 - `NameEntry`: the inline name form that replaces `window.prompt` (Enter saves, Escape cancels, the
@@ -778,7 +842,7 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 ## 8. Menus
 
 - The app menu is the `AppMenu` launcher: a `.surface-elevated` frame holding a grid of tiles grouped by
-  helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar pill,
+  helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar tile,
   `sublabel` for a quiet second tile line when an item's current state is part of its identity
   (the Orientation tile's mode, the instrument dashboard's KIP acronym) so the label keeps one
   voice across the grid, `icon` a lucide component, `group` a section heading, `pressed` for a
@@ -816,7 +880,10 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   (a native `<dialog class="modal-card">` opened via the `dialog` action, which calls `showModal()`),
   used for the waypoint editor and the MOB confirm.
 - The bottom bar renders the pinned `MenuItem`s in stored order (using `shortLabel`) plus a More
-  overflow. The app menu's toolbar edit mode owns membership, order, reset, and the live reorder
+  overflow, as equal tiles: an icon over a one-line label on the bar's two shared line heights, so
+  each label sits on the readouts' value baseline. On the helm row each tile is exactly one bar
+  column and the bar holds four (three plus More when more are pinned); elsewhere tiles share the bar
+  equally, up to one column each, and go icon-only when a labeled tile would not fit. The app menu's toolbar edit mode owns membership, order, reset, and the live reorder
   announcement; the bar only renders the resolved list. Fit against the available layout column and
   the control's resolved size, including inherited compact overrides. Do not measure a content-sized
   bar that shrinks again whenever a pill moves into More.
@@ -832,21 +899,16 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 
 - 44 px (`--control-size`) for every action target; `--row-size` for list rows, defined as the same
   value so a row can never fall below that floor.
-- The one carve-out is the status strip's explain-tap chips (`.chip-btn`), whose hit box is about
-  33 px: the text line plus `--space-2` of block padding, with a matching negative block margin so
-  the target costs the strip no height. They are readouts first, and their tap reveals a
-  `TransientNote` explanation, never a state change, so a missed tap costs nothing. Raising them to
-  44 px is NOT an improvement: `.strip-start` wraps with a 12 px row gap (8 px under 600 px), so a
-  44 px box would reach about 13 px past its own text on each side and overlap the neighboring
-  row's target, turning a near miss into a tap on the wrong chip. Every real action in the strip
-  (Retry, Reconnect, Help, N up) keeps the full 44 px target, and so does a chip that opens a panel
-  (the autopilot and anchor chips), which keeps that target in layout rather than cancelling it with
-  a negative margin.
-- A chip does not carry both an explain-tap and an action that already routes to the same
-  explanation. The link chips sit beside the connection dot, whose tap states the connection
-  diagnosis; Waiting for GPS carries Help, which opens the GPS readiness section; the orientation
-  chip's label is its own explanation and N up is its action. Adding a second target to those would
-  crowd the row without telling the navigator anything new.
+- The status bar has no compact carve-out any more: every readout is a full-height data cell, so an
+  explain-tap cell (AIS, Depth) or notice (a weather warning, radar trouble) reveals its
+  `TransientNote` explanation from a full 44 px target, and every real action (Retry, Reconnect,
+  Help, Enable, the anchor and autopilot doors, the Chart cell) has the same target. The connection
+  dot is the one small target left, a quiet explain-tap in its gutter.
+- A cell or notice does not carry both an explain-tap and an action that already routes to the same
+  explanation. The link notices sit beside the connection dot, whose tap states the connection
+  diagnosis; Waiting for GPS carries Help, which opens the GPS readiness section; the Chart cell is
+  itself the return to north up, and a fallback's reason is on the caution line. Adding a second
+  target to those would crowd the row without telling the navigator anything new.
 - Destructive actions and derived-guidance navigation handoffs arm with `InlineConfirm`. They do not
   fire on a single tap.
 - Escape peels the topmost surface via the shared dismiss stack (`registerDismiss`), in last-opened

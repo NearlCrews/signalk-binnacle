@@ -44,10 +44,32 @@ function body(props: ComponentProps<typeof StatusStrip>): string {
   return render(StatusStrip, { props }).body;
 }
 
+// The opening tag of the first element carrying a class, throwing when absent.
+function openingTag(html: string, className: string): string {
+  const at = html.indexOf(className);
+  if (at < 0) throw new Error(`No element with ${className}`);
+  const start = html.lastIndexOf('<', at);
+  return html.slice(start, html.indexOf('>', at) + 1);
+}
+
 describe('StatusStrip depth alarm', () => {
-  it('carries no Sound off chip unless App reports an armed watch that cannot sound', () => {
-    expect(body(baseProps())).not.toContain('Sound off');
-    expect(body({ ...baseProps(), soundOff: 'blocked' })).toContain('Sound off');
+  it('carries no sound-off notice unless App reports an armed watch that cannot sound', () => {
+    expect(body(baseProps())).not.toContain('sound-off-notice');
+    const blocked = body({ ...baseProps(), soundOff: 'blocked' });
+    expect(blocked).toContain('Alarm sound off');
+    expect(blocked).toContain('>Enable</button>');
+  });
+
+  it('offers a tap only where a tap can bring the alarm sound back', () => {
+    const failed = body({ ...baseProps(), soundOff: 'failed' });
+    expect(failed).toContain('Alarm sound failed');
+    expect(failed).toContain('>Try again</button>');
+    // No Web Audio at all: the notice explains on a tap and offers no action that cannot work.
+    const unsupported = body({ ...baseProps(), soundOff: 'unsupported' });
+    expect(unsupported).toContain('Alarm sound unavailable');
+    expect(unsupported).not.toContain('>Enable</button>');
+    expect(unsupported).not.toContain('>Try again</button>');
+    expect(openingTag(unsupported, 'sound-off-notice')).toMatch(/^<button/);
   });
 
   it('shows the toolbar clock as local time, not UTC', () => {
@@ -59,7 +81,7 @@ describe('StatusStrip depth alarm', () => {
 
   it('does not mark the Depth readout when the shallow alarm is not sounding', () => {
     const html = body(baseProps());
-    expect(html).not.toContain('depth-alarm');
+    expect(html).not.toContain('data-cell--alarm');
     expect(html).toContain('No depth source is publishing');
   });
 
@@ -99,7 +121,7 @@ describe('StatusStrip depth alarm', () => {
 
   it('marks the Depth readout and swaps its tooltip when the shallow alarm is sounding', () => {
     const html = body({ ...baseProps(), shallowAlarming: true });
-    expect(html).toContain('depth-alarm');
+    expect(openingTag(html, 'depth-readout')).toContain('data-cell--alarm');
     expect(html).toContain('Shallow water: depth below the alarm threshold');
     expect(html).toContain('Shallow');
   });
@@ -108,8 +130,8 @@ describe('StatusStrip depth alarm', () => {
     const props = baseProps();
     expect(props.vessel.sogStale).toBe(false);
     const html = body({ ...props, fixStale: true });
-    const start = html.indexOf('sog-readout');
-    expect(html.slice(start, html.indexOf('</span>', start))).toContain('fix-lost');
+    expect(openingTag(html, 'sog-readout')).toContain('data-cell--warning');
+    expect(openingTag(html, 'cog-readout')).toContain('data-cell--warning');
     expect(html).toContain('No GPS fix');
   });
 
@@ -119,11 +141,12 @@ describe('StatusStrip depth alarm', () => {
       connectionLabel: 'Reconnecting…',
       connectionPhase: 'reconnecting',
     });
-    const reconnect = html.slice(0, html.indexOf('Reconnect</button>'));
-    expect(reconnect).toContain('Reconnecting…');
+    const notice = html.slice(0, html.indexOf('Reconnect</button>'));
+    expect(notice).toContain('Reconnecting…');
     // One live region for the phase: the always-mounted dot, whose visually-hidden label is the
     // only copy of connectionLabel inside a role="status".
-    expect(reconnect.match(/role="status"/g) ?? []).toHaveLength(1);
+    expect(notice).not.toContain('role="status"');
+    expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
   });
 
   it('shows the stalled-data readout with a reconnect action while the socket is open', () => {
@@ -156,7 +179,7 @@ describe('StatusStrip depth alarm', () => {
     });
     const props = baseProps();
     const html = body({ ...props, vessel });
-    expect(html).toContain('Depth stale');
+    expect(html).toContain('>Paused<');
     expect(html).toContain('Depth data is stale');
     expect(html).not.toContain('>4.0<');
   });
@@ -167,15 +190,18 @@ describe('StatusStrip depth alarm', () => {
     // title still explains that the watch cannot monitor.
     const noSource = body({ ...baseProps(), shallowState: 'no-source' as const });
     expect(noSource).toContain('shallow watch cannot monitor');
-    expect(noSource).not.toContain('watch paused<');
+    expect(noSource).not.toContain('>Paused<');
+    // A paused watch says so in place of the value, in the caution voice; the dashed value and
+    // the datum tag are dropped, and a tap names the cause.
     const stale = body({ ...baseProps(), shallowState: 'stale' as const });
-    expect(stale).toContain('Depth stale, watch paused');
-    // The paused label carries the whole message: the dashed value and the datum tag are dropped
-    // so a degraded strip does not spend its widest moment on nine characters of nothing.
+    expect(stale).toContain('>Paused<');
+    expect(stale).toContain('the shallow watch is paused');
+    expect(openingTag(stale, 'depth-readout')).toContain('data-cell--warning');
     expect(stale).not.toContain('Xducer');
     const noReading = body({ ...baseProps(), shallowState: 'no-reading' as const });
-    expect(noReading).toContain('Depth unavailable, watch paused');
-    expect(body(baseProps())).not.toContain('watch paused');
+    expect(noReading).toContain('>Paused<');
+    expect(noReading).toContain('streaming unusable readings');
+    expect(body(baseProps())).not.toContain('>Paused<');
   });
 
   it('says Waiting for GPS when connected with no position ever received', () => {
@@ -217,8 +243,7 @@ describe('StatusStrip depth alarm', () => {
     // must never dim with the Signal K link.
     const sog = down.slice(down.indexOf('sog-readout'));
     expect(sog.slice(0, sog.indexOf('>'))).toContain('subordinate');
-    const fix = down.indexOf('No GPS fix');
-    expect(down.slice(down.lastIndexOf('<span', fix), fix)).toContain('subordinate');
+    expect(openingTag(down, 'fix-notice')).toContain('subordinate');
     const radar = down.indexOf('Radar stale');
     expect(down.slice(down.lastIndexOf('<button', radar), radar)).not.toContain('subordinate');
     // A healthy link never subordinates anything.
@@ -229,8 +254,7 @@ describe('StatusStrip depth alarm', () => {
     const props = baseProps();
     props.anchor.dropLocal({ latitude: 60, longitude: 24 }, 40);
     const html = body({ ...props, onOpenAnchor: () => {} });
-    const anchorAt = html.indexOf('anchor-chip');
-    expect(html.slice(html.lastIndexOf('<', anchorAt), anchorAt)).toContain('<button');
+    expect(openingTag(html, 'anchor-readout')).toMatch(/^<button/);
     expect(html).toContain('Opens Anchor watch');
     expect(html).not.toContain('aria-label="Open anchor watch"');
   });
@@ -245,8 +269,8 @@ describe('StatusStrip depth alarm', () => {
 
   it('renders the explanatory chips as buttons carrying their titles, with no new live regions', () => {
     const html = body({ ...baseProps(), aisCount: 3, connectionPhase: 'open' });
-    const ais = html.indexOf('AIS targets being watched for collision risk');
-    expect(html.slice(html.lastIndexOf('<button', ais), ais)).toContain('chip-btn');
+    expect(openingTag(html, 'slot-ais')).toMatch(/^<button[^>]*data-cell/);
+    expect(openingTag(html, 'slot-ais')).toContain('AIS targets being watched for collision risk');
     // The conn dot keeps its single live region inside the button.
     expect(html.match(/role="status"/g) ?? []).toHaveLength(1);
   });
@@ -254,7 +278,7 @@ describe('StatusStrip depth alarm', () => {
 
 describe('StatusStrip alerts chip', () => {
   it('stays hidden with no caution-grade alerts', () => {
-    expect(body(baseProps())).not.toContain('alerts-chip');
+    expect(body(baseProps())).not.toContain('alerts-notice');
   });
 
   it('counts alerts in words and names its door, the visible words leading the name', () => {
@@ -262,5 +286,92 @@ describe('StatusStrip alerts chip', () => {
     const html = body({ ...baseProps(), alertCount: 3, onOpenAlarms: () => {} });
     expect(html).toContain('3 alerts<');
     expect(html).toContain('aria-label="3 alerts, open Alarms"');
+  });
+});
+
+describe('StatusStrip bar grid', () => {
+  it('shows nothing on the caution line while nothing is wrong', () => {
+    expect(body(baseProps())).not.toContain('class="notice');
+  });
+
+  it('says Last fix without a dangling separator when the fix has no age', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame({
+      self: new Map([
+        ['navigation.position', { latitude: 42.6154, longitude: -83.5166 }],
+      ]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const html = body({ ...baseProps(), vessel, fixStale: true });
+    expect(html).toMatch(/>Last fix( · \d+ (s|min) ago)?</);
+    expect(html).not.toContain('Last fix · <');
+  });
+
+  it('sets each coordinate close to its hemisphere so the position fits two columns', () => {
+    const store = new SignalKStore();
+    const vessel = new OwnVessel(store);
+    store.applyFrame({
+      self: new Map([
+        ['navigation.position', { latitude: 42.6154, longitude: -83.5166 }],
+      ]) as SKFrame['self'],
+      connection: { phase: 'open', attempt: 0 },
+      epoch: 1000,
+    });
+    const html = body({ ...baseProps(), vessel });
+    expect(html).toContain('<b class="num">42.6154°</b>N</span>');
+    expect(html).toContain('<b class="num">83.5166°</b>W</span>');
+    expect(openingTag(html, 'position-readout')).toContain('data-cell--wide');
+  });
+
+  it('gives each optional readout its own spare column, so one appearing moves no other', () => {
+    const orientation = {
+      label: 'Course up (COG)',
+      active: true,
+      shown: 'Course up',
+      reference: 'COG' as const,
+    };
+    const autopilot = { autopilotChip: { kind: 'standby' as const }, onOpenAutopilot: () => {} };
+    const alone = body({ ...baseProps(), ...autopilot, orientation });
+    expect(openingTag(alone, 'orientation-readout')).toContain('slot-extra-1');
+    expect(openingTag(alone, 'ap-cell')).toContain('slot-extra-2');
+    // The anchor watch takes the second column; the autopilot yields to the Time column rather
+    // than pushing the chart cell aside.
+    const props = baseProps();
+    props.anchor.dropLocal({ latitude: 60, longitude: 24 }, 40);
+    const all = body({ ...props, onOpenAnchor: () => {}, ...autopilot, orientation });
+    expect(openingTag(all, 'orientation-readout')).toContain('slot-extra-1');
+    expect(openingTag(all, 'anchor-readout')).toContain('slot-extra-2');
+    expect(openingTag(all, 'ap-cell')).toContain('slot-extra-3');
+  });
+
+  it('makes the Chart cell the one-tap return to north up, naming its reference', () => {
+    const html = body({
+      ...baseProps(),
+      orientation: { label: 'Course up (COG)', active: true, shown: 'Course up', reference: 'COG' },
+      onResetOrientation: () => {},
+    });
+    expect(openingTag(html, 'orientation-readout')).toMatch(/^<button/);
+    expect(html).toContain('Course up<');
+    expect(html).toContain('· COG');
+    expect(html).toContain(', return to north up');
+    expect(html).not.toContain('orientation-notice');
+  });
+
+  it('says north up in the caution voice and names the fallback on the caution line', () => {
+    const html = body({
+      ...baseProps(),
+      orientation: {
+        label: 'North up (too slow for course up)',
+        active: false,
+        shown: 'North up',
+      },
+    });
+    expect(openingTag(html, 'orientation-readout')).toContain('data-cell--warning');
+    expect(html).toContain('North up<');
+    expect(html).toContain('North up (too slow for course up)');
+    // The shown mode is a live region, so the fallback is announced as well as drawn.
+    expect(html).toMatch(/role="status" aria-live="polite">North up</);
   });
 });

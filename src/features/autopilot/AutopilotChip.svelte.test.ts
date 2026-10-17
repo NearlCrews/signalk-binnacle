@@ -36,10 +36,17 @@ describe('AutopilotChip', () => {
     expect(renderChip({ kind: 'standby' })).toContain('Standby');
   });
 
+  it('is one data cell on the bar grid, placed by its host', () => {
+    const html = render(AutopilotChip, {
+      props: { chip: { kind: 'standby' }, onOpen: vi.fn(), cellClass: 'slot-extra-2' },
+    }).body;
+    expect(html).toMatch(/<button[^>]*class="data-cell ap-cell slot-extra-2/);
+  });
+
   it('marks a vanished provider as unreachable in the warning voice, announced once', () => {
     const html = renderChip({ kind: 'lost' });
     expect(html).toContain('Unreachable');
-    expect(html).toContain('sev-warning');
+    expect(html).toContain('data-cell--warning');
     expect(html).toContain('role="status"');
   });
 });

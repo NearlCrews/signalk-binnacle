@@ -16,12 +16,13 @@ source, and surrounding traffic before relying on it.
   chart is rotated (course-up or heading-up) and the boat is making way, Follow adds a bounded
   look-ahead that sits the boat low on screen so the water ahead gets the pixels.
 - **Orientation** cycles north-up, course-up, and heading-up. The launcher tile reads Orientation
-  with the current mode on a quiet second line, and the bar pill shows the bare mode name, which
+  with the current mode on a quiet second line, and the bar tile shows the bare mode name, which
   flips on tap. North-up is the default; the rotating
   modes are explicit, profile-owned choices. Heading-up needs fresh true heading and course-up
   needs fresh COG with way on; a stale or missing reference falls back to north immediately.
-  While a rotating mode is chosen, a status-strip chip keeps the live orientation and its
-  reference (including the fallback) visible, and its N up action returns to north with one tap.
+  While a rotating mode is chosen, the status strip's Chart cell shows what the chart is doing and
+  its reference (Chart · COG, Course up), and one tap on the cell returns to north up. When the
+  reference fails, the cell says North up in the caution voice and the caution line names why.
   Rotation gestures stay disabled; the mode is the only author of chart bearing, and the chart
   stays flat (never pitched). Zoom controls provide gloved-hand alternatives to pinch, and
   the compact labeled scale reports nautical distance.
@@ -118,7 +119,7 @@ source, and surrounding traffic before relying on it.
   panel names the one-time Resources Provider step with a Check again action. See
   [Tracks](tracks.md).
 - **Autopilot** consumes the Signal K v2 Autopilot API when a provider plugin supplies it. The
-  status chip opens the panel and shows engaged or standby only when that state is known and fresh.
+  status strip's AP cell opens the panel and shows engaged or standby only when that state is known and fresh.
   Engage, disengage, tack, and gybe each take an armed second tap naming the action and mode;
   changing mode while engaged also requires confirmation. Heading nudges are direct while engaged
   and disabled on standby or when state is untrusted. Unknown, stale, and lost state never imply
@@ -417,23 +418,34 @@ source, and surrounding traffic before relying on it.
   control named Menu exists at a time. Menu renders as a launcher tile only while customizing,
   since tapping a tile is the pin control. Pinned actions can be dragged, moved with the keyboard,
   or changed through their **Reorder** menu's **Move up** and **Move down** actions. Moves preserve
-  focus and announce the new position; Reset requires confirmation. When the bar cannot fit its
-  actions, **More** exposes the overflow while keeping Menu reachable.
-- Degraded status-strip chips explain themselves on touch: tapping the connection dot, the AIS
-  chip, the depth chip, or a radar-trouble chip shows its explanation as a
-  transient note above the strip. Waiting for GPS carries a Help action, and the anchor chip opens
-  Anchor watch. Labels and their actions stay grouped where space permits and wrap within the
-  available width when text or the viewport requires it. Short screens use compact spacing without
-  shrinking the 44 px controls.
-- Two conditional chips are the only strip content that is not a helm reading, and both are doors
-  at the full control size: the alerts count (warn and alert grades, which sound nothing and raise
-  no strip) opens Alarms, and **Sound off** appears while a watch is armed (anchor, shallow water,
-  AIS targets in range, an active route, or a raised alarm) on a display whose alarm sound is
-  blocked, failed, or unsupported; a tap explains, and a blocked gate clears on it. A calm chart
-  shows neither.
-- On helm-width displays (about 900 px and wider at the default text size) every instrument value
-  in the strip rises to the readout size together; labels, units, and the trailing position and
-  time stay at the strip size. Enlarged text keeps one size, since it already enlarges them.
+  focus and announce the new position; Reset requires confirmation. The actions are equal tiles, an
+  icon over its label. When the bar cannot fit its actions, **More** exposes the overflow while
+  keeping Menu reachable; the helm row holds four tiles.
+- The status strip is one grid of equal columns. Every readout is a cell with a caps label over its
+  value, every value is one size on one shared baseline, and the position takes two columns. On a
+  display about 1,580 px wide at the default text size, the strip is one helm row: AIS, SOG, COG,
+  HDG, and Depth, the pinned tiles at the center, then the chart orientation, anchor, and autopilot
+  cells when present, each in its own column, the position, and the time (which the autopilot
+  displaces while the anchor watch is also showing). Narrower displays put the tiles on their own
+  row under a wrapping grid of whole cells. A phone held sideways keeps one row, and very large text
+  on a narrow phone sets each label beside its value so the strip stays short.
+- A problem with one readout shows in its own cell: dashed SOG and COG in the caution voice while the
+  fix is lost, Depth Paused while the shallow watch is paused, Last fix with its age on the position,
+  and the anchor, shallow, and autopilot states in their cells. Every other problem goes on the
+  caution line above the readouts, which appears only while something is wrong and snaps to the
+  same columns: Data link failed with Retry, a lost or silent connection with Reconnect, Offline,
+  No GPS fix, Waiting for GPS with Help, an orientation fallback, a weather warning, the alerts count
+  (warn and alert grades, which sound nothing and raise no strip; it opens Alarms), radar trouble,
+  unassessed AIS targets on a phone (which has no AIS cell), and the alarm-sound notice, which
+  appears while a watch is armed (anchor, shallow water, AIS targets in range, an active route, or a
+  raised alarm) on a display that cannot sound it: **Alarm sound off** with Enable while the browser
+  blocks audio, **Alarm sound failed** with Try again after the device failed, and **Alarm sound
+  unavailable**, which only explains, where Web Audio is missing. A calm chart shows no caution
+  line.
+- Readouts explain themselves on touch: tapping the connection dot, the AIS cell, the Depth cell, a
+  weather warning, or radar trouble shows its explanation as a transient note above the strip. The
+  anchor cell opens Anchor watch, the AP cell opens the autopilot, and every tappable cell and notice
+  is a full 44 px target. Short screens use compact spacing without shrinking the 44 px controls.
 - While the Signal K link itself is down or silent, the readouts that pause with it (GPS, speed,
   course, heading, and the depth watch) are subordinated, with a dashed underline on any held value,
   so the strip presents one failure with one action. Radar health is excluded: it rides the radar provider's own stream, not this link.

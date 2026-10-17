@@ -67,7 +67,7 @@ two leaves a tile that opens nothing, or a panel with no way in.
    order, so a group move means relocating the literal, not only editing its `group` string. Safety
    stays before Weather and Instruments; Settings (Profiles) MUST stay last. Set `id`, `label`, `icon` (a lucide component),
    `group`, `pressed: activePanel === '<id>'`, and `onSelect: () => togglePanel('<id>')`. Add
-   `shortLabel` when the label is long (the bottom-bar pill renders `shortLabel ?? label`). Add
+   `shortLabel` when the label is long (the bottom-bar tile renders `shortLabel ?? label`). Add
    `disabled` plus `disabledLabel` for a transient block, such as a chart still loading. When a
    user-relevant optional provider is absent, keep the item visible with `available: false` plus an
    actionable `unavailableHint`; do not hide it with a conditional spread. A blocked entry explains

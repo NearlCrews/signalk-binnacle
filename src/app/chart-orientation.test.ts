@@ -20,6 +20,7 @@ describe('resolveOrientation', () => {
       bearingDeg: 0,
       active: true,
       label: 'North up',
+      shown: 'North up',
     });
   });
 
@@ -28,6 +29,7 @@ describe('resolveOrientation', () => {
     expect(result.bearingDeg).toBeCloseTo(90);
     expect(result.active).toBe(true);
     expect(result.label).toBe('Heading up (true)');
+    expect(result).toMatchObject({ shown: 'Heading up', reference: 'True' });
   });
 
   it('falls back to north immediately on a stale or missing heading', () => {
@@ -35,7 +37,11 @@ describe('resolveOrientation', () => {
       bearingDeg: 0,
       active: false,
       fallback: 'stale-heading',
+      shown: 'North up',
     });
+    expect(resolveOrientation({ mode: 'heading', ...fresh, headingStale: true }).reference).toBe(
+      undefined,
+    );
     expect(resolveOrientation({ mode: 'heading', ...fresh, headingRad: undefined })).toMatchObject({
       bearingDeg: 0,
       active: false,
@@ -45,6 +51,10 @@ describe('resolveOrientation', () => {
 
   it('rotates course-up only with fresh COG and way on', () => {
     expect(resolveOrientation({ mode: 'course', ...fresh }).bearingDeg).toBeCloseTo(180);
+    expect(resolveOrientation({ mode: 'course', ...fresh })).toMatchObject({
+      shown: 'Course up',
+      reference: 'COG',
+    });
     expect(resolveOrientation({ mode: 'course', ...fresh, cogStale: true })).toMatchObject({
       bearingDeg: 0,
       fallback: 'stale-cog',

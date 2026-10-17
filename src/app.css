@@ -11,6 +11,7 @@
 @import "./styles/cards.css";
 @import "./styles/badges.css";
 @import "./styles/instruments.css";
+@import "./styles/data-cells.css";
 @import "./styles/icon-controls.css";
 @import "./styles/scrubber.css";
 @import "./styles/overlays.css";

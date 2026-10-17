@@ -340,7 +340,9 @@ test('gives simultaneous navigation and forecast maps unique names', async ({ pa
   await expect(page.locator('canvas[aria-label="Map"]')).toHaveCount(0);
 });
 
-test('keeps a status-strip action chip on one control row', async ({ page }) => {
+test('keeps the status-strip Chart cell a full target without widening the strip', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => localStorage.clear());
   await page.goto('/');
@@ -354,15 +356,15 @@ test('keeps a status-strip action chip on one control row', async ({ page }) => 
     .getByRole('button', { name: /^Orientation/ })
     .click();
 
-  const chip = page.locator('.status-strip .orientation-chip');
-  await expect(chip).toBeVisible();
-  const action = chip.getByRole('button', { name: 'N up' });
-  const [chipBox, actionBox] = await Promise.all([requireBox(chip), requireBox(action)]);
-  // The action keeps its full touch target, and the chip is that one row rather than a label line
-  // with the target stacked beneath it, which used to cost the chart an extra row per chip.
-  expect(actionBox.height).toBeGreaterThanOrEqual(44);
-  expect(chipBox.height).toBeLessThanOrEqual(actionBox.height + 1);
-  // A chip that grew wider than it is tall must still not push the strip sideways.
+  // The Chart cell is its own action, the one-tap return to north up, so the whole cell is the
+  // full touch target; with no COG yet it states the fallback on the caution line.
+  const cell = page.locator('.status-strip .orientation-readout');
+  await expect(cell).toBeVisible();
+  const box = await requireBox(cell);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  await expect(page.locator('.status-strip .orientation-notice')).toContainText('North up');
+  // A long fallback label must still not push the strip sideways.
   await expectNoHorizontalOverflow(page.locator('body'));
 });
 

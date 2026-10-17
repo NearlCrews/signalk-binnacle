@@ -92,7 +92,7 @@ $effect(() => {
   translate: -50% -50%;
   z-index: var(--z-overlay);
 }
-/* A stale fix reads in the caution tone, matching the strip's fix-lost treatment. */
+/* A stale fix reads in the caution tone, matching the status strip's last-fix cell. */
 .off-screen-indicator--stale {
   color: var(--warning);
   border-color: var(--warning);

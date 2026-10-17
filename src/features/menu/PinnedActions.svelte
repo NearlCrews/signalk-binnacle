@@ -25,17 +25,20 @@ interface Props {
 
 const { actions }: Props = $props();
 const compactPhone = createMediaQuery(NARROW_QUERY);
-// Below 480px the four default pills exceed the strip's width with labels on, so the pills go
-// icon-only: the label collapses to visually-hidden, keeping the accessible name and the 44px
-// target while all pinned actions stay one tap away.
-const iconOnlyPills = createMediaQuery('(max-width: 480px)');
-// A phone held sideways keeps the strip on one row, so the pills go icon-only there too.
+// A phone held sideways keeps the strip on one row, so the tiles go icon-only there: the label
+// collapses to visually-hidden, keeping the accessible name and the 44px target.
 const landscapeShort = createMediaQuery(LANDSCAPE_SHORT_QUERY);
+// The narrowest tile that still holds an icon over a one-word label; below it the tiles go
+// icon-only, so every pinned action stays one tap away on the narrowest phones.
+const LABELED_TILE_REM = 5.25;
 let moreOpen = $state(false);
 let moreTrigger = $state<HTMLButtonElement>();
 let moreSurface = $state<HTMLElement>();
 let bar = $state<HTMLElement>();
 let measuredCapacity = $state<number>();
+let barWidth = $state<number>();
+let barGap = $state(0);
+let rootSize = $state(16);
 let largeText = $state(false);
 
 // The shared toolbar-menu focus machine: roving keydown, the Tab redirect, and the open-focus and
@@ -59,8 +62,12 @@ const capacity = $derived(
     ? responsiveMaximum
     : Math.min(responsiveMaximum, measuredCapacity ?? responsiveMaximum),
 );
-const iconOnly = $derived(iconOnlyPills.matches || landscapeShort.matches || largeText);
 const split = $derived(splitBarActions(actions, capacity));
+const slots = $derived(Math.max(1, Math.min(actions.length, capacity)));
+const narrowTiles = $derived(
+  barWidth !== undefined && (barWidth - barGap * (slots - 1)) / slots < LABELED_TILE_REM * rootSize,
+);
+const iconOnly = $derived(landscapeShort.matches || largeText || narrowTiles);
 const moreActive = $derived(split.overflow.some((action) => action.pressed === true));
 const blockedNote = new Toast();
 const NOTE_MS = 5_000;
@@ -73,15 +80,21 @@ onMount(() => {
   const measure = () => {
     // Sideways the capacity ignores the measurement; rotating back resizes the root and re-measures.
     if (landscapeShort.matches) return;
-    const rootStyle = getComputedStyle(document.documentElement);
     const barStyle = getComputedStyle(element);
-    const rootSize = Number.parseFloat(rootStyle.fontSize) || 16;
+    rootSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     // Computed control dimensions resolve inherited px, rem, and calc() tokens alike.
-    const control = element.querySelector<HTMLElement>('.btn-pill');
+    const control = element.querySelector<HTMLElement>('.bar-tile');
     const controlSize = control ? Number.parseFloat(getComputedStyle(control).minBlockSize) : 0;
-    const gap = Number.parseFloat(barStyle.columnGap || barStyle.gap) || 0;
+    const gap = Number.parseFloat(barStyle.columnGap) || 0;
+    barGap = gap;
     largeText = rootSize >= 24;
-    measuredCapacity = barCapacity(element.clientWidth, controlSize, gap, responsiveMaximum);
+    barWidth = element.clientWidth;
+    // The status strip's helm row grants the bar a fixed number of its columns.
+    const granted = Number.parseInt(barStyle.getPropertyValue('--bar-capacity'), 10);
+    measuredCapacity =
+      granted > 0
+        ? Math.min(granted, responsiveMaximum)
+        : barCapacity(element.clientWidth, controlSize, gap, responsiveMaximum);
   };
   let frame: number | undefined;
   const scheduleMeasure = () => {
@@ -116,7 +129,7 @@ function run(action: MenuItem, after?: () => void): void {
 $effect(() => machine.syncOpen(moreOpen));
 </script>
 
-<div class="pinned-actions strip-center" bind:this={bar}>
+<div class="pinned-actions strip-center" class:icon-only-bar={iconOnly} bind:this={bar}>
   {#if !moreOpen}
     <!-- Sideways the bar sits flush at the trailing edge, where a centered note would shrink into half
          its width, so the note anchors to the bar's end. -->
@@ -130,7 +143,7 @@ $effect(() => machine.syncOpen(moreOpen));
   {#each split.visible as action (action.id)}
     <button
       type="button"
-      class="btn btn-pill"
+      class="btn bar-tile"
       class:icon-only={iconOnly}
       class:is-on={action.pressed === true}
       aria-pressed={action.pressed === undefined ? undefined : action.pressed}
@@ -139,16 +152,20 @@ $effect(() => machine.syncOpen(moreOpen));
       onclick={() => run(action)}
     >
       <UnavailableHint hint={action.available === false ? action.unavailableHint : undefined} />
-      <MenuItemIcon item={action} size={16} />
-      <span class:visually-hidden={iconOnly}>{action.shortLabel ?? action.label}</span>
-      <MenuItemCount item={action} hideBadge={iconOnly} />
+      <MenuItemIcon item={action} size={18} />
+      <span class="tile-label data-baseline">
+        <span class="truncate" class:visually-hidden={iconOnly}
+          >{action.shortLabel ?? action.label}</span
+        >
+        <MenuItemCount item={action} hideBadge={iconOnly} />
+      </span>
     </button>
   {/each}
   {#if split.overflow.length > 0}
     <div class="more-wrap" data-menu-opener-group>
       <button
         type="button"
-        class="btn btn-pill"
+        class="btn bar-tile"
         class:icon-only={iconOnly}
         bind:this={moreTrigger}
         data-menu-opener
@@ -160,11 +177,13 @@ $effect(() => machine.syncOpen(moreOpen));
         title="More actions"
         onclick={() => (moreOpen = !moreOpen)}
       >
-        <Ellipsis size={16} aria-hidden="true" />
-        <span class:visually-hidden={iconOnly}>More</span>
-        {#if split.overflow.length > 1 && !iconOnly}
-          <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
-        {/if}
+        <span class="tile-icon"><Ellipsis size={18} aria-hidden="true" /></span>
+        <span class="tile-label data-baseline">
+          <span class:visually-hidden={iconOnly}>More</span>
+          {#if split.overflow.length > 1 && !iconOnly}
+            <span class="pill-count" aria-hidden="true">{split.overflow.length}</span>
+          {/if}
+        </span>
       </button>
       <AnchoredMenu
         open={moreOpen}
@@ -209,28 +228,59 @@ $effect(() => machine.syncOpen(moreOpen));
 </div>
 
 <style>
+/* The bar's actions are equal tiles, an icon over a one-line label on the status bar's two shared
+   line heights, so a tile's label sits on the readouts' value baseline. Tiles share the bar
+   equally, up to one bar column each. On the status strip's helm row each tile is exactly one bar
+   column: the host grants --bar-capacity and sets the column, gap, and inset. */
 .pinned-actions {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-  max-inline-size: calc(
-    100vw -
-    2 *
-    var(--space-2) -
-    env(safe-area-inset-left, 0px) -
-    env(safe-area-inset-right, 0px)
-  );
+  /* Fill the host's column whatever the host's own alignment, so capacity is measured against the
+     room the bar has, never against tiles that shrink again as one moves into More. */
+  justify-self: stretch;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--bar-tile-column, minmax(0, var(--data-cell-min)));
+  justify-content: var(--bar-tile-justify, center);
+  column-gap: var(--bar-tile-gap, var(--space-2));
   min-inline-size: 0;
 }
-.btn-pill[aria-disabled="true"],
+.bar-tile {
+  display: grid;
+  grid-template-rows: var(--data-label-line) var(--data-value-line);
+  align-content: center;
+  justify-items: center;
+  gap: 0;
+  min-inline-size: 0;
+  margin-inline: var(--bar-tile-inset, 0);
+  padding: 0 0.2rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.tile-icon {
+  display: inline-flex;
+}
+.tile-label {
+  max-inline-size: 100%;
+}
+.tile-label > .truncate {
+  min-inline-size: 0;
+}
+.bar-tile.icon-only {
+  display: flex;
+  inline-size: var(--control-size);
+  min-inline-size: var(--control-size);
+  padding: 0;
+}
+.pinned-actions.icon-only-bar {
+  grid-auto-columns: max-content;
+}
+.bar-tile[aria-disabled="true"],
 .menu-item[aria-disabled="true"] {
   opacity: var(--disabled-opacity);
   cursor: default;
 }
 @media (hover: hover) and (pointer: fine) {
-  .btn-pill[aria-disabled="true"]:hover {
+  .bar-tile[aria-disabled="true"]:hover {
     border-color: var(--border);
     background: var(--surface-raised);
   }
@@ -240,6 +290,7 @@ $effect(() => machine.syncOpen(moreOpen));
 }
 .more-wrap {
   position: relative;
+  display: grid;
 }
 .blocked-more-note {
   margin: 0;
@@ -260,36 +311,12 @@ $effect(() => machine.syncOpen(moreOpen));
   max-block-size: calc(100 * var(--dvh) - 1rem);
   overflow-y: auto;
 }
-@media (max-width: 900px) {
-  .pinned-actions {
-    /* The stacked strip has one column. Measure its available width, not the shrinking pills. */
-    justify-self: stretch;
-    inline-size: 100%;
-  }
-}
-@media (max-width: 600px) {
-  .pinned-actions {
-    flex-wrap: nowrap;
-    gap: var(--space-1);
-  }
-}
-/* One strip row on a phone held sideways: the pills sit at the trailing edge at their own width
-   instead of stretching across the stacked strip's single column. */
+/* One strip row on a phone held sideways: the icon tiles sit at the trailing edge at their own
+   width instead of sharing out the strip. */
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 1000px) {
   .pinned-actions {
     margin-inline-start: auto;
-    inline-size: auto;
-    flex-wrap: nowrap;
+    grid-auto-columns: max-content;
   }
-}
-@media (max-width: 480px) {
-  .btn-pill {
-    min-inline-size: var(--control-size);
-    justify-content: center;
-  }
-}
-.btn-pill.icon-only {
-  min-inline-size: var(--control-size);
-  justify-content: center;
 }
 </style>

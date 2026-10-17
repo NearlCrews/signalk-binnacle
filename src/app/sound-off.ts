@@ -16,7 +16,7 @@ export function watchArmed(w: ArmedWatches): boolean {
   );
 }
 
-// The gate state the strip's Sound off chip shows, or undefined to hide it.
+// The gate state the strip's sound-off notice shows, or undefined to hide it.
 export function soundOffState(state: AlarmAudioState, armed: boolean): AlarmAudioState | undefined {
   return armed && state !== 'ready' ? state : undefined;
 }

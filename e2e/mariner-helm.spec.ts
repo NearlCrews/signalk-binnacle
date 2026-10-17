@@ -436,8 +436,8 @@ test('stale GPS stops presenting coordinates as a current position', async ({ pa
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
-  // The cluster, not a label-filtered readout: the label itself is what the fix changes.
-  const cluster = page.locator('.center-cluster');
+  // The position cell, not a label-filtered readout: the label itself is what the fix changes.
+  const cluster = page.locator('.status-strip .position-readout');
   await expect(cluster).toContainText('Vessel');
   await expect(cluster).toContainText('27.7000');
 
@@ -455,7 +455,7 @@ test('a server staleness declaration relabels the fix and names the quiet source
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
   await sendDelta(page, OWN_FIX);
-  const cluster = page.locator('.center-cluster');
+  const cluster = page.locator('.status-strip .position-readout');
   await expect(cluster).toContainText('Vessel');
   await expect(cluster).toContainText('27.7000');
 
@@ -607,13 +607,17 @@ test('orientation falls back to north on a stale reference and survives a manual
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('button', { name: /Orientation Course up/ }).click();
 
-  const chip = page.locator('.status-strip .orientation-chip');
+  const chip = page.locator('.status-strip .orientation-readout');
+  const notice = page.locator('.status-strip .orientation-notice');
   await sendDelta(page, OWN_FIX);
-  await expect(chip).toContainText('Heading up (true)');
+  await expect(chip).toContainText('Heading up');
+  await expect(chip).toContainText('True');
+  await expect(notice).toHaveCount(0);
 
   // The reference stops arriving: the vessel staleness window elapses and the chart states its
   // immediate fallback to north rather than holding a dead rotation.
-  await expect(chip).toContainText('North up (true heading stale)', { timeout: 20_000 });
+  await expect(chip).toContainText('North up', { timeout: 20_000 });
+  await expect(notice).toContainText('North up (true heading stale)');
 
   // A manual pan releases Follow elsewhere but must not corrupt the orientation state.
   const canvas = page.locator('.maplibregl-canvas');
@@ -623,11 +627,12 @@ test('orientation falls back to north on a stale reference and survives a manual
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 40, { steps: 5 });
   await page.mouse.up();
-  await expect(chip).toContainText('North up (true heading stale)');
+  await expect(notice).toContainText('North up (true heading stale)');
 
-  // One tap returns to north-up, and the chip retires with the mode.
-  await chip.getByRole('button', { name: 'N up' }).click();
+  // One tap on the Chart cell returns to north-up, and the cell retires with the mode.
+  await chip.click();
   await expect(chip).toHaveCount(0);
+  await expect(notice).toHaveCount(0);
 });
 
 test('watch handoff keeps an offline snapshot on the device and says so', async ({ page }) => {
@@ -774,11 +779,20 @@ test.describe('a phone held sideways', () => {
     if (textPercent !== undefined) await setRootFontSize(page, textPercent);
     await openApp(page);
     if (fix) await sendDelta(page, OWN_FIX);
+    // A fresh load cannot sound an alarm until the first tap, which the caution line states above
+    // the readouts. Enable is that tap, so the calm strip is one row again.
+    const enable = page.locator('.status-strip .sound-off-notice').getByRole('button', {
+      name: 'Enable',
+    });
+    if (await enable.isVisible()) {
+      await enable.click();
+      await expect(enable).toHaveCount(0);
+    }
   }
 
   async function stripBoxes(page: Page) {
     const [readouts, bar] = await Promise.all([
-      requireBox(page.locator('.status-strip .strip-start')),
+      requireBox(page.locator('.status-strip .strip-readouts')),
       requireBox(page.locator('.status-strip .pinned-actions')),
     ]);
     return { readouts, bar };

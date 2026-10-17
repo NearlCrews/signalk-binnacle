@@ -1,0 +1,102 @@
+/* The status bar's data cell: one readout on the bar's shared column grid. Every cell is the same two
+   fixed lines, a caps label line over a value line, so labels share one line and values share one
+   baseline across the whole bar, whatever each cell holds. Composed by the status strip and the
+   autopilot readout; the bar's pinned tiles reuse the same two line heights. */
+.data-cell {
+  display: grid;
+  grid-template-rows: var(--data-label-line) var(--data-value-line);
+  align-content: center;
+  min-inline-size: 0;
+  block-size: var(--control-size);
+  padding: 0 0.35rem;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+}
+button.data-cell {
+  cursor: pointer;
+}
+/* A hairline divides neighboring cells; a host grid clears it where the neighboring column is
+   empty. */
+.data-cell + .data-cell {
+  border-inline-start: 1px solid var(--border);
+}
+.data-cell--wide {
+  grid-column: span 2;
+}
+/* A label too long for its column ends in an ellipsis, never a silent cut; the cell's title and its
+   tap carry the whole text. */
+.data-cell-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: var(--data-label-line);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.data-cell-label svg {
+  margin-inline-end: var(--space-1);
+  vertical-align: -0.1em;
+}
+/* The bar's value line, shared by the data cells and the pinned tiles' labels. A zero-width numeral
+   strut leads it, so a word (Paused, Standby, a tile's label) sits on the numerals' baseline
+   instead of its own font's, and every value line on the bar shares one baseline. */
+.data-baseline,
+.data-cell-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  line-height: var(--data-value-line);
+}
+.data-baseline::before,
+.data-cell-value::before {
+  content: "0";
+  inline-size: 0;
+  margin-inline-end: -0.2rem;
+  visibility: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  font-weight: 700;
+}
+/* Units, datums, and qualifiers ride the value line at the label size. The value and its unit never
+   shrink; a trailing qualifier (a datum, an unassessed count) is the one part that may, and it ends
+   in an ellipsis rather than a silent cut. */
+.data-cell-value {
+  overflow: hidden;
+  font-size: var(--text-xs);
+}
+.data-cell-value > * {
+  flex: none;
+}
+.data-cell-value > .data-cell-qualifier {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.data-cell-value .num {
+  font-size: var(--text-data);
+  font-weight: 700;
+  color: var(--text);
+}
+.data-cell-value .word {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+/* A caution or alarm owns the whole cell: label, value, and unit take the grade color, and the
+   label carries a warning icon so the grade never rests on color alone. */
+.data-cell--warning,
+.data-cell--warning .num,
+.data-cell--warning .word {
+  color: var(--warning);
+}
+.data-cell--alarm,
+.data-cell--alarm .num,
+.data-cell--alarm .word {
+  color: var(--alarm);
+}

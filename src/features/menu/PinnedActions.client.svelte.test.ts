@@ -18,7 +18,7 @@ interface CapacityHarness {
 }
 
 // A stacked-strip toolbar column at large text in a portrait phone viewport: the bar measures the
-// column it is given, with just enough pill styling for real control sizes. The viewport, root
+// column it is given, with just enough tile styling for real control sizes. The viewport, root
 // style, and mount are restored afterward.
 async function withCapacityHarness(
   columnWidth: number,
@@ -36,7 +36,7 @@ async function withCapacityHarness(
   target.style.cssText = `display:grid;grid-template-columns:1fr;justify-items:center;width:${columnWidth}px;--control-size:${controlSize};--space-1:4px;--space-2:4px;`;
   const style = document.createElement('style');
   style.textContent = `
-    [data-pinned-capacity-test] .btn-pill { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
+    [data-pinned-capacity-test] .bar-tile { min-block-size:var(--control-size); min-inline-size:var(--control-size); box-sizing:border-box; }
     [data-pinned-capacity-test] .visually-hidden { position:absolute; inline-size:1px; block-size:1px; overflow:hidden; clip-path:inset(50%); }
   `;
   document.head.append(style);
@@ -71,7 +71,7 @@ describe('pinned action availability and resize lifecycle', () => {
         for (let frame = 0; frame < 4; frame += 1) {
           await settle(1);
           expect(target.querySelector<HTMLElement>('.pinned-actions')?.clientWidth).toBe(220);
-          expect(target.querySelectorAll('.btn-pill')).toHaveLength(expectedPills);
+          expect(target.querySelectorAll('.bar-tile')).toHaveLength(expectedPills);
           expect(target.querySelector('.pinned-actions > button')?.textContent).toContain('Menu');
         }
       }),
@@ -82,10 +82,10 @@ describe('pinned action availability and resize lifecycle', () => {
     // measured from it would hold at two.
     withCapacityHarness(100, '44px', async ({ target, settle }) => {
       await settle();
-      expect(target.querySelectorAll('.btn-pill')).toHaveLength(2);
+      expect(target.querySelectorAll('.bar-tile')).toHaveLength(2);
       await page.viewport(568, 320);
       await settle();
-      expect(target.querySelectorAll('.btn-pill')).toHaveLength(4);
+      expect(target.querySelectorAll('.bar-tile')).toHaveLength(4);
     }));
 
   it('lets a blocked action explain itself without invoking it', async () => {
