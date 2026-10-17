@@ -188,7 +188,7 @@ function chooseCategory(event: Event): void {
   </div>
   <footer class="dialog-footer">
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
-    <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={saveBlocked}>
+    <button type="button" class="btn btn-primary" onclick={save} disabled={saveBlocked}>
       {busy ? 'Saving…' : 'Save note'}
     </button>
   </footer>

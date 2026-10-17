@@ -477,8 +477,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Overlays, modals: `.modal-card` supplies the frame. Native point editors also compose
   `.editor-dialog`, `.dialog-header`, `.dialog-body`, `.dialog-footer`, and `.dialog-field`. The shared
   editor frame replaces the browser's font-relative dialog size cap with a viewport bound; the
-  editor's body scrolls while its header and wrapping action footer remain in the flex layout. Fields
-  and buttons may shrink and wrap inside the body instead of widening it at enlarged text.
+  editor's body scrolls while its header and wrapping action footer remain in the flex layout. The
+  header, body, and footer share one `--space-3` inset, and the footer's actions are equal cells that
+  wrap as whole buttons, all at the panel-control radius (no pill in a dialog). Fields and buttons may
+  shrink and wrap inside the body instead of widening it at enlarged text.
 - Strips (`strips.css`): `.bottom-strip` (the pinned bottom action row, composed by ten strips:
   Nav guidance, Measure, MOB, Anchor watch, the collision Danger strip, Shallow water, Alarm, Route
   edit, History playback, and the top-level plotter shell), with `.bottom-strip--accent` and `.bottom-strip--wide`

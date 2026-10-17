@@ -116,11 +116,11 @@ const title = $derived(waypoint ? 'Edit waypoint' : 'Add waypoint');
   </div>
   <footer class="dialog-footer">
     <button type="button" class="btn" onclick={onCancel} disabled={busy}>Cancel</button>
-    <button type="button" class="btn btn-primary btn-pill" onclick={save} disabled={busy}>
+    <button type="button" class="btn btn-primary" onclick={save} disabled={busy}>
       {busy ? 'Saving…' : 'Save'}
     </button>
     {#if onSaveAndNavigate && !waypoint}
-      <button type="button" class="btn btn-pill" onclick={saveAndNavigate} disabled={busy}>
+      <button type="button" class="btn" onclick={saveAndNavigate} disabled={busy}>
         Save and navigate
       </button>
     {/if}

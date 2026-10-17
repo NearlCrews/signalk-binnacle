@@ -238,7 +238,13 @@ dialog.editor-dialog[open] {
   min-inline-size: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: var(--space-2);
+}
+/* The editor's three bands share one inset, so the title, the fields, and the actions start on the
+   same edge. */
+.editor-dialog .dialog-header,
+.editor-dialog .dialog-body,
+.editor-dialog .dialog-footer {
+  padding: var(--space-3);
 }
 .modal-card .dialog-footer {
   display: flex;
@@ -248,14 +254,15 @@ dialog.editor-dialog[open] {
   padding: var(--space-3) var(--space-4);
   border-block-start: 1px solid var(--border);
 }
+/* The editor's actions are equal cells that wrap as whole buttons. At enlarged text a long label
+   still wraps inside its cell, so the footer never widens the dialog past the viewport. */
+.editor-dialog .dialog-footer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+}
 .editor-dialog .dialog-footer .btn {
   min-inline-size: 0;
   max-inline-size: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
-  padding-inline: var(--space-1);
-}
-.editor-dialog .dialog-footer {
-  gap: var(--space-1);
-  padding: var(--space-2);
 }
