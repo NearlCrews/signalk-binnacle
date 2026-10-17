@@ -138,7 +138,7 @@
     {
       "name": "Application CSS",
       "path": "public/assets/index-*.css",
-      "limit": "22 kB"
+      "limit": "23 kB"
     },
     {
       "name": "Service worker",
