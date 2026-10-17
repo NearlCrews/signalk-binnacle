@@ -385,7 +385,7 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 
   <section class="panel-section" aria-label="Track color">
     <h3 class="caps-label">Track color</h3>
-    <div class="color-mode segmented" role="group" aria-label="Track color">
+    <div class="segmented" role="group" aria-label="Track color">
       <button
         type="button"
         class="btn"
@@ -647,11 +647,6 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
 </SlideOver>
 
 <style>
-/* The segment join comes from the global .segmented treatment; only the equal segment widths and
-   the off-segment quiet fill are local. */
-.color-mode .btn {
-  flex: 1;
-}
 /* The recording-state line: muted while paused, accented while a track is being captured. */
 .status--on {
   color: var(--accent);

@@ -613,14 +613,6 @@ function discardActiveDraft(): void {
 .radar-field select.input {
   inline-size: 100%;
 }
-/* Every segmented in this panel (the On/Off field toggles and the Power control) fills its row with
-   equal-width segments; one rule covers both since each lives inside a .panel-section. */
-.panel-section .segmented {
-  flex: 1;
-}
-.panel-section .segmented .btn {
-  flex: 1;
-}
 /* Before any value has arrived the slider thumb parks at the minimum; dim it so it does not read as a
    real minimum while the value readout shows the unknown placeholder. */
 .range.is-unset {

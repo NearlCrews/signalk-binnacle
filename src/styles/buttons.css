@@ -10,11 +10,16 @@
 }
 
 /* One segmented-toggle treatment: a joined group of .btn children where exactly one is on. The
-   ends keep the outer radius, the shared edges collapse to a single border. */
+   control fills its row and its segments share it equally (never narrower than a touch target),
+   so every segmented control reads as one equal module, in a column or beside a label. The ends
+   keep the outer radius, the shared edges collapse to a single border. */
 .segmented {
   display: flex;
+  inline-size: 100%;
 }
 .segmented .btn {
+  flex: 1 1 0;
+  min-inline-size: var(--control-size);
   border-radius: 0;
 }
 .segmented .btn:first-child {

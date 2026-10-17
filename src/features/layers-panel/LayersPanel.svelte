@@ -368,9 +368,6 @@ const reorder = createLayerReorder(
 .layer-tabs {
   margin-block: var(--space-1) var(--space-2);
 }
-.layer-tabs .btn {
-  flex: 1;
-}
 .load-note {
   display: flex;
   flex-wrap: wrap;

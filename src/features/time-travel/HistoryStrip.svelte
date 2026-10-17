@@ -345,18 +345,6 @@ const liveMessage = $derived.by(() => {
   color: var(--text-muted);
 }
 
-.range-options,
-.speed-options {
-  flex: 1;
-}
-
-.range-options .btn,
-.speed-options .btn {
-  flex: 1 1 0;
-  min-inline-size: var(--control-size);
-  padding-inline: var(--space-2);
-}
-
 .load-note,
 .source-note {
   margin: var(--space-1) 0;

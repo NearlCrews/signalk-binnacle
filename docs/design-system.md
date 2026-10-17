@@ -281,7 +281,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   as a layout container, not a semantic list).
 - Buttons (`buttons.css`): `.btn` (the base bordered button, 44px), `.btn-primary` (filled accent),
   `.btn-danger`, `.btn-ghost`, `.btn--grow` (flex-fill), `.segmented` (a joined row of `.btn` for a
-  binary or small-enum choice; the active segment carries `.is-on`), and `.pill-count` (the small
+  binary or small-enum choice; the active segment carries `.is-on`; the control fills its row and
+  its segments share it equally, never below the 44px target, so no consumer scopes its own segment
+  widths), and `.pill-count` (the small
   count chip shared by the toolbar's collapsed More pill and a menu item's live count, rendered
   through the menu slice's `MenuItemCount`).
 - Icon controls (`icon-controls.css`): `.icon-btn` (square icon button), `.icon-btn--accent`,

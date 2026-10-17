@@ -168,13 +168,9 @@
   flex-direction: column;
   gap: var(--space-1);
 }
-.nav-sort .segmented {
-  inline-size: 100%;
-}
 .nav-sort .segmented .btn {
-  flex: 1;
-  /* Default flex min-width is the content size, which would push a long label (Distance) past the
-     dock and break the joined-segment border; let an over-wide segment shrink instead. */
+  /* A sort label (Distance) can be wider than its equal share of the narrow dock; let it shrink
+     rather than push the joined-segment border past the dock. */
   min-inline-size: 0;
   gap: var(--space-1);
 }
