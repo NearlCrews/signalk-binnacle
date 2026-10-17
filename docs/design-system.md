@@ -280,7 +280,10 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Base (`base.css`): `.bare-list` (list-style, margin, and padding reset for a `<ul>` or `<ol>` used
   as a layout container, not a semantic list).
 - Buttons (`buttons.css`): `.btn` (the base bordered button, 44px), `.btn-primary` (filled accent),
-  `.btn-danger`, `.btn-ghost`, `.btn--grow` (flex-fill), `.segmented` (a joined row of `.btn` for a
+  `.btn-danger`, `.btn-ghost`, `.btn--grow` (flex-fill), `.action-group` (a surface's cluster of
+  actions, as on a banner: equal buttons sized to the widest label that stay together and wrap below
+  the words as one; the action that fixes the state is `.btn-primary` and Dismiss is `.btn-ghost`,
+  both at the panel-control radius), `.segmented` (a joined row of `.btn` for a
   binary or small-enum choice; the active segment carries `.is-on`; the control fills its row and
   its segments share it equally, never below the 44px target, so no consumer scopes its own segment
   widths), and `.pill-count` (the small
@@ -293,7 +296,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Forms (`forms.css`): `.control-error` (a control's own validation message, the alarm-voiced
   counterpart to `.muted-note--xs`, sitting directly under the field it refuses), `.input` (text
   inputs and selects, 44px, raised fill, `--border-control` boundary; `select.input` draws its own
-  token chevron), the drawn checkbox and radio (no browser control, so night-red never shows a gray
+  token chevron) with `.input--large` (one step up, applied to every text-entry field of a form that
+  steps up any, so one surface never mixes two input sizes), `.field-label` (one field's label,
+  sentence case at `--text-sm`, muted; caps labels are for section headings), the drawn checkbox and radio (no browser control, so night-red never shows a gray
   box), the switch (`input[type="checkbox"][role="switch"]`), the Windows high-contrast fallback to
   the native control, `.range` (the live
   slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons as equal
@@ -674,7 +679,10 @@ Shared behavior lives here. Compose these; do not re-implement them.
   `touch-action: none` (provided by `.reorder-row .handle`), or a touchscreen claims the gesture as
   a scroll and the drag never fires. Also provide `ReorderActions` with Move up and Move down for
   single-tap operation without dragging. Those actions and Arrow keys use the same bounded order
-  mutation and announcement as drag; unavailable boundary moves stay disabled.
+  mutation and announcement as drag; unavailable boundary moves stay disabled. A customize list
+  composes the shared line too: `.reorder-line` on each row (the toggle, an optional `.row-note`,
+  then the grip and its menu, one gap and one trailing inset) and `.customize-head` for its Shown
+  and Available heads, so the instrument and trend customize lists cannot drift apart.
 - `surfaceTransition`: the one arrival motion for every surface over the chart, a Svelte transition
   taking a `SurfaceMotion`: `left` and `right` slide a docked panel 24px in from its edge, `below`
   raises a phone sheet or the floating weather panel 32px, each over 180ms with a fade from 0.3, and

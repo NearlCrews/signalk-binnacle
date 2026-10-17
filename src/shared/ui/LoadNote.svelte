@@ -9,13 +9,15 @@ interface Props {
   retryKind?: 'request' | 'probe';
   // The object of a request retry, for the accessible name when a panel can show more than one.
   retryName?: string;
+  // A whole accessible name, for a retry that is not a load (Retry profile sync).
+  retryLabel?: string;
 }
 
-const { state, message, onRetry, retryKind = 'request', retryName }: Props = $props();
+const { state, message, onRetry, retryKind = 'request', retryName, retryLabel }: Props = $props();
 
 const label = $derived(retryKind === 'probe' ? 'Check again' : 'Retry');
 const accessibleName = $derived(
-  retryKind === 'request' && retryName ? `Retry loading ${retryName}` : undefined,
+  retryLabel ?? (retryKind === 'request' && retryName ? `Retry loading ${retryName}` : undefined),
 );
 </script>
 
@@ -34,9 +36,9 @@ const accessibleName = $derived(
 {/if}
 
 <style>
+/* The Retry fills its row, like every lone action. */
 .load-note {
   display: grid;
-  justify-items: start;
   gap: var(--space-2);
 }
 .load-note p {

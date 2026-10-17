@@ -11,7 +11,13 @@ import { onDestroy } from 'svelte';
 import { categoryLabel } from '$entities/poi-icons';
 import { Clock, formatDayClock, formatMonthDay, MINUTE_MS } from '$shared/lib';
 import type { UpgradeOutcome } from '$shared/signalk';
-import { InlineConfirm, restoreFocusAfterCancel, SlideOver, WriteAccessNote } from '$shared/ui';
+import {
+  InlineConfirm,
+  LoadNote,
+  restoreFocusAfterCancel,
+  SlideOver,
+  WriteAccessNote,
+} from '$shared/ui';
 import type { NoteSelection } from './notes-client';
 import type { NormalizedItem, NoteDetail } from './notes-detail';
 import { safeHttpUrl } from './notes-detail';
@@ -278,19 +284,14 @@ function measure(item: NormalizedItem): string {
     <p class="muted-note" role="status">Loading…</p>
   {/if}
   {#if failed}
-    <p class="alert-note" role="alert">
-      {detail
+    <LoadNote
+      state="error"
+      message={detail
         ? 'Could not refresh place details. Showing retained information; provider changes may be missing.'
         : 'Could not load the details for this place.'}
-    </p>
-    <button
-      type="button"
-      class="btn btn-ghost"
-      onclick={() => (attempt += 1)}
-      aria-label="Retry place details"
-    >
-      Retry
-    </button>
+      onRetry={() => (attempt += 1)}
+      retryLabel="Retry place details"
+    />
   {/if}
   {#if sections}
     {#each sections as section (section.id)}

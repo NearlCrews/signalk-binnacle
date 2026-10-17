@@ -553,13 +553,17 @@ const emptyMessage = $derived(emptyReason());
         {/if}
       </div>
       <dl class="card-stats">
-        <dt class="caps-label">Distance</dt>
-        <dd>
-          <span class="num">{distanceNm}</span>
-          nm
-        </dd>
-        <dt class="caps-label">Waypoints</dt>
-        <dd><span class="num">{route.waypoints.length}</span></dd>
+        <div>
+          <dt class="caps-label">Distance</dt>
+          <dd>
+            <span class="num">{distanceNm}</span>
+            nm
+          </dd>
+        </div>
+        <div>
+          <dt class="caps-label">Waypoints</dt>
+          <dd><span class="num">{route.waypoints.length}</span></dd>
+        </div>
       </dl>
       {#if renamingId === route.id}
         <NameEntry

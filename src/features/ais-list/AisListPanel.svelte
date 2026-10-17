@@ -235,12 +235,12 @@ $effect(() => {
                   <span class="caps-label">{aisKindLabel(row.kind)}</span>
                 {/if}
                 {#if row.severity === 'danger'}
-                  <span class="caps-label sev-danger">Collision risk</span>
+                  <span class="badge badge--alarm badge--caps">Collision risk</span>
                 {:else if row.severity === 'warning'}
-                  <span class="caps-label sev-warning">Getting close</span>
+                  <span class="badge badge--warning badge--caps">Getting close</span>
                 {:else if row.unassessedReason}
                   <span
-                    class="caps-label sev-warning"
+                    class="badge badge--warning badge--caps"
                     title={row.unassessedReason === 'course-unavailable'
                       ? 'CPA unavailable: the target course is missing or stale'
                       : 'CPA unavailable: no fresh motion data from this target'}

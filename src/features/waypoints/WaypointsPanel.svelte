@@ -332,23 +332,29 @@ $effect(() => {
         </button>
       </div>
       <dl class="card-stats">
-        <dt class="caps-label">Position</dt>
-        <dd>
-          <span class="num">
-            {formatLatitude(waypoint.position.latitude)}
-            {formatLongitude(waypoint.position.longitude)}
-          </span>
-        </dd>
-        <dt class="caps-label">Distance</dt>
-        <dd>
-          <span class="num">{formatMetersOrNm(row.distanceMeters, units.mode)}</span>
-        </dd>
-        <dt class="caps-label">Bearing</dt>
-        <dd title="Bearing in degrees true">
-          <span class="num">
-            {row.bearingRad === undefined ? '--' : `${formatBearingOr(row.bearingRad)}°T`}
-          </span>
-        </dd>
+        <div>
+          <dt class="caps-label">Position</dt>
+          <dd>
+            <span class="num">
+              {formatLatitude(waypoint.position.latitude)}
+              {formatLongitude(waypoint.position.longitude)}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="caps-label">Distance</dt>
+          <dd>
+            <span class="num">{formatMetersOrNm(row.distanceMeters, units.mode)}</span>
+          </dd>
+        </div>
+        <div>
+          <dt class="caps-label">Bearing</dt>
+          <dd title="Bearing in degrees true">
+            <span class="num">
+              {row.bearingRad === undefined ? '--' : `${formatBearingOr(row.bearingRad)}°T`}
+            </span>
+          </dd>
+        </div>
       </dl>
       {#if waypoint.description}
         <p class="description">{waypoint.description}</p>

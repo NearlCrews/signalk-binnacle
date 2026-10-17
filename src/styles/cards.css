@@ -46,6 +46,35 @@
   align-items: center;
   gap: 0.4rem;
 }
+/* A list of read-only report cards (watch handoff snapshots, companion reports) on the saved cards'
+   module: the same gap between cards and the same inset inside them, so a report list and a saved
+   list in neighboring panels read as one family. The li carries .card-frame. */
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.card-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+}
+/* A report card's head: the title, its state, and the time on one line that wraps at 320 px rather
+   than overflowing; the time sits at the trailing edge. */
+.card-list .card-head {
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+.card-list .card-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.card-list .when {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+}
 .saved .name {
   flex: 1;
   display: flex;
@@ -84,8 +113,14 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+/* Each label and its value are one group, so a label never wraps away from its value. */
+.card-stats > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
 .card-stats dd {
-  margin: 0 0.4rem 0 0;
+  margin: 0;
 }
 .card-stats .num {
   font-weight: 600;

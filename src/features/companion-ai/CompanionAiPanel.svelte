@@ -2,7 +2,7 @@
 import { onDestroy, onMount } from 'svelte';
 import { Clock, MINUTE_MS } from '$shared/lib';
 import type { AuthController } from '$shared/signalk';
-import { SlideOver, WriteAccessNote } from '$shared/ui';
+import { LoadNote, SlideOver, WriteAccessNote } from '$shared/ui';
 import type { CompanionAiController } from './companion-ai-controller.svelte';
 import { analyzerTitle, companionReportTime } from './companion-reports';
 
@@ -68,12 +68,12 @@ onDestroy(() => {
     <section class="panel-section" aria-label="Latest reports">
       <h3 class="caps-label">Latest reports</h3>
       {#if controller.availability === 'unavailable'}
-        <p class="alert-note" role="alert">
-          Companion reports could not be loaded. Anything already received stays listed below.
-        </p>
-        <div class="panel-controls">
-          <button type="button" class="btn" onclick={() => void controller.refresh()}>Retry</button>
-        </div>
+        <LoadNote
+          state="error"
+          message="Companion reports could not be loaded. Anything already received stays listed below."
+          onRetry={() => void controller.refresh()}
+          retryName="companion reports"
+        />
       {/if}
       {#if controller.loading && controller.reports.length === 0}
         <p class="muted-note" role="status">Checking for companion reports…</p>
@@ -83,23 +83,23 @@ onDestroy(() => {
         </p>
       {/if}
       {#if controller.reports.length > 0}
-        <ul class="bare-list report-list">
+        <ul class="bare-list card-list">
           {#each controller.reports as report (report.analyzerId)}
             {@const title = analyzerTitle(report.analyzerId)}
             {@const busy = controller.busyAnalyzerIds.has(report.analyzerId)}
             {@const note = controller.ackNoteFor(report.analyzerId)}
-            <li class="card-frame report">
-              <div class="report-head">
-                <span class="report-title">{title}</span>
+            <li class="card-frame">
+              <div class="card-head">
+                <span class="card-title">{title}</span>
                 {#if report.state === 'warn'}
-                  <span class="caps-label sev-warning">Report unavailable</span>
+                  <span class="badge badge--warning badge--caps">Report unavailable</span>
                 {/if}
                 <span class="num when">{companionReportTime(report.timestampMs, clock.now)}</span>
               </div>
               <p class="report-text" class:sev-warning={report.state === 'warn'}>
                 {report.message}
               </p>
-              <div class="report-actions">
+              <div class="panel-controls">
                 <button
                   type="button"
                   class="btn"
@@ -129,33 +129,8 @@ onDestroy(() => {
 </SlideOver>
 
 <style>
-.report-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.report {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
-}
-/* The header wraps at 320 px instead of overflowing: title, state, and timestamp each keep their
-   own line when squeezed. */
-.report-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-}
-.report-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-.when {
-  margin-inline-start: auto;
-  color: var(--text-muted);
-}
+/* The card list, the card inset, the wrapping head, the title, and the trailing time come from the
+   shared .card-list in cards.css. */
 .report-text {
   margin: 0;
   white-space: pre-line;

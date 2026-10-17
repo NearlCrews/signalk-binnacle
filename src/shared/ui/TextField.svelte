@@ -53,10 +53,11 @@ function commit(event: Event): void {
 <!-- The labeled text-input row shared by the region name field and the chart name and description
      fields, so the labeled-text shape cannot drift per panel. The inline variant grows the input
      beside its label; the stacked variant sets a field label above a card-width input. -->
-<label class="text-field" class:stacked={variant === 'stacked'} class:large>
+<label class="text-field" class:stacked={variant === 'stacked'}>
   <span class="name">{label}</span>
   <input
     class="input"
+    class:input--large={large}
     {type}
     {value}
     {placeholder}
@@ -105,9 +106,5 @@ function commit(event: Event): void {
 .text-field.stacked .input {
   inline-size: 100%;
   box-sizing: border-box;
-}
-/* One step above the global .input font, for a single field typed gloved on a pitching deck. */
-.text-field.large .input {
-  font-size: var(--text-input-large);
 }
 </style>

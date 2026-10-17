@@ -139,7 +139,7 @@ onDestroy(() => onHover(undefined));
   {#if onRetry && (viewState.phase === 'error' || viewState.offline)}
     <button
       type="button"
-      class="btn"
+      class="btn btn-ghost"
       onclick={onRetry}
       disabled={viewState.phase === 'loading'}
       aria-label="Retry places"

@@ -214,7 +214,7 @@ $effect(() => {
 <div class="icon-picker">
   <button
     type="button"
-    class="picker-trigger"
+    class="input input--large picker-trigger"
     {id}
     bind:this={triggerEl}
     aria-expanded={isOpen}
@@ -273,19 +273,14 @@ $effect(() => {
   inline-size: 100%;
 }
 
+/* The box, boundary, and type are the shared text-entry .input at the large size, so the picker reads
+   as one more field beside the dialog's name and category. */
 .picker-trigger {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   inline-size: 100%;
-  min-block-size: var(--control-size);
-  padding: var(--space-2);
-  font-size: var(--text-md);
   text-align: start;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--text);
   cursor: pointer;
 }
 

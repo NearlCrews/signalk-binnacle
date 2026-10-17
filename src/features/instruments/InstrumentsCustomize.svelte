@@ -83,7 +83,9 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
 <!-- The reorder controller measures rows and listens for scroll on this element, so it is the one
      scroll container over both sections and it holds the data-tile-row rows (the shown list). -->
 <div class="customize-list" bind:this={listEl}>
-  <h3 class="caps-label section-label">Shown</h3>
+  <div class="customize-head">
+    <h3 class="caps-label">Shown</h3>
+  </div>
   <ul class="tile-list bare-list">
     {#each shown as def, i (def.id)}
       {@const indicator = reorder.indicatorFor(def.id)}
@@ -92,7 +94,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
       {@const hintId = historicalOnly ? historyHintId(def.id) : undefined}
       <li
         data-tile-row={def.id}
-        class="row-interactive reorder-row is-on"
+        class="row-interactive reorder-row reorder-line is-on"
         class:dragging={reorder.dragId === def.id}
         class:drop-before={indicator.before}
         class:drop-after={indicator.after}
@@ -105,9 +107,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
           describedBy={hintId}
         />
         {#if historicalOnly}
-          <span id={hintId} class="muted-note muted-note--xs history-note"
-            >Previously seen, no live data</span
-          >
+          <span id={hintId} class="row-note">Previously seen, no live data</span>
         {/if}
         <button
           type="button"
@@ -128,11 +128,11 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
       </li>
     {/each}
   </ul>
-  <div class="available-head">
-    <h3 class="caps-label section-label">Available</h3>
+  <div class="customize-head">
+    <h3 class="caps-label">Available</h3>
     <button
       type="button"
-      class="btn btn-ghost rescan"
+      class="btn btn-ghost"
       disabled={controller.discovering}
       aria-busy={controller.discovering}
       onclick={() => controller.refreshCatalog()}
@@ -165,7 +165,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
               : 'No data received from this sensor yet'}
             {@const hintId = historicalOnly || unavailable ? historyHintId(def.id) : undefined}
             <li
-              class="row-interactive"
+              class="row-interactive reorder-line"
               class:unavailable
               title={historicalOnly || unavailable ? unavailableHint : undefined}
             >
@@ -177,9 +177,7 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
                 describedBy={hintId}
               />
               {#if historicalOnly}
-                <span id={hintId} class="muted-note muted-note--xs history-note"
-                  >Previously seen, no live data</span
-                >
+                <span id={hintId} class="row-note">Previously seen, no live data</span>
               {:else if unavailable}
                 <UnavailableHint id={hintId} hint={unavailableHint} />
               {/if}
@@ -205,41 +203,10 @@ const historyStatusMessage = $derived(HISTORY_STATUS_MESSAGES[controller.history
   overflow-y: auto;
   min-block-size: 0;
 }
-.section-label {
-  padding: var(--space-2) var(--space-3) var(--space-1);
-}
-.section-label:first-child {
-  padding-block-start: 0;
-}
-.available-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding-inline-end: var(--space-3);
-}
-.rescan {
-  min-block-size: var(--row-size);
-}
-.empty-note {
-  padding: 0 var(--space-3) var(--space-2);
-}
+.empty-note,
 .scan-status {
   padding: 0 var(--space-3) var(--space-2);
 }
-.history-note {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-/* One line per row: the toggle grows, the grip sits inline at the trailing edge. Without this the
-   block-flow row wraps the grip onto its own line and every selected row doubles in height. */
-.tile-list li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding-inline-end: var(--space-1);
-}
-
-/* The grip rest and lift, the drag feedback, and touch-action: none come from the shared
-   .reorder-row (styles/reorder.css), the same vocabulary the layer rows use. */
+/* The line, its note, the section heads, the grip rest and lift, and the drag feedback come from the
+   shared reorder vocabulary (styles/reorder.css), the same one the trend list and layer rows use. */
 </style>

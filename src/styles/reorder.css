@@ -45,3 +45,36 @@
     opacity: 1;
   }
 }
+
+/* One customize line, composed by the instrument and trend customize lists: the toggle grows, then an
+   optional status note, then the grip and its reorder menu inline at the trailing edge, so every row
+   is one line tall and every list shares one gap and one trailing inset. */
+.reorder-line {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-end: var(--space-1);
+}
+/* A row's quiet status note (Previously seen, a missing live report): capped so the toggle label
+   keeps its room, wrapping under the cap rather than squeezing the label. */
+.row-note {
+  max-inline-size: 8rem;
+  flex-shrink: 1;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+/* A customize list's section head (Shown, Available): one row height and one inset, the caps title and
+   an optional count or action on one line. */
+.customize-head {
+  display: flex;
+  min-block-size: var(--row-size);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+}
+.customize-head h3 {
+  margin: 0;
+}

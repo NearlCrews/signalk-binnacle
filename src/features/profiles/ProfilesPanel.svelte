@@ -19,6 +19,7 @@ import {
   ArmedRow,
   defaultSaveName,
   InlineConfirm,
+  LoadNote,
   NameEntry,
   OverflowActions,
   pickTextFile,
@@ -180,43 +181,26 @@ function useProfile(id: string): void {
   {onBack}
 >
   {#if syncState === 'capacity-conflict'}
-    <p class="alert-note" role="alert">
-      The combined device and server libraries exceed the
-      {MAX_PROFILES.toLocaleString('en-US')}-profile limit. Delete at least one profile, then retry
-      profile sync.
-    </p>
-    <button
-      type="button"
-      class="btn btn-ghost"
-      onclick={onRetrySync}
-      aria-label="Retry profile sync"
-    >
-      Retry
-    </button>
+    <LoadNote
+      state="error"
+      message={`The combined device and server libraries exceed the ${MAX_PROFILES.toLocaleString('en-US')}-profile limit. Delete at least one profile, then retry profile sync.`}
+      onRetry={onRetrySync}
+      retryLabel="Retry profile sync"
+    />
   {:else if syncState === 'conflict'}
-    <p class="alert-note" role="alert">
-      Another station changed these profiles. Binnacle could not finish merging the changes.
-    </p>
-    <button
-      type="button"
-      class="btn btn-ghost"
-      onclick={onRetrySync}
-      aria-label="Retry profile sync"
-    >
-      Retry
-    </button>
+    <LoadNote
+      state="error"
+      message="Another station changed these profiles. Binnacle could not finish merging the changes."
+      onRetry={onRetrySync}
+      retryLabel="Retry profile sync"
+    />
   {:else if syncState === 'error'}
-    <p class="alert-note" role="alert">
-      Profiles are saved on this device. Server profile data could not be read safely.
-    </p>
-    <button
-      type="button"
-      class="btn btn-ghost"
-      onclick={onRetrySync}
-      aria-label="Retry profile sync"
-    >
-      Retry
-    </button>
+    <LoadNote
+      state="error"
+      message="Profiles are saved on this device. Server profile data could not be read safely."
+      onRetry={onRetrySync}
+      retryLabel="Retry profile sync"
+    />
   {:else if syncState === 'syncing'}
     <p class="muted-note" role="status">Syncing profiles with this Signal K account…</p>
   {:else if auth.writeBlocked}
@@ -329,7 +313,7 @@ function useProfile(id: string): void {
       <div class="card-head">
         <span class="name">{profile.name}</span>
         {#if isDefault}
-          <span class="caps-label tag">Default</span>
+          <span class="badge badge--caps">Default</span>
         {/if}
         {#if isActive}
           <span class="badge badge--accent badge--caps">Active here</span>
@@ -459,11 +443,6 @@ function useProfile(id: string): void {
 <style>
 /* The card list, name, actions, the active-card accent treatment, and the "Active" badge all come from
    the shared .saved system in app.css. */
-/* A quiet caps-label tag marking the default profile, distinct from the filled accent "Active" pill. */
-.tag {
-  flex-shrink: 0;
-  color: var(--accent);
-}
 .remote-update {
   display: grid;
   gap: var(--space-2);

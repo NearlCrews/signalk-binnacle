@@ -425,6 +425,7 @@ Reach for a shared class before writing scoped CSS. The full reference is `desig
 | A labeled current-item readout | `<dl class="stat-grid">` | three columns; see the empty-unit rule below |
 | An at-a-glance inline stats line | `<dl class="card-stats">` | wrapping, mono `.num` |
 | A row of action buttons under a heading | `.panel-controls` (equal cells, wraps whole buttons) | Save, Cancel, New |
+| A banner's or strip's action cluster | `.action-group` (equal buttons sized to the widest label) | a scoped inline button inside a sentence |
 | A column section with a heading | `.panel-section` | flex column, `--space-2` gap; do not invent a per-feature name |
 
 `.stat-grid` contract: the `dd` is `display: contents`, so a row with no unit MUST still emit an empty

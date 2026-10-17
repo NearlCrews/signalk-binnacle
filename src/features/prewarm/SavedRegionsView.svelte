@@ -133,15 +133,19 @@ function chartList(region: SavedRegionDto): string {
              passage stays a navigator judgment. -->
         <p class="area-summary muted-note">{areaSummary(region)}</p>
         <dl class="card-stats">
-          <dt class="caps-label">Saved</dt>
-          <dd><span class="num">{cached.value}</span> {cached.unit}</dd>
+          <div>
+            <dt class="caps-label">Saved</dt>
+            <dd><span class="num">{cached.value}</span> {cached.unit}</dd>
+          </div>
           {#if region.lastDownloadedAt !== null}
-            <dt class="caps-label">Updated</dt>
-            <dd>
-              <span class="num"
-                >{new Date(region.lastDownloadedAt * 1000).toLocaleDateString()}</span
-              >
-            </dd>
+            <div>
+              <dt class="caps-label">Updated</dt>
+              <dd>
+                <span class="num"
+                  >{new Date(region.lastDownloadedAt * 1000).toLocaleDateString()}</span
+                >
+              </dd>
+            </div>
           {/if}
         </dl>
         {#if region.status === 'downloading' && regionPollError[region.id]}

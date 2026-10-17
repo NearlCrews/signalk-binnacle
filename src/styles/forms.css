@@ -18,6 +18,18 @@
   color: var(--text-muted);
   opacity: 1;
 }
+/* One step above the base input font, for a field typed gloved on a pitching deck. A form that steps
+   up one field steps up all of its text-entry fields, so one surface never mixes two input sizes. */
+.input--large {
+  font-size: var(--text-input-large);
+}
+/* A field's own label: sentence case at the per-field label size, muted. Caps labels are for section
+   headings, not for the label of one field. */
+.field-label {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
 
 /* The panel-wide search field: the .input box stretched across the panel, shared by the nearby
    vessels, Find places, and Waypoints lists through the SearchInput primitive so all three present

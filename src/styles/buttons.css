@@ -3,6 +3,15 @@
    share the fill and hover feel instead of each re-declaring it. The lit "engaged" .is-on state lives
    in icon-controls.css, which app.css imports AFTER this module so it wins the same-specificity tie. */
 
+/* A surface's cluster of actions (a banner's, a strip's): equal buttons sized to the widest label,
+   side by side, that stay together and move onto their own line as one when the surface runs out
+   of room. */
+.action-group {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-2);
+}
 /* A button that stretches to fill a flex row outside .panel-controls (the autopilot command rows, a
    region's lone primary); a .panel-controls row already shares its width equally. */
 .btn--grow {
@@ -53,6 +62,8 @@
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
+  /* A link styled as a button (Approve in Signal K, Sign in) reads as a button, never underlined. */
+  text-decoration: none;
   cursor: pointer;
   transition:
     border-color var(--transition-fast),

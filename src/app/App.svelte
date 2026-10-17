@@ -3509,7 +3509,7 @@ const plotterActions = {
           >
             <p class="alert-note" role="alert">Personal note editor stopped unexpectedly.</p>
             <div class="panel-controls">
-              <button type="button" class="btn btn-primary" onclick={reset}>Retry</button>
+              <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
               <button type="button" class="btn" onclick={personalNotesController.cancelEdit}>
                 Cancel
               </button>
@@ -3527,7 +3527,7 @@ const plotterActions = {
         <div class="panel-controls">
           <button
             type="button"
-            class="btn btn-primary"
+            class="btn btn-ghost"
             onclick={() => (personalNoteDialogAttempt += 1)}
           >
             Retry

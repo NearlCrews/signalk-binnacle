@@ -993,17 +993,17 @@ $effect(() => {
            back to the chart on every boot. Dismiss persists on this device. -->
       <div class="alert-note toast-banner action-note action-note--wrap" role="status">
         <span>First time with Binnacle? Read the short safety orientation, or set up charts.</span>
-        <button type="button" class="btn btn-compact" onclick={() => openHelpPanel()}>
-          Open Help
-        </button>
         <!-- The new navigator's actual first question is where the charts are, and the reference
              base map alone never answers it. -->
-        <button type="button" class="btn btn-compact" onclick={() => openLayersPanel('charts')}>
-          Set up charts
-        </button>
-        <button type="button" class="btn btn-compact" onclick={dismissHelpOrientation}>
-          Dismiss
-        </button>
+        <div class="action-group">
+          <button type="button" class="btn" onclick={() => openHelpPanel()}>Open Help</button>
+          <button type="button" class="btn" onclick={() => openLayersPanel('charts')}>
+            Set up charts
+          </button>
+          <button type="button" class="btn btn-ghost" onclick={dismissHelpOrientation}>
+            Dismiss
+          </button>
+        </div>
       </div>
     {/if}
     {#if showEncPrompt}
@@ -1011,10 +1011,12 @@ $effect(() => {
            the one case the app can fix in a tap. Dismiss persists on this device. -->
       <div class="alert-note toast-banner action-note action-note--wrap" role="status">
         <span>The official US nautical charts (NOAA ENC) cover these waters.</span>
-        <button type="button" class="btn btn-compact" onclick={onEnableNoaaEnc}>
-          Turn on NOAA ENC
-        </button>
-        <button type="button" class="btn btn-compact" onclick={onDismissEncPrompt}>Dismiss</button>
+        <div class="action-group">
+          <button type="button" class="btn btn-primary" onclick={onEnableNoaaEnc}>
+            Turn on NOAA ENC
+          </button>
+          <button type="button" class="btn btn-ghost" onclick={onDismissEncPrompt}>Dismiss</button>
+        </div>
       </div>
     {/if}
     <!-- The toast channel carries failures and refusals only (see Toast), so it announces as an
@@ -1025,7 +1027,9 @@ $effect(() => {
         role="alert"
       >
         <span>{toastMessage}</span>
-        <button type="button" class="btn btn-ghost" onclick={onDismissToast}>Dismiss</button>
+        <div class="action-group">
+          <button type="button" class="btn btn-ghost" onclick={onDismissToast}>Dismiss</button>
+        </div>
       </div>
     {/if}
   </div>
@@ -2378,11 +2382,13 @@ $effect(() => {
             use:dialog={closeWeatherPanel}
           >
             <p role="alert">Weather view stopped unexpectedly.</p>
-            <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
-            <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
-              Back to menu
-            </button>
-            <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+            <div class="panel-controls">
+              <button type="button" class="btn btn-ghost" onclick={reset}>Retry</button>
+              <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
+                Back to menu
+              </button>
+              <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+            </div>
           </div>
         {/snippet}
       </ErrorBoundary>
@@ -2393,11 +2399,13 @@ $effect(() => {
         use:dialog={closeWeatherPanel}
       >
         <p role="alert">Weather view could not load.</p>
-        <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
-        <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
-          Back to menu
-        </button>
-        <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+        <div class="panel-controls">
+          <button type="button" class="btn btn-ghost" onclick={retryLazyPanel}>Retry</button>
+          <button type="button" class="btn btn-ghost" onclick={backFromWeatherPanel}>
+            Back to menu
+          </button>
+          <button type="button" class="btn btn-ghost" onclick={closeWeatherPanel}>Close</button>
+        </div>
       </div>
     {/await}
   {/if}

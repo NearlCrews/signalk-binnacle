@@ -62,7 +62,7 @@ function statusText(item: TrendItem): string | undefined {
 </script>
 
 <div class="customize-list" bind:this={listEl}>
-  <div class="selection-head">
+  <div class="customize-head">
     <h3 class="caps-label">Selected</h3>
     <span class="muted-note">{selected.length} of {MAX_TREND_INSTRUMENTS} selected</span>
   </div>
@@ -73,7 +73,7 @@ function statusText(item: TrendItem): string | undefined {
       {@const describedBy = itemStatus ? hintId('selected-trend', item.id) : undefined}
       <li
         data-trend-row={item.id}
-        class="row-interactive reorder-row is-on"
+        class="row-interactive reorder-row reorder-line is-on"
         class:dragging={reorder.dragId === item.id}
         class:drop-before={indicator.before}
         class:drop-after={indicator.after}
@@ -108,7 +108,7 @@ function statusText(item: TrendItem): string | undefined {
     {/each}
   </ul>
 
-  <div class="available-head">
+  <div class="customize-head">
     <h3 class="caps-label">Available</h3>
     <button
       type="button"
@@ -134,7 +134,10 @@ function statusText(item: TrendItem): string | undefined {
             : itemStatus
               ? hintId('available-trend', item.id)
               : undefined}
-          <li class="row-interactive" class:unavailable={!atLimit && !item.hasLiveReport}>
+          <li
+            class="row-interactive reorder-line"
+            class:unavailable={!atLimit && !item.hasLiveReport}
+          >
             <LayerToggle
               label={item.label}
               description={item.description}
@@ -170,41 +173,15 @@ function statusText(item: TrendItem): string | undefined {
   min-block-size: 0;
   overflow-y: auto;
 }
-.selection-head,
-.available-head {
-  display: flex;
-  min-block-size: var(--row-size);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.selection-head,
-.available-head,
 .limit-note,
 .empty-note {
   padding-inline: var(--space-3);
-}
-.selection-head h3,
-.available-head h3 {
-  margin: 0;
 }
 .limit-note {
   margin: 0 0 var(--space-2);
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
-.trend-list li {
-  display: flex;
-  min-inline-size: 0;
-  align-items: center;
-  gap: var(--space-1);
-  padding-inline-end: var(--space-1);
-}
-.row-note {
-  max-inline-size: 8rem;
-  flex-shrink: 1;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  overflow-wrap: anywhere;
-}
+/* The line, its note, the section heads, the grip rest and lift, and the drag feedback come from the
+   shared reorder vocabulary (styles/reorder.css). */
 </style>

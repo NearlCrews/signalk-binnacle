@@ -55,7 +55,7 @@ const SYNC_LABELS = {
       <p class="alert-note" role="alert">{controller.error}</p>
     {/if}
     <label class="note-field">
-      <span class="caps-label">Note for the oncoming watch</span>
+      <span class="field-label">Note for the oncoming watch</span>
       <textarea
         class="input"
         bind:value={controller.draft}
@@ -141,16 +141,16 @@ const SYNC_LABELS = {
     {#if controller.records.length === 0 && controller.loadState !== 'loading'}
       <p class="muted-note">No snapshots yet.</p>
     {:else}
-      <ul class="bare-list snapshot-list">
+      <ul class="bare-list card-list">
         {#each controller.records as record (record.id)}
-          <li class="card-frame snapshot">
-            <div class="snapshot-head">
+          <li class="card-frame">
+            <div class="card-head">
               <span class="num when">
                 {formatClockTime(record.createdAt)}
                 {formatMonthDay(record.createdAt)}
               </span>
               <span class="muted-note age">{ageText(record.createdAt)}</span>
-              <span class="caps-label sync" class:sync-shared={record.sync === 'shared'}>
+              <span class="badge badge--caps sync" class:badge--strong={record.sync === 'shared'}>
                 {SYNC_LABELS[record.sync]}
               </span>
             </div>
@@ -183,34 +183,12 @@ const SYNC_LABELS = {
 .note-field textarea {
   resize: vertical;
 }
-.snapshot-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.snapshot {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
-}
-/* The header wraps at 320 px instead of overflowing: clock, age, and the sync chip each keep
-   their own line when squeezed. */
-.snapshot-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-}
+/* The card list, the card inset, and the wrapping head come from the shared .card-list in cards.css. */
 .age {
   margin: 0;
 }
 .sync {
   margin-inline-start: auto;
-  color: var(--text-muted);
-}
-.sync-shared {
-  color: var(--text);
 }
 .snapshot-note {
   margin: 0;

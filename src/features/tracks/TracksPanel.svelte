@@ -579,16 +579,22 @@ function setColorMode(mode: TrackSettings['colorMode']): void {
         <span class="name" title={track.name}>{track.name}</span>
       </div>
       <dl class="card-stats">
-        <dt class="caps-label">Distance</dt>
-        <dd>
-          <span class="num">{distanceNm}</span>
-          nm
-        </dd>
-        <dt class="caps-label">Duration</dt>
-        <dd><span class="num">{durationText}</span></dd>
+        <div>
+          <dt class="caps-label">Distance</dt>
+          <dd>
+            <span class="num">{distanceNm}</span>
+            nm
+          </dd>
+        </div>
+        <div>
+          <dt class="caps-label">Duration</dt>
+          <dd><span class="num">{durationText}</span></dd>
+        </div>
         {#if spanText}
-          <dt class="caps-label">Recorded</dt>
-          <dd>{spanText}</dd>
+          <div>
+            <dt class="caps-label">Recorded</dt>
+            <dd>{spanText}</dd>
+          </div>
         {/if}
       </dl>
       {#if armedDelete.isArmed(track.id)}

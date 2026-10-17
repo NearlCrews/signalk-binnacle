@@ -2,13 +2,12 @@
 import ChevronRight from '@lucide/svelte/icons/chevron-right';
 import Lock from '@lucide/svelte/icons/lock';
 import Plus from '@lucide/svelte/icons/plus';
-import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import type { UserCharts } from '$entities/user-charts';
 import type { Bbox4 } from '$shared/geo';
 import { hasVisibleNavigationChart, type LayerListItem } from '$shared/map';
 import type { PersistedValue } from '$shared/settings';
 import type { AuthController } from '$shared/signalk';
-import { createPanelMinimize, EmptyState, SlideOver, WriteAccessNote } from '$shared/ui';
+import { createPanelMinimize, EmptyState, LoadNote, SlideOver, WriteAccessNote } from '$shared/ui';
 import AddChartForm from './AddChartForm.svelte';
 import LayerRow from './LayerRow.svelte';
 import { CATEGORY_DEFAULT_OPEN, CATEGORY_ORDER, layerCategory } from './layer-category';
@@ -205,27 +204,19 @@ const reorder = createLayerReorder(
       {#if chartsLoadState === 'loading'}
         <p class="muted-note" role="status">Loading Signal K chart sources…</p>
       {:else if chartsLoadState === 'error'}
-        <div class="load-note" role="alert">
-          <p class="muted-note">
-            Could not load Signal K chart sources. Saved URL charts remain available.
-          </p>
-          {#if onRetryCharts}
-            <button type="button" class="btn" onclick={onRetryCharts}>
-              <RefreshCw size={16} aria-hidden="true" />
-              Retry
-            </button>
-          {/if}
-        </div>
+        <LoadNote
+          state="error"
+          message="Could not load Signal K chart sources. Saved URL charts remain available."
+          onRetry={onRetryCharts}
+          retryName="chart sources"
+        />
       {:else if chartsLoadState === 'partial'}
-        <div class="load-note" role="alert">
-          <p class="muted-note">Some Signal K chart sources could not be opened.</p>
-          {#if onRetryCharts}
-            <button type="button" class="btn" onclick={onRetryCharts}>
-              <RefreshCw size={16} aria-hidden="true" />
-              Retry
-            </button>
-          {/if}
-        </div>
+        <LoadNote
+          state="error"
+          message="Some Signal K chart sources could not be opened."
+          onRetry={onRetryCharts}
+          retryName="chart sources"
+        />
       {/if}
       <section class="category" aria-label="Chart sources">
         <h3 class="category-head pinned-head">
@@ -367,16 +358,6 @@ const reorder = createLayerReorder(
 }
 .layer-tabs {
   margin-block: var(--space-1) var(--space-2);
-}
-.load-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.load-note .muted-note {
-  flex: 1 1 14rem;
 }
 /* A pinned, always-on layer (own vessel, MOB, active collision): the same flat row module as a normal
    layer, with a lock glyph in the lead rail instead of a drag handle (it cannot move or be hidden) and

@@ -2,7 +2,7 @@
 import { onMount } from 'svelte';
 import { formatClockTime, formatDayClock, formatMonthDay, MINUTE_MS } from '$shared/lib';
 import { adminLoginUrl } from '$shared/signalk';
-import { InlineConfirm, restoreFocusAfterCancel, SlideOver } from '$shared/ui';
+import { InlineConfirm, LoadNote, restoreFocusAfterCancel, SlideOver } from '$shared/ui';
 import { type LogbookEntry, MAX_LOGBOOK_TEXT_LENGTH } from './logbook-client';
 import type { LogbookController } from './logbook-controller.svelte';
 
@@ -272,12 +272,12 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
       {#if controller.loadState === 'loading'}
         <p class="muted-note" role="status">Loading recent entries…</p>
       {:else if controller.loadState === 'error'}
-        <p class="alert-note" role="alert">
-          Could not load recent entries. Anything already received stays listed below.
-        </p>
-        <div class="panel-controls">
-          <button type="button" class="btn" onclick={() => void controller.refresh()}>Retry</button>
-        </div>
+        <LoadNote
+          state="error"
+          message="Could not load recent entries. Anything already received stays listed below."
+          onRetry={() => void controller.refresh()}
+          retryName="recent entries"
+        />
       {/if}
       {#if controller.loadState === 'ready' && controller.entries.length === 0}
         <p class="muted-note">No entries in the last two days. Add the first one above.</p>
@@ -319,10 +319,6 @@ const dayGroups = $derived.by<DayGroup[]>(() => {
 }
 .entry-field textarea {
   resize: vertical;
-}
-.field-label {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 .suggested-text {
   margin: 0;

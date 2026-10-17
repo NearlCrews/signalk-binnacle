@@ -145,7 +145,7 @@ function chooseCategory(event: Event): void {
     <label class="dialog-field">
       <span>Text</span>
       <textarea
-        class="input note-text"
+        class="input input--large note-text"
         bind:value={text}
         maxlength={MAX_PERSONAL_NOTE_TEXT_LENGTH}
         disabled={busy}
@@ -155,7 +155,7 @@ function chooseCategory(event: Event): void {
 
     <label class="dialog-field">
       <span>Category</span>
-      <select class="input" value={category} disabled={busy} onchange={chooseCategory}>
+      <select class="input input--large" value={category} disabled={busy} onchange={chooseCategory}>
         {#each POI_CATEGORIES as option (option)}
           <option value={option}>{categoryLabel(option)}</option>
         {/each}

@@ -58,7 +58,7 @@ function submit(event: SubmitEvent): void {
 
 <form class="name-entry" aria-label={label} aria-busy={busy} onsubmit={submit}>
   <label class="name-entry-field">
-    <span class="caps-label">{label}</span>
+    <span class="field-label">{label}</span>
     <input
       class="input"
       type="text"
