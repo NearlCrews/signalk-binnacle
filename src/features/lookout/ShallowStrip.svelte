@@ -46,21 +46,34 @@ function acknowledge(): void {
         {/if}
       </div>
     </div>
-    <div class="row">
-      <span class="metric"
-        >Depth <b>{formatLengthOr(shallow.depthMeters, units.mode)}</b> {unit}</span
-      >
-      {#if shallow.insideServerZone}
-        <span class="note">Inside the server's depth alarm zone</span>
-      {:else}
-        <span class="metric"
-          >Limit <b>{formatLengthOr(shallow.effectiveLimitMeters, units.mode)}</b> {unit}</span
+    <!-- The Limit cell stays when the server's zone fired, naming the zone in place of a number, so
+         the readouts never change shape. -->
+    <div class="metrics">
+      <div class="data-cell">
+        <span class="data-cell-label">Depth</span>
+        <span class="data-cell-value"
+          ><b class="num">{formatLengthOr(shallow.depthMeters, units.mode)}</b
+          ><span>{unit}</span></span
         >
-      {/if}
-      {#if shallow.depthSource}
-        <span class="note">{DEPTH_SOURCE_TITLES[shallow.depthSource]}</span>
+      </div>
+      {#if shallow.insideServerZone}
+        <div class="data-cell" title="Inside the server's depth alarm zone">
+          <span class="data-cell-label">Limit</span>
+          <span class="data-cell-value"><span class="word">Server zone</span></span>
+        </div>
+      {:else}
+        <div class="data-cell">
+          <span class="data-cell-label">Limit</span>
+          <span class="data-cell-value"
+            ><b class="num">{formatLengthOr(shallow.effectiveLimitMeters, units.mode)}</b
+            ><span>{unit}</span></span
+          >
+        </div>
       {/if}
     </div>
+    {#if shallow.depthSource}
+      <p class="note source">{DEPTH_SOURCE_TITLES[shallow.depthSource]}</p>
+    {/if}
     {#if shallow.acknowledged &&
       shallow.rearmBelowMeters !== undefined &&
       shallow.rearmBelowMeters > 0}
@@ -72,7 +85,8 @@ function acknowledge(): void {
 {/if}
 
 <style>
-.rearm {
+.rearm,
+.source {
   margin: 0.3rem 0 0;
 }
 </style>

@@ -2,6 +2,7 @@
    surface with a caps title, a pill action button, and mono readouts. Each sets --strip-accent (the
    route accent or the alarm) for the border and the title. */
 .bottom-strip {
+  --data-value-size: var(--text-readout);
   inline-size: min(var(--strip-max-width), calc(100% - var(--space-5)));
   padding: var(--space-2) var(--space-3);
   background: var(--strip-fill, var(--surface-overlay));
@@ -66,6 +67,15 @@
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
   font-size: var(--text-base);
+}
+/* A strip's readouts: data cells (data-cells.css) on equal columns, each a caps label over its value
+   at the strip's readout size, so a strip's numbers line up exactly as the status bar's do and a
+   wrapped second line keeps the same columns. The negative inset puts the first label on the
+   title's edge. */
+.bottom-strip .metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr));
+  margin-inline: -0.35rem;
 }
 /* A name that takes the row's flexible space and ellipsizes rather than wrapping (the active
    destination, a contact). A strip that must let the name shrink below its content adds

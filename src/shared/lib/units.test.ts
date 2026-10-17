@@ -29,6 +29,7 @@ import {
   landDistanceUnit,
   lengthUnit,
   METRIC_UNITS,
+  metersOrNmParts,
   metersPerSecondToKnots,
   metersToNauticalMiles,
   nauticalMilesToMeters,
@@ -144,6 +145,18 @@ describe('formatMetersOrNm', () => {
   it('reads the placeholder for an absent value', () => {
     expect(formatMetersOrNm(undefined)).toBe('--');
     expect(formatMetersOrNm(null)).toBe('--');
+  });
+});
+
+describe('metersOrNmParts', () => {
+  it('splits the value from its unit for a readout that sets the unit in its own slot', () => {
+    expect(metersOrNmParts(93.4)).toEqual({ value: '93', unit: 'm' });
+    expect(metersOrNmParts(4260)).toEqual({ value: '2.30', unit: 'nm' });
+    expect(metersOrNmParts(30, 'imperial')).toEqual({ value: '98', unit: 'ft' });
+  });
+
+  it('carries no unit beside the placeholder', () => {
+    expect(metersOrNmParts(undefined)).toEqual({ value: '--', unit: '' });
   });
 });
 

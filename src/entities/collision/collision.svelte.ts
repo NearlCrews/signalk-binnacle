@@ -37,7 +37,7 @@ export interface DangerContact {
   source: CpaSource;
   // True once the closest approach has passed: the contact is held at its last active grade for a
   // bounded window so it does not vanish from displays at the very moment the vessels are nearest.
-  // Displays render "past closest approach" instead of a countdown; tcpaSeconds is the provider's
+  // Displays render Passed in the TCPA column instead of a countdown; tcpaSeconds is the provider's
   // time past CPA (at or below zero) or zero on the computed branch, whose cpaMeters is the
   // current range. Optional so hand-built fixtures elsewhere stay valid: absent reads as false,
   // and the assessment itself always writes it.
@@ -311,7 +311,7 @@ export function assessContacts(
         const held = holdSeverity(t.id, previous, recedingSince, nowMs);
         if (held !== undefined) {
           // computeCpa reports the current range and a zero TCPA once the approach is past;
-          // receding is what tells displays to render "past closest approach", not the numbers.
+          // receding is what tells displays to render Passed, not the numbers.
           contacts.push({
             id: t.id,
             name: t.name,

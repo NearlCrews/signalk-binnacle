@@ -43,7 +43,9 @@ describe('ShallowStrip', () => {
   it('names the server zone instead of a limit the depth already clears', () => {
     const html = body(view({ depthMeters: 4, insideServerZone: true }));
     expect(html).toContain("Inside the server's depth alarm zone");
-    expect(html).not.toContain('Limit');
+    // The Limit cell stays, naming the zone in place of a number the depth already clears.
+    expect(html).toContain('Server zone');
+    expect(html).not.toMatch(/Limit<\/span>[\s\S]*?class="num"/);
   });
 
   it('leaves out a re-arm depth at or below zero', () => {

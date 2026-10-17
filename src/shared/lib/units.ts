@@ -327,13 +327,25 @@ export function formatMetersOrNm(
   meters: number | null | undefined,
   units: UnitsSelection = 'metric',
 ): string {
-  if (meters == null) return PLACEHOLDER;
+  const { value, unit } = metersOrNmParts(meters, units);
+  return unit ? `${value} ${unit}` : value;
+}
+
+// The same distance as a value and its unit, for a readout that sets the unit in its own slot
+// beside the numeral rather than inside it. The unit is empty while there is no value.
+export function metersOrNmParts(
+  meters: number | null | undefined,
+  units: UnitsSelection = 'metric',
+): { value: string; unit: string } {
+  if (meters == null) return { value: PLACEHOLDER, unit: '' };
   if (resolveUnits(units).length === 'ft') {
-    if (meters < IMPERIAL_NM_FLOOR_METERS) return `${Math.round(meters / METERS_PER_FOOT)} ft`;
-    return `${formatNm(meters)} nm`;
+    if (meters < IMPERIAL_NM_FLOOR_METERS) {
+      return { value: `${Math.round(meters / METERS_PER_FOOT)}`, unit: 'ft' };
+    }
+    return { value: formatNm(meters), unit: 'nm' };
   }
-  if (meters < METERS_PER_NAUTICAL_MILE) return `${Math.round(meters)} m`;
-  return `${formatNm(meters)} nm`;
+  if (meters < METERS_PER_NAUTICAL_MILE) return { value: `${Math.round(meters)}`, unit: 'm' };
+  return { value: formatNm(meters), unit: 'nm' };
 }
 
 export function formatTcpaMin(seconds: number, digits = 0): string {

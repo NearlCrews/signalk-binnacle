@@ -164,7 +164,7 @@ Pick the token by role, never by eye:
 | `--text-lg` | 1 | rare dialog emphasis (a dialog heading, a conditions readout), and a status bar word value (Paused, Standby, Course up), set on the numerals' baseline |
 | `--text-xl` | 1.15 | panel titles (`.panel-title`) and the MOB confirm's modal heading |
 | `--text-data` | 1.125 | every status bar value (`.data-cell-value .num`) at every width: one size across the whole bar, instruments, position, and time alike, so the bar reads as one instrument row |
-| `--text-readout` | 1.25 | the bottom-strip metrics (`.bottom-strip .metric`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
+| `--text-readout` | 1.25 | the bottom strips' metric values (their data cells, set through `--data-value-size` on `.bottom-strip`) and the position tile's two-line coordinates; the collision strip alone steps its CPA and TCPA values up to `--text-readout-lg`, since the top alert's decision numbers outrank an ordinary numeral, and every alarm-grade strip sets its title at `--text-base` weight 700 |
 | `--text-readout-lg` | 1.75 | instrument tile hero values, and the collision strip's decision numbers above |
 
 Two nearby sizes on the same surface for the same role is drift, not hierarchy: reuse the role's
@@ -327,8 +327,11 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   the muted or warning color, which night-red cannot separate by brightness), and `.truncate`
   (single-line ellipsis truncation; the span still owns its width bound, a `max-inline-size` or a flex
   `min-inline-size: 0`, or the clip never engages). The status bar's readouts are data cells, below.
-- Data cells (`data-cells.css`): the status bar's readout vocabulary, composed by the status strip
-  and the autopilot cell. A `.data-cell` is one bar column, the control size tall, holding two fixed
+- Data cells (`data-cells.css`): the readout vocabulary of the status bar and the bottom strips,
+  composed by the status strip, the autopilot cell, and every strip's metrics row. A host sets the
+  value size for its role through `--data-value-size` (and `--data-value-line` for a larger size):
+  the status bar uses `--text-data`, the strips `--text-readout`, and the collision strip's CPA and
+  TCPA `--text-readout-lg`. A `.data-cell` is one bar column, the control size tall, holding two fixed
   lines at the shared `--data-label-line` and `--data-value-line` heights: a `.data-cell-label`
   (bare caps words, no colon: SOG, COG, HDG, Depth, Vessel, Time, Chart · COG, AP · Auto) over a
   `.data-cell-value` (the value in `.num` at `--text-data`, then the unit, datum, or hemisphere as
@@ -499,7 +502,13 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   (`.bottom-strip--alarm`, `.bottom-strip--warning`) outweigh the informational ones: a 2 px border,
   a 10 percent wash of the grade color over the strip surface (`--strip-fill`), and the
   `--text-base` weight-700 title. Night-red keeps the plain overlay surface, because night body
-  text falls under AA on any red wash. `.actions` clusters a tool strip's trailing buttons. An alarm
+  text falls under AA on any red wash. A strip's readouts are `.metrics`: data cells on equal
+  columns, the first label on the title's edge, so a wrapped second line keeps the same columns and
+  a cell that does not apply right now names its state in place (the shallow strip's Limit reads
+  Server zone, a passed contact's TCPA reads Passed) rather than leaving the row. The collision
+  strip sets each contact on the same three columns, so CPA and TCPA stack down the list, and the
+  nav strip's XTE is a double cell that holds its deviation track and steer cue whether or not the
+  boat is off track. `.actions` clusters a tool strip's trailing buttons. An alarm
   strip's safety actions are an `.action-group` instead: equal buttons sized to the widest label,
   each holding its slot for the life of the strip. A done action leaves its word in its own slot
   (Acknowledged, Silenced, Muted here), an action that does not apply right now leaves its slot

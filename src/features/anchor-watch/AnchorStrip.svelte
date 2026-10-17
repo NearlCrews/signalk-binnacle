@@ -70,15 +70,21 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
         </button>
       </div>
     </div>
-    <div class="row">
-      <span class="metric">
-        Off anchor <b>{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b>
-        {lengthUnit(units.mode)}
-      </span>
-      <span class="metric">
-        Radius <b>{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b>
-        {lengthUnit(units.mode)}
-      </span>
+    <div class="metrics">
+      <div class="data-cell">
+        <span class="data-cell-label">Off anchor</span>
+        <span class="data-cell-value"
+          ><b class="num">{formatLengthOr(anchor.distanceMeters, units.mode, 0)}</b
+          ><span>{lengthUnit(units.mode)}</span></span
+        >
+      </div>
+      <div class="data-cell">
+        <span class="data-cell-label">Radius</span>
+        <span class="data-cell-value"
+          ><b class="num">{formatLengthOr(anchor.radiusMeters, units.mode, 0)}</b
+          ><span>{lengthUnit(units.mode)}</span></span
+        >
+      </div>
     </div>
   </aside>
 {/if}

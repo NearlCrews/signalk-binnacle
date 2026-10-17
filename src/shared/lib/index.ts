@@ -89,6 +89,7 @@ export {
   METERS_PER_NAUTICAL_MILE,
   METRIC_UNITS,
   MINUTE_MS,
+  metersOrNmParts,
   metersPerSecondToKnots,
   metersToFeet,
   metersToNauticalMiles,

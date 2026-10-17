@@ -1,7 +1,9 @@
-/* The status bar's data cell: one readout on the bar's shared column grid. Every cell is the same two
-   fixed lines, a caps label line over a value line, so labels share one line and values share one
-   baseline across the whole bar, whatever each cell holds. Composed by the status strip and the
-   autopilot readout; the bar's pinned tiles reuse the same two line heights. */
+/* The data cell: one readout on a shared column grid. Every cell is the same two fixed lines, a caps
+   label line over a value line, so labels share one line and values share one baseline across the
+   whole row, whatever each cell holds. Composed by the status strip, the autopilot readout, and the
+   bottom strips' metrics; the bar's pinned tiles reuse the same two line heights. A host sets the
+   value size for its role with --data-value-size (the bottom strips use --text-readout), and the
+   value line with --data-value-line when a larger size needs it. */
 .data-cell {
   display: grid;
   grid-template-rows: var(--data-label-line) var(--data-value-line);
@@ -59,7 +61,7 @@ button.data-cell {
   margin-inline-end: -0.2rem;
   visibility: hidden;
   font-family: var(--font-mono);
-  font-size: var(--text-data);
+  font-size: var(--data-value-size, var(--text-data));
   font-weight: 700;
 }
 /* Units, datums, and qualifiers ride the value line at the label size. The value and its unit never
@@ -79,7 +81,7 @@ button.data-cell {
   text-overflow: ellipsis;
 }
 .data-cell-value .num {
-  font-size: var(--text-data);
+  font-size: var(--data-value-size, var(--text-data));
   font-weight: 700;
   color: var(--text);
 }

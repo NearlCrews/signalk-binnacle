@@ -2,7 +2,7 @@
 import { onDestroy } from 'svelte';
 import type { MobStore } from '$entities/mob';
 import type { UnitsStore } from '$entities/units';
-import { formatBearingOr, formatClockTime, formatMetersOrNm } from '$shared/lib';
+import { formatBearingOr, formatClockTime, metersOrNmParts } from '$shared/lib';
 import { ConfirmArm } from '$shared/ui';
 import { formatElapsed } from './mob-format';
 
@@ -39,6 +39,8 @@ onDestroy(() => {
 
 let armedMobContext: string | undefined;
 let armedSteerContext: string | undefined;
+// The range's unit sits in its own slot beside the numeral, like the bearing's.
+const range = $derived(metersOrNmParts(mob.distanceMeters, units.mode));
 const mobContext = $derived(mob.actionContext ?? JSON.stringify([mob.position, mob.markEpochMs]));
 const steerContext = $derived(JSON.stringify([mobContext, activeCourseContext, activeCourse]));
 
@@ -115,18 +117,36 @@ const steerWarning = $derived(
         </button>
       </div>
     </div>
-    <div class="row">
-      <span class="metric">Bearing <b>{formatBearingOr(mob.bearingRad)}</b>&deg;T</span>
-      <span class="metric">Range <b>{formatMetersOrNm(mob.distanceMeters, units.mode)}</b></span>
+    <div class="metrics">
+      <div class="data-cell">
+        <span class="data-cell-label">Bearing</span>
+        <span class="data-cell-value"
+          ><b class="num">{formatBearingOr(mob.bearingRad)}</b><span>&deg;T</span></span
+        >
+      </div>
+      <div class="data-cell">
+        <span class="data-cell-label">Range</span>
+        <span class="data-cell-value"
+          ><b class="num">{range.value}</b><span>{range.unit}</span></span
+        >
+      </div>
       {#if mob.elapsedSeconds !== undefined}
-        <span class="metric">Elapsed <b>{formatElapsed(mob.elapsedSeconds)}</b></span>
+        <div class="data-cell">
+          <span class="data-cell-label">Elapsed</span>
+          <span class="data-cell-value"
+            ><b class="num">{formatElapsed(mob.elapsedSeconds)}</b></span
+          >
+        </div>
       {/if}
       <!-- The wall-clock mark time: what goes in the log and out on the VHF relay, so a stressed
-           skipper never does clock arithmetic from elapsed. -->
+           skipper never does clock arithmetic from elapsed. Two columns hold the seconds. -->
       {#if mob.markEpochMs !== undefined}
-        <span class="metric"
-          >Marked <b>{formatClockTime(mob.markEpochMs, { seconds: true })}</b></span
-        >
+        <div class="data-cell data-cell--wide">
+          <span class="data-cell-label">Marked</span>
+          <span class="data-cell-value"
+            ><b class="num">{formatClockTime(mob.markEpochMs, { seconds: true })}</b></span
+          >
+        </div>
       {/if}
     </div>
     {#if steerArm.armed}

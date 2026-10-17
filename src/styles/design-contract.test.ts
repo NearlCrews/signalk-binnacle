@@ -214,10 +214,12 @@ describe('design contract: helm readouts', () => {
   const pinned = sources['/src/features/menu/PinnedActions.svelte'] ?? '';
 
   it('sets every bar value at one size on one shared baseline', () => {
-    expect(cells).toMatch(/\.data-cell-value \.num \{\s*font-size: var\(--text-data\);/);
+    expect(cells).toMatch(
+      /\.data-cell-value \.num \{\s*font-size: var\(--data-value-size, var\(--text-data\)\);/,
+    );
     // The numeral strut that puts a word value, and a tile's label, on the numerals' baseline.
     expect(cells).toMatch(
-      /\.data-baseline::before,\s*\.data-cell-value::before \{[^}]*font-family: var\(--font-mono\);[^}]*font-size: var\(--text-data\);/,
+      /\.data-baseline::before,\s*\.data-cell-value::before \{[^}]*font-family: var\(--font-mono\);[^}]*font-size: var\(--data-value-size, var\(--text-data\)\);/,
     );
     expect(pinned).toContain('class="tile-label data-baseline"');
     // No component sizes a bar value on its own.

@@ -98,18 +98,26 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
               >{vesselLabel(contact.name, contact.id)}</span
             >
           {/if}
-          <span class="metric" title="Closest point of approach: how near this vessel will pass">
-            CPA <b>{formatNm(contact.cpaMeters)}</b> nm
-          </span>
+          <div class="data-cell" title="Closest point of approach: how near this vessel will pass">
+            <span class="data-cell-label">CPA</span>
+            <span class="data-cell-value"
+              ><b class="num">{formatNm(contact.cpaMeters)}</b><span>nm</span></span
+            >
+          </div>
           {#if contact.receding}
-            <!-- A held contact past its closest approach: a countdown would read as still closing. -->
-            <span class="metric" title="This vessel has passed its closest point and is opening">
-              past closest approach
-            </span>
+            <!-- A held contact past its closest approach: a countdown would read as still closing,
+                 so the TCPA cell says it passed, in the same column. -->
+            <div class="data-cell" title="This vessel has passed its closest point and is opening">
+              <span class="data-cell-label">TCPA</span>
+              <span class="data-cell-value"><span class="word">Passed</span></span>
+            </div>
           {:else}
-            <span class="metric" title="Time to the closest point of approach">
-              TCPA <b>{formatTcpaMin(contact.tcpaSeconds, 1)}</b> min
-            </span>
+            <div class="data-cell" title="Time to the closest point of approach">
+              <span class="data-cell-label">TCPA</span>
+              <span class="data-cell-value"
+                ><b class="num">{formatTcpaMin(contact.tcpaSeconds, 1)}</b><span>min</span></span
+              >
+            </div>
           {/if}
         </li>
       {/each}
@@ -161,10 +169,22 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   margin-block-start: 0.3rem;
   font-size: var(--text-xs);
 }
-/* The top alert's decision numbers outrank an ordinary instrument numeral: these are what the helm
-   acts on. Applies to Danger and Caution alike; the title size is the shared alarm-strip one. */
-.metric b {
-  font-size: var(--text-readout-lg);
+/* Each contact is one row of the same three columns (the name, then CPA and TCPA as data cells), so
+   the decision numbers stack in columns down the list. The top alert's decision numbers outrank an
+   ordinary instrument numeral: these are what the helm acts on. Applies to Danger and Caution alike;
+   the title size is the shared alarm-strip one. */
+.collision-strip {
+  --data-value-size: var(--text-readout-lg);
+  --data-value-line: 2.25rem;
+}
+.list .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 6.5rem);
+  align-items: center;
+}
+.list .data-cell {
+  block-size: auto;
+  min-block-size: var(--control-size);
 }
 @media (max-width: 600px) {
   /* The contact name owns its own line at phone width instead of truncating beside two metrics,
@@ -173,11 +193,11 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   .note--provenance {
     display: none;
   }
-  .row {
-    flex-wrap: wrap;
+  .list .row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .row .name {
-    flex-basis: 100%;
+  .list .row .name {
+    grid-column: 1 / -1;
     white-space: normal;
   }
 }

@@ -343,64 +343,77 @@ const eta = $derived.by(() => {
         <span>{stopArm.armed ? 'Confirm stop?' : 'Stop'}</span>
       </button>
     </div>
-    <div class="row">
-      <span class="metric" title="Distance to waypoint{sourceSuffix('distance')}"
-        >DTW <b>{dtw}</b> nm</span
-      >
-      <span class="metric" title="Bearing to waypoint, degrees true{sourceSuffix('bearing')}"
-        >BTW <b>{btw}</b>&deg;T</span
-      >
-      <span
-        class="metric"
+    <div class="metrics">
+      <div class="data-cell" title="Distance to waypoint{sourceSuffix('distance')}">
+        <span class="data-cell-label">DTW</span>
+        <span class="data-cell-value"><b class="num">{dtw}</b><span>nm</span></span>
+      </div>
+      <div class="data-cell" title="Bearing to waypoint, degrees true{sourceSuffix('bearing')}">
+        <span class="data-cell-label">BTW</span>
+        <span class="data-cell-value"><b class="num">{btw}</b><span>&deg;T</span></span>
+      </div>
+      <!-- Two columns hold the deviation track and the steer cue beside the number, so the cell keeps
+           its width whether or not the boat is off track. -->
+      <div
+        class="data-cell data-cell--wide xte-cell"
         title="Cross-track error: how far off the leg you are{xteAlarming
           ? ', past the off-course alarm limit'
           : ''}{sourceSuffix('crossTrack')}"
       >
-        XTE
-        {#if cdi}
-          <span class="cdi" aria-hidden="true">
-            <span class="cdi-center"></span>
-            <span
-              class="cdi-needle"
-              class:pegged={cdi.pegged}
-              class:alarming={xteAlarming}
-              style="inset-inline-start: calc(50% + {cdi.pos * 45}%)"
-            ></span>
+        <span class="data-cell-label">XTE</span>
+        <span class="data-cell-value">
+          <span class="cdi" class:cdi--idle={!cdi} aria-hidden="true">
+            {#if cdi}
+              <span class="cdi-center"></span>
+              <span
+                class="cdi-needle"
+                class:pegged={cdi.pegged}
+                class:alarming={xteAlarming}
+                style="inset-inline-start: calc(50% + {cdi.pos * 45}%)"
+              ></span>
+            {/if}
           </span>
-        {/if}
-        {#if steer}
-          <span class="steer" class:sev-danger={xteAlarming}>{steer}</span>
-        {/if}
-        <b class:sev-danger={xteAlarming}>{xte}</b>
-        nm
-      </span>
-      <span class="metric" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}"
-        >VMG <b>{vmg}</b> {speedUnit(units)}</span
-      >
-      <span
-        class="metric"
+          <span class="steer" class:sev-danger={xteAlarming}>{steer ?? ''}</span>
+          <b class="num" class:sev-danger={xteAlarming}>{xte}</b><span>nm</span>
+        </span>
+      </div>
+      <div class="data-cell" title="Velocity made good toward the waypoint{sourceSuffix('vmg')}">
+        <span class="data-cell-label">VMG</span>
+        <span class="data-cell-value"><b class="num">{vmg}</b><span>{speedUnit(units)}</span></span>
+      </div>
+      <div
+        class="data-cell"
         title={guidance.timeToGoBasis === 'vmg'
           ? 'Time to go at the current velocity made good toward the waypoint; unavailable when not making progress'
           : 'Time to go to the waypoint, from the server course provider'}
       >
-        TTG <b>{ttg}</b>
-        {#if guidance.timeToGoBasis === 'vmg'}
-          <span class="note">VMG</span>
-        {/if}
-      </span>
-      {#if routeProgress}
-        <span class="metric" title="Route distance still to run across the legs ahead">
-          RTE <b>{routeDtg}</b> nm
-        </span>
-        <span
-          class="metric"
-          title="Estimated arrival: the active leg's time to go plus the planning speed for the legs ahead. Not a weather-, current-, or tack-aware passage estimate."
-        >
-          ETA <b>{eta}</b>
-          {#if routeProgress.basis}
-            <span class="note">{routeProgress.basis === 'vmg-plan' ? 'VMG+plan' : 'plan'}</span>
+        <span class="data-cell-label">TTG</span>
+        <span class="data-cell-value">
+          <b class="num">{ttg}</b>
+          {#if guidance.timeToGoBasis === 'vmg'}
+            <span class="data-cell-qualifier">VMG</span>
           {/if}
         </span>
+      </div>
+      {#if routeProgress}
+        <div class="data-cell" title="Route distance still to run across the legs ahead">
+          <span class="data-cell-label">RTE</span>
+          <span class="data-cell-value"><b class="num">{routeDtg}</b><span>nm</span></span>
+        </div>
+        <div
+          class="data-cell"
+          title="Estimated arrival: the active leg's time to go plus the planning speed for the legs ahead. Not a weather-, current-, or tack-aware passage estimate."
+        >
+          <span class="data-cell-label">ETA</span>
+          <span class="data-cell-value">
+            <b class="num">{eta}</b>
+            {#if routeProgress.basis}
+              <span class="data-cell-qualifier"
+                >{routeProgress.basis === 'vmg-plan' ? 'VMG+plan' : 'plan'}</span
+              >
+            {/if}
+          </span>
+        </div>
       {/if}
     </div>
   </aside>
@@ -417,19 +430,24 @@ const eta = $derived.by(() => {
   white-space: nowrap;
 }
 .steer {
+  min-inline-size: 1ch;
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--accent);
+}
+/* With no deviation to show, the track keeps its width so the number never moves. */
+.cdi--idle {
+  border-color: transparent;
 }
 /* The compact CDI track: a horizontal scale with a center mark and a needle that deflects to the
    steer-to side, proportional to the cross-track error up to full scale. */
 .cdi {
   position: relative;
   display: inline-block;
+  align-self: center;
   inline-size: 3.5rem;
   block-size: var(--space-3);
-  margin-inline: var(--space-1);
-  vertical-align: middle;
+  margin-inline-end: var(--space-1);
   border-block: 1px solid var(--border);
 }
 .cdi-center {
