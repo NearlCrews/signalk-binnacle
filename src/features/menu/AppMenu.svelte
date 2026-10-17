@@ -286,13 +286,14 @@ function onCardFocusOut(event: FocusEvent): void {
   /* Scroll-edge shadows (the local-attachment technique): a soft cue that a tile row continues
      past the cap, gone when the edge is reached because the surface-colored cover scrolls over
      it. Effectively invisible at night-red on the near-black surface, where the heavier group
-     rules carry the structure instead. */
+     rules carry the structure instead. The cover is the frame's own --surface-overlay: any other
+     surface paints the scroll region as a second card inside the launcher by day. */
   background:
-    linear-gradient(var(--surface) 30%, transparent),
-    linear-gradient(transparent, var(--surface) 70%) 0 100%,
+    linear-gradient(var(--surface-overlay) 30%, transparent),
+    linear-gradient(transparent, var(--surface-overlay) 70%) 0 100%,
     radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.18), transparent),
     radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.18), transparent) 0 100%;
-  background-color: var(--surface);
+  background-color: var(--surface-overlay);
   background-repeat: no-repeat;
   background-size:
     100% 40px,
