@@ -2,7 +2,7 @@
 import type { MeasureStore } from '$entities/measure';
 import type { UnitsStore } from '$entities/units';
 import type { LatLon } from '$shared/geo';
-import { formatBearingOr, formatMetersOrNm } from '$shared/lib';
+import { formatBearingOr, metersOrNmParts } from '$shared/lib';
 import {
   Disclosure,
   InlineConfirm,
@@ -138,7 +138,7 @@ $effect(() => {
         move it.
       </p>
       <PositionFields {position} onChange={(next) => (position = next)} />
-      <div class="actions">
+      <div class="panel-controls">
         <button
           type="button"
           class="btn btn-pill btn-strip"
@@ -187,7 +187,7 @@ $effect(() => {
             {/each}
           </select>
         </label>
-        <div class="point-actions">
+        <div class="panel-controls point-actions">
           <button
             type="button"
             class="btn btn-pill btn-strip"
@@ -236,40 +236,67 @@ $effect(() => {
       </div>
     {/if}
 
+    <!-- The readouts are data cells on the strip's equal columns; a leg's distance and bearing share
+         one double cell, each with its unit in its own slot. -->
+    {#snippet distance(
+      meters: number | undefined,
+    )}
+      {@const parts = metersOrNmParts(meters, units.mode)}
+      <b class="num">{parts.value}</b><span>{parts.unit}</span>
+    {/snippet}
     {#if selectedNumber !== undefined}
-      <div class="row selected-readout" aria-live="polite">
-        <span class="metric">Point <b>{selectedNumber} of {measure.vertices.length}</b></span>
+      <div class="metrics selected-readout" aria-live="polite">
+        <div class="data-cell">
+          <span class="data-cell-label">Point</span>
+          <span class="data-cell-value"
+            ><b class="num">{selectedNumber}</b><span>of {measure.vertices.length}</span></span
+          >
+        </div>
         {#if measure.selectedIncomingLeg}
-          <span class="metric">
-            Previous
-            <b>{formatMetersOrNm(measure.selectedIncomingLeg.distanceMeters, units.mode)}</b>
-            <b>{formatBearingOr(measure.selectedIncomingLeg.bearingRad)}</b>&deg;T
-          </span>
+          <div class="data-cell data-cell--wide">
+            <span class="data-cell-label">Previous</span>
+            <span class="data-cell-value"
+              >{@render distance(measure.selectedIncomingLeg.distanceMeters)}
+              <b class="num">{formatBearingOr(measure.selectedIncomingLeg.bearingRad)}</b
+              ><span>&deg;T</span></span
+            >
+          </div>
         {/if}
         {#if measure.selectedOutgoingLeg}
-          <span class="metric">
-            Next <b>{formatMetersOrNm(measure.selectedOutgoingLeg.distanceMeters, units.mode)}</b>
-            <b>{formatBearingOr(measure.selectedOutgoingLeg.bearingRad)}</b>&deg;T
-          </span>
+          <div class="data-cell data-cell--wide">
+            <span class="data-cell-label">Next</span>
+            <span class="data-cell-value"
+              >{@render distance(measure.selectedOutgoingLeg.distanceMeters)}
+              <b class="num">{formatBearingOr(measure.selectedOutgoingLeg.bearingRad)}</b
+              ><span>&deg;T</span></span
+            >
+          </div>
         {/if}
         {#if measure.legs.length > 1}
-          <span class="metric">
-            Total <b>{formatMetersOrNm(measure.totalMeters, units.mode)}</b>
-          </span>
+          <div class="data-cell">
+            <span class="data-cell-label">Total</span>
+            <span class="data-cell-value">{@render distance(measure.totalMeters)}</span>
+          </div>
         {/if}
       </div>
     {:else if measure.lastLeg}
-      <div class="row" aria-live="polite">
-        <span class="metric">
-          Leg <b>{formatMetersOrNm(measure.lastLeg.distanceMeters, units.mode)}</b>
-        </span>
-        <span class="metric"
-          >Bearing <b>{formatBearingOr(measure.lastLeg.bearingRad)}</b>&deg;T</span
-        >
+      <div class="metrics" aria-live="polite">
+        <div class="data-cell">
+          <span class="data-cell-label">Leg</span>
+          <span class="data-cell-value">{@render distance(measure.lastLeg.distanceMeters)}</span>
+        </div>
+        <div class="data-cell">
+          <span class="data-cell-label">Bearing</span>
+          <span class="data-cell-value"
+            ><b class="num">{formatBearingOr(measure.lastLeg.bearingRad)}</b
+            ><span>&deg;T</span></span
+          >
+        </div>
         {#if measure.legs.length > 1}
-          <span class="metric">
-            Total <b>{formatMetersOrNm(measure.totalMeters, units.mode)}</b>
-          </span>
+          <div class="data-cell">
+            <span class="data-cell-label">Total</span>
+            <span class="data-cell-value">{@render distance(measure.totalMeters)}</span>
+          </div>
         {/if}
       </div>
     {/if}
@@ -296,12 +323,10 @@ $effect(() => {
   font-size: var(--text-md);
 }
 .point-actions {
-  display: flex;
   flex: 1 1 22rem;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
-.point-actions .btn-strip {
+.edit-row .btn-strip,
+.panel-controls .btn-strip {
   margin-inline-start: 0;
 }
 .selected-readout {
@@ -312,9 +337,6 @@ $effect(() => {
   .point-picker,
   .point-actions {
     inline-size: 100%;
-  }
-  .point-actions .btn-strip {
-    flex: 1 1 auto;
   }
 }
 </style>

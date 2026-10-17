@@ -465,7 +465,19 @@ test('keeps chart controls legible and the instrument title on one line', async 
     )
     .toBe(true);
   await expect(page.locator('.maplibregl-ctrl-top-right button')).toHaveCount(2);
-  await expect(page.locator('.maplibregl-ctrl-bottom-right')).toHaveCSS('bottom', '12px');
+  // The bottom-right controls sit one chrome gutter (--space-3) above the chart edge, on the same line
+  // as the bottom-left badge, not a doubled container inset plus control margin.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const control = document
+          .querySelector('.maplibregl-ctrl-bottom-right .maplibregl-ctrl:last-child')
+          ?.getBoundingClientRect();
+        const chart = document.querySelector('.maplibregl-map')?.getBoundingClientRect();
+        return control && chart ? Math.round(chart.bottom - control.bottom) : -1;
+      }),
+    )
+    .toBe(12);
 
   const pinnedInstruments = page.getByRole('button', { name: 'Instruments', exact: true }).first();
   if (await pinnedInstruments.isVisible()) {

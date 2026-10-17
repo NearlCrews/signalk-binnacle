@@ -211,10 +211,11 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
     >
   </span>
   <span class="leg-line leg-line--metrics">
-    <span class="num">{formatNm(leg.distanceMeters)} nm</span>
-    <span class="num">{formatBearingOr(leg.bearingRad)}&deg;T</span>
-    <span class="num leg-elapsed" title="Cumulative elapsed time to reach this point">
-      Elapsed {seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}
+    <span><span class="num">{formatNm(leg.distanceMeters)}</span> nm</span>
+    <span><span class="num">{formatBearingOr(leg.bearingRad)}</span>&deg;T</span>
+    <span class="leg-elapsed" title="Cumulative elapsed time to reach this point">
+      Elapsed
+      <span class="num">{seconds === undefined ? PLACEHOLDER : formatDuration(seconds)}</span>
     </span>
   </span>
   {#if forecast !== undefined &&
@@ -304,15 +305,19 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
 .leg-row.is-on {
   border-inline-start-width: var(--active-bar-width);
 }
+/* Every leg sets its lines on the same columns, so names, distances, bearings, and elapsed times stack
+   in columns down the list: a leg-number column wide enough for two digits, then the endpoint name
+   and arrival, and under them three equal metric columns. */
 .leg-line {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2.5ch minmax(0, 1fr) auto;
   align-items: baseline;
   gap: var(--space-2);
   inline-size: 100%;
 }
 .leg-no {
   color: var(--text-muted);
-  min-inline-size: var(--space-4);
+  text-align: end;
 }
 .leg-name {
   flex: 1;
@@ -326,12 +331,14 @@ const forecastContext = $derived(routeForecastContext(weatherGrid, weatherStatus
   color: var(--accent);
 }
 .leg-line--metrics {
+  grid-template-columns: 2.5ch repeat(3, minmax(0, 1fr));
   color: var(--text-muted);
-  flex-wrap: wrap;
-  padding-inline-start: calc(var(--space-4) + var(--space-2));
 }
-.leg-elapsed {
-  margin-inline-start: auto;
+.leg-line--metrics > :first-child {
+  grid-column-start: 2;
+}
+.leg-line--metrics .num {
+  color: var(--text);
 }
 .departure {
   display: flex;

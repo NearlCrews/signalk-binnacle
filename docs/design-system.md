@@ -879,7 +879,9 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
 ## 8. Menus
 
 - The app menu is the `AppMenu` launcher: a `.surface-elevated` frame holding a grid of tiles grouped by
-  helm intent. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar tile,
+  helm intent, every group on one tile module (the same columns whatever a group holds, so a short
+  group leaves spare cells empty rather than widening its tiles), each tile top-aligned with its
+  label's two lines reserved. A menu entry is a `MenuItem` (`id`, `label`, `shortLabel` for the bottom-bar tile,
   `sublabel` for a quiet second tile line when an item's current state is part of its identity
   (the Orientation tile's mode, the instrument dashboard's KIP acronym) so the label keeps one
   voice across the grid, `icon` a lucide component, `group` a section heading, `pressed` for a

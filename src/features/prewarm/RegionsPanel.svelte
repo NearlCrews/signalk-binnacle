@@ -588,6 +588,7 @@ function chartLabel(id: string): string {
                 <span class="unit">{estimateFmt.unit}</span>
               {:else}
                 <span class="num">--</span>
+                <span class="unit"></span>
               {/if}
             </dd>
             <dt>Space available</dt>

@@ -5,11 +5,11 @@ import {
   formatBearingOr,
   formatDayClock,
   formatLengthOr,
-  formatMetersOrNm,
   formatMonthDay,
   formatPrecipRateOr,
   formatPressureOr,
   lengthUnit,
+  metersOrNmParts,
   pressureUnit,
   speedUnit,
 } from '$shared/lib';
@@ -65,6 +65,20 @@ const hasRiskCues = $derived(
     outlook.some((day) => day.worstRiskCue !== undefined),
 );
 
+// The fields any hourly step carries: every row sets each of them in the same place, with a dash
+// where a step lacks it, so the values line up down the list instead of shifting with each row.
+const fields = $derived({
+  pressure: forecast.some((step) => step.pressurePa !== undefined),
+  waves: forecast.some((step) => step.waveHeightM !== undefined),
+  windWaves: forecast.some((step) => step.windWaveHeightM !== undefined),
+  swell: forecast.some((step) => step.swellHeightM !== undefined),
+  current: forecast.some((step) => step.currentSpeedMs !== undefined),
+  visibility: forecast.some((step) => step.visibilityM !== undefined),
+  precip: forecast.some(
+    (step) => step.precipitationMm !== undefined && step.precipitationMm >= RAIN_VISIBLE_MM_H,
+  ),
+});
+
 function stepLabel(timeMs: number): string {
   return formatDayClock(timeMs, { minute: false });
 }
@@ -80,12 +94,10 @@ function windRangeText(day: DayOutlook): string {
   label: string,
   heightM: number | undefined,
 )}
-  {#if heightM !== undefined}
-    <span
-      >{label} <b class="num">{formatLengthOr(heightM, units.profile)}</b>
-      {lengthUnit(units.profile)}</span
-    >
-  {/if}
+  <span
+    >{label} <b class="num">{formatLengthOr(heightM, units.profile)}</b>
+    {heightM === undefined ? '' : lengthUnit(units.profile)}</span
+  >
 {/snippet}
 
 <h3 class="caps-label forecast-head">Forecast · next {horizonH} h</h3>
@@ -106,39 +118,50 @@ function windRangeText(day: DayOutlook): string {
             {/if}
           </span>
         {/if}
-        {#if step.pressurePa !== undefined}
+        {#if fields.pressure}
           <span
             ><b class="num">{formatPressureOr(step.pressurePa, units.profile)}</b>
-            {pressureUnit(units.profile)}</span
+            {step.pressurePa === undefined ? '' : pressureUnit(units.profile)}</span
           >
         {/if}
-        {@render waveSpan('Waves', step.waveHeightM)}
-        {@render waveSpan('Wind waves', step.windWaveHeightM)}
-        {@render waveSpan('Swell', step.swellHeightM)}
-        {#if step.currentSpeedMs !== undefined}
+        {#if fields.waves}
+          {@render waveSpan('Waves', step.waveHeightM)}
+        {/if}
+        {#if fields.windWaves}
+          {@render waveSpan('Wind waves', step.windWaveHeightM)}
+        {/if}
+        {#if fields.swell}
+          {@render waveSpan('Swell', step.swellHeightM)}
+        {/if}
+        {#if fields.current}
           <span
             >Current <b class="num">{speed(step.currentSpeedMs)}</b>
-            {speedUnit(units.profile)}</span
+            {step.currentSpeedMs === undefined ? '' : speedUnit(units.profile)}</span
           >
         {/if}
-        {#if step.visibilityM !== undefined}
-          <span
-            >Visibility <b class="num">{formatMetersOrNm(step.visibilityM, units.profile)}</b></span
-          >
+        {#if fields.visibility}
+          {@const visibility = metersOrNmParts(step.visibilityM, units.profile)}
+          <span>Visibility <b class="num">{visibility.value}</b> {visibility.unit}</span>
         {/if}
-        {#if step.precipitationMm !== undefined && step.precipitationMm >= RAIN_VISIBLE_MM_H}
-          <span>
-            {step.precipitationType ?? 'Precipitation'}
-            <b class="num">{precip(step.precipitationMm)}</b>
-            {precipUnitLabel(step.precipIsRate, units.profile)}
-          </span>
+        {#if fields.precip}
+          {#if step.precipitationMm !== undefined && step.precipitationMm >= RAIN_VISIBLE_MM_H}
+            <span>
+              {step.precipitationType ?? 'Precipitation'}
+              <b class="num">{precip(step.precipitationMm)}</b>
+              {precipUnitLabel(step.precipIsRate, units.profile)}
+            </span>
+          {:else}
+            <span>Precipitation <b class="num">--</b></span>
+          {/if}
         {/if}
         {#if step.riskCues}
-          {#each step.riskCues as cue (cue)}
-            <span class:sev-danger={isDangerCue(cue)} class:sev-warning={!isDangerCue(cue)}
-              >{cue}</span
-            >
-          {/each}
+          <span class="f-cues">
+            {#each step.riskCues as cue (cue)}
+              <span class:sev-danger={isDangerCue(cue)} class:sev-warning={!isDangerCue(cue)}
+                >{cue}</span
+              >
+            {/each}
+          </span>
         {/if}
         {#if step.provenance}
           <span class="f-source">{provenanceLabel(step.provenance, providerLabel)}</span>
@@ -216,11 +239,15 @@ function windRangeText(day: DayOutlook): string {
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+/* The details are two equal columns: wind and its gust lead on their own line, every other field the
+   forecast carries holds the same cell in every row, and risk cues and the source take their own
+   lines, so a field never shifts from one row to the next. */
 .f-details {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.1rem var(--space-2);
   flex: 1;
+  min-inline-size: 0;
 }
 .f-details > span:not(.f-wind) {
   font-size: var(--text-xs);
@@ -228,11 +255,18 @@ function windRangeText(day: DayOutlook): string {
 .f-details > span:not(.f-wind, .sev-danger, .sev-warning) {
   color: var(--text-muted);
 }
-.f-wind {
-  flex-basis: 100%;
+.f-wind,
+.f-cues,
+.f-source {
+  grid-column: 1 / -1;
+}
+.f-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
 }
 .f-source {
-  margin-inline-start: auto;
+  justify-self: end;
 }
 .risk-note {
   margin: 0;

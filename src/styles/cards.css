@@ -133,6 +133,11 @@
   gap: 0.2rem;
   flex-shrink: 0;
 }
+/* The overflow menu holds the trailing edge of every card's action row, so it sits at one x down the
+   list whether or not a card offers its leading action (an active profile has no Use profile). */
+.saved .actions > .overflow-actions {
+  margin-inline-start: auto;
+}
 /* Push the destructive delete to the trailing edge so it is not flush against the safe actions and an
    accidental tap is less likely. */
 .saved .actions .icon-btn--danger {

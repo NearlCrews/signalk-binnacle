@@ -87,8 +87,13 @@ const {
 </div>
 
 <style>
+/* Return to now takes its own line beneath the controls in every layout, so its appearing never
+   narrows the slider or moves the step buttons and the timestamp. */
+.scrubber {
+  flex-wrap: wrap;
+}
 .return-now {
   grid-column: 1 / -1;
-  flex: 0 0 auto;
+  flex: 1 0 100%;
 }
 </style>

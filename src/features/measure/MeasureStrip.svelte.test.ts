@@ -32,9 +32,14 @@ describe('MeasureStrip', () => {
     measure.add({ latitude: 0.001, longitude: 0 });
     measure.add({ latitude: 0.002, longitude: 0 });
     const body = renderStrip(measure);
-    expect(body).toContain('Leg <b>111 m</b>');
-    expect(body).toContain('Bearing <b>000</b>°T');
-    expect(body).toContain('Total <b>222 m</b>');
+    // Each readout is a data cell: its label, then the value with its unit in its own slot.
+    const cell = (label: string, value: string, unit: string) =>
+      new RegExp(
+        `>${label}</span>\\s*<span class="data-cell-value">(<!---->)*<b class="num">${value}</b><span>${unit}</span>`,
+      );
+    expect(body).toMatch(cell('Leg', '111', 'm'));
+    expect(body).toMatch(cell('Bearing', '000', '°T'));
+    expect(body).toMatch(cell('Total', '222', 'm'));
   });
 
   it('shows a compact selected-point editor with both adjacent leg readouts', () => {

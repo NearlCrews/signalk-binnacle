@@ -373,21 +373,23 @@ function onCardFocusOut(event: FocusEvent): void {
 .group-label {
   padding-inline: var(--space-1);
 }
-/* auto-fit collapses to as many columns as the group has items (a 1-item group gets one
-   full-width tile, a 2-item group gets two half-width tiles) rather than always reserving 3
-   columns and leaving dead cells; the 6.5rem floor settles a large group at 3 per row on a 390px
-   phone sheet with enough width that "Nearby vessels (AIS)" fits its two clamped lines instead of
-   ellipsizing the qualifier. */
+/* One tile module for every group: auto-fill keeps the same columns whatever a group holds, so every
+   group's tiles share one width and one set of column edges, and a short group leaves its spare
+   cells empty rather than stretching its tiles wider than its neighbors'. The 6.5rem floor settles
+   at 3 per row on a 390px phone sheet with enough width that "Nearby vessels (AIS)" fits its two
+   clamped lines instead of ellipsizing the qualifier. */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
   gap: var(--space-1);
 }
 .menu-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Top-aligned, with the label's two lines reserved, so every tile in a row puts its icon and its
+     label on the same lines whether its label takes one line or two. */
+  justify-content: flex-start;
   gap: var(--space-1);
   min-block-size: 5rem;
   padding: var(--space-2) var(--space-1);
@@ -461,6 +463,7 @@ function onCardFocusOut(event: FocusEvent): void {
   -webkit-box-orient: vertical;
   line-clamp: 2;
   overflow: hidden;
+  min-block-size: 2.4em;
 }
 /* The quiet state line under a tile label (the Orientation tile's current mode): one line,
    muted, so the label keeps one voice across the grid while the state stays visible. */

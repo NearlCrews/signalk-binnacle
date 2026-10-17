@@ -89,7 +89,7 @@ describe('RouteEditPlan', () => {
 
   it('keeps every time unavailable at zero planning speed', () => {
     const body = renderPlan({ planningSpeed: speed(0) });
-    expect(body).toContain(`Elapsed ${PLACEHOLDER}`);
+    expect(body).toMatch(new RegExp(`Elapsed <span class="num[^"]*">${PLACEHOLDER}<`));
     const arrivals = body.match(/class="leg-arrive num[^"]*"[^>]*>([^<]*)</g) ?? [];
     expect(arrivals.length).toBeGreaterThan(0);
     for (const cell of arrivals) expect(cell).toContain(PLACEHOLDER);

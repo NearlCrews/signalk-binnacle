@@ -361,8 +361,9 @@ const reorder = createLayerReorder(
 }
 /* A pinned, always-on layer (own vessel, MOB, active collision): the same flat row module as a normal
    layer, with a lock glyph in the lead rail instead of a drag handle (it cannot move or be hidden) and
-   no toggle or opacity control. The lead reserves the same width as a layer row's handle so the titles
-   share one column. */
+   no toggle or opacity control. The lead reserves a layer row's whole lead (the grip and its reorder
+   menu) plus its switch and the gap between them, so the pinned titles start on the layer titles'
+   column, at the layer titles' weight. */
 .pinned-row {
   display: flex;
   align-items: center;
@@ -371,8 +372,9 @@ const reorder = createLayerReorder(
 .pinned-row .lead {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  inline-size: var(--control-size);
+  /* The lock sits where a layer row's grip does: centered in the first control-size slot. */
+  padding-inline-start: calc((var(--control-size) - 1.125rem) / 2);
+  inline-size: calc(2 * var(--control-size) + var(--space-2) + var(--switch-width));
   flex-shrink: 0;
 }
 .pinned-row :global(.pin-glyph) {
@@ -385,7 +387,6 @@ const reorder = createLayerReorder(
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: var(--text-md);
-  font-weight: 600;
 }
 .category {
   list-style: none;

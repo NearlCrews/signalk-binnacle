@@ -86,17 +86,14 @@
   line-height: 1.4;
   text-align: center;
 }
-/* Keep the enlarged attribution target and its focus ring above the persistent helm toolbar. */
-.maplibregl-ctrl-bottom-right {
-  inset-block-end: var(--space-3);
-}
-/* On the navigation chart the bottom-right controls (scale, attribution) also yield to the
-   measured safety-rail height, so a danger strip never half-covers them; --rail-clearance is 0px
-   while no alerts are up. Scoped through .chart-canvas so the weather mini-map keeps its own
-   controls where they are. The uniform --space-3 margin is the one chrome gutter every floating
-   control shares. */
+/* The uniform --space-3 control margin below is the one chrome gutter every floating control shares,
+   and the only offset from the chart edge: it keeps the attribution target and its focus ring above
+   the helm toolbar, and puts the bottom-right controls on the same line as the bottom-left badge.
+   On the navigation chart they also yield to the measured safety-rail height, so a danger strip
+   never half-covers them; --rail-clearance is 0px while no alerts are up. Scoped through
+   .chart-canvas so the weather mini-map keeps its own controls where they are. */
 .chart-canvas .maplibregl-ctrl-bottom-right {
-  inset-block-end: calc(var(--space-3) + var(--rail-clearance, 0px));
+  inset-block-end: var(--rail-clearance, 0px);
 }
 .maplibregl-ctrl-top-right .maplibregl-ctrl,
 .maplibregl-ctrl-bottom-right .maplibregl-ctrl {

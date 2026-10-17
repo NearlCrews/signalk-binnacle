@@ -301,23 +301,37 @@ const liveMessage = $derived.by(() => {
             Position unavailable near this time. The replay marker is hidden.
           </p>
         {/if}
-        <div class="row">
-          <span class="metric"
-            >Depth below transducer, average
-            <b>{formatLengthOr(current.depth ?? null, units.profile)}</b> {depthUnit}</span
-          >
-          <span class="metric"
-            >Peak apparent wind <b>{formatSpeedOr(current.windApparent ?? null, units.profile)}</b>
-            {speedUnitLabel}</span
-          >
-          <span class="metric"
-            >Baro, average <b>{formatPressureOr(current.pressure ?? null, units.profile)}</b>
-            {baroUnit}</span
-          >
-          <span class="metric"
-            >SOG, average <b>{formatSpeedOr(current.sog ?? null, units.profile)}</b>
-            {speedUnitLabel}</span
-          >
+        <!-- Data cells on the strip's equal columns, each qualifier (average, peak) in the label line
+             and the depth's transducer reference beside its unit, as on the status bar. -->
+        <div class="metrics">
+          <div class="data-cell" title="Depth below transducer, average">
+            <span class="data-cell-label">Depth · avg</span>
+            <span class="data-cell-value"
+              ><b class="num">{formatLengthOr(current.depth ?? null, units.profile)}</b
+              ><span>{depthUnit}</span><span class="data-cell-qualifier">Xducer</span></span
+            >
+          </div>
+          <div class="data-cell" title="Peak apparent wind speed">
+            <span class="data-cell-label">AWS · peak</span>
+            <span class="data-cell-value"
+              ><b class="num">{formatSpeedOr(current.windApparent ?? null, units.profile)}</b
+              ><span>{speedUnitLabel}</span></span
+            >
+          </div>
+          <div class="data-cell" title="Barometric pressure, average">
+            <span class="data-cell-label">Baro · avg</span>
+            <span class="data-cell-value"
+              ><b class="num">{formatPressureOr(current.pressure ?? null, units.profile)}</b
+              ><span>{baroUnit}</span></span
+            >
+          </div>
+          <div class="data-cell" title="Speed over ground, average">
+            <span class="data-cell-label">SOG · avg</span>
+            <span class="data-cell-value"
+              ><b class="num">{formatSpeedOr(current.sog ?? null, units.profile)}</b
+              ><span>{speedUnitLabel}</span></span
+            >
+          </div>
         </div>
       {/if}
     {/if}
@@ -331,9 +345,12 @@ const liveMessage = $derived.by(() => {
   container-type: inline-size;
 }
 
+/* The two control rows share one label column, so the Range and Playback speed controls start and
+   end on the same edges. */
 .range-row,
 .speed-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
   margin-block: var(--space-2);
@@ -365,8 +382,8 @@ const liveMessage = $derived.by(() => {
 @container (max-width: 26rem) {
   .range-row,
   .speed-row {
+    grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
-    flex-direction: column;
     gap: var(--space-1);
   }
 

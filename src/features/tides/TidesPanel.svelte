@@ -1,5 +1,4 @@
 <script lang="ts">
-import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 import { onDestroy, untrack } from 'svelte';
 import type {
   NearbyTideStation,
@@ -82,14 +81,14 @@ $effect(() => {
 });
 
 // The rate and set as one string, so no stray whitespace creeps in between the rate and the comma.
-const currentRate = $derived.by(() => {
-  if (!nextCurrent) return '';
-  const dirSuffix =
-    nextCurrent.directionRad !== undefined
-      ? `, toward ${formatBearingOr(nextCurrent.directionRad, 0)}°T`
-      : '';
-  return `${formatCurrentRate(nextCurrent.velocityMps, units.profile)}${dirSuffix}`;
-});
+// The rate rides the value slot with the time; the direction is the qualifier, in the unit slot, as
+// the second height is in the tide rows.
+const currentRate = $derived(
+  nextCurrent ? formatCurrentRate(nextCurrent.velocityMps, units.profile) : '',
+);
+function towardText(directionRad: number | undefined): string {
+  return directionRad === undefined ? '' : `toward ${formatBearingOr(directionRad, 0)}°T`;
+}
 
 const CURVE_W = 240;
 const CURVE_H = 60;
@@ -306,6 +305,10 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           </dd>
         </dl>
       {/if}
+      <!-- The datum qualifies the heights directly above it, so it sits with them. -->
+      <p class="footnote datum">
+        {formatTideDatum(tide)}. Check the chart's datum before combining heights.
+      </p>
 
       {#if curve.length > 1}
         <!-- The curve restates the next-high and next-low numbers in the list above, so it is
@@ -343,7 +346,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           <dd>
             {#if nextCurrent}
               <span class="num">{formatTideEventTime(nextCurrent.timeMs)}, {currentRate}</span>
-              <span class="unit"></span>
+              <span class="unit">{towardText(nextCurrent.directionRad)}</span>
             {:else}
               <span class="num">--</span><span class="unit"></span>
             {/if}
@@ -353,14 +356,9 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
             <dd>
               <span class="num"
                 >{formatTideEventTime(followingFlow.timeMs)},
-                {formatCurrentRate(
-                  followingFlow.velocityMps,
-                  units.profile,
-                )}{followingFlow.directionRad !== undefined
-                  ? `, toward ${formatBearingOr(followingFlow.directionRad, 0)}°T`
-                  : ''}</span
+                {formatCurrentRate(followingFlow.velocityMps, units.profile)}</span
               >
-              <span class="unit"></span>
+              <span class="unit">{towardText(followingFlow.directionRad)}</span>
             </dd>
           {/if}
         </dl>
@@ -383,8 +381,7 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
           <p class="alert-note">{selectionFailure('current')}</p>
         {/if}
       </div>
-      <button type="button" class="btn" onclick={() => void controller.retry()}>
-        <RefreshCw size={16} aria-hidden="true" />
+      <button type="button" class="btn btn-ghost" onclick={() => void controller.retry()}>
         Retry
       </button>
     </div>
@@ -394,11 +391,6 @@ function curvePath(points: Array<{ x: number; y: number }>): string {
 
   {#if sourceNote}
     <p class="muted-note source-note">{sourceNote}</p>
-  {/if}
-  {#if tide}
-    <p class="footnote">
-      {formatTideDatum(tide)}. Check the chart's datum before combining heights.
-    </p>
   {/if}
   <p class="footnote">
     Times include the date and the device's local timezone. Current directions are toward, in

@@ -194,6 +194,10 @@ $effect(() => {
           </div>
         </AnchoredMenu>
       </div>
+    {:else if item.supportsOpacity}
+      <!-- The tune slot is held while the layer is off, so turning it on adds the control without
+           shrinking the title or moving the manage button. -->
+      <span class="tune-slot" aria-hidden="true"></span>
     {/if}
     {#if onManage}
       <button
@@ -321,6 +325,9 @@ $effect(() => {
 .tune-anchor {
   position: relative;
   display: inline-flex;
+}
+.tune-slot {
+  inline-size: var(--control-size);
 }
 /* The opacity popover, anchored under the tune button at the row's trailing edge. The floating-card
    frame comes from the shared .popover-card; this only positions and sizes it. */

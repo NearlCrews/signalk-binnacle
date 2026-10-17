@@ -5,13 +5,13 @@ import {
   formatDayClock,
   formatFixed,
   formatLengthOr,
-  formatMetersOrNm,
   formatPercent,
   formatPrecipRateOr,
   formatPressureOr,
   formatTemperatureOr,
   HOUR_MS,
   lengthUnit,
+  metersOrNmParts,
   pressureUnit,
   speedUnit,
   temperatureUnit,
@@ -83,6 +83,8 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   const hours = Math.floor(minutes / 60);
   return `${hours} h ${minutes % 60} min ago`;
 }
+// The visibility's unit sits beside the numeral like every other reading's, not inside it.
+const visibility = $derived(metersOrNmParts(current.visibilityM, units.profile));
 </script>
 
 <p class="cond-when">
@@ -103,7 +105,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
 </p>
 <dl class="now">
   {#if current.windMs !== undefined}
-    <div>
+    <div class="now-wide">
       <dt>Wind</dt>
       <dd>
         <b class="num">{speed(current.windMs)}</b>
@@ -121,7 +123,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     </div>
   {/if}
   {#if current.pressurePa !== undefined || measuredLabel}
-    <div>
+    <div class="now-wide">
       <dt>Pressure</dt>
       <dd>
         {#if current.pressurePa !== undefined}
@@ -174,7 +176,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
   {#if current.visibilityM !== undefined}
     <div>
       <dt>Visibility</dt>
-      <dd><b class="num">{formatMetersOrNm(current.visibilityM, units.profile)}</b></dd>
+      <dd><b class="num">{visibility.value}</b> {visibility.unit}</dd>
     </div>
   {/if}
   {#if current.cloudFraction !== undefined}
@@ -189,7 +191,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     periodS: number | undefined,
     fromRad: number | undefined,
   )}
-    <div>
+    <div class="now-wide">
       <dt>{label}</dt>
       <dd>
         <b class="num">{height(heightM)}</b>
@@ -223,7 +225,7 @@ function ageLabel(ageMs: number | undefined): string | undefined {
     {@render waveBlock('Swell', current.swellHeightM, current.swellPeriodS, current.swellFromRad)}
   {/if}
   {#if current.currentSpeedMs !== undefined}
-    <div>
+    <div class="now-wide">
       <dt>Current</dt>
       <dd>
         <b class="num">{speed(current.currentSpeedMs)}</b>
@@ -283,6 +285,12 @@ function ageLabel(ageMs: number | undefined): string | undefined {
 .now div {
   display: flex;
   flex-direction: column;
+}
+/* A reading made of several parts (wind with its direction, a wave height with its period and
+   direction, a current with its direction, pressure with its trend lines) takes the whole row, a
+   whole multiple of the column, rather than wrapping inside a half cell beside a one-number reading. */
+.now .now-wide {
+  grid-column: 1 / -1;
 }
 .now dt {
   font-size: var(--text-xs);
