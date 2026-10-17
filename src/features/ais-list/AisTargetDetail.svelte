@@ -70,7 +70,7 @@ const kindTag = $derived(aisKindLabel(row.kind));
   </p>
 {/if}
 <section class="panel-section" aria-label="Target actions">
-  <button type="button" class="btn btn-ghost locate" onclick={() => onLocate(row.position)}>
+  <button type="button" class="btn btn-ghost" onclick={() => onLocate(row.position)}>
     <Crosshair size={16} aria-hidden="true" />
     Show on chart
   </button>
@@ -185,10 +185,3 @@ const kindTag = $derived(aisKindLabel(row.kind));
     </p>
   {/if}
 </section>
-
-<style>
-/* The locate action sits at the top of the body as a compact button, not stretched full width. */
-.locate {
-  align-self: flex-start;
-}
-</style>

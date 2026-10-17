@@ -296,7 +296,9 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   token chevron), the drawn checkbox and radio (no browser control, so night-red never shows a gray
   box), the switch (`input[type="checkbox"][role="switch"]`), the Windows high-contrast fallback to
   the native control, `.range` (the live
-  slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons under a header),
+  slider, paired with a `.num` readout), `.panel-controls` (a row of action buttons as equal
+  cells that share the row and wrap as whole buttons; a lone action fills its row, like a lone `.btn`
+  in a section column, and no panel keeps a compact natural-width action of its own),
   and `.search-input` (the full-width search field with its 44px clear affordance, applied through
   the `SearchInput` primitive in the AIS, Find places, and Waypoints panels).
 - Text (`text.css`): `.caps-label` (the uppercase, tracked, muted SECTION heading), `.muted-note` (a
@@ -808,7 +810,8 @@ every shipped panel (alarms, anchor, tracks, weather, routes, the radar controls
   - A toggle list row (a layer, a weather overlay): `.row-interactive` with `.is-on` for the lit state.
   - A saved-item list: `SavedList` over `.card-frame` cards.
   - A destructive or immediate navigation action: `InlineConfirm` (armed), never a blocking confirm.
-  - A row of panel actions (Save, Cancel, New): `.panel-controls`.
+  - A row of panel actions (Save, Cancel, New): `.panel-controls`, equal cells that wrap as whole
+    buttons. Never a scoped flex row of natural-width buttons, and no `.btn--grow` inside it.
 - Display values are SI in the store; convert only at the display edge. This includes provider-defined
   controls such as radar range in meters, angles in radians, and durations in seconds. Convert both the
   value and its capability bounds for the widget, then convert the committed value back to SI.

@@ -264,7 +264,7 @@ function useProfile(id: string): void {
   <div class="panel-controls">
     <button
       type="button"
-      class="btn btn-primary btn--grow"
+      class="btn btn-primary"
       disabled={atProfileLimit}
       aria-describedby={atProfileLimit ? 'profile-limit-note' : undefined}
       bind:this={saveTrigger}

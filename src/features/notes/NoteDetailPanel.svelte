@@ -179,7 +179,7 @@ function measure(item: NormalizedItem): string {
   footer={hasFooter ? footer : undefined}
   bodyFlex
 >
-  <div class="detail-actions">
+  <div class="panel-controls">
     {#if onLocate}
       <button type="button" class="btn btn-ghost" onclick={onLocate}>
         <Crosshair size={16} aria-hidden="true" />
@@ -401,15 +401,6 @@ function measure(item: NormalizedItem): string {
 .rating {
   display: inline-flex;
   color: var(--select);
-}
-/* The scroll box and the gapped column come from the shared .panel-body with bodyFlex; only the
-   content spacing inside a section is local. */
-/* The chart and ownership actions sit at the top as compact buttons, not stretched full width. */
-.detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-self: flex-start;
 }
 /* The mutation error keeps its message and its dismiss control on one row, with the message taking
    the free space so the control stays at the end. */

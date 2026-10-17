@@ -164,11 +164,16 @@ select.input {
   background-repeat: no-repeat;
 }
 
-/* A row of action buttons under a panel header (New route, Save and Cancel), shared so the panels do
-   not each re-declare the row. */
+/* A row of action buttons (New route and Import, Save and Cancel, Delete and Cancel), shared so the
+   panels do not each re-declare the row. The buttons are equal cells that share the row and wrap as
+   whole buttons, each at least a readable button wide, and a lone action fills its row. The width is
+   definite, so the auto-fit grid never collapses to one stacked column inside a shrink-to-fit parent
+   (InlineConfirm's row, a content-sized dialog). */
 .panel-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
   gap: var(--space-2);
+  inline-size: 100%;
 }
 
 /* The themed range slider shared by the opacity and time-scrub controls: a thin track with a large

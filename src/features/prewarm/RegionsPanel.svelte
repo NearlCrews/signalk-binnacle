@@ -321,7 +321,7 @@ function chartLabel(id: string): string {
     <div class="panel-controls">
       <button
         type="button"
-        class="btn btn-primary btn--grow"
+        class="btn btn-primary"
         disabled={!adminAccess}
         onclick={startNewRegion}
       >
@@ -378,7 +378,7 @@ function chartLabel(id: string): string {
           false,
         )}
         <div class="panel-controls">
-          <button type="button" class="btn btn--grow" onclick={() => controller.runCoverageCheck()}>
+          <button type="button" class="btn" onclick={() => controller.runCoverageCheck()}>
             Check route coverage
           </button>
           {#if coverageReport !== null}
@@ -446,7 +446,7 @@ function chartLabel(id: string): string {
       <div class="panel-controls">
         <button
           type="button"
-          class="btn btn--grow"
+          class="btn"
           disabled={!adminAccess}
           onclick={() => controller.useCurrentView()}
         >
@@ -454,7 +454,7 @@ function chartLabel(id: string): string {
         </button>
         <button
           type="button"
-          class="btn btn--grow"
+          class="btn"
           disabled={!adminAccess}
           class:is-on={drawing}
           aria-pressed={drawing}
@@ -613,7 +613,7 @@ function chartLabel(id: string): string {
           <div class="panel-controls">
             <button
               type="button"
-              class="btn btn-primary btn--grow"
+              class="btn btn-primary"
               disabled={submitting || !adminAccess}
               onclick={() => void saveRegion()}
             >
@@ -626,7 +626,7 @@ function chartLabel(id: string): string {
           <div class="panel-controls">
             <button
               type="button"
-              class="btn btn-primary btn--grow"
+              class="btn btn-primary"
               disabled={!gate || submitting}
               onclick={() => void prepareDownload()}
             >

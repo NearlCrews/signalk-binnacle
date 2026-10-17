@@ -401,7 +401,7 @@ const emptyMessage = $derived(emptyReason());
   <div class="panel-controls">
     <button
       type="button"
-      class="btn btn-primary btn--grow"
+      class="btn btn-primary"
       onclick={() => onNew()}
       disabled={working !== undefined || writesDisabled}
     >
@@ -441,7 +441,7 @@ const emptyMessage = $derived(emptyReason());
         <div class="panel-controls">
           <button
             type="button"
-            class="btn btn-primary btn--grow"
+            class="btn btn-primary"
             bind:this={saveTrigger}
             disabled={working.waypoints.length < 2 || writesDisabled}
             onclick={() => (naming = true)}

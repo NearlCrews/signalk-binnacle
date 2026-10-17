@@ -3,8 +3,8 @@
    share the fill and hover feel instead of each re-declaring it. The lit "engaged" .is-on state lives
    in icon-controls.css, which app.css imports AFTER this module so it wins the same-specificity tie. */
 
-/* A primary action that stretches to fill its controls row (Routes and Profiles); not the default,
-   since a three-button row (Tracks) keeps its primary natural-width. */
+/* A button that stretches to fill a flex row outside .panel-controls (the autopilot command rows, a
+   region's lone primary); a .panel-controls row already shares its width equally. */
 .btn--grow {
   flex: 1;
 }
