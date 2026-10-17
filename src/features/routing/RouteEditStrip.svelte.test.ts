@@ -43,7 +43,8 @@ describe('RouteEditStrip', () => {
     const one = strip(1);
     expect(one).toMatch(/disabled[^>]*>[^<]*Save/);
     expect(one).toContain('Cancel');
-    expect(one).not.toContain('Confirm cancel?');
+    expect(one).not.toContain('<span>Confirm cancel?</span>');
+    expect(one).toContain('data-reserve="Confirm cancel?"');
     const two = strip(2);
     expect(two).not.toMatch(/disabled[^>]*>[^<]*Save/);
   });

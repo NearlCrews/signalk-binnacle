@@ -499,8 +499,15 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   (`.bottom-strip--alarm`, `.bottom-strip--warning`) outweigh the informational ones: a 2 px border,
   a 10 percent wash of the grade color over the strip surface (`--strip-fill`), and the
   `--text-base` weight-700 title. Night-red keeps the plain overlay surface, because night body
-  text falls under AA on any red wash. `.actions` clusters a strip's trailing buttons, and `.actions--safety`
-  widens the gutter between a paired safety pair so a wrong tap in a seaway is less likely.
+  text falls under AA on any red wash. `.actions` clusters a tool strip's trailing buttons. An alarm
+  strip's safety actions are an `.action-group` instead: equal buttons sized to the widest label,
+  each holding its slot for the life of the strip. A done action leaves its word in its own slot
+  (Acknowledged, Silenced, Muted here), an action that does not apply right now leaves its slot
+  empty (`.slot-empty`), and acknowledging never removes the strip's other actions (Raise anchor,
+  Mute, Cancel stay where they were), so nothing slides under the thumb. An armed confirm reserves
+  its other label's width with `.label-reserve` and `data-reserve`, so arming changes only the
+  words. On a phone the group takes its own full-width row of equal cells. `.actions--safety`
+  widens the gutter between paired safety buttons so a wrong tap in a seaway is less likely.
 
 ## 6. Shared UI primitives (`$shared/ui`)
 

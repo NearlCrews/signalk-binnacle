@@ -75,12 +75,16 @@ function acknowledge(): void {
       {#if others > 0}
         <span class="note">+{others} more</span>
       {/if}
-      {#if quieted}
-        <span class="note ack-tag">{locallyMuted ? 'Muted here' : 'Silenced'}</span>
-      {/if}
-      <div class="actions actions--safety">
+      <!-- Four fixed slots for the life of the strip, so an action never slides under the thumb: a
+           done action leaves its word in its slot (Silenced, Muted here), and one that does not
+           apply right now leaves its slot empty. -->
+      <div class="action-group actions--safety">
         {#if silenceOffered}
           <button type="button" class="btn btn-pill btn-strip" onclick={silence}>Silence</button>
+        {:else if quieted && !locallyMuted}
+          <span class="note ack-tag">Silenced</span>
+        {:else}
+          <span class="slot-empty" aria-hidden="true"></span>
         {/if}
         <!-- Local relief stays available while a server action is pending or unsupported. -->
         {#if sounding}
@@ -92,11 +96,17 @@ function acknowledge(): void {
           >
             Mute here
           </button>
+        {:else if quieted && locallyMuted}
+          <span class="note ack-tag">Muted here</span>
+        {:else}
+          <span class="slot-empty" aria-hidden="true"></span>
         {/if}
         {#if onAcknowledge && canAcknowledge && !writeBlocked}
           <button type="button" class="btn btn-pill btn-strip" onclick={acknowledge}>
             Acknowledge
           </button>
+        {:else}
+          <span class="slot-empty" aria-hidden="true"></span>
         {/if}
         <button type="button" class="btn btn-pill btn-strip" onclick={onOpenAlarms}>
           Open Alarms

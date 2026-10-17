@@ -36,15 +36,15 @@ function acknowledge(): void {
   >
     <div class="head">
       <span class="title">Shallow water</span>
-      {#if shallow.acknowledged}
-        <span class="note ack-tag">Acknowledged</span>
-      {:else}
-        <div class="actions actions--safety">
+      <div class="action-group actions--safety">
+        {#if shallow.acknowledged}
+          <span class="note ack-tag">Acknowledged</span>
+        {:else}
           <button type="button" class="btn btn-pill btn-strip" onclick={acknowledge}>
             Acknowledge
           </button>
-        </div>
-      {/if}
+        {/if}
+      </div>
     </div>
     <div class="row">
       <span class="metric"

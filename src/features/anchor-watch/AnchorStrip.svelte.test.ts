@@ -54,6 +54,10 @@ describe('AnchorStrip', () => {
     expect(body).toContain('Anchor watch: no GPS');
     expect(body).toContain('Acknowledged');
     expect(body).not.toContain('>Acknowledge<');
+    // Acknowledging leaves its word in its own slot, and Raise anchor stays one tap away while
+    // the condition persists.
+    expect(body).toContain('<span>Raise anchor</span>');
+    expect(body.indexOf('Acknowledged')).toBeLessThan(body.indexOf('<span>Raise anchor</span>'));
   });
 
   it('lets a drag outrank the blind causes for the title', () => {

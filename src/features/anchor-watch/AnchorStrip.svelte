@@ -43,10 +43,12 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
       <span class="title">
         {anchor.dragging ? 'Anchor dragging' : blindCause ? BLIND_TITLES[blindCause] : ''}
       </span>
-      {#if acked}
-        <span class="note ack-tag">Acknowledged</span>
-      {:else}
-        <div class="actions actions--safety">
+      <!-- Every action keeps its slot: acknowledging leaves its word in place, and Raise anchor stays
+           one tap away while the condition persists. -->
+      <div class="action-group actions--safety">
+        {#if acked}
+          <span class="note ack-tag">Acknowledged</span>
+        {:else}
           <!-- Before the blind tone arms there is nothing to acknowledge, and a tap here must
                not silently disarm the alarm the grace is still counting toward. -->
           <button
@@ -57,11 +59,16 @@ const acked = $derived(anchor.dragging ? anchor.acknowledged : anchor.blindAckno
           >
             Acknowledge
           </button>
-          <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapRaise}>
-            {raiseArm.armed ? 'Confirm raise?' : 'Raise anchor'}
-          </button>
-        </div>
-      {/if}
+        {/if}
+        <button
+          type="button"
+          class="btn btn-pill btn-strip btn-warning label-reserve"
+          data-reserve={raiseArm.armed ? 'Raise anchor' : 'Confirm raise?'}
+          onclick={tapRaise}
+        >
+          <span>{raiseArm.armed ? 'Confirm raise?' : 'Raise anchor'}</span>
+        </button>
+      </div>
     </div>
     <div class="row">
       <span class="metric">

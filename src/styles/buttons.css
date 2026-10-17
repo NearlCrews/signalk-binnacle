@@ -12,6 +12,22 @@
   grid-auto-columns: 1fr;
   gap: var(--space-2);
 }
+/* A button whose words swap (an armed confirm: Raise anchor, then Confirm raise?) reserves the width
+   of its other label, named in data-reserve, so arming changes only the words and never moves the
+   button or its neighbors. The label sits in its own span; the reserve is hidden generated content,
+   out of the text and the accessible name. */
+.label-reserve {
+  display: inline-grid;
+  place-items: center;
+}
+.label-reserve > span,
+.label-reserve::after {
+  grid-area: 1 / 1;
+}
+.label-reserve::after {
+  content: attr(data-reserve);
+  visibility: hidden;
+}
 /* A button that stretches to fill a flex row outside .panel-controls (the autopilot command rows, a
    region's lone primary); a .panel-controls row already shares its width equally. */
 .btn--grow {

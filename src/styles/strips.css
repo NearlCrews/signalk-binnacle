@@ -91,13 +91,34 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.bottom-strip .actions .btn-strip {
+.bottom-strip .actions .btn-strip,
+.bottom-strip .action-group .btn-strip {
   margin-inline-start: 0;
+}
+/* An alarm strip's safety actions are an .action-group: equal buttons sized to the widest label,
+   pushed to the trailing edge beside the title. Every action keeps its slot for the life of the
+   strip: a done action leaves its word (Acknowledged, Silenced) in its own slot, and an action that
+   does not apply right now leaves its slot empty, so nothing slides under the thumb as the alarm
+   changes state. */
+.bottom-strip .action-group {
+  margin-inline-start: auto;
+}
+.bottom-strip .slot-empty {
+  min-block-size: var(--control-size);
 }
 /* A wide gutter between paired safety buttons (Mute/Acknowledge, Acknowledge/Raise) so they do
    not read as twins and a wrong tap in a seaway is less likely. */
 .bottom-strip .actions--safety {
   gap: var(--space-4);
+}
+/* A phone strip gives its actions their own full-width row of equal cells that wrap as whole
+   buttons, rather than squeezing a cluster beside the title. */
+@media (max-width: 600px) {
+  .bottom-strip .action-group {
+    flex-basis: 100%;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
+  }
 }
 /* Acknowledged: the operator has it in hand, but the condition persists, so the strip keeps its
    alarm or warning color and full text contrast and steps down to a dashed border; the ack tag
@@ -109,7 +130,10 @@
   --strip-fill: var(--surface-overlay);
 }
 .bottom-strip .ack-tag {
-  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--control-size);
   font-weight: 600;
   white-space: nowrap;
 }

@@ -85,26 +85,33 @@ const steerWarning = $derived(
   >
     <div class="head">
       <span class="title">Man overboard</span>
-      {#if mob.acknowledged}
-        <span class="note ack-tag">Acknowledged</span>
-      {/if}
-      <div class="actions actions--safety">
+      <!-- Every action keeps its slot: acknowledging leaves its word in place, so Cancel never slides
+           under the thumb, and an armed confirm keeps its button's width. -->
+      <div class="action-group actions--safety">
         <button
           type="button"
-          class="btn btn-pill btn-strip btn-alarm"
+          class="btn btn-pill btn-strip btn-alarm label-reserve"
+          data-reserve={steerArm.armed ? 'Steer to MOB' : 'Confirm steer?'}
           disabled={!mob.position}
           onclick={tapSteer}
           onkeydown={disarmSteerOnEscape}
         >
-          {steerArm.armed ? 'Confirm steer?' : 'Steer to MOB'}
+          <span>{steerArm.armed ? 'Confirm steer?' : 'Steer to MOB'}</span>
         </button>
-        {#if !mob.acknowledged}
+        {#if mob.acknowledged}
+          <span class="note ack-tag">Acknowledged</span>
+        {:else}
           <button type="button" class="btn btn-pill btn-strip" onclick={() => mob.acknowledge()}>
             Acknowledge
           </button>
         {/if}
-        <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapCancel}>
-          {cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}
+        <button
+          type="button"
+          class="btn btn-pill btn-strip btn-warning label-reserve"
+          data-reserve={cancelArm.armed ? 'Cancel' : 'Confirm cancel?'}
+          onclick={tapCancel}
+        >
+          <span>{cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}</span>
         </button>
       </div>
     </div>

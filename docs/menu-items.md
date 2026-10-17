@@ -189,7 +189,9 @@ source, and surrounding traffic before relying on it.
   fix is required to drop. Lost GPS makes browser drag detection visibly degraded, while a server
   watch remains active independently. A browser watch whose GPS fix stays lost for about 30 seconds
   sounds the anchor tone and shows an "Anchor watch: no GPS" strip with per-episode Acknowledge
-  (which re-arms when the fix returns) and Raise. A stream reconnect's stale server state is
+  (which re-arms when the fix returns) and Raise. Acknowledging any anchor strip leaves
+  Acknowledged in that action's place and keeps Raise anchor one tap away while the condition
+  persists. A stream reconnect's stale server state is
   reported as "Anchor watch state is stale: reconnecting to the server." only after about 5 seconds
   and is never worded as a GPS loss. Server-mode changes require write access; client-mode changes
   stay available. Conflicting actions are locked until completion. In server mode, **Edit anchor

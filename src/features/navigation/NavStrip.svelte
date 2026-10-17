@@ -334,8 +334,13 @@ const eta = $derived.by(() => {
       {/if}
       <!-- The visible text is the whole label: it swaps to the confirm question when armed, and a
            fixed aria-label would keep announcing the unarmed name. -->
-      <button type="button" class="btn btn-pill btn-strip" onclick={tapStop}>
-        {stopArm.armed ? 'Confirm stop?' : 'Stop'}
+      <button
+        type="button"
+        class="btn btn-pill btn-strip label-reserve"
+        data-reserve={stopArm.armed ? 'Stop' : 'Confirm stop?'}
+        onclick={tapStop}
+      >
+        <span>{stopArm.armed ? 'Confirm stop?' : 'Stop'}</span>
       </button>
     </div>
     <div class="row">

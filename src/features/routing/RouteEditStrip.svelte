@@ -49,8 +49,13 @@ function tapCancel(): void {
       <button type="button" class="btn btn-pill btn-strip" disabled={!canSave} onclick={onSave}>
         Save
       </button>
-      <button type="button" class="btn btn-pill btn-strip btn-warning" onclick={tapCancel}>
-        {cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}
+      <button
+        type="button"
+        class="btn btn-pill btn-strip btn-warning label-reserve"
+        data-reserve={cancelArm.armed ? 'Cancel' : 'Confirm cancel?'}
+        onclick={tapCancel}
+      >
+        <span>{cancelArm.armed ? 'Confirm cancel?' : 'Cancel'}</span>
       </button>
     </div>
   </div>

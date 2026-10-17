@@ -46,25 +46,26 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
   >
     <div class="head">
       <span class="title">{worstIsDanger ? 'Danger' : 'Caution'}</span>
-      {#if acknowledged}
-        <span class="note ack-tag">Acknowledged</span>
-      {/if}
       {#if computedFallback}
         <span class="note note--provenance">computing locally</span>
       {/if}
-      {#if !acknowledged}
-        <div class="actions actions--safety">
-          <!-- A stable "Mute" label with aria-pressed carrying the on state: a label that flips to
-               "Unmute" reads as a different action mid-incident, and a mute toggle is not
-               destructive, so it stays a plain .btn-strip rather than the warning variant. -->
-          <button
-            type="button"
-            class="btn btn-pill btn-strip"
-            aria-pressed={muted}
-            onclick={onToggleMute}
-          >
-            Mute
-          </button>
+      <!-- Both actions keep their slots: acknowledging leaves its word in place of the button, and
+           Mute stays where it was. -->
+      <div class="action-group actions--safety">
+        <!-- A stable "Mute" label with aria-pressed carrying the on state: a label that flips to
+             "Unmute" reads as a different action mid-incident, and a mute toggle is not
+             destructive, so it stays a plain .btn-strip rather than the warning variant. -->
+        <button
+          type="button"
+          class="btn btn-pill btn-strip"
+          aria-pressed={muted}
+          onclick={onToggleMute}
+        >
+          Mute
+        </button>
+        {#if acknowledged}
+          <span class="note ack-tag">Acknowledged</span>
+        {:else}
           <button
             type="button"
             class="btn btn-pill btn-strip"
@@ -72,8 +73,8 @@ const acknowledged = $derived(collision.suppressed && !collision.escalating);
           >
             Acknowledge
           </button>
-        </div>
-      {/if}
+        {/if}
+      </div>
     </div>
     <ul class="bare-list list">
       {#each top as contact (contact.id)}
