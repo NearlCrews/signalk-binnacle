@@ -34,6 +34,8 @@ const grade = $derived(
 );
 </script>
 
+<!-- The badge's line is held while the tile is calm, so a state appearing never moves the tile's
+     numeral: the tile centers the same content block either way. -->
 {#if label}
   <span
     class="badge badge--caps"
@@ -41,4 +43,12 @@ const grade = $derived(
     class:badge--warning={grade === 'caution'}
     >{label}</span
   >
+{:else}
+  <span class="badge badge--caps badge-slot" aria-hidden="true">&nbsp;</span>
 {/if}
+
+<style>
+.badge-slot {
+  visibility: hidden;
+}
+</style>

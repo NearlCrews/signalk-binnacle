@@ -183,10 +183,16 @@
 .stat-grid dd {
   display: contents;
 }
-.stat-grid .num {
+.stat-grid .num,
+.stat-grid .stat-text {
   font-weight: 600;
   color: var(--text);
   text-align: end;
+}
+/* A text value (a status, a source name) takes the value column's alignment and weight, without the
+   mono face, so a grid mixing numbers and words keeps one value column. */
+.stat-grid .stat-text {
+  overflow-wrap: anywhere;
 }
 .stat-grid .unit {
   min-inline-size: var(--stat-unit-min-width);

@@ -373,8 +373,13 @@ Reach for these before writing scoped CSS. Each lives in the named module.
 - Cards (`cards.css`): `.card-frame` (the raised bordered card surface, border + radius-md +
   surface-raised), `.saved` plus its card list (used through the SavedList primitive), `.empty-state`
   (the dashed empty-list block, used through the EmptyState primitive), `.stat-grid`
-  (the label/value stat readout), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
+  (the label/value stat readout: every row emits its label and exactly two value cells, the value
+  and its unit, so a missing cell never shifts the rows below; a text value takes `.stat-text` for
+  the value column's alignment and weight without the mono face), the `.nav-*` family (`.nav-sort`, `.nav-list`, `.nav-row`,
   `.nav-name`, `.nav-metrics`, `.nav-metric`) for the AIS, POI, and Waypoints two-line sortable lists.
+  The AIS list sets each row's readouts in fixed slots (Distance, Bearing, Speed, then CPA, TCPA, and
+  HDG, with a dash where a target has no value) and its risk badge on the trailing edge, so the
+  collision numbers stack in columns down the list.
   POI search and Waypoints also share the `$shared/nav` list core behind that presentation
   (`filterNavRows`, `sortNavRows`, `navMetrics`, and friends), so the two can never search, sort, or
   measure differently; AIS targets keeps its own sort in `ais-rows.ts` and shares only the CSS. A
@@ -391,7 +396,8 @@ Reach for these before writing scoped CSS. Each lives in the named module.
   loud leading `.abbr` (the abbreviation is the tile's scanned name: SOG, HDG, AWS at `--text-sm`
   weight 700, with the long name as the quiet gloss beside it),
   the zone tints (`.tile--warning`, `.tile--alarm`, `.tile--stale`), `.tile--wide`, and `.tile--empty`.
-  Tiles in one grid stay equal height in every state: the `.value` slot reserves the hero line box
+  Tiles in one grid stay equal height in every state, and a state badge's line is held while the
+  tile is calm, so Stale, Warning, or Alarm appearing never moves the numeral: the `.value` slot reserves the hero line box
   (`--hero-leading`), and a no-sensor tile renders its `.muted-note` gloss inside that slot, centered,
   never collapsing shorter than its value siblings. Tile content centers on both axes (the gauge-face
   read); instrument tiles are the one centered numeric family, and list rows, stat grids, and

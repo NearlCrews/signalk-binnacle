@@ -9,10 +9,10 @@ import type { ReactiveClock } from '$shared/lib';
 import {
   capitalize,
   formatBearingOr,
-  formatMetersOrNm,
   formatNm,
   formatSpeedOr,
   formatTcpaMin,
+  metersOrNmParts,
   speedUnit,
 } from '$shared/lib';
 import type { ConnectionPhase } from '$shared/signalk';
@@ -146,7 +146,7 @@ $effect(() => {
       Search by name or Maritime Mobile Service Identity (MMSI), or tap a target on the chart.
     </p>
     {#if unassessedCount > 0}
-      <p class="muted-note" role="status">
+      <p class="alert-note" role="status">
         Collision assessment is degraded: {unassessedCount}
         {unassessedCount === 1 ? 'target' : 'targets'}
         cannot be assessed because course or motion data is missing or stale. They are marked
@@ -154,7 +154,7 @@ $effect(() => {
       </p>
     {/if}
     {#if vessel.positionStale}
-      <p class="muted-note" role="status">
+      <p class="alert-note" role="status">
         Own GPS fix is stale. Distance and bearing are unavailable, and the list is ordered by name
         until a fresh fix arrives.
       </p>
@@ -216,6 +216,7 @@ $effect(() => {
     {:else}
       <ul class="nav-list bare-list" aria-label="Nearby vessels">
         {#each rows as row (row.id)}
+          {@const range = metersOrNmParts(row.rangeMeters, units.mode)}
           <li>
             <button
               type="button"
@@ -234,13 +235,17 @@ $effect(() => {
                 {#if row.kind !== 'vessel'}
                   <span class="caps-label">{aisKindLabel(row.kind)}</span>
                 {/if}
+                {#if row.navigationState}
+                  <span class="caps-label">{capitalize(row.navigationState)}</span>
+                {/if}
+                <!-- The risk badge holds the row's trailing edge, at one x down the list. -->
                 {#if row.severity === 'danger'}
-                  <span class="badge badge--alarm badge--caps">Collision risk</span>
+                  <span class="badge badge--alarm badge--caps risk">Collision risk</span>
                 {:else if row.severity === 'warning'}
-                  <span class="badge badge--warning badge--caps">Getting close</span>
+                  <span class="badge badge--warning badge--caps risk">Getting close</span>
                 {:else if row.unassessedReason}
                   <span
-                    class="badge badge--warning badge--caps"
+                    class="badge badge--warning badge--caps risk"
                     title={row.unassessedReason === 'course-unavailable'
                       ? 'CPA unavailable: the target course is missing or stale'
                       : 'CPA unavailable: no fresh motion data from this target'}
@@ -248,47 +253,51 @@ $effect(() => {
                     Unassessed
                   </span>
                 {/if}
-                {#if row.navigationState}
-                  <span class="caps-label">{capitalize(row.navigationState)}</span>
-                {/if}
               </span>
-              <span class="nav-metrics">
-                <span class="nav-metric">
-                  Distance <b class="num">{formatMetersOrNm(row.rangeMeters, units.mode)}</b>
-                </span>
-                <span class="nav-metric" title="Bearing in degrees true"
-                  >Bearing <b class="num">{formatBearingOr(row.bearingRad)}</b>&deg;T</span
+              <!-- Fixed slots, the same six in every row with a dash where a target has no value, so
+                   distance, CPA, and TCPA stack in columns down the list. -->
+              <span class="nav-metrics ais-metrics">
+                <span class="nav-metric"
+                  >Distance <b class="num">{range.value}</b> {range.unit}</span
                 >
-                {#if row.kind !== 'aton'}
-                  <span class="nav-metric" title="Speed over ground"
-                    >Speed <b class="num">{formatSpeedOr(row.sogMps, units.profile)}</b>
-                    {speedUnit(units.profile)}</span
+                <span class="nav-metric" title="Bearing in degrees true"
+                  >Bearing <b class="num">{formatBearingOr(row.bearingRad)}</b>
+                  {row.bearingRad === undefined ? '' : '°T'}</span
+                >
+                <span class="nav-metric" title="Speed over ground"
+                  >Speed
+                  <b class="num"
+                    >{row.kind === 'aton' ? '--' : formatSpeedOr(row.sogMps, units.profile)}</b
                   >
-                {/if}
-                {#if row.headingRad !== undefined}
-                  <span class="nav-metric" title="Heading, true"
-                    >HDG <b class="num">{formatBearingOr(row.headingRad)}</b>&deg;T</span
-                  >
-                {/if}
-                {#if row.destination}
-                  <span class="nav-metric" title="Reported voyage destination"
-                    >Dest <b class="num">{row.destination}</b></span
-                  >
-                {/if}
-                {#if row.cpaMeters !== undefined}
-                  <span class="nav-metric" title="Closest point of approach"
-                    >CPA <b class="num">{formatNm(row.cpaMeters)}</b> nm</span
-                  >
-                {/if}
+                  {row.kind === 'aton' ? '' : speedUnit(units.profile)}</span
+                >
+                <span class="nav-metric" title="Closest point of approach"
+                  >CPA
+                  <b class="num">{row.cpaMeters === undefined ? '--' : formatNm(row.cpaMeters)}</b>
+                  {row.cpaMeters === undefined ? '' : 'nm'}</span
+                >
                 {#if row.receding}
                   <span
                     class="nav-metric"
                     title="This vessel has passed its closest point and is opening"
-                    >past CPA</span
+                    >TCPA <b class="num">Passed</b></span
                   >
-                {:else if row.tcpaSeconds !== undefined}
+                {:else}
                   <span class="nav-metric" title="Time to closest point of approach"
-                    >TCPA <b class="num">{formatTcpaMin(row.tcpaSeconds, 1)}</b> min</span
+                    >TCPA
+                    <b class="num"
+                      >{row.tcpaSeconds === undefined ? '--' : formatTcpaMin(row.tcpaSeconds, 1)}</b
+                    >
+                    {row.tcpaSeconds === undefined ? '' : 'min'}</span
+                  >
+                {/if}
+                <span class="nav-metric" title="Heading, true"
+                  >HDG <b class="num">{formatBearingOr(row.headingRad)}</b>
+                  {row.headingRad === undefined ? '' : '°T'}</span
+                >
+                {#if row.destination}
+                  <span class="nav-metric dest" title="Reported voyage destination"
+                    >Dest <b class="num">{row.destination}</b></span
                   >
                 {/if}
               </span>
@@ -308,7 +317,7 @@ $effect(() => {
 
 <style>
 /* The vessel name and its plain risk badge share a baseline row so the collision state is named in
-   words next to the name, not conveyed by the name color alone. */
+   words next to the name, not conveyed by the name color alone; the badge holds the trailing edge. */
 .nav-head {
   display: flex;
   align-items: baseline;
@@ -317,5 +326,17 @@ $effect(() => {
 .nav-head .nav-name {
   flex: 1;
   min-inline-size: 0;
+}
+.risk {
+  margin-inline-start: auto;
+}
+/* Three equal columns of fixed slots (Distance, Bearing, Speed, then CPA, TCPA, HDG) with the
+   destination on its own line, so every row's readouts share the same columns. */
+.ais-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ais-metrics .dest {
+  grid-column: 1 / -1;
 }
 </style>

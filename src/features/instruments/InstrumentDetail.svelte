@@ -141,16 +141,16 @@ const zoneLabel = $derived(
     <dd><span class="num">{valueLine}</span><span class="unit"></span></dd>
     {#if reading.secondary}
       <dt>Detail</dt>
-      <dd><span>{reading.secondary}</span><span class="unit"></span></dd>
+      <dd><span class="stat-text">{reading.secondary}</span><span class="unit"></span></dd>
     {/if}
     <dt>Status</dt>
-    <dd><span>{stateLabel}</span><span class="unit"></span></dd>
+    <dd><span class="stat-text">{stateLabel}</span><span class="unit"></span></dd>
     <dt>Zone</dt>
-    <dd><span>{zoneLabel}</span><span class="unit"></span></dd>
+    <dd><span class="stat-text">{zoneLabel}</span><span class="unit"></span></dd>
     <dt>Source</dt>
-    <dd><span>{sourceLabel}</span><span class="unit"></span></dd>
+    <dd><span class="stat-text">{sourceLabel}</span><span class="unit"></span></dd>
     <dt>Updated</dt>
-    <dd><span>{age}</span><span class="unit"></span></dd>
+    <dd><span class="stat-text">{age}</span><span class="unit"></span></dd>
   </dl>
 
   {#if staleSourceNote}
