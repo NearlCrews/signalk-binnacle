@@ -667,6 +667,9 @@ let railHeight = $state(0);
 // The first-run chart hint sits where the top banners and, on a short screen, a tall safety rail
 // also land, so it waits while either shows.
 let bannerHeight = $state(0);
+// The access banner's measured height: the top notices sit below it, so a first-run toast can never
+// cover the approval the whole app is waiting on.
+let authBannerHeight = $state(0);
 let chartHeight = $state(0);
 let panelHeight = $state(0);
 let coverageRouteId = $state<string>();
@@ -964,7 +967,7 @@ $effect(() => {
     {onMapInstance}
     {onMapDestroyed}
   />
-  <div class="banner-slot">
+  <div class="banner-slot" bind:clientHeight={authBannerHeight}>
     <AuthBanner
       {auth}
       requestsUrl={accessRequestsUrl}
@@ -972,7 +975,11 @@ $effect(() => {
       onDismissInsecure={onDismissInsecureNote}
     />
   </div>
-  <div class="top-banner-stack" bind:clientHeight={bannerHeight}>
+  <div
+    class="top-banner-stack"
+    style:--auth-banner-height="{authBannerHeight}px"
+    bind:clientHeight={bannerHeight}
+  >
     {#if criticalOverlayError}
       <div class="alert-note alert-note--filled toast-banner" role="alert">
         {criticalOverlayError}
@@ -2417,7 +2424,7 @@ $effect(() => {
    auto for its own content-sized box. */
 .top-banner-stack {
   position: absolute;
-  inset-block-start: var(--space-3);
+  inset-block-start: calc(var(--space-3) + var(--auth-banner-height, 0px));
   inset-inline: 0;
   display: flex;
   flex-direction: column;
